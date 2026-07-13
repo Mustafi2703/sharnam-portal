@@ -126,7 +126,50 @@ async function seedChecklistsFromExcel() {
       },
     });
     created++;
-    if (created >= 40) break; // keep seed lean for demo
+  }
+  console.log("Checklist templates from Final Index:", created);
+
+  // Fallback catalog when Excel is missing on Render
+  if ((await prisma.checklistTemplate.count()) < 5) {
+    const fallback = [
+      ["Mobilization", "Checklist For Pre-Construction & Mobilization"],
+      ["Civil", "Checklist For Excavation Work"],
+      ["Civil", "Checklist For Brick Masonry Work"],
+      ["Civil", "Checklist For Block Work"],
+      ["Civil", "Checklist For Filling Work"],
+      ["Civil", "Checklist For Floor Trimix Work"],
+      ["Civil", "Checklist For Anchor Bolt Fixing — PEB"],
+      ["Civil", "Anti Termite Report"],
+      ["Civil", "Aggregate Crushing Value Test"],
+      ["MEP", "Checklist For Electrical Conduit Concealment"],
+      ["MEP", "Checklist For Plumbing Rough-In"],
+      ["MEP", "Checklist For Fire Fighting Installation"],
+      ["Finishing", "Checklist For Plaster Work"],
+      ["Finishing", "Checklist For Tile Flooring"],
+      ["Handover", "Checklist For Handing Over Work"],
+    ] as const;
+    for (const [category, name] of fallback) {
+      const existing = await prisma.checklistTemplate.findFirst({ where: { name } });
+      if (existing) continue;
+      await prisma.checklistTemplate.create({
+        data: {
+          name,
+          category,
+          checklistType: "Quality",
+          source: "fallback-catalog",
+          items: {
+            create: [
+              { itemCode: "1.0", description: "Approved drawing revision available on site", sortOrder: 1, section: "Pre-checks" },
+              { itemCode: "2.0", description: "Materials verified as per approved brand/make", sortOrder: 2, section: "Pre-checks" },
+              { itemCode: "3.0", description: "Setting out / levels verified", sortOrder: 3, section: "Execution" },
+              { itemCode: "4.0", description: "Workmanship acceptable to PMC", sortOrder: 4, section: "Execution" },
+              { itemCode: "5.0", description: "Safety precautions observed", sortOrder: 5, section: "Safety" },
+              { itemCode: "6.0", description: "Ready for next activity / inspection", sortOrder: 6, section: "Close-out" },
+            ],
+          },
+        },
+      });
+    }
   }
 
   // Drawing review checklist with Yes/No/NA form items
@@ -224,41 +267,86 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
 
-  // Sample drawing published so site can submit checklists
-  const drawing = await prisma.drawing.upsert({
-    where: { projectId_drawingNumber: { projectId: project.id, drawingNumber: "A-101" } },
-    create: {
-      projectId: project.id,
-      drawingNumber: "A-101",
-      title: "Ground Floor Plan",
-      discipline: "Architecture",
-      currentRev: "Rev A",
-      status: "Approved",
-      isPublished: true,
-      folderPath: "Drawings/Architecture",
-      revisions: {
-        create: {
-          revisionNumber: "Rev A",
-          revisionLabel: "Rev A — IFC",
-          fileUrl: "/uploads/onedrive/SPDC-DEMO-01/Drawings/Architecture/A-101-placeholder.txt",
-          fileName: "A-101-placeholder.txt",
-          published: true,
-          uploadedById: users.find((u) => u.role === "office")?.id,
+  // Rich drawing register for demo walkthrough
+  const officeId = users.find((u) => u.role === "office")?.id;
+  const drawingSet: {
+    drawingNumber: string;
+    title: string;
+    discipline: string;
+    rev: string;
+    published: boolean;
+  }[] = [
+    { drawingNumber: "A-101", title: "Ground Floor Plan", discipline: "Architecture", rev: "Rev C", published: true },
+    { drawingNumber: "A-102", title: "First Floor Plan", discipline: "Architecture", rev: "Rev B", published: true },
+    { drawingNumber: "A-103", title: "Second Floor Plan", discipline: "Architecture", rev: "Rev B", published: true },
+    { drawingNumber: "A-104", title: "Terrace / Roof Plan", discipline: "Architecture", rev: "Rev A", published: true },
+    { drawingNumber: "A-201", title: "Building Elevations — North & South", discipline: "Architecture", rev: "Rev B", published: true },
+    { drawingNumber: "A-202", title: "Building Elevations — East & West", discipline: "Architecture", rev: "Rev B", published: true },
+    { drawingNumber: "A-301", title: "Wall Sections & Details", discipline: "Architecture", rev: "Rev A", published: true },
+    { drawingNumber: "A-401", title: "Door & Window Schedule", discipline: "Architecture", rev: "Rev A", published: false },
+    { drawingNumber: "S-101", title: "Foundation Plan", discipline: "Structural", rev: "Rev C", published: true },
+    { drawingNumber: "S-102", title: "Column Layout — Ground", discipline: "Structural", rev: "Rev B", published: true },
+    { drawingNumber: "S-201", title: "Typical Floor Framing Plan", discipline: "Structural", rev: "Rev B", published: true },
+    { drawingNumber: "S-301", title: "Beam / Slab Reinforcement Details", discipline: "Structural", rev: "Rev A", published: true },
+    { drawingNumber: "S-401", title: "Staircase Structural Details", discipline: "Structural", rev: "Rev A", published: false },
+    { drawingNumber: "E-101", title: "Electrical Lighting Layout — GF", discipline: "MEP", rev: "Rev B", published: true },
+    { drawingNumber: "E-102", title: "Power & DB Layout — GF", discipline: "MEP", rev: "Rev A", published: true },
+    { drawingNumber: "P-101", title: "Plumbing Water Supply Layout", discipline: "MEP", rev: "Rev B", published: true },
+    { drawingNumber: "P-201", title: "Drainage & Soil Layout", discipline: "MEP", rev: "Rev A", published: true },
+    { drawingNumber: "F-101", title: "Fire Fighting Layout", discipline: "MEP", rev: "Rev A", published: false },
+    { drawingNumber: "C-101", title: "Site Grading & Road Layout", discipline: "Civil", rev: "Rev B", published: true },
+    { drawingNumber: "C-201", title: "UG Tank & Drainage Network", discipline: "Civil", rev: "Rev A", published: true },
+    { drawingNumber: "C-301", title: "Compound Wall Details", discipline: "Civil", rev: "Rev A", published: false },
+  ];
+
+  let firstDrawingId = "";
+  for (const d of drawingSet) {
+    const folder = `Drawings/${d.discipline === "MEP" ? "MEP" : d.discipline}`;
+    const fileName = `${d.drawingNumber}-placeholder.txt`;
+    const absDir = path.join(driveRoot, folder);
+    fs.mkdirSync(absDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(absDir, fileName),
+      `Mock IFC sheet ${d.drawingNumber} — ${d.title} (${d.rev})\nReplace with PDF via Office portal.`
+    );
+    const drawing = await prisma.drawing.upsert({
+      where: {
+        projectId_drawingNumber: { projectId: project.id, drawingNumber: d.drawingNumber },
+      },
+      create: {
+        projectId: project.id,
+        drawingNumber: d.drawingNumber,
+        title: d.title,
+        discipline: d.discipline,
+        currentRev: d.rev,
+        status: d.published ? "Approved" : "Draft",
+        isPublished: d.published,
+        folderPath: folder,
+        revisions: {
+          create: {
+            revisionNumber: d.rev,
+            revisionLabel: `${d.rev} — IFC`,
+            fileUrl: `/uploads/onedrive/${project.code}/${folder}/${fileName}`,
+            fileName,
+            published: d.published,
+            uploadedById: officeId,
+          },
         },
       },
-    },
-    update: { isPublished: true, status: "Approved" },
-  });
+      update: {
+        title: d.title,
+        discipline: d.discipline,
+        currentRev: d.rev,
+        isPublished: d.published,
+        status: d.published ? "Approved" : "Draft",
+      },
+    });
+    if (!firstDrawingId) firstDrawingId = drawing.id;
+  }
+  console.log("Drawings seeded:", drawingSet.length);
 
-  const uploadDir = path.join(process.cwd(), "uploads", "onedrive", "SPDC-DEMO-01", "Drawings", "Architecture");
-  fs.mkdirSync(uploadDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(uploadDir, "A-101-placeholder.txt"),
-    "Mock drawing file for demo — replace with PDF via Office portal upload."
-  );
-
-  // Assign a few checklist templates
-  const templates = await prisma.checklistTemplate.findMany({ take: 8 });
+  // Assign ALL checklist templates to the demo project
+  const templates = await prisma.checklistTemplate.findMany();
   for (const t of templates) {
     await prisma.checklistAssignment.upsert({
       where: { projectId_templateId: { projectId: project.id, templateId: t.id } },
@@ -266,6 +354,8 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       update: {},
     });
   }
+  console.log("Checklist assignments:", templates.length);
+  const drawing = { id: firstDrawingId };
 
   // Cost sample from cashflow packages
   const packages = [

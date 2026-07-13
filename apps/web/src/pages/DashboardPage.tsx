@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { Badge, Card, PageHeader, Stat, WorkflowStrip } from "../components/ui";
 
 type Project = {
   id: string;
@@ -9,6 +10,7 @@ type Project = {
   name: string;
   status: string;
   clientName?: string;
+  location?: string;
   _count?: { drawings: number; members: number };
 };
 
@@ -21,65 +23,78 @@ export default function DashboardPage() {
     api<Project[]>("/api/projects", { token }).then(setProjects).catch(console.error);
   }, []);
 
-  const tips: Record<string, string> = {
-    admin: "Full access — manage roles, audit trail, cost, and all project modules.",
-    office: "Review checklists, publish drawings, run cost tracking & communications.",
-    site_employee: "Mobile-first: fill daily diary and checklists (requires published drawings).",
-    client: "View approved checklists, diaries, and weekly reports for your projects.",
-    employee: "Office-style employee access for demos.",
+  const roleCopy: Record<string, string> = {
+    admin: "You own the system — roles, audit, and every project module.",
+    office: "Publish drawings to unlock site checklists. Review, cost, and communicate.",
+    site_employee: "Log the day. Fill checklists only after drawings are published.",
+    client: "See approved work, diaries, and weekly packs — without the noise.",
+    employee: "Cross-functional demo seat across office modules.",
   };
+
+  const flowActive =
+    user?.role === "site_employee" ? 2 : user?.role === "client" ? 3 : user?.role === "office" ? 1 : 0;
 
   return (
     <div className="space-y-8">
-      <header>
-        <p className="text-sm uppercase tracking-[0.18em] text-brand">Portal home</p>
-        <h1 className="font-display text-4xl sm:text-5xl mt-1">
-          Welcome, {user?.fullName?.split(" ")[0]}
-        </h1>
-        <p className="text-steel-muted mt-2 max-w-2xl">{tips[user?.role || "office"]}</p>
-      </header>
+      <PageHeader
+        eyebrow="Command center"
+        title={`Good day, ${user?.fullName?.split(" ")[0]}`}
+        subtitle={roleCopy[user?.role || "office"]}
+        actions={<Badge tone="brand">{user?.portal} portal</Badge>}
+      />
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Projects", value: projects.length },
-          { label: "Portal", value: user?.portal },
-          { label: "Role", value: user?.role?.replace("_", " ") },
-          { label: "DMS", value: "Mock OneDrive" },
-        ].map((c) => (
-          <div key={c.label} className="rounded-2xl bg-white border border-black/5 p-5 shadow-sm">
-            <div className="text-xs uppercase tracking-wider text-steel-muted">{c.label}</div>
-            <div className="mt-2 text-2xl font-semibold capitalize">{c.value}</div>
-          </div>
-        ))}
+      <WorkflowStrip
+        active={flowActive}
+        steps={[
+          { label: "Publish drawings", hint: "Office uploads IFC sets into Mock OneDrive" },
+          { label: "Gate opens", hint: "Site can only submit when drawings are live" },
+          { label: "Fill checklists", hint: "Yes / No / N.A. forms — not Excel sheets" },
+          { label: "Approve & report", hint: "Office signs off · client sees weekly pack" },
+        ]}
+      />
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="Projects" value={projects.length} hint="Assigned to your portal" />
+        <Stat
+          label="Drawings on demo"
+          value={projects[0]?._count?.drawings ?? "—"}
+          hint="Published sets unlock QA"
+        />
+        <Stat label="Your role" value={(user?.role || "").replace("_", " ")} />
+        <Stat label="DMS" value="Mock OD" hint="Graph swap-ready later" />
       </div>
 
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Your projects</h2>
-          <Link to="/projects" className="text-sm text-brand">
-            View all
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-2xl">Active projects</h2>
+          <Link to="/projects" className="text-sm text-brand font-medium">
+            All projects →
           </Link>
         </div>
         <div className="grid md:grid-cols-2 gap-3">
-          {projects.map((p) => (
-            <Link
-              key={p.id}
-              to={`/projects/${p.id}`}
-              className="rounded-2xl bg-white border border-black/5 p-5 hover:border-brand/40 transition shadow-sm"
-            >
-              <div className="text-xs text-brand font-medium">{p.code}</div>
-              <div className="font-semibold text-lg mt-1">{p.name}</div>
-              <div className="text-sm text-steel-muted mt-1">
-                {p.clientName || "—"} · {p.status}
-              </div>
-              <div className="text-xs text-steel-muted mt-3">
-                {p._count?.drawings ?? 0} drawings · {p._count?.members ?? 0} members
-              </div>
+          {projects.map((p, i) => (
+            <Link key={p.id} to={`/projects/${p.id}`} className={`rise rise-delay-${Math.min(i + 1, 3)}`}>
+              <Card className="hover:border-brand/40 transition h-full group">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-mono text-[11px] text-brand tracking-wider">{p.code}</div>
+                    <div className="font-semibold text-lg mt-1 group-hover:text-brand-dark transition">
+                      {p.name}
+                    </div>
+                    <div className="text-sm text-steel-muted mt-1">
+                      {p.clientName || "—"}
+                      {p.location ? ` · ${p.location}` : ""}
+                    </div>
+                  </div>
+                  <Badge tone={p.status === "In Progress" ? "ok" : "neutral"}>{p.status}</Badge>
+                </div>
+                <div className="mt-5 pt-4 border-t border-line flex gap-4 text-xs text-steel-muted font-mono">
+                  <span>{p._count?.drawings ?? 0} drawings</span>
+                  <span>{p._count?.members ?? 0} members</span>
+                </div>
+              </Card>
             </Link>
           ))}
-          {!projects.length && (
-            <p className="text-steel-muted text-sm">No projects assigned yet.</p>
-          )}
         </div>
       </section>
     </div>

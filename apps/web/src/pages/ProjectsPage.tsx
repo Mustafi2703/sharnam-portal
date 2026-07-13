@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
 
 type Project = {
   id: string;
@@ -10,6 +11,7 @@ type Project = {
   status: string;
   clientName?: string;
   location?: string;
+  _count?: { drawings: number; members: number };
 };
 
 export default function ProjectsPage() {
@@ -25,56 +27,54 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-4xl">Projects</h1>
-        <p className="text-steel-muted">Site delivery units — drawings, checklists, diary & cost live here.</p>
-      </header>
+      <PageHeader
+        eyebrow="Portfolio"
+        title="Projects"
+        subtitle="Each project is a spine — drawings, checklists, diary, cost, and communications hang off it."
+      />
 
       {canCreate && (
-        <form
-          className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2 bg-white rounded-2xl border border-black/5 p-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            await api("/api/projects", { method: "POST", token, body: JSON.stringify(form) });
-            setForm({ code: "", name: "", clientName: "", location: "" });
-            await load();
-          }}
-        >
-          <input className="rounded-xl border px-3 py-2 text-sm" placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
-          <input className="rounded-xl border px-3 py-2 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <input className="rounded-xl border px-3 py-2 text-sm" placeholder="Client" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
-          <input className="rounded-xl border px-3 py-2 text-sm" placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-          <button className="rounded-xl bg-brand text-white text-sm font-medium">Create</button>
-        </form>
+        <Card>
+          <form
+            className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await api("/api/projects", { method: "POST", token, body: JSON.stringify(form) });
+              setForm({ code: "", name: "", clientName: "", location: "" });
+              await load();
+            }}
+          >
+            <Input placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
+            <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <Input placeholder="Client" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
+            <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <Button type="submit">Create project</Button>
+          </form>
+        </Card>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-black/5 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-sand/60 text-left">
-            <tr>
-              <th className="p-3">Code</th>
-              <th className="p-3">Name</th>
-              <th className="p-3">Client</th>
-              <th className="p-3">Status</th>
-              <th className="p-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.id} className="border-t border-black/5">
-                <td className="p-3 font-medium text-brand">{p.code}</td>
-                <td className="p-3">{p.name}</td>
-                <td className="p-3 text-steel-muted">{p.clientName || "—"}</td>
-                <td className="p-3">{p.status}</td>
-                <td className="p-3 text-right">
-                  <Link className="text-brand" to={`/projects/${p.id}`}>
-                    Open
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid md:grid-cols-2 gap-3">
+        {projects.map((p) => (
+          <Link key={p.id} to={`/projects/${p.id}`}>
+            <Card className="h-full hover:border-brand/40 transition">
+              <div className="flex justify-between gap-3">
+                <div>
+                  <div className="font-mono text-[11px] text-brand">{p.code}</div>
+                  <div className="font-semibold text-lg mt-1">{p.name}</div>
+                  <div className="text-sm text-steel-muted mt-1">
+                    {p.clientName || "—"}
+                    {p.location ? ` · ${p.location}` : ""}
+                  </div>
+                </div>
+                <Badge tone="ok">{p.status}</Badge>
+              </div>
+              <div className="mt-4 pt-3 border-t border-line font-mono text-[11px] text-steel-muted flex gap-4">
+                <span>{p._count?.drawings ?? 0} drawings</span>
+                <span>{p._count?.members ?? 0} members</span>
+              </div>
+            </Card>
+          </Link>
+        ))}
       </div>
     </div>
   );
