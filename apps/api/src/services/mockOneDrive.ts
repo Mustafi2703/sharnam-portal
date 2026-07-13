@@ -41,6 +41,13 @@ export class MockOneDriveService {
       "Documents/Reports",
       "Photos",
       "Checklists",
+      "Inspections",
+      "Inspections/Architecture",
+      "Inspections/Structural",
+      "Inspections/MEP",
+      "Inspections/Civil",
+      "RFIs",
+      "Submittals",
     ];
 
     for (const rel of folders) {

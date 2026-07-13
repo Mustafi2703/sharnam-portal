@@ -15,6 +15,7 @@ import { diaryRouter } from "./routes/diary.js";
 import { commsRouter } from "./routes/comms.js";
 import { costRouter } from "./routes/cost.js";
 import { reportsRouter, auditRouter, crmRouter, hrmRouter } from "./routes/reports.js";
+import { vendorsRouter, rfiRouter, inspectionsRouter, directoryRouter } from "./routes/procore.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -53,6 +54,10 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/crm", crmRouter);
 app.use("/api/hrm", hrmRouter);
+app.use("/api/vendors", vendorsRouter);
+app.use("/api/rfis", rfiRouter);
+app.use("/api/inspections", inspectionsRouter);
+app.use("/api/directory", directoryRouter);
 
 // Serve built React app (single-service Render deploy)
 const webDist = path.resolve(__dirname, "../../web/dist");

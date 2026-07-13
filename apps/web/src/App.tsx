@@ -4,7 +4,6 @@ import { AppShell } from "./components/AppShell";
 import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
-import ProjectDetailPage from "./pages/ProjectDetailPage";
 import ChecklistPage from "./pages/ChecklistPage";
 import DiaryPage from "./pages/DiaryPage";
 import CommsPage from "./pages/CommsPage";
@@ -15,6 +14,14 @@ import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
 import CrmPage from "./pages/CrmPage";
 import HrmPage from "./pages/HrmPage";
+import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
+import ProjectHomePage from "./pages/project/ProjectHomePage";
+import VendorsPage from "./pages/project/VendorsPage";
+import RfisPage from "./pages/project/RfisPage";
+import InspectionsPage from "./pages/project/InspectionsPage";
+import DirectoryPage from "./pages/project/DirectoryPage";
+import DrawingsPage from "./pages/project/DrawingsPage";
+import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -45,13 +52,23 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
-                <Route path="/projects/:id" element={<ProjectDetailPage />} />
-                <Route path="/projects/:id/checklist" element={<ChecklistPage />} />
-                <Route path="/projects/:id/diary" element={<DiaryPage />} />
-                <Route path="/projects/:id/comms" element={<CommsPage />} />
-                <Route path="/projects/:id/cost" element={<CostPage />} />
-                <Route path="/projects/:id/dms" element={<DmsPage />} />
-                <Route path="/projects/:id/reports" element={<ReportsPage />} />
+                <Route path="/projects/:id" element={<ProjectToolsLayout />}>
+                  <Route index element={<ProjectHomePage />} />
+                  <Route path="directory" element={<DirectoryPage />} />
+                  <Route path="vendors" element={<VendorsPage />} />
+                  <Route path="drawings" element={<DrawingsPage />} />
+                  <Route path="dms" element={<DmsPage />} />
+                  <Route path="checklist" element={<ChecklistPage />} />
+                  <Route path="inspections" element={<InspectionsPage />} />
+                  <Route path="rfis" element={<RfisPage />} />
+                  <Route path="submittals" element={<SubmittalsPage />} />
+                  <Route path="photos" element={<PhotosPage />} />
+                  <Route path="diary" element={<DiaryPage />} />
+                  <Route path="comms" element={<CommsPage />} />
+                  <Route path="coordination" element={<CoordinationPage />} />
+                  <Route path="cost" element={<CostPage />} />
+                  <Route path="reports" element={<ReportsPage />} />
+                </Route>
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />
                 <Route path="/crm" element={<CrmPage />} />

@@ -300,6 +300,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   ];
 
   let firstDrawingId = "";
+  let structuralDrawingId = "";
   for (const d of drawingSet) {
     const folder = `Drawings/${d.discipline === "MEP" ? "MEP" : d.discipline}`;
     const fileName = `${d.drawingNumber}-placeholder.txt`;
@@ -342,6 +343,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       },
     });
     if (!firstDrawingId) firstDrawingId = drawing.id;
+    if (d.drawingNumber === "S-101") structuralDrawingId = drawing.id;
   }
   console.log("Drawings seeded:", drawingSet.length);
 
@@ -356,6 +358,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   }
   console.log("Checklist assignments:", templates.length);
   const drawing = { id: firstDrawingId };
+  const structuralDrawing = { id: structuralDrawingId || firstDrawingId };
 
   // Cost sample from cashflow packages
   const packages = [
@@ -447,6 +450,189 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
 
+  // Vendors (Procore-style company directory)
+  const vendorDefs = [
+    {
+      name: "M/s Bhavna Infra",
+      trade: "Civil / Main Contractor",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      businessPhone: "+91 79 2650 1001",
+      email: "projects@bhavnainfra.demo",
+      primaryContactName: "Ketan Shah",
+      gstNumber: "24AAAAA0000A1Z5",
+      licenseNumber: "LIC-CIV-1042",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
+      name: "Pearl Electricals",
+      trade: "Electrical",
+      city: "Vadodara",
+      state: "Gujarat",
+      businessPhone: "+91 265 240 2200",
+      email: "ops@pearl.demo",
+      primaryContactName: "Meera Joshi",
+      gstNumber: "24BBBBB0000B1Z5",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
+      name: "AquaFlow MEP",
+      trade: "Plumbing",
+      city: "Surat",
+      state: "Gujarat",
+      email: "info@aquaflow.demo",
+      primaryContactName: "Imran Khan",
+      isPrequalified: false,
+      insuranceVerified: true,
+    },
+    {
+      name: "SteelForm Fabricators",
+      trade: "Structural steel",
+      city: "Rajkot",
+      state: "Gujarat",
+      email: "sales@steelform.demo",
+      primaryContactName: "Nilesh Patel",
+      isPrequalified: true,
+      insuranceVerified: false,
+    },
+  ] as const;
+
+  for (const v of vendorDefs) {
+    const existing = await prisma.vendor.findFirst({ where: { name: v.name } });
+    const vendor =
+      existing ||
+      (await prisma.vendor.create({
+        data: { ...v, country: "India", createdVia: "Seed" },
+      }));
+    await prisma.projectVendor.upsert({
+      where: { projectId_vendorId: { projectId: project.id, vendorId: vendor.id } },
+      create: { projectId: project.id, vendorId: vendor.id, tradeRole: v.trade, assignedVia: "Seed" },
+      update: { tradeRole: v.trade },
+    });
+  }
+  console.log("Vendors seeded:", vendorDefs.length);
+
+  const adminId = users.find((u) => u.role === "admin")?.id!;
+  const siteId = users.find((u) => u.role === "site_employee")?.id!;
+  const officeUserId = users.find((u) => u.role === "office")?.id!;
+
+  // Sample RFI
+  const rfiCount = await prisma.rfi.count({ where: { projectId: project.id } });
+  if (rfiCount === 0 && drawing.id) {
+    await prisma.rfi.create({
+      data: {
+        projectId: project.id,
+        number: "RFI-001",
+        subject: "Beam depth conflict at Grid B/3",
+        question:
+          "Structural S-201 shows 450mm beam; architectural ceiling void on A-301 allows only 380mm. Please confirm preferred resolution.",
+        status: "Open",
+        ballInCourt: "Assignee",
+        assignedToId: officeUserId,
+        createdById: siteId,
+        linkedDrawingId: structuralDrawing.id,
+        dueDate: new Date(Date.now() + 5 * 86400000),
+        scheduleImpact: "Medium",
+        costImpact: "Low",
+      },
+    });
+  }
+
+  // Sample QA inspection (gated by published drawings)
+  const inspCount = await prisma.qualityInspection.count({ where: { projectId: project.id } });
+  if (inspCount === 0 && structuralDrawing.id) {
+    const insp = await prisma.qualityInspection.create({
+      data: {
+        projectId: project.id,
+        title: "Raft foundation pre-pour",
+        inspectionType: "Quality",
+        status: "Open",
+        location: "Block A — Grid A1-D4",
+        linkedDrawingId: structuralDrawing.id,
+        trade: "Civil",
+        createdById: officeUserId,
+        assignedToId: siteId,
+        dueDate: new Date(Date.now() + 2 * 86400000),
+        items: {
+          create: [
+            { description: "Formwork alignment matches S-101", sortOrder: 1 },
+            { description: "Cover blocks / chairs in place", sortOrder: 2 },
+            { description: "Rebar size & spacing as per schedule", sortOrder: 3 },
+            { description: "Construction joint prepared", sortOrder: 4 },
+            {
+              description: "Ready for concrete pour",
+              sortOrder: 5,
+              autoGenerateRfi: true,
+            },
+          ],
+        },
+      },
+    });
+    const inspFolder = path.join(driveRoot, "Inspections", "Structural");
+    fs.mkdirSync(inspFolder, { recursive: true });
+    fs.writeFileSync(
+      path.join(inspFolder, `${insp.id}-meta.txt`),
+      `Inspection: ${insp.title}\nLinked drawing: S-101\n`
+    );
+  }
+
+  // Submittal + coordination sample
+  if ((await prisma.submittal.count({ where: { projectId: project.id } })) === 0) {
+    await prisma.submittal.create({
+      data: {
+        projectId: project.id,
+        number: "SUB-001",
+        title: "AAC block manufacturer data",
+        submittalType: "Product Data",
+        status: "Open",
+        ballInCourt: "Reviewer",
+        specSection: "04 22 00",
+      },
+    });
+  }
+  if ((await prisma.designCoordinationIssue.count({ where: { projectId: project.id } })) === 0) {
+    await prisma.designCoordinationIssue.create({
+      data: {
+        projectId: project.id,
+        title: "AHU duct vs beam clash — Level 1 corridor",
+        description: "400x600 duct conflicts with secondary beam at Grid C.",
+        discipline: "MEP",
+        location: "L1 corridor",
+        priority: "High",
+      },
+    });
+  }
+
+  // Ensure Inspections / RFIs folders exist in mock drive
+  for (const rel of [
+    "Inspections",
+    "Inspections/Architecture",
+    "Inspections/Structural",
+    "Inspections/MEP",
+    "Inspections/Civil",
+    "RFIs",
+    "Submittals",
+  ]) {
+    fs.mkdirSync(path.join(driveRoot, rel), { recursive: true });
+    const name = rel.split("/").pop()!;
+    const parentPath = rel.includes("/") ? rel.split("/").slice(0, -1).join("/") : null;
+    await prisma.documentFolder.upsert({
+      where: { projectId_path: { projectId: project.id, path: rel } },
+      create: {
+        projectId: project.id,
+        path: rel,
+        name,
+        parentPath,
+        mockDriveId: `mock-${project.code}-${rel}`,
+        lastSyncedAt: new Date(),
+      },
+      update: { lastSyncedAt: new Date() },
+    });
+  }
+
+  void adminId;
   return { project, drawing };
 }
 
