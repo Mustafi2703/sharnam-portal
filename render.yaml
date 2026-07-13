@@ -3,9 +3,11 @@ services:
     name: sharnam-api
     runtime: node
     plan: free
+    region: oregon
     rootDir: .
-    buildCommand: npm install && npx prisma generate && npm run build -w @sharnam/api
-    startCommand: npx prisma db push && npm run db:seed && npm run start -w @sharnam/api
+    buildCommand: npm install && npx prisma generate
+    startCommand: npx prisma db push && SHARNAM_EXCEL_ROOT=. npx tsx seed/seed.ts && npm run start -w @sharnam/api
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
         value: "22"
@@ -20,7 +22,9 @@ services:
       - key: SEED_PASSWORD
         value: Demo@1234
       - key: WEB_ORIGIN
-        sync: false
+        value: "*"
+      - key: PORT
+        value: "10000"
 
   - type: web
     name: sharnam-web
@@ -28,10 +32,6 @@ services:
     rootDir: .
     buildCommand: npm install && npm run build -w @sharnam/web
     staticPublishPath: apps/web/dist
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache
     routes:
       - type: rewrite
         source: /*
