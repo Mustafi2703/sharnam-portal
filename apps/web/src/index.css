@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #0a7ea4;
-  --color-brand-dark: #06627f;
-  --color-brand-soft: #d9eef6;
-  --color-brand-glow: #3db4d8;
-  --color-steel: #121820;
-  --color-steel-2: #1c2530;
-  --color-steel-muted: #6b7a8c;
-  --color-sand: #f0ebe3;
-  --color-ink: #0e141b;
-  --color-paper: #faf9f7;
-  --color-line: rgba(18, 24, 32, 0.08);
-  --color-ok: #1f7a4d;
+  --color-brand: #007ba7;
+  --color-brand-dark: #005b7f;
+  --color-brand-soft: #e8f5fa;
+  --color-brand-glow: #4ec3e0;
+  --color-steel: #0b1016;
+  --color-steel-2: #151c26;
+  --color-steel-muted: #5a6a7c;
+  --color-sand: #f4f0ea;
+  --color-ink: #0b1016;
+  --color-paper: #ffffff;
+  --color-line: rgba(11, 16, 22, 0.1);
+  --color-ok: #0f7a45;
   --color-warn: #9a6700;
   --color-danger: #b42318;
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
@@ -30,24 +30,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background-color: #ebe6de;
-  background-image:
-    linear-gradient(180deg, rgba(250, 249, 247, 0.92), rgba(235, 230, 222, 0.98)),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 47px,
-      rgba(18, 24, 32, 0.03) 47px,
-      rgba(18, 24, 32, 0.03) 48px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 47px,
-      rgba(18, 24, 32, 0.03) 47px,
-      rgba(18, 24, 32, 0.03) 48px
-    );
-  background-attachment: fixed;
+  background: #f3f1ec;
 }
 
 .font-display {
@@ -60,21 +43,73 @@ body {
 }
 
 .surface {
-  background: rgba(250, 249, 247, 0.92);
+  background: #ffffff;
   border: 1px solid var(--color-line);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 18px 40px -28px rgba(18, 24, 32, 0.35);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 16px 40px -28px rgba(11, 16, 22, 0.28);
 }
 
 .surface-dark {
-  background: linear-gradient(165deg, #1c2530 0%, #121820 100%);
-  color: #f5f7fa;
+  background: #0b1016;
+  color: #f7fafc;
+}
+
+.hero-readable {
+  background:
+    linear-gradient(115deg, rgba(11, 16, 22, 0.94) 0%, rgba(11, 16, 22, 0.82) 48%, rgba(0, 91, 127, 0.72) 100%),
+    url("/bg.webp") center/cover no-repeat;
+  color: #ffffff;
 }
 
 .blueprint-grid {
   background-image:
-    linear-gradient(rgba(61, 180, 216, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(61, 180, 216, 0.08) 1px, transparent 1px);
-  background-size: 28px 28px;
+    linear-gradient(rgba(78, 195, 224, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(78, 195, 224, 0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.corner-frame {
+  position: relative;
+}
+
+.corner-frame::before,
+.corner-frame::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--color-brand);
+  pointer-events: none;
+  transition: width 0.25s ease, height 0.25s ease;
+}
+
+.corner-frame::before {
+  top: 10px;
+  left: 10px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.corner-frame::after {
+  right: 10px;
+  bottom: 10px;
+  border-right: 2px solid;
+  border-bottom: 2px solid;
+}
+
+.corner-frame:hover::before,
+.corner-frame:hover::after {
+  width: 28px;
+  height: 28px;
+}
+
+.portal-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.portal-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(0, 123, 167, 0.45);
+  box-shadow: 0 22px 50px -28px rgba(0, 91, 127, 0.55);
 }
 
 .workflow-step {
@@ -88,7 +123,7 @@ body {
   left: calc(50% + 18px);
   width: calc(100% - 36px);
   height: 1px;
-  background: linear-gradient(90deg, rgba(10, 126, 164, 0.5), rgba(10, 126, 164, 0.1));
+  background: linear-gradient(90deg, rgba(0, 123, 167, 0.55), rgba(0, 123, 167, 0.08));
 }
 
 .workflow-step:last-child::after {
@@ -98,7 +133,7 @@ body {
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -107,17 +142,17 @@ body {
 }
 
 .rise {
-  animation: rise-in 0.45s ease-out both;
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .rise-delay-1 {
-  animation-delay: 0.06s;
+  animation-delay: 0.07s;
 }
 .rise-delay-2 {
-  animation-delay: 0.12s;
+  animation-delay: 0.14s;
 }
 .rise-delay-3 {
-  animation-delay: 0.18s;
+  animation-delay: 0.21s;
 }
 
 ::-webkit-scrollbar {
@@ -125,6 +160,10 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(18, 24, 32, 0.25);
+  background: rgba(11, 16, 22, 0.22);
   border-radius: 999px;
+}
+
+::selection {
+  background: rgba(0, 123, 167, 0.22);
 }

@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { Badge, Button, Card, Input } from "../components/ui";
+import { BrandLink, BrandMark } from "../components/Brand";
 
 type PortalConfig = {
   key: string;
@@ -12,50 +13,55 @@ type PortalConfig = {
   subtitle: string;
   demoEmail: string;
   allowedRoles: RoleKey[];
-  accent: string;
+  panelClass: string;
   points: string[];
+  cta: string;
 };
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   client: {
     key: "client",
     title: "Client portal",
-    headline: "See progress without the site noise.",
-    subtitle: "Approved checklists, diaries, and weekly reports for your project.",
+    headline: "Project clarity for owners & clients.",
+    subtitle: "Approved checklists, diaries, and weekly reports — without site clutter.",
     demoEmail: "client@sharnam.demo",
     allowedRoles: ["client"],
-    accent: "from-sky-500/25",
+    panelClass: "from-[#005b7f] to-[#0b1016]",
     points: ["Published drawings visibility", "Approved QA trail", "Weekly report pack"],
+    cta: "Enter client portal",
   },
   site: {
     key: "site",
     title: "Site employee portal",
-    headline: "Log the day. Fill checklists when drawings are live.",
-    subtitle: "Field crew access — diary, gated checklists, photos.",
+    headline: "Built for the field.",
+    subtitle: "Daily diary and gated checklists once drawings are published.",
     demoEmail: "site@sharnam.demo",
     allowedRoles: ["site_employee"],
-    accent: "from-amber-500/20",
+    panelClass: "from-[#0b1016] to-[#1a3040]",
     points: ["Daily diary", "Drawing-gated checklists", "Yes / No / N.A. forms"],
+    cta: "Enter site portal",
   },
   employee: {
     key: "employee",
     title: "Employee portal",
-    headline: "Office & field staff workspace.",
-    subtitle: "Cross-functional employee seat for projects, CRM, and coordination.",
+    headline: "Your workday workspace.",
+    subtitle: "Projects, coordination, and self-service for staff.",
     demoEmail: "employee@sharnam.demo",
     allowedRoles: ["employee", "office"],
-    accent: "from-emerald-500/20",
+    panelClass: "from-[#0d3d4f] to-[#0b1016]",
     points: ["Project modules", "Communications", "HR self-service"],
+    cta: "Enter employee portal",
   },
   office: {
     key: "office",
     title: "Office portal",
-    headline: "Publish drawings. Review. Cost. Communicate.",
-    subtitle: "PMC office — unlock the site gate and run the project spine.",
+    headline: "Run the project spine.",
+    subtitle: "Publish drawings, review QA, track cost, and communicate.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["office", "admin"],
-    accent: "from-cyan-400/25",
+    panelClass: "from-[#007ba7] to-[#0b1016]",
     points: ["Drawing publish", "Checklist review", "Cost & BOQ"],
+    cta: "Enter office portal",
   },
 };
 
@@ -71,21 +77,30 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-2">
-      <section className={`relative hidden lg:flex flex-col justify-between p-12 surface-dark blueprint-grid overflow-hidden`}>
-        <div className={`absolute inset-0 bg-[radial-gradient(ellipse_at_20%_15%,var(--tw-gradient-from),transparent_55%)] ${cfg.accent}`} />
-        <div className="relative">
-          <Link to="/login" className="text-white/50 text-sm hover:text-white transition">
+      <section
+        className={`relative hidden lg:flex flex-col justify-between p-12 text-white overflow-hidden bg-gradient-to-br ${cfg.panelClass}`}
+      >
+        <div className="absolute inset-0 blueprint-grid opacity-60" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(78,195,224,0.25),transparent_50%)]" />
+        <div className="relative z-10">
+          <BrandLink to="/login" tagTone="dark" />
+          <Link to="/login" className="inline-block mt-8 text-sm text-white/80 hover:text-white underline-offset-4 hover:underline">
             ← All portals
           </Link>
-          <Badge tone="brand">
+          <div className="mt-8 inline-flex rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur">
             {cfg.title}
-          </Badge>
-          <h1 className="font-display text-5xl xl:text-6xl mt-5 leading-[0.98] max-w-lg">{cfg.headline}</h1>
-          <p className="mt-5 text-lg text-white/70 max-w-md leading-relaxed">{cfg.subtitle}</p>
+          </div>
+          <h1 className="font-display text-5xl xl:text-[3.4rem] mt-5 leading-[1.05] max-w-lg text-white drop-shadow-sm">
+            {cfg.headline}
+          </h1>
+          <p className="mt-5 text-base xl:text-lg text-white/90 max-w-md leading-relaxed">{cfg.subtitle}</p>
         </div>
-        <ul className="relative space-y-2 max-w-md">
+        <ul className="relative z-10 space-y-2.5 max-w-md">
           {cfg.points.map((p, i) => (
-            <li key={p} className="flex gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/85">
+            <li
+              key={p}
+              className="flex gap-3 rounded-2xl border border-white/20 bg-black/25 backdrop-blur-md px-4 py-3.5 text-sm text-white shadow-lg"
+            >
               <span className="font-mono text-brand-glow text-xs mt-0.5">0{i + 1}</span>
               {p}
             </li>
@@ -93,19 +108,18 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
         </ul>
       </section>
 
-      <section className="flex items-center justify-center p-6 sm:p-10">
+      <section className="flex items-center justify-center p-6 sm:p-10 bg-[#f3f1ec]">
         <div className="w-full max-w-md rise">
-          <div className="lg:hidden mb-6">
-            <Link to="/login" className="text-sm text-brand">
+          <div className="lg:hidden mb-8 space-y-4">
+            <BrandMark size="lg" tagTone="light" />
+            <Link to="/login" className="text-sm text-brand font-medium">
               ← All portals
             </Link>
-            <div className="font-display text-3xl mt-3">शरणम्</div>
-            <p className="text-steel-muted text-sm">{cfg.title}</p>
           </div>
-          <h2 className="font-display text-4xl text-ink">Sign in</h2>
-          <p className="text-steel-muted mt-2 mb-6 text-sm">{cfg.subtitle}</p>
+          <h2 className="font-display text-4xl text-ink tracking-tight">Sign in</h2>
+          <p className="text-steel-muted mt-2 mb-6 text-sm leading-relaxed">{cfg.subtitle}</p>
 
-          <Card>
+          <Card className="!shadow-xl !shadow-steel/10">
             <form
               className="space-y-4"
               onSubmit={async (e) => {
@@ -144,12 +158,14 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
                   autoComplete="current-password"
                 />
               </label>
-              {error && <p className="text-sm text-danger">{error}</p>}
-              <Button disabled={busy} className="w-full !py-3">
-                {busy ? "Signing in…" : `Enter ${cfg.title.toLowerCase()}`}
+              {error && (
+                <p className="text-sm text-danger bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
+              )}
+              <Button disabled={busy} className="w-full !py-3.5 !text-[15px]">
+                {busy ? "Signing in…" : cfg.cta}
               </Button>
               <p className="text-center font-mono text-[11px] text-steel-muted">
-                Demo: {cfg.demoEmail} · Demo@1234
+                Demo · {cfg.demoEmail} · Demo@1234
               </p>
             </form>
           </Card>
@@ -171,40 +187,94 @@ export function LoginHubPage() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="surface-dark blueprint-grid px-6 py-10 sm:px-10">
-        <div className="max-w-5xl mx-auto">
-          <div className="font-display text-4xl sm:text-5xl">शरणम्</div>
-          <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.28em] text-white/45">Site Command</p>
-          <h1 className="font-display text-3xl sm:text-4xl mt-8 text-white/95 max-w-xl leading-tight">
-            Choose your portal
-          </h1>
-          <p className="mt-3 text-white/60 max-w-lg">
-            Separate entry for clients, site crew, employees, and office — so each login matches how people work.
-          </p>
+    <div className="min-h-screen flex flex-col bg-[#f3f1ec]">
+      <header className="hero-readable relative overflow-hidden">
+        <div className="absolute inset-0 blueprint-grid opacity-40" />
+        <div className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 py-10 sm:py-14">
+          <div className="flex items-center justify-between gap-4">
+            <BrandMark size="lg" tagTone="dark" />
+            <span className="hidden sm:inline-flex rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs text-white backdrop-blur">
+              PMC field system
+            </span>
+          </div>
+
+          <div className="mt-12 sm:mt-16 max-w-2xl">
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-brand-glow mb-4">
+              Choose your portal
+            </p>
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl text-white leading-[1.05] tracking-tight">
+              One project spine.
+              <span className="block text-brand-glow mt-1">Four clear entrances.</span>
+            </h1>
+            <p className="mt-5 text-base sm:text-lg text-white/92 leading-relaxed max-w-xl">
+              Clients, site crew, employees, and office each get a dedicated login — so the experience matches
+              how they actually work on site.
+            </p>
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-3 text-sm">
+            {["Drawings unlock checklists", "Daily diary", "Cost & reports"].map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-white/25 bg-black/30 px-3.5 py-1.5 text-white backdrop-blur"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
         </div>
       </header>
 
-      <div className="flex-1 px-6 py-10 sm:px-10">
-        <div className="max-w-5xl mx-auto grid sm:grid-cols-2 gap-4">
-          {cards.map(({ key, path }, i) => {
-            const c = PORTAL_LOGINS[key];
-            return (
-              <Link key={key} to={path} className={`rise rise-delay-${Math.min(i + 1, 3)}`}>
-                <Card className="h-full hover:border-brand/40 transition group">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand">{c.title}</div>
-                  <div className="font-display text-2xl mt-2 group-hover:text-brand-dark transition">{c.headline}</div>
-                  <p className="text-sm text-steel-muted mt-2 leading-relaxed">{c.subtitle}</p>
-                  <div className="mt-5 text-sm font-medium text-brand">Continue →</div>
-                </Card>
-              </Link>
-            );
-          })}
+      <div className="flex-1 px-6 sm:px-10 py-10 sm:py-12">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-end justify-between gap-4 mb-6">
+            <div>
+              <h2 className="font-display text-2xl sm:text-3xl text-ink">Portals</h2>
+              <p className="text-steel-muted text-sm mt-1">Select who you are to continue</p>
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4 lg:gap-5">
+            {cards.map(({ key, path }, i) => {
+              const c = PORTAL_LOGINS[key];
+              return (
+                <Link key={key} to={path} className={`rise rise-delay-${Math.min(i + 1, 3)}`}>
+                  <div className="portal-card corner-frame surface rounded-2xl p-6 h-full">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-brand">{c.title}</div>
+                    <div className="font-display text-2xl sm:text-[1.65rem] mt-3 text-ink leading-tight">
+                      {c.headline}
+                    </div>
+                    <p className="text-sm text-steel-muted mt-3 leading-relaxed">{c.subtitle}</p>
+                    <ul className="mt-5 space-y-1.5">
+                      {c.points.map((p) => (
+                        <li key={p} className="text-xs text-ink/80 flex gap-2">
+                          <span className="text-brand mt-0.5">▸</span>
+                          {p}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand">
+                      Continue
+                      <span className="transition-transform group-hover:translate-x-1">→</span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <p className="mt-10 text-center text-xs text-steel-muted font-mono">
+            Demo password for all portals · Demo@1234 · Admin uses Office portal
+          </p>
         </div>
-        <p className="max-w-5xl mx-auto mt-8 text-center text-xs text-steel-muted font-mono">
-          Admin uses Office portal · password Demo@1234 for all demos
-        </p>
       </div>
+
+      <footer className="border-t border-line bg-white/70 px-6 py-5">
+        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          <BrandMark size="sm" tagTone="light" />
+          <p className="text-xs text-steel-muted">Sharnam Project Development Consultants & Co.</p>
+        </div>
+      </footer>
     </div>
   );
 }
