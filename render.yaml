@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: sharnam-api
+    name: sharnam-portal
     runtime: node
     plan: free
     region: oregon
     rootDir: .
-    buildCommand: npm install && npx prisma generate
-    startCommand: npx prisma db push && SHARNAM_EXCEL_ROOT=. npx tsx seed/seed.ts && npm run start -w @sharnam/api
+    buildCommand: npm install && npx prisma generate && npm run build -w @sharnam/web
+    startCommand: npx prisma db push && npx tsx seed/seed.ts && npm run start -w @sharnam/api
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
@@ -23,19 +23,5 @@ services:
         value: Demo@1234
       - key: WEB_ORIGIN
         value: "*"
-      - key: PORT
-        value: "10000"
-
-  - type: web
-    name: sharnam-web
-    runtime: static
-    rootDir: .
-    buildCommand: npm install && npm run build -w @sharnam/web
-    staticPublishPath: apps/web/dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
       - key: VITE_API_URL
-        sync: false
+        value: ""

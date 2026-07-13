@@ -54,6 +54,16 @@ app.use("/api/audit", auditRouter);
 app.use("/api/crm", crmRouter);
 app.use("/api/hrm", hrmRouter);
 
+// Serve built React app (single-service Render deploy)
+const webDist = path.resolve(__dirname, "../../web/dist");
+if (fs.existsSync(webDist)) {
+  app.use(express.static(webDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
+    res.sendFile(path.join(webDist, "index.html"));
+  });
+}
+
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(500).json({ error: err.message || "Server error" });
