@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.env
+.env.local
+*.db
+*.db-journal
+uploads/**
+!uploads/.gitkeep
+.DS_Store
+.vite
+coverage
+.prisma
+apps/web/dist
+apps/api/dist

@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: sharnam-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npx prisma generate && npm run build -w @sharnam/api
+    startCommand: npx prisma db push && npm run db:seed && npm run start -w @sharnam/api
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        value: file:./prod.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MOCK_ONEDRIVE
+        value: "true"
+      - key: UPLOAD_DIR
+        value: ./uploads
+      - key: SEED_PASSWORD
+        value: Demo@1234
+      - key: WEB_ORIGIN
+        sync: false
+
+  - type: web
+    name: sharnam-web
+    runtime: static
+    rootDir: .
+    buildCommand: npm install && npm run build -w @sharnam/web
+    staticPublishPath: apps/web/dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false
