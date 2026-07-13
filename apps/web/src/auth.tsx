@@ -8,6 +8,7 @@ type AuthState = {
   permissions: ModulePermissions | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithToken: (token: string, user: AuthUser) => void;
   logout: () => void;
   refresh: () => Promise<void>;
 };
@@ -58,6 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("sharnam_token", data.token);
         setToken(data.token);
         setUser(data.user);
+      },
+      loginWithToken: (nextToken, nextUser) => {
+        localStorage.setItem("sharnam_token", nextToken);
+        setToken(nextToken);
+        setUser(nextUser);
       },
       logout: () => {
         localStorage.removeItem("sharnam_token");

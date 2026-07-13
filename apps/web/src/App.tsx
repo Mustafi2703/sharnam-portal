@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
-import LoginPage from "./pages/LoginPage";
+import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
@@ -20,7 +20,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center text-steel-muted">
+      <div className="min-h-screen grid place-items-center text-steel-muted font-mono text-sm">
         Loading portal…
       </div>
     );
@@ -32,7 +32,11 @@ function Protected({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={<LoginHubPage />} />
+      <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
+      <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
+      <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
+      <Route path="/login/office" element={<PortalLoginPage portalKey="office" />} />
       <Route
         path="/*"
         element={
