@@ -4,22 +4,28 @@ export function BrandMark({
   size = "md",
   showTag = true,
   tagTone = "light",
+  compact = false,
 }: {
   size?: "sm" | "md" | "lg";
   showTag?: boolean;
-  /** Tag text color relative to surrounding surface */
   tagTone?: "light" | "dark";
+  compact?: boolean;
 }) {
-  const heights = { sm: "h-10", md: "h-12", lg: "h-[4.25rem]" };
+  const heights = { sm: "h-7", md: "h-10", lg: "h-14" };
   return (
-    <div className="flex items-center gap-3 min-w-0">
-      <div className="rounded-xl overflow-hidden ring-1 ring-black/20 shadow-md bg-black shrink-0">
+    <div className={`flex items-center min-w-0 ${compact ? "gap-2" : "gap-3"}`}>
+      <div className={`overflow-hidden ring-1 ring-black/20 bg-black shrink-0 ${compact ? "rounded" : "rounded-lg"}`}>
         <img src="/logo.png" alt="शरणम्" className={`${heights[size]} w-auto object-contain block`} />
       </div>
-      {showTag && (
+      {showTag && !compact && (
         <div className={tagTone === "dark" ? "text-white" : "text-ink"}>
-          <div className="font-mono text-[10px] uppercase tracking-[0.28em] opacity-55">Site Command</div>
+          <div className="text-[10px] uppercase tracking-[0.2em] opacity-55 font-medium">शरणम् Portal</div>
         </div>
+      )}
+      {showTag && compact && (
+        <span className={`text-sm font-semibold tracking-tight ${tagTone === "dark" ? "text-white" : "text-ink"}`}>
+          शरणम्
+        </span>
       )}
     </div>
   );

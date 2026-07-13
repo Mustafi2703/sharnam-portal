@@ -2,31 +2,74 @@ import { NavLink, Outlet, useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge } from "../../components/ui";
+import { Badge, Button } from "../../components/ui";
 
-const TOOLS = [
-  { to: "", label: "Home", end: true },
-  { to: "directory", label: "Directory" },
-  { to: "vendors", label: "Vendors" },
-  { to: "drawings", label: "Drawings" },
-  { to: "dms", label: "Documents" },
-  { to: "checklist", label: "Checklists" },
-  { to: "inspections", label: "QA / Inspections" },
-  { to: "rfis", label: "RFIs" },
-  { to: "submittals", label: "Submittals" },
-  { to: "photos", label: "Photos" },
-  { to: "diary", label: "Daily Log" },
-  { to: "comms", label: "Meetings & Comms" },
-  { to: "coordination", label: "Design Coordination" },
-  { to: "cost", label: "Cost" },
-  { to: "reports", label: "Reports" },
+const TOOL_GROUPS: { title: string; items: { to: string; label: string; end?: boolean }[] }[] = [
+  {
+    title: "Project",
+    items: [
+      { to: "", label: "Home", end: true },
+      { to: "directory", label: "Directory" },
+      { to: "vendors", label: "Vendors" },
+    ],
+  },
+  {
+    title: "Design & Docs",
+    items: [
+      { to: "drawings", label: "Drawings" },
+      { to: "dms", label: "Documents" },
+      { to: "coordination", label: "Design Coordination" },
+      { to: "submittals", label: "Submittals" },
+    ],
+  },
+  {
+    title: "Quality",
+    items: [
+      { to: "checklist", label: "Checklists" },
+      { to: "inspections", label: "Inspections" },
+      { to: "rfis", label: "RFIs" },
+    ],
+  },
+  {
+    title: "Field",
+    items: [
+      { to: "diary", label: "Daily Log" },
+      { to: "photos", label: "Photos" },
+      { to: "comms", label: "Meetings" },
+    ],
+  },
+  {
+    title: "Finance",
+    items: [
+      { to: "cost", label: "Budget & Cost" },
+      { to: "reports", label: "Reports" },
+    ],
+  },
 ];
+
+const SIDEBAR_KEY = "sharnam.toolsSidebarOpen";
 
 export default function ProjectToolsLayout() {
   const { id } = useParams();
   const { token } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const v = localStorage.getItem(SIDEBAR_KEY);
+      return v === null ? true : v === "1";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, sidebarOpen ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (!id) return;
@@ -37,53 +80,125 @@ export default function ProjectToolsLayout() {
   }, [id, token]);
 
   return (
-    <div className="min-h-[70vh] -mx-4 sm:-mx-6 lg:-mx-8 -mt-2">
-      <div className="border-b border-line bg-white px-4 sm:px-6 lg:px-8 py-4">
-        <Link to="/projects" className="text-xs text-brand font-medium">
-          ← All projects
-        </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="font-mono text-[11px] text-brand tracking-wider">{project?.code || "…"}</div>
-            <h1 className="font-display text-3xl text-ink leading-tight">{project?.name || "Project"}</h1>
-            <p className="text-sm text-steel-muted mt-1">
-              {project?.clientName} · {project?.location} · {project?.status}
-            </p>
+    <div className="min-h-[70vh] -mx-3 sm:-mx-5 lg:-mx-6 -mt-4 sm:-mt-5">
+      {/* Procore tool header */}
+      <div className="procore-tool-header px-3 sm:px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Button
+              type="button"
+              variant="secondary"
+              className="!rounded !px-2.5 !py-1.5 !text-xs shrink-0"
+              onClick={() => setSidebarOpen((o) => !o)}
+              title={sidebarOpen ? "Hide tools menu" : "Show tools menu"}
+            >
+              {sidebarOpen ? "☰ Hide tools" : "☰ Tools"}
+            </Button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs text-steel-muted">
+                <Link to="/projects" className="text-procore-blue hover:underline">
+                  Projects
+                </Link>
+                <span>/</span>
+                <span className="font-mono text-[11px] text-brand">{project?.code || "…"}</span>
+              </div>
+              <h1 className="text-lg sm:text-xl font-semibold text-ink truncate leading-tight">
+                {project?.name || "Project"}
+              </h1>
+            </div>
           </div>
-          <Badge tone={gate.publishedCount > 0 ? "ok" : "warn"}>
-            {gate.publishedCount > 0
-              ? `${gate.publishedCount} published drawings`
-              : "No published drawings — checklists & QA locked"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <span className="hidden md:inline text-xs text-steel-muted">
+              {project?.clientName} · {project?.location}
+            </span>
+            <Badge tone={gate.publishedCount > 0 ? "ok" : "warn"}>
+              {gate.publishedCount > 0
+                ? `${gate.publishedCount} published drawings`
+                : "Drawings gate locked"}
+            </Badge>
+          </div>
         </div>
       </div>
 
-      <div className="lg:grid lg:grid-cols-[220px_1fr] min-h-[60vh]">
-        <aside className="border-b lg:border-b-0 lg:border-r border-line bg-[#f7f5f1] lg:min-h-[60vh]">
-          <div className="px-3 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">
-            Project tools
-          </div>
-          <nav className="px-2 pb-4 flex lg:flex-col gap-0.5 overflow-x-auto">
-            {TOOLS.map((t) => (
-              <NavLink
-                key={t.to || "home"}
-                to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
-                end={t.end}
-                className={({ isActive }) =>
-                  `px-3 py-2 rounded-lg text-sm whitespace-nowrap transition ${
-                    isActive
-                      ? "bg-brand text-white font-medium"
-                      : "text-ink/80 hover:bg-white hover:text-ink"
-                  }`
-                }
+      <div className={`min-h-[60vh] ${sidebarOpen ? "lg:grid lg:grid-cols-[220px_1fr]" : ""}`}>
+        {/* Hideable left tools (Procore-style project tool list) */}
+        {sidebarOpen && (
+          <aside className="border-b lg:border-b-0 lg:border-r border-line bg-white lg:min-h-[60vh]">
+            <div className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-steel-muted border-b border-line flex items-center justify-between">
+              <span>Project tools</span>
+              <button
+                type="button"
+                className="lg:hidden text-xs text-procore-blue"
+                onClick={() => setSidebarOpen(false)}
               >
-                {t.label}
-              </NavLink>
-            ))}
-          </nav>
-        </aside>
-        <div className="p-4 sm:p-6 lg:p-8 bg-[#f3f1ec] min-w-0">
-          <Outlet context={{ project, gate, reloadProject: () => api(`/api/projects/${id}`, { token }).then(setProject) }} />
+                Close
+              </button>
+            </div>
+            <nav className="py-2 max-h-[50vh] lg:max-h-none overflow-y-auto">
+              {TOOL_GROUPS.map((g) => (
+                <div key={g.title} className="mb-2">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-steel-muted/80">
+                    {g.title}
+                  </div>
+                  {g.items.map((t) => (
+                    <NavLink
+                      key={t.to || "home"}
+                      to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
+                      end={t.end}
+                      className={({ isActive }) =>
+                        `block px-3 py-1.5 text-[13px] border-l-[3px] transition ${
+                          isActive
+                            ? "border-brand bg-brand-soft text-ink font-semibold"
+                            : "border-transparent text-ink/80 hover:bg-sand"
+                        }`
+                      }
+                    >
+                      {t.label}
+                    </NavLink>
+                  ))}
+                </div>
+              ))}
+            </nav>
+          </aside>
+        )}
+
+        <div className="p-3 sm:p-5 bg-[#f0f0f0] min-w-0">
+          {!sidebarOpen && (
+            <div className="mb-3 flex flex-wrap gap-1">
+              {TOOL_GROUPS.flatMap((g) => g.items)
+                .slice(0, 8)
+                .map((t) => (
+                  <NavLink
+                    key={t.to || "home"}
+                    to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
+                    end={t.end}
+                    className={({ isActive }) =>
+                      `px-2.5 py-1 rounded text-xs border ${
+                        isActive
+                          ? "bg-brand text-white border-brand"
+                          : "bg-white border-line text-ink hover:border-brand/40"
+                      }`
+                    }
+                  >
+                    {t.label}
+                  </NavLink>
+                ))}
+              <button
+                type="button"
+                className="px-2.5 py-1 rounded text-xs border border-line bg-white text-procore-blue"
+                onClick={() => setSidebarOpen(true)}
+              >
+                More tools…
+              </button>
+            </div>
+          )}
+          <Outlet
+            context={{
+              project,
+              gate,
+              reloadProject: () => api(`/api/projects/${id}`, { token }).then(setProject),
+            }}
+          />
         </div>
       </div>
     </div>

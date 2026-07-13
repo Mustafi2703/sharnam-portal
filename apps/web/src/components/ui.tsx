@@ -17,8 +17,8 @@ export function PageHeader({
         {eyebrow && (
           <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-brand mb-2">{eyebrow}</p>
         )}
-        <h1 className="font-display text-4xl sm:text-5xl leading-[1.05] text-ink">{title}</h1>
-        {subtitle && <p className="mt-3 text-steel-muted max-w-2xl text-[15px] leading-relaxed">{subtitle}</p>}
+        <h1 className="text-2xl sm:text-3xl font-semibold leading-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-2 text-steel-muted max-w-2xl text-sm leading-relaxed">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
@@ -35,7 +35,7 @@ export function Card({
   padding?: boolean;
 }) {
   return (
-    <div className={`surface rounded-2xl ${padding ? "p-5 sm:p-6" : ""} ${className}`}>{children}</div>
+    <div className={`surface rounded ${padding ? "p-4 sm:p-5" : ""} ${className}`}>{children}</div>
   );
 }
 
@@ -55,7 +55,7 @@ export function Badge({
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium tracking-wide ${tones[tone]}`}
+      className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium tracking-wide ${tones[tone]}`}
     >
       {children}
     </span>
@@ -72,13 +72,13 @@ export function Button({
 }) {
   const variants = {
     primary: "bg-brand hover:bg-brand-dark text-white shadow-sm",
-    secondary: "bg-white border border-line text-ink hover:bg-sand/60",
+    secondary: "bg-white border border-line text-ink hover:bg-sand",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/5",
     dark: "bg-steel text-white hover:bg-steel-2",
   };
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
     >
       {children}
@@ -149,7 +149,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
 }
@@ -158,7 +158,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
 }
@@ -167,7 +167,7 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return (
     <textarea
       {...props}
-      className={`w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
 }
