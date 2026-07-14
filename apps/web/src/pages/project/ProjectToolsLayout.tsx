@@ -1,16 +1,19 @@
 import { NavLink, Outlet, useParams, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
+import type { RoleKey } from "@sharnam/shared";
 
-const TOOL_GROUPS: { title: string; items: { to: string; label: string; end?: boolean }[] }[] = [
+type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[]; note?: string };
+
+const TOOL_GROUPS: { title: string; items: ToolItem[] }[] = [
   {
     title: "Project",
     items: [
       { to: "", label: "Home", end: true },
       { to: "directory", label: "Directory" },
-      { to: "vendors", label: "Vendors" },
+      { to: "vendors", label: "Vendors", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
     ],
   },
   {
@@ -18,22 +21,22 @@ const TOOL_GROUPS: { title: string; items: { to: string; label: string; end?: bo
     items: [
       { to: "drawings", label: "Drawings" },
       { to: "dms", label: "Documents" },
-      { to: "coordination", label: "Design Coordination" },
-      { to: "submittals", label: "Submittals" },
+      { to: "coordination", label: "Design Coordination", roles: ["admin", "office", "site_employee", "employee"] },
+      { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
     ],
   },
   {
     title: "Quality",
     items: [
       { to: "checklist", label: "Checklists" },
-      { to: "inspections", label: "Inspections" },
-      { to: "rfis", label: "RFIs" },
+      { to: "inspections", label: "Inspections / QAP", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
+      { to: "rfis", label: "RFIs & Concerns" },
     ],
   },
   {
     title: "Field",
     items: [
-      { to: "diary", label: "Daily Log" },
+      { to: "diary", label: "Daily Log", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
       { to: "photos", label: "Photos" },
       { to: "comms", label: "Meetings" },
     ],
@@ -41,7 +44,7 @@ const TOOL_GROUPS: { title: string; items: { to: string; label: string; end?: bo
   {
     title: "Finance",
     items: [
-      { to: "cost", label: "Budget & Cost" },
+      { to: "cost", label: "Budget & Cost", roles: ["admin", "office", "employee"], note: "Phase 2 depth" },
       { to: "reports", label: "Reports" },
     ],
   },
@@ -49,9 +52,16 @@ const TOOL_GROUPS: { title: string; items: { to: string; label: string; end?: bo
 
 const SIDEBAR_KEY = "sharnam.toolsSidebarOpen";
 
+function visibleTools(role?: RoleKey | null) {
+  return TOOL_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((t) => !t.roles || !role || t.roles.includes(role)),
+  })).filter((g) => g.items.length > 0);
+}
+
 export default function ProjectToolsLayout() {
   const { id } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -62,6 +72,8 @@ export default function ProjectToolsLayout() {
       return true;
     }
   });
+
+  const groups = useMemo(() => visibleTools(user?.role), [user?.role]);
 
   useEffect(() => {
     try {
@@ -81,7 +93,6 @@ export default function ProjectToolsLayout() {
 
   return (
     <div className="min-h-[70vh] -mx-3 sm:-mx-5 lg:-mx-6 -mt-4 sm:-mt-5">
-      {/* Procore tool header */}
       <div className="procore-tool-header px-3 sm:px-5 py-3">
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex items-center gap-2 min-w-0">
@@ -121,7 +132,6 @@ export default function ProjectToolsLayout() {
       </div>
 
       <div className={`min-h-[60vh] ${sidebarOpen ? "lg:grid lg:grid-cols-[220px_1fr]" : ""}`}>
-        {/* Hideable left tools (Procore-style project tool list) */}
         {sidebarOpen && (
           <aside className="border-b lg:border-b-0 lg:border-r border-line bg-white lg:min-h-[60vh]">
             <div className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-steel-muted border-b border-line flex items-center justify-between">
@@ -135,7 +145,7 @@ export default function ProjectToolsLayout() {
               </button>
             </div>
             <nav className="py-2 max-h-[50vh] lg:max-h-none overflow-y-auto">
-              {TOOL_GROUPS.map((g) => (
+              {groups.map((g) => (
                 <div key={g.title} className="mb-2">
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-steel-muted/80">
                     {g.title}
@@ -154,6 +164,7 @@ export default function ProjectToolsLayout() {
                       }
                     >
                       {t.label}
+                      {t.note ? <span className="block text-[10px] font-normal text-steel-muted">{t.note}</span> : null}
                     </NavLink>
                   ))}
                 </div>
@@ -165,7 +176,8 @@ export default function ProjectToolsLayout() {
         <div className="p-3 sm:p-5 bg-[#f0f0f0] min-w-0">
           {!sidebarOpen && (
             <div className="mb-3 flex flex-wrap gap-1">
-              {TOOL_GROUPS.flatMap((g) => g.items)
+              {groups
+                .flatMap((g) => g.items)
                 .slice(0, 8)
                 .map((t) => (
                   <NavLink

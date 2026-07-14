@@ -44,6 +44,7 @@ export default function App() {
       <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
       <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
       <Route path="/login/office" element={<PortalLoginPage portalKey="office" />} />
+      <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
       <Route
         path="/*"
         element={

@@ -101,7 +101,12 @@ drawingsRouter.use(requireAuth);
 drawingsRouter.get("/project/:projectId", async (req, res) => {
   const drawings = await prisma.drawing.findMany({
     where: { projectId: req.params.projectId },
-    include: { revisions: { orderBy: { createdAt: "desc" } } },
+    include: {
+      revisions: {
+        orderBy: { createdAt: "desc" },
+        include: { uploadedBy: { select: { fullName: true } } },
+      },
+    },
     orderBy: { drawingNumber: "asc" },
   });
   res.json(drawings);
@@ -205,4 +210,44 @@ drawingsRouter.post("/:id/publish", requireRoles("admin", "office"), async (req:
   });
   await audit("drawing.publish", { userId: req.user!.id, entity: "Drawing", entityId: drawing.id });
   res.json(drawing);
+});
+
+/** CSV export matching Approval & GFC Drawing Log columns */
+drawingsRouter.get("/project/:projectId/export.csv", async (req, res) => {
+  const drawings = await prisma.drawing.findMany({
+    where: { projectId: req.params.projectId },
+    include: { revisions: { orderBy: { createdAt: "desc" } } },
+    orderBy: { drawingNumber: "asc" },
+  });
+  const header = [
+    "Sr No",
+    "Drawing Number",
+    "Drawing Title",
+    "Discipline",
+    "Current Revision",
+    "Revision Date",
+    "Status",
+    "Published",
+    "Revision Count",
+    "Latest File",
+  ];
+  const rows = drawings.map((d, i) => {
+    const latest = d.revisions[0];
+    return [
+      String(i + 1),
+      d.drawingNumber,
+      `"${d.title.replace(/"/g, '""')}"`,
+      d.discipline,
+      d.currentRev,
+      latest ? new Date(latest.createdAt).toISOString().slice(0, 10) : "",
+      d.status,
+      d.isPublished ? "Yes" : "No",
+      String(d.revisions.length),
+      latest?.fileName || latest?.fileUrl || "",
+    ].join(",");
+  });
+  const csv = [header.join(","), ...rows].join("\n");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="gfc-drawing-log-${req.params.projectId}.csv"`);
+  res.send(csv);
 });

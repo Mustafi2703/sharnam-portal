@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import type { AuthUser, RoleKey, PortalKey } from "@sharnam/shared";
+import type { AuthUser, RoleKey, PortalKey, ModuleKey, PermissionAction } from "@sharnam/shared";
+import { DEFAULT_ROLE_PERMISSIONS, can } from "@sharnam/shared";
 
 const JWT_SECRET = process.env.JWT_SECRET || "sharnam-demo-jwt-secret";
 
@@ -28,6 +29,17 @@ export function requireRoles(...roles: RoleKey[]) {
   return (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     if (req.user.role === "admin" || roles.includes(req.user.role)) return next();
+    return res.status(403).json({ error: "Forbidden" });
+  };
+}
+
+/** Enforce module permission matrix (admin always allowed). */
+export function requirePermission(module: ModuleKey, action: PermissionAction) {
+  return (req: AuthedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    if (req.user.role === "admin") return next();
+    const perms = DEFAULT_ROLE_PERMISSIONS[req.user.role];
+    if (can(perms, module, action)) return next();
     return res.status(403).json({ error: "Forbidden" });
   };
 }

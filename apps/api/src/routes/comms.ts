@@ -88,6 +88,34 @@ commsRouter.post("/meetings/:id/items", requireRoles("admin", "office"), async (
   res.status(201).json(item);
 });
 
+commsRouter.patch(
+  "/meetings/items/:itemId",
+  requireRoles("admin", "office", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const item = await prisma.meetingItem.update({
+      where: { id: req.params.itemId },
+      data: {
+        resolutionStatus: req.body.resolutionStatus,
+        priority: req.body.priority,
+        description: req.body.description,
+      },
+    });
+    res.json(item);
+  }
+);
+
+commsRouter.patch("/meetings/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const meeting = await prisma.meeting.update({
+    where: { id: req.params.id },
+    data: {
+      status: req.body.status,
+      title: req.body.title,
+      location: req.body.location,
+    },
+  });
+  res.json(meeting);
+});
+
 commsRouter.post("/meetings/:id/carry-over", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const source = await prisma.meeting.findUnique({
     where: { id: req.params.id },

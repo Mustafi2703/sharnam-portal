@@ -145,16 +145,147 @@ crmRouter.post("/deals", requireRoles("admin", "office"), async (req, res) => {
   res.status(201).json(deal);
 });
 
+crmRouter.patch("/leads/:id", requireRoles("admin", "office"), async (req, res) => {
+  const lead = await prisma.lead.update({
+    where: { id: req.params.id },
+    data: {
+      title: req.body.title,
+      contactName: req.body.contactName,
+      email: req.body.email,
+      phone: req.body.phone,
+      stage: req.body.stage,
+      value: req.body.value != null ? Number(req.body.value) : undefined,
+    },
+  });
+  res.json(lead);
+});
+
+/** Convert a lead into a project + optional members/vendors + Closed Won deal */
+crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  if (lead.projectId) return res.status(400).json({ error: "Lead already converted" });
+
+  const code = String(req.body.code || "").trim();
+  const name = String(req.body.name || lead.title).trim();
+  if (!code || !name) return res.status(400).json({ error: "code and name required" });
+
+  const project = await prisma.project.create({
+    data: {
+      code,
+      name,
+      clientName: req.body.clientName || lead.contactName || undefined,
+      location: req.body.location || undefined,
+      status: "Planning",
+    },
+  });
+
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { projectId: project.id, stage: "Converted" },
+  });
+
+  await prisma.deal.create({
+    data: {
+      name: `${name} — PMC`,
+      stage: "Closed Won",
+      value: lead.value || Number(req.body.value || 0),
+      projectId: project.id,
+    },
+  });
+
+  const memberIds: string[] = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+  for (const userId of memberIds) {
+    await prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId: project.id, userId } },
+      create: { projectId: project.id, userId, role: "member" },
+      update: {},
+    });
+  }
+
+  const vendorIds: string[] = Array.isArray(req.body.vendorIds) ? req.body.vendorIds : [];
+  for (const vendorId of vendorIds) {
+    await prisma.projectVendor.upsert({
+      where: { projectId_vendorId: { projectId: project.id, vendorId } },
+      create: { projectId: project.id, vendorId, assignedVia: "CRM convert" },
+      update: {},
+    });
+  }
+
+  // Always add converter as member
+  await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId: project.id, userId: req.user!.id } },
+    create: { projectId: project.id, userId: req.user!.id, role: "office" },
+    update: {},
+  });
+
+  const { mockOneDrive } = await import("../services/mockOneDrive.js");
+  await mockOneDrive.ensureProjectTree(project.id);
+
+  res.status(201).json({ project, leadId: lead.id });
+});
+
 export const hrmRouter = Router();
 hrmRouter.use(requireAuth);
 
 hrmRouter.get("/employees", async (_req, res) => {
   const users = await prisma.user.findMany({
-    where: { role: { in: ["office", "site_employee", "employee", "admin"] } },
-    select: { id: true, fullName: true, email: true, role: true, portal: true, phone: true, isActive: true },
+    where: { role: { in: ["office", "site_employee", "employee", "admin", "vendor"] } },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      role: true,
+      portal: true,
+      phone: true,
+      isActive: true,
+      memberships: { include: { project: { select: { id: true, code: true, name: true } } } },
+    },
   });
   const profiles = await prisma.employeeProfile.findMany();
   res.json(users.map((u) => ({ ...u, profile: profiles.find((p) => p.userId === u.id) || null })));
+});
+
+hrmRouter.post("/employees", requireRoles("admin", "office"), async (req, res) => {
+  const bcrypt = await import("bcryptjs");
+  const { portalForRole } = await import("@sharnam/shared");
+  const { email, fullName, role, phone, empCode, department, designation, password } = req.body;
+  if (!email || !fullName || !role) return res.status(400).json({ error: "email, fullName, role required" });
+  const hash = await bcrypt.hash(password || process.env.SEED_PASSWORD || "Demo@1234", 10);
+  const roleKey = role as import("@sharnam/shared").RoleKey;
+  const user = await prisma.user.create({
+    data: {
+      email,
+      fullName,
+      role: roleKey,
+      portal: portalForRole(roleKey),
+      phone,
+      passwordHash: hash,
+    },
+  });
+  if (role !== "client" && role !== "vendor") {
+    await prisma.employeeProfile.create({
+      data: {
+        userId: user.id,
+        empCode: empCode || `EMP-${Date.now().toString().slice(-6)}`,
+        department: department || null,
+        designation: designation || null,
+        joinDate: new Date(),
+      },
+    });
+  }
+  res.status(201).json(user);
+});
+
+hrmRouter.post("/assign", requireRoles("admin", "office"), async (req, res) => {
+  const { projectId, userId, role } = req.body;
+  if (!projectId || !userId) return res.status(400).json({ error: "projectId and userId required" });
+  const member = await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId, userId } },
+    create: { projectId, userId, role: role || "member" },
+    update: { role: role || "member" },
+  });
+  res.json(member);
 });
 
 hrmRouter.get("/attendance", async (req, res) => {

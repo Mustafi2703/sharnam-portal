@@ -27,7 +27,7 @@ export default function ChecklistPage() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [responses, setResponses] = useState<Record<string, { answer: string; remarks: string }>>({});
   const [msg, setMsg] = useState("");
-  const canFill = ["admin", "office", "site_employee", "employee"].includes(user?.role || "");
+  const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canReview = user?.role === "admin" || user?.role === "office";
 
   const load = () =>
@@ -88,14 +88,34 @@ export default function ChecklistPage() {
         <PageHeader
           eyebrow="Quality assurance"
           title="Checklists"
-          subtitle="Excel masters become structured forms. Site submit is blocked until drawings are published."
+          subtitle="Final Index masters become dual-fill forms (office / site / vendor). Submit blocked until drawings are published."
           actions={
             data && (
-              <Badge tone={data.canSubmit ? "ok" : "warn"}>
-                {data.canSubmit
-                  ? `${data.publishedDrawings} published drawings`
-                  : "Waiting on published drawings"}
-              </Badge>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Badge tone={data.canSubmit ? "ok" : "warn"}>
+                  {data.canSubmit
+                    ? `${data.publishedDrawings} published drawings`
+                    : "Waiting on published drawings"}
+                </Badge>
+                <Button
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={async () => {
+                    const res = await fetch(`/api/checklist/project/${id}/export.csv`, {
+                      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    });
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "checklist-fills.csv";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Export fills CSV
+                </Button>
+              </div>
             )
           }
         />

@@ -11,6 +11,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # Free-tier demo: SQLite file (ephemeral). For a durable client demo, attach
+      # Render Postgres and change prisma/schema.prisma provider to "postgresql",
+      # then set DATABASE_URL from the database connection string.
       - key: DATABASE_URL
         value: file:./prod.db
       - key: JWT_SECRET
@@ -25,3 +28,5 @@ services:
         value: "*"
       - key: VITE_API_URL
         value: ""
+      - key: SHARNAM_EXCEL_ROOT
+        value: "."

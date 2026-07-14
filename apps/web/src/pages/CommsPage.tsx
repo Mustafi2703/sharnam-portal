@@ -128,15 +128,58 @@ export default function CommsPage() {
           </select>
           {activeMeeting && (
             <>
-              <ul className="text-sm space-y-1">
+              <ul className="text-sm space-y-2">
                 {meetings
                   .find((m) => m.id === activeMeeting)
                   ?.items?.map((i: any) => (
-                    <li key={i.id}>
-                      [{i.resolutionStatus}] {i.description}
+                    <li key={i.id} className="flex justify-between gap-2 items-start border-b border-black/5 pb-2">
+                      <span>
+                        <span
+                          className={`inline-block text-[10px] font-mono px-1.5 py-0.5 rounded mr-2 ${
+                            i.resolutionStatus === "Closed" || i.resolutionStatus === "Resolved"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-amber-100 text-amber-900"
+                          }`}
+                        >
+                          {i.resolutionStatus}
+                        </span>
+                        {i.description}
+                      </span>
+                      {canEdit && i.resolutionStatus !== "Closed" && i.resolutionStatus !== "Resolved" && (
+                        <button
+                          type="button"
+                          className="text-xs text-brand shrink-0"
+                          onClick={async () => {
+                            await api(`/api/comms/meetings/items/${i.id}`, {
+                              method: "PATCH",
+                              token,
+                              body: JSON.stringify({ resolutionStatus: "Closed" }),
+                            });
+                            await load();
+                          }}
+                        >
+                          Close
+                        </button>
+                      )}
                     </li>
                   ))}
               </ul>
+              {canEdit && activeMeeting && (
+                <button
+                  type="button"
+                  className="text-sm text-brand"
+                  onClick={async () => {
+                    await api(`/api/comms/meetings/${activeMeeting}`, {
+                      method: "PATCH",
+                      token,
+                      body: JSON.stringify({ status: "Closed" }),
+                    });
+                    await load();
+                  }}
+                >
+                  Mark meeting closed
+                </button>
+              )}
               {canEdit && (
                 <div className="flex gap-2">
                   <input className="flex-1 rounded-xl border px-3 py-2 text-sm" placeholder="Agenda / minute item" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} />

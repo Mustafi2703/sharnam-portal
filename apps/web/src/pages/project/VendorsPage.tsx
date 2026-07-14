@@ -42,7 +42,7 @@ export default function VendorsPage() {
       <PageHeader
         eyebrow="Company directory"
         title="Vendors"
-        subtitle="Procore-style vendor/company records — assign to this project by trade."
+        subtitle="Procore-style vendor records — create, edit, and assign multiple trades to this project."
       />
 
       {canEdit && (

@@ -2,7 +2,7 @@
 
 Procore-inspired PMC portal for **Sharnam Project Development Consultants & Co.**
 
-New React + Node stack (not PHP). Mock OneDrive DMS until Azure credentials exist. BOQ import patterns adapted from [parikh-procurement](https://github.com/Mustafi2703/parikh-procurement).
+React (Vite) + Express + Prisma. Mock OneDrive DMS until Azure Graph credentials arrive (see [CLIENT_MICROSOFT_REQUEST.md](CLIENT_MICROSOFT_REQUEST.md)).
 
 ## Demo credentials
 
@@ -10,7 +10,8 @@ New React + Node stack (not PHP). Mock OneDrive DMS until Azure credentials exis
 |--------|-------|----------|
 | Admin | `admin@sharnam.demo` | `Demo@1234` |
 | Office | `office@sharnam.demo` | `Demo@1234` |
-| Site employee | `site@sharnam.demo` | `Demo@1234` |
+| Site | `site@sharnam.demo` | `Demo@1234` |
+| Vendor | `vendor@sharnam.demo` | `Demo@1234` |
 | Client | `client@sharnam.demo` | `Demo@1234` |
 | Employee | `employee@sharnam.demo` | `Demo@1234` |
 
@@ -26,45 +27,50 @@ npm run dev
 - Web: http://localhost:5173  
 - API: http://localhost:4000/api/health  
 
-Optional: set `SHARNAM_EXCEL_ROOT` to the folder containing `Final Index.xlsx` and `Drwing check master checklist.xlt.xls` before seeding.
+Optional: `SHARNAM_EXCEL_ROOT` pointing at the folder with `Final Index.xlsx` (defaults to repo root).
 
-## Modules (demo-ready)
+## Modules ready for client demo
 
-- Auth + editable roles / portals
-- Projects, Drawings (publish gate for checklists)
-- Mock OneDrive DMS (sync / browse / upload)
-- Checklist forms from Excel masters
-- Daily diary (manpower, equipment, notes)
-- Communications matrix, log, meetings + carry-over
-- Cost tracking (budget / monitoring / cashflow / BOQ import)
-- Daily & weekly reports + audit trail
-- CRM & HRM shells
+- Four portals: **office / site / vendor / client** (+ employee login)
+- CRM: leads board → convert to project → assign staff & vendors
+- HRM: add employees, assign to projects, attendance / leave
+- Drawings: GFC log register, revision audit, CSV export, publish gate
+- Checklists: Final Index templates, dual-fill (office/site/vendor), gate on published drawings
+- Inspections / QAP → auto RFI; client concerns as RFIs
+- Daily log, meetings MoM open/close + carry-over
+- Reports (printable), audit trail, cost shell (office)
+- Mock OneDrive project folders for drawings/docs
 
 ## Render deploy
 
-See `render.yaml`. Create a PostgreSQL database, set `DATABASE_URL`, `JWT_SECRET`, `WEB_ORIGIN`, then:
+See [render.yaml](render.yaml). Prefer **Postgres** for production:
+
+1. Create a Render Web Service from this repo (uses `render.yaml`)
+2. Add a Render PostgreSQL database and set `DATABASE_URL` to the internal URL
+3. Set `JWT_SECRET`, `WEB_ORIGIN` to the public service URL, `MOCK_ONEDRIVE=true`, `SEED_PASSWORD`
+4. Deploy → open `/login` and walk the demo
 
 ```bash
-# on API service build
 npm install
+npx prisma generate
 npx prisma db push
 npm run db:seed
-npm run build -w @sharnam/api
+npm run build -w @sharnam/web
 npm run start -w @sharnam/api
 ```
 
-For SQLite demo on a single dyno, keep `DATABASE_URL=file:./dev.db` (ephemeral on free tier — prefer Postgres on Render).
+SQLite (`file:./prod.db`) works for a quick demo dyno but is ephemeral on free tier — use Postgres for anything shared with the client.
 
 ## Client walkthrough
 
-1. Login as **office** → open Demo project → confirm published drawing A-101  
-2. Login as **site** → Daily Diary + submit a checklist  
-3. Login as **office** → approve checklist → Cost → BOQ import  
-4. Login as **client** → view reports / approved work  
-5. Login as **admin** → Roles matrix + Audit  
+1. **Office** → CRM leads → convert → open project → Drawings (publish)  
+2. **Site** → Daily Log + Checklist fill  
+3. **Vendor** → Checklist / respond to RFI  
+4. **Client** → view drawings (no upload) → raise concern under RFIs  
+5. **Admin** → Permissions + Audit  
 
-## Out of scope (later)
+## Later
 
-- Real Microsoft Graph / Azure AD  
-- Full RFI / drawing OCR compare  
-- Live PHP data migration  
+- Real Microsoft Graph / SharePoint ([CLIENT_MICROSOFT_REQUEST.md](CLIENT_MICROSOFT_REQUEST.md))
+- Hostinger / `spdc.in` cutover after Graph
+- Drawing OCR compare, deeper cost / payroll, PHP migration

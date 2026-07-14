@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
 
 const EXCEL_ROOT = path.resolve(
-  process.env.SHARNAM_EXCEL_ROOT || path.join(process.cwd(), "..", "app")
+  process.env.SHARNAM_EXCEL_ROOT || process.cwd()
 );
 
 function readSheet(file: string, sheetIndex = 0) {
@@ -58,6 +58,7 @@ async function seedUsers() {
     { email: "site@sharnam.demo", fullName: "Site Engineer", role: "site_employee" },
     { email: "client@sharnam.demo", fullName: "Client Viewer", role: "client" },
     { email: "employee@sharnam.demo", fullName: "Demo Employee", role: "employee" },
+    { email: "vendor@sharnam.demo", fullName: "Vendor Partner", role: "vendor" },
   ];
 
   const users = [];
@@ -79,7 +80,7 @@ async function seedUsers() {
       },
     });
     users.push(u);
-    if (d.role !== "client") {
+    if (d.role !== "client" && d.role !== "vendor") {
       await prisma.employeeProfile.upsert({
         where: { userId: u.id },
         create: {
@@ -605,6 +606,43 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
 
+  // Sample meeting for MoM demo
+  if ((await prisma.meeting.count({ where: { projectId: project.id } })) === 0) {
+    await prisma.meeting.create({
+      data: {
+        projectId: project.id,
+        title: "Weekly Site Coordination",
+        meetingDate: new Date(),
+        location: "Site cabin / Teams",
+        status: "Agenda",
+        items: {
+          create: [
+            {
+              category: "Quality",
+              description: "Confirm GFC publish for Block A elevations",
+              priority: "High",
+              resolutionStatus: "Open",
+              assignedToId: officeUserId,
+            },
+            {
+              category: "Safety",
+              description: "Edge protection on Level 2 balcony",
+              priority: "Medium",
+              resolutionStatus: "Open",
+              assignedToId: siteId,
+            },
+            {
+              category: "General",
+              description: "Vendor induction for Pearl Electricals completed",
+              priority: "Low",
+              resolutionStatus: "Closed",
+            },
+          ],
+        },
+      },
+    });
+  }
+
   // Ensure Inspections / RFIs folders exist in mock drive
   for (const rel of [
     "Inspections",
@@ -646,7 +684,7 @@ async function main() {
   console.log("Done.");
   console.log("Demo project:", project.code, project.name);
   console.log("Password for all demo users:", SEED_PASSWORD);
-  console.log("Logins: admin@sharnam.demo / office@sharnam.demo / site@sharnam.demo / client@sharnam.demo");
+  console.log("Logins: admin / office / site / client / employee / vendor @sharnam.demo");
 }
 
 main()

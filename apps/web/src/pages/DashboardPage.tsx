@@ -27,8 +27,9 @@ export default function DashboardPage() {
     admin: "You own the system — roles, audit, and every project module.",
     office: "Publish drawings to unlock site checklists. Review, cost, and communicate.",
     site_employee: "Log the day. Fill checklists only after drawings are published.",
-    client: "See approved work, diaries, and weekly packs — without the noise.",
+    client: "See approved work and raise concerns — without drawing upload control.",
     employee: "Cross-functional demo seat across office modules.",
+    vendor: "Assigned projects only — dual checklists, diary fills, and RFI responses.",
   };
 
   const flowActive =

@@ -60,7 +60,7 @@ checklistRouter.post("/project/:projectId/assign", requireRoles("admin", "office
 
 checklistRouter.post(
   "/assignments/:assignmentId/submit",
-  requireRoles("admin", "office", "site_employee", "employee"),
+  requireRoles("admin", "office", "site_employee", "employee", "vendor"),
   upload.array("photos", 10),
   async (req: AuthedRequest, res) => {
     const assignment = await prisma.checklistAssignment.findUnique({
@@ -138,4 +138,30 @@ checklistRouter.get("/submissions/:id", async (req, res) => {
   });
   if (!submission) return res.status(404).json({ error: "Not found" });
   res.json(submission);
+});
+
+/** Export project checklist fills for site engineers (shared dual-fill audit) */
+checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
+  const submissions = await prisma.checklistSubmission.findMany({
+    where: { assignment: { projectId: req.params.projectId } },
+    include: {
+      assignment: { include: { template: true } },
+      submittedBy: { select: { fullName: true, role: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const header = ["Submitted At", "Checklist", "Status", "Filled By", "Role", "Remarks"];
+  const rows = submissions.map((s) =>
+    [
+      new Date(s.createdAt).toISOString(),
+      `"${(s.assignment.template.name || "").replace(/"/g, '""')}"`,
+      s.status,
+      `"${s.submittedBy.fullName.replace(/"/g, '""')}"`,
+      s.submittedBy.role || "",
+      `"${(s.remarks || "").replace(/"/g, '""')}"`,
+    ].join(",")
+  );
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="checklist-log-${req.params.projectId}.csv"`);
+  res.send([header.join(","), ...rows].join("\n"));
 });

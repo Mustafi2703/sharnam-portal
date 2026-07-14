@@ -63,6 +63,17 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Drawing publish", "Checklist review", "Cost & BOQ"],
     cta: "Enter office portal",
   },
+  vendor: {
+    key: "vendor",
+    title: "Vendor portal",
+    headline: "Trade partner workspace.",
+    subtitle: "Assigned projects only — dual checklists, RFI responses, and site diary fills.",
+    demoEmail: "vendor@sharnam.demo",
+    allowedRoles: ["vendor"],
+    panelClass: "from-[#1a3040] to-[#0b1016]",
+    points: ["Assigned projects", "Dual checklist fills", "Respond to RFIs"],
+    cta: "Enter vendor portal",
+  },
 };
 
 export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_LOGINS }) {
@@ -180,10 +191,10 @@ export function LoginHubPage() {
   if (!loading && user) return <Navigate to="/" replace />;
 
   const cards: { key: keyof typeof PORTAL_LOGINS; path: string }[] = [
-    { key: "client", path: "/login/client" },
-    { key: "site", path: "/login/site" },
-    { key: "employee", path: "/login/employee" },
     { key: "office", path: "/login/office" },
+    { key: "site", path: "/login/site" },
+    { key: "vendor", path: "/login/vendor" },
+    { key: "client", path: "/login/client" },
   ];
 
   return (
@@ -204,11 +215,11 @@ export function LoginHubPage() {
             </p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl text-white leading-[1.05] tracking-tight">
               One project spine.
-              <span className="block text-brand-glow mt-1">Four clear entrances.</span>
+              <span className="block text-brand-glow mt-1">Four working portals.</span>
             </h1>
             <p className="mt-5 text-base sm:text-lg text-white/92 leading-relaxed max-w-xl">
-              Clients, site crew, employees, and office each get a dedicated login — so the experience matches
-              how they actually work on site.
+              Sharnam office, site engineers, vendors, and clients each get a dedicated login matched to their
+              controls — drawings publish stays with the office.
             </p>
           </div>
 

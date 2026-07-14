@@ -4,6 +4,7 @@ export const ROLES = [
   "site_employee",
   "client",
   "employee",
+  "vendor",
 ] as const;
 
 export type RoleKey = (typeof ROLES)[number];
@@ -13,6 +14,7 @@ export const PORTALS = [
   "office",
   "site",
   "client",
+  "vendor",
 ] as const;
 
 export type PortalKey = (typeof PORTALS)[number];
@@ -32,6 +34,9 @@ export const MODULES = [
   "hrm",
   "roles",
   "users",
+  "vendors",
+  "rfis",
+  "inspections",
 ] as const;
 
 export type ModuleKey = (typeof MODULES)[number];
@@ -74,6 +79,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     hrm: { view: true, create: true, edit: true, approve: true },
     roles: { view: false, create: false, edit: false, approve: false },
     users: { view: true, create: false, edit: false, approve: false },
+    vendors: { view: true, create: true, edit: true, approve: false },
+    rfis: { view: true, create: true, edit: true, approve: true },
+    inspections: { view: true, create: true, edit: true, approve: true },
   },
   site_employee: {
     ...emptyPermissions(false),
@@ -83,7 +91,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     checklist: { view: true, create: true, edit: true, approve: false },
     daily_diary: { view: true, create: true, edit: true, approve: false },
     communications: { view: true, create: false, edit: false, approve: false },
-    meetings: { view: true, create: false, edit: false, approve: false },
+    meetings: { view: true, create: false, edit: true, approve: false },
     cost_tracking: { view: false, create: false, edit: false, approve: false },
     reports: { view: true, create: false, edit: false, approve: false },
     audit: { view: false, create: false, edit: false, approve: false },
@@ -91,6 +99,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     hrm: { view: false, create: false, edit: false, approve: false },
     roles: { view: false, create: false, edit: false, approve: false },
     users: { view: false, create: false, edit: false, approve: false },
+    vendors: { view: true, create: false, edit: false, approve: false },
+    rfis: { view: true, create: true, edit: true, approve: false },
+    inspections: { view: true, create: true, edit: true, approve: false },
   },
   client: {
     ...emptyPermissions(false),
@@ -108,6 +119,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     hrm: { view: false, create: false, edit: false, approve: false },
     roles: { view: false, create: false, edit: false, approve: false },
     users: { view: false, create: false, edit: false, approve: false },
+    vendors: { view: true, create: false, edit: false, approve: false },
+    rfis: { view: true, create: true, edit: false, approve: false },
+    inspections: { view: true, create: false, edit: false, approve: false },
   },
   employee: {
     ...emptyPermissions(false),
@@ -125,6 +139,29 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     hrm: { view: true, create: false, edit: false, approve: false },
     roles: { view: false, create: false, edit: false, approve: false },
     users: { view: false, create: false, edit: false, approve: false },
+    vendors: { view: true, create: false, edit: false, approve: false },
+    rfis: { view: true, create: true, edit: true, approve: false },
+    inspections: { view: true, create: true, edit: true, approve: false },
+  },
+  vendor: {
+    ...emptyPermissions(false),
+    projects: { view: true, create: false, edit: false, approve: false },
+    drawings: { view: true, create: false, edit: false, approve: false },
+    dms: { view: true, create: false, edit: false, approve: false },
+    checklist: { view: true, create: true, edit: true, approve: false },
+    daily_diary: { view: true, create: true, edit: true, approve: false },
+    communications: { view: true, create: false, edit: false, approve: false },
+    meetings: { view: true, create: false, edit: false, approve: false },
+    cost_tracking: { view: false, create: false, edit: false, approve: false },
+    reports: { view: true, create: false, edit: false, approve: false },
+    audit: { view: false, create: false, edit: false, approve: false },
+    crm: { view: false, create: false, edit: false, approve: false },
+    hrm: { view: false, create: false, edit: false, approve: false },
+    roles: { view: false, create: false, edit: false, approve: false },
+    users: { view: false, create: false, edit: false, approve: false },
+    vendors: { view: true, create: false, edit: true, approve: false },
+    rfis: { view: true, create: false, edit: true, approve: false },
+    inspections: { view: true, create: false, edit: true, approve: false },
   },
 };
 
@@ -139,9 +176,20 @@ export function portalForRole(role: RoleKey): PortalKey {
       return "site";
     case "client":
       return "client";
+    case "vendor":
+      return "vendor";
     default:
       return "office";
   }
+}
+
+export function can(
+  permissions: ModulePermissions | null | undefined,
+  module: ModuleKey,
+  action: PermissionAction
+): boolean {
+  if (!permissions) return false;
+  return Boolean(permissions[module]?.[action]);
 }
 
 export type AuthUser = {

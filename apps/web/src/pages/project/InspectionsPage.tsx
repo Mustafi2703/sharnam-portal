@@ -38,8 +38,8 @@ export default function InspectionsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Quality assurance"
-        title="QA / Inspections"
-        subtitle="Separate from checklists — inspection forms stored under Mock OneDrive by drawing discipline."
+        title="Inspections / Quality action plan"
+        subtitle="Daily QA forms linked to published drawings. Mark items Pass / Fail / Unresolved — unresolved can spawn RFIs."
         actions={
           <Badge tone={data?.canInspect ? "ok" : "warn"}>
             {data?.canInspect ? "Gate open" : "Publish drawings first"}

@@ -88,9 +88,10 @@ rfiRouter.get("/project/:projectId", async (req, res) => {
   res.json(rfis);
 });
 
-rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee", "client"), async (req: AuthedRequest, res) => {
   const count = await prisma.rfi.count({ where: { projectId: req.params.projectId } });
-  const number = req.body.number || `RFI-${String(count + 1).padStart(3, "0")}`;
+  const isClient = req.user!.role === "client";
+  const number = req.body.number || `${isClient ? "CON" : "RFI"}-${String(count + 1).padStart(3, "0")}`;
   const due = req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 7 * 86400000);
 
   const rfi = await prisma.rfi.create({
@@ -104,12 +105,13 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       assignedToId: req.body.assignedToId || null,
       createdById: req.user!.id,
       dueDate: due,
-      linkedDrawingId: req.body.linkedDrawingId || null,
+      linkedDrawingId: isClient ? null : req.body.linkedDrawingId || null,
       responsibleVendorId: req.body.responsibleVendorId || null,
       scheduleImpact: req.body.scheduleImpact || "None",
       costImpact: req.body.costImpact || "None",
       isPrivate: !!req.body.isPrivate,
       specSectionLink: req.body.specSectionLink,
+      questionReceivedFrom: isClient ? "Client portal" : req.body.questionReceivedFrom,
     },
     include: {
       assignedTo: { select: { fullName: true } },
@@ -120,7 +122,7 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   res.status(201).json(rfi);
 });
 
-rfiRouter.post("/:id/respond", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+rfiRouter.post("/:id/respond", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const response = await prisma.rfiResponse.create({
     data: {
       rfiId: req.params.id,
@@ -236,7 +238,7 @@ inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "s
   res.status(201).json(inspection);
 });
 
-inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
+inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_employee", "vendor"), async (req: AuthedRequest, res) => {
   const item = await prisma.inspectionItem.update({
     where: { id: req.params.itemId },
     data: { status: req.body.status, remarks: req.body.remarks },

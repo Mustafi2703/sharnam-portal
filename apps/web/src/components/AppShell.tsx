@@ -5,10 +5,10 @@ import { Badge, Button } from "./ui";
 import { BrandMark } from "./Brand";
 
 const nav = [
-  { to: "/", label: "Home", roles: ["admin", "office", "site_employee", "client", "employee"] },
-  { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee"] },
+  { to: "/", label: "Home", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
+  { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/crm", label: "CRM", roles: ["admin", "office", "employee"] },
-  { to: "/hrm", label: "Directory", roles: ["admin", "office"] },
+  { to: "/hrm", label: "HRM", roles: ["admin", "office"] },
   { to: "/audit", label: "Audit", roles: ["admin", "office"] },
   { to: "/roles", label: "Permissions", roles: ["admin"] },
 ];

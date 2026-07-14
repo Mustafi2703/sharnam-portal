@@ -39,7 +39,7 @@ diaryRouter.get("/project/:projectId/date/:date", async (req, res) => {
   res.json(log);
 });
 
-diaryRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+diaryRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const logDate = dayStart(req.body.date || new Date());
   const log = await prisma.dailyLog.upsert({
     where: { projectId_logDate: { projectId: req.params.projectId, logDate } },
@@ -60,7 +60,7 @@ diaryRouter.post("/project/:projectId", requireRoles("admin", "office", "site_em
   res.json(log);
 });
 
-diaryRouter.post("/:id/manpower", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+diaryRouter.post("/:id/manpower", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const entry = await prisma.dailyLogManpower.create({
     data: {
       dailyLogId: req.params.id,
@@ -73,7 +73,7 @@ diaryRouter.post("/:id/manpower", requireRoles("admin", "office", "site_employee
   res.status(201).json(entry);
 });
 
-diaryRouter.post("/:id/equipment", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+diaryRouter.post("/:id/equipment", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const entry = await prisma.dailyLogEquipment.create({
     data: {
       dailyLogId: req.params.id,
@@ -86,7 +86,7 @@ diaryRouter.post("/:id/equipment", requireRoles("admin", "office", "site_employe
   res.status(201).json(entry);
 });
 
-diaryRouter.post("/:id/notes", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+diaryRouter.post("/:id/notes", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const entry = await prisma.dailyLogNote.create({
     data: { dailyLogId: req.params.id, noteText: req.body.noteText },
   });
