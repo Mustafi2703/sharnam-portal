@@ -14,6 +14,7 @@ const TOOL_GROUPS: { title: string; items: ToolItem[] }[] = [
       { to: "", label: "Home", end: true },
       { to: "directory", label: "Directory" },
       { to: "vendors", label: "Vendors", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
+      { to: "email", label: "Email settings", roles: ["admin", "office", "employee", "site_employee"] },
     ],
   },
   {

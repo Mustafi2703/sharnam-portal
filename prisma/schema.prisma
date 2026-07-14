@@ -57,6 +57,12 @@ model Project {
   status      String   @default("Planning")
   startDate   DateTime?
   endDate     DateTime?
+  /// Comma-separated notification emails for this project
+  notificationEmails String?
+  emailFromName      String?  @default("शरणम् Portal")
+  emailEnabled       Boolean  @default(true)
+  notifyOnDrawingPublish Boolean @default(true)
+  notifyOnChecklistSubmit Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -82,6 +88,23 @@ model Project {
   submittals           Submittal[]
   coordinationIssues   DesignCoordinationIssue[]
   safetyRecords        SafetyRecord[]
+  emailOutbox          EmailOutbox[]
+}
+
+/** Mock / queued outbound emails (swap to SMTP/Graph later) */
+model EmailOutbox {
+  id        String   @id @default(cuid())
+  projectId String?
+  toEmails  String
+  subject   String
+  body      String
+  context   String?
+  status    String   @default("Queued")
+  createdById String?
+  createdAt DateTime @default(now())
+  sentAt    DateTime?
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 }
 
 model ProjectMember {

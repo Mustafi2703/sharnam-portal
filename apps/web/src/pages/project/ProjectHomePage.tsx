@@ -42,6 +42,8 @@ export default function ProjectHomePage() {
           ["checklist", "Final Index (Site)", "Site execution work checklists"],
           ["quality-inspections", "Quality Inspections", "QI forms (pre-pour, review…)"],
           ["inspections", "Quality Action Plan", "Track open QI actions & due dates"],
+          ["comms", "Meetings & Comms", "Matrix + schedule meetings"],
+          ["email", "Email settings", "Per-project notification recipients"],
           ["safety", "Safety", "Incidents, observations, JHAs"],
           ["rfis", "RFIs", "Questions with ball-in-court"],
         ].map(([to, title, desc]) => (

@@ -5,6 +5,9 @@ import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ChecklistPage from "./pages/ChecklistPage";
+import ChecklistFillPage from "./pages/ChecklistFillPage";
+import WorkspacePage from "./pages/WorkspacePage";
+import ProjectEmailSettingsPage from "./pages/ProjectEmailSettingsPage";
 import DiaryPage from "./pages/DiaryPage";
 import CommsPage from "./pages/CommsPage";
 import CostPage from "./pages/CostPage";
@@ -37,6 +40,14 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomeRedirect() {
+  const { user } = useAuth();
+  if (user?.portal === "office" || user?.portal === "site" || user?.role === "site_employee" || user?.role === "office" || user?.role === "vendor") {
+    return <Navigate to="/workspace" replace />;
+  }
+  return <DashboardPage />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -46,13 +57,25 @@ export default function App() {
       <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
       <Route path="/login/office" element={<PortalLoginPage portalKey="office" />} />
       <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
+
+      {/* Spacious checklist fill — own chrome, no tool sidebar */}
+      <Route
+        path="/projects/:id/checklist/fill/:assignmentId"
+        element={
+          <Protected>
+            <ChecklistFillPage />
+          </Protected>
+        }
+      />
+
       <Route
         path="/*"
         element={
           <Protected>
             <AppShell>
               <Routes>
-                <Route path="/" element={<DashboardPage />} />
+                <Route path="/" element={<HomeRedirect />} />
+                <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
@@ -70,6 +93,7 @@ export default function App() {
                   <Route path="diary" element={<DiaryPage />} />
                   <Route path="comms" element={<CommsPage />} />
                   <Route path="coordination" element={<CoordinationPage />} />
+                  <Route path="email" element={<ProjectEmailSettingsPage />} />
                   <Route path="cost" element={<CostPage />} />
                   <Route path="reports" element={<ReportsPage />} />
                 </Route>

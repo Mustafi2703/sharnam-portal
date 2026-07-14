@@ -52,6 +52,57 @@ projectsRouter.get("/:id", async (req, res) => {
   res.json(project);
 });
 
+projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const {
+    notificationEmails,
+    emailFromName,
+    emailEnabled,
+    notifyOnDrawingPublish,
+    notifyOnChecklistSubmit,
+    clientName,
+    location,
+    status,
+  } = req.body;
+  const project = await prisma.project.update({
+    where: { id: req.params.id },
+    data: {
+      notificationEmails: notificationEmails !== undefined ? String(notificationEmails) : undefined,
+      emailFromName: emailFromName !== undefined ? String(emailFromName) : undefined,
+      emailEnabled: typeof emailEnabled === "boolean" ? emailEnabled : undefined,
+      notifyOnDrawingPublish: typeof notifyOnDrawingPublish === "boolean" ? notifyOnDrawingPublish : undefined,
+      notifyOnChecklistSubmit: typeof notifyOnChecklistSubmit === "boolean" ? notifyOnChecklistSubmit : undefined,
+      clientName: clientName !== undefined ? clientName : undefined,
+      location: location !== undefined ? location : undefined,
+      status: status !== undefined ? status : undefined,
+    },
+  });
+  await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
+  res.json(project);
+});
+
+projectsRouter.get("/:id/emails", requireRoles("admin", "office", "employee", "site_employee"), async (req, res) => {
+  const rows = await prisma.emailOutbox.findMany({
+    where: { projectId: req.params.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  res.json(rows);
+});
+
+projectsRouter.post("/:id/emails/send", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const { queueProjectEmail } = await import("../services/email.js");
+  const result = await queueProjectEmail({
+    projectId: req.params.id,
+    subject: req.body.subject || "Project notice",
+    body: req.body.body || "",
+    context: req.body.context || "manual",
+    createdById: req.user!.id,
+    toOverride: req.body.toEmails,
+  });
+  if (result.skipped) return res.status(400).json({ error: result.reason });
+  res.status(201).json(result.email);
+});
+
 projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const { userId, role } = req.body;
   const member = await prisma.projectMember.upsert({
@@ -228,6 +279,19 @@ drawingsRouter.post("/:id/publish", requireRoles("admin", "office", "employee", 
     data: { published: true },
   });
   await audit("drawing.publish", { userId: req.user!.id, entity: "Drawing", entityId: drawing.id });
+
+  const project = await prisma.project.findUnique({ where: { id: drawing.projectId } });
+  if (project?.notifyOnDrawingPublish) {
+    const { queueProjectEmail } = await import("../services/email.js");
+    await queueProjectEmail({
+      projectId: drawing.projectId,
+      subject: `Drawing published — ${drawing.drawingNumber}`,
+      body: `${drawing.drawingNumber} — ${drawing.title} (${drawing.currentRev}) is now published.\nQuality / Final Index checklists and communications are unlocked for site fills.`,
+      context: "drawing.publish",
+      createdById: req.user!.id,
+    });
+  }
+
   res.json(drawing);
 });
 

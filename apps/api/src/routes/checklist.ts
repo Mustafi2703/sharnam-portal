@@ -9,8 +9,65 @@ const upload = multer({ storage: multer.memoryStorage() });
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 
-checklistRouter.get("/templates", async (_req, res) => {
+checklistRouter.post(
+  "/project/:projectId/assign",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+  const { templateId } = req.body;
+  const assignment = await prisma.checklistAssignment.upsert({
+    where: {
+      projectId_templateId: { projectId: req.params.projectId, templateId },
+    },
+    create: { projectId: req.params.projectId, templateId },
+    update: {},
+    include: { template: true },
+  });
+  await audit("checklist.assign", { userId: req.user!.id, entity: "ChecklistAssignment", entityId: assignment.id });
+  res.status(201).json(assignment);
+});
+
+checklistRouter.delete(
+  "/assignments/:assignmentId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    await prisma.checklistAssignment.delete({ where: { id: req.params.assignmentId } });
+    await audit("checklist.unassign", { userId: req.user!.id, entity: "ChecklistAssignment", entityId: req.params.assignmentId });
+    res.json({ ok: true });
+  }
+);
+
+checklistRouter.get("/assignments/:assignmentId", async (req, res) => {
+  const assignment = await prisma.checklistAssignment.findUnique({
+    where: { id: req.params.assignmentId },
+    include: {
+      template: { include: { items: { orderBy: { sortOrder: "asc" } } } },
+      project: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          notificationEmails: true,
+          emailEnabled: true,
+        },
+      },
+      submissions: {
+        orderBy: { createdAt: "desc" },
+        take: 40,
+        include: {
+          submittedBy: { select: { fullName: true, email: true, role: true } },
+          drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
+        },
+      },
+    },
+  });
+  if (!assignment) return res.status(404).json({ error: "Not found" });
+  res.json(assignment);
+});
+
+checklistRouter.get("/templates", async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const templates = await prisma.checklistTemplate.findMany({
+    where: type ? { checklistType: type } : undefined,
     include: { _count: { select: { items: true } } },
     orderBy: [{ category: "asc" }, { name: "asc" }],
   });
@@ -53,20 +110,6 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
   });
 });
 
-checklistRouter.post("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const { templateId } = req.body;
-  const assignment = await prisma.checklistAssignment.upsert({
-    where: {
-      projectId_templateId: { projectId: req.params.projectId, templateId },
-    },
-    create: { projectId: req.params.projectId, templateId },
-    update: {},
-    include: { template: true },
-  });
-  await audit("checklist.assign", { userId: req.user!.id, entity: "ChecklistAssignment", entityId: assignment.id });
-  res.status(201).json(assignment);
-});
-
 checklistRouter.post(
   "/assignments/:assignmentId/submit",
   requireRoles("admin", "office", "site_employee", "employee", "vendor"),
@@ -74,6 +117,7 @@ checklistRouter.post(
   async (req: AuthedRequest, res) => {
     const assignment = await prisma.checklistAssignment.findUnique({
       where: { id: req.params.assignmentId },
+      include: { template: true, project: true },
     });
     if (!assignment) return res.status(404).json({ error: "Assignment not found" });
 
@@ -114,6 +158,18 @@ checklistRouter.post(
       entity: "ChecklistSubmission",
       entityId: submission.id,
     });
+
+    if (assignment.project.notifyOnChecklistSubmit) {
+      const { queueProjectEmail } = await import("../services/email.js");
+      await queueProjectEmail({
+        projectId: assignment.projectId,
+        subject: `Checklist submitted — ${assignment.template.name}`,
+        body: `${req.user!.fullName || "User"} submitted "${assignment.template.name}" (${assignment.template.checklistType}).\nStatus: ${submission.status}`,
+        context: "checklist.submit",
+        createdById: req.user!.id,
+      });
+    }
+
     res.status(201).json(submission);
   }
 );

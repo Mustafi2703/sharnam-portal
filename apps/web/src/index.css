@@ -1,26 +1,29 @@
 @import "tailwindcss";
 
-/* Procore-inspired CORE palette — navy/blue primary (not orange) */
+/*
+  शरणम् brand — derived from logo.png
+  Teal mark on near-black · corner registration marks · no Procore blue
+*/
 @theme {
-  --color-brand: #006ddf;
-  --color-brand-dark: #0057b3;
-  --color-brand-soft: #e8f2fc;
-  --color-brand-glow: #5ba8f5;
-  --color-accent: #2a9d8f;
-  --color-steel: #1a1a1a;
-  --color-steel-2: #282828;
-  --color-steel-muted: #707070;
-  --color-sand: #f5f5f5;
-  --color-ink: #1f2a37;
+  --color-brand: #128a8c;
+  --color-brand-dark: #0d6365;
+  --color-brand-soft: #e7f5f5;
+  --color-brand-glow: #3db5b7;
+  --color-accent: #c45c26;
+  --color-steel: #141414;
+  --color-steel-2: #1e1e1e;
+  --color-steel-muted: #6b6f73;
+  --color-sand: #f3f4f3;
+  --color-ink: #121412;
   --color-paper: #ffffff;
-  --color-line: #e6e6e6;
-  --color-ok: #0b8626;
-  --color-warn: #b78103;
-  --color-danger: #d62c2f;
-  --color-procore-navy: #1f2a37;
-  --color-procore-blue: #006ddf;
-  --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --color-line: #e2e5e4;
+  --color-ok: #1a7a3c;
+  --color-warn: #b07400;
+  --color-danger: #c23030;
+  --color-procore-navy: #121412;
+  --color-procore-blue: #128a8c;
+  --font-sans: "Plus Jakarta Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Sora", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -34,13 +37,16 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background: #f0f0f0;
+  background:
+    radial-gradient(ellipse 80% 50% at 100% -10%, rgba(18, 138, 140, 0.07), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(18, 138, 140, 0.05), transparent 45%),
+    #eceeed;
 }
 
 .font-display {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .font-mono {
@@ -50,29 +56,56 @@ body {
 .surface {
   background: #ffffff;
   border: 1px solid var(--color-line);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px rgba(18, 20, 18, 0.04);
 }
 
 .surface-dark {
-  background: #1a1a1a;
-  color: #f7fafc;
+  background: #121412;
+  color: #f4f7f6;
 }
 
 .hero-readable {
   background:
-    linear-gradient(115deg, rgba(31, 42, 55, 0.97) 0%, rgba(31, 42, 55, 0.9) 55%, rgba(0, 109, 223, 0.55) 100%),
+    linear-gradient(120deg, rgba(10, 12, 12, 0.96) 0%, rgba(13, 99, 101, 0.88) 55%, rgba(18, 138, 140, 0.55) 100%),
     url("/bg.webp") center/cover no-repeat;
   color: #ffffff;
 }
 
 .procore-topbar {
-  background: #1f2a37;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #121412;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .procore-tool-header {
   background: #ffffff;
-  border-bottom: 1px solid #e6e6e6;
+  border-bottom: 1px solid #e2e5e4;
+}
+
+/* Logo-inspired corner registration frame */
+.brand-frame {
+  position: relative;
+}
+.brand-frame::before,
+.brand-frame::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--color-brand);
+  pointer-events: none;
+  opacity: 0.55;
+}
+.brand-frame::before {
+  top: 8px;
+  left: 8px;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+}
+.brand-frame::after {
+  bottom: 8px;
+  right: 8px;
+  border-bottom: 1.5px solid;
+  border-right: 1.5px solid;
 }
 
 .workflow-step {
@@ -86,7 +119,7 @@ body {
   left: calc(50% + 18px);
   width: calc(100% - 36px);
   height: 1px;
-  background: #d9d9d9;
+  background: #d5d9d8;
 }
 
 .workflow-step:last-child::after {
@@ -118,15 +151,17 @@ body {
   animation-delay: 0.15s;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.22);
-  border-radius: 4px;
+.blueprint-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
-::selection {
-  background: rgba(244, 126, 66, 0.25);
+.portal-card {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.portal-card:hover {
+  box-shadow: 0 8px 24px rgba(18, 138, 140, 0.08);
 }

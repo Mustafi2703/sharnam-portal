@@ -26,7 +26,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     subtitle: "Approved checklists, diaries, and weekly reports — without site clutter.",
     demoEmail: "client@sharnam.demo",
     allowedRoles: ["client"],
-    panelClass: "from-[#005b7f] to-[#0b1016]",
+    panelClass: "from-[#0a1212] to-[#0d6365]",
     points: ["Published drawings visibility", "Approved QA trail", "Weekly report pack"],
     cta: "Enter client portal",
   },
@@ -37,7 +37,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     subtitle: "Daily diary and gated checklists once drawings are published.",
     demoEmail: "site@sharnam.demo",
     allowedRoles: ["site_employee"],
-    panelClass: "from-[#0b1016] to-[#1a3040]",
+    panelClass: "from-[#0a0c0c] to-[#128a8c]",
     points: ["Upload drawings / revisions", "Drawing-gated checklists", "Daily diary"],
     cta: "Enter site portal",
   },
@@ -48,7 +48,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     subtitle: "Projects, coordination, and self-service for staff.",
     demoEmail: "employee@sharnam.demo",
     allowedRoles: ["employee", "office"],
-    panelClass: "from-[#0d3d4f] to-[#0b1016]",
+    panelClass: "from-[#0d6365] to-[#0a0c0c]",
     points: ["Project modules", "Communications", "HR self-service"],
     cta: "Enter employee portal",
   },
@@ -59,7 +59,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     subtitle: "Publish drawings, review QA, track cost, and communicate.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["office", "admin"],
-    panelClass: "from-[#007ba7] to-[#0b1016]",
+    panelClass: "from-[#128a8c] to-[#0a0c0c]",
     points: ["Drawing publish", "Checklist review", "Cost & BOQ"],
     cta: "Enter office portal",
   },
@@ -70,7 +70,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     subtitle: "Assigned projects only — dual checklists, RFI responses, and site diary fills.",
     demoEmail: "vendor@sharnam.demo",
     allowedRoles: ["vendor"],
-    panelClass: "from-[#1a3040] to-[#0b1016]",
+    panelClass: "from-[#1a3030] to-[#0a0c0c]",
     points: ["Assigned projects", "Upload drawing revisions", "Dual checklist fills"],
     cta: "Enter vendor portal",
   },
@@ -84,7 +84,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to="/workspace" replace />;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-2">
@@ -119,7 +119,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
         </ul>
       </section>
 
-      <section className="flex items-center justify-center p-6 sm:p-10 bg-[#f3f1ec]">
+      <section className="flex items-center justify-center p-6 sm:p-10 bg-sand">
         <div className="w-full max-w-md rise">
           <div className="lg:hidden mb-8 space-y-4">
             <BrandMark size="lg" tagTone="light" />
@@ -188,7 +188,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 
 export function LoginHubPage() {
   const { user, loading } = useAuth();
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to="/workspace" replace />;
 
   const cards: { key: keyof typeof PORTAL_LOGINS; path: string }[] = [
     { key: "office", path: "/login/office" },

@@ -5,7 +5,7 @@ import { Badge, Button } from "./ui";
 import { BrandMark } from "./Brand";
 
 const nav = [
-  { to: "/", label: "Home", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
+  { to: "/workspace", label: "Workspaces", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/crm", label: "CRM", roles: ["admin", "office", "employee"] },
   { to: "/hrm", label: "HRM", roles: ["admin", "office"] },
@@ -18,11 +18,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f0f0f0]">
-      {/* Procore-style global top navbar */}
+    <div className="min-h-screen flex flex-col bg-sand">
+      {/* Tool chrome — dark steel, teal accents (logo-aligned, not Procore blue) */}
       <header className="procore-topbar sticky top-0 z-40 text-white">
         <div className="flex items-center gap-4 px-3 sm:px-4 h-12">
-          <Link to="/" className="shrink-0 flex items-center gap-2">
+          <Link to="/workspace" className="shrink-0 flex items-center gap-2">
             <BrandMark size="sm" tagTone="dark" compact />
           </Link>
 
@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <NavLink
                   key={n.to}
                   to={n.to}
-                  end={n.to === "/"}
+                  end={n.to === "/workspace"}
                   className={({ isActive }) =>
                     `px-3 py-1.5 rounded text-[13px] font-medium whitespace-nowrap transition ${
                       isActive

@@ -343,8 +343,17 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       clientName: "Demo Client Corp",
       location: "Ahmedabad, Gujarat",
       status: "In Progress",
+      notificationEmails: "office@sharnam.demo,client@sharnam.demo",
+      emailFromName: "शरणम् Portal",
+      emailEnabled: true,
+      notifyOnDrawingPublish: true,
+      notifyOnChecklistSubmit: true,
     },
-    update: {},
+    update: {
+      notificationEmails: "office@sharnam.demo,client@sharnam.demo",
+      emailFromName: "शरणम् Portal",
+      emailEnabled: true,
+    },
   });
 
   for (const u of users) {
