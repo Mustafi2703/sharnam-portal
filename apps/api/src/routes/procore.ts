@@ -176,7 +176,7 @@ inspectionsRouter.get("/project/:projectId", async (req, res) => {
   res.json({ inspections: rows, canInspect: published > 0, publishedDrawings: published });
 });
 
-inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
+inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
   const published = await prisma.drawing.count({
     where: { projectId: req.params.projectId, isPublished: true },
   });
@@ -238,10 +238,29 @@ inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "s
   res.status(201).json(inspection);
 });
 
-inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_employee", "vendor"), async (req: AuthedRequest, res) => {
+inspectionsRouter.post("/:id/items", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+  const inspection = await prisma.qualityInspection.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!inspection) return res.status(404).json({ error: "Not found" });
+  const item = await prisma.inspectionItem.create({
+    data: {
+      inspectionId: inspection.id,
+      description: req.body.description,
+      sortOrder: (inspection.items?.length || 0) + 1,
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      autoGenerateRfi: !!req.body.autoGenerateRfi,
+    },
+  });
+  res.status(201).json(item);
+});
+
+inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_employee", "vendor", "employee"), async (req: AuthedRequest, res) => {
   const item = await prisma.inspectionItem.update({
     where: { id: req.params.itemId },
-    data: { status: req.body.status, remarks: req.body.remarks },
+    data: {
+      status: req.body.status,
+      remarks: req.body.remarks,
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+    },
     include: { inspection: true },
   });
 
@@ -331,7 +350,7 @@ directoryRouter.post("/project/:projectId/submittals", requireRoles("admin", "of
   res.status(201).json(row);
 });
 
-directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const row = await prisma.designCoordinationIssue.create({
     data: {
       projectId: req.params.projectId,
@@ -343,6 +362,20 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
     },
   });
   res.status(201).json(row);
+});
+
+directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const row = await prisma.designCoordinationIssue.update({
+    where: { id: req.params.id },
+    data: {
+      status: req.body.status,
+      title: req.body.title,
+      description: req.body.description,
+      priority: req.body.priority,
+      location: req.body.location,
+    },
+  });
+  res.json(row);
 });
 
 directoryRouter.post("/project/:projectId/photos", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {

@@ -302,7 +302,9 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
 
   let firstDrawingId = "";
   let structuralDrawingId = "";
+  let drawIdx = 0;
   for (const d of drawingSet) {
+    drawIdx += 1;
     const folder = `Drawings/${d.discipline === "MEP" ? "MEP" : d.discipline}`;
     const fileName = `${d.drawingNumber}-placeholder.txt`;
     const absDir = path.join(driveRoot, folder);
@@ -320,14 +322,16 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
         drawingNumber: d.drawingNumber,
         title: d.title,
         discipline: d.discipline,
-        currentRev: d.rev,
+        buildingArea: d.discipline === "Civil" ? "Site" : "Block A",
+        tlNo: String((drawIdx % 5) + 1),
+        currentRev: d.rev.replace("Rev ", "R"),
         status: d.published ? "Approved" : "Draft",
         isPublished: d.published,
         folderPath: folder,
         revisions: {
           create: {
-            revisionNumber: d.rev,
-            revisionLabel: `${d.rev} — IFC`,
+            revisionNumber: d.rev.replace("Rev ", "R"),
+            revisionLabel: `${d.rev.replace("Rev ", "R")} — IFC`,
             fileUrl: `/uploads/onedrive/${project.code}/${folder}/${fileName}`,
             fileName,
             published: d.published,
@@ -338,13 +342,53 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       update: {
         title: d.title,
         discipline: d.discipline,
-        currentRev: d.rev,
+        buildingArea: d.discipline === "Civil" ? "Site" : "Block A",
+        currentRev: d.rev.replace("Rev ", "R"),
         isPublished: d.published,
         status: d.published ? "Approved" : "Draft",
       },
     });
     if (!firstDrawingId) firstDrawingId = drawing.id;
     if (d.drawingNumber === "S-101") structuralDrawingId = drawing.id;
+
+    // Extra R1 revision on published sheets so GFC R0/R1 date columns look like the Excel log
+    if (d.published) {
+      const revCount = await prisma.drawingRevision.count({ where: { drawingId: drawing.id } });
+      if (revCount < 2) {
+        const r1Name = `${d.drawingNumber}-R1-placeholder.txt`;
+        fs.writeFileSync(
+          path.join(absDir, r1Name),
+          `Mock IFC sheet ${d.drawingNumber} — ${d.title} (R1)\nRevision uploaded after publish.\n`
+        );
+        await prisma.drawingRevision.create({
+          data: {
+            drawingId: drawing.id,
+            revisionNumber: "R1",
+            revisionLabel: "R1 — IFC revision",
+            fileUrl: `/uploads/onedrive/${project.code}/${folder}/${r1Name}`,
+            fileName: r1Name,
+            published: true,
+            uploadedById: officeId,
+            createdAt: new Date(Date.now() - 3 * 86400000),
+          },
+        });
+        await prisma.drawing.update({
+          where: { id: drawing.id },
+          data: { currentRev: "R1" },
+        });
+        // Backdate R0 createdAt so columns show distinct dates
+        const r0 = await prisma.drawingRevision.findFirst({
+          where: { drawingId: drawing.id, revisionNumber: { in: ["R0", "Rev 0", d.rev.replace("Rev ", "R")] } },
+          orderBy: { createdAt: "asc" },
+        });
+        if (r0) {
+          await prisma.drawingRevision.update({
+            where: { id: r0.id },
+            data: { createdAt: new Date(Date.now() - 14 * 86400000), revisionNumber: "R0", published: false },
+          });
+        }
+      }
+    }
   }
   console.log("Drawings seeded:", drawingSet.length);
 
@@ -547,8 +591,8 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     const insp = await prisma.qualityInspection.create({
       data: {
         projectId: project.id,
-        title: "Raft foundation pre-pour",
-        inspectionType: "Quality",
+        title: "Raft foundation — Quality Action Plan",
+        inspectionType: "Quality Action Plan",
         status: "Open",
         location: "Block A — Grid A1-D4",
         linkedDrawingId: structuralDrawing.id,
@@ -558,14 +602,15 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
         dueDate: new Date(Date.now() + 2 * 86400000),
         items: {
           create: [
-            { description: "Formwork alignment matches S-101", sortOrder: 1 },
-            { description: "Cover blocks / chairs in place", sortOrder: 2 },
-            { description: "Rebar size & spacing as per schedule", sortOrder: 3 },
-            { description: "Construction joint prepared", sortOrder: 4 },
+            { description: "Formwork alignment matches S-101", sortOrder: 1, dueDate: new Date(Date.now() + 1 * 86400000) },
+            { description: "Cover blocks / chairs in place", sortOrder: 2, dueDate: new Date(Date.now() + 1 * 86400000) },
+            { description: "Rebar size & spacing as per schedule", sortOrder: 3, dueDate: new Date(Date.now() + 2 * 86400000) },
+            { description: "Construction joint prepared", sortOrder: 4, dueDate: new Date(Date.now() + 2 * 86400000) },
             {
               description: "Ready for concrete pour",
               sortOrder: 5,
               autoGenerateRfi: true,
+              dueDate: new Date(Date.now() + 3 * 86400000),
             },
           ],
         },

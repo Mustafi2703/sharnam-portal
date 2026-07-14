@@ -29,7 +29,7 @@ const TOOL_GROUPS: { title: string; items: ToolItem[] }[] = [
     title: "Quality",
     items: [
       { to: "checklist", label: "Checklists" },
-      { to: "inspections", label: "Inspections / QAP", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
+      { to: "inspections", label: "Quality Action Plan", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
       { to: "safety", label: "Safety" },
       { to: "rfis", label: "RFIs & Concerns" },
     ],
@@ -37,9 +37,9 @@ const TOOL_GROUPS: { title: string; items: ToolItem[] }[] = [
   {
     title: "Field",
     items: [
-      { to: "diary", label: "Daily Log", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
+      { to: "diary", label: "Employee Day Log", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
       { to: "photos", label: "Photos" },
-      { to: "comms", label: "Meetings" },
+      { to: "comms", label: "Meetings & Comms" },
     ],
   },
   {

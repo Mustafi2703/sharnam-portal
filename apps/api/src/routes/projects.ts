@@ -103,7 +103,7 @@ drawingsRouter.get("/project/:projectId", async (req, res) => {
     where: { projectId: req.params.projectId },
     include: {
       revisions: {
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
         include: { uploadedBy: { select: { fullName: true } } },
       },
     },
@@ -127,7 +127,7 @@ drawingsRouter.post(
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Not found" });
 
-    const { drawingNumber, title, discipline, revisionNumber, publish } = req.body;
+    const { drawingNumber, title, discipline, revisionNumber, publish, buildingArea, tlNo } = req.body;
     if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
 
     let fileUrl = "";
@@ -139,7 +139,12 @@ drawingsRouter.post(
       fileName = req.file.originalname;
     }
 
-    const rev = revisionNumber || "Rev 0";
+    const existing = await prisma.drawing.findUnique({
+      where: { projectId_drawingNumber: { projectId: project.id, drawingNumber } },
+      include: { revisions: true },
+    });
+    const revIndex = existing?.revisions.length ?? 0;
+    const rev = revisionNumber || `R${revIndex}`;
     const published = publish === "true" || publish === true;
 
     const drawing = await prisma.drawing.upsert({
@@ -149,6 +154,8 @@ drawingsRouter.post(
         drawingNumber,
         title,
         discipline: discipline || "Architecture",
+        buildingArea: buildingArea || null,
+        tlNo: tlNo || null,
         currentRev: rev,
         status: published ? "Approved" : "Draft",
         isPublished: published,
@@ -157,7 +164,7 @@ drawingsRouter.post(
           ? {
               create: {
                 revisionNumber: rev,
-                revisionLabel: rev,
+                revisionLabel: `${rev} — initial`,
                 fileUrl,
                 fileName,
                 published,
@@ -169,6 +176,8 @@ drawingsRouter.post(
       update: {
         title,
         discipline: discipline || undefined,
+        buildingArea: buildingArea !== undefined ? buildingArea || null : undefined,
+        tlNo: tlNo !== undefined ? tlNo || null : undefined,
         currentRev: rev,
         isPublished: published || undefined,
         status: published ? "Approved" : undefined,
@@ -181,7 +190,7 @@ drawingsRouter.post(
         data: {
           drawingId: drawing.id,
           revisionNumber: rev,
-          revisionLabel: rev,
+          revisionLabel: `${rev} — upload`,
           fileUrl,
           fileName,
           published,
@@ -190,10 +199,20 @@ drawingsRouter.post(
       });
     }
 
-    await audit("drawing.upload", { userId: req.user!.id, entity: "Drawing", entityId: drawing.id });
+    await audit("drawing.upload", {
+      userId: req.user!.id,
+      entity: "Drawing",
+      entityId: drawing.id,
+      meta: { drawingNumber, revision: rev, fileName },
+    });
     const fresh = await prisma.drawing.findUnique({
       where: { id: drawing.id },
-      include: { revisions: { orderBy: { createdAt: "desc" } } },
+      include: {
+        revisions: {
+          orderBy: { createdAt: "asc" },
+          include: { uploadedBy: { select: { fullName: true } } },
+        },
+      },
     });
     res.status(201).json(fresh);
   }
@@ -224,8 +243,8 @@ drawingsRouter.post(
     });
     if (!drawing) return res.status(404).json({ error: "Drawing not found" });
 
-    const revisionNumber = String(req.body.revisionNumber || `Rev ${drawing.revisions.length}`);
-    const revisionLabel = String(req.body.revisionLabel || revisionNumber);
+    const revisionNumber = String(req.body.revisionNumber || `R${drawing.revisions.length}`);
+    const revisionLabel = String(req.body.revisionLabel || `${revisionNumber} — ${new Date().toLocaleDateString()}`);
     const publish = req.body.publish === "true" || req.body.publish === true;
 
     let fileUrl = "";
@@ -244,7 +263,7 @@ drawingsRouter.post(
       return res.status(400).json({ error: "File required for revision upload" });
     }
 
-    // Supersede prior published revisions when publishing this one
+    // Keep prior revision files; mark previous live revisions unpublished when publishing this one
     if (publish) {
       await prisma.drawingRevision.updateMany({
         where: { drawingId: drawing.id, published: true },
@@ -273,7 +292,7 @@ drawingsRouter.post(
       },
       include: {
         revisions: {
-          orderBy: { createdAt: "desc" },
+          orderBy: { createdAt: "asc" },
           include: { uploadedBy: { select: { fullName: true } } },
         },
       },
@@ -283,7 +302,7 @@ drawingsRouter.post(
       userId: req.user!.id,
       entity: "DrawingRevision",
       entityId: rev.id,
-      meta: { drawingId: drawing.id, revisionNumber },
+      meta: { drawingId: drawing.id, revisionNumber, fileName },
     });
     res.status(201).json(updated);
   }
@@ -293,34 +312,42 @@ drawingsRouter.post(
 drawingsRouter.get("/project/:projectId/export.csv", async (req, res) => {
   const drawings = await prisma.drawing.findMany({
     where: { projectId: req.params.projectId },
-    include: { revisions: { orderBy: { createdAt: "desc" } } },
+    include: { revisions: { orderBy: { createdAt: "asc" } } },
     orderBy: { drawingNumber: "asc" },
   });
   const header = [
-    "Sr No",
-    "Drawing Number",
-    "Drawing Title",
-    "Discipline",
-    "Current Revision",
-    "Revision Date",
-    "Status",
+    "DISCIPLINE",
+    "BUILDING/AREA",
+    "TL No",
+    "DWG. NO.",
+    "TITLE",
+    "Drawing Browse",
+    "R0",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "TOTAL",
     "Published",
-    "Revision Count",
-    "Latest File",
+    "Current Rev",
   ];
-  const rows = drawings.map((d, i) => {
-    const latest = d.revisions[0];
+  const rows = drawings.map((d) => {
+    const dates = [0, 1, 2, 3, 4, 5].map((i) =>
+      d.revisions[i] ? new Date(d.revisions[i].createdAt).toISOString().slice(0, 10) : ""
+    );
+    const latest = d.revisions[d.revisions.length - 1];
     return [
-      String(i + 1),
+      d.discipline,
+      `"${(d.buildingArea || "").replace(/"/g, '""')}"`,
+      `"${(d.tlNo || "").replace(/"/g, '""')}"`,
       d.drawingNumber,
       `"${d.title.replace(/"/g, '""')}"`,
-      d.discipline,
-      d.currentRev,
-      latest ? new Date(latest.createdAt).toISOString().slice(0, 10) : "",
-      d.status,
-      d.isPublished ? "Yes" : "No",
+      latest?.fileUrl || "",
+      ...dates,
       String(d.revisions.length),
-      latest?.fileName || latest?.fileUrl || "",
+      d.isPublished ? "Yes" : "No",
+      d.currentRev,
     ].join(",");
   });
   const csv = [header.join(","), ...rows].join("\n");

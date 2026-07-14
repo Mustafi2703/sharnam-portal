@@ -118,7 +118,9 @@ model Drawing {
   drawingNumber  String
   title          String
   discipline     String   @default("Architecture")
-  currentRev     String   @default("Rev 0")
+  buildingArea   String?
+  tlNo           String?
+  currentRev     String   @default("R0")
   status         String   @default("Draft")
   isPublished    Boolean  @default(false)
   folderPath     String?
@@ -627,6 +629,7 @@ model InspectionItem {
   status        String  @default("Pending")
   remarks       String?
   sortOrder     Int     @default(0)
+  dueDate       DateTime?
   autoGenerateRfi Boolean @default(false)
   linkedRfiId   String?
 
