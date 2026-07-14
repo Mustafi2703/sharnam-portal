@@ -38,7 +38,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "site@sharnam.demo",
     allowedRoles: ["site_employee"],
     panelClass: "from-[#0b1016] to-[#1a3040]",
-    points: ["Daily diary", "Drawing-gated checklists", "Yes / No / N.A. forms"],
+    points: ["Upload drawings / revisions", "Drawing-gated checklists", "Daily diary"],
     cta: "Enter site portal",
   },
   employee: {
@@ -71,7 +71,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "vendor@sharnam.demo",
     allowedRoles: ["vendor"],
     panelClass: "from-[#1a3040] to-[#0b1016]",
-    points: ["Assigned projects", "Dual checklist fills", "Respond to RFIs"],
+    points: ["Assigned projects", "Upload drawing revisions", "Dual checklist fills"],
     cta: "Enter vendor portal",
   },
 };

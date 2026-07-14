@@ -88,7 +88,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
   site_employee: {
     ...emptyPermissions(false),
     projects: { view: true, create: false, edit: false, approve: false },
-    drawings: { view: true, create: false, edit: false, approve: false },
+    drawings: { view: true, create: true, edit: true, approve: true },
     dms: { view: true, create: false, edit: false, approve: false },
     checklist: { view: true, create: true, edit: true, approve: false },
     daily_diary: { view: true, create: true, edit: true, approve: false },
@@ -130,7 +130,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
   employee: {
     ...emptyPermissions(false),
     projects: { view: true, create: false, edit: false, approve: false },
-    drawings: { view: true, create: false, edit: false, approve: false },
+    drawings: { view: true, create: true, edit: true, approve: true },
     dms: { view: true, create: false, edit: false, approve: false },
     checklist: { view: true, create: true, edit: true, approve: false },
     daily_diary: { view: true, create: true, edit: true, approve: false },
@@ -151,7 +151,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
   vendor: {
     ...emptyPermissions(false),
     projects: { view: true, create: false, edit: false, approve: false },
-    drawings: { view: true, create: false, edit: false, approve: false },
+    drawings: { view: true, create: true, edit: true, approve: true },
     dms: { view: true, create: false, edit: false, approve: false },
     checklist: { view: true, create: true, edit: true, approve: false },
     daily_diary: { view: true, create: true, edit: true, approve: false },

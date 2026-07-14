@@ -121,7 +121,7 @@ drawingsRouter.get("/project/:projectId/gate", async (req, res) => {
 
 drawingsRouter.post(
   "/project/:projectId",
-  requireRoles("admin", "office"),
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
@@ -199,7 +199,7 @@ drawingsRouter.post(
   }
 );
 
-drawingsRouter.post("/:id/publish", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+drawingsRouter.post("/:id/publish", requireRoles("admin", "office", "employee", "site_employee", "vendor"), async (req: AuthedRequest, res) => {
   const drawing = await prisma.drawing.update({
     where: { id: req.params.id },
     data: { isPublished: true, status: "Approved" },
@@ -215,7 +215,7 @@ drawingsRouter.post("/:id/publish", requireRoles("admin", "office"), async (req:
 /** Upload a new revision onto an existing drawing register row */
 drawingsRouter.post(
   "/:id/revisions",
-  requireRoles("admin", "office"),
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     const drawing = await prisma.drawing.findUnique({

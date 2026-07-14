@@ -113,8 +113,8 @@ export default function DrawingsPage() {
         title="Drawing register"
         subtitle={
           clientOnly
-            ? "Published sheets only. Upload and publish stay with Sharnam office."
-            : "Interactive register with revision history. Expand a row to audit versions or upload the next revision."
+            ? "Published sheets only. Clients cannot upload — raise concerns under RFIs."
+            : "Office, site, employees, and vendors can register sheets and upload revisions. Checklists unlock only after at least one drawing is published."
         }
         actions={
           <div className="flex flex-wrap gap-2">

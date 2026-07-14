@@ -13,9 +13,15 @@ export function can(
   return false;
 }
 
-/** Roles that may upload/publish drawings */
+/** Roles that may upload drawings / revisions / publish (not client) */
 export function canManageDrawings(role?: RoleKey | null) {
-  return role === "admin" || role === "office";
+  return (
+    role === "admin" ||
+    role === "office" ||
+    role === "employee" ||
+    role === "site_employee" ||
+    role === "vendor"
+  );
 }
 
 /** Client: view only for drawings; may raise RFIs */

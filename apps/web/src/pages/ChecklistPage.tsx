@@ -88,7 +88,7 @@ export default function ChecklistPage() {
         <PageHeader
           eyebrow="Quality assurance"
           title="Checklists"
-          subtitle="Final Index masters become dual-fill forms (office / site / vendor). Submit blocked until drawings are published."
+          subtitle="Upload & publish a drawing first — then dual-fill forms (office / site / vendor). Submit stays blocked until the drawings gate is open."
           actions={
             data && (
               <div className="flex flex-wrap gap-2 items-center">
