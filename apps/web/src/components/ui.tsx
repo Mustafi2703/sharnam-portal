@@ -71,10 +71,10 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "dark";
 }) {
   const variants = {
-    primary: "bg-brand hover:bg-brand-dark text-white shadow-sm",
+    primary: "bg-procore-blue hover:bg-brand-dark text-white shadow-sm",
     secondary: "bg-white border border-line text-ink hover:bg-sand",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/5",
-    dark: "bg-steel text-white hover:bg-steel-2",
+    dark: "bg-procore-navy text-white hover:bg-[#16202b]",
   };
   return (
     <button
@@ -169,5 +169,40 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
       {...props}
       className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
+  );
+}
+
+/** Styled file picker — replaces bare browser "Choose file" control */
+export function FileField({
+  label = "Choose file",
+  accept,
+  file,
+  onChange,
+  hint,
+}: {
+  label?: string;
+  accept?: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+  hint?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-dashed border-line bg-sand/40 px-3 py-3 cursor-pointer hover:border-brand/50 hover:bg-brand-soft/40 transition">
+        <span className="inline-flex items-center justify-center rounded bg-procore-navy text-white text-xs font-medium px-3 py-1.5 shrink-0">
+          {label}
+        </span>
+        <span className="text-sm text-steel-muted truncate">
+          {file ? file.name : "PDF, DWG, or image — no file selected"}
+        </span>
+        <input
+          type="file"
+          className="sr-only"
+          accept={accept}
+          onChange={(e) => onChange(e.target.files?.[0] || null)}
+        />
+      </label>
+      {hint && <p className="text-[11px] text-steel-muted">{hint}</p>}
+    </div>
   );
 }

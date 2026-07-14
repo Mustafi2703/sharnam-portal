@@ -643,6 +643,47 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
 
+  if ((await prisma.safetyRecord.count({ where: { projectId: project.id } })) === 0) {
+    await prisma.safetyRecord.createMany({
+      data: [
+        {
+          projectId: project.id,
+          recordType: "Toolbox Talk",
+          title: "Working at height — balcony guard rails",
+          description: "Morning toolbox talk completed with civil team before slab edge work.",
+          severity: "Medium",
+          status: "Closed",
+          location: "Block A — Level 2",
+          correctiveAction: "Guard rails confirmed in place before work start",
+          reportedById: siteId,
+          closedAt: new Date(),
+        },
+        {
+          projectId: project.id,
+          recordType: "Near Miss",
+          title: "Loose plank on scaffold access",
+          description: "Worker reported unstable plank on tower scaffold east face.",
+          severity: "High",
+          status: "Open",
+          location: "Block A — East scaffold",
+          correctiveAction: "Replace plank and inspect all platforms",
+          reportedById: siteId,
+          assignedToId: officeUserId,
+        },
+        {
+          projectId: project.id,
+          recordType: "Observation",
+          title: "PPE compliance — Helmets at rebar yard",
+          description: "Spot check: 2 workers without helmets in rebar cutting zone.",
+          severity: "Low",
+          status: "Open",
+          location: "Rebar yard",
+          reportedById: officeUserId,
+        },
+      ],
+    });
+  }
+
   // Ensure Inspections / RFIs folders exist in mock drive
   for (const rel of [
     "Inspections",

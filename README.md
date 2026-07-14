@@ -69,8 +69,8 @@ SQLite (`file:./prod.db`) works for a quick demo dyno but is ephemeral on free t
 4. **Client** → view drawings (no upload) → raise concern under RFIs  
 5. **Admin** → Permissions + Audit  
 
-## Later
+## Ask the client (Microsoft Graph)
 
-- Real Microsoft Graph / SharePoint ([CLIENT_MICROSOFT_REQUEST.md](CLIENT_MICROSOFT_REQUEST.md))
-- Hostinger / `spdc.in` cutover after Graph
-- Drawing OCR compare, deeper cost / payroll, PHP migration
+Use [CLIENT_MICROSOFT_REQUEST.md](CLIENT_MICROSOFT_REQUEST.md) when ready to connect SharePoint/OneDrive. Until then storage stays on Render (mock OneDrive).
+
+Demo walkthrough also covers: Drawings (GFC register + revision upload), Safety log, dual checklists, vendor/client portals.

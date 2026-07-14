@@ -37,6 +37,7 @@ export const MODULES = [
   "vendors",
   "rfis",
   "inspections",
+  "safety",
 ] as const;
 
 export type ModuleKey = (typeof MODULES)[number];
@@ -82,6 +83,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     vendors: { view: true, create: true, edit: true, approve: false },
     rfis: { view: true, create: true, edit: true, approve: true },
     inspections: { view: true, create: true, edit: true, approve: true },
+    safety: { view: true, create: true, edit: true, approve: true },
   },
   site_employee: {
     ...emptyPermissions(false),
@@ -102,6 +104,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     vendors: { view: true, create: false, edit: false, approve: false },
     rfis: { view: true, create: true, edit: true, approve: false },
     inspections: { view: true, create: true, edit: true, approve: false },
+    safety: { view: true, create: true, edit: true, approve: false },
   },
   client: {
     ...emptyPermissions(false),
@@ -122,6 +125,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     vendors: { view: true, create: false, edit: false, approve: false },
     rfis: { view: true, create: true, edit: false, approve: false },
     inspections: { view: true, create: false, edit: false, approve: false },
+    safety: { view: true, create: false, edit: false, approve: false },
   },
   employee: {
     ...emptyPermissions(false),
@@ -142,6 +146,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     vendors: { view: true, create: false, edit: false, approve: false },
     rfis: { view: true, create: true, edit: true, approve: false },
     inspections: { view: true, create: true, edit: true, approve: false },
+    safety: { view: true, create: true, edit: true, approve: false },
   },
   vendor: {
     ...emptyPermissions(false),
@@ -162,6 +167,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     vendors: { view: true, create: false, edit: true, approve: false },
     rfis: { view: true, create: false, edit: true, approve: false },
     inspections: { view: true, create: false, edit: true, approve: false },
+    safety: { view: true, create: true, edit: true, approve: false },
   },
 };
 

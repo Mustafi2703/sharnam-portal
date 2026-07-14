@@ -33,6 +33,8 @@ model User {
   rfiResponses         RfiResponse[]
   inspectionsCreated   QualityInspection[] @relation("InspectionCreator")
   inspectionsAssigned  QualityInspection[] @relation("InspectionAssignee")
+  safetyReported       SafetyRecord[]      @relation("SafetyReporter")
+  safetyAssigned       SafetyRecord[]      @relation("SafetyAssignee")
 }
 
 model RoleDefinition {
@@ -79,6 +81,7 @@ model Project {
   photos               ProjectPhoto[]
   submittals           Submittal[]
   coordinationIssues   DesignCoordinationIssue[]
+  safetyRecords        SafetyRecord[]
 }
 
 model ProjectMember {
@@ -675,4 +678,26 @@ model DesignCoordinationIssue {
   updatedAt   DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model SafetyRecord {
+  id              String    @id @default(cuid())
+  projectId       String
+  recordType      String    @default("Observation")
+  title           String
+  description     String?
+  severity        String    @default("Low")
+  status          String    @default("Open")
+  location        String?
+  correctiveAction String?
+  occurredAt      DateTime  @default(now())
+  closedAt        DateTime?
+  reportedById    String
+  assignedToId    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reportedBy User    @relation("SafetyReporter", fields: [reportedById], references: [id])
+  assignedTo User?   @relation("SafetyAssignee", fields: [assignedToId], references: [id])
 }

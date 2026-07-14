@@ -212,6 +212,83 @@ drawingsRouter.post("/:id/publish", requireRoles("admin", "office"), async (req:
   res.json(drawing);
 });
 
+/** Upload a new revision onto an existing drawing register row */
+drawingsRouter.post(
+  "/:id/revisions",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const drawing = await prisma.drawing.findUnique({
+      where: { id: req.params.id },
+      include: { project: true, revisions: true },
+    });
+    if (!drawing) return res.status(404).json({ error: "Drawing not found" });
+
+    const revisionNumber = String(req.body.revisionNumber || `Rev ${drawing.revisions.length}`);
+    const revisionLabel = String(req.body.revisionLabel || revisionNumber);
+    const publish = req.body.publish === "true" || req.body.publish === true;
+
+    let fileUrl = "";
+    let fileName = "";
+    if (req.file) {
+      const folder = drawing.folderPath || `Drawings/${drawing.discipline}`;
+      const saved = await mockOneDrive.upload(
+        drawing.project.code,
+        folder,
+        req.file.originalname,
+        req.file.buffer
+      );
+      fileUrl = saved.url;
+      fileName = req.file.originalname;
+    } else {
+      return res.status(400).json({ error: "File required for revision upload" });
+    }
+
+    // Supersede prior published revisions when publishing this one
+    if (publish) {
+      await prisma.drawingRevision.updateMany({
+        where: { drawingId: drawing.id, published: true },
+        data: { published: false },
+      });
+    }
+
+    const rev = await prisma.drawingRevision.create({
+      data: {
+        drawingId: drawing.id,
+        revisionNumber,
+        revisionLabel,
+        fileUrl,
+        fileName,
+        published: publish,
+        uploadedById: req.user!.id,
+      },
+      include: { uploadedBy: { select: { fullName: true } } },
+    });
+
+    const updated = await prisma.drawing.update({
+      where: { id: drawing.id },
+      data: {
+        currentRev: revisionNumber,
+        ...(publish ? { isPublished: true, status: "Approved" } : {}),
+      },
+      include: {
+        revisions: {
+          orderBy: { createdAt: "desc" },
+          include: { uploadedBy: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    await audit("drawing.revision", {
+      userId: req.user!.id,
+      entity: "DrawingRevision",
+      entityId: rev.id,
+      meta: { drawingId: drawing.id, revisionNumber },
+    });
+    res.status(201).json(updated);
+  }
+);
+
 /** CSV export matching Approval & GFC Drawing Log columns */
 drawingsRouter.get("/project/:projectId/export.csv", async (req, res) => {
   const drawings = await prisma.drawing.findMany({

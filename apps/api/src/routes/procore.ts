@@ -358,3 +358,71 @@ directoryRouter.post("/project/:projectId/photos", requireRoles("admin", "office
   });
   res.status(201).json(row);
 });
+
+export const safetyRouter = Router();
+safetyRouter.use(requireAuth);
+
+safetyRouter.get("/project/:projectId", async (req, res) => {
+  const records = await prisma.safetyRecord.findMany({
+    where: { projectId: req.params.projectId },
+    include: {
+      reportedBy: { select: { id: true, fullName: true } },
+      assignedTo: { select: { id: true, fullName: true } },
+    },
+    orderBy: { occurredAt: "desc" },
+  });
+  const open = records.filter((r) => r.status === "Open").length;
+  const incidents = records.filter((r) => r.recordType === "Incident" || r.recordType === "Near Miss").length;
+  res.json({ records, stats: { total: records.length, open, incidents } });
+});
+
+safetyRouter.post(
+  "/project/:projectId",
+  requireRoles("admin", "office", "site_employee", "employee", "vendor"),
+  async (req: AuthedRequest, res) => {
+    const row = await prisma.safetyRecord.create({
+      data: {
+        projectId: req.params.projectId,
+        recordType: req.body.recordType || "Observation",
+        title: req.body.title,
+        description: req.body.description,
+        severity: req.body.severity || "Low",
+        status: req.body.status || "Open",
+        location: req.body.location,
+        correctiveAction: req.body.correctiveAction,
+        occurredAt: req.body.occurredAt ? new Date(req.body.occurredAt) : new Date(),
+        reportedById: req.user!.id,
+        assignedToId: req.body.assignedToId || null,
+      },
+      include: {
+        reportedBy: { select: { fullName: true } },
+        assignedTo: { select: { fullName: true } },
+      },
+    });
+    await audit("safety.create", { userId: req.user!.id, entity: "SafetyRecord", entityId: row.id });
+    res.status(201).json(row);
+  }
+);
+
+safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
+  const status = req.body.status;
+  const row = await prisma.safetyRecord.update({
+    where: { id: req.params.id },
+    data: {
+      title: req.body.title,
+      description: req.body.description,
+      severity: req.body.severity,
+      status,
+      location: req.body.location,
+      correctiveAction: req.body.correctiveAction,
+      assignedToId: req.body.assignedToId,
+      closedAt: status === "Closed" ? new Date() : req.body.closedAt ? new Date(req.body.closedAt) : undefined,
+    },
+    include: {
+      reportedBy: { select: { fullName: true } },
+      assignedTo: { select: { fullName: true } },
+    },
+  });
+  await audit("safety.update", { userId: req.user!.id, entity: "SafetyRecord", entityId: row.id });
+  res.json(row);
+});

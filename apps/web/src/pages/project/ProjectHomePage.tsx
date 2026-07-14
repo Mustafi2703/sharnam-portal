@@ -40,6 +40,7 @@ export default function ProjectHomePage() {
           ["vendors", "Vendors", "Company directory + project assignment"],
           ["drawings", "Drawings", "Publish sheets to open the gate"],
           ["inspections", "QA / Inspections", "Separate inspection forms"],
+          ["safety", "Safety", "Incidents, observations, JHAs"],
           ["checklist", "Checklists", "Site QA forms (drawing gated)"],
           ["rfis", "RFIs", "Questions with ball-in-court"],
         ].map(([to, title, desc]) => (

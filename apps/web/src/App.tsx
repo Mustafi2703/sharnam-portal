@@ -22,6 +22,7 @@ import InspectionsPage from "./pages/project/InspectionsPage";
 import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
+import SafetyPage from "./pages/project/SafetyPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -61,6 +62,7 @@ export default function App() {
                   <Route path="dms" element={<DmsPage />} />
                   <Route path="checklist" element={<ChecklistPage />} />
                   <Route path="inspections" element={<InspectionsPage />} />
+                  <Route path="safety" element={<SafetyPage />} />
                   <Route path="rfis" element={<RfisPage />} />
                   <Route path="submittals" element={<SubmittalsPage />} />
                   <Route path="photos" element={<PhotosPage />} />
