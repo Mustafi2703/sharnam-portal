@@ -71,14 +71,14 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "dark";
 }) {
   const variants = {
-    primary: "bg-brand hover:bg-brand-dark text-white shadow-sm",
+    primary: "bg-ink hover:bg-black text-white shadow-sm",
     secondary: "bg-white border border-line text-ink hover:bg-sand",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/5",
-    dark: "bg-steel text-white hover:bg-steel-2",
+    dark: "bg-black text-white hover:bg-steel-2",
   };
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-sm px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
     >
       {children}
@@ -112,7 +112,7 @@ export function WorkflowStrip({
             <div className="flex items-center gap-2 mb-2">
               <span
                 className={`h-7 w-7 rounded-full grid place-items-center text-xs font-semibold ${
-                  i <= active ? "bg-brand text-white" : "bg-steel/10 text-steel-muted"
+                  i <= active ? "bg-ink text-white" : "bg-steel/10 text-steel-muted"
                 }`}
               >
                 {i + 1}
@@ -189,7 +189,7 @@ export function FileField({
   return (
     <div className="space-y-1.5">
       <label className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-dashed border-line bg-sand/40 px-3 py-3 cursor-pointer hover:border-brand/50 hover:bg-brand-soft/40 transition">
-        <span className="inline-flex items-center justify-center rounded bg-procore-navy text-white text-xs font-medium px-3 py-1.5 shrink-0">
+        <span className="inline-flex items-center justify-center rounded-sm bg-black text-white text-xs font-medium px-3 py-1.5 shrink-0">
           {label}
         </span>
         <span className="text-sm text-steel-muted truncate">

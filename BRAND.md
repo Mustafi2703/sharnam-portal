@@ -1,29 +1,26 @@
-# शरणम् brand guidelines (portal UI)
+# शरणम् brand guidelines
 
-Derived from `apps/web/public/logo.png` — Devanagari mark with corner registration dashes on near-black.
+## Principle
+The **logo is the brand**. Do not flood the UI with the logo’s cyan. Put the mark on a **black plate** (as in `logo.png`) and keep chrome charcoal / concrete / white.
 
 ## Color
-
 | Token | Hex | Use |
 |-------|-----|-----|
-| Brand teal | `#128a8c` | Primary buttons, links, active tool |
-| Brand dark | `#0d6365` | Hover / pressed |
-| Brand soft | `#e7f5f5` | Selected rows, soft chips |
-| Ink / steel | `#121412` | Top bar, display type, logo plate |
+| Void / primary CTA | `#0a0a0a` | Buttons, top bar, ink |
 | Paper | `#ffffff` | Surfaces |
-| Sand | `#f3f4f3` | Page wash, muted panels |
-| Accent (sparingly) | `#c45c26` | Alerts that need warmth — not primary |
+| Concrete | `#f2f2f2` | Page wash |
+| Mark (sparingly) | `#0b6a78` | Registration ticks only (`.brand-frame`) |
+| Soft metal | `#c4a574` | Rare construction accent |
 
-**Do not use Procore blue (`#006ddf`) or purple gradients.** Teal replaces blue everywhere.
+## Logo
+- Always show `logo.png` on black (`logo-plate`)
+- Hero / login: logo is large and centered — first visual signal
+- Never recolor the PNG tint to fill buttons
 
-## Typography
+## Type
+- Display: **Syne**
+- UI: **Instrument Sans**
+- Mono: **IBM Plex Mono** (drawing nos, times)
 
-- **Display:** Sora — tool titles, hero lines
-- **UI:** Plus Jakarta Sans — body, forms, nav
-- **Mono:** IBM Plex Mono — drawing numbers, codes, timestamps
-
-## Motifs
-
-- Black logo plate with teal mark (as in the PNG)
-- Optional corner “registration” marks (`.brand-frame`) on focused workspaces
-- Clean Procore-like tool chrome (dark top bar + white tool strip) — content stays spacious and light
+## Imagery
+Construction photography under `/media/` — steel, site, drawings, field. Prefer full-bleed heroes and interactive media tiles over flat panels.

@@ -110,11 +110,15 @@ export default function ProjectToolsLayout() {
             </Button>
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-xs text-steel-muted">
-                <Link to="/projects" className="text-procore-blue hover:underline">
+                <Link to="/workspace" className="text-ink hover:underline font-medium">
+                  Workspaces
+                </Link>
+                <span>/</span>
+                <Link to="/projects" className="text-ink/70 hover:underline">
                   Projects
                 </Link>
                 <span>/</span>
-                <span className="font-mono text-[11px] text-brand">{project?.code || "…"}</span>
+                <span className="font-mono text-[11px] text-steel-muted">{project?.code || "…"}</span>
               </div>
               <h1 className="text-lg sm:text-xl font-semibold text-ink truncate leading-tight">
                 {project?.name || "Project"}

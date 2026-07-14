@@ -1,29 +1,31 @@
 @import "tailwindcss";
 
 /*
-  शरणम् brand — derived from logo.png
-  Teal mark on near-black · corner registration marks · no Procore blue
+  शरणम् — logo-first design
+  Brand signal = logo on black plate (not a teal flood).
+  UI = charcoal / concrete / white. Logo mark color only for registration ticks.
 */
 @theme {
-  --color-brand: #128a8c;
-  --color-brand-dark: #0d6365;
-  --color-brand-soft: #e7f5f5;
-  --color-brand-glow: #3db5b7;
-  --color-accent: #c45c26;
-  --color-steel: #141414;
-  --color-steel-2: #1e1e1e;
-  --color-steel-muted: #6b6f73;
-  --color-sand: #f3f4f3;
-  --color-ink: #121412;
+  --color-brand: #0a0a0a;
+  --color-brand-dark: #000000;
+  --color-brand-soft: #f0f0f0;
+  --color-brand-glow: #e8e8e8;
+  --color-mark: #0b6a78;
+  --color-accent: #c4a574;
+  --color-steel: #0a0a0a;
+  --color-steel-2: #1a1a1a;
+  --color-steel-muted: #6e6e6e;
+  --color-sand: #f2f2f2;
+  --color-ink: #0a0a0a;
   --color-paper: #ffffff;
-  --color-line: #e2e5e4;
-  --color-ok: #1a7a3c;
-  --color-warn: #b07400;
-  --color-danger: #c23030;
-  --color-procore-navy: #121412;
-  --color-procore-blue: #128a8c;
-  --font-sans: "Plus Jakarta Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Sora", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-line: #dddddd;
+  --color-ok: #1f7a3f;
+  --color-warn: #a16207;
+  --color-danger: #b91c1c;
+  --color-procore-navy: #0a0a0a;
+  --color-procore-blue: #0a0a0a;
+  --font-sans: "Instrument Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Syne", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -37,16 +39,13 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background:
-    radial-gradient(ellipse 80% 50% at 100% -10%, rgba(18, 138, 140, 0.07), transparent 50%),
-    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(18, 138, 140, 0.05), transparent 45%),
-    #eceeed;
+  background: #ececec;
 }
 
 .font-display {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 .font-mono {
@@ -56,32 +55,32 @@ body {
 .surface {
   background: #ffffff;
   border: 1px solid var(--color-line);
-  box-shadow: 0 1px 2px rgba(18, 20, 18, 0.04);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
 }
 
 .surface-dark {
-  background: #121412;
-  color: #f4f7f6;
+  background: #0a0a0a;
+  color: #f7f7f7;
 }
 
 .hero-readable {
   background:
-    linear-gradient(120deg, rgba(10, 12, 12, 0.96) 0%, rgba(13, 99, 101, 0.88) 55%, rgba(18, 138, 140, 0.55) 100%),
-    url("/bg.webp") center/cover no-repeat;
+    linear-gradient(105deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.55) 45%, rgba(0, 0, 0, 0.35) 100%),
+    url("/media/hero-site.jpg") center/cover no-repeat;
   color: #ffffff;
 }
 
 .procore-topbar {
-  background: #121412;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: #000000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .procore-tool-header {
   background: #ffffff;
-  border-bottom: 1px solid #e2e5e4;
+  border-bottom: 1px solid #dddddd;
 }
 
-/* Logo-inspired corner registration frame */
+/* Logo registration marks — only place the logo’s cyan shows in chrome */
 .brand-frame {
   position: relative;
 }
@@ -89,29 +88,74 @@ body {
 .brand-frame::after {
   content: "";
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border-color: var(--color-brand);
+  width: 16px;
+  height: 16px;
+  border-color: var(--color-mark);
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 0.85;
 }
 .brand-frame::before {
-  top: 8px;
-  left: 8px;
-  border-top: 1.5px solid;
-  border-left: 1.5px solid;
+  top: 10px;
+  left: 10px;
+  border-top: 2px solid;
+  border-left: 2px solid;
 }
 .brand-frame::after {
-  bottom: 8px;
-  right: 8px;
-  border-bottom: 1.5px solid;
-  border-right: 1.5px solid;
+  bottom: 10px;
+  right: 10px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+.logo-plate {
+  background: #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.media-tile {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.media-tile img {
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.media-tile:hover img {
+  transform: scale(1.08);
+}
+.media-tile .media-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.75) 100%);
+  transition: background 0.35s ease;
+}
+.media-tile:hover .media-veil {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.82) 100%);
+}
+
+.interactive-lift {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+}
+.interactive-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+}
+
+.spotlight {
+  background:
+    radial-gradient(600px circle at var(--mx, 50%) var(--my, 30%), rgba(255, 255, 255, 0.08), transparent 40%);
 }
 
 .workflow-step {
   position: relative;
 }
-
 .workflow-step::after {
   content: "";
   position: absolute;
@@ -119,9 +163,8 @@ body {
   left: calc(50% + 18px);
   width: calc(100% - 36px);
   height: 1px;
-  background: #d5d9d8;
+  background: #d5d5d5;
 }
-
 .workflow-step:last-child::after {
   display: none;
 }
@@ -129,7 +172,7 @@ body {
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -137,31 +180,54 @@ body {
   }
 }
 
-.rise {
-  animation: rise-in 0.35s ease both;
+@keyframes mark-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
+.rise {
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 .rise-delay-1 {
-  animation-delay: 0.05s;
+  animation-delay: 0.06s;
 }
 .rise-delay-2 {
-  animation-delay: 0.1s;
+  animation-delay: 0.12s;
 }
 .rise-delay-3 {
-  animation-delay: 0.15s;
+  animation-delay: 0.18s;
+}
+.rise-delay-4 {
+  animation-delay: 0.24s;
 }
 
 .blueprint-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 28px 28px;
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 .portal-card {
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.2s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.portal-card:hover {
+  transform: translateY(-4px);
 }
 
-.portal-card:hover {
-  box-shadow: 0 8px 24px rgba(18, 138, 140, 0.08);
+.construction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  color: #fff;
 }

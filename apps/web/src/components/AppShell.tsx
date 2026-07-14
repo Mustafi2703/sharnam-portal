@@ -19,11 +19,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-sand">
-      {/* Tool chrome — dark steel, teal accents (logo-aligned, not Procore blue) */}
       <header className="procore-topbar sticky top-0 z-40 text-white">
-        <div className="flex items-center gap-4 px-3 sm:px-4 h-12">
-          <Link to="/workspace" className="shrink-0 flex items-center gap-2">
-            <BrandMark size="sm" tagTone="dark" compact />
+        <div className="flex items-center gap-4 px-3 sm:px-4 h-13 sm:h-14">
+          <Link to="/workspace" className="shrink-0 flex items-center gap-2 group">
+            <BrandMark size="sm" tagTone="dark" compact showTag={false} />
+            <span className="hidden md:inline font-display text-sm tracking-tight text-white/90 group-hover:text-white">
+              शरणम्
+            </span>
           </Link>
 
           <nav className="flex items-center gap-0.5 overflow-x-auto min-w-0 flex-1">
@@ -35,10 +37,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   to={n.to}
                   end={n.to === "/workspace"}
                   className={({ isActive }) =>
-                    `px-3 py-1.5 rounded text-[13px] font-medium whitespace-nowrap transition ${
+                    `px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition border-b-2 ${
                       isActive
-                        ? "bg-white/15 text-white"
-                        : "text-white/75 hover:bg-white/10 hover:text-white"
+                        ? "border-white text-white"
+                        : "border-transparent text-white/65 hover:text-white hover:border-white/30"
                     }`
                   }
                 >
