@@ -60,7 +60,8 @@ export default function App() {
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />
                   <Route path="dms" element={<DmsPage />} />
-                  <Route path="checklist" element={<ChecklistPage />} />
+                  <Route path="checklist" element={<ChecklistPage family="SiteExecution" />} />
+                  <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="rfis" element={<RfisPage />} />

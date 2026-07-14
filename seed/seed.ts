@@ -96,42 +96,74 @@ async function seedUsers() {
   return users;
 }
 
+/** Two separate families:
+ *  - SiteExecution  → Final Index (site work / activity checklists)
+ *  - QualityInspection → QA inspection forms (drawing review, pre-pour, etc.)
+ */
 async function seedChecklistsFromExcel() {
   const indexFile = path.join(EXCEL_ROOT, "Final Index.xlsx");
   const drawingFile = path.join(EXCEL_ROOT, "Drwing check master checklist.xlt.xls");
 
+  // Reclassify legacy rows that all used checklistType "Quality"
+  await prisma.checklistTemplate.updateMany({
+    where: { OR: [{ source: "Final Index.xlsx" }, { source: "fallback-catalog" }] },
+    data: { checklistType: "SiteExecution" },
+  });
+  await prisma.checklistTemplate.updateMany({
+    where: {
+      OR: [
+        { source: "Drwing check master checklist.xlt.xls" },
+        { source: "quality-inspection-catalog" },
+        { name: { contains: "Drawing Review" } },
+      ],
+    },
+    data: { checklistType: "QualityInspection" },
+  });
+
   const indexRows = readSheet(indexFile);
   let created = 0;
-  for (let i = 1; i < indexRows.length; i++) {
+  // Final Index header is usually on row 3: Sr No | File Name | Work Category
+  for (let i = 0; i < indexRows.length; i++) {
     const sr = String(indexRows[i][0] ?? "").trim();
     const name = String(indexRows[i][1] ?? "").trim();
     const category = String(indexRows[i][2] ?? "General").trim() || "General";
-    if (!name) continue;
+    if (!name || /^file name$/i.test(name) || /^sr\.?\s*no/i.test(sr)) continue;
+    if (!/^\d+$/.test(sr)) continue;
     const existing = await prisma.checklistTemplate.findFirst({ where: { name, category } });
-    if (existing) continue;
+    if (existing) {
+      if (existing.checklistType !== "SiteExecution") {
+        await prisma.checklistTemplate.update({
+          where: { id: existing.id },
+          data: { checklistType: "SiteExecution", source: "Final Index.xlsx" },
+        });
+      }
+      continue;
+    }
     await prisma.checklistTemplate.create({
       data: {
         name,
         category,
-        checklistType: "Quality",
+        checklistType: "SiteExecution",
         source: "Final Index.xlsx",
         items: {
           create: [
-            { itemCode: "1", description: `${name} — preliminary checks complete`, sortOrder: 1 },
-            { itemCode: "2", description: "Materials verified as per approved brand", sortOrder: 2 },
-            { itemCode: "3", description: "Workmanship acceptable", sortOrder: 3 },
-            { itemCode: "4", description: "Safety precautions observed", sortOrder: 4 },
-            { itemCode: "5", description: "Ready for next activity / handover", sortOrder: 5 },
+            { itemCode: "1", description: `${name} — preliminary checks complete`, sortOrder: 1, section: "Pre-checks" },
+            { itemCode: "2", description: "Materials verified as per approved brand", sortOrder: 2, section: "Pre-checks" },
+            { itemCode: "3", description: "Setting out / levels verified on site", sortOrder: 3, section: "Execution" },
+            { itemCode: "4", description: "Workmanship acceptable to PMC", sortOrder: 4, section: "Execution" },
+            { itemCode: "5", description: "Safety precautions observed", sortOrder: 5, section: "Safety" },
+            { itemCode: "6", description: "Ready for next activity / handover", sortOrder: 6, section: "Close-out" },
           ],
         },
       },
     });
     created++;
   }
-  console.log("Checklist templates from Final Index:", created);
+  console.log("Site execution templates from Final Index:", created);
 
-  // Fallback catalog when Excel is missing on Render
-  if ((await prisma.checklistTemplate.count()) < 5) {
+  // Fallback Final Index catalog when Excel is missing (e.g. empty deploy)
+  const siteCount = await prisma.checklistTemplate.count({ where: { checklistType: "SiteExecution" } });
+  if (siteCount < 5) {
     const fallback = [
       ["Mobilization", "Checklist For Pre-Construction & Mobilization"],
       ["Civil", "Checklist For Excavation Work"],
@@ -151,12 +183,18 @@ async function seedChecklistsFromExcel() {
     ] as const;
     for (const [category, name] of fallback) {
       const existing = await prisma.checklistTemplate.findFirst({ where: { name } });
-      if (existing) continue;
+      if (existing) {
+        await prisma.checklistTemplate.update({
+          where: { id: existing.id },
+          data: { checklistType: "SiteExecution", source: existing.source || "fallback-catalog" },
+        });
+        continue;
+      }
       await prisma.checklistTemplate.create({
         data: {
           name,
           category,
-          checklistType: "Quality",
+          checklistType: "SiteExecution",
           source: "fallback-catalog",
           items: {
             create: [
@@ -173,7 +211,7 @@ async function seedChecklistsFromExcel() {
     }
   }
 
-  // Drawing review checklist with Yes/No/NA form items
+  // Quality inspection — Drawing review master (+ fallback QI templates)
   const drawRows = readSheet(drawingFile);
   let section = "General";
   const items: { itemCode: string; description: string; section: string; sortOrder: number }[] = [];
@@ -206,13 +244,94 @@ async function seedChecklistsFromExcel() {
         data: {
           name,
           category: "Drawings",
-          checklistType: "Quality",
+          checklistType: "QualityInspection",
           source: "Drwing check master checklist.xlt.xls",
           items: { create: items },
         },
       });
+    } else {
+      await prisma.checklistTemplate.update({
+        where: { id: existing.id },
+        data: { checklistType: "QualityInspection", source: "Drwing check master checklist.xlt.xls" },
+      });
     }
   }
+
+  const qiFallback: { category: string; name: string; lines: string[] }[] = [
+    {
+      category: "Structural",
+      name: "QI — Raft / Footing Pre-Pour Inspection",
+      lines: [
+        "Formwork alignment matches approved GFC",
+        "Cover blocks / chairs in place",
+        "Rebar size, spacing & lap as per schedule",
+        "Construction joint prepared",
+        "Embeds / sleeves verified",
+        "Ready for concrete pour",
+      ],
+    },
+    {
+      category: "Structural",
+      name: "QI — Slab / Beam Pre-Pour Inspection",
+      lines: [
+        "Soffit levels checked",
+        "Prop / staging adequate",
+        "Top & bottom reinforcement complete",
+        "Electrical / plumbing inserts cast-in confirmed",
+        "Cleaning completed; debris removed",
+      ],
+    },
+    {
+      category: "MEP",
+      name: "QI — Electrical First Fix Inspection",
+      lines: [
+        "Conduit routes match coordinated GFC",
+        "Box locations / heights correct",
+        "Earthing continuity provisional OK",
+        "No clashes with structural / HVAC",
+      ],
+    },
+    {
+      category: "Finishing",
+      name: "QI — Waterproofing Inspection",
+      lines: [
+        "Surface preparation accepted",
+        "Membrane / coating as approved system",
+        "Overlaps / detailing at drains correct",
+        "Flood / ponding test scheduled",
+      ],
+    },
+  ];
+  for (const q of qiFallback) {
+    const existing = await prisma.checklistTemplate.findFirst({ where: { name: q.name } });
+    if (existing) {
+      await prisma.checklistTemplate.update({
+        where: { id: existing.id },
+        data: { checklistType: "QualityInspection", source: "quality-inspection-catalog" },
+      });
+      continue;
+    }
+    await prisma.checklistTemplate.create({
+      data: {
+        name: q.name,
+        category: q.category,
+        checklistType: "QualityInspection",
+        source: "quality-inspection-catalog",
+        items: {
+          create: q.lines.map((description, i) => ({
+            itemCode: `${i + 1}.0`,
+            description,
+            sortOrder: i + 1,
+            section: i === q.lines.length - 1 ? "Close-out" : "Inspection",
+          })),
+        },
+      },
+    });
+  }
+
+  const siteN = await prisma.checklistTemplate.count({ where: { checklistType: "SiteExecution" } });
+  const qiN = await prisma.checklistTemplate.count({ where: { checklistType: "QualityInspection" } });
+  console.log(`Checklist families — SiteExecution: ${siteN}, QualityInspection: ${qiN}`);
 }
 
 async function seedProjectAndCost(users: { id: string; role: string }[]) {

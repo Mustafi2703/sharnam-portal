@@ -28,7 +28,8 @@ const TOOL_GROUPS: { title: string; items: ToolItem[] }[] = [
   {
     title: "Quality",
     items: [
-      { to: "checklist", label: "Checklists" },
+      { to: "checklist", label: "Final Index (Site)" },
+      { to: "quality-inspections", label: "Quality Inspections" },
       { to: "inspections", label: "Quality Action Plan", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
       { to: "safety", label: "Safety" },
       { to: "rfis", label: "RFIs & Concerns" },

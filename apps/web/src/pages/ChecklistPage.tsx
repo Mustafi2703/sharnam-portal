@@ -4,18 +4,45 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, WorkflowStrip } from "../components/ui";
 
+export type ChecklistFamily = "SiteExecution" | "QualityInspection";
+
+const FAMILY_META: Record<
+  ChecklistFamily,
+  { eyebrow: string; title: string; subtitle: string; otherTo: string; otherLabel: string; exportName: string }
+> = {
+  SiteExecution: {
+    eyebrow: "Site execution",
+    title: "Final Index checklists",
+    subtitle:
+      "Site work / activity checklists from the Final Index (mobilization, civil, MEP, finishing). Dual-fill after drawings are published.",
+    otherTo: "quality-inspections",
+    otherLabel: "Open Quality Inspections →",
+    exportName: "final-index-checklists.csv",
+  },
+  QualityInspection: {
+    eyebrow: "Quality assurance",
+    title: "Quality inspection checklists",
+    subtitle:
+      "Separate QI forms (drawing review, pre-pour, first-fix, waterproofing). Not the same as Final Index site-execution checklists.",
+    otherTo: "checklist",
+    otherLabel: "Open Final Index (site) →",
+    exportName: "quality-inspection-checklists.csv",
+  },
+};
+
 type Item = { id: string; itemCode?: string; description: string; section?: string };
 type Template = { id: string; name: string; items: Item[] };
 type Assignment = {
   id: string;
   status: string;
-  template: { id: string; name: string; category: string; _count: { items: number } };
+  template: { id: string; name: string; category: string; checklistType?: string; _count: { items: number } };
   submissions: { id: string; status: string; createdAt: string; submittedBy: { fullName: string } }[];
 };
 
-export default function ChecklistPage() {
+export default function ChecklistPage({ family = "SiteExecution" as ChecklistFamily }: { family?: ChecklistFamily }) {
   const { id } = useParams();
   const { token, user } = useAuth();
+  const meta = FAMILY_META[family];
   const [data, setData] = useState<{
     assignments: Assignment[];
     canSubmit: boolean;
@@ -32,13 +59,17 @@ export default function ChecklistPage() {
 
   const load = () =>
     api<{ assignments: Assignment[]; canSubmit: boolean; publishedDrawings: number }>(
-      `/api/checklist/project/${id}`,
+      `/api/checklist/project/${id}?type=${encodeURIComponent(family)}`,
       { token }
-    ).then(setData);
+    ).then((d) => {
+      setData(d);
+      setActive(null);
+      setTemplate(null);
+    });
 
   useEffect(() => {
     void load();
-  }, [id, token]);
+  }, [id, token, family]);
 
   const categories = useMemo(() => {
     const set = new Set(data?.assignments.map((a) => a.template.category) || []);
@@ -86,12 +117,15 @@ export default function ChecklistPage() {
           ← Project hub
         </Link>
         <PageHeader
-          eyebrow="Quality assurance"
-          title="Checklists"
-          subtitle="Upload & publish a drawing first — then dual-fill forms (office / site / vendor). Submit stays blocked until the drawings gate is open."
+          eyebrow={meta.eyebrow}
+          title={meta.title}
+          subtitle={meta.subtitle}
           actions={
             data && (
               <div className="flex flex-wrap gap-2 items-center">
+                <Link to={`/projects/${id}/${meta.otherTo}`} className="text-xs font-semibold text-brand underline">
+                  {meta.otherLabel}
+                </Link>
                 <Badge tone={data.canSubmit ? "ok" : "warn"}>
                   {data.canSubmit
                     ? `${data.publishedDrawings} published drawings`
@@ -101,14 +135,14 @@ export default function ChecklistPage() {
                   variant="secondary"
                   className="!text-xs"
                   onClick={async () => {
-                    const res = await fetch(`/api/checklist/project/${id}/export.csv`, {
+                    const res = await fetch(`/api/checklist/project/${id}/export.csv?type=${encodeURIComponent(family)}`, {
                       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                     });
                     const blob = await res.blob();
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = "checklist-fills.csv";
+                    a.download = meta.exportName;
                     a.click();
                     URL.revokeObjectURL(url);
                   }}
@@ -123,12 +157,21 @@ export default function ChecklistPage() {
 
       <WorkflowStrip
         active={data?.canSubmit ? (active ? 2 : 1) : 0}
-        steps={[
-          { label: "Drawing published", hint: "Office unlocks the gate" },
-          { label: "Pick checklist", hint: `${data?.assignments.length || 0} assigned to project` },
-          { label: "Fill Yes / No / N.A.", hint: "Remarks per line item" },
-          { label: "Office review", hint: "Approve for client visibility" },
-        ]}
+        steps={
+          family === "SiteExecution"
+            ? [
+                { label: "Drawing published", hint: "Office unlocks the gate" },
+                { label: "Pick Final Index form", hint: `${data?.assignments.length || 0} site checklists` },
+                { label: "Fill Yes / No / N.A.", hint: "Remarks per line item" },
+                { label: "Office review", hint: "Approve for client visibility" },
+              ]
+            : [
+                { label: "Drawing published", hint: "Office unlocks the gate" },
+                { label: "Pick QI template", hint: `${data?.assignments.length || 0} quality inspections` },
+                { label: "Inspect & fill", hint: "Yes / No / N.A. + remarks" },
+                { label: "Sign-off", hint: "Office review" },
+              ]
+        }
       />
 
       <div className="grid lg:grid-cols-[380px_1fr] gap-4 items-start">

@@ -27,8 +27,12 @@ checklistRouter.get("/templates/:id", async (req, res) => {
 });
 
 checklistRouter.get("/project/:projectId", async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const assignments = await prisma.checklistAssignment.findMany({
-    where: { projectId: req.params.projectId },
+    where: {
+      projectId: req.params.projectId,
+      ...(type ? { template: { checklistType: type } } : {}),
+    },
     include: {
       template: { include: { _count: { select: { items: true } } } },
       submissions: {
@@ -41,7 +45,12 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
   const gate = await prisma.drawing.count({
     where: { projectId: req.params.projectId, isPublished: true },
   });
-  res.json({ assignments, canSubmit: gate > 0, publishedDrawings: gate });
+  res.json({
+    assignments,
+    canSubmit: gate > 0,
+    publishedDrawings: gate,
+    checklistType: type || "all",
+  });
 });
 
 checklistRouter.post("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -142,18 +151,25 @@ checklistRouter.get("/submissions/:id", async (req, res) => {
 
 /** Export project checklist fills for site engineers (shared dual-fill audit) */
 checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const submissions = await prisma.checklistSubmission.findMany({
-    where: { assignment: { projectId: req.params.projectId } },
+    where: {
+      assignment: {
+        projectId: req.params.projectId,
+        ...(type ? { template: { checklistType: type } } : {}),
+      },
+    },
     include: {
       assignment: { include: { template: true } },
       submittedBy: { select: { fullName: true, role: true } },
     },
     orderBy: { createdAt: "desc" },
   });
-  const header = ["Submitted At", "Checklist", "Status", "Filled By", "Role", "Remarks"];
+  const header = ["Submitted At", "Family", "Checklist", "Status", "Filled By", "Role", "Remarks"];
   const rows = submissions.map((s) =>
     [
       new Date(s.createdAt).toISOString(),
+      s.assignment.template.checklistType || "",
       `"${(s.assignment.template.name || "").replace(/"/g, '""')}"`,
       s.status,
       `"${s.submittedBy.fullName.replace(/"/g, '""')}"`,

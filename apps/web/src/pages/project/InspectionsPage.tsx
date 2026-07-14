@@ -45,7 +45,7 @@ export default function InspectionsPage() {
       <PageHeader
         eyebrow="Quality assurance"
         title="Quality action plan"
-        subtitle="Maintain action plans linked to published drawings. Track item status and due dates; unresolved items can spawn RFIs."
+        subtitle="Corrective / follow-up action plans (separate from Final Index site checklists and Quality Inspection forms). Link items to drawings; unresolved can spawn RFIs."
         actions={
           <Badge tone={data?.canInspect ? "ok" : "warn"}>
             {data?.canInspect ? "Drawings gate open" : "Publish drawings first"}

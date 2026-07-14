@@ -22,7 +22,7 @@ export default function ProjectHomePage() {
         steps={[
           { label: "CRM setup", hint: "Project · people · vendors" },
           { label: "Publish drawings", hint: "Unlocks QA & checklists" },
-          { label: "Inspect & checklist", hint: "Forms by discipline folder" },
+          { label: "Inspect & checklist", hint: "Final Index + QI forms" },
           { label: "RFI & close-out", hint: "Ball-in-court tracking" },
         ]}
       />
@@ -39,9 +39,10 @@ export default function ProjectHomePage() {
           ["directory", "Directory", "Assign employees to this project"],
           ["vendors", "Vendors", "Company directory + project assignment"],
           ["drawings", "Drawings", "Publish sheets to open the gate"],
-          ["inspections", "QA / Inspections", "Separate inspection forms"],
+          ["checklist", "Final Index (Site)", "Site execution work checklists"],
+          ["quality-inspections", "Quality Inspections", "QI forms (pre-pour, review…)"],
+          ["inspections", "Quality Action Plan", "Track open QI actions & due dates"],
           ["safety", "Safety", "Incidents, observations, JHAs"],
-          ["checklist", "Checklists", "Site QA forms (drawing gated)"],
           ["rfis", "RFIs", "Questions with ball-in-court"],
         ].map(([to, title, desc]) => (
           <Link key={to} to={`/projects/${id}/${to}`}>
