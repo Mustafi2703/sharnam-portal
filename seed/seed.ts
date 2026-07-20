@@ -561,19 +561,71 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
 
   const existingCf = await prisma.costCashflowPeriod.count({ where: { projectId: project.id } });
   if (existingCf === 0) {
-    const months = ["Jan-2023", "Feb-2023", "Mar-2023", "Apr-2023"];
-    for (const m of months) {
+    const months = ["Oct-2025", "Nov-2025", "Dec-2025", "Jan-2026"];
+    const planned = [6485619, 8564401, 5975619, 5975619];
+    const actual = [5650000, 6735532, 4993250, 4930000];
+    for (let i = 0; i < months.length; i++) {
       await prisma.costCashflowPeriod.create({
         data: {
           projectId: project.id,
-          periodLabel: m,
-          packageName: "Civil Works",
-          plannedAmount: 3000000,
-          actualAmount: m.startsWith("Apr") ? 0 : 2800000,
-          progressPct: m.startsWith("Apr") ? 0 : 0.9,
+          periodLabel: months[i],
+          packageName: "Project cashflow",
+          plannedAmount: planned[i],
+          actualAmount: actual[i],
+          progressPct: actual[i] / planned[i],
         },
       });
     }
+  }
+
+  // Measurement / Monitoring sheet from Cashflow Dashboard (skip long parent headers)
+  const monCount = await prisma.costMonitoringLine.count({ where: { projectId: project.id } });
+  if (monCount === 0) {
+    const cashFile = path.join(EXCEL_ROOT, "Cashflow - Dashboard.xlsx");
+    const monRows = readSheet(cashFile, 0);
+    // Prefer Monitoring sheet by name
+    let monData: unknown[][] = [];
+    if (fs.existsSync(cashFile)) {
+      const wb = XLSX.readFile(cashFile);
+      const sheetName = wb.SheetNames.find((n) => /monitor/i.test(n)) || wb.SheetNames[5];
+      if (sheetName) {
+        monData = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheetName], {
+          header: 1,
+          defval: "",
+        }) as unknown as unknown[][];
+      }
+    }
+    let createdMon = 0;
+    for (let i = 0; i < monData.length && createdMon < 40; i++) {
+      const row = monData[i] as (string | number)[];
+      const itemNo = String(row[0] ?? "").trim();
+      const description = String(row[1] ?? "").trim();
+      const uom = String(row[2] ?? "").trim();
+      const rate = Number(row[3]) || 0;
+      const boqQty = Number(row[4]) || 0;
+      if (!description || description.length < 8) continue;
+      if (!uom && !rate && !boqQty) continue; // skip parent narrative rows without UOM
+      if (/^item no/i.test(itemNo) || /^item of work/i.test(description)) continue;
+      const gfcQty = Number(row[6]) || 0;
+      const achievedQty = Number(row[7]) || 0;
+      const excessQty = Number(row[8]) || 0;
+      await prisma.costMonitoringLine.create({
+        data: {
+          projectId: project.id,
+          itemNo: itemNo || String(createdMon + 1),
+          description: description.slice(0, 500),
+          uom: uom || null,
+          rate,
+          boqQty,
+          gfcQty,
+          achievedQty,
+          excessQty,
+          boqCost: rate * boqQty,
+        },
+      });
+      createdMon++;
+    }
+    console.log("Monitoring (measurement) lines seeded:", createdMon);
   }
 
   // Communications matrix defaults

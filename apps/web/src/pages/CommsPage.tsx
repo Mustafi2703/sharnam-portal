@@ -60,15 +60,15 @@ export default function CommsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <div>
-        <Link to={`/projects/${id}`} className="text-sm text-brand">
-          ← Project
+        <Link to={`/workspace`} className="text-sm text-brand font-medium">
+          ← Workspaces
         </Link>
         <PageHeader
-          eyebrow="Project communications"
-          title="Communications & meetings"
-          subtitle="Matrix, message log, and scheduled meetings with MoM open/close tracking."
+          eyebrow="Communications"
+          title="Meetings, matrix & logs"
+          subtitle="Spaced layout with scrollable lists. Schedule meetings after drawings publish; raise RFIs from the Quality or Field workspace."
         />
       </div>
 
@@ -84,6 +84,16 @@ export default function CommsPage() {
             {label}
           </Button>
         ))}
+        <Link to={`/projects/${id}/rfis`} className="ml-auto">
+          <Button type="button" variant="ghost" className="!text-xs">
+            RFIs & queries →
+          </Button>
+        </Link>
+        <Link to={`/projects/${id}/reports`}>
+          <Button type="button" variant="ghost" className="!text-xs">
+            DPR / reports →
+          </Button>
+        </Link>
       </div>
 
       {tab === "matrix" && (

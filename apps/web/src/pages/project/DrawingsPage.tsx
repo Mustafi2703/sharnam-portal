@@ -1,9 +1,10 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
-import { Badge, Button, Card, FileField, Input, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, PageHeader } from "../../components/ui";
+import { UploadModal } from "../../components/UploadModal";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const REV_SLOTS = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
@@ -22,6 +23,7 @@ function fileKind(nameOrUrl?: string | null) {
 
 export default function DrawingsPage() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [drawings, setDrawings] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
@@ -31,6 +33,7 @@ export default function DrawingsPage() {
   const [showRegister, setShowRegister] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [formError, setFormError] = useState("");
   const [form, setForm] = useState({
     drawingNumber: "",
     title: "",
@@ -54,6 +57,14 @@ export default function DrawingsPage() {
   useEffect(() => {
     void load();
   }, [id, token]);
+
+  useEffect(() => {
+    if (searchParams.get("upload") === "1" && canUpload) {
+      setShowRegister(true);
+      setFormError("");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, canUpload, setSearchParams]);
 
   const disciplines = ["All", ...Array.from(new Set(drawings.map((d) => d.discipline)))];
   const filtered = useMemo(
@@ -80,6 +91,7 @@ export default function DrawingsPage() {
     e.preventDefault();
     setBusy(true);
     setMsg("");
+    setFormError("");
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, String(v)));
@@ -99,10 +111,16 @@ export default function DrawingsPage() {
       setMsg("Drawing saved to GFC register.");
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Upload failed");
+      setFormError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusy(false);
     }
+  }
+
+  function closeRegister() {
+    setShowRegister(false);
+    setFile(null);
+    setFormError("");
   }
 
   async function uploadRevision(e: FormEvent) {
@@ -123,7 +141,7 @@ export default function DrawingsPage() {
       setMsg("Revision uploaded — date logged on the register.");
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Revision upload failed");
+      setFormError(err instanceof Error ? err.message : "Revision upload failed");
     } finally {
       setBusy(false);
     }
@@ -159,8 +177,14 @@ export default function DrawingsPage() {
               Export GFC CSV
             </Button>
             {canUpload && (
-              <Button type="button" variant={showRegister ? "secondary" : "primary"} onClick={() => setShowRegister((v) => !v)}>
-                {showRegister ? "Close form" : "Register sheet"}
+              <Button
+                type="button"
+                onClick={() => {
+                  setShowRegister(true);
+                  setFormError("");
+                }}
+              >
+                Upload drawing
               </Button>
             )}
           </div>
@@ -184,32 +208,78 @@ export default function DrawingsPage() {
         ))}
       </div>
 
-      {canUpload && showRegister && (
-        <Card>
-          <h3 className="font-semibold mb-3">Register drawing (GFC)</h3>
-          <form className="grid sm:grid-cols-2 gap-3" onSubmit={registerDrawing}>
-            <Input required placeholder="DWG. NO. (e.g. A-101)" value={form.drawingNumber} onChange={(e) => setForm({ ...form, drawingNumber: e.target.value })} />
-            <Input required placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
-              {["Architecture", "Structural", "MEP", "Civil"].map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </Select>
-            <Input placeholder="Building / Area" value={form.buildingArea} onChange={(e) => setForm({ ...form, buildingArea: e.target.value })} />
-            <Input placeholder="TL No" value={form.tlNo} onChange={(e) => setForm({ ...form, tlNo: e.target.value })} />
-            <Input placeholder="First revision (R0)" value={form.revisionNumber} onChange={(e) => setForm({ ...form, revisionNumber: e.target.value })} />
-            <div className="sm:col-span-2">
-              <FileField file={file} onChange={setFile} label="Browse drawing" accept=".pdf,.png,.jpg,.jpeg,.dwg,.webp" hint="PDF or image preferred for in-app viewer" />
-            </div>
-            <label className="sm:col-span-2 flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.publish} onChange={(e) => setForm({ ...form, publish: e.target.checked })} />
-              Publish now (unlocks checklists) — you can still upload R1+ later
-            </label>
-            <Button type="submit" disabled={busy || !file} className="sm:col-span-2">
-              {busy ? "Saving…" : "Save to GFC register"}
-            </Button>
-          </form>
-        </Card>
+      {canUpload && (
+        <UploadModal
+          open={showRegister}
+          title="Upload drawing"
+          context={`Project · GFC register · ${form.discipline}`}
+          file={file}
+          onFile={setFile}
+          accept=".pdf,.png,.jpg,.jpeg,.dwg,.webp"
+          primaryLabel={form.publish ? "Upload & publish" : "Upload to register"}
+          busy={busy}
+          error={formError}
+          onClose={closeRegister}
+          onSubmit={registerDrawing}
+          fields={[
+            {
+              kind: "text",
+              name: "drawingNumber",
+              label: "Drawing no.",
+              required: true,
+              placeholder: "A-101",
+              value: form.drawingNumber,
+              onChange: (v) => setForm({ ...form, drawingNumber: v }),
+            },
+            {
+              kind: "text",
+              name: "title",
+              label: "Title",
+              required: true,
+              placeholder: "Ground floor plan",
+              value: form.title,
+              onChange: (v) => setForm({ ...form, title: v }),
+            },
+            {
+              kind: "select",
+              name: "discipline",
+              label: "Discipline",
+              value: form.discipline,
+              onChange: (v) => setForm({ ...form, discipline: v }),
+              options: ["Architecture", "Structural", "MEP", "Civil"],
+            },
+            {
+              kind: "text",
+              name: "buildingArea",
+              label: "Building / Area",
+              placeholder: "Block A",
+              value: form.buildingArea,
+              onChange: (v) => setForm({ ...form, buildingArea: v }),
+            },
+            {
+              kind: "text",
+              name: "tlNo",
+              label: "TL No",
+              value: form.tlNo,
+              onChange: (v) => setForm({ ...form, tlNo: v }),
+            },
+            {
+              kind: "text",
+              name: "revisionNumber",
+              label: "First revision",
+              placeholder: "R0",
+              value: form.revisionNumber,
+              onChange: (v) => setForm({ ...form, revisionNumber: v }),
+            },
+            {
+              kind: "checkbox",
+              name: "publish",
+              label: "Publish now (unlocks checklist fills for engineers)",
+              checked: form.publish,
+              onChange: (v) => setForm({ ...form, publish: v }),
+            },
+          ]}
+        />
       )}
 
       <Card padding={false} className="overflow-hidden">
@@ -376,35 +446,48 @@ export default function DrawingsPage() {
       </Card>
 
       {canUpload && uploadForId && uploadTarget && (
-        <div className="fixed inset-0 z-50 bg-black/45 flex items-end sm:items-center justify-center p-3">
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto !shadow-xl">
-            <div className="flex justify-between gap-3 mb-3">
-              <div>
-                <div className="font-mono text-[11px] text-brand">{uploadTarget.drawingNumber}</div>
-                <h3 className="font-semibold text-lg">Upload revision</h3>
-                <p className="text-xs text-steel-muted">
-                  Current {uploadTarget.currentRev} · {uploadTarget.revisions?.length || 0} file(s) logged ·{" "}
-                  {uploadTarget.isPublished ? "published — more revs allowed" : "draft"}
-                </p>
-              </div>
-              <Button type="button" variant="ghost" onClick={() => setUploadForId(null)}>
-                Close
-              </Button>
-            </div>
-            <form className="space-y-3" onSubmit={uploadRevision}>
-              <Input required value={revForm.revisionNumber} onChange={(e) => setRevForm({ ...revForm, revisionNumber: e.target.value })} placeholder="R1" />
-              <Input value={revForm.revisionLabel} onChange={(e) => setRevForm({ ...revForm, revisionLabel: e.target.value })} placeholder="Label / note" />
-              <FileField file={revFile} onChange={setRevFile} label="Choose PDF / image" accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg" />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={revForm.publish} onChange={(e) => setRevForm({ ...revForm, publish: e.target.checked })} />
-                Set as current published revision
-              </label>
-              <Button type="submit" disabled={busy || !revFile} className="w-full">
-                {busy ? "Uploading…" : "Upload & log date"}
-              </Button>
-            </form>
-          </Card>
-        </div>
+        <UploadModal
+          open={!!uploadForId}
+          title="Upload revision"
+          context={`${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · ${uploadTarget.revisions?.length || 0} file(s)`}
+          file={revFile}
+          onFile={setRevFile}
+          accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg"
+          primaryLabel="Upload & log date"
+          busy={busy}
+          error={formError}
+          onClose={() => {
+            setUploadForId(null);
+            setRevFile(null);
+            setFormError("");
+          }}
+          onSubmit={uploadRevision}
+          fields={[
+            {
+              kind: "text",
+              name: "revisionNumber",
+              label: "Revision",
+              required: true,
+              placeholder: "R1",
+              value: revForm.revisionNumber,
+              onChange: (v) => setRevForm({ ...revForm, revisionNumber: v }),
+            },
+            {
+              kind: "text",
+              name: "revisionLabel",
+              label: "Label / note",
+              value: revForm.revisionLabel,
+              onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
+            },
+            {
+              kind: "checkbox",
+              name: "publish",
+              label: "Set as current published revision",
+              checked: revForm.publish,
+              onChange: (v) => setRevForm({ ...revForm, publish: v }),
+            },
+          ]}
+        />
       )}
 
       {viewer && (

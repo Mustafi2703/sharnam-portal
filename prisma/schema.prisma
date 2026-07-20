@@ -170,8 +170,9 @@ model DrawingRevision {
   uploadedById   String?
   createdAt      DateTime @default(now())
 
-  drawing    Drawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
-  uploadedBy User?   @relation("DrawingUploader", fields: [uploadedById], references: [id])
+  drawing     Drawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  uploadedBy  User?   @relation("DrawingUploader", fields: [uploadedById], references: [id])
+  checklistFills ChecklistSubmission[]
 }
 
 model ChecklistTemplate {
@@ -215,6 +216,8 @@ model ChecklistSubmission {
   id           String   @id @default(cuid())
   assignmentId String
   drawingId    String?
+  revisionId   String?
+  revisionNumber String?
   submittedById String
   status       String   @default("Draft")
   responsesJson String
@@ -225,6 +228,7 @@ model ChecklistSubmission {
 
   assignment  ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   drawing     Drawing?            @relation(fields: [drawingId], references: [id])
+  revision    DrawingRevision?    @relation(fields: [revisionId], references: [id])
   submittedBy User                @relation(fields: [submittedById], references: [id])
   photos      ChecklistPhoto[]
 }

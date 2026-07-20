@@ -56,6 +56,7 @@ checklistRouter.get("/assignments/:assignmentId", async (req, res) => {
         include: {
           submittedBy: { select: { fullName: true, email: true, role: true } },
           drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
+          revision: { select: { id: true, revisionNumber: true, createdAt: true } },
         },
       },
     },
@@ -130,7 +131,25 @@ checklistRouter.post(
       });
     }
 
-    const { responsesJson, drawingId, remarks, status } = req.body;
+    const { responsesJson, drawingId, revisionId, revisionNumber, remarks, status } = req.body;
+    if (!drawingId) {
+      return res.status(400).json({ error: "Select a drawing before submitting the checklist." });
+    }
+    const drawing = await prisma.drawing.findFirst({
+      where: { id: drawingId, projectId: assignment.projectId },
+      include: { revisions: { orderBy: { createdAt: "desc" } } },
+    });
+    if (!drawing) return res.status(400).json({ error: "Drawing not found on this project." });
+    if (!drawing.isPublished || !drawing.revisions.length) {
+      return res.status(400).json({
+        error: "Checklist fill unlocks only after a drawing file is uploaded and published.",
+      });
+    }
+    let rev = revisionId
+      ? drawing.revisions.find((r) => r.id === revisionId)
+      : drawing.revisions[0];
+    if (!rev) return res.status(400).json({ error: "Select a revision for this drawing." });
+
     let responses = responsesJson;
     if (typeof responses === "string") {
       try {
@@ -145,7 +164,9 @@ checklistRouter.post(
     const submission = await prisma.checklistSubmission.create({
       data: {
         assignmentId: assignment.id,
-        drawingId: drawingId || null,
+        drawingId: drawing.id,
+        revisionId: rev.id,
+        revisionNumber: revisionNumber || rev.revisionNumber,
         submittedById: req.user!.id,
         status: status || "Submitted",
         responsesJson: responses,
@@ -217,19 +238,24 @@ checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
     },
     include: {
       assignment: { include: { template: true } },
-      submittedBy: { select: { fullName: true, role: true } },
+      submittedBy: { select: { fullName: true, role: true, email: true } },
+      drawing: { select: { drawingNumber: true, title: true } },
+      revision: { select: { revisionNumber: true, createdAt: true } },
     },
     orderBy: { createdAt: "desc" },
   });
-  const header = ["Submitted At", "Family", "Checklist", "Status", "Filled By", "Role", "Remarks"];
+  const header = ["Submitted At", "Family", "Checklist", "Drawing", "Revision", "Status", "Filled By", "Role", "Email", "Remarks"];
   const rows = submissions.map((s) =>
     [
       new Date(s.createdAt).toISOString(),
       s.assignment.template.checklistType || "",
       `"${(s.assignment.template.name || "").replace(/"/g, '""')}"`,
+      s.drawing ? `${s.drawing.drawingNumber}` : "",
+      s.revisionNumber || s.revision?.revisionNumber || "",
       s.status,
       `"${s.submittedBy.fullName.replace(/"/g, '""')}"`,
       s.submittedBy.role || "",
+      s.submittedBy.email || "",
       `"${(s.remarks || "").replace(/"/g, '""')}"`,
     ].join(",")
   );

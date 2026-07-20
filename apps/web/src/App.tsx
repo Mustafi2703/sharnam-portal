@@ -26,6 +26,7 @@ import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 import SafetyPage from "./pages/project/SafetyPage";
+import ThemeOptionsPage from "./pages/ThemeOptionsPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -76,6 +77,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<HomeRedirect />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
+                <Route path="/themes" element={<ThemeOptionsPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />

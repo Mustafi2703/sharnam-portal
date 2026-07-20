@@ -1,224 +1,221 @@
-import { NavLink, Outlet, useParams, Link } from "react-router-dom";
+import { NavLink, Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
+import { ToolRightPanel } from "../../components/ToolRightPanel";
 import type { RoleKey } from "@sharnam/shared";
+import { getActiveWorkspace, setActiveWorkspace, type WorkspaceKey } from "../../workspaces";
 
-type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[]; note?: string };
+type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[] };
 
-const TOOL_GROUPS: { title: string; items: ToolItem[] }[] = [
-  {
-    title: "Project",
-    items: [
-      { to: "", label: "Home", end: true },
-      { to: "directory", label: "Directory" },
-      { to: "vendors", label: "Vendors", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
-      { to: "email", label: "Email settings", roles: ["admin", "office", "employee", "site_employee"] },
-    ],
-  },
-  {
-    title: "Design & Docs",
-    items: [
-      { to: "drawings", label: "Drawings" },
-      { to: "dms", label: "Documents" },
-      { to: "coordination", label: "Design Coordination", roles: ["admin", "office", "site_employee", "employee"] },
-      { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
-    ],
-  },
-  {
-    title: "Quality",
-    items: [
-      { to: "checklist", label: "Final Index (Site)" },
-      { to: "quality-inspections", label: "Quality Inspections" },
-      { to: "inspections", label: "Quality Action Plan", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
-      { to: "safety", label: "Safety" },
-      { to: "rfis", label: "RFIs & Concerns" },
-    ],
-  },
-  {
-    title: "Field",
-    items: [
-      { to: "diary", label: "Employee Day Log", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
-      { to: "photos", label: "Photos" },
-      { to: "comms", label: "Meetings & Comms" },
-    ],
-  },
-  {
-    title: "Finance",
-    items: [
-      { to: "cost", label: "Budget & Cost", roles: ["admin", "office", "employee"], note: "Phase 2 depth" },
-      { to: "reports", label: "Reports" },
-    ],
-  },
+const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
+  home: [
+    { to: "", label: "Overview", end: true },
+    { to: "directory", label: "Directory" },
+    { to: "vendors", label: "Vendors", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
+    { to: "email", label: "Email", roles: ["admin", "office", "employee", "site_employee"] },
+  ],
+  drawings: [
+    { to: "drawings", label: "GFC register" },
+    { to: "dms", label: "Documents" },
+    { to: "coordination", label: "Coordination", roles: ["admin", "office", "site_employee", "employee"] },
+    { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
+  ],
+  quality: [
+    { to: "checklist", label: "Final Index" },
+    { to: "quality-inspections", label: "QI forms" },
+    { to: "inspections", label: "Action plan" },
+    { to: "safety", label: "Safety" },
+    { to: "rfis", label: "RFIs" },
+  ],
+  field: [
+    { to: "diary", label: "Day log" },
+    { to: "photos", label: "Photos" },
+    { to: "rfis", label: "RFIs" },
+  ],
+  comms: [
+    { to: "comms", label: "Meetings" },
+    { to: "rfis", label: "RFIs" },
+    { to: "reports", label: "DPR / reports" },
+  ],
+  cost: [
+    { to: "cost", label: "Measurement" },
+    { to: "reports", label: "Reports" },
+  ],
+};
+
+const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; roles?: RoleKey[] }[] = [
+  { key: "home", label: "Home", path: "" },
+  { key: "drawings", label: "Drawings", path: "drawings" },
+  { key: "quality", label: "Quality", path: "checklist" },
+  { key: "field", label: "Field", path: "diary" },
+  { key: "comms", label: "Comms", path: "comms" },
+  { key: "cost", label: "Cost", path: "cost", roles: ["admin", "office", "employee"] },
 ];
 
-const SIDEBAR_KEY = "sharnam.toolsSidebarOpen";
-
-function visibleTools(role?: RoleKey | null) {
-  return TOOL_GROUPS.map((g) => ({
-    ...g,
-    items: g.items.filter((t) => !t.roles || !role || t.roles.includes(role)),
-  })).filter((g) => g.items.length > 0);
+function moduleFromPath(pathname: string): WorkspaceKey | "home" {
+  const seg = pathname.split("/").filter(Boolean);
+  const tool = seg[2] || "";
+  if (!tool) return "home";
+  if (["drawings", "dms", "coordination", "submittals"].includes(tool)) return "drawings";
+  if (["checklist", "quality-inspections", "inspections", "safety"].includes(tool)) return "quality";
+  if (["diary", "photos"].includes(tool)) return "field";
+  if (["comms"].includes(tool)) return "comms";
+  if (["cost"].includes(tool)) return "cost";
+  if (tool === "rfis") return getActiveWorkspace() === "field" ? "field" : "quality";
+  if (tool === "reports") return getActiveWorkspace() === "cost" ? "cost" : "comms";
+  return "home";
 }
 
 export default function ProjectToolsLayout() {
   const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    try {
-      const v = localStorage.getItem(SIDEBAR_KEY);
-      return v === null ? true : v === "1";
-    } catch {
-      return true;
-    }
-  });
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
 
-  const groups = useMemo(() => visibleTools(user?.role), [user?.role]);
+  const activeMod = moduleFromPath(location.pathname);
+  const sideItems = useMemo(() => {
+    const items = SIDE_TOOLS[activeMod] || SIDE_TOOLS.home;
+    return items.filter((t) => !t.roles || !user?.role || t.roles.includes(user.role));
+  }, [activeMod, user?.role]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(SIDEBAR_KEY, sidebarOpen ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  }, [sidebarOpen]);
+  const topMods = useMemo(
+    () => TOP_MODULES.filter((m) => !m.roles || !user?.role || m.roles.includes(user.role)),
+    [user?.role]
+  );
+
+  const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
 
   useEffect(() => {
     if (!id) return;
     api(`/api/projects/${id}`, { token }).then(setProject).catch(console.error);
     api<{ publishedCount: number }>(`/api/drawings/project/${id}/gate`, { token })
-      .then((g: { publishedCount: number }) => setGate(g))
+      .then((g) => setGate(g))
       .catch(console.error);
   }, [id, token]);
 
+  useEffect(() => {
+    if (activeMod !== "home") setActiveWorkspace(activeMod);
+  }, [activeMod]);
+
   return (
-    <div className="min-h-[70vh] -mx-3 sm:-mx-5 lg:-mx-6 -mt-4 sm:-mt-5">
-      <div className="procore-tool-header px-3 sm:px-5 py-3">
-        <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <Button
-              type="button"
-              variant="secondary"
-              className="!rounded !px-2.5 !py-1.5 !text-xs shrink-0"
-              onClick={() => setSidebarOpen((o) => !o)}
-              title={sidebarOpen ? "Hide tools menu" : "Show tools menu"}
-            >
-              {sidebarOpen ? "☰ Hide tools" : "☰ Tools"}
-            </Button>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs text-steel-muted">
-                <Link to="/workspace" className="text-ink hover:underline font-medium">
-                  Workspaces
-                </Link>
-                <span>/</span>
-                <Link to="/projects" className="text-ink/70 hover:underline">
-                  Projects
-                </Link>
-                <span>/</span>
-                <span className="font-mono text-[11px] text-steel-muted">{project?.code || "…"}</span>
-              </div>
-              <h1 className="text-lg sm:text-xl font-semibold text-ink truncate leading-tight">
-                {project?.name || "Project"}
-              </h1>
+    <div className="min-h-[70vh] -mx-4 sm:-mx-6 lg:-mx-8 -mt-6 sm:-mt-8">
+      <div className="bg-white border-b border-line">
+        <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
+              <Link to="/workspace" className="text-brand font-medium hover:underline">
+                Sharnam workspaces
+              </Link>
+              <span>/</span>
+              <span className="font-mono">{project?.code || "…"}</span>
             </div>
+            <h1 className="font-display text-lg sm:text-xl text-ink truncate mt-0.5">
+              {project?.name || "Project"}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden md:inline text-xs text-steel-muted">
-              {project?.clientName} · {project?.location}
-            </span>
+            <Button type="button" variant="ghost" className="!text-xs lg:hidden" onClick={() => setSidebarOpen((o) => !o)}>
+              {sidebarOpen ? "Hide tools" : "Tools"}
+            </Button>
+            <Button type="button" variant="ghost" className="!text-xs" onClick={() => setRightOpen((o) => !o)}>
+              {rightOpen ? "Hide actions" : "Actions"}
+            </Button>
             <Badge tone={gate.publishedCount > 0 ? "ok" : "warn"}>
-              {gate.publishedCount > 0
-                ? `${gate.publishedCount} published drawings`
-                : "Drawings gate locked"}
+              {gate.publishedCount > 0 ? `${gate.publishedCount} published` : "Gate locked"}
             </Badge>
           </div>
         </div>
+
+        <nav className="px-2 sm:px-4 flex gap-0.5 overflow-x-auto border-t border-line" aria-label="Sharnam modules">
+          {topMods.map((m) => (
+            <NavLink
+              key={m.key}
+              to={m.path ? `/projects/${id}/${m.path}` : `/projects/${id}`}
+              end={!m.path}
+              onClick={() => {
+                if (m.key === "home") setActiveWorkspace(null);
+                else setActiveWorkspace(m.key);
+              }}
+              className={() => {
+                const on = activeMod === m.key;
+                return `px-3 sm:px-4 py-2.5 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
+                  on ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
+                }`;
+              }}
+            >
+              {m.label}
+            </NavLink>
+          ))}
+        </nav>
       </div>
 
-      <div className={`min-h-[60vh] ${sidebarOpen ? "lg:grid lg:grid-cols-[220px_1fr]" : ""}`}>
+      <div
+        className={`min-h-[62vh] ${
+          sidebarOpen && rightOpen
+            ? "xl:grid xl:grid-cols-[168px_1fr_240px]"
+            : sidebarOpen
+              ? "lg:grid lg:grid-cols-[168px_1fr]"
+              : rightOpen
+                ? "xl:grid xl:grid-cols-[1fr_240px]"
+                : ""
+        }`}
+      >
         {sidebarOpen && (
-          <aside className="border-b lg:border-b-0 lg:border-r border-line bg-white lg:min-h-[60vh]">
-            <div className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-steel-muted border-b border-line flex items-center justify-between">
-              <span>Project tools</span>
-              <button
-                type="button"
-                className="lg:hidden text-xs text-procore-blue"
-                onClick={() => setSidebarOpen(false)}
-              >
-                Close
-              </button>
+          <aside className="border-b xl:border-b-0 xl:border-r border-line bg-white">
+            <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-steel-muted border-b border-line">
+              {moduleLabel}
             </div>
-            <nav className="py-2 max-h-[50vh] lg:max-h-none overflow-y-auto">
-              {groups.map((g) => (
-                <div key={g.title} className="mb-2">
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-steel-muted/80">
-                    {g.title}
-                  </div>
-                  {g.items.map((t) => (
-                    <NavLink
-                      key={t.to || "home"}
-                      to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
-                      end={t.end}
-                      className={({ isActive }) =>
-                        `block px-3 py-1.5 text-[13px] border-l-[3px] transition ${
-                          isActive
-                            ? "border-brand bg-brand-soft text-ink font-semibold"
-                            : "border-transparent text-ink/80 hover:bg-sand"
-                        }`
-                      }
-                    >
-                      {t.label}
-                      {t.note ? <span className="block text-[10px] font-normal text-steel-muted">{t.note}</span> : null}
-                    </NavLink>
-                  ))}
-                </div>
+            <nav className="p-2 space-y-0.5">
+              {sideItems.map((t) => (
+                <NavLink
+                  key={t.to || "home"}
+                  to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
+                  end={t.end}
+                  className={({ isActive }) =>
+                    `block rounded-md px-2.5 py-2 text-[13px] transition ${
+                      isActive ? "bg-brand-soft text-brand font-semibold" : "text-ink/80 hover:bg-sand"
+                    }`
+                  }
+                >
+                  {t.label}
+                </NavLink>
               ))}
             </nav>
           </aside>
         )}
 
-        <div className="p-3 sm:p-5 bg-[#f0f0f0] min-w-0">
-          {!sidebarOpen && (
-            <div className="mb-3 flex flex-wrap gap-1">
-              {groups
-                .flatMap((g) => g.items)
-                .slice(0, 8)
-                .map((t) => (
-                  <NavLink
-                    key={t.to || "home"}
-                    to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
-                    end={t.end}
-                    className={({ isActive }) =>
-                      `px-2.5 py-1 rounded text-xs border ${
-                        isActive
-                          ? "bg-brand text-white border-brand"
-                          : "bg-white border-line text-ink hover:border-brand/40"
-                      }`
-                    }
-                  >
-                    {t.label}
-                  </NavLink>
-                ))}
-              <button
-                type="button"
-                className="px-2.5 py-1 rounded text-xs border border-line bg-white text-procore-blue"
-                onClick={() => setSidebarOpen(true)}
-              >
-                More tools…
-              </button>
-            </div>
-          )}
+        <div className="p-5 sm:p-7 bg-sand min-w-0">
           <Outlet
             context={{
               project,
               gate,
               reloadProject: () => api(`/api/projects/${id}`, { token }).then(setProject),
+              reloadGate: () =>
+                api<{ publishedCount: number }>(`/api/drawings/project/${id}/gate`, { token }).then(setGate),
             }}
           />
         </div>
+
+        {rightOpen && id && (
+          <ToolRightPanel
+            ctx={{
+              projectId: id,
+              projectCode: project?.code,
+              projectName: project?.name,
+              publishedCount: gate.publishedCount,
+              moduleLabel,
+              role: user?.role,
+            }}
+            onUploadDrawing={() => navigate(`/projects/${id}/drawings?upload=1`)}
+            onAssignChecklist={() => navigate(`/projects/${id}/checklist?assign=1`)}
+          />
+        )}
       </div>
     </div>
   );

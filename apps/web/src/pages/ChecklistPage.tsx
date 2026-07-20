@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
@@ -13,14 +13,15 @@ const FAMILY_META: Record<
   SiteExecution: {
     eyebrow: "Site execution",
     title: "Final Index checklists",
-    subtitle: "Open each form in a spacious fill window. Choose the GFC drawing, fill Yes/No/N.A., and keep an audit log per checklist.",
+    subtitle:
+      "Assign checklist types to the project. Engineers open a fill window, pick a published drawing + revision, then complete Yes / No / N.A.",
     otherTo: "quality-inspections",
     otherLabel: "Quality Inspections →",
   },
   QualityInspection: {
     eyebrow: "Quality assurance",
     title: "Quality inspection checklists",
-    subtitle: "Separate QI library (pre-pour, drawing review…). Not Final Index site-execution forms.",
+    subtitle: "Separate QI library (pre-pour, drawing review…). Fill against a published sheet the same way as Final Index.",
     otherTo: "checklist",
     otherLabel: "Final Index (site) →",
   },
@@ -35,6 +36,7 @@ type Assignment = {
 
 export default function ChecklistPage({ family = "SiteExecution" as ChecklistFamily }: { family?: ChecklistFamily }) {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const meta = FAMILY_META[family];
   const [data, setData] = useState<{
@@ -47,7 +49,10 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
   const [query, setQuery] = useState("");
   const [addTemplateId, setAddTemplateId] = useState("");
   const [msg, setMsg] = useState("");
+  const [showAssign, setShowAssign] = useState(false);
   const canManage = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
+  const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
+  const isClient = user?.role === "client";
 
   const load = async () => {
     const [d, t] = await Promise.all([
@@ -65,6 +70,13 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
     void load();
   }, [id, token, family]);
 
+  useEffect(() => {
+    if (searchParams.get("assign") === "1" && canManage) {
+      setShowAssign(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, canManage, setSearchParams]);
+
   const categories = useMemo(() => {
     const set = new Set(data?.assignments.map((a) => a.template.category) || []);
     return ["All", ...Array.from(set).sort()];
@@ -77,6 +89,16 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
       return catOk && (!q || a.template.name.toLowerCase().includes(q));
     });
   }, [data, category, query]);
+
+  const byCategory = useMemo(() => {
+    const map = new Map<string, Assignment[]>();
+    for (const a of filtered) {
+      const k = a.template.category || "General";
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(a);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
 
   const assignedIds = new Set(data?.assignments.map((a) => a.template.id) || []);
   const available = templates.filter((t) => !assignedIds.has(t.id));
@@ -101,6 +123,11 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
               <Link to={`/projects/${id}/${meta.otherTo}`} className="text-xs font-semibold text-brand underline">
                 {meta.otherLabel}
               </Link>
+              {canManage && (
+                <Button type="button" className="!text-xs" onClick={() => setShowAssign((v) => !v)}>
+                  {showAssign ? "Hide assign" : "Assign checklist type"}
+                </Button>
+              )}
               <Badge tone={data?.canSubmit ? "ok" : "warn"}>
                 {data?.canSubmit ? `${data.publishedDrawings} published drawings` : "Waiting on published drawings"}
               </Badge>
@@ -110,21 +137,33 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
       </div>
 
       <WorkflowStrip
-        active={data?.canSubmit ? 1 : 0}
+        active={data?.canSubmit ? (canFill ? 2 : 1) : 0}
         steps={[
           { label: "Drawing published", hint: "Unlocks fills" },
-          { label: "Manage catalog", hint: "Assign forms" },
-          { label: "Open fill window", hint: "Spacious + drawing pick" },
-          { label: "Audit & email", hint: "Log + notify" },
+          { label: "Assign checklist type", hint: "Catalog per project" },
+          { label: "Pick drawing + rev", hint: "Engineer fill window" },
+          { label: "Yes / No / N.A.", hint: "Audit + CSV" },
         ]}
       />
 
-      {canManage && (
+      {isClient && (
+        <Card className="bg-brand-soft/40 border-brand/20">
+          <div className="font-semibold">Client view</div>
+          <p className="text-sm text-steel-muted mt-1">
+            You can see which checklist types are on the project. Filling is for site / office / vendors after drawings are published.
+          </p>
+        </Card>
+      )}
+
+      {canManage && showAssign && (
         <Card>
-          <h3 className="font-semibold mb-3">Manage checklists</h3>
+          <h3 className="font-semibold mb-1">Assign checklist type</h3>
+          <p className="text-xs text-steel-muted mb-3">
+            Each type becomes a form engineers fill against a specific published drawing.
+          </p>
           <div className="flex flex-wrap gap-2 items-end">
             <label className="text-sm flex-1 min-w-[220px]">
-              Add template to project
+              Template
               <Select className="mt-1" value={addTemplateId} onChange={(e) => setAddTemplateId(e.target.value)}>
                 <option value="">Select template…</option>
                 {available.slice(0, 200).map((t) => (
@@ -146,7 +185,7 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                     body: JSON.stringify({ templateId: addTemplateId }),
                   });
                   setAddTemplateId("");
-                  setMsg("Checklist assigned to project.");
+                  setMsg("Checklist type assigned to project.");
                   await load();
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Failed");
@@ -162,7 +201,17 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
 
       <Card padding={false} className="overflow-hidden">
         <div className="p-4 border-b border-line space-y-3 bg-sand/40">
-          <Input placeholder="Search checklists…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Input
+              className="max-w-sm"
+              placeholder="Search checklist types…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <p className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">
+              {filtered.length} types · fill picks drawing + revision
+            </p>
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {categories.map((c) => (
               <button
@@ -177,46 +226,71 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
               </button>
             ))}
           </div>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">
-            {filtered.length} forms · open in new window to fill
-          </p>
         </div>
-        <ul className="divide-y divide-line max-h-[70vh] overflow-y-auto">
-          {filtered.map((a) => {
-            const latest = a.submissions[0];
-            return (
-              <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 hover:bg-brand-soft/30">
-                <div className="min-w-0">
-                  <div className="font-medium text-sm leading-snug">{a.template.name}</div>
-                  <div className="text-[11px] text-steel-muted mt-1 font-mono">
-                    {a.template.category} · {a.template._count.items} items
-                    {latest ? ` · last ${latest.status} by ${latest.submittedBy.fullName}` : " · no fills yet"}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" className="!text-xs !py-1.5" onClick={() => openFill(a.id)}>
-                    Open fill window
-                  </Button>
-                  {canManage && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="!text-xs !py-1.5 text-danger"
-                      onClick={async () => {
-                        if (!confirm("Remove this checklist from the project?")) return;
-                        await api(`/api/checklist/assignments/${a.id}`, { method: "DELETE", token });
-                        await load();
-                      }}
+
+        <div className="divide-y divide-line max-h-[70vh] overflow-y-auto">
+          {byCategory.map(([cat, items]) => (
+            <div key={cat}>
+              <div className="px-4 py-2 bg-procore-navy text-white text-[11px] font-mono uppercase tracking-wider sticky top-0 z-[1]">
+                {cat} · {items.length} type{items.length === 1 ? "" : "s"}
+              </div>
+              <ul>
+                {items.map((a) => {
+                  const latest = a.submissions[0];
+                  return (
+                    <li
+                      key={a.id}
+                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 hover:bg-brand-soft/30 border-t border-line"
                     >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-          {!filtered.length && <li className="p-8 text-center text-sm text-steel-muted">No checklists in this family yet — assign from Manage above.</li>}
-        </ul>
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm leading-snug">{a.template.name}</div>
+                        <div className="text-[11px] text-steel-muted mt-1 font-mono">
+                          {a.template._count.items} items
+                          {a.template.checklistType ? ` · ${a.template.checklistType}` : ""}
+                          {latest
+                            ? ` · last ${latest.status} by ${latest.submittedBy.fullName}`
+                            : " · no fills yet — engineer picks drawing"}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {canFill && (
+                          <Button
+                            type="button"
+                            className="!text-xs !py-1.5"
+                            disabled={!data?.canSubmit}
+                            title={!data?.canSubmit ? "Publish a drawing first" : undefined}
+                            onClick={() => openFill(a.id)}
+                          >
+                            Fill vs drawing
+                          </Button>
+                        )}
+                        {canManage && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="!text-xs !py-1.5 text-danger"
+                            onClick={async () => {
+                              if (!confirm("Remove this checklist type from the project?")) return;
+                              await api(`/api/checklist/assignments/${a.id}`, { method: "DELETE", token });
+                              await load();
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+          {!filtered.length && (
+            <div className="p-8 text-center text-sm text-steel-muted">
+              No checklist types yet — use Assign checklist type (or the right Actions panel).
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );
