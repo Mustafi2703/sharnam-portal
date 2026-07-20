@@ -213,7 +213,7 @@ export default function ProjectToolsLayout() {
               role: user?.role,
             }}
             onUploadDrawing={() => navigate(`/projects/${id}/drawings?upload=1`)}
-            onAssignChecklist={() => navigate(`/projects/${id}/checklist?assign=1`)}
+            onAssignChecklist={() => navigate(`/projects/${id}/checklist/assign`)}
           />
         )}
       </div>

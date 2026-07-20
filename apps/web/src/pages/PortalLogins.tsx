@@ -260,9 +260,9 @@ export function LoginHubPage() {
             <a href="#modules" className="hidden md:inline text-sm text-steel-muted hover:text-brand font-medium">
               Modules
             </a>
-            <Link to="/login/office">
+            <Link to="/options">
               <Button type="button" className="!text-xs !py-2">
-                Open Sharnam
+                UI options 1–5
               </Button>
             </Link>
           </div>

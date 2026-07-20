@@ -1,18 +1,27 @@
-/** Theme options A–H — CSS variable maps for live preview / lock */
+/** Five live construction UI systems — colors + structural style (no stock photos) */
 export type ThemeOption = {
   id: string;
+  number: 1 | 2 | 3 | 4 | 5;
   letter: string;
   name: string;
   blurb: string;
+  style: "amber" | "graphite" | "forest" | "blueprint" | "night";
+  density: "comfortable" | "compact";
+  radius: "soft" | "sharp" | "pill";
   vars: Record<string, string>;
 };
 
-export const THEME_OPTIONS: ThemeOption[] = [
+/** Options 1–5 shown on Render /options and /ui/1…/ui/5 */
+export const LIVE_UI_OPTIONS: ThemeOption[] = [
   {
-    id: "a-amber",
-    letter: "A",
+    id: "ui-1",
+    number: 1,
+    letter: "1",
     name: "Site Amber",
-    blurb: "Recommended · orange + logo cyan",
+    blurb: "Warm PMC desk · soft cards · Sharnam orange + cyan",
+    style: "amber",
+    density: "comfortable",
+    radius: "soft",
     vars: {
       "--color-brand": "#e4632a",
       "--color-brand-dark": "#c24d1a",
@@ -22,87 +31,132 @@ export const THEME_OPTIONS: ThemeOption[] = [
       "--color-sand": "#faf7f4",
       "--color-ink": "#1c1c1c",
       "--color-line": "#eadfd6",
+      "--color-paper": "#ffffff",
       "--color-procore-navy": "#2a2a2a",
       "--color-procore-blue": "#e4632a",
+      "--ui-radius": "12px",
+      "--ui-radius-sm": "8px",
+      "--font-display": '"Syne", "Instrument Sans", system-ui, sans-serif',
     },
   },
   {
-    id: "b-graphite",
-    letter: "B",
-    name: "Concrete Graphite",
-    blurb: "Steel chrome · orange sparks",
+    id: "ui-2",
+    number: 2,
+    letter: "2",
+    name: "Graphite Procore",
+    blurb: "Dense tool chrome · sharp corners · steel + orange sparks",
+    style: "graphite",
+    density: "compact",
+    radius: "sharp",
     vars: {
-      "--color-brand": "#3d4450",
-      "--color-brand-dark": "#2a3038",
-      "--color-brand-soft": "#f0f1f3",
-      "--color-brand-glow": "#8a919c",
-      "--color-mark": "#e4632a",
-      "--color-sand": "#f5f5f6",
-      "--color-ink": "#1a1b1e",
-      "--color-line": "#d8dce2",
-      "--color-procore-navy": "#3d4450",
-      "--color-procore-blue": "#e4632a",
+      "--color-brand": "#f97316",
+      "--color-brand-dark": "#ea580c",
+      "--color-brand-soft": "#fff7ed",
+      "--color-brand-glow": "#fdba74",
+      "--color-mark": "#334155",
+      "--color-sand": "#f1f5f9",
+      "--color-ink": "#0f172a",
+      "--color-line": "#cbd5e1",
+      "--color-paper": "#ffffff",
+      "--color-procore-navy": "#1e293b",
+      "--color-procore-blue": "#f97316",
+      "--ui-radius": "4px",
+      "--ui-radius-sm": "2px",
+      "--font-display": '"IBM Plex Sans", "Instrument Sans", system-ui, sans-serif',
     },
   },
   {
-    id: "c-forest",
-    letter: "C",
-    name: "Forest Site",
-    blurb: "Green field · warm secondary",
+    id: "ui-3",
+    number: 3,
+    letter: "3",
+    name: "Forest Field",
+    blurb: "Site-green energy · roomy layout · clay secondary",
+    style: "forest",
+    density: "comfortable",
+    radius: "pill",
     vars: {
       "--color-brand": "#2f6f4e",
       "--color-brand-dark": "#24583d",
       "--color-brand-soft": "#eaf5ef",
       "--color-brand-glow": "#7ab894",
       "--color-mark": "#c45c26",
-      "--color-sand": "#f6f8f5",
-      "--color-ink": "#1a241e",
-      "--color-line": "#d7e3da",
-      "--color-procore-navy": "#1a241e",
+      "--color-sand": "#f4f7f2",
+      "--color-ink": "#142019",
+      "--color-line": "#cfe0d4",
+      "--color-paper": "#ffffff",
+      "--color-procore-navy": "#1a2e22",
       "--color-procore-blue": "#2f6f4e",
+      "--ui-radius": "16px",
+      "--ui-radius-sm": "999px",
+      "--font-display": '"Fraunces", "Syne", Georgia, serif',
     },
   },
   {
-    id: "d-blueprint",
-    letter: "D",
-    name: "Blueprint White",
-    blurb: "Technical white · cyan lines",
+    id: "ui-4",
+    number: 4,
+    letter: "4",
+    name: "Blueprint Desk",
+    blurb: "Technical white · hairline rules · cyan registration marks",
+    style: "blueprint",
+    density: "compact",
+    radius: "sharp",
     vars: {
-      "--color-brand": "#1a1a1a",
-      "--color-brand-dark": "#000000",
-      "--color-brand-soft": "#f4f7fb",
-      "--color-brand-glow": "#6b7280",
-      "--color-mark": "#1e6b9f",
-      "--color-sand": "#f7f9fc",
-      "--color-ink": "#111827",
-      "--color-line": "#d6dee8",
-      "--color-procore-navy": "#1a1a1a",
-      "--color-procore-blue": "#1e6b9f",
+      "--color-brand": "#0f172a",
+      "--color-brand-dark": "#020617",
+      "--color-brand-soft": "#eff6ff",
+      "--color-brand-glow": "#93c5fd",
+      "--color-mark": "#0284c7",
+      "--color-sand": "#f8fafc",
+      "--color-ink": "#0c1222",
+      "--color-line": "#bfdbfe",
+      "--color-paper": "#ffffff",
+      "--color-procore-navy": "#0f172a",
+      "--color-procore-blue": "#0284c7",
+      "--ui-radius": "2px",
+      "--ui-radius-sm": "0px",
+      "--font-display": '"Space Grotesk", "IBM Plex Sans", system-ui, sans-serif',
     },
   },
   {
-    id: "e-night",
-    letter: "E",
-    name: "Night Shift Orange",
-    blurb: "Dark chrome · night ops",
+    id: "ui-5",
+    number: 5,
+    letter: "5",
+    name: "Night Shift",
+    blurb: "Dark ops chrome · high-contrast orange · night site",
+    style: "night",
+    density: "compact",
+    radius: "soft",
     vars: {
       "--color-brand": "#ff6b2c",
       "--color-brand-dark": "#e0551a",
       "--color-brand-soft": "#2a201c",
       "--color-brand-glow": "#ffb086",
       "--color-mark": "#ffb086",
-      "--color-sand": "#141210",
+      "--color-sand": "#12100e",
       "--color-ink": "#f5ede6",
-      "--color-line": "#2e2622",
-      "--color-procore-navy": "#1a1614",
+      "--color-line": "#3a322c",
+      "--color-paper": "#1c1815",
+      "--color-procore-navy": "#0c0a09",
       "--color-procore-blue": "#ff6b2c",
+      "--ui-radius": "10px",
+      "--ui-radius-sm": "6px",
+      "--font-display": '"Syne", "Instrument Sans", system-ui, sans-serif',
     },
   },
+];
+
+/** Full catalog (includes legacy letters for /themes) */
+export const THEME_OPTIONS: ThemeOption[] = [
+  ...LIVE_UI_OPTIONS,
   {
     id: "f-terracotta",
+    number: 1,
     letter: "F",
     name: "Terracotta Clay",
     blurb: "Warm clay paper",
+    style: "amber",
+    density: "comfortable",
+    radius: "soft",
     vars: {
       "--color-brand": "#c65d3a",
       "--color-brand-dark": "#a44a2c",
@@ -112,54 +166,37 @@ export const THEME_OPTIONS: ThemeOption[] = [
       "--color-sand": "#fbf6f1",
       "--color-ink": "#2a211c",
       "--color-line": "#e8d5c8",
+      "--color-paper": "#ffffff",
       "--color-procore-navy": "#2a211c",
       "--color-procore-blue": "#c65d3a",
-    },
-  },
-  {
-    id: "g-slate-gold",
-    letter: "G",
-    name: "Slate & Gold",
-    blurb: "Premium charcoal + gold",
-    vars: {
-      "--color-brand": "#b8943f",
-      "--color-brand-dark": "#95762f",
-      "--color-brand-soft": "#f7f4ec",
-      "--color-brand-glow": "#d4bc7a",
-      "--color-mark": "#2f3640",
-      "--color-sand": "#f4f2ed",
-      "--color-ink": "#1c1f24",
-      "--color-line": "#ddd6c8",
-      "--color-procore-navy": "#2f3640",
-      "--color-procore-blue": "#b8943f",
-    },
-  },
-  {
-    id: "h-coral-ink",
-    letter: "H",
-    name: "Coral Ink",
-    blurb: "Coral accent · ink type",
-    vars: {
-      "--color-brand": "#e24b4a",
-      "--color-brand-dark": "#c23a39",
-      "--color-brand-soft": "#fff0ef",
-      "--color-brand-glow": "#f0908f",
-      "--color-mark": "#1b1b1b",
-      "--color-sand": "#fffcfb",
-      "--color-ink": "#161616",
-      "--color-line": "#ecdad8",
-      "--color-procore-navy": "#1b1b1b",
-      "--color-procore-blue": "#e24b4a",
+      "--ui-radius": "12px",
+      "--ui-radius-sm": "8px",
+      "--font-display": '"Syne", system-ui, sans-serif',
     },
   },
 ];
 
 export const THEME_STORAGE_KEY = "sharnam_theme_option";
 
+export function getLiveOption(numOrId: string | number) {
+  const n = String(numOrId);
+  return (
+    LIVE_UI_OPTIONS.find((t) => String(t.number) === n || t.id === n || t.letter === n) ||
+    LIVE_UI_OPTIONS[0]
+  );
+}
+
 export function applyThemeOption(id: string) {
-  const opt = THEME_OPTIONS.find((t) => t.id === id) || THEME_OPTIONS[0];
+  const opt =
+    LIVE_UI_OPTIONS.find((t) => t.id === id || String(t.number) === id || t.letter === id) ||
+    THEME_OPTIONS.find((t) => t.id === id) ||
+    LIVE_UI_OPTIONS[0];
   const root = document.documentElement;
   Object.entries(opt.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  root.setAttribute("data-ui-style", opt.style);
+  root.setAttribute("data-ui-density", opt.density);
+  root.setAttribute("data-ui-radius", opt.radius);
+  root.setAttribute("data-ui-option", String(opt.number));
   try {
     localStorage.setItem(THEME_STORAGE_KEY, opt.id);
   } catch {
@@ -175,5 +212,5 @@ export function loadSavedTheme() {
   } catch {
     /* ignore */
   }
-  return applyThemeOption("a-amber");
+  return applyThemeOption("ui-1");
 }

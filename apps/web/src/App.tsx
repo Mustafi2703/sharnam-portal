@@ -27,6 +27,10 @@ import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 import SafetyPage from "./pages/project/SafetyPage";
 import ThemeOptionsPage from "./pages/ThemeOptionsPage";
+import UiOptionsHubPage from "./pages/UiOptionsHubPage";
+import UiOptionLandingPage from "./pages/UiOptionLandingPage";
+import RevisionUploadPage from "./pages/project/RevisionUploadPage";
+import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -37,13 +41,19 @@ function Protected({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/options" replace />;
   return <>{children}</>;
 }
 
 function HomeRedirect() {
   const { user } = useAuth();
-  if (user?.portal === "office" || user?.portal === "site" || user?.role === "site_employee" || user?.role === "office" || user?.role === "vendor") {
+  if (
+    user?.portal === "office" ||
+    user?.portal === "site" ||
+    user?.role === "site_employee" ||
+    user?.role === "office" ||
+    user?.role === "vendor"
+  ) {
     return <Navigate to="/workspace" replace />;
   }
   return <DashboardPage />;
@@ -52,6 +62,11 @@ function HomeRedirect() {
 export default function App() {
   return (
     <Routes>
+      {/* Public: five UI systems live on Render */}
+      <Route path="/" element={<UiOptionsHubPage />} />
+      <Route path="/options" element={<UiOptionsHubPage />} />
+      <Route path="/ui/:optionId" element={<UiOptionLandingPage />} />
+
       <Route path="/login" element={<LoginHubPage />} />
       <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
       <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
@@ -59,7 +74,6 @@ export default function App() {
       <Route path="/login/office" element={<PortalLoginPage portalKey="office" />} />
       <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
 
-      {/* Spacious checklist fill — own chrome, no tool sidebar */}
       <Route
         path="/projects/:id/checklist/fill/:assignmentId"
         element={
@@ -75,7 +89,7 @@ export default function App() {
           <Protected>
             <AppShell>
               <Routes>
-                <Route path="/" element={<HomeRedirect />} />
+                <Route path="/app" element={<HomeRedirect />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/themes" element={<ThemeOptionsPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
@@ -84,8 +98,11 @@ export default function App() {
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />
+                  <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />
+                  <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
                   <Route path="dms" element={<DmsPage />} />
                   <Route path="checklist" element={<ChecklistPage family="SiteExecution" />} />
+                  <Route path="checklist/assign" element={<ChecklistAssignPage />} />
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="safety" element={<SafetyPage />} />

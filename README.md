@@ -29,6 +29,20 @@ npm run dev
 
 Optional: `SHARNAM_EXCEL_ROOT` pointing at the folder with `Final Index.xlsx` (defaults to repo root).
 
+## Live UI options (Render)
+
+Public hub (no login): **`/`** or **`/options`** — five construction UI systems.
+
+| Option | Route | Look |
+|--------|-------|------|
+| 1 Site Amber | `/ui/1` | Warm soft PMC |
+| 2 Graphite Procore | `/ui/2` | Dense sharp steel |
+| 3 Forest Field | `/ui/3` | Green roomy |
+| 4 Blueprint Desk | `/ui/4` | Technical cyan |
+| 5 Night Shift | `/ui/5` | Dark ops orange |
+
+Same portals (Office / Site / Vendor / Client) under every option. Demo password: `Demo@1234`.
+
 ## Modules ready for client demo
 
 - Four portals: **office / site / vendor / client** (+ employee login)

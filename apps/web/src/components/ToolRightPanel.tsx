@@ -65,6 +65,14 @@ export function ToolRightPanel({
               type="button"
               variant="secondary"
               className="w-full !justify-start !text-xs"
+              onClick={() => navigate(`/projects/${ctx.projectId}/drawings/upload-revision`)}
+            >
+              Upload revision
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full !justify-start !text-xs"
               onClick={() => navigate(`/projects/${ctx.projectId}/dms`)}
             >
               Upload docs
@@ -75,7 +83,7 @@ export function ToolRightPanel({
               className="w-full !justify-start !text-xs"
               onClick={() => {
                 if (onAssignChecklist) onAssignChecklist();
-                else navigate(`/projects/${ctx.projectId}/checklist?assign=1`);
+                else navigate(`/projects/${ctx.projectId}/checklist/assign`);
               }}
             >
               Assign checklist type

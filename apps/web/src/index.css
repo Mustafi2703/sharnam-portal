@@ -38,7 +38,30 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background: linear-gradient(180deg, #fffaf6 0%, #f3eee8 100%);
+  background: var(--color-sand);
+}
+
+html[data-ui-style="night"] body {
+  background: var(--color-sand);
+}
+
+html[data-ui-density="compact"] .surface {
+  box-shadow: none;
+}
+
+html[data-ui-radius="sharp"] .surface,
+html[data-ui-radius="sharp"] .rounded-xl,
+html[data-ui-radius="sharp"] .rounded-2xl,
+html[data-ui-radius="sharp"] .rounded-lg {
+  border-radius: var(--ui-radius, 4px) !important;
+}
+
+.bg-paper {
+  background-color: var(--color-paper);
+}
+
+.ui-panel {
+  border-radius: var(--ui-radius, 12px);
 }
 
 .font-display {
