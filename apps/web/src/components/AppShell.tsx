@@ -208,14 +208,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-1 shrink-0 pl-2 border-l border-line">
-            <span className="hidden sm:inline text-[10px] font-mono uppercase text-steel-muted mr-1">UI</span>
+            <Link
+              to="/options"
+              className="hidden sm:inline text-[11px] font-semibold text-brand mr-1 whitespace-nowrap hover:underline"
+              title="Open all UI systems"
+            >
+              Styles 1–5
+            </Link>
+            <span className="sm:hidden text-[10px] font-mono uppercase text-steel-muted mr-1">UI</span>
             {LIVE_UI_OPTIONS.map((t) => (
               <button
                 key={t.id}
                 type="button"
-                title={t.name}
+                title={`${t.number}. ${t.name}`}
                 onClick={() => applyThemeOption(t.id)}
-                className={`h-7 w-7 text-[11px] font-semibold border transition ${
+                className={`h-8 min-w-[2rem] px-1.5 text-[12px] font-semibold border transition ${
                   String(t.number) === activeUi
                     ? "bg-brand text-white border-brand"
                     : "bg-sand border-line text-steel-muted hover:border-brand"

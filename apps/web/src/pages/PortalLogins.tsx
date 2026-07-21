@@ -5,7 +5,7 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { Button, Card, Input } from "../components/ui";
 import { BrandLink, BrandMark, BRAND_EN, BRAND_HI, BRAND_TAG } from "../components/Brand";
-import { THEME_OPTIONS } from "../themes";
+import { LIVE_UI_OPTIONS } from "../themes";
 
 type PortalConfig = {
   key: string;
@@ -422,19 +422,28 @@ export function LoginHubPage() {
         <div className="max-w-6xl mx-auto px-5 py-10">
           <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Eight UI options</p>
-              <h2 className="font-display text-2xl">Theme swatches A–H</h2>
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Five live UI systems</p>
+              <h2 className="font-display text-2xl">Pick a style before or after login</h2>
             </div>
-            <p className="text-xs text-steel-muted">Apply inside the app after login · /themes</p>
+            <Link to="/options" className="text-sm font-semibold text-brand hover:underline">
+              Open full options hub →
+            </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-            {THEME_OPTIONS.map((t) => (
-              <div key={t.id} className="rounded-xl border border-line overflow-hidden bg-sand/40">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {LIVE_UI_OPTIONS.map((t) => (
+              <Link
+                key={t.id}
+                to={`/ui/${t.number}`}
+                className="rounded-xl border border-line overflow-hidden bg-sand/40 hover:border-brand transition"
+              >
                 <div className="h-10" style={{ background: t.vars["--color-brand"] }} />
-                <div className="p-2.5">
-                  <div className="text-xs font-display">{t.letter} · {t.name}</div>
+                <div className="p-3">
+                  <div className="text-xs font-display">
+                    {t.number} · {t.name}
+                  </div>
+                  <div className="text-[11px] text-steel-muted mt-0.5">{t.style}</div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

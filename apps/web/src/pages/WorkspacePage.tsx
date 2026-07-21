@@ -65,8 +65,8 @@ export default function WorkspacePage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <Badge tone="neutral">{user?.portal} portal</Badge>
-          <Link to="/themes" className="text-xs font-semibold text-brand hover:underline">
-            Theme options A–H →
+          <Link to="/options" className="text-xs font-semibold text-brand hover:underline">
+            UI styles 1–5 →
           </Link>
           {activeWs && (
             <Button type="button" variant="secondary" className="!text-xs" onClick={clearFocus}>

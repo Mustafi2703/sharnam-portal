@@ -5,7 +5,7 @@ services:
     plan: free
     region: oregon
     rootDir: .
-    buildCommand: npm install && npx prisma generate && npm run build -w @sharnam/web
+    buildCommand: npm install && npx prisma generate && npm run build -w @sharnam/web && test -f apps/web/dist/index.html && ls -la apps/web/dist/assets | head
     startCommand: npx prisma db push && npx tsx seed/seed.ts && npm run start -w @sharnam/api
     healthCheckPath: /api/health
     envVars:

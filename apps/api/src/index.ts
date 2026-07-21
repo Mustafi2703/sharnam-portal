@@ -22,6 +22,13 @@ const PORT = Number(process.env.PORT || 4000);
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+const webDistCandidates = [
+  path.resolve(__dirname, "../../web/dist"),
+  path.resolve(process.cwd(), "apps/web/dist"),
+  path.resolve(process.cwd(), "web/dist"),
+];
+const webDist = webDistCandidates.find((p) => fs.existsSync(path.join(p, "index.html"))) || null;
+
 app.use(
   cors({
     origin: process.env.WEB_ORIGIN?.split(",") || true,
@@ -37,6 +44,9 @@ app.get("/api/health", (_req, res) => {
     service: "sharnam-api",
     mockOneDrive: process.env.MOCK_ONEDRIVE !== "false",
     time: new Date().toISOString(),
+    commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local",
+    webDist,
+    uiOptions: "1-5 at / and /options",
   });
 });
 
@@ -60,14 +70,16 @@ app.use("/api/inspections", inspectionsRouter);
 app.use("/api/directory", directoryRouter);
 app.use("/api/safety", safetyRouter);
 
-// Serve built React app (single-service Render deploy)
-const webDist = path.resolve(__dirname, "../../web/dist");
-if (fs.existsSync(webDist)) {
-  app.use(express.static(webDist));
+// Serve built React app AFTER API routes (single-service Render deploy)
+if (webDist) {
+  console.log(`Serving web UI from ${webDist}`);
+  app.use(express.static(webDist, { maxAge: 0, etag: true }));
   app.get("*", (req, res, next) => {
     if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
     res.sendFile(path.join(webDist, "index.html"));
   });
+} else {
+  console.warn("Web dist not found. Looked in:", webDistCandidates.join(", "));
 }
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
