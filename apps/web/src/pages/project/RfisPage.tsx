@@ -12,6 +12,7 @@ export default function RfisPage() {
   const [drawings, setDrawings] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [matrixCanRespond, setMatrixCanRespond] = useState(false);
   const [form, setForm] = useState({
     subject: "",
     question: "",
@@ -26,33 +27,30 @@ export default function RfisPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
 
   const isClient = user?.role === "client";
-  const canCreate =
-    user?.role === "admin" ||
-    user?.role === "office" ||
-    user?.role === "site_employee" ||
-    user?.role === "employee" ||
-    user?.role === "client";
-  const canRespond =
-    user?.role === "admin" ||
-    user?.role === "office" ||
-    user?.role === "site_employee" ||
-    user?.role === "employee" ||
-    user?.role === "vendor";
+  const canCreate = !!user; // anyone on the project portal can raise
+  const canRespond = matrixCanRespond;
+  const canClose = matrixCanRespond;
 
   const load = async () => {
-    const [r, u, d, a] = await Promise.all([
-      api<any[]>(`/api/rfis/project/${id}`, { token }),
+    const [rPayload, u, d, a] = await Promise.all([
+      api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
         assignments: [],
       })),
     ]);
-    setRfis(r);
+    const list = Array.isArray(rPayload) ? rPayload : rPayload.rfis || [];
+    setRfis(list);
+    if (Array.isArray(rPayload)) {
+      setMatrixCanRespond(["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || ""));
+    } else {
+      setMatrixCanRespond(!!rPayload.canRespond);
+    }
     setUsers(u);
     setDrawings(d);
     setAssignments(a.assignments || []);
-    if (!active && r[0]) setActive(r[0].id);
+    if (!active && list[0]) setActive(list[0].id);
   };
 
   useEffect(() => {
@@ -69,8 +67,8 @@ export default function RfisPage() {
         title={isClient ? "Concerns & RFIs" : "RFIs"}
         subtitle={
           isClient
-            ? "Raise project concerns for Sharnam office. You can view open / closed status — drawing control stays with the office."
-            : "Raise RFIs against drawings and attach a checklist type. Office can respond and close; site fills linked checklists when resolved."
+            ? "Raise concerns anytime. Only parties on the Communication Matrix (or Sharnam office) can respond and close."
+            : "Anyone can raise an RFI. Respond / close is limited to roles on the Communication Matrix (RFI rows) plus Sharnam office."
         }
       />
 
@@ -232,10 +230,10 @@ export default function RfisPage() {
                     await load();
                   }}
                 >
-                  <TextArea rows={3} placeholder="Response" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
+                  <TextArea rows={3} placeholder="Official response (matrix party)" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
                   <div className="flex gap-2">
                     <Button type="submit">Submit response</Button>
-                    {(user?.role === "admin" || user?.role === "office") && (
+                    {canClose && (
                       <Button
                         type="button"
                         variant="secondary"
@@ -253,6 +251,11 @@ export default function RfisPage() {
                     )}
                   </div>
                 </form>
+              )}
+              {!canRespond && selected.status !== "Closed" && (
+                <p className="text-xs text-steel-muted bg-sand/50 p-3 rounded-lg">
+                  You can view this RFI. Respond / close is only for Communication Matrix parties — ask Sharnam office to add your role under Comms → Matrix (RFI Update).
+                </p>
               )}
             </div>
           )}

@@ -1,8 +1,11 @@
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 export const vendorsRouter = Router();
 vendorsRouter.use(requireAuth);
@@ -73,7 +76,9 @@ vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office")
 export const rfiRouter = Router();
 rfiRouter.use(requireAuth);
 
-rfiRouter.get("/project/:projectId", async (req, res) => {
+rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
+  const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
+  const canRespond = await roleOnRfiMatrix(req.params.projectId, req.user!.role);
   const rfis = await prisma.rfi.findMany({
     where: { projectId: req.params.projectId },
     include: {
@@ -85,10 +90,10 @@ rfiRouter.get("/project/:projectId", async (req, res) => {
     },
     orderBy: { createdAt: "desc" },
   });
-  res.json(rfis);
+  res.json({ rfis, canRespond, canClose: canRespond, matrixGate: true });
 });
 
-rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee", "client"), async (req: AuthedRequest, res) => {
+rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee", "client", "vendor"), async (req: AuthedRequest, res) => {
   const count = await prisma.rfi.count({ where: { projectId: req.params.projectId } });
   const isClient = req.user!.role === "client";
   const number = req.body.number || `${isClient ? "CON" : "RFI"}-${String(count + 1).padStart(3, "0")}`;
@@ -124,7 +129,16 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   res.status(201).json(rfi);
 });
 
-rfiRouter.post("/:id/respond", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
+rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
+  const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "RFI not found" });
+  const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
+  const allowed = await roleOnRfiMatrix(existing.projectId, req.user!.role);
+  if (!allowed) {
+    return res.status(403).json({
+      error: "Only roles listed on this project's Communication Matrix (RFI rows) can respond. Ask Sharnam office to add your role.",
+    });
+  }
   const response = await prisma.rfiResponse.create({
     data: {
       rfiId: req.params.id,
@@ -145,7 +159,16 @@ rfiRouter.post("/:id/respond", requireRoles("admin", "office", "site_employee", 
   res.status(201).json(response);
 });
 
-rfiRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
+  const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "RFI not found" });
+  const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
+  const allowed = await roleOnRfiMatrix(existing.projectId, req.user!.role);
+  if (!allowed) {
+    return res.status(403).json({
+      error: "Only Communication Matrix parties (or Sharnam office) can close / update this RFI.",
+    });
+  }
   const rfi = await prisma.rfi.update({
     where: { id: req.params.id },
     data: {
@@ -336,7 +359,7 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
   });
 });
 
-directoryRouter.post("/project/:projectId/submittals", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+directoryRouter.post("/project/:projectId/submittals", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const count = await prisma.submittal.count({ where: { projectId: req.params.projectId } });
   const row = await prisma.submittal.create({
     data: {
@@ -345,12 +368,98 @@ directoryRouter.post("/project/:projectId/submittals", requireRoles("admin", "of
       title: req.body.title,
       submittalType: req.body.submittalType || "Product Data",
       status: req.body.status || "Draft",
+      ballInCourt: req.body.ballInCourt || "Submitter",
       specSection: req.body.specSection,
+      description: req.body.description || null,
+      revisionNumber: req.body.revisionNumber || "0",
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      attachmentsJson: req.body.attachmentsJson
+        ? typeof req.body.attachmentsJson === "string"
+          ? req.body.attachmentsJson
+          : JSON.stringify(req.body.attachmentsJson)
+        : null,
     },
   });
+  await audit("submittal.create", { userId: req.user!.id, entity: "Submittal", entityId: row.id });
   res.status(201).json(row);
 });
+
+directoryRouter.patch("/submittals/:id", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
+  const row = await prisma.submittal.update({
+    where: { id: req.params.id },
+    data: {
+      title: req.body.title,
+      submittalType: req.body.submittalType,
+      status: req.body.status,
+      ballInCourt: req.body.ballInCourt,
+      specSection: req.body.specSection,
+      description: req.body.description,
+      revisionNumber: req.body.revisionNumber,
+      reviewerNotes: req.body.reviewerNotes,
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+      attachmentsJson: req.body.attachmentsJson !== undefined
+        ? typeof req.body.attachmentsJson === "string"
+          ? req.body.attachmentsJson
+          : JSON.stringify(req.body.attachmentsJson)
+        : undefined,
+    },
+  });
+  await audit("submittal.update", { userId: req.user!.id, entity: "Submittal", entityId: row.id });
+  res.json(row);
+});
+
+directoryRouter.get("/project/:projectId/submittals", async (req, res) => {
+  const rows = await prisma.submittal.findMany({
+    where: { projectId: req.params.projectId },
+    orderBy: { updatedAt: "desc" },
+  });
+  res.json(rows);
+});
+
+directoryRouter.get("/project/:projectId/photos", async (req, res) => {
+  const album = req.query.album ? String(req.query.album) : undefined;
+  const rows = await prisma.projectPhoto.findMany({
+    where: { projectId: req.params.projectId, ...(album ? { album } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  const albums = await prisma.projectPhoto.groupBy({
+    by: ["album"],
+    where: { projectId: req.params.projectId },
+    _count: true,
+  });
+  res.json({ photos: rows, albums });
+});
+
+directoryRouter.post(
+  "/project/:projectId/photos",
+  requireRoles("admin", "office", "site_employee", "employee", "vendor"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Not found" });
+    let fileUrl = req.body.fileUrl || "";
+    if (req.file) {
+      const { mockOneDrive } = await import("../services/mockOneDrive.js");
+      const saved = await mockOneDrive.upload(project.code, "Photos", req.file.originalname, req.file.buffer);
+      fileUrl = saved.url;
+    }
+    if (!fileUrl) fileUrl = `/uploads/photos/placeholder-${Date.now()}.txt`;
+    const row = await prisma.projectPhoto.create({
+      data: {
+        projectId: req.params.projectId,
+        fileUrl,
+        album: req.body.album || "Site Progress",
+        description: req.body.description,
+        trade: req.body.trade,
+        location: req.body.location,
+        isPrivate: req.body.isPrivate === "true" || req.body.isPrivate === true,
+      },
+    });
+    await audit("photo.create", { userId: req.user!.id, entity: "ProjectPhoto", entityId: row.id });
+    res.status(201).json(row);
+  }
+);
 
 directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const row = await prisma.designCoordinationIssue.create({
@@ -378,20 +487,6 @@ directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "empl
     },
   });
   res.json(row);
-});
-
-directoryRouter.post("/project/:projectId/photos", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
-  const row = await prisma.projectPhoto.create({
-    data: {
-      projectId: req.params.projectId,
-      fileUrl: req.body.fileUrl || "/uploads/placeholder-photo.txt",
-      album: req.body.album || "Unclassified",
-      description: req.body.description,
-      trade: req.body.trade,
-      location: req.body.location,
-    },
-  });
-  res.status(201).json(row);
 });
 
 export const safetyRouter = Router();

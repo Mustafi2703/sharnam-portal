@@ -721,9 +721,14 @@ model Submittal {
   number      String
   title       String
   submittalType String @default("Product Data")
+  /// Draft → Submitted → Under Review → Revise & Resubmit → Approved / Rejected
   status      String   @default("Draft")
   ballInCourt String   @default("Submitter")
   specSection String?
+  description String?
+  revisionNumber String @default("0")
+  reviewerNotes String?
+  attachmentsJson String?
   dueDate     DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

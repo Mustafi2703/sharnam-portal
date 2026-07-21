@@ -1,90 +1,72 @@
 import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
+import { buildDprPack, buildWprPack, renderDprHtml, renderWprHtml } from "../services/reportPacks.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
 
 reportsRouter.get("/daily/:projectId", async (req, res) => {
-  const date = req.query.date ? new Date(String(req.query.date)) : new Date();
-  date.setHours(0, 0, 0, 0);
-  const next = new Date(date);
-  next.setDate(next.getDate() + 1);
-
-  const [diary, submissions, audits] = await Promise.all([
-    prisma.dailyLog.findUnique({
-      where: { projectId_logDate: { projectId: req.params.projectId, logDate: date } },
-      include: { manpower: true, equipment: true, notes: true },
-    }),
-    prisma.checklistSubmission.findMany({
-      where: {
-        assignment: { projectId: req.params.projectId },
-        createdAt: { gte: date, lt: next },
-      },
-      include: {
-        assignment: { include: { template: true } },
-        submittedBy: { select: { fullName: true } },
-      },
-    }),
-    prisma.auditEvent.findMany({
-      where: { createdAt: { gte: date, lt: next } },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-  ]);
-
+  const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
   res.json({
     type: "daily",
-    date,
-    diary,
-    checklistSubmissions: submissions,
-    activity: audits,
+    date: pack.date,
+    diary: pack.diary,
+    checklistSubmissions: pack.submissions,
+    activity: [],
+    kpis: pack.kpis,
+    project: pack.project,
+    rfis: pack.rfis,
+    safety: pack.safety,
+    photos: pack.photos,
   });
 });
 
 reportsRouter.get("/weekly/:projectId", async (req, res) => {
-  const end = req.query.end ? new Date(String(req.query.end)) : new Date();
-  end.setHours(23, 59, 59, 999);
-  const start = new Date(end);
-  start.setDate(start.getDate() - 7);
-  start.setHours(0, 0, 0, 0);
-
-  const [diaries, submissions, meetings, cost] = await Promise.all([
-    prisma.dailyLog.findMany({
-      where: { projectId: req.params.projectId, logDate: { gte: start, lte: end } },
-      include: { _count: { select: { manpower: true, notes: true } } },
-    }),
-    prisma.checklistSubmission.findMany({
-      where: {
-        assignment: { projectId: req.params.projectId },
-        createdAt: { gte: start, lte: end },
-      },
-      include: { assignment: { include: { template: true } } },
-    }),
-    prisma.meeting.findMany({
-      where: { projectId: req.params.projectId, meetingDate: { gte: start, lte: end } },
-      include: { items: true },
-    }),
-    prisma.costCashflowPeriod.findMany({ where: { projectId: req.params.projectId } }),
-  ]);
-
+  const pack = await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined);
   res.json({
     type: "weekly",
-    start,
-    end,
-    summary: {
-      diaryDays: diaries.length,
-      checklistsSubmitted: submissions.length,
-      checklistsApproved: submissions.filter((s) => s.status === "Approved").length,
-      meetings: meetings.length,
-      openMeetingItems: meetings.flatMap((m) => m.items).filter((i) => i.resolutionStatus === "Open").length,
-    },
-    diaries,
-    submissions,
-    meetings,
-    cashflow: cost,
-    htmlStub: `<h1>Weekly Project Report</h1><p>${start.toDateString()} – ${end.toDateString()}</p><ul><li>Diary days: ${diaries.length}</li><li>Checklists: ${submissions.length}</li><li>Meetings: ${meetings.length}</li></ul>`,
+    start: pack.start,
+    end: pack.end,
+    summary: pack.kpis,
+    diaries: pack.diaries,
+    submissions: pack.submissions,
+    meetings: pack.meetings,
+    cashflow: pack.cashflow,
+    project: pack.project,
+    kpis: pack.kpis,
+    drawings: pack.drawings,
+    rfis: pack.rfis,
+    safety: pack.safety,
+    submittals: pack.submittals,
+    htmlStub: `<h1>Weekly Project Report</h1><p>${new Date(pack.start).toDateString()} – ${new Date(pack.end).toDateString()}</p>`,
   });
+});
+
+reportsRouter.get("/dpr/:projectId/pack", async (req, res) => {
+  res.json(await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined));
+});
+
+reportsRouter.get("/wpr/:projectId/pack", async (req, res) => {
+  res.json(await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined));
+});
+
+reportsRouter.get("/dpr/:projectId/download.html", async (req, res) => {
+  const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
+  const html = renderDprHtml(pack);
+  const fname = `DPR-${pack.project.code}-${new Date(pack.date).toISOString().slice(0, 10)}.html`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(html);
+});
+
+reportsRouter.get("/wpr/:projectId/download.html", async (req, res) => {
+  const pack = await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined);
+  const html = renderWprHtml(pack);
+  const fname = `WPR-${pack.project.code}-${new Date(pack.end).toISOString().slice(0, 10)}.html`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(html);
 });
 
 export const auditRouter = Router();

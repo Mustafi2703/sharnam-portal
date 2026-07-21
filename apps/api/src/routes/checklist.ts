@@ -174,10 +174,31 @@ checklistRouter.post(
       },
     });
 
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (files.length) {
+      const { mockOneDrive } = await import("../services/mockOneDrive.js");
+      for (const f of files) {
+        const saved = await mockOneDrive.upload(
+          assignment.project.code,
+          "Checklists",
+          f.originalname,
+          f.buffer
+        );
+        await prisma.checklistPhoto.create({
+          data: {
+            submissionId: submission.id,
+            fileUrl: saved.url,
+            caption: f.originalname,
+          },
+        });
+      }
+    }
+
     await audit("checklist.submit", {
       userId: req.user!.id,
       entity: "ChecklistSubmission",
       entityId: submission.id,
+      meta: { photos: files.length },
     });
 
     if (assignment.project.notifyOnChecklistSubmit) {

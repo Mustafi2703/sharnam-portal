@@ -19,6 +19,7 @@ export default function ChecklistFillPage() {
   const [revisionId, setRevisionId] = useState("");
   const [responses, setResponses] = useState<Record<string, { answer: string; remarks: string }>>({});
   const [remarks, setRemarks] = useState("");
+  const [photos, setPhotos] = useState<FileList | null>(null);
   const [msg, setMsg] = useState("");
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
 
@@ -67,19 +68,23 @@ export default function ChecklistFillPage() {
       return;
     }
     try {
+      const fd = new FormData();
+      fd.append("responsesJson", JSON.stringify(responses));
+      fd.append("drawingId", drawingId);
+      fd.append("revisionId", revisionId);
+      if (selectedRev?.revisionNumber) fd.append("revisionNumber", selectedRev.revisionNumber);
+      fd.append("remarks", remarks);
+      fd.append("status", "Submitted");
+      if (photos) {
+        Array.from(photos).forEach((f) => fd.append("photos", f));
+      }
       await api(`/api/checklist/assignments/${assignmentId}/submit`, {
         method: "POST",
         token,
-        body: JSON.stringify({
-          responsesJson: responses,
-          drawingId,
-          revisionId,
-          revisionNumber: selectedRev?.revisionNumber,
-          remarks,
-          status: "Submitted",
-        }),
+        body: fd,
       });
-      setMsg("Submitted — audit log updated.");
+      setMsg(photos?.length ? `Submitted with ${photos.length} photo(s).` : "Submitted — audit log updated.");
+      setPhotos(null);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -297,6 +302,16 @@ export default function ChecklistFillPage() {
                 </div>
 
                 <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-line">
+                  <label className="text-sm text-steel-muted">
+                    Photos / evidence
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      multiple
+                      className="block mt-1 text-xs"
+                      onChange={(e) => setPhotos(e.target.files)}
+                    />
+                  </label>
                   {canFill && (
                     <Button type="submit" disabled={!drawingId || !revisionId}>
                       Submit checklist form
