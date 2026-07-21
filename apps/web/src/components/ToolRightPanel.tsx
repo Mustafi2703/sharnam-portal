@@ -11,7 +11,7 @@ export type RightPanelContext = {
   role?: RoleKey;
 };
 
-/** Procore-style right action / context panel */
+/** Procore-style right action / context panel — module-aware */
 export function ToolRightPanel({
   ctx,
   onUploadDrawing,
@@ -25,6 +25,7 @@ export function ToolRightPanel({
   const isClient = ctx.role === "client";
   const canUpload = ctx.role && ctx.role !== "client";
   const canFill = ctx.role && ["admin", "office", "site_employee", "employee", "vendor"].includes(ctx.role);
+  const mod = (ctx.moduleLabel || "").toLowerCase();
 
   return (
     <aside className="border-t lg:border-t-0 lg:border-l border-line bg-white flex flex-col min-h-full">
@@ -36,7 +37,7 @@ export function ToolRightPanel({
       <div className="p-3 space-y-3 flex-1">
         <div className="rounded-lg border border-line bg-sand/50 p-3">
           <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">Drawing gate</div>
-          <div className="mt-1.5 flex items-center justify-between gap-2">
+          <div className="mt-1.5">
             <Badge tone={ctx.publishedCount > 0 ? "ok" : "warn"}>
               {ctx.publishedCount > 0 ? `${ctx.publishedCount} published` : "Locked"}
             </Badge>
@@ -54,10 +55,7 @@ export function ToolRightPanel({
             <Button
               type="button"
               className="w-full !justify-start !text-xs"
-              onClick={() => {
-                if (onUploadDrawing) onUploadDrawing();
-                else navigate(`/projects/${ctx.projectId}/drawings?upload=1`);
-              }}
+              onClick={() => (onUploadDrawing ? onUploadDrawing() : navigate(`/projects/${ctx.projectId}/drawings?upload=1`))}
             >
               Upload drawing
             </Button>
@@ -75,25 +73,60 @@ export function ToolRightPanel({
               className="w-full !justify-start !text-xs"
               onClick={() => navigate(`/projects/${ctx.projectId}/dms`)}
             >
-              Upload docs
+              Upload docs (OneDrive)
             </Button>
             <Button
               type="button"
               variant="secondary"
               className="w-full !justify-start !text-xs"
-              onClick={() => {
-                if (onAssignChecklist) onAssignChecklist();
-                else navigate(`/projects/${ctx.projectId}/checklist/assign`);
-              }}
+              onClick={() =>
+                onAssignChecklist ? onAssignChecklist() : navigate(`/projects/${ctx.projectId}/checklist/assign`)
+              }
             >
               Assign checklist type
             </Button>
           </div>
         )}
 
-        {canFill && (
+        {(mod.includes("comm") || mod.includes("home")) && canUpload && (
           <div className="space-y-2">
-            <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Engineer fills</p>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Communications</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full !justify-start !text-xs"
+              onClick={() => navigate(`/projects/${ctx.projectId}/comms`)}
+            >
+              Matrix · Agenda · MoM
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full !justify-start !text-xs"
+              onClick={() => navigate(`/projects/${ctx.projectId}/reports`)}
+            >
+              DPR / daily pack
+            </Button>
+          </div>
+        )}
+
+        {(mod.includes("cost") || mod.includes("home")) && canUpload && !isClient && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Cost</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full !justify-start !text-xs"
+              onClick={() => navigate(`/projects/${ctx.projectId}/cost?tab=bills`)}
+            >
+              COP / vendor bills
+            </Button>
+          </div>
+        )}
+
+        {(mod.includes("quality") || mod.includes("field") || mod.includes("home")) && canFill && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Quality & field</p>
             <Button
               type="button"
               variant="secondary"
@@ -107,14 +140,18 @@ export function ToolRightPanel({
               type="button"
               variant="secondary"
               className="w-full !justify-start !text-xs"
-              disabled={ctx.publishedCount === 0}
-              onClick={() => navigate(`/projects/${ctx.projectId}/quality-inspections`)}
+              onClick={() => navigate(`/projects/${ctx.projectId}/rfis`)}
             >
-              QI forms
+              RFIs + checklist attach
             </Button>
-            <p className="text-[11px] text-steel-muted leading-relaxed">
-              Each fill picks a published drawing + revision before Yes / No / N.A.
-            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full !justify-start !text-xs"
+              onClick={() => navigate(`/projects/${ctx.projectId}/safety`)}
+            >
+              Safety records
+            </Button>
           </div>
         )}
 
@@ -142,22 +179,25 @@ export function ToolRightPanel({
               className="w-full !justify-start !text-xs"
               onClick={() => navigate(`/projects/${ctx.projectId}/reports`)}
             >
-              Weekly packs / reports
+              Weekly packs / DPR
             </Button>
-            <p className="text-[11px] text-steel-muted leading-relaxed">
-              View-only on drawings. No upload or cost access.
-            </p>
           </div>
         )}
 
         <div className="space-y-1.5 pt-2 border-t border-line">
           <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Jump</p>
           {[
-            ["drawings", "GFC register"],
+            ["drawings", "GFC / revisions"],
+            ["dms", "Documents"],
             ["checklist", "Final Index"],
             ["rfis", "RFIs"],
+            ["comms", "Comms (MoM)"],
+            ["reports", "DPR"],
+            ["safety", "Safety"],
+            ["cost", "Cost / COP"],
+            ["directory", "Directory"],
+            ["vendors", "Vendors"],
             ["diary", "Day log"],
-            ["comms", "Meetings"],
           ].map(([path, label]) => (
             <Link
               key={path}

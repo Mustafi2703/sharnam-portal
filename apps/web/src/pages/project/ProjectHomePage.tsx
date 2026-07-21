@@ -29,14 +29,18 @@ export default function ProjectHomePage() {
       ]
     : [
         ["drawings", "Drawings", "Upload, revise, publish sheets", "DWG", "#E4632A"],
+        ["dms", "Documents", "OneDrive-style project docs", "DOC", "#3D4450"],
         ["checklist", "Final Index", "Assign types · fill vs drawing", "FI", "#0B6A78"],
         ["quality-inspections", "Quality Inspections", "QI forms vs published sheets", "QI", "#2F6F4E"],
         ["inspections", "Quality Action Plan", "Track open QI actions", "QAP", "#3D4450"],
-        ["comms", "Meetings & Comms", "Matrix + schedule", "MTG", "#C24D1A"],
-        ["diary", "Day log", "Manpower & field notes", "FLD", "#E4632A"],
-        ["rfis", "RFIs", "Ball-in-court questions", "RFI", "#0B6A78"],
-        ["cost", "Cost", "Measurement & cashflow", "₹", "#2F6F4E"],
-        ["dms", "Documents", "Upload project docs", "DOC", "#3D4450"],
+        ["comms", "Matrix · Agenda · MoM", "Agenda before MoM · follow-up", "MTG", "#C24D1A"],
+        ["reports", "DPR / reports", "Daily & weekly packs", "DPR", "#E4632A"],
+        ["diary", "Day log", "Manpower & field notes", "FLD", "#0B6A78"],
+        ["rfis", "RFIs + checklist", "Attach checklist · office resolve", "RFI", "#0B6A78"],
+        ["safety", "Safety", "Observations & incidents", "SAF", "#1C4A5A"],
+        ["cost", "Cost / COP / bills", "Measurement + vendor bill tracker", "₹", "#2F6F4E"],
+        ["directory", "Directory", "Assign people to project", "DIR", "#3D4450"],
+        ["vendors", "Vendors", "Trade partners on project", "VEN", "#C24D1A"],
         ["email", "Email settings", "Notification recipients", "EML", "#1C4A5A"],
       ];
 

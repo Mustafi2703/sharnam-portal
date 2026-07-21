@@ -1,23 +1,40 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, PageHeader } from "../components/ui";
+import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 
 export default function CostPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [summary, setSummary] = useState<any>(null);
+  const [billsData, setBillsData] = useState<{ bills: any[]; totals: any } | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [tab, setTab] = useState<"budget" | "monitoring" | "cashflow" | "rates" | "boq">("monitoring");
-  const canEdit = user?.role === "admin" || user?.role === "office";
+  const [tab, setTab] = useState<"budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills">(
+    searchParams.get("tab") === "bills" ? "bills" : "monitoring"
+  );
+  const [billForm, setBillForm] = useState({
+    vendorName: "",
+    billNo: "",
+    amount: "",
+    gstAmount: "",
+    copNo: "",
+    description: "",
+    status: "Submitted",
+  });
+  const canEdit = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
   const clientBlocked = user?.role === "client";
 
   const load = () => api(`/api/cost/${id}/summary`, { token }).then(setSummary);
+  const loadBills = () => api<{ bills: any[]; totals: any }>(`/api/cost/${id}/bills`, { token }).then(setBillsData);
 
   useEffect(() => {
-    if (!clientBlocked) void load();
-  }, [id, token]);
+    if (!clientBlocked) {
+      void load();
+      void loadBills();
+    }
+  }, [id, token, clientBlocked]);
 
   if (clientBlocked) {
     return (
@@ -34,6 +51,7 @@ export default function CostPage() {
 
   const tabs = [
     ["monitoring", "Measurement"],
+    ["bills", "COP / Bills"],
     ["cashflow", "Cashflow"],
     ["budget", "Budget WBS"],
     ["rates", "Rate diff"],
@@ -48,8 +66,8 @@ export default function CostPage() {
         </Link>
         <PageHeader
           eyebrow="Finance"
-          title="Cost & cashflow"
-          subtitle="Measurement sheet (Monitoring), cashflow periods, and budget — seeded from Cashflow Dashboard.xlsx. Scroll panels keep large BOQ lists usable."
+          title="Cost, COP & bill tracker"
+          subtitle="Measurement, vendor bill / COP entries, cashflow and budget — Procore-style registers."
         />
       </div>
 
@@ -58,7 +76,7 @@ export default function CostPage() {
           ["Budgeted", summary.totals.budgeted],
           ["Work order", summary.totals.workOrder],
           ["Certified", summary.totals.certified],
-          ["Planned CF", summary.totals.planned],
+          ["Bills pending", billsData?.totals?.pending ?? 0],
           ["Actual CF", summary.totals.actual],
         ].map(([label, val]) => (
           <Card key={label as string} className="!p-4">
@@ -81,8 +99,125 @@ export default function CostPage() {
             {label}
           </button>
         ))}
-        <Badge tone="neutral">{summary.monitoring?.length || 0} measurement lines</Badge>
       </div>
+
+      {tab === "bills" && (
+        <div className="space-y-4">
+          {canEdit && (
+            <Card>
+              <h3 className="font-semibold mb-2">Vendor bill entry</h3>
+              <p className="text-xs text-steel-muted mb-3">
+                COP / RA bill tracker — enter vendor bills, link COP no., move status to Certified / Paid.
+              </p>
+              <form
+                className="grid sm:grid-cols-2 gap-2"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  await api(`/api/cost/${id}/bills`, {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify({
+                      ...billForm,
+                      amount: Number(billForm.amount || 0),
+                      gstAmount: Number(billForm.gstAmount || 0),
+                    }),
+                  });
+                  setBillForm({
+                    vendorName: "",
+                    billNo: "",
+                    amount: "",
+                    gstAmount: "",
+                    copNo: "",
+                    description: "",
+                    status: "Submitted",
+                  });
+                  await loadBills();
+                }}
+              >
+                <Input
+                  required
+                  placeholder="Vendor name"
+                  value={billForm.vendorName}
+                  onChange={(e) => setBillForm({ ...billForm, vendorName: e.target.value })}
+                />
+                <Input
+                  required
+                  placeholder="Bill no."
+                  value={billForm.billNo}
+                  onChange={(e) => setBillForm({ ...billForm, billNo: e.target.value })}
+                />
+                <Input
+                  required
+                  placeholder="Amount"
+                  value={billForm.amount}
+                  onChange={(e) => setBillForm({ ...billForm, amount: e.target.value })}
+                />
+                <Input
+                  placeholder="GST"
+                  value={billForm.gstAmount}
+                  onChange={(e) => setBillForm({ ...billForm, gstAmount: e.target.value })}
+                />
+                <Input
+                  placeholder="COP / RA no."
+                  value={billForm.copNo}
+                  onChange={(e) => setBillForm({ ...billForm, copNo: e.target.value })}
+                />
+                <Select value={billForm.status} onChange={(e) => setBillForm({ ...billForm, status: e.target.value })}>
+                  {["Draft", "Submitted", "Under review", "Certified", "Paid", "Rejected"].map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </Select>
+                <Input
+                  className="sm:col-span-2"
+                  placeholder="Description"
+                  value={billForm.description}
+                  onChange={(e) => setBillForm({ ...billForm, description: e.target.value })}
+                />
+                <Button type="submit" className="sm:col-span-2">
+                  Add vendor bill
+                </Button>
+              </form>
+            </Card>
+          )}
+          <Table
+            headers={["Bill no", "Vendor", "COP", "Amount", "GST", "Status", "Date"]}
+            rows={(billsData?.bills || []).map((b: any) => [
+              b.billNo,
+              b.vendorName,
+              b.copNo || "—",
+              formatINR(b.amount),
+              formatINR(b.gstAmount),
+              b.status,
+              new Date(b.billDate).toLocaleDateString(),
+            ])}
+          />
+          {canEdit && (
+            <div className="flex flex-wrap gap-2">
+              {(billsData?.bills || [])
+                .filter((b) => b.status === "Submitted" || b.status === "Under review")
+                .slice(0, 8)
+                .map((b) => (
+                  <Button
+                    key={b.id}
+                    type="button"
+                    variant="secondary"
+                    className="!text-xs"
+                    onClick={async () => {
+                      await api(`/api/cost/bills/${b.id}`, {
+                        method: "PATCH",
+                        token,
+                        body: JSON.stringify({ status: "Certified" }),
+                      });
+                      await loadBills();
+                    }}
+                  >
+                    Certify {b.billNo}
+                  </Button>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "budget" && (
         <Table
@@ -99,10 +234,7 @@ export default function CostPage() {
       )}
       {tab === "monitoring" && (
         <div className="space-y-3">
-          <p className="text-sm text-steel-muted">
-            Measurement items from the Monitoring sheet — parent narrative rows without UOM/rate are skipped so the
-            register stays usable.
-          </p>
+          <p className="text-sm text-steel-muted">Measurement items from the Monitoring sheet.</p>
           <Table
             headers={["Item", "Description", "UOM", "Rate", "BOQ Qty", "GFC", "Achieved", "Excess", "BOQ Cost"]}
             rows={summary.monitoring.map((b: any) => [
@@ -147,9 +279,7 @@ export default function CostPage() {
       )}
       {tab === "boq" && (
         <Card className="space-y-4">
-          <p className="text-sm text-steel-muted">
-            Upload BOQ Excel (Sr / Description / Qty / Rate / Unit / Amount). Imports land in measurement / monitoring.
-          </p>
+          <p className="text-sm text-steel-muted">Upload BOQ Excel. Imports land in measurement / monitoring.</p>
           {canEdit && (
             <form
               className="flex flex-wrap gap-2 items-center"
@@ -168,7 +298,7 @@ export default function CostPage() {
               <Button type="submit">Import BOQ</Button>
             </form>
           )}
-          <ul className="text-sm space-y-2 list-roomy">
+          <ul className="text-sm space-y-2">
             {summary.boqBatches.map((b: any) => (
               <li key={b.id} className="border border-line px-3 py-2">
                 {b.fileName} · {b.rowCount} rows · {new Date(b.createdAt).toLocaleString()}
@@ -208,7 +338,7 @@ function Table({ headers, rows }: { headers: string[]; rows: (string | number | 
           {!rows.length && (
             <tr>
               <td className="p-6 text-steel-muted" colSpan={headers.length}>
-                No rows — re-seed or import BOQ / measurement.
+                No rows yet.
               </td>
             </tr>
           )}

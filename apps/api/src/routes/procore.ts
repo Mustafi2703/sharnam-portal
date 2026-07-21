@@ -106,6 +106,8 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       createdById: req.user!.id,
       dueDate: due,
       linkedDrawingId: isClient ? null : req.body.linkedDrawingId || null,
+      linkedChecklistItemId: req.body.linkedChecklistItemId || null,
+      attachmentsJson: req.body.attachmentsJson ? JSON.stringify(req.body.attachmentsJson) : req.body.attachmentNote || null,
       responsibleVendorId: req.body.responsibleVendorId || null,
       scheduleImpact: req.body.scheduleImpact || "None",
       costImpact: req.body.costImpact || "None",

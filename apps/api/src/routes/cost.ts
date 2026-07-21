@@ -163,3 +163,55 @@ costRouter.post("/:projectId/rate-diff", requireRoles("admin", "office"), async 
   });
   res.status(201).json(row);
 });
+
+/** COP / bill tracker — vendor bill entries (client video) */
+costRouter.get("/:projectId/bills", async (req, res) => {
+  const bills = await prisma.vendorBill.findMany({
+    where: { projectId: req.params.projectId },
+    include: { vendor: { select: { id: true, name: true, trade: true } } },
+    orderBy: { billDate: "desc" },
+  });
+  const totals = {
+    count: bills.length,
+    amount: bills.reduce((s, b) => s + b.amount, 0),
+    certified: bills.filter((b) => b.status === "Certified" || b.status === "Paid").reduce((s, b) => s + b.amount, 0),
+    pending: bills
+      .filter((b) => ["Draft", "Submitted", "Under review"].includes(b.status))
+      .reduce((s, b) => s + b.amount, 0),
+  };
+  res.json({ bills, totals });
+});
+
+costRouter.post("/:projectId/bills", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const bill = await prisma.vendorBill.create({
+    data: {
+      projectId: req.params.projectId,
+      vendorId: req.body.vendorId || null,
+      vendorName: req.body.vendorName || "Vendor",
+      billNo: req.body.billNo,
+      billDate: req.body.billDate ? new Date(req.body.billDate) : new Date(),
+      amount: Number(req.body.amount || 0),
+      gstAmount: Number(req.body.gstAmount || 0),
+      status: req.body.status || "Draft",
+      copNo: req.body.copNo || null,
+      description: req.body.description || null,
+      attachmentUrl: req.body.attachmentUrl || null,
+      createdById: req.user!.id,
+    },
+  });
+  await audit("cost.bill.create", { userId: req.user!.id, entity: "VendorBill", entityId: bill.id });
+  res.status(201).json(bill);
+});
+
+costRouter.patch("/bills/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const bill = await prisma.vendorBill.update({
+    where: { id: req.params.id },
+    data: {
+      status: req.body.status,
+      copNo: req.body.copNo,
+      amount: req.body.amount != null ? Number(req.body.amount) : undefined,
+      description: req.body.description,
+    },
+  });
+  res.json(bill);
+});

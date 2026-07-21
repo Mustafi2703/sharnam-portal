@@ -89,6 +89,7 @@ model Project {
   coordinationIssues   DesignCoordinationIssue[]
   safetyRecords        SafetyRecord[]
   emailOutbox          EmailOutbox[]
+  vendorBills          VendorBill[]
 }
 
 /** Mock / queued outbound emails (swap to SMTP/Graph later) */
@@ -339,7 +340,11 @@ model Meeting {
   title       String
   meetingDate DateTime
   location    String?
+  /// Agenda → MoM → Follow-up → Closed (client video flow)
   status      String   @default("Agenda")
+  /// Optional link to parent MoM when this is a follow-up
+  parentMeetingId String?
+  agendaNotes String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -350,7 +355,8 @@ model Meeting {
 model MeetingItem {
   id               String   @id @default(cuid())
   meetingId        String
-  category         String   @default("General")
+  /// Agenda | MoM | Action | Follow-up
+  category         String   @default("Agenda")
   description      String
   assignedToId     String?
   dueDate          DateTime?
@@ -360,6 +366,29 @@ model MeetingItem {
 
   meeting    Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   assignedTo User?   @relation(fields: [assignedToId], references: [id])
+}
+
+/// COP / RA bill tracker — vendor bill entries (client video)
+model VendorBill {
+  id            String   @id @default(cuid())
+  projectId     String
+  vendorId      String?
+  vendorName    String
+  billNo        String
+  billDate      DateTime @default(now())
+  amount        Float    @default(0)
+  gstAmount     Float    @default(0)
+  /// Draft | Submitted | Under review | Certified | Paid | Rejected
+  status        String   @default("Draft")
+  copNo         String?
+  description   String?
+  attachmentUrl String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendor  Vendor? @relation(fields: [vendorId], references: [id])
 }
 
 model CostBudgetLine {
@@ -561,6 +590,7 @@ model Vendor {
 
   projects ProjectVendor[]
   rfis     Rfi[]
+  bills    VendorBill[]
 }
 
 model ProjectVendor {

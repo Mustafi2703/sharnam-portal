@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
@@ -17,10 +17,13 @@ export default function RfisPage() {
     question: "",
     assignedToId: "",
     linkedDrawingId: "",
+    linkedChecklistItemId: "",
+    attachmentNote: "",
     scheduleImpact: "None",
     costImpact: "None",
   });
   const [answer, setAnswer] = useState("");
+  const [assignments, setAssignments] = useState<any[]>([]);
 
   const isClient = user?.role === "client";
   const canCreate =
@@ -37,14 +40,18 @@ export default function RfisPage() {
     user?.role === "vendor";
 
   const load = async () => {
-    const [r, u, d] = await Promise.all([
+    const [r, u, d, a] = await Promise.all([
       api<any[]>(`/api/rfis/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
+        assignments: [],
+      })),
     ]);
     setRfis(r);
     setUsers(u);
     setDrawings(d);
+    setAssignments(a.assignments || []);
     if (!active && r[0]) setActive(r[0].id);
   };
 
@@ -63,7 +70,7 @@ export default function RfisPage() {
         subtitle={
           isClient
             ? "Raise project concerns for Sharnam office. You can view open / closed status — drawing control stays with the office."
-            : "Raise questions against drawings. Inspection failures can auto-create RFIs. Status: Open → Answered → Closed."
+            : "Raise RFIs against drawings and attach a checklist type. Office can respond and close; site fills linked checklists when resolved."
         }
       />
 
@@ -75,14 +82,14 @@ export default function RfisPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               await api(`/api/rfis/project/${id}`, { method: "POST", token, body: JSON.stringify(form) });
-              setForm({ ...form, subject: "", question: "" });
+              setForm({ ...form, subject: "", question: "", linkedChecklistItemId: "", attachmentNote: "" });
               await load();
             }}
           >
             <Input required placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
             <TextArea required rows={3} placeholder={isClient ? "Describe your concern" : "Question"} value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} />
             {!isClient && (
-              <div className="grid sm:grid-cols-3 gap-2">
+              <div className="grid sm:grid-cols-2 gap-2">
                 <Select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>
                   <option value="">Assignee</option>
                   {users.map((u) => (
@@ -99,7 +106,28 @@ export default function RfisPage() {
                     </option>
                   ))}
                 </Select>
+                <Select
+                  value={form.linkedChecklistItemId}
+                  onChange={(e) => setForm({ ...form, linkedChecklistItemId: e.target.value })}
+                >
+                  <option value="">Attach checklist type (optional)</option>
+                  {assignments.map((a) => (
+                    <option key={a.id} value={a.template?.id || a.id}>
+                      {a.template?.name || a.id}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  placeholder="Checklist / attachment note"
+                  value={form.attachmentNote}
+                  onChange={(e) => setForm({ ...form, attachmentNote: e.target.value })}
+                />
                 <Select value={form.scheduleImpact} onChange={(e) => setForm({ ...form, scheduleImpact: e.target.value })}>
+                  {["None", "Low", "Medium", "High"].map((x) => (
+                    <option key={x}>{x}</option>
+                  ))}
+                </Select>
+                <Select value={form.costImpact} onChange={(e) => setForm({ ...form, costImpact: e.target.value })}>
                   {["None", "Low", "Medium", "High"].map((x) => (
                     <option key={x}>{x}</option>
                   ))}
@@ -163,6 +191,20 @@ export default function RfisPage() {
                 </div>
               </div>
               <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
+              {(selected.linkedChecklistItemId || selected.attachmentsJson) && (
+                <div className="rounded-lg border border-line p-3 text-sm space-y-1">
+                  <div className="font-semibold text-xs uppercase tracking-wider text-steel-muted">Linked checklist / note</div>
+                  {selected.linkedChecklistItemId && (
+                    <div className="font-mono text-xs">Checklist ref: {selected.linkedChecklistItemId}</div>
+                  )}
+                  {selected.attachmentsJson && <div className="text-steel-muted">{selected.attachmentsJson}</div>}
+                  {(user?.role === "admin" || user?.role === "office" || user?.role === "site_employee") && (
+                    <Link to={`/projects/${id}/checklist`} className="text-brand text-xs font-semibold inline-block mt-1">
+                      Open checklist catalog to fill →
+                    </Link>
+                  )}
+                </div>
+              )}
               <div>
                 <h3 className="font-semibold text-sm mb-2">Responses</h3>
                 <ul className="space-y-2">
