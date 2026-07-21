@@ -39,6 +39,10 @@ export class MockOneDriveService {
       "Documents",
       "Documents/Contracts",
       "Documents/Reports",
+      "Documents/DPR",
+      "Documents/WPR",
+      "Documents/QAP",
+      "Documents/Communication-Matrix",
       "Photos",
       "Checklists",
       "Inspections",
@@ -48,6 +52,8 @@ export class MockOneDriveService {
       "Inspections/Civil",
       "RFIs",
       "Submittals",
+      "Safety",
+      "Cost-Bills",
     ];
 
     for (const rel of folders) {
@@ -112,6 +118,25 @@ export class MockOneDriveService {
 
   async sync(projectId: string) {
     return this.ensureProjectTree(projectId);
+  }
+
+  /** Mark folder synced when user opens it (Graph delta hook later) */
+  async touchFolder(projectId: string, relPath: string) {
+    if (!relPath) return;
+    const name = relPath.split("/").pop()!;
+    const parentPath = relPath.includes("/") ? relPath.split("/").slice(0, -1).join("/") : null;
+    await prisma.documentFolder.upsert({
+      where: { projectId_path: { projectId, path: relPath } },
+      create: {
+        projectId,
+        path: relPath,
+        name,
+        parentPath,
+        mockDriveId: `mock-open-${relPath}`,
+        lastSyncedAt: new Date(),
+      },
+      update: { lastSyncedAt: new Date() },
+    });
   }
 }
 

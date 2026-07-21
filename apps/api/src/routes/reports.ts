@@ -177,6 +177,13 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
       clientName: req.body.clientName || lead.contactName || undefined,
       location: req.body.location || undefined,
       status: "Planning",
+      clientContactName: req.body.clientContactName || lead.contactName || undefined,
+      clientEmail: req.body.clientEmail || lead.email || undefined,
+      clientPhone: req.body.clientPhone || lead.phone || undefined,
+      clientAddress: req.body.clientAddress || undefined,
+      clientGst: req.body.clientGst || undefined,
+      designConsultant: req.body.designConsultant || undefined,
+      contractorName: req.body.contractorName || undefined,
     },
   });
 

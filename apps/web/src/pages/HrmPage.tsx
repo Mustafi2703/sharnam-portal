@@ -4,12 +4,17 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 
+/**
+ * HRM — company people + assign into project directory (employees & vendors).
+ * Project Directory tool shows the live roster for each site.
+ */
 export default function HrmPage() {
   const { token, user } = useAuth();
   const [employees, setEmployees] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [leave, setLeave] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
   const [leaveForm, setLeaveForm] = useState({ fromDate: "", toDate: "", reason: "" });
   const [empForm, setEmpForm] = useState({
     fullName: "",
@@ -21,20 +26,23 @@ export default function HrmPage() {
     designation: "",
   });
   const [assign, setAssign] = useState({ userId: "", projectId: "", role: "site_employee" });
+  const [vendorAssign, setVendorAssign] = useState({ vendorId: "", projectId: "", trade: "" });
   const [msg, setMsg] = useState("");
   const canManage = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
-    const [e, a, l, p] = await Promise.all([
+    const [e, a, l, p, v] = await Promise.all([
       api<any[]>("/api/hrm/employees", { token }),
       api<any[]>("/api/hrm/attendance", { token }),
       api<any[]>("/api/hrm/leave", { token }),
       canManage ? api<any[]>("/api/projects", { token }) : Promise.resolve([]),
+      canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
     ]);
     setEmployees(e);
     setAttendance(a);
     setLeave(l);
     setProjects(p);
+    setVendors(v);
   };
 
   useEffect(() => {
@@ -60,9 +68,9 @@ export default function HrmPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="HRM"
-        title="People & site assignment"
-        subtitle="Add site engineers and office staff, mark attendance, assign them to projects."
+        eyebrow="HRM · Directory"
+        title="People & project directory"
+        subtitle="Maintain the company roster, then assign employees and vendors into a project directory (Communication Matrix orgs live here). Open Directory inside a project to browse the live list."
         actions={
           <Button
             onClick={async () => {
@@ -85,7 +93,7 @@ export default function HrmPage() {
       {msg && <p className="text-sm text-ok">{msg}</p>}
 
       {canManage && (
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-3 gap-4">
           <Card>
             <h3 className="font-semibold mb-3">Add employee</h3>
             <form className="grid sm:grid-cols-2 gap-2" onSubmit={createEmployee}>
@@ -109,13 +117,14 @@ export default function HrmPage() {
           </Card>
 
           <Card>
-            <h3 className="font-semibold mb-3">Assign to project / site</h3>
+            <h3 className="font-semibold mb-3">Assign employee → project</h3>
+            <p className="text-xs text-steel-muted mb-2">Adds them to that project’s directory.</p>
             <form
               className="space-y-2"
               onSubmit={async (e) => {
                 e.preventDefault();
                 await api("/api/hrm/assign", { method: "POST", token, body: JSON.stringify(assign) });
-                setMsg("Assigned to project.");
+                setMsg("Employee added to project directory.");
                 await load();
               }}
             >
@@ -141,9 +150,52 @@ export default function HrmPage() {
                 ))}
               </Select>
               <Button type="submit" className="w-full">
-                Assign
+                Assign to directory
               </Button>
             </form>
+          </Card>
+
+          <Card>
+            <h3 className="font-semibold mb-3">Assign vendor → project</h3>
+            <p className="text-xs text-steel-muted mb-2">Vendors appear in project Directory + Communications matrix orgs.</p>
+            <form
+              className="space-y-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await api(`/api/vendors/project/${vendorAssign.projectId}/assign`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify({ vendorId: vendorAssign.vendorId, tradeRole: vendorAssign.trade }),
+                });
+                setMsg("Vendor added to project directory.");
+              }}
+            >
+              <Select required value={vendorAssign.vendorId} onChange={(e) => setVendorAssign({ ...vendorAssign, vendorId: e.target.value })}>
+                <option value="">Vendor company</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </Select>
+              <Select required value={vendorAssign.projectId} onChange={(e) => setVendorAssign({ ...vendorAssign, projectId: e.target.value })}>
+                <option value="">Project</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} — {p.name}
+                  </option>
+                ))}
+              </Select>
+              <Input placeholder="Trade / package" value={vendorAssign.trade} onChange={(e) => setVendorAssign({ ...vendorAssign, trade: e.target.value })} />
+              <Button type="submit" className="w-full">
+                Assign vendor
+              </Button>
+            </form>
+            {vendorAssign.projectId && (
+              <Link to={`/projects/${vendorAssign.projectId}/directory`} className="mt-3 inline-flex text-xs font-semibold text-brand">
+                Open project directory →
+              </Link>
+            )}
           </Card>
         </div>
       )}
@@ -161,7 +213,7 @@ export default function HrmPage() {
                 {e.memberships?.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {e.memberships.slice(0, 3).map((m: any) => (
-                      <Link key={m.id} to={`/projects/${m.project.id}`} className="text-[10px] font-mono text-brand bg-brand-soft px-1.5 py-0.5 rounded">
+                      <Link key={m.id} to={`/projects/${m.project.id}/directory`} className="text-[10px] font-mono text-brand bg-brand-soft px-1.5 py-0.5 rounded">
                         {m.project.code}
                       </Link>
                     ))}

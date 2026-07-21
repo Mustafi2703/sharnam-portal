@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
+import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 
 const LEAD_STAGES = ["New", "Qualified", "Proposal", "Negotiation", "Converted", "Lost"];
 
@@ -24,11 +24,21 @@ export default function CrmPage() {
     stage: "New",
     value: "",
   });
+  const emptyClient = {
+    clientName: "",
+    clientContactName: "",
+    clientEmail: "",
+    clientPhone: "",
+    clientAddress: "",
+    clientGst: "",
+    designConsultant: "",
+    contractorName: "",
+    location: "",
+  };
   const [convertForm, setConvertForm] = useState({
     code: "",
     name: "",
-    clientName: "",
-    location: "",
+    ...emptyClient,
     memberIds: [] as string[],
     vendorIds: [] as string[],
   });
@@ -37,10 +47,9 @@ export default function CrmPage() {
   const [projectForm, setProjectForm] = useState({
     code: "",
     name: "",
-    clientName: "",
-    location: "",
-    description: "",
+    ...emptyClient,
   });
+  const [editProject, setEditProject] = useState<any | null>(null);
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState("site_employee");
   const [vendorId, setVendorId] = useState("");
@@ -121,7 +130,7 @@ export default function CrmPage() {
       <PageHeader
         eyebrow="CRM"
         title="Leads & projects"
-        subtitle="Capture leads, convert to project with tender details, assign site staff and vendors."
+        subtitle="Create projects with full client card (contact, GST, consultant, contractor). Assign staff in CRM; manage the live directory in HR / project Directory."
         actions={
           canManage ? (
             <div className="flex gap-2">
@@ -183,8 +192,11 @@ export default function CrmPage() {
                             setConvertForm({
                               code: `SPDC-${Date.now().toString().slice(-5)}`,
                               name: lead.title,
+                              ...emptyClient,
                               clientName: lead.contactName || "",
-                              location: "",
+                              clientContactName: lead.contactName || "",
+                              clientEmail: lead.email || "",
+                              clientPhone: lead.phone || "",
                               memberIds: [],
                               vendorIds: [],
                             });
@@ -225,7 +237,17 @@ export default function CrmPage() {
             <form className="space-y-3" onSubmit={runConvert}>
               <Input required placeholder="Project code" value={convertForm.code} onChange={(e) => setConvertForm({ ...convertForm, code: e.target.value })} />
               <Input required placeholder="Project name" value={convertForm.name} onChange={(e) => setConvertForm({ ...convertForm, name: e.target.value })} />
-              <Input placeholder="Client" value={convertForm.clientName} onChange={(e) => setConvertForm({ ...convertForm, clientName: e.target.value })} />
+              <p className="text-[11px] font-mono uppercase text-steel-muted pt-1">Client information</p>
+              <Input placeholder="Client organisation" value={convertForm.clientName} onChange={(e) => setConvertForm({ ...convertForm, clientName: e.target.value })} />
+              <Input placeholder="Client contact name" value={convertForm.clientContactName} onChange={(e) => setConvertForm({ ...convertForm, clientContactName: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Client email" value={convertForm.clientEmail} onChange={(e) => setConvertForm({ ...convertForm, clientEmail: e.target.value })} />
+                <Input placeholder="Client phone" value={convertForm.clientPhone} onChange={(e) => setConvertForm({ ...convertForm, clientPhone: e.target.value })} />
+              </div>
+              <Input placeholder="Client address" value={convertForm.clientAddress} onChange={(e) => setConvertForm({ ...convertForm, clientAddress: e.target.value })} />
+              <Input placeholder="GST / tax ID" value={convertForm.clientGst} onChange={(e) => setConvertForm({ ...convertForm, clientGst: e.target.value })} />
+              <Input placeholder="Design consultant" value={convertForm.designConsultant} onChange={(e) => setConvertForm({ ...convertForm, designConsultant: e.target.value })} />
+              <Input placeholder="Main contractor" value={convertForm.contractorName} onChange={(e) => setConvertForm({ ...convertForm, contractorName: e.target.value })} />
               <Input placeholder="Site location" value={convertForm.location} onChange={(e) => setConvertForm({ ...convertForm, location: e.target.value })} />
               <div>
                 <div className="text-xs font-mono uppercase text-steel-muted mb-1">Assign staff</div>
@@ -295,9 +317,16 @@ export default function CrmPage() {
             <form className="grid md:grid-cols-2 gap-3" onSubmit={createProject}>
               <Input required placeholder="Project code" value={projectForm.code} onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })} />
               <Input required placeholder="Project name" value={projectForm.name} onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })} />
-              <Input placeholder="Client" value={projectForm.clientName} onChange={(e) => setProjectForm({ ...projectForm, clientName: e.target.value })} />
-              <Input placeholder="Location" value={projectForm.location} onChange={(e) => setProjectForm({ ...projectForm, location: e.target.value })} />
-              <TextArea className="md:col-span-2" placeholder="Tender scope / notes" value={projectForm.description} onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })} />
+              <p className="md:col-span-2 text-[11px] font-mono uppercase text-steel-muted pt-1">Client information (CRM card)</p>
+              <Input placeholder="Client organisation" value={projectForm.clientName} onChange={(e) => setProjectForm({ ...projectForm, clientName: e.target.value })} />
+              <Input placeholder="Client contact name" value={projectForm.clientContactName} onChange={(e) => setProjectForm({ ...projectForm, clientContactName: e.target.value })} />
+              <Input placeholder="Client email" value={projectForm.clientEmail} onChange={(e) => setProjectForm({ ...projectForm, clientEmail: e.target.value })} />
+              <Input placeholder="Client phone" value={projectForm.clientPhone} onChange={(e) => setProjectForm({ ...projectForm, clientPhone: e.target.value })} />
+              <Input className="md:col-span-2" placeholder="Client address / site address" value={projectForm.clientAddress} onChange={(e) => setProjectForm({ ...projectForm, clientAddress: e.target.value })} />
+              <Input placeholder="GST / tax ID" value={projectForm.clientGst} onChange={(e) => setProjectForm({ ...projectForm, clientGst: e.target.value })} />
+              <Input placeholder="Site location" value={projectForm.location} onChange={(e) => setProjectForm({ ...projectForm, location: e.target.value })} />
+              <Input placeholder="Design consultant" value={projectForm.designConsultant} onChange={(e) => setProjectForm({ ...projectForm, designConsultant: e.target.value })} />
+              <Input placeholder="Main contractor" value={projectForm.contractorName} onChange={(e) => setProjectForm({ ...projectForm, contractorName: e.target.value })} />
               <Button type="submit" className="md:col-span-2">
                 Create project → Assign team
               </Button>
@@ -363,12 +392,59 @@ export default function CrmPage() {
                 <Input placeholder="Trade" value={trade} onChange={(e) => setTrade(e.target.value)} />
                 <Button type="submit">Assign vendor</Button>
               </form>
+              <p className="text-xs text-steel-muted">
+                After assign, manage the full directory (employees + vendors) in{" "}
+                <Link to="/hrm" className="text-brand font-semibold">
+                  HR / Directory
+                </Link>{" "}
+                or the project Directory tool.
+              </p>
               <Link to={`/projects/${createdId}`} className="inline-flex text-sm font-semibold text-brand">
                 Open project tools →
               </Link>
             </div>
           )}
         </Card>
+      )}
+
+      {editProject && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display text-2xl mb-1">Client & project card</h3>
+            <p className="text-sm text-steel-muted mb-4 font-mono">{editProject.code}</p>
+            <form
+              className="grid gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await api(`/api/projects/${editProject.id}/settings`, {
+                  method: "PATCH",
+                  token,
+                  body: JSON.stringify(editProject),
+                });
+                setMsg("Client information saved.");
+                setEditProject(null);
+                await load();
+              }}
+            >
+              <Input value={editProject.name || ""} onChange={(e) => setEditProject({ ...editProject, name: e.target.value })} placeholder="Project name" />
+              <Input value={editProject.clientName || ""} onChange={(e) => setEditProject({ ...editProject, clientName: e.target.value })} placeholder="Client organisation" />
+              <Input value={editProject.clientContactName || ""} onChange={(e) => setEditProject({ ...editProject, clientContactName: e.target.value })} placeholder="Contact name" />
+              <Input value={editProject.clientEmail || ""} onChange={(e) => setEditProject({ ...editProject, clientEmail: e.target.value })} placeholder="Email" />
+              <Input value={editProject.clientPhone || ""} onChange={(e) => setEditProject({ ...editProject, clientPhone: e.target.value })} placeholder="Phone" />
+              <Input value={editProject.clientAddress || ""} onChange={(e) => setEditProject({ ...editProject, clientAddress: e.target.value })} placeholder="Address" />
+              <Input value={editProject.clientGst || ""} onChange={(e) => setEditProject({ ...editProject, clientGst: e.target.value })} placeholder="GST" />
+              <Input value={editProject.designConsultant || ""} onChange={(e) => setEditProject({ ...editProject, designConsultant: e.target.value })} placeholder="Design consultant" />
+              <Input value={editProject.contractorName || ""} onChange={(e) => setEditProject({ ...editProject, contractorName: e.target.value })} placeholder="Contractor" />
+              <Input value={editProject.location || ""} onChange={(e) => setEditProject({ ...editProject, location: e.target.value })} placeholder="Location" />
+              <div className="flex gap-2 pt-2">
+                <Button type="submit">Save</Button>
+                <Button type="button" variant="secondary" onClick={() => setEditProject(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
       )}
 
       {(tab === "projects" || !canManage) && (
@@ -381,12 +457,22 @@ export default function CrmPage() {
                   <div className="font-mono text-xs text-brand">{p.code}</div>
                   <div className="font-medium">{p.name}</div>
                   <div className="text-xs text-steel-muted">
-                    {p.clientName || "—"} · {p.location || "—"}
+                    {p.clientName || "—"} · {p.clientContactName || "—"} · {p.location || "—"}
                   </div>
+                  {(p.designConsultant || p.contractorName) && (
+                    <div className="text-[11px] text-steel-muted mt-0.5">
+                      Consultant: {p.designConsultant || "—"} · Contractor: {p.contractorName || "—"}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right space-y-1">
                   <Badge>{p.status}</Badge>
-                  <div>
+                  <div className="flex flex-col gap-1 items-end">
+                    {canManage && (
+                      <button type="button" className="text-xs text-steel-muted hover:text-brand" onClick={() => setEditProject({ ...p })}>
+                        Edit client card
+                      </button>
+                    )}
                     <Link to={`/projects/${p.id}`} className="text-xs text-brand font-semibold">
                       Open tools
                     </Link>

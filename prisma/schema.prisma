@@ -53,6 +53,14 @@ model Project {
   code        String   @unique
   name        String
   clientName  String?
+  /// Client / stakeholder card (CRM → project)
+  clientContactName String?
+  clientEmail       String?
+  clientPhone       String?
+  clientAddress     String?
+  clientGst         String?
+  designConsultant  String?
+  contractorName    String?
   location    String?
   status      String   @default("Planning")
   startDate   DateTime?

@@ -29,10 +29,36 @@ projectsRouter.get("/", async (req: AuthedRequest, res) => {
 });
 
 projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const { code, name, clientName, location, status } = req.body;
+  const {
+    code,
+    name,
+    clientName,
+    location,
+    status,
+    clientContactName,
+    clientEmail,
+    clientPhone,
+    clientAddress,
+    clientGst,
+    designConsultant,
+    contractorName,
+  } = req.body;
   if (!code || !name) return res.status(400).json({ error: "code and name required" });
   const project = await prisma.project.create({
-    data: { code, name, clientName, location, status: status || "Planning" },
+    data: {
+      code,
+      name,
+      clientName,
+      location,
+      status: status || "Planning",
+      clientContactName,
+      clientEmail,
+      clientPhone,
+      clientAddress,
+      clientGst,
+      designConsultant,
+      contractorName,
+    },
   });
   await mockOneDrive.ensureProjectTree(project.id);
   await audit("project.create", { userId: req.user!.id, entity: "Project", entityId: project.id });
@@ -62,6 +88,14 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     clientName,
     location,
     status,
+    name,
+    clientContactName,
+    clientEmail,
+    clientPhone,
+    clientAddress,
+    clientGst,
+    designConsultant,
+    contractorName,
   } = req.body;
   const project = await prisma.project.update({
     where: { id: req.params.id },
@@ -74,6 +108,14 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
       clientName: clientName !== undefined ? clientName : undefined,
       location: location !== undefined ? location : undefined,
       status: status !== undefined ? status : undefined,
+      name: name !== undefined ? name : undefined,
+      clientContactName: clientContactName !== undefined ? clientContactName : undefined,
+      clientEmail: clientEmail !== undefined ? clientEmail : undefined,
+      clientPhone: clientPhone !== undefined ? clientPhone : undefined,
+      clientAddress: clientAddress !== undefined ? clientAddress : undefined,
+      clientGst: clientGst !== undefined ? clientGst : undefined,
+      designConsultant: designConsultant !== undefined ? designConsultant : undefined,
+      contractorName: contractorName !== undefined ? contractorName : undefined,
     },
   });
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
@@ -125,10 +167,28 @@ dmsRouter.post("/:projectId/sync", async (req: AuthedRequest, res) => {
 dmsRouter.get("/:projectId/browse", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
-  const path = String(req.query.path || "");
+  const folderPath = String(req.query.path || "");
+  // Sync-on-open: refresh tree (and later Graph delta) when a folder is opened
+  const syncOnOpen = String(req.query.sync || "1") !== "0";
+  let syncedAt: string | null = null;
+  if (syncOnOpen) {
+    await mockOneDrive.ensureProjectTree(project.id);
+    if (folderPath) {
+      await mockOneDrive.touchFolder(project.id, folderPath);
+    }
+    syncedAt = new Date().toISOString();
+  }
   const folders = await prisma.documentFolder.findMany({ where: { projectId: project.id } });
-  const children = mockOneDrive.listChildren(project.code, path);
-  res.json({ projectCode: project.code, path, children, folders });
+  const children = mockOneDrive.listChildren(project.code, folderPath);
+  res.json({
+    projectCode: project.code,
+    path: folderPath,
+    children,
+    folders,
+    syncedAt,
+    provider: "mock-onedrive",
+    note: "Browsable now; Microsoft Graph swap uses same browse+sync-on-open contract.",
+  });
 });
 
 dmsRouter.post(
