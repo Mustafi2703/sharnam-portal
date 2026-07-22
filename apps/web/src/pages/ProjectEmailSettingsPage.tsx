@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Button, Card, Input, PageHeader, TextArea } from "../components/ui";
+import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
 
 /** Per-project email distribution (used on drawing publish & checklist submit) */
 export default function ProjectEmailSettingsPage() {
@@ -14,9 +14,12 @@ export default function ProjectEmailSettingsPage() {
     emailEnabled: true,
     notifyOnDrawingPublish: true,
     notifyOnChecklistSubmit: true,
+    outlookMailbox: "",
+    outlookConnected: false,
   });
   const [outbox, setOutbox] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [outlookMsg, setOutlookMsg] = useState("");
   const [sendForm, setSendForm] = useState({ subject: "", body: "", toEmails: "" });
   const [sendMsg, setSendMsg] = useState("");
   const canEdit = ["admin", "office", "employee"].includes(user?.role || "");
@@ -33,6 +36,8 @@ export default function ProjectEmailSettingsPage() {
       emailEnabled: p.emailEnabled !== false,
       notifyOnDrawingPublish: p.notifyOnDrawingPublish !== false,
       notifyOnChecklistSubmit: p.notifyOnChecklistSubmit !== false,
+      outlookMailbox: p.outlookMailbox || "",
+      outlookConnected: !!p.outlookConnected,
     });
     setOutbox(e);
   };
@@ -60,10 +65,83 @@ export default function ProjectEmailSettingsPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <PageHeader
-        eyebrow="Project"
-        title="Email settings"
-        subtitle="Configure who receives notices when drawings are published and checklists are submitted. Delivery is logged in the outbox (SMTP/Graph can replace the mock later)."
+        eyebrow="Comms · Email"
+        title="Email / Outlook"
+        subtitle="Connect an Outlook mailbox for this project, set notification recipients, and send from one place. Outbox logs every message."
       />
+
+      <Card className="border-brand/30 bg-brand-soft/30">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Microsoft Outlook</h3>
+            <p className="text-sm text-steel-muted mt-1 max-w-xl leading-relaxed">
+              Link the project mailbox (e.g. project@yourcompany.com). When Microsoft Graph credentials are set on the
+              server, mail sends through Outlook; until then messages are queued in the outbox.
+            </p>
+            {form.outlookConnected && (
+              <p className="text-sm text-ok mt-2 font-medium">
+                Connected · {form.outlookMailbox || "mailbox saved"}
+              </p>
+            )}
+          </div>
+          <Badge tone={form.outlookConnected ? "ok" : "neutral"}>
+            {form.outlookConnected ? "Connected" : "Not connected"}
+          </Badge>
+        </div>
+        {canEdit && (
+          <form
+            className="mt-4 flex flex-wrap gap-2 items-end"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setOutlookMsg("");
+              try {
+                await api(`/api/projects/${id}/settings`, {
+                  method: "PATCH",
+                  token,
+                  body: JSON.stringify({
+                    outlookMailbox: form.outlookMailbox,
+                    outlookConnected: true,
+                  }),
+                });
+                setOutlookMsg("Outlook mailbox linked for this project.");
+                await load();
+              } catch (err) {
+                setOutlookMsg(err instanceof Error ? err.message : "Failed");
+              }
+            }}
+          >
+            <label className="text-sm flex-1 min-w-[220px]">
+              Outlook mailbox
+              <Input
+                className="mt-1"
+                type="email"
+                required
+                placeholder="pm@client.com"
+                value={form.outlookMailbox}
+                onChange={(e) => setForm({ ...form, outlookMailbox: e.target.value })}
+              />
+            </label>
+            <Button type="submit">Connect Outlook</Button>
+            {form.outlookConnected && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  await api(`/api/projects/${id}/settings`, {
+                    method: "PATCH",
+                    token,
+                    body: JSON.stringify({ outlookConnected: false }),
+                  });
+                  await load();
+                }}
+              >
+                Disconnect
+              </Button>
+            )}
+            {outlookMsg && <p className="w-full text-sm text-steel-muted">{outlookMsg}</p>}
+          </form>
+        )}
+      </Card>
 
       <Card>
         <form className="space-y-3" onSubmit={save}>

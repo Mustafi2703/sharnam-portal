@@ -11,21 +11,21 @@ const FAMILY_META: Record<
   { eyebrow: string; title: string; subtitle: string; otherTo: string; otherLabel: string; rfiKind: string }
 > = {
   SiteExecution: {
-    eyebrow: "Site execution",
-    title: "Final Index checklists",
+    eyebrow: "Drawings · site checklists",
+    title: "Site checklists",
     subtitle:
-      "Assign / upload checklist types on the project. Raise a Drawing Checklist RFI so Communication Matrix parties and the responsible vendor can fill — no drawing required.",
-    otherTo: "quality-inspections",
-    otherLabel: "Quality Inspections →",
+      "Assign a checklist type, then Request checklist fill. Fillers open the form, upload docs, and can upload / link drawings + revisions.",
+    otherTo: "inspections",
+    otherLabel: "Quality Inspections (Procore) →",
     rfiKind: "DrawingChecklist",
   },
   QualityInspection: {
-    eyebrow: "Quality assurance",
-    title: "Quality inspection checklists",
+    eyebrow: "Legacy QI templates",
+    title: "QI checklist templates",
     subtitle:
-      "Separate QI library. Raise a Quality Inspection RFI (separate from drawing fill RFIs) for matrix parties / vendor to complete the form.",
-    otherTo: "checklist",
-    otherLabel: "Final Index (site) →",
+      "Prefer Quality Inspections (Procore form) for live QI. This library is only for template assign + Request QI fill.",
+    otherTo: "inspections",
+    otherLabel: "Open Quality Inspections →",
     rfiKind: "QualityInspection",
   },
 };
@@ -136,7 +136,7 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                 to={`/projects/${id}/rfis?kind=${meta.rfiKind}`}
                 className="text-xs font-semibold text-mark underline"
               >
-                Raise fill RFI →
+                Raise fill request →
               </Link>
             </div>
           }
@@ -146,10 +146,10 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
       <WorkflowStrip
         active={2}
         steps={[
-          { label: "Assign checklist", hint: "Upload type to project" },
-          { label: "Raise fill RFI", hint: family === "QualityInspection" ? "QI RFI" : "Drawing RFI" },
-          { label: "Matrix / vendor fill", hint: "Comments + photos + docs" },
-          { label: "Audit / close", hint: "CSV + respond" },
+          { label: "Assign type", hint: "Add checklist to project" },
+          { label: "Request fill", hint: "Matrix / vendor" },
+          { label: "Fill form", hint: "Docs + drawing / rev" },
+          { label: "Close", hint: "Audit CSV" },
         ]}
       />
 

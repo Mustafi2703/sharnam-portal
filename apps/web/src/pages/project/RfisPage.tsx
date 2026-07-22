@@ -120,12 +120,12 @@ export default function RfisPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="RFIs · three clear types"
-        title={isClient ? "Concerns & RFIs" : "RFIs"}
+        eyebrow="Simple request types"
+        title={isClient ? "Concerns & RFIs" : "Requests"}
         subtitle={
           isClient
-            ? "Raise concerns anytime. Matrix parties (or Sharnam office) respond and close."
-            : "① Request for Information — PMC clarification. ② Drawing checklist fill — matrix / vendor complete site checklists. ③ Quality Inspection RFI — separate QI fill flow only."
+            ? "Raise a concern anytime. Matrix parties or office respond and close."
+            : "① Ask (PMC RFI) — clarification. ② Request checklist fill — open the fill form (drawings + docs). ③ Quality Inspection — Procore-style QI is under Quality; use Request QI fill only when needed."
         }
       />
 
@@ -133,9 +133,9 @@ export default function RfisPage() {
         {(
           [
             ["All", "All"],
-            ["RequestForInformation", "PMC RFI"],
-            ["DrawingChecklist", "Drawing fill"],
-            ["QualityInspection", "QI fill"],
+            ["RequestForInformation", "Ask (PMC)"],
+            ["DrawingChecklist", "Request checklist fill"],
+            ["QualityInspection", "Request QI fill"],
             ["ClientConcern", "Client"],
           ] as [RfiKind, string][]
         ).map(([k, label]) => (
@@ -154,13 +154,13 @@ export default function RfisPage() {
 
       {canCreate && (
         <Card>
-          <h3 className="font-semibold mb-3">{isClient ? "Raise concern" : "Create RFI"}</h3>
+          <h3 className="font-semibold mb-3">{isClient ? "Raise concern" : "Create request"}</h3>
           <form
             className="space-y-3"
             onSubmit={async (e) => {
               e.preventDefault();
               if (needsChecklist && !form.linkedAssignmentId) {
-                alert("Select the checklist this fill RFI is for.");
+                alert("Select the checklist this fill request is for.");
                 return;
               }
               const assignment = checklistOptions.find((a) => a.id === form.linkedAssignmentId);
@@ -187,9 +187,9 @@ export default function RfisPage() {
           >
             {!isClient && (
               <Select value={form.rfiKind} onChange={(e) => setForm({ ...form, rfiKind: e.target.value, linkedAssignmentId: "" })}>
-                <option value="RequestForInformation">Request for Information (PMC)</option>
-                <option value="DrawingChecklist">Drawing checklist fill RFI</option>
-                <option value="QualityInspection">Quality Inspection fill RFI (separate)</option>
+                <option value="RequestForInformation">Ask — Request for Information (PMC)</option>
+                <option value="DrawingChecklist">Request checklist fill (site / drawings)</option>
+                <option value="QualityInspection">Request QI fill (separate from Procore QI form)</option>
               </Select>
             )}
             <Input required placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
@@ -200,8 +200,8 @@ export default function RfisPage() {
                 isClient
                   ? "Describe your concern"
                   : form.rfiKind === "RequestForInformation"
-                    ? "Information requested (PMC RFI)"
-                    : "Ask matrix parties / vendor to fill the linked checklist"
+                    ? "What information do you need?"
+                    : "Ask matrix parties / vendor to open and fill the linked checklist (they can attach drawings, revisions, and docs)."
               }
               value={form.question}
               onChange={(e) => setForm({ ...form, question: e.target.value })}
@@ -325,13 +325,15 @@ export default function RfisPage() {
               <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
               {(selected.linkedAssignmentId || selected.linkedChecklistItemId) &&
                 (selected.rfiKind === "DrawingChecklist" || selected.rfiKind === "QualityInspection") && (
-                <div className="rounded-lg border border-line p-3 text-sm space-y-2">
-                  <div className="font-semibold text-xs uppercase tracking-wider text-steel-muted">Checklist to fill</div>
-                  <p className="text-steel-muted text-xs">
-                    Matrix parties and the responsible vendor fill this checklist (drawing link optional).
+                <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
+                  <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill this checklist</div>
+                  <p className="text-steel-muted text-xs leading-relaxed">
+                    Open the fill form to answer Yes/No/N.A., upload photos & docs, and attach or upload a drawing / revision if needed.
                   </p>
-                  <Link to={fillLink} className="text-brand text-sm font-semibold inline-block">
-                    Open checklist fill →
+                  <Link to={fillLink}>
+                    <Button type="button" className="!text-sm">
+                      Fill checklist form →
+                    </Button>
                   </Link>
                 </div>
               )}

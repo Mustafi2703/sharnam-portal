@@ -176,36 +176,37 @@ export function ToolRightPanel({
         }
         break;
       case "quality-inspections":
-        if (canFill) {
-          actions.push(
-            { label: "QI checklist forms", to: "quality-inspections", primary: true },
-            { label: "Assign QI checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
-            {
-              label: "Raise QI fill RFI",
-              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
-              secondary: true,
-            }
-          );
-        }
-        break;
       case "checklist":
         if (canFill) {
           actions.push(
-            { label: "Final Index (site)", to: "checklist", primary: true },
-            { label: "Assign site checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true }
+            {
+              label: tool === "quality-inspections" ? "QI templates (legacy)" : "Site checklists",
+              to: tool === "quality-inspections" ? "quality-inspections" : "checklist",
+              primary: true,
+            },
+            { label: "Assign checklist type", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
+            {
+              label: "Request checklist fill",
+              onClick: () =>
+                navigate(
+                  `/projects/${ctx.projectId}/rfis?kind=${tool === "quality-inspections" ? "QualityInspection" : "DrawingChecklist"}`
+                ),
+              secondary: true,
+            },
+            { label: "Quality Inspections (Procore)", to: "inspections", secondary: true }
           );
         }
         break;
       case "inspections":
         if (canFill) {
           actions.push(
-            { label: "Raise Quality Inspection", to: "inspections", primary: true },
+            { label: "New Quality Inspection", to: "inspections", primary: true },
+            { label: "Open Safety", to: "safety", secondary: true },
             {
-              label: "QI fill RFI",
+              label: "Request QI fill",
               onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
               secondary: true,
-            },
-            { label: "Open Safety", to: "safety", secondary: true }
+            }
           );
         }
         break;
@@ -259,19 +260,16 @@ export function ToolRightPanel({
         if (canEmail) actions.push({ label: "Compose email", onClick: () => openCompose(), primary: true }, { label: "Email settings", to: "email", secondary: true });
         break;
       default:
-        if (canUpload) {
-          actions.push(
-            { label: "Upload drawing", onClick: () => navigate(`/projects/${ctx.projectId}/drawings?upload=1`), primary: true },
-            { label: "Create RFI", to: "rfis", secondary: true },
-            { label: "Day log", to: "diary", secondary: true },
-            { label: "Comms matrix", to: "comms", secondary: true }
-          );
-        }
+        actions.push(
+          { label: "Open Drawings", to: "drawings", primary: true },
+          { label: "Open Quality", to: "inspections", secondary: true },
+          { label: "Meetings / MoM", to: "comms", secondary: true }
+        );
         break;
     }
   }
 
-  if (canEmail && tool !== "email") {
+  if (canEmail && (tool === "email" || tool === "comms")) {
     actions.push({ label: "Send email", onClick: () => openCompose(), secondary: true });
   }
   if (canDelete && ["rfis", "photos", "inspections", "checklist", "quality-inspections", "comms", "submittals", "coordination"].includes(tool)) {

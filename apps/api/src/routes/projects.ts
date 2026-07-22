@@ -85,6 +85,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     emailEnabled,
     notifyOnDrawingPublish,
     notifyOnChecklistSubmit,
+    outlookMailbox,
+    outlookConnected,
     clientName,
     location,
     status,
@@ -105,6 +107,14 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
       emailEnabled: typeof emailEnabled === "boolean" ? emailEnabled : undefined,
       notifyOnDrawingPublish: typeof notifyOnDrawingPublish === "boolean" ? notifyOnDrawingPublish : undefined,
       notifyOnChecklistSubmit: typeof notifyOnChecklistSubmit === "boolean" ? notifyOnChecklistSubmit : undefined,
+      outlookMailbox: outlookMailbox !== undefined ? String(outlookMailbox || "") || null : undefined,
+      outlookConnected: typeof outlookConnected === "boolean" ? outlookConnected : undefined,
+      outlookConnectedAt:
+        typeof outlookConnected === "boolean"
+          ? outlookConnected
+            ? new Date()
+            : null
+          : undefined,
       clientName: clientName !== undefined ? clientName : undefined,
       location: location !== undefined ? location : undefined,
       status: status !== undefined ? status : undefined,

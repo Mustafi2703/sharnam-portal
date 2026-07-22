@@ -22,7 +22,14 @@ export default function ChecklistFillPage() {
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<FileList | null>(null);
   const [msg, setMsg] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [newDw, setNewDw] = useState({ drawingNumber: "", title: "", revisionNumber: "R0" });
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const [revFile, setRevFile] = useState<File | null>(null);
+  const [revNumber, setRevNumber] = useState("");
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
+  const canUploadDrawing = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
 
   const emptyLine = (): LineResponse => ({ answer: "", remarks: "", photos: [], docs: [] });
 
@@ -135,6 +142,65 @@ export default function ChecklistFillPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function uploadNewDrawing(e: FormEvent) {
+    e.preventDefault();
+    if (!newFile || !newDw.drawingNumber || !newDw.title) {
+      setMsg("Drawing number, title, and file are required.");
+      return;
+    }
+    setUploadBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("drawingNumber", newDw.drawingNumber);
+      fd.append("title", newDw.title);
+      fd.append("revisionNumber", newDw.revisionNumber || "R0");
+      fd.append("publish", "true");
+      fd.append("file", newFile);
+      const created = await api<any>(`/api/drawings/project/${projectId}`, { method: "POST", token, body: fd });
+      await load();
+      setDrawingId(created.id);
+      const latest = [...(created.revisions || [])].sort(
+        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+      if (latest) setRevisionId(latest.id);
+      setUploadOpen(false);
+      setNewFile(null);
+      setNewDw({ drawingNumber: "", title: "", revisionNumber: "R0" });
+      setMsg("Drawing uploaded and linked to this fill.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
+  async function uploadRevision(e: FormEvent) {
+    e.preventDefault();
+    if (!drawingId || !revFile) {
+      setMsg("Select a drawing and choose a revision file.");
+      return;
+    }
+    setUploadBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("revisionNumber", revNumber || `R${revs.length}`);
+      fd.append("publish", "true");
+      fd.append("file", revFile);
+      const rev = await api<any>(`/api/drawings/${drawingId}/revisions`, { method: "POST", token, body: fd });
+      await load();
+      setRevisionId(rev.id);
+      setRevFile(null);
+      setRevNumber("");
+      setMsg("Revision uploaded and selected.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Revision upload failed");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-sand">
       <header className="sticky top-0 z-30 bg-white border-b border-line">
@@ -168,7 +234,7 @@ export default function ChecklistFillPage() {
             <PageHeader
               eyebrow={assignment.template.category}
               title={assignment.template.name}
-              subtitle="Fill each line with Yes/No/N.A., comment, photos, and docs. Drawing / revision is optional context. Intended fillers: Communication Matrix parties and the responsible vendor on the fill RFI."
+              subtitle="Fill each line with Yes/No/N.A., comments, photos, and docs. Link an existing drawing/revision or upload a new sheet / revision here."
               actions={
                 <div className="text-right">
                   <div className="text-2xl font-display text-brand">
@@ -179,10 +245,79 @@ export default function ChecklistFillPage() {
               }
             />
 
+            {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+
             <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
               <aside className="space-y-5 sticky top-20">
                 <Card className="brand-frame !p-5">
-                  <h3 className="font-semibold text-sm mb-3">Drawing (optional)</h3>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h3 className="font-semibold text-sm">Drawing / revision</h3>
+                    {canUploadDrawing && (
+                      <button
+                        type="button"
+                        className="text-[11px] font-semibold text-brand"
+                        onClick={() => setUploadOpen((v) => !v)}
+                      >
+                        {uploadOpen ? "Hide upload" : "Upload…"}
+                      </button>
+                    )}
+                  </div>
+
+                  {canUploadDrawing && uploadOpen && (
+                    <div className="mb-4 space-y-4 border border-line rounded-lg p-3 bg-sand/50">
+                      <form className="space-y-2" onSubmit={uploadNewDrawing}>
+                        <div className="text-[11px] font-semibold uppercase text-steel-muted">New drawing</div>
+                        <Input
+                          placeholder="Drawing no."
+                          value={newDw.drawingNumber}
+                          onChange={(e) => setNewDw({ ...newDw, drawingNumber: e.target.value })}
+                          required
+                        />
+                        <Input
+                          placeholder="Title"
+                          value={newDw.title}
+                          onChange={(e) => setNewDw({ ...newDw, title: e.target.value })}
+                          required
+                        />
+                        <Input
+                          placeholder="Revision (R0)"
+                          value={newDw.revisionNumber}
+                          onChange={(e) => setNewDw({ ...newDw, revisionNumber: e.target.value })}
+                        />
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          className="block text-xs w-full"
+                          onChange={(e) => setNewFile(e.target.files?.[0] || null)}
+                          required
+                        />
+                        <Button type="submit" className="!text-xs w-full" disabled={uploadBusy}>
+                          Upload & link
+                        </Button>
+                      </form>
+                      {drawingId && (
+                        <form className="space-y-2 border-t border-line pt-3" onSubmit={uploadRevision}>
+                          <div className="text-[11px] font-semibold uppercase text-steel-muted">New revision on selected</div>
+                          <Input
+                            placeholder={`Next rev (e.g. R${revs.length})`}
+                            value={revNumber}
+                            onChange={(e) => setRevNumber(e.target.value)}
+                          />
+                          <input
+                            type="file"
+                            accept=".pdf,image/*"
+                            className="block text-xs w-full"
+                            onChange={(e) => setRevFile(e.target.files?.[0] || null)}
+                            required
+                          />
+                          <Button type="submit" variant="secondary" className="!text-xs w-full" disabled={uploadBusy}>
+                            Upload revision
+                          </Button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+
                   <div className="scroll-panel space-y-2 list-roomy pr-1">
                     <button
                       type="button"
@@ -195,7 +330,7 @@ export default function ChecklistFillPage() {
                       }`}
                     >
                       <div className="text-sm font-medium">No drawing linked</div>
-                      <div className="text-[11px] text-steel-muted mt-1">Fill without a sheet</div>
+                      <div className="text-[11px] text-steel-muted mt-1">Fill with docs / photos only</div>
                     </button>
                     {drawings.map((d) => (
                       <button
@@ -213,7 +348,7 @@ export default function ChecklistFillPage() {
                     ))}
                     {!drawings.length && (
                       <p className="text-xs text-steel-muted leading-relaxed">
-                        No drawings on this project yet — you can still submit the checklist.
+                        No drawings yet — upload above or submit with photos/docs only.
                       </p>
                     )}
                   </div>

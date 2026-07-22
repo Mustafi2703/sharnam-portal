@@ -28,7 +28,7 @@ export async function queueProjectEmail(opts: {
       sentAt: new Date(),
     },
   });
-  // Mock transport: persisted to EmailOutbox (swap for SMTP/Graph later)
+  // Mock transport → EmailOutbox. When project.outlookConnected + GRAPH_* env exist, swap for Microsoft Graph sendMail.
   console.log(`[email] → ${to} | ${row.subject}`);
   return { skipped: false as const, email: row };
 }

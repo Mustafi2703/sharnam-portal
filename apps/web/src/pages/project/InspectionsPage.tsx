@@ -55,14 +55,17 @@ export default function InspectionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Quality module · inspections"
+        eyebrow="Quality module · Procore-style form"
         title="Quality Inspections"
-        subtitle="Separate Quality Inspection tool — raise inspections, assign, mark Ready. Unresolved lines can spawn a QI fill RFI. Safety is a separate tool in this same Quality module."
+        subtitle="This is the live QI check form (raise → Ready → fill lines → Pass/Fail). Different from site checklists and from Safety. Attach photos/docs on each line."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone="ok">QI flow</Badge>
+            <Badge tone="ok">Procore-style QI</Badge>
             <Link to={`/projects/${id}/safety`} className="text-sm font-semibold text-brand">
               Safety →
+            </Link>
+            <Link to={`/projects/${id}/checklist`} className="text-sm font-semibold text-brand">
+              Site checklists →
             </Link>
           </div>
         }
@@ -71,10 +74,10 @@ export default function InspectionsPage() {
       <WorkflowStrip
         active={1}
         steps={[
-          { label: "Raise inspection", hint: "Checklist → form" },
-          { label: "Mark Ready", hint: "Assignee fills" },
-          { label: "QI fill RFI", hint: "Matrix / vendor" },
-          { label: "Close", hint: "Unresolved → RFI" },
+          { label: "Raise QI", hint: "Pick checklist template" },
+          { label: "Mark Ready", hint: "Assignee fills form" },
+          { label: "Pass / Fail", hint: "Photos + docs" },
+          { label: "Close", hint: "Or request QI fill" },
         ]}
       />
 

@@ -14,21 +14,19 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     { to: "", label: "Overview", end: true },
     { to: "directory", label: "Directory" },
     { to: "vendors", label: "Vendors", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
-    { to: "email", label: "Email", roles: ["admin", "office", "employee", "site_employee"] },
   ],
   drawings: [
     { to: "drawings", label: "GFC register" },
     { to: "dms", label: "Documents (DMS)" },
     { to: "coordination", label: "Coordination", roles: ["admin", "office", "site_employee", "employee"] },
     { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
-    { to: "rfis", label: "Drawing fill RFIs", query: "kind=DrawingChecklist", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
+    { to: "rfis", label: "Request checklist fill", query: "kind=DrawingChecklist", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
   ],
   quality: [
     { to: "inspections", label: "Quality Inspections" },
     { to: "safety", label: "Safety" },
-    { to: "quality-inspections", label: "QI checklist forms" },
-    { to: "checklist", label: "Final Index (site)" },
-    { to: "rfis", label: "QI fill RFIs", query: "kind=QualityInspection" },
+    { to: "checklist", label: "Site checklists" },
+    { to: "rfis", label: "Request QI fill", query: "kind=QualityInspection" },
   ],
   field: [
     { to: "diary", label: "Day log" },
@@ -36,8 +34,9 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     { to: "rfis", label: "Field RFIs" },
   ],
   comms: [
-    { to: "comms", label: "Matrix / MoM" },
-    { to: "rfis", label: "PMC RFIs", query: "kind=RequestForInformation" },
+    { to: "comms", label: "Meetings · MoM" },
+    { to: "rfis", label: "Ask (PMC RFI)", query: "kind=RequestForInformation" },
+    { to: "email", label: "Email / Outlook", roles: ["admin", "office", "employee", "site_employee"] },
     { to: "reports", label: "DPR / WPR" },
   ],
   cost: [
@@ -62,7 +61,7 @@ function moduleFromPath(pathname: string): WorkspaceKey | "home" {
   if (["drawings", "dms", "coordination", "submittals"].includes(tool)) return "drawings";
   if (["checklist", "quality-inspections", "inspections", "safety"].includes(tool)) return "quality";
   if (["diary", "photos"].includes(tool)) return "field";
-  if (["comms"].includes(tool)) return "comms";
+  if (["comms", "email"].includes(tool)) return "comms";
   if (["cost"].includes(tool)) return "cost";
   if (tool === "rfis") {
     const ws = getActiveWorkspace();
@@ -70,7 +69,7 @@ function moduleFromPath(pathname: string): WorkspaceKey | "home" {
     return "quality";
   }
   if (tool === "reports") return getActiveWorkspace() === "cost" ? "cost" : "comms";
-  if (["directory", "vendors", "email"].includes(tool)) return "home";
+  if (["directory", "vendors"].includes(tool)) return "home";
   return "home";
 }
 

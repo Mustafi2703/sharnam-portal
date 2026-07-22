@@ -46,12 +46,11 @@ export default function CommsPage() {
     frequency: "Weekly",
     channel: "Meeting",
   });
-  // Presets: Meeting | RFI | Email for topic routing form
+  // Presets: Meeting only — RFIs live under Ask (PMC RFI), not as duplicate meeting channels
   const TOPIC_PRESETS = [
     { label: "Site Meeting", communicationType: "Site Meeting", channel: "Meeting", frequency: "Weekly" },
     { label: "Design Meeting", communicationType: "Design Meeting", channel: "Meeting", frequency: "Bi-weekly" },
-    { label: "RFI Update", communicationType: "RFI Update", channel: "RFI", frequency: "As needed" },
-    { label: "Checklist fill", communicationType: "Checklist fill", channel: "RFI", frequency: "As needed" },
+    { label: "Commercial Meeting", communicationType: "Commercial Meeting", channel: "Meeting", frequency: "Monthly" },
   ];
   const [contactForm, setContactForm] = useState({
     orgSection: "Client",
@@ -195,18 +194,18 @@ export default function CommsPage() {
         </Link>
         <PageHeader
           eyebrow="Communications"
-          title="Matrix · Agenda · MoM · Follow-up"
-          subtitle="Maintain who is involved (Client, Sharnam PMC, consultant, contractor, concrete / site). Generate agenda before MoM, then follow up open actions."
+          title="Meetings · MoM"
+          subtitle="Simple flow: set Matrix (who) → Create meeting → Agenda → MoM (minutes + actions) → Follow-up. Use Ask (PMC RFI) for questions — not inside MoM."
         />
       </div>
 
       <WorkflowStrip
         active={flowActive}
         steps={[
-          { label: "Matrix", hint: "Who talks to whom" },
-          { label: "Agenda", hint: "Generate before MoM" },
+          { label: "Matrix", hint: "Who is involved" },
+          { label: "Create meeting", hint: "Then agenda" },
           { label: "MoM", hint: "Minutes + actions" },
-          { label: "Follow-up", hint: "Carry open actions" },
+          { label: "Follow-up", hint: "Open actions" },
         ]}
       />
 
@@ -214,7 +213,7 @@ export default function CommsPage() {
         {(
           [
             ["matrix", "1 · Matrix"],
-            ["agenda", "2 · Agenda"],
+            ["agenda", "2 · Create / Agenda"],
             ["mom", "3 · MoM"],
             ["followup", "4 · Follow-up"],
             ["log", "Comm log"],
@@ -224,14 +223,14 @@ export default function CommsPage() {
             {label}
           </Button>
         ))}
-        <Link to={`/projects/${id}/reports`} className="ml-auto">
+        <Link to={`/projects/${id}/email`} className="ml-auto">
           <Button type="button" variant="ghost" className="!text-xs">
-            DPR →
+            Outlook →
           </Button>
         </Link>
-        <Link to={`/projects/${id}/rfis`}>
+        <Link to={`/projects/${id}/rfis?kind=RequestForInformation`}>
           <Button type="button" variant="ghost" className="!text-xs">
-            RFIs →
+            Ask (PMC RFI) →
           </Button>
         </Link>
       </div>

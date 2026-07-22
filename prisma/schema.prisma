@@ -71,6 +71,10 @@ model Project {
   emailEnabled       Boolean  @default(true)
   notifyOnDrawingPublish Boolean @default(true)
   notifyOnChecklistSubmit Boolean @default(true)
+  /// Outlook / Microsoft 365 mailbox for project mail (Graph when configured)
+  outlookMailbox     String?
+  outlookConnected   Boolean  @default(false)
+  outlookConnectedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

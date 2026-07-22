@@ -55,28 +55,32 @@ export default function ProjectHomePage() {
           </p>
           <h2 className="font-display text-2xl">Designed module grid</h2>
           <p className="text-sm text-steel-muted mt-1 max-w-xl">
-            Procore-style tools — use the right Actions panel for upload drawing, assign checklist, and engineer fills.
+            Open one module at a time. Upload drawings only inside Drawings. Quality Inspections are the Procore QI form.
+            Comms is Matrix → meeting → MoM.
           </p>
         </div>
         {canUpload && (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings?upload=1`)}>
-              Upload drawing
+            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings`)}>
+              Open Drawings
             </Button>
             <Button
               type="button"
               variant="secondary"
               className="!text-xs"
-              onClick={() => navigate(`/projects/${id}/checklist?assign=1`)}
+              onClick={() => navigate(`/projects/${id}/inspections`)}
             >
-              Assign checklist
+              Open Quality
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/comms`)}>
+              Open Comms
             </Button>
           </div>
         )}
       </div>
 
       <WorkflowStrip
-        active={s.publishedDrawings > 0 ? 2 : 0}
+        active={1}
         steps={
           isClient
             ? [
@@ -86,10 +90,10 @@ export default function ProjectHomePage() {
                 { label: "Read packs", hint: "Reports" },
               ]
             : [
-                { label: "Upload drawings", hint: "GFC register" },
-                { label: "Publish gate", hint: "Unlocks QA fills" },
-                { label: "Assign + fill", hint: "Checklist vs drawing" },
-                { label: "RFI & close-out", hint: "Ball-in-court" },
+                { label: "Drawings", hint: "Upload + publish" },
+                { label: "Quality / Site", hint: "QI form or checklist" },
+                { label: "Request fill", hint: "Matrix / vendor" },
+                { label: "Comms / MoM", hint: "Meetings + Ask" },
               ]
         }
       />
@@ -124,13 +128,13 @@ export default function ProjectHomePage() {
       </div>
 
       {s.publishedDrawings === 0 && !isClient && (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <div className="font-semibold text-warn">Gate locked</div>
+        <Card className="border-line bg-sand/50">
+          <div className="font-semibold">No drawings yet</div>
           <p className="text-sm text-steel-muted mt-1">
-            Publish at least one drawing before engineers can fill checklists against a sheet.
+            Upload in the Drawings module when you have sheets. Checklists and Quality Inspections can still run without a drawing.
           </p>
-          <Button className="mt-3" onClick={() => navigate(`/projects/${id}/drawings?upload=1`)}>
-            Upload drawing
+          <Button className="mt-3" onClick={() => navigate(`/projects/${id}/drawings`)}>
+            Go to Drawings
           </Button>
         </Card>
       )}

@@ -285,14 +285,14 @@ export default function DrawingsPage() {
         <Card className="!p-5 border-brand/25 bg-brand-soft/20">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
             <div>
-              <h3 className="font-display text-lg">Checklist + fill RFI (latest revision)</h3>
+              <h3 className="font-display text-lg">Checklist + request fill (latest revision)</h3>
               <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-                Browse a drawing, assign the checklist, then raise a Drawing fill RFI so Communication Matrix parties and the
-                vendor complete it against the latest revision.
+                Assign a site checklist, then request fill so matrix / vendor open the form against the latest revision —
+                they can upload docs and new drawings / revisions from the fill screen.
               </p>
             </div>
             <Link to={`/projects/${id}/rfis?kind=DrawingChecklist`} className="text-sm font-semibold text-brand">
-              Open fill RFIs →
+              Request checklist fill →
             </Link>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
@@ -341,7 +341,7 @@ export default function DrawingsPage() {
               Assign checklist
             </Button>
             <Button type="button" disabled={!fillDrawingId} onClick={() => void raiseDrawingFillRfi()}>
-              Raise fill RFI (matrix / vendor)
+              Raise request fill (matrix / vendor)
             </Button>
             {fillAssignmentId && (
               <Link

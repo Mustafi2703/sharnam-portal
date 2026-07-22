@@ -134,10 +134,10 @@ export default function UiOptionsHubPage() {
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-brand mb-2">UI systems 1–5</p>
-            <h2 className="font-display text-3xl tracking-tight">Plus Jakarta · Source Sans · clear colour</h2>
+            <h2 className="font-display text-3xl tracking-tight">Five distinct styles — pick one</h2>
           </div>
           <p className="text-sm text-steel-muted max-w-sm">
-            Attractive, readable design language — same Master / module tools underneath every style.
+            Each option uses different fonts, density, and colour — not just a hue swap.
           </p>
         </div>
 
@@ -156,21 +156,33 @@ export default function UiOptionsHubPage() {
               <div className="px-5 pb-5 pt-2 border-t border-line">
                 <div className="flex items-center gap-3">
                   <span
-                    className="h-9 w-9 grid place-items-center text-white text-sm font-display"
+                    className="h-10 w-10 grid place-items-center text-white text-lg"
                     style={{ background: opt.vars["--color-brand"], borderRadius: opt.vars["--ui-radius-sm"] }}
+                    aria-hidden
                   >
-                    {opt.number}
+                    {opt.icon}
                   </span>
                   <div>
-                    <div className="font-display text-lg leading-tight">{opt.name}</div>
+                    <div className="font-display text-lg leading-tight" style={{ fontFamily: opt.vars["--font-display"] }}>
+                      {opt.number}. {opt.name}
+                    </div>
                     <div className="text-xs text-steel-muted mt-0.5">
-                      {opt.style} · {opt.density}
+                      {opt.chip} · {opt.density}
                       {opt.number === 1 ? " · recommended" : ""}
                     </div>
                   </div>
                 </div>
                 <p className="text-sm text-steel-muted mt-3 leading-relaxed">{opt.blurb}</p>
-                <div className="mt-3 text-sm font-semibold text-brand group-hover:underline">Open landing →</div>
+                <div className="mt-3 flex gap-1.5">
+                  {["--color-brand", "--color-mark", "--color-ok", "--color-procore-navy"].map((k) => (
+                    <span
+                      key={k}
+                      className="h-3 w-3 rounded-full border border-black/10"
+                      style={{ background: opt.vars[k] }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-3 text-sm font-semibold text-brand group-hover:underline">Open this style →</div>
               </div>
             </Link>
           ))}

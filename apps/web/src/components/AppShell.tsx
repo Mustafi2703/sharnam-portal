@@ -13,7 +13,7 @@ const primaryNav = [
   { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/crm", label: "CRM", roles: ["admin", "office", "employee"] },
   { to: "/hrm", label: "HR / Directory", roles: ["admin", "office"] },
-  { to: "/options", label: "UI 1–5", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
+  { to: "/options", label: "Styles", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
 ];
 
 type Proj = { id: string; code: string; name: string };
@@ -27,7 +27,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const ws = typeof window !== "undefined" ? getActiveWorkspace() : null;
   const wsLabel = WORKSPACES.find((w) => w.key === ws)?.title;
-  const canUpload = user && user.role !== "client";
 
   useEffect(() => {
     if (!token) return;
@@ -94,15 +93,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
 
           <div className="flex items-center gap-2 shrink-0 ml-auto">
-            {canUpload && projectId && (
-              <Button
-                type="button"
-                className="!text-xs !py-2 !px-3 hidden sm:inline-flex"
-                onClick={() => navigate(`/projects/${projectId}/drawings?upload=1`)}
-              >
-                Upload drawing
-              </Button>
-            )}
             <Badge tone="neutral">{user?.portal}</Badge>
             <Button
               variant="ghost"
@@ -136,39 +126,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </NavLink>
               ))}
             {projectId && (
-              <>
-                <NavLink
-                  to={`/projects/${projectId}`}
-                  end
-                  className={({ isActive }) =>
-                    `px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
-                      isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
-                    }`
-                  }
-                >
-                  Overview
-                </NavLink>
-                <NavLink
-                  to={`/projects/${projectId}/comms`}
-                  className={({ isActive }) =>
-                    `hidden sm:inline-flex px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
-                      isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
-                    }`
-                  }
-                >
-                  Comms
-                </NavLink>
-                <NavLink
-                  to={`/projects/${projectId}/reports`}
-                  className={({ isActive }) =>
-                    `hidden md:inline-flex px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
-                      isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
-                    }`
-                  }
-                >
-                  DPR/WPR
-                </NavLink>
-              </>
+              <NavLink
+                to={`/projects/${projectId}`}
+                end
+                className={({ isActive }) =>
+                  `px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
+                    isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
+                  }`
+                }
+              >
+                Overview
+              </NavLink>
             )}
           </nav>
 
@@ -180,16 +148,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button
                 key={t.id}
                 type="button"
-                title={`${t.number}. ${t.name}`}
+                title={`${t.name} — ${t.blurb}`}
                 onClick={() => applyThemeOption(t.id)}
-                className={`h-9 min-w-[2.25rem] px-2 text-sm font-semibold border transition ${
+                className={`h-9 min-w-[2.75rem] px-2 text-[11px] font-semibold border transition inline-flex items-center justify-center gap-1 ${
                   String(t.number) === activeUi
                     ? "bg-brand text-white border-brand"
                     : "bg-sand border-line text-steel-muted hover:border-brand"
                 }`}
                 style={{ borderRadius: "var(--ui-radius-sm, 6px)" }}
               >
-                {t.number}
+                <span aria-hidden style={{ color: String(t.number) === activeUi ? "#fff" : t.vars["--color-brand"] }}>
+                  {t.icon}
+                </span>
+                <span className="hidden lg:inline">{t.chip}</span>
               </button>
             ))}
           </div>
@@ -199,7 +170,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="px-4 sm:px-6 py-2 bg-brand-soft/50 border-b border-line text-xs text-steel-muted flex flex-wrap gap-x-4 gap-y-1">
             <span className="font-mono text-brand font-semibold">{selected.code}</span>
             <span className="truncate">{selected.name}</span>
-            <span className="text-steel-muted/90">Select project · open a tool · Actions panel shows only that tool</span>
+            <span className="text-steel-muted/90">
+              Open a module → use that module’s tools only. Upload drawings in Drawings. Email in Home → Email / Outlook.
+            </span>
           </div>
         )}
       </header>
