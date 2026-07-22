@@ -37,14 +37,20 @@ export default function DirectoryPage() {
       <PageHeader
         eyebrow="Project directory"
         title="People & companies"
-        subtitle="Project roster — assign from HRM master (all employees & vendors). Feed Communications matrix and RFI distribution. Manage company-wide pool in HR / Directory."
+        subtitle="Build the project roster from Master / HRM — PMC, staff, and vendors. Feeds Meeting + RFI communication matrix and checklist fill parties."
         actions={
           <div className="flex flex-wrap gap-3">
+            <Link to="/master" className="text-sm font-semibold text-brand">
+              Master module →
+            </Link>
             <Link to="/hrm" className="text-sm font-semibold text-brand">
               HRM master →
             </Link>
             <Link to={`/projects/${id}/vendors`} className="text-sm font-semibold text-brand">
               Vendors →
+            </Link>
+            <Link to={`/projects/${id}/comms`} className="text-sm font-semibold text-brand">
+              Matrix →
             </Link>
           </div>
         }

@@ -163,9 +163,9 @@ export default function ProjectToolsLayout() {
         </nav>
       </div>
 
-      <div className={`tool-shell ${shellClass} bg-sand`}>
+      <div className={`tool-shell ${shellClass} bg-sand w-full`}>
         {sidebarOpen && (
-          <aside className="border-b xl:border-b-0 xl:border-r border-line bg-paper tool-side-nav">
+          <aside className="border-b xl:border-b-0 xl:border-r border-line bg-paper tool-side-nav min-w-0">
             <div className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-muted border-b border-line">
               {moduleLabel}
             </div>
@@ -186,7 +186,7 @@ export default function ProjectToolsLayout() {
           </aside>
         )}
 
-        <div className="p-5 sm:p-8 lg:p-10 min-w-0 page-stack">
+        <div className="p-5 sm:p-8 lg:p-10 xl:p-12 min-w-0 page-stack w-full max-w-none">
           <Outlet
             context={{
               project,

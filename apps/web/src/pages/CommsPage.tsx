@@ -46,6 +46,13 @@ export default function CommsPage() {
     frequency: "Weekly",
     channel: "Meeting",
   });
+  // Presets: Meeting | RFI | Email for topic routing form
+  const TOPIC_PRESETS = [
+    { label: "Site Meeting", communicationType: "Site Meeting", channel: "Meeting", frequency: "Weekly" },
+    { label: "Design Meeting", communicationType: "Design Meeting", channel: "Meeting", frequency: "Bi-weekly" },
+    { label: "RFI Update", communicationType: "RFI Update", channel: "RFI", frequency: "As needed" },
+    { label: "Checklist fill", communicationType: "Checklist fill", channel: "RFI", frequency: "As needed" },
+  ];
   const [contactForm, setContactForm] = useState({
     orgSection: "Client",
     orgName: "",
@@ -257,6 +264,23 @@ export default function CommsPage() {
                 Seed BPCL-style rows
               </Button>
             )}
+            {canEdit && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-sm"
+                onClick={async () => {
+                  const r = await api<{ created: number }>(`/api/comms/matrix/${id}/seed-standard`, {
+                    method: "POST",
+                    token,
+                  });
+                  setMsg(`Meeting + RFI topic matrix: added ${r.created} row(s).`);
+                  await load();
+                }}
+              >
+                Seed Meeting + RFI parties
+              </Button>
+            )}
           </div>
 
           <Card className="!bg-procore-navy !text-white !border-0">
@@ -373,9 +397,71 @@ export default function CommsPage() {
             </table>
           </Card>
 
-          <details className="text-sm">
-            <summary className="cursor-pointer font-semibold text-steel-muted">Topic routing (who talks to whom)</summary>
-            <Card className="mt-3" padding={false}>
+          <details className="text-sm" open>
+            <summary className="cursor-pointer font-semibold text-steel-muted">Topic routing — Meeting + RFI parties</summary>
+            <Card className="mt-3 space-y-3 !p-4">
+              <p className="text-xs text-steel-muted">
+                Define who talks for Meetings and RFIs. Use <strong>Seed Meeting + RFI parties</strong> above, or add rows
+                with presets.
+              </p>
+              {canEdit && (
+                <div className="flex flex-wrap gap-2">
+                  {TOPIC_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      className="text-xs px-2.5 py-1.5 border border-line rounded-md hover:border-brand"
+                      onClick={() =>
+                        setMatrixForm({
+                          ...matrixForm,
+                          communicationType: p.communicationType,
+                          channel: p.channel,
+                          frequency: p.frequency,
+                        })
+                      }
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {canEdit && (
+                <form
+                  className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    await api(`/api/comms/matrix/${id}`, { method: "POST", token, body: JSON.stringify(matrixForm) });
+                    setMsg("Topic routing row added.");
+                    await load();
+                  }}
+                >
+                  <Input
+                    value={matrixForm.communicationType}
+                    onChange={(e) => setMatrixForm({ ...matrixForm, communicationType: e.target.value })}
+                    placeholder="Type"
+                  />
+                  <Select value={matrixForm.fromRole} onChange={(e) => setMatrixForm({ ...matrixForm, fromRole: e.target.value })}>
+                    {ORG_ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select value={matrixForm.toRole} onChange={(e) => setMatrixForm({ ...matrixForm, toRole: e.target.value })}>
+                    {ORG_ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select value={matrixForm.channel} onChange={(e) => setMatrixForm({ ...matrixForm, channel: e.target.value })}>
+                    <option value="Meeting">Meeting</option>
+                    <option value="RFI">RFI</option>
+                    <option value="Email">Email</option>
+                  </Select>
+                  <Button type="submit">Add row</Button>
+                </form>
+              )}
               <table className="w-full text-sm">
                 <thead className="bg-sand text-left text-[10px] uppercase text-steel-muted">
                   <tr>
@@ -393,9 +479,20 @@ export default function CommsPage() {
                       <td className="p-3">{roleLabel(r.fromRole)}</td>
                       <td className="p-3">{roleLabel(r.toRole)}</td>
                       <td className="p-3">{r.frequency}</td>
-                      <td className="p-3">{r.channel}</td>
+                      <td className="p-3">
+                        <Badge tone={r.channel === "Meeting" ? "ok" : r.channel === "RFI" ? "brand" : "neutral"}>
+                          {r.channel}
+                        </Badge>
+                      </td>
                     </tr>
                   ))}
+                  {!matrix.length && (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-steel-muted text-sm">
+                        No topic rows — seed Meeting + RFI parties.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </Card>

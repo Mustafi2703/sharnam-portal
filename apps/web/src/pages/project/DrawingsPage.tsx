@@ -1,9 +1,9 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
-import { Badge, Button, Card, PageHeader } from "../../components/ui";
+import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { UploadModal } from "../../components/UploadModal";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -34,6 +34,12 @@ export default function DrawingsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [formError, setFormError] = useState("");
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [fillDrawingId, setFillDrawingId] = useState("");
+  const [fillTemplateId, setFillTemplateId] = useState("");
+  const [fillAssignmentId, setFillAssignmentId] = useState("");
+  const [fillMsg, setFillMsg] = useState("");
   const [form, setForm] = useState({
     drawingNumber: "",
     title: "",
@@ -50,8 +56,17 @@ export default function DrawingsPage() {
   const clientOnly = isClientViewOnly(user?.role);
 
   const load = async () => {
-    const d = await api<any[]>(`/api/drawings/project/${id}`, { token });
+    const [d, a, t] = await Promise.all([
+      api<any[]>(`/api/drawings/project/${id}`, { token }),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
+        assignments: [],
+      })),
+      api<any[]>(`/api/checklist/templates?type=SiteExecution`, { token }).catch(() => []),
+    ]);
     setDrawings(d);
+    setAssignments(a.assignments || []);
+    setTemplates(t);
+    if (!fillDrawingId && d[0]) setFillDrawingId(d[0].id);
   };
 
   useEffect(() => {
@@ -72,6 +87,64 @@ export default function DrawingsPage() {
     [drawings, filter]
   );
   const uploadTarget = drawings.find((d) => d.id === uploadForId);
+  const fillDrawing = drawings.find((d) => d.id === fillDrawingId);
+  const latestRev = useMemo(() => {
+    const revs = [...(fillDrawing?.revisions || [])].sort(
+      (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    return revs[0] || null;
+  }, [fillDrawing]);
+  const assignedIds = new Set(assignments.map((a) => a.template?.id));
+  const availableTemplates = templates.filter((t) => !assignedIds.has(t.id));
+
+  async function assignChecklistOnDrawing() {
+    if (!fillTemplateId) return;
+    setFillMsg("");
+    try {
+      const a = await api<any>(`/api/checklist/project/${id}/assign`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ templateId: fillTemplateId }),
+      });
+      setFillAssignmentId(a.id);
+      setFillMsg(`Checklist “${a.template?.name || "assigned"}” ready — raise fill RFI next.`);
+      await load();
+    } catch (err) {
+      setFillMsg(err instanceof Error ? err.message : "Assign failed");
+    }
+  }
+
+  async function raiseDrawingFillRfi() {
+    setFillMsg("");
+    const assignmentId = fillAssignmentId || assignments[0]?.id;
+    if (!assignmentId) {
+      setFillMsg("Assign a checklist first.");
+      return;
+    }
+    if (!fillDrawingId) {
+      setFillMsg("Select a drawing.");
+      return;
+    }
+    const assignment = assignments.find((a) => a.id === assignmentId) || { id: assignmentId, template: { name: "Checklist" } };
+    try {
+      const rfi = await api<any>(`/api/rfis/project/${id}`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          rfiKind: "DrawingChecklist",
+          subject: `Fill checklist vs ${fillDrawing?.drawingNumber || "drawing"} ${latestRev?.revisionNumber || "latest"}`,
+          question: `Please complete checklist “${assignment.template?.name || "assigned"}” against drawing ${fillDrawing?.drawingNumber} · ${fillDrawing?.title || ""} · revision ${latestRev?.revisionNumber || "latest"}. Communication matrix parties and responsible vendor fill this form.`,
+          linkedDrawingId: fillDrawingId,
+          linkedAssignmentId: assignmentId,
+          linkedChecklistItemId: assignment.template?.id || null,
+          attachmentNote: latestRev ? `Latest rev ${latestRev.revisionNumber}` : "No revision yet",
+        }),
+      });
+      setFillMsg(`Fill RFI ${rfi.number} raised for matrix / vendor.`);
+    } catch (err) {
+      setFillMsg(err instanceof Error ? err.message : "RFI failed");
+    }
+  }
 
   async function exportCsv() {
     const res = await fetch(`${API_BASE}/api/drawings/project/${id}/export.csv`, {
@@ -209,6 +282,81 @@ export default function DrawingsPage() {
       </div>
 
       {canUpload && (
+        <Card className="!p-5 border-brand/25 bg-brand-soft/20">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <div>
+              <h3 className="font-display text-lg">Checklist + fill RFI (latest revision)</h3>
+              <p className="text-sm text-steel-muted mt-1 max-w-2xl">
+                Browse a drawing, assign the checklist, then raise a Drawing fill RFI so Communication Matrix parties and the
+                vendor complete it against the latest revision.
+              </p>
+            </div>
+            <Link to={`/projects/${id}/rfis?kind=DrawingChecklist`} className="text-sm font-semibold text-brand">
+              Open fill RFIs →
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+            <label className="text-xs text-steel-muted block">
+              Drawing
+              <Select className="mt-1" value={fillDrawingId} onChange={(e) => setFillDrawingId(e.target.value)}>
+                <option value="">Select drawing…</option>
+                {drawings.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.drawingNumber} — {d.title}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <div className="text-sm">
+              <div className="text-xs text-steel-muted">Latest revision</div>
+              <div className="font-mono font-semibold mt-1.5">
+                {latestRev ? `${latestRev.revisionNumber} · ${fmtDate(latestRev.createdAt)}` : "No revision yet"}
+              </div>
+            </div>
+            <label className="text-xs text-steel-muted block">
+              Assign checklist type
+              <Select className="mt-1" value={fillTemplateId} onChange={(e) => setFillTemplateId(e.target.value)}>
+                <option value="">Template…</option>
+                {availableTemplates.slice(0, 80).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-xs text-steel-muted block">
+              Or pick assigned checklist
+              <Select className="mt-1" value={fillAssignmentId} onChange={(e) => setFillAssignmentId(e.target.value)}>
+                <option value="">Assignment…</option>
+                {assignments.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.template?.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" disabled={!fillTemplateId} onClick={() => void assignChecklistOnDrawing()}>
+              Assign checklist
+            </Button>
+            <Button type="button" disabled={!fillDrawingId} onClick={() => void raiseDrawingFillRfi()}>
+              Raise fill RFI (matrix / vendor)
+            </Button>
+            {fillAssignmentId && (
+              <Link
+                to={`/projects/${id}/checklist/fill/${fillAssignmentId}?family=SiteExecution`}
+                className="self-center text-sm font-semibold text-brand"
+              >
+                Open fill form →
+              </Link>
+            )}
+          </div>
+          {fillMsg && <p className="text-sm text-steel-muted mt-3">{fillMsg}</p>}
+        </Card>
+      )}
+
+      {canUpload && (
         <UploadModal
           open={showRegister}
           title="Upload drawing"
@@ -274,7 +422,7 @@ export default function DrawingsPage() {
             {
               kind: "checkbox",
               name: "publish",
-              label: "Publish now (unlocks checklist fills for engineers)",
+              label: "Publish now (shows on register; fill RFIs use latest rev)",
               checked: form.publish,
               onChange: (v) => setForm({ ...form, publish: v }),
             },

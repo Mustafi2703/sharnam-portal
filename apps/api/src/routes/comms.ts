@@ -29,6 +29,41 @@ commsRouter.post("/matrix/:projectId", requireRoles("admin", "office"), async (r
   res.status(201).json(row);
 });
 
+/** Seed Meeting + RFI matrix rows so respond/fill parties are defined */
+commsRouter.post("/matrix/:projectId/seed-standard", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const specs = [
+    { communicationType: "RFI Update", fromRole: "office", toRole: "client", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "office", toRole: "vendor", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "office", toRole: "site_employee", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "employee", toRole: "office", frequency: "As needed", channel: "RFI" },
+    { communicationType: "Site Meeting", fromRole: "office", toRole: "client", frequency: "Weekly", channel: "Meeting" },
+    { communicationType: "Site Meeting", fromRole: "office", toRole: "vendor", frequency: "Weekly", channel: "Meeting" },
+    { communicationType: "Site Meeting", fromRole: "office", toRole: "site_employee", frequency: "Weekly", channel: "Meeting" },
+    { communicationType: "Design Meeting", fromRole: "employee", toRole: "office", frequency: "Bi-weekly", channel: "Meeting" },
+    { communicationType: "Design Meeting", fromRole: "office", toRole: "client", frequency: "Bi-weekly", channel: "Meeting" },
+    { communicationType: "Checklist fill", fromRole: "office", toRole: "vendor", frequency: "As needed", channel: "RFI" },
+    { communicationType: "Checklist fill", fromRole: "office", toRole: "site_employee", frequency: "As needed", channel: "RFI" },
+  ];
+  let created = 0;
+  for (const s of specs) {
+    const exists = await prisma.communicationMatrix.findFirst({
+      where: {
+        projectId,
+        communicationType: s.communicationType,
+        fromRole: s.fromRole,
+        toRole: s.toRole,
+        channel: s.channel,
+      },
+    });
+    if (exists) continue;
+    await prisma.communicationMatrix.create({ data: { projectId, ...s, isActive: true } });
+    created += 1;
+  }
+  await audit("comms.matrix.seed", { userId: req.user!.id, entity: "Project", entityId: projectId, meta: { created } });
+  res.json({ ok: true, created });
+});
+
 /** BPCL-style contact matrix (TECHNICAL / COMMERCIAL) */
 commsRouter.get("/contacts/:projectId", async (req, res) => {
   const kind = String(req.query.kind || "TECHNICAL").toUpperCase();
