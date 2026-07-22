@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { RoleKey } from "@sharnam/shared";
-import { Badge, Button, Input, TextArea } from "./ui";
+import { Button, Input, TextArea } from "./ui";
 import { api } from "../api";
 import { useAuth } from "../auth";
 
