@@ -5,9 +5,12 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { Button, Card, Input } from "../components/ui";
 import { BrandLink, BrandMark, BRAND_EN, BRAND_HI, BRAND_TAG } from "../components/Brand";
-import { LIVE_UI_OPTIONS } from "../themes";
+import { LIVE_UI_OPTIONS, RECOMMENDED_UI, applyThemeOption } from "../themes";
+import { setActiveWorkspace, type WorkspaceKey } from "../workspaces";
 
-type PortalConfig = {
+export const LOGIN_LANDING_KEY = "sharnam_login_landing";
+
+export type PortalConfig = {
   key: string;
   title: string;
   shortLabel: string;
@@ -19,75 +22,184 @@ type PortalConfig = {
   cta: string;
   tone: string;
   icon: string;
+  /** Where to land after sign-in */
+  landingPath?: string;
+  /** Optional workspace focus */
+  workspaceKey?: WorkspaceKey | null;
+  group: "master" | "module" | "role";
 };
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
-  client: {
-    key: "client",
-    title: "Client",
-    shortLabel: "Client",
-    headline: "Owner clarity on every sheet.",
-    subtitle: "Published GFC, approved QA, and weekly packs — view-only client desk.",
-    demoEmail: "client@sharnam.demo",
-    allowedRoles: ["client"],
-    points: ["Drawing visibility", "Raise concerns", "Weekly reports"],
-    cta: "Enter Client portal",
-    tone: "#0B6A78",
-    icon: "CL",
+  master: {
+    key: "master",
+    title: "Master",
+    shortLabel: "Master",
+    headline: "Set up every project from one desk.",
+    subtitle: "Create projects, HRM assign, CRM, master documents, and choose the right RFI type.",
+    demoEmail: "office@sharnam.demo",
+    allowedRoles: ["admin", "office"],
+    points: ["Create projects", "HRM & directory", "Master documents (DMS)", "PMC · Drawing · QI RFIs"],
+    cta: "Enter Master module",
+    tone: "#1E3A8A",
+    icon: "MS",
+    landingPath: "/master",
+    workspaceKey: null,
+    group: "master",
+  },
+  drawings: {
+    key: "drawings",
+    title: "Drawings & Documents",
+    shortLabel: "Drawings",
+    headline: "GFC register and project Documents.",
+    subtitle: "Upload sheets, manage DMS, attach checklists, raise Drawing checklist fill RFIs.",
+    demoEmail: "office@sharnam.demo",
+    allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
+    points: ["GFC register", "Documents (DMS)", "Drawing fill RFIs", "Coordination"],
+    cta: "Enter Drawings module",
+    tone: "#1D4ED8",
+    icon: "DW",
+    landingPath: "/workspace",
+    workspaceKey: "drawings",
+    group: "module",
+  },
+  quality: {
+    key: "quality",
+    title: "Quality",
+    shortLabel: "Quality",
+    headline: "QI checklists and inspection fills.",
+    subtitle: "Final Index, QI forms, action plans — Quality Inspection RFIs stay separate from drawing fills.",
+    demoEmail: "site@sharnam.demo",
+    allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
+    points: ["Final Index", "QI checklists", "QI fill RFIs (separate)", "Action plans"],
+    cta: "Enter Quality module",
+    tone: "#15803D",
+    icon: "QA",
+    landingPath: "/workspace",
+    workspaceKey: "quality",
+    group: "module",
+  },
+  comms: {
+    key: "comms",
+    title: "Communications",
+    shortLabel: "Comms",
+    headline: "Matrix, MoM, and PMC RFIs.",
+    subtitle: "Communication matrix parties, meetings, and Request for Information raised by PMC.",
+    demoEmail: "office@sharnam.demo",
+    allowedRoles: ["admin", "office", "employee", "site_employee"],
+    points: ["Communication matrix", "Request for Information", "MoM / follow-ups", "DPR / WPR"],
+    cta: "Enter Comms module",
+    tone: "#2563EB",
+    icon: "CM",
+    landingPath: "/workspace",
+    workspaceKey: "comms",
+    group: "module",
+  },
+  field: {
+    key: "field",
+    title: "Field",
+    shortLabel: "Field",
+    headline: "Day log, photos, site RFIs.",
+    subtitle: "Manpower, equipment, and field evidence for the project spine.",
+    demoEmail: "site@sharnam.demo",
+    allowedRoles: ["admin", "office", "site_employee", "employee", "vendor"],
+    points: ["Day log", "Photos", "Field RFIs", "Reports"],
+    cta: "Enter Field module",
+    tone: "#DC2626",
+    icon: "FD",
+    landingPath: "/workspace",
+    workspaceKey: "field",
+    group: "module",
+  },
+  office: {
+    key: "office",
+    title: "Sharnam Office",
+    shortLabel: "Office",
+    headline: "Full office spine — same as Master tools.",
+    subtitle: "Upload drawings, assign checklists, cost, and project control.",
+    demoEmail: "office@sharnam.demo",
+    allowedRoles: ["office", "admin"],
+    points: ["Master setup", "All modules", "Cost & BOQ", "Publishing"],
+    cta: "Enter Sharnam Office",
+    tone: "#1D4ED8",
+    icon: "OF",
+    landingPath: "/master",
+    workspaceKey: null,
+    group: "role",
   },
   site: {
     key: "site",
     title: "Sharnam Site",
     shortLabel: "Site",
     headline: "Field tools for Sharnam site teams.",
-    subtitle: "Day logs, Final Index fills against published drawings + revisions.",
+    subtitle: "Day logs, checklist fills via RFIs, revisions.",
     demoEmail: "site@sharnam.demo",
     allowedRoles: ["site_employee"],
-    points: ["Upload revisions", "Drawing-gated checklists", "Employee day log"],
+    points: ["Day log", "Checklist fills", "Revisions", "QI forms"],
     cta: "Enter Sharnam Site",
-    tone: "#E4632A",
+    tone: "#15803D",
     icon: "ST",
+    landingPath: "/workspace",
+    workspaceKey: "field",
+    group: "role",
   },
   employee: {
     key: "employee",
     title: "Employee",
     shortLabel: "Employee",
     headline: "Your Sharnam workday desk.",
-    subtitle: "Projects, coordination, and self-service across the spine.",
+    subtitle: "Projects, coordination, and self-service across modules.",
     demoEmail: "employee@sharnam.demo",
     allowedRoles: ["employee", "office"],
     points: ["Project modules", "Communications", "HR self-service"],
     cta: "Enter Employee desk",
-    tone: "#C24D1A",
+    tone: "#64748B",
     icon: "EM",
-  },
-  office: {
-    key: "office",
-    title: "Sharnam Office",
-    shortLabel: "Office",
-    headline: "Run the Sharnam project spine.",
-    subtitle: "Upload drawings, publish GFC, assign checklist types, unlock site fills.",
-    demoEmail: "office@sharnam.demo",
-    allowedRoles: ["office", "admin"],
-    points: ["Upload & publish drawings", "Assign checklist types", "Cost & BOQ"],
-    cta: "Enter Sharnam Office",
-    tone: "#E4632A",
-    icon: "OF",
+    landingPath: "/workspace",
+    group: "role",
   },
   vendor: {
     key: "vendor",
     title: "Vendor",
     shortLabel: "Vendor",
     headline: "Trade partner on Sharnam projects.",
-    subtitle: "Assigned projects — dual checklists, RFIs, and field fills.",
+    subtitle: "Assigned projects — checklist fills when you are the responsible vendor on an RFI.",
     demoEmail: "vendor@sharnam.demo",
     allowedRoles: ["vendor"],
-    points: ["Assigned projects", "Revision upload", "Dual checklist fills"],
+    points: ["Assigned projects", "Fill RFIs", "Photos / dual fills"],
     cta: "Enter Vendor portal",
-    tone: "#1C4A5A",
+    tone: "#0F172A",
     icon: "VN",
+    landingPath: "/workspace",
+    workspaceKey: "drawings",
+    group: "role",
+  },
+  client: {
+    key: "client",
+    title: "Client",
+    shortLabel: "Client",
+    headline: "Owner clarity on every sheet.",
+    subtitle: "Published GFC, concerns, and weekly packs — view-oriented client desk.",
+    demoEmail: "client@sharnam.demo",
+    allowedRoles: ["client"],
+    points: ["Drawing visibility", "Raise concerns", "Weekly reports"],
+    cta: "Enter Client portal",
+    tone: "#1E40AF",
+    icon: "CL",
+    landingPath: "/workspace",
+    workspaceKey: "drawings",
+    group: "role",
   },
 };
+
+export function consumeLoginLanding() {
+  try {
+    const path = localStorage.getItem(LOGIN_LANDING_KEY) || "/workspace";
+    localStorage.removeItem(LOGIN_LANDING_KEY);
+    return path;
+  } catch {
+    return "/workspace";
+  }
+}
 
 function useSpotlight() {
   return (e: MouseEvent<HTMLElement>) => {
@@ -129,6 +241,13 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
                 portal: cfg.key,
               }),
             });
+            try {
+              localStorage.setItem(LOGIN_LANDING_KEY, cfg.landingPath || "/workspace");
+              if (cfg.workspaceKey) setActiveWorkspace(cfg.workspaceKey);
+              else setActiveWorkspace(null);
+            } catch {
+              /* ignore */
+            }
             loginWithToken(data.token, data.user);
           } catch (err) {
             setError(err instanceof Error ? err.message : "Login failed");
@@ -166,16 +285,22 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
 export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_LOGINS }) {
   const cfg = PORTAL_LOGINS[portalKey];
   const { user, loading } = useAuth();
-  if (!loading && user) return <Navigate to="/workspace" replace />;
+  if (!cfg) return <Navigate to="/login" replace />;
+  if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
     <div className="min-h-screen flex flex-col bg-sand">
       <header className="sticky top-0 z-40 bg-white border-b border-line">
-        <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
+        <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between gap-3">
           <BrandLink to="/login" tagTone="light" />
-          <Link to="/login" className="text-xs font-medium text-steel-muted hover:text-brand">
-            All portals
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/options" className="text-xs font-semibold text-brand hover:underline">
+              Finalize UI
+            </Link>
+            <Link to="/login" className="text-xs font-medium text-steel-muted hover:text-brand">
+              All logins
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -221,27 +346,19 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   );
 }
 
-const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
+const MODULE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "field"];
+const ROLE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Designed landing — logo, portal doors, indoor login (no raw photo modules) */
+/** Designed landing — finalize UI, then module + role logins */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const spotlight = useSpotlight();
-  const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
+  const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("master");
   const [showDoor, setShowDoor] = useState(true);
 
-  if (!loading && user) return <Navigate to="/workspace" replace />;
+  if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   const cfg = PORTAL_LOGINS[active];
-
-  const modules = [
-    { name: "Drawings & GFC", blurb: "Upload · register · publish gate", accent: "#E4632A", icon: "DWG" },
-    { name: "Final Index", blurb: "Checklist types per drawing for engineers", accent: "#0B6A78", icon: "FI" },
-    { name: "Quality Inspections", blurb: "QI templates separate from site fills", accent: "#2F6F4E", icon: "QI" },
-    { name: "Cost & cashflow", blurb: "Measurement sheet + periods", accent: "#3D4450", icon: "₹" },
-    { name: "Meetings & DPR", blurb: "Matrix, MoM, daily reports", accent: "#C24D1A", icon: "MTG" },
-    { name: "RFIs & day log", blurb: "Queries, manpower, photos", accent: "#1C4A5A", icon: "FLD" },
-  ];
 
   function openPortal(key: keyof typeof PORTAL_LOGINS) {
     setActive(key);
@@ -254,15 +371,12 @@ export function LoginHubPage() {
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
           <BrandMark size="md" tagTone="light" />
           <div className="flex items-center gap-2 sm:gap-3">
-            <a href="#portals" className="hidden sm:inline text-sm text-steel-muted hover:text-brand font-medium">
-              Portals
-            </a>
-            <a href="#modules" className="hidden md:inline text-sm text-steel-muted hover:text-brand font-medium">
-              Modules
+            <a href="#modules" className="hidden sm:inline text-sm text-steel-muted hover:text-brand font-medium">
+              Module logins
             </a>
             <Link to="/options">
-              <Button type="button" className="!text-xs !py-2">
-                UI options 1–5
+              <Button type="button" className="!text-xs !py-2" onClick={() => applyThemeOption(RECOMMENDED_UI)}>
+                Finalize UI 1–5
               </Button>
             </Link>
           </div>
@@ -281,36 +395,33 @@ export function LoginHubPage() {
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.02]">
               {BRAND_EN}
               <span className="block text-white/90 text-2xl sm:text-3xl mt-3 font-semibold">
-                Project control for construction PMCs
+                Master setup · module logins · clear RFIs
               </span>
             </h1>
             <p className="text-base sm:text-lg text-white/80 max-w-md leading-relaxed">
-              Drawings, RFIs with checklist attach, day logs, communication matrix, submittals, and downloadable DPR/WPR —
-              Office · Site · Vendor · Client.
+              Finalize a blue / red / white / green UI, then sign into Master or the module you manage. Checklist fills need a
+              Drawing or QI RFI; PMC can also raise classic Requests for Information.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button type="button" className="!px-5 !py-3" onClick={() => openPortal("office")}>
-                Enter Sharnam Office
+              <Button type="button" className="!px-5 !py-3" onClick={() => openPortal("master")}>
+                Master module
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="!px-5 !py-3 !bg-white/10 !text-white !border-white/35"
-                onClick={() => openPortal("client")}
-              >
-                Client portal
-              </Button>
+              <Link to="/options">
+                <Button type="button" variant="secondary" className="!px-5 !py-3 !bg-white/10 !text-white !border-white/35">
+                  Finalize UI first
+                </Button>
+              </Link>
             </div>
             <p className="text-xs font-mono text-white/55">Demo password · Demo@1234</p>
           </div>
 
           <Card className="rise rise-delay-1 !p-0 overflow-hidden !bg-white/95">
             <div className="px-5 py-3.5 border-b border-line bg-procore-navy text-white flex justify-between items-center">
-              <span className="text-sm font-semibold">Four portals</span>
+              <span className="text-sm font-semibold">Module doors</span>
               <span className="text-[10px] font-mono text-white/70">Pick & sign in</span>
             </div>
             <div className="grid grid-cols-2 gap-px bg-line">
-              {(["office", "site", "vendor", "client"] as const).map((key) => {
+              {MODULE_KEYS.map((key) => {
                 const p = PORTAL_LOGINS[key];
                 return (
                   <button
@@ -329,45 +440,44 @@ export function LoginHubPage() {
         </div>
       </section>
 
-      <section id="portals" className="max-w-6xl mx-auto px-5 py-12">
-        <div className="rounded-2xl border border-line bg-white overflow-hidden shadow-sm">
-          <div className="px-6 sm:px-8 pt-8 pb-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Step indoors</p>
-            <h2 className="font-display text-2xl sm:text-3xl">Choose your Sharnam login</h2>
-            <p className="text-sm text-steel-muted mt-2 max-w-xl">
-              Sharnam Office · Sharnam Site · Vendor · Client — designed doors, not photo cards.
-            </p>
-          </div>
+      <section id="modules" className="max-w-6xl mx-auto px-5 py-12 space-y-10">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Everyone manages their module</p>
+          <h2 className="font-display text-2xl sm:text-3xl">Module logins</h2>
+          <p className="text-sm text-steel-muted mt-2 max-w-2xl">
+            Master holds project setup, HRM, and documents. Drawings, Quality, Comms, and Field each have their own door.
+          </p>
+        </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 px-4 sm:px-6 pb-6">
-            {HUB_PORTALS.map((key, i) => {
-              const p = PORTAL_LOGINS[key];
-              const selected = active === key && showDoor;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => openPortal(key)}
-                  onMouseMove={spotlight}
-                  className={`spotlight text-left rounded-xl border p-4 transition rise rise-delay-${Math.min(i + 1, 4)} ${
-                    selected ? "border-brand ring-2 ring-brand/25 bg-brand-soft/30" : "border-line hover:border-brand/40 bg-white"
-                  }`}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {MODULE_KEYS.map((key, i) => {
+            const p = PORTAL_LOGINS[key];
+            const selected = active === key && showDoor;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => openPortal(key)}
+                onMouseMove={spotlight}
+                className={`spotlight text-left rounded-xl border p-4 transition rise rise-delay-${Math.min(i + 1, 4)} ${
+                  selected ? "border-brand ring-2 ring-brand/25 bg-brand-soft/30" : "border-line hover:border-brand/40 bg-white"
+                }`}
+              >
+                <span
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-white text-xs font-display"
+                  style={{ background: p.tone }}
                 >
-                  <span
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-white text-xs font-display"
-                    style={{ background: p.tone }}
-                  >
-                    {p.icon}
-                  </span>
-                  <div className="font-display text-lg mt-3">{p.title}</div>
-                  <p className="text-xs text-steel-muted mt-1.5 line-clamp-2 leading-relaxed">{p.subtitle}</p>
-                  <div className="mt-3 text-xs font-semibold text-brand">{selected ? "Open below ↓" : "Open door →"}</div>
-                </button>
-              );
-            })}
-          </div>
+                  {p.icon}
+                </span>
+                <div className="font-display text-base mt-3">{p.title}</div>
+                <p className="text-xs text-steel-muted mt-1.5 line-clamp-2 leading-relaxed">{p.subtitle}</p>
+              </button>
+            );
+          })}
+        </div>
 
-          <div id="indoor-login" className="grid lg:grid-cols-[1fr_0.95fr] border-t border-line">
+        <div className="rounded-2xl border border-line bg-white overflow-hidden shadow-sm">
+          <div className="grid lg:grid-cols-[1fr_0.95fr]">
             <div className="p-8 sm:p-10 bg-sand/50 border-b lg:border-b-0 lg:border-r border-line">
               <span
                 className="inline-flex h-12 w-12 items-center justify-center rounded-xl text-white font-display"
@@ -400,59 +510,24 @@ export function LoginHubPage() {
             </div>
           </div>
         </div>
-      </section>
 
-      <section id="modules" className="max-w-6xl mx-auto px-5 pb-12">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-mark mb-2">After you sign in</p>
-        <h2 className="font-display text-2xl sm:text-3xl mb-6">Designed modules</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {modules.map((m, i) => (
-            <button
-              key={m.name}
-              type="button"
-              onClick={() => openPortal("office")}
-              className={`text-left rounded-xl border border-line bg-white p-5 hover:border-brand/40 transition rise rise-delay-${Math.min(i + 1, 4)}`}
-            >
-              <span
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white text-[10px] font-display"
-                style={{ background: m.accent }}
-              >
-                {m.icon}
-              </span>
-              <div className="font-display text-lg mt-3">{m.name}</div>
-              <p className="text-sm text-steel-muted mt-1.5 leading-relaxed">{m.blurb}</p>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-t border-line bg-white">
-        <div className="max-w-6xl mx-auto px-5 py-10">
-          <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Five live UI systems</p>
-              <h2 className="font-display text-2xl">Pick a style before or after login</h2>
-            </div>
-            <Link to="/options" className="text-sm font-semibold text-brand hover:underline">
-              Open full options hub →
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {LIVE_UI_OPTIONS.map((t) => (
-              <Link
-                key={t.id}
-                to={`/ui/${t.number}`}
-                className="rounded-xl border border-line overflow-hidden bg-sand/40 hover:border-brand transition"
-              >
-                <div className="h-10" style={{ background: t.vars["--color-brand"] }} />
-                <div className="p-3">
-                  <div className="text-xs font-display">
-                    {t.number} · {t.name}
-                  </div>
-                  <div className="text-[11px] text-steel-muted mt-0.5">{t.style}</div>
-                </div>
-              </Link>
-            ))}
+        <div>
+          <h3 className="font-display text-xl mb-3">Role portals</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {ROLE_KEYS.map((key) => {
+              const p = PORTAL_LOGINS[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => openPortal(key)}
+                  className="text-left rounded-xl border border-line bg-white p-4 hover:border-brand/40"
+                >
+                  <div className="font-display text-lg">{p.title}</div>
+                  <p className="text-xs text-steel-muted mt-1">{p.subtitle}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>

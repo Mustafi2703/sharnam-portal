@@ -6,17 +6,18 @@ import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { applyThemeOption, getLiveOption, LIVE_UI_OPTIONS } from "../themes";
 import { BrandMark, BRAND_EN, BRAND_HI } from "../components/Brand";
 import { Button, Card, Input } from "../components/ui";
-import { PORTAL_LOGINS } from "./PortalLogins";
+import { PORTAL_LOGINS, LOGIN_LANDING_KEY, consumeLoginLanding } from "./PortalLogins";
+import { setActiveWorkspace } from "../workspaces";
 
-const HUB: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
+const HUB: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "field", "client"];
 
-/** Professional themed landing — 4 portals + style switcher */
+/** Professional themed landing — module logins + style switcher */
 export default function UiOptionLandingPage() {
   const { optionId } = useParams();
   const opt = getLiveOption(optionId || "1");
   const { user, loading, loginWithToken } = useAuth();
-  const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
-  const [email, setEmail] = useState(PORTAL_LOGINS.office.demoEmail);
+  const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("master");
+  const [email, setEmail] = useState(PORTAL_LOGINS.master.demoEmail);
   const [password, setPassword] = useState("Demo@1234");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,7 +31,7 @@ export default function UiOptionLandingPage() {
     setError("");
   }, [active]);
 
-  if (!loading && user) return <Navigate to="/workspace" replace />;
+  if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   const cfg = PORTAL_LOGINS[active];
 
@@ -82,11 +83,10 @@ export default function UiOptionLandingPage() {
       <section className="max-w-6xl mx-auto px-5 py-10 sm:py-14 grid lg:grid-cols-[1fr_420px] gap-10 items-start">
         <div className="space-y-8">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-brand mb-2">Four portals</p>
-            <h2 className="font-display text-2xl sm:text-3xl tracking-tight">Same project spine. Role-right tools.</h2>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-brand mb-2">Module logins</p>
+            <h2 className="font-display text-2xl sm:text-3xl tracking-tight">Master · Drawings · Quality · Comms · Field</h2>
             <p className="mt-3 text-steel-muted max-w-lg leading-relaxed">
-              Office runs drawings and the matrix. Site fills day logs and checklists. Vendors respond on packages.
-              Clients raise RFIs and read published packs — Procore-shaped, Sharnam-branded.
+              Finalize this UI, then sign into the module you manage. Checklist fills need Drawing or QI RFIs; PMC also raises classic Requests for Information.
             </p>
           </div>
 
@@ -136,7 +136,7 @@ export default function UiOptionLandingPage() {
             <div className="text-sm font-semibold">Sign in · {cfg.title}</div>
             <div className="text-[11px] text-white/65 mt-1 font-mono">Password Demo@1234</div>
           </div>
-          <div className="grid grid-cols-4 gap-px bg-line">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-line">
             {HUB.map((key) => {
               const p = PORTAL_LOGINS[key];
               const on = active === key;
@@ -145,7 +145,7 @@ export default function UiOptionLandingPage() {
                   key={key}
                   type="button"
                   onClick={() => setActive(key)}
-                  className={`text-center py-3 text-xs font-semibold transition ${on ? "bg-brand text-white" : "bg-paper hover:bg-sand"}`}
+                  className={`text-center py-3 text-[10px] sm:text-xs font-semibold transition ${on ? "bg-brand text-white" : "bg-paper hover:bg-sand"}`}
                 >
                   {p.shortLabel}
                 </button>
@@ -168,6 +168,13 @@ export default function UiOptionLandingPage() {
                     portal: cfg.key,
                   }),
                 });
+                try {
+                  localStorage.setItem(LOGIN_LANDING_KEY, cfg.landingPath || "/workspace");
+                  if (cfg.workspaceKey) setActiveWorkspace(cfg.workspaceKey);
+                  else setActiveWorkspace(null);
+                } catch {
+                  /* ignore */
+                }
                 loginWithToken(data.token, data.user);
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Login failed");

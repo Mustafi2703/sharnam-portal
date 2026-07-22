@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { applyThemeOption, LIVE_UI_OPTIONS, type ThemeOption } from "../themes";
-import { BrandMark, BRAND_EN, BRAND_HI, BRAND_TAG } from "../components/Brand";
+import { BrandMark, BRAND_EN, BRAND_HI } from "../components/Brand";
 import { Button } from "../components/ui";
 
 function StylePreview({ opt }: { opt: ThemeOption }) {
@@ -83,23 +83,23 @@ function StylePreview({ opt }: { opt: ThemeOption }) {
   );
 }
 
-/** Public hub — five clean PMC UI systems */
+/** Public hub — finalize UI first, then module logins */
 export default function UiOptionsHubPage() {
   useEffect(() => {
     /* hub uses page sand; themes apply on option open */
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F5F2EE] text-ink">
+    <div className="min-h-screen bg-[#F8FAFC] text-ink">
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-line">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-3">
           <BrandMark size="sm" tagTone="light" />
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-steel-muted hover:text-brand font-semibold">
-              Four portals
+              Module logins
             </Link>
-            <Link to="/ui/1">
-              <Button className="!text-sm !py-2.5">Enter Site Amber</Button>
+            <Link to="/ui/1" onClick={() => applyThemeOption("ui-1")}>
+              <Button className="!text-sm !py-2.5">Recommended · Clear Blue</Button>
             </Link>
           </div>
         </div>
@@ -108,22 +108,22 @@ export default function UiOptionsHubPage() {
       <section className="hero-site text-white">
         <div className="max-w-6xl mx-auto px-5 py-16 sm:py-24">
           <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/70 mb-4">
-            {BRAND_HI} · {BRAND_TAG}
+            Step 1 · Finalize UI · {BRAND_HI}
           </p>
           <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl tracking-tight max-w-2xl leading-[1.05]">
-            Construction PMC software that looks like the site office.
+            Professional PMC chrome — blue, red, white, green.
           </h1>
           <p className="mt-5 text-base sm:text-lg text-white/85 max-w-xl leading-relaxed">
-            Five designed UI systems — same drawings, RFIs, diary, matrix, and client packs underneath. Pick a style,
-            then sign in to Office, Site, Vendor, or Client.
+            Pick a clean style first (Clear Blue recommended). Then open module logins: Master, Drawings, Quality, Comms,
+            Field — everyone manages their desk.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/login">
-              <Button className="!text-sm !py-3 !px-5">Open portal logins</Button>
+            <Link to="/ui/1" onClick={() => applyThemeOption("ui-1")}>
+              <Button className="!text-sm !py-3 !px-5">Finalize Clear Blue</Button>
             </Link>
-            <Link to="/ui/2">
+            <Link to="/login">
               <Button variant="secondary" className="!text-sm !py-3 !px-5 !bg-white/10 !text-white !border-white/30">
-                Try Graphite
+                Module logins
               </Button>
             </Link>
           </div>
@@ -134,9 +134,11 @@ export default function UiOptionsHubPage() {
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-brand mb-2">UI systems 1–5</p>
-            <h2 className="font-display text-3xl tracking-tight">Clean chrome. Spacious tools.</h2>
+            <h2 className="font-display text-3xl tracking-tight">Plus Jakarta · Source Sans · clear colour</h2>
           </div>
-          <p className="text-sm text-steel-muted max-w-sm">No cluttered cards — each option is a full theme for the same Sharnam portal.</p>
+          <p className="text-sm text-steel-muted max-w-sm">
+            Attractive, readable design language — same Master / module tools underneath every style.
+          </p>
         </div>
 
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -163,6 +165,7 @@ export default function UiOptionsHubPage() {
                     <div className="font-display text-lg leading-tight">{opt.name}</div>
                     <div className="text-xs text-steel-muted mt-0.5">
                       {opt.style} · {opt.density}
+                      {opt.number === 1 ? " · recommended" : ""}
                     </div>
                   </div>
                 </div>
@@ -174,7 +177,7 @@ export default function UiOptionsHubPage() {
         </div>
 
         <p className="mt-14 text-xs text-steel-muted">
-          © {BRAND_EN} · Demo password Demo@1234 · office@ / site@ / vendor@ / client@sharnam.demo
+          © {BRAND_EN} · Demo · office@ / site@ / vendor@ / client@sharnam.demo · Demo@1234
         </p>
       </main>
     </div>

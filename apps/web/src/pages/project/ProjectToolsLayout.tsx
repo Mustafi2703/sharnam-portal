@@ -37,7 +37,7 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   ],
   comms: [
     { to: "comms", label: "Matrix / MoM" },
-    { to: "rfis", label: "RFIs" },
+    { to: "rfis", label: "PMC RFIs" },
     { to: "reports", label: "DPR / WPR" },
   ],
   cost: [

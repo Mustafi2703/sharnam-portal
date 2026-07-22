@@ -102,9 +102,20 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   const isClient = req.user!.role === "client";
   const rfiKind = isClient
     ? "ClientConcern"
-    : req.body.rfiKind || (req.body.linkedChecklistItemId || req.body.linkedAssignmentId ? "DrawingChecklist" : "Manual");
+    : req.body.rfiKind ||
+      (req.body.linkedChecklistItemId || req.body.linkedAssignmentId
+        ? "DrawingChecklist"
+        : "RequestForInformation");
   const prefix =
-    rfiKind === "QualityInspection" ? "QI-RFI" : rfiKind === "DrawingChecklist" ? "DWG-RFI" : isClient ? "CON" : "RFI";
+    rfiKind === "QualityInspection"
+      ? "QI-RFI"
+      : rfiKind === "DrawingChecklist"
+        ? "DWG-RFI"
+        : rfiKind === "RequestForInformation"
+          ? "RFI"
+          : isClient
+            ? "CON"
+            : "RFI";
   const number = req.body.number || `${prefix}-${String(count + 1).padStart(3, "0")}`;
   const due = req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 7 * 86400000);
 

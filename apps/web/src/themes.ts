@@ -1,4 +1,4 @@
-/** Five live PMC UI systems — clear readable fonts, red / blue / white / green */
+/** Five live PMC UI systems — finalized professional palette: blue / red / white / green */
 export type ThemeOption = {
   id: string;
   number: 1 | 2 | 3 | 4 | 5;
@@ -11,9 +11,9 @@ export type ThemeOption = {
   vars: Record<string, string>;
 };
 
-/** Shared readable stack — Source Sans 3 body, IBM Plex for headings */
-const FONT_DISPLAY = '"IBM Plex Sans", "Source Sans 3", system-ui, sans-serif';
-const FONT_SANS = '"Source Sans 3", "IBM Plex Sans", system-ui, sans-serif';
+/** Plus Jakarta for headlines · Source Sans for body — clear, professional PMC chrome */
+const FONT_DISPLAY = '"Plus Jakarta Sans", "Source Sans 3", system-ui, sans-serif';
+const FONT_SANS = '"Source Sans 3", "Plus Jakarta Sans", system-ui, sans-serif';
 
 export const LIVE_UI_OPTIONS: ThemeOption[] = [
   {
@@ -21,7 +21,7 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
     number: 1,
     letter: "1",
     name: "Clear Blue",
-    blurb: "Blue primary · red actions · green OK · white paper — easy to read",
+    blurb: "Recommended · blue primary · red signal · green OK · white paper",
     style: "blueprint",
     density: "comfortable",
     radius: "soft",
@@ -40,9 +40,9 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
       "--color-steel-muted": "#64748B",
       "--color-ok": "#15803D",
       "--color-danger": "#DC2626",
-      "--ui-radius": "8px",
+      "--ui-radius": "10px",
       "--ui-radius-sm": "6px",
-      "--ui-nav-h": "64px",
+      "--ui-nav-h": "68px",
       "--ui-gap": "1.5rem",
       "--font-display": FONT_DISPLAY,
       "--font-sans": FONT_SANS,
@@ -52,8 +52,8 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
     id: "ui-2",
     number: 2,
     letter: "2",
-    name: "Steel Desk",
-    blurb: "Navy chrome · blue links · green status · crisp registers",
+    name: "Navy Desk",
+    blurb: "Deep navy chrome · blue links · green status · crisp registers",
     style: "graphite",
     density: "comfortable",
     radius: "sharp",
@@ -72,9 +72,9 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
       "--color-steel-muted": "#64748B",
       "--color-ok": "#16A34A",
       "--color-danger": "#DC2626",
-      "--ui-radius": "4px",
-      "--ui-radius-sm": "2px",
-      "--ui-nav-h": "64px",
+      "--ui-radius": "6px",
+      "--ui-radius-sm": "4px",
+      "--ui-nav-h": "68px",
       "--ui-gap": "1.35rem",
       "--font-display": FONT_DISPLAY,
       "--font-sans": FONT_SANS,
@@ -104,9 +104,9 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
       "--color-steel-muted": "#4B5563",
       "--color-ok": "#16A34A",
       "--color-danger": "#DC2626",
-      "--ui-radius": "10px",
-      "--ui-radius-sm": "6px",
-      "--ui-nav-h": "64px",
+      "--ui-radius": "12px",
+      "--ui-radius-sm": "8px",
+      "--ui-nav-h": "68px",
       "--ui-gap": "1.5rem",
       "--font-display": FONT_DISPLAY,
       "--font-sans": FONT_SANS,
@@ -117,7 +117,7 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
     number: 4,
     letter: "4",
     name: "White Office",
-    blurb: "White first · blue brand · red mark · green confirmation",
+    blurb: "White-first · blue brand · red mark · green confirmation",
     style: "blueprint",
     density: "comfortable",
     radius: "sharp",
@@ -136,10 +136,10 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
       "--color-steel-muted": "#6B7280",
       "--color-ok": "#15803D",
       "--color-danger": "#B91C1C",
-      "--ui-radius": "6px",
+      "--ui-radius": "8px",
       "--ui-radius-sm": "4px",
-      "--ui-nav-h": "68px",
-      "--ui-gap": "1.5rem",
+      "--ui-nav-h": "72px",
+      "--ui-gap": "1.6rem",
       "--font-display": FONT_DISPLAY,
       "--font-sans": FONT_SANS,
     },
@@ -149,7 +149,7 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
     number: 5,
     letter: "5",
     name: "Signal Red",
-    blurb: "Red CTAs · blue nav · green OK · white content",
+    blurb: "Red CTAs · blue nav · green OK · white content panels",
     style: "amber",
     density: "comfortable",
     radius: "soft",
@@ -168,9 +168,9 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
       "--color-steel-muted": "#6B7280",
       "--color-ok": "#16A34A",
       "--color-danger": "#991B1B",
-      "--ui-radius": "8px",
+      "--ui-radius": "10px",
       "--ui-radius-sm": "6px",
-      "--ui-nav-h": "64px",
+      "--ui-nav-h": "68px",
       "--ui-gap": "1.5rem",
       "--font-display": FONT_DISPLAY,
       "--font-sans": FONT_SANS,
@@ -179,8 +179,9 @@ export const LIVE_UI_OPTIONS: ThemeOption[] = [
 ];
 
 export const THEME_OPTIONS: ThemeOption[] = [...LIVE_UI_OPTIONS];
-
 export const THEME_STORAGE_KEY = "sharnam_theme_option";
+/** Recommended finalized look */
+export const RECOMMENDED_UI = "ui-1";
 
 export function getLiveOption(numOrId: string | number) {
   const n = String(numOrId);
@@ -215,5 +216,5 @@ export function loadSavedTheme() {
   } catch {
     /* ignore */
   }
-  return applyThemeOption("ui-1");
+  return applyThemeOption(RECOMMENDED_UI);
 }

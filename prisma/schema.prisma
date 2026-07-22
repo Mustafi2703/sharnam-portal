@@ -656,8 +656,8 @@ model Rfi {
   number                String
   subject               String
   question              String
-  /// DrawingChecklist | QualityInspection | Manual | ClientConcern
-  rfiKind               String    @default("Manual")
+  /// RequestForInformation | DrawingChecklist | QualityInspection | Manual | ClientConcern
+  rfiKind               String    @default("RequestForInformation")
   status                String    @default("Open")
   ballInCourt           String    @default("Assignee")
   assignedToId          String?

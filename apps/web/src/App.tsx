@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
-import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
+import MasterModulePage from "./pages/MasterModulePage";
+import { LoginHubPage, PortalLoginPage, consumeLoginLanding } from "./pages/PortalLogins";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ChecklistPage from "./pages/ChecklistPage";
@@ -47,16 +48,23 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function HomeRedirect() {
   const { user } = useAuth();
+  if (user?.role === "admin" || user?.role === "office" || user?.portal === "office" || user?.portal === "admin") {
+    try {
+      const landing = localStorage.getItem("sharnam_login_landing");
+      if (landing) return <Navigate to={consumeLoginLanding()} replace />;
+    } catch {
+      /* ignore */
+    }
+    return <Navigate to="/master" replace />;
+  }
   if (
-    user?.portal === "office" ||
     user?.portal === "site" ||
     user?.role === "site_employee" ||
-    user?.role === "office" ||
     user?.role === "vendor"
   ) {
-    return <Navigate to="/workspace" replace />;
+    return <Navigate to={consumeLoginLanding()} replace />;
   }
-  return <DashboardPage />;
+  return <Navigate to={consumeLoginLanding()} replace />;
 }
 
 export default function App() {
@@ -68,6 +76,11 @@ export default function App() {
       <Route path="/ui/:optionId" element={<UiOptionLandingPage />} />
 
       <Route path="/login" element={<LoginHubPage />} />
+      <Route path="/login/master" element={<PortalLoginPage portalKey="master" />} />
+      <Route path="/login/drawings" element={<PortalLoginPage portalKey="drawings" />} />
+      <Route path="/login/quality" element={<PortalLoginPage portalKey="quality" />} />
+      <Route path="/login/comms" element={<PortalLoginPage portalKey="comms" />} />
+      <Route path="/login/field" element={<PortalLoginPage portalKey="field" />} />
       <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
       <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
       <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
@@ -91,8 +104,10 @@ export default function App() {
               <Routes>
                 <Route path="/app" element={<HomeRedirect />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
+                <Route path="/master" element={<MasterModulePage />} />
                 <Route path="/themes" element={<ThemeOptionsPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
                   <Route path="directory" element={<DirectoryPage />} />

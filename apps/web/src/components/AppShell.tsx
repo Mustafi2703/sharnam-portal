@@ -8,7 +8,8 @@ import { LIVE_UI_OPTIONS, THEME_STORAGE_KEY, applyThemeOption } from "../themes"
 import { api } from "../api";
 
 const primaryNav = [
-  { to: "/workspace", label: "Home", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
+  { to: "/master", label: "Master", roles: ["admin", "office"] },
+  { to: "/workspace", label: "Modules", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/crm", label: "CRM", roles: ["admin", "office", "employee"] },
   { to: "/hrm", label: "HR / Directory", roles: ["admin", "office"] },
