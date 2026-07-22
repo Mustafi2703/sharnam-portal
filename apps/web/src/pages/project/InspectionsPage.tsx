@@ -57,21 +57,19 @@ export default function InspectionsPage() {
       <PageHeader
         eyebrow="Quality assurance"
         title="Inspections & action plans"
-        subtitle="Raise an inspection with a checklist template — items become the form. Assign people, link a published drawing, mark Ready when the form can be filled. Docs land under project OneDrive / Inspections."
+        subtitle="Raise an inspection with a checklist template — items become the form. Assign people, optionally link a drawing, mark Ready. Unresolved lines can spawn a separate QI fill RFI for matrix / vendor."
         actions={
-          <Badge tone={data?.canInspect ? "ok" : "warn"}>
-            {data?.canInspect ? "Drawings gate open" : "Publish drawings first"}
-          </Badge>
+          <Badge tone="ok">QI flow open</Badge>
         }
       />
 
       <WorkflowStrip
-        active={data?.canInspect ? 1 : 0}
+        active={1}
         steps={[
-          { label: "Drawing published", hint: "Required gate" },
           { label: "Raise inspection", hint: "Checklist → form" },
           { label: "Mark Ready", hint: "Assignee fills" },
-          { label: "Close / RFI", hint: "Unresolved items" },
+          { label: "QI fill RFI", hint: "Matrix / vendor" },
+          { label: "Close", hint: "Unresolved → RFI" },
         ]}
       />
 
@@ -147,7 +145,7 @@ export default function InspectionsPage() {
             </Select>
             <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <Button type="submit" className="sm:col-span-2 lg:col-span-3" disabled={!data?.canInspect}>
+            <Button type="submit" className="sm:col-span-2 lg:col-span-3">
               Create draft inspection
             </Button>
           </form>

@@ -59,8 +59,8 @@ export default function WorkspacePage() {
           </h1>
           <p className="mt-2 text-sm text-steel-muted max-w-xl leading-relaxed">
             {isClient
-              ? "Select your project, then open Drawings, Quality, or Reports — view-only client desk with designed tools (no photo tiles)."
-              : "Select a project, then open a module. Use the right Actions panel inside for upload drawing, assign checklist, and engineer fills."}
+              ? "Select your project, then open a module tool set — Drawings & Documents, Quality, Comms, Field, or Reports."
+              : "Each portal login lands here. Pick a project, then choose a module (tools). Documents (DMS) holds files; checklists fill via Drawing or QI RFIs for matrix parties / vendors."}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -107,7 +107,7 @@ export default function WorkspacePage() {
       {selected && (
         <section className="space-y-4">
           <div className="flex items-end justify-between gap-3">
-            <h2 className="font-display text-xl">2 · Modules for {selected.code}</h2>
+            <h2 className="font-display text-xl">2 · Select tools / module for {selected.code}</h2>
             {activeWs && (
               <span className="text-xs text-steel-muted">
                 Focused: <strong className="text-brand">{WORKSPACES.find((w) => w.key === activeWs)?.title}</strong>

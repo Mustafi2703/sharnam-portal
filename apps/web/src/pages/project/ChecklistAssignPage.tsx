@@ -60,7 +60,7 @@ export default function ChecklistAssignPage() {
         token,
         body: JSON.stringify({ templateId }),
       });
-      setMsg("Checklist type assigned. Engineers fill it against a published drawing.");
+      setMsg("Checklist type assigned. Raise a Drawing or QI fill RFI so matrix parties / vendor can complete it.");
       setTemplateId("");
       await load();
     } catch (err) {

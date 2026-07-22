@@ -33,7 +33,7 @@ export default function ChecklistFillPage() {
     ]);
     setAssignment(a);
     const published = d.filter((x) => x.isPublished && (x.revisions?.length || 0) > 0);
-    setDrawings(published);
+    setDrawings(published.length ? published : d);
     const init: Record<string, LineResponse> = {};
     a.template.items.forEach((i: Item) => {
       init[i.id] = emptyLine();
@@ -73,10 +73,6 @@ export default function ChecklistFillPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMsg("");
-    if (!drawingId || !revisionId) {
-      setMsg("Choose the drawing and the revision this form applies to.");
-      return;
-    }
     try {
       const payload: Record<string, { answer: string; remarks: string }> = {};
       const itemComments: Record<string, string> = {};
@@ -88,8 +84,8 @@ export default function ChecklistFillPage() {
       const fd = new FormData();
       fd.append("responsesJson", JSON.stringify(payload));
       fd.append("itemCommentsJson", JSON.stringify(itemComments));
-      fd.append("drawingId", drawingId);
-      fd.append("revisionId", revisionId);
+      if (drawingId) fd.append("drawingId", drawingId);
+      if (revisionId) fd.append("revisionId", revisionId);
       if (selectedRev?.revisionNumber) fd.append("revisionNumber", selectedRev.revisionNumber);
       fd.append("remarks", remarks);
       fd.append("status", "Submitted");
@@ -172,7 +168,7 @@ export default function ChecklistFillPage() {
             <PageHeader
               eyebrow={assignment.template.category}
               title={assignment.template.name}
-              subtitle="Pick a published drawing and revision, then fill each line with Yes/No/N.A., comment, photos, and docs."
+              subtitle="Fill each line with Yes/No/N.A., comment, photos, and docs. Drawing / revision is optional context. Intended fillers: Communication Matrix parties and the responsible vendor on the fill RFI."
               actions={
                 <div className="text-right">
                   <div className="text-2xl font-display text-brand">
@@ -186,8 +182,21 @@ export default function ChecklistFillPage() {
             <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
               <aside className="space-y-5 sticky top-20">
                 <Card className="brand-frame !p-5">
-                  <h3 className="font-semibold text-sm mb-3">1 · Drawing</h3>
+                  <h3 className="font-semibold text-sm mb-3">Drawing (optional)</h3>
                   <div className="scroll-panel space-y-2 list-roomy pr-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDrawingId("");
+                        setRevisionId("");
+                      }}
+                      className={`w-full text-left border px-3 py-3 transition ${
+                        !drawingId ? "selected-ring border-brand" : "border-line hover:border-brand/40"
+                      }`}
+                    >
+                      <div className="text-sm font-medium">No drawing linked</div>
+                      <div className="text-[11px] text-steel-muted mt-1">Fill without a sheet</div>
+                    </button>
                     {drawings.map((d) => (
                       <button
                         key={d.id}
@@ -203,15 +212,15 @@ export default function ChecklistFillPage() {
                       </button>
                     ))}
                     {!drawings.length && (
-                      <p className="text-xs text-warn leading-relaxed">
-                        No published drawings with files yet. Upload & publish a drawing first (any role except client).
+                      <p className="text-xs text-steel-muted leading-relaxed">
+                        No drawings on this project yet — you can still submit the checklist.
                       </p>
                     )}
                   </div>
                 </Card>
 
                 <Card className="!p-5">
-                  <h3 className="font-semibold text-sm mb-3">2 · Revision</h3>
+                  <h3 className="font-semibold text-sm mb-3">Revision (optional)</h3>
                   <div className="space-y-2">
                     {revs.map((r: any) => (
                       <button
@@ -268,7 +277,7 @@ export default function ChecklistFillPage() {
                     <div className="font-semibold mt-1">
                       {selectedDrawing
                         ? `${selectedDrawing.drawingNumber} · ${selectedRev?.revisionNumber || "—"}`
-                        : "No drawing selected"}
+                        : "No drawing (OK)"}
                     </div>
                   </div>
                   <Input
@@ -381,7 +390,7 @@ export default function ChecklistFillPage() {
                     />
                   </label>
                   {canFill && (
-                    <Button type="submit" disabled={!drawingId || !revisionId}>
+                    <Button type="submit">
                       Submit checklist form
                     </Button>
                   )}

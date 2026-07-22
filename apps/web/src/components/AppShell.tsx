@@ -63,12 +63,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex flex-col bg-sand">
       <header className="procore-topbar sticky top-0 z-40 shadow-sm">
         <div
-          className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 border-b border-white/10 bg-procore-navy text-white"
-          style={{ minHeight: "var(--ui-nav-h, 56px)" }}
+          className="flex items-center gap-4 sm:gap-5 px-5 sm:px-8 border-b border-white/10 bg-procore-navy text-white"
+          style={{ minHeight: "var(--ui-nav-h, 64px)" }}
         >
           <Link to="/workspace" className="shrink-0 flex items-center gap-2.5" aria-label={`${BRAND_EN} home`}>
             <BrandMark size="sm" tagTone="dark" compact showTag={false} />
-            <span className="hidden sm:inline font-display text-[15px] tracking-tight text-white">{BRAND_EN}</span>
+            <span className="hidden sm:inline font-display text-base tracking-tight text-white">{BRAND_EN}</span>
           </Link>
 
           <label className="flex items-center gap-2 min-w-0 flex-1 max-w-md">
@@ -116,8 +116,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-2 sm:px-4 min-h-12 bg-paper">
-          <nav className="flex items-center gap-0.5 overflow-x-auto min-w-0 flex-1 py-1">
+        <div className="flex items-center gap-2 px-3 sm:px-6 min-h-14 bg-paper">
+          <nav className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1 py-2">
             {primaryNav
               .filter((n) => !user || n.roles.includes(user.role))
               .map((n) => (
@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   to={n.to}
                   end={n.to === "/workspace"}
                   className={({ isActive }) =>
-                    `px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
+                    `px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -140,7 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   to={`/projects/${projectId}`}
                   end
                   className={({ isActive }) =>
-                    `px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
+                    `px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -150,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <NavLink
                   to={`/projects/${projectId}/comms`}
                   className={({ isActive }) =>
-                    `hidden sm:inline-flex px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
+                    `hidden sm:inline-flex px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -160,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <NavLink
                   to={`/projects/${projectId}/reports`}
                   className={({ isActive }) =>
-                    `hidden md:inline-flex px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
+                    `hidden md:inline-flex px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }

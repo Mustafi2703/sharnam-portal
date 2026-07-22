@@ -228,7 +228,11 @@ drawingsRouter.get("/project/:projectId/gate", async (req, res) => {
   const published = await prisma.drawing.count({
     where: { projectId: req.params.projectId, isPublished: true },
   });
-  res.json({ canSubmitChecklist: published > 0, publishedCount: published });
+  res.json({
+    canSubmitChecklist: true,
+    publishedCount: published,
+    note: "Checklists fill via Drawing Checklist / QI RFIs — drawings are optional context, not a lock.",
+  });
 });
 
 drawingsRouter.post(

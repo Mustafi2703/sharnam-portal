@@ -656,6 +656,8 @@ model Rfi {
   number                String
   subject               String
   question              String
+  /// DrawingChecklist | QualityInspection | Manual | ClientConcern
+  rfiKind               String    @default("Manual")
   status                String    @default("Open")
   ballInCourt           String    @default("Assignee")
   assignedToId          String?
@@ -664,7 +666,10 @@ model Rfi {
   closedAt              DateTime?
   linkedDrawingId       String?
   drawingPinJson        String?
+  /// Legacy: often stores checklist template id
   linkedChecklistItemId String?
+  /// Checklist assignment to be filled by matrix parties / vendor
+  linkedAssignmentId    String?
   specSectionLink       String?
   responsibleVendorId   String?
   questionReceivedFrom  String?

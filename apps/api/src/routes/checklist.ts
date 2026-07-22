@@ -101,14 +101,36 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
       },
     },
   });
-  const gate = await prisma.drawing.count({
+  const published = await prisma.drawing.count({
     where: { projectId: req.params.projectId, isPublished: true },
+  });
+  const fillRfis = await prisma.rfi.findMany({
+    where: {
+      projectId: req.params.projectId,
+      status: { in: ["Open", "Answered"] },
+      rfiKind: { in: ["DrawingChecklist", "QualityInspection"] },
+    },
+    select: {
+      id: true,
+      number: true,
+      subject: true,
+      rfiKind: true,
+      linkedAssignmentId: true,
+      linkedChecklistItemId: true,
+      responsibleVendorId: true,
+      status: true,
+    },
   });
   res.json({
     assignments,
-    canSubmit: gate > 0,
-    publishedDrawings: gate,
+    canSubmit: true,
+    publishedDrawings: published,
     checklistType: type || "all",
+    fillRfis,
+    flow:
+      type === "QualityInspection"
+        ? "Raise a Quality Inspection RFI to ask matrix parties / vendor to fill QI checklists."
+        : "Upload / assign checklists under Drawings → Documents, then raise a Drawing Checklist RFI for matrix parties / vendor to fill.",
   });
 });
 
@@ -123,33 +145,33 @@ checklistRouter.post(
     });
     if (!assignment) return res.status(404).json({ error: "Assignment not found" });
 
-    const published = await prisma.drawing.count({
-      where: { projectId: assignment.projectId, isPublished: true },
+    const { canFillChecklistAssignment } = await import("../services/reportPacks.js");
+    const fillGate = await canFillChecklistAssignment({
+      projectId: assignment.projectId,
+      assignmentId: assignment.id,
+      templateId: assignment.templateId,
+      user: req.user!,
     });
-    if (published === 0) {
-      return res.status(400).json({
-        error: "Checklist submission blocked: upload and publish at least one drawing for this project first.",
-      });
+    if (!fillGate.ok) {
+      return res.status(403).json({ error: fillGate.reason });
     }
 
     const { responsesJson, drawingId, revisionId, revisionNumber, remarks, status } = req.body;
-    if (!drawingId) {
-      return res.status(400).json({ error: "Select a drawing before submitting the checklist." });
-    }
-    const drawing = await prisma.drawing.findFirst({
-      where: { id: drawingId, projectId: assignment.projectId },
-      include: { revisions: { orderBy: { createdAt: "desc" } } },
-    });
-    if (!drawing) return res.status(400).json({ error: "Drawing not found on this project." });
-    if (!drawing.isPublished || !drawing.revisions.length) {
-      return res.status(400).json({
-        error: "Checklist fill unlocks only after a drawing file is uploaded and published.",
+
+    let drawing: { id: string; revisions: { id: string; revisionNumber: string }[] } | null = null;
+    let rev: { id: string; revisionNumber: string } | null = null;
+    if (drawingId) {
+      const found = await prisma.drawing.findFirst({
+        where: { id: drawingId, projectId: assignment.projectId },
+        include: { revisions: { orderBy: { createdAt: "desc" } } },
       });
+      if (!found) return res.status(400).json({ error: "Drawing not found on this project." });
+      drawing = found;
+      rev = revisionId
+        ? found.revisions.find((r) => r.id === revisionId) || null
+        : found.revisions[0] || null;
+      if (revisionId && !rev) return res.status(400).json({ error: "Select a valid revision for this drawing." });
     }
-    let rev = revisionId
-      ? drawing.revisions.find((r) => r.id === revisionId)
-      : drawing.revisions[0];
-    if (!rev) return res.status(400).json({ error: "Select a revision for this drawing." });
 
     let responses = responsesJson;
     if (typeof responses === "string") {
@@ -165,9 +187,9 @@ checklistRouter.post(
     const submission = await prisma.checklistSubmission.create({
       data: {
         assignmentId: assignment.id,
-        drawingId: drawing.id,
-        revisionId: rev.id,
-        revisionNumber: revisionNumber || rev.revisionNumber,
+        drawingId: drawing?.id || null,
+        revisionId: rev?.id || null,
+        revisionNumber: revisionNumber || rev?.revisionNumber || null,
         submittedById: req.user!.id,
         status: status || "Submitted",
         responsesJson: responses,
@@ -216,7 +238,7 @@ checklistRouter.post(
       userId: req.user!.id,
       entity: "ChecklistSubmission",
       entityId: submission.id,
-      meta: { files: files.length, itemAttachments: itemAttachCount },
+      meta: { files: files.length, itemAttachments: itemAttachCount, fillVia: fillGate.via },
     });
 
     if (assignment.project.notifyOnChecklistSubmit) {

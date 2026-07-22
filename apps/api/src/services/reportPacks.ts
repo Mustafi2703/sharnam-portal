@@ -318,3 +318,58 @@ export async function roleOnRfiMatrix(projectId: string, role: string) {
   const pool = rfiRows.length ? rfiRows : rows;
   return pool.some((m) => m.fromRole === role || m.toRole === role);
 }
+
+/**
+ * Who may fill a checklist assignment:
+ * - admin / office always
+ * - open DrawingChecklist / QualityInspection RFI linked to this assignment/template:
+ *   matrix parties, assigned user, or vendor on that RFI
+ * - otherwise site / employee / vendor (assigned checklists stay fillable)
+ */
+export async function canFillChecklistAssignment(opts: {
+  projectId: string;
+  assignmentId: string;
+  templateId: string;
+  user: { id: string; role: string; email?: string | null };
+}) {
+  const { projectId, assignmentId, templateId, user } = opts;
+  if (user.role === "admin" || user.role === "office") return { ok: true as const, via: "office" };
+
+  const openRfis = await prisma.rfi.findMany({
+    where: {
+      projectId,
+      status: { in: ["Open", "Answered"] },
+      rfiKind: { in: ["DrawingChecklist", "QualityInspection"] },
+      OR: [{ linkedAssignmentId: assignmentId }, { linkedChecklistItemId: templateId }],
+    },
+    include: { vendor: { select: { id: true, email: true } } },
+  });
+
+  if (openRfis.length) {
+    if (openRfis.some((r) => r.assignedToId === user.id)) return { ok: true as const, via: "assignee" };
+    const onMatrix = await roleOnRfiMatrix(projectId, user.role);
+    if (onMatrix) return { ok: true as const, via: "matrix" };
+    if (user.role === "vendor") {
+      const email = (user.email || "").toLowerCase();
+      const vendorHit = openRfis.some(
+        (r) =>
+          r.responsibleVendorId &&
+          (r.vendor?.email || "").toLowerCase() === email
+      );
+      if (vendorHit || openRfis.some((r) => r.responsibleVendorId)) {
+        // Vendor role on portal with a responsible vendor set on the RFI
+        if (openRfis.some((r) => r.responsibleVendorId)) return { ok: true as const, via: "vendor" };
+      }
+    }
+    return {
+      ok: false as const,
+      reason: "Only Communication Matrix parties, the RFI assignee, or the responsible vendor can fill this checklist.",
+    };
+  }
+
+  if (["site_employee", "employee", "vendor"].includes(user.role)) {
+    return { ok: true as const, via: "role" };
+  }
+  return { ok: false as const, reason: "You cannot fill this checklist." };
+}
+

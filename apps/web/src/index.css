@@ -5,26 +5,26 @@
   Tokens overridden per UI option 1–5 via themes.ts
 */
 @theme {
-  --color-brand: #e4632a;
-  --color-brand-dark: #c24d1a;
-  --color-brand-soft: #fff4ed;
-  --color-brand-glow: #f4a574;
-  --color-mark: #0b6a78;
-  --color-accent: #0b6a78;
-  --color-steel: #1c2430;
-  --color-steel-2: #3d4450;
-  --color-steel-muted: #6b6560;
-  --color-sand: #f7f4f0;
-  --color-ink: #1a1a1a;
+  --color-brand: #1d4ed8;
+  --color-brand-dark: #1e3a8a;
+  --color-brand-soft: #eff6ff;
+  --color-brand-glow: #93c5fd;
+  --color-mark: #dc2626;
+  --color-accent: #1d4ed8;
+  --color-steel: #0f172a;
+  --color-steel-2: #334155;
+  --color-steel-muted: #64748b;
+  --color-sand: #f8fafc;
+  --color-ink: #0f172a;
   --color-paper: #ffffff;
-  --color-line: #e6ddd4;
-  --color-ok: #1f7a3f;
+  --color-line: #e2e8f0;
+  --color-ok: #15803d;
   --color-warn: #b45309;
-  --color-danger: #c23030;
-  --color-procore-navy: #1c2430;
-  --color-procore-blue: #e4632a;
-  --font-sans: "DM Sans", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Syne", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-danger: #dc2626;
+  --color-procore-navy: #1e3a8a;
+  --color-procore-blue: #1d4ed8;
+  --font-sans: "Source Sans 3", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "IBM Plex Sans", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -39,8 +39,9 @@ body {
   font-family: var(--font-sans);
   color: var(--color-ink);
   background: var(--color-sand);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -74,8 +75,8 @@ html[data-ui-radius="sharp"] .rounded-lg {
 
 .font-display {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 .font-mono {

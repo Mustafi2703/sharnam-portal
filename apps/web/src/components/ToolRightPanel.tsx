@@ -163,17 +163,34 @@ export function ToolRightPanel({
         }
         break;
       case "dms":
-        if (canUpload) actions.push({ label: "Upload to current folder", to: "dms", primary: true });
+        if (canUpload) {
+          actions.push(
+            { label: "Upload to current folder", to: "dms", primary: true },
+            { label: "Assign checklist types", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
+            {
+              label: "Raise drawing fill RFI",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=DrawingChecklist`),
+              secondary: true,
+            }
+          );
+        }
         break;
       case "checklist":
       case "quality-inspections":
         if (canFill) {
           actions.push(
-            { label: "Open Final Index", to: "checklist", primary: true, disabled: ctx.publishedCount === 0 },
-            { label: "Assign checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true }
+            { label: "Open checklist catalog", to: tool === "quality-inspections" ? "quality-inspections" : "checklist", primary: true },
+            { label: "Assign checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
+            {
+              label: tool === "quality-inspections" ? "Raise QI fill RFI" : "Raise drawing fill RFI",
+              onClick: () =>
+                navigate(
+                  `/projects/${ctx.projectId}/rfis?kind=${tool === "quality-inspections" ? "QualityInspection" : "DrawingChecklist"}`
+                ),
+              secondary: true,
+            }
           );
         }
-        if (canUpload) actions.push({ label: "Upload drawing first", to: "drawings", secondary: true });
         break;
       case "rfis":
         actions.push(
@@ -300,18 +317,11 @@ export function ToolRightPanel({
       </div>
 
       <div className="p-4 space-y-4 flex-1">
-        {(tool === "checklist" || tool === "quality-inspections" || tool === "drawings" || !tool) && (
+        {(tool === "checklist" || tool === "quality-inspections" || tool === "rfis") && (
           <div className="rounded-[var(--ui-radius,10px)] border border-line bg-sand/60 p-4">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">Drawing gate</div>
-            <div className="mt-2">
-              <Badge tone={ctx.publishedCount > 0 ? "ok" : "warn"}>
-                {ctx.publishedCount > 0 ? `${ctx.publishedCount} published` : "Locked"}
-              </Badge>
-            </div>
+            <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">Fill flow</div>
             <p className="text-xs text-steel-muted mt-2 leading-relaxed">
-              {ctx.publishedCount > 0
-                ? "Checklist fills unlock against published GFC sheets."
-                : "Publish a drawing to unlock checklist / QI fills."}
+              Assign checklist → raise Drawing or QI fill RFI → matrix parties / vendor fill (drawing optional). Documents live under Documents (DMS).
             </p>
           </div>
         )}

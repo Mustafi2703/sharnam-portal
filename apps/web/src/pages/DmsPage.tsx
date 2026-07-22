@@ -47,9 +47,9 @@ export default function DmsPage() {
           ← Project
         </Link>
         <PageHeader
-          eyebrow="Documents · OneDrive per project"
-          title="Project drive"
-          subtitle="Each project has its own OneDrive tree. Exact filepath is shown below — pipe uploads into the open folder (Drawings, Documents/Communication-Matrix, Design-Coordination, Inspections…). Sync-on-open; Graph later."
+          eyebrow="Documents module · DMS"
+          title="Project documents"
+          subtitle="This is the Documents module for the project (OneDrive-style). Keep drawings, checklist packs, RFIs, and inspections here. Assign checklists on Quality / Final Index, then raise a Drawing fill RFI so matrix parties and vendors complete them."
           actions={<Badge tone={syncing ? "warn" : "ok"}>{syncing ? "Syncing…" : "Live browse"}</Badge>}
         />
       </div>

@@ -8,22 +8,25 @@ export type ChecklistFamily = "SiteExecution" | "QualityInspection";
 
 const FAMILY_META: Record<
   ChecklistFamily,
-  { eyebrow: string; title: string; subtitle: string; otherTo: string; otherLabel: string }
+  { eyebrow: string; title: string; subtitle: string; otherTo: string; otherLabel: string; rfiKind: string }
 > = {
   SiteExecution: {
     eyebrow: "Site execution",
     title: "Final Index checklists",
     subtitle:
-      "Assign checklist types to the project. Engineers open a fill window, pick a published drawing + revision, then complete Yes / No / N.A.",
+      "Assign / upload checklist types on the project. Raise a Drawing Checklist RFI so Communication Matrix parties and the responsible vendor can fill — no drawing required.",
     otherTo: "quality-inspections",
     otherLabel: "Quality Inspections →",
+    rfiKind: "DrawingChecklist",
   },
   QualityInspection: {
     eyebrow: "Quality assurance",
     title: "Quality inspection checklists",
-    subtitle: "Separate QI library (pre-pour, drawing review…). Fill against a published sheet the same way as Final Index.",
+    subtitle:
+      "Separate QI library. Raise a Quality Inspection RFI (separate from drawing fill RFIs) for matrix parties / vendor to complete the form.",
     otherTo: "checklist",
     otherLabel: "Final Index (site) →",
+    rfiKind: "QualityInspection",
   },
 };
 
@@ -128,21 +131,25 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                   {showAssign ? "Hide assign" : "Assign checklist type"}
                 </Button>
               )}
-              <Badge tone={data?.canSubmit ? "ok" : "warn"}>
-                {data?.canSubmit ? `${data.publishedDrawings} published drawings` : "Waiting on published drawings"}
-              </Badge>
+              <Badge tone="ok">Ready to assign & fill</Badge>
+              <Link
+                to={`/projects/${id}/rfis?kind=${meta.rfiKind}`}
+                className="text-xs font-semibold text-mark underline"
+              >
+                Raise fill RFI →
+              </Link>
             </div>
           }
         />
       </div>
 
       <WorkflowStrip
-        active={data?.canSubmit ? (canFill ? 2 : 1) : 0}
+        active={2}
         steps={[
-          { label: "Drawing published", hint: "Unlocks fills" },
-          { label: "Assign checklist type", hint: "Catalog per project" },
-          { label: "Pick drawing + rev", hint: "Engineer fill window" },
-          { label: "Yes / No / N.A.", hint: "Audit + CSV" },
+          { label: "Assign checklist", hint: "Upload type to project" },
+          { label: "Raise fill RFI", hint: family === "QualityInspection" ? "QI RFI" : "Drawing RFI" },
+          { label: "Matrix / vendor fill", hint: "Comments + photos + docs" },
+          { label: "Audit / close", hint: "CSV + respond" },
         ]}
       />
 
@@ -150,7 +157,7 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
         <Card className="bg-brand-soft/40 border-brand/20">
           <div className="font-semibold">Client view</div>
           <p className="text-sm text-steel-muted mt-1">
-            You can see which checklist types are on the project. Filling is for site / office / vendors after drawings are published.
+            You can see which checklist types are on the project. Filling is for matrix parties, office, site, and vendors via fill RFIs.
           </p>
         </Card>
       )}
@@ -159,7 +166,7 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
         <Card>
           <h3 className="font-semibold mb-1">Assign checklist type</h3>
           <p className="text-xs text-steel-muted mb-3">
-            Each type becomes a form engineers fill against a specific published drawing.
+            Each type becomes a fillable form. Then raise a {family === "QualityInspection" ? "QI" : "Drawing"} fill RFI so matrix parties / vendor complete it.
           </p>
           <div className="flex flex-wrap gap-2 items-end">
             <label className="text-sm flex-1 min-w-[220px]">
@@ -257,12 +264,18 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                           <Button
                             type="button"
                             className="!text-xs !py-1.5"
-                            disabled={!data?.canSubmit}
-                            title={!data?.canSubmit ? "Publish a drawing first" : undefined}
                             onClick={() => openFill(a.id)}
                           >
-                            Fill vs drawing
+                            Fill form
                           </Button>
+                        )}
+                        {canManage && (
+                          <Link
+                            to={`/projects/${id}/rfis?kind=${meta.rfiKind}`}
+                            className="text-xs font-semibold text-mark self-center px-1"
+                          >
+                            Raise fill RFI
+                          </Link>
                         )}
                         {canManage && (
                           <Button

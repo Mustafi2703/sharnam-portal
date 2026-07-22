@@ -18,16 +18,17 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   ],
   drawings: [
     { to: "drawings", label: "GFC register" },
-    { to: "dms", label: "Documents" },
+    { to: "dms", label: "Documents (DMS)" },
     { to: "coordination", label: "Coordination", roles: ["admin", "office", "site_employee", "employee"] },
     { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
+    { to: "rfis", label: "Drawing fill RFIs", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
   ],
   quality: [
     { to: "checklist", label: "Final Index" },
-    { to: "quality-inspections", label: "QI forms" },
+    { to: "quality-inspections", label: "QI checklists" },
     { to: "inspections", label: "Action plan" },
+    { to: "rfis", label: "QI fill RFIs" },
     { to: "safety", label: "Safety" },
-    { to: "rfis", label: "RFIs" },
   ],
   field: [
     { to: "diary", label: "Day log" },
@@ -116,8 +117,8 @@ export default function ProjectToolsLayout() {
 
   return (
     <div className="min-h-[72vh] -mx-4 sm:-mx-6 lg:-mx-8 -mt-6 sm:-mt-8">
-      <div className="bg-paper border-b border-line sticky top-[calc(var(--ui-nav-h,56px)+2.75rem)] z-20">
-        <div className="px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center gap-4 justify-between">
+      <div className="bg-paper border-b border-line sticky top-[calc(var(--ui-nav-h,64px)+3.5rem)] z-20">
+        <div className="px-4 sm:px-6 lg:px-8 py-5 flex flex-wrap items-center gap-4 justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
               <Link to="/workspace" className="text-brand font-semibold hover:underline">
@@ -135,9 +136,7 @@ export default function ProjectToolsLayout() {
             <Button type="button" variant="ghost" className="!text-sm" onClick={() => setRightOpen((o) => !o)}>
               {rightOpen ? "Hide actions" : "Actions"}
             </Button>
-            <Badge tone={gate.publishedCount > 0 ? "ok" : "warn"}>
-              {gate.publishedCount > 0 ? `${gate.publishedCount} published` : "Gate locked"}
-            </Badge>
+            <Badge tone="ok">{gate.publishedCount} drawings</Badge>
           </div>
         </div>
 
