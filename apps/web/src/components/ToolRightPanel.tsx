@@ -175,20 +175,45 @@ export function ToolRightPanel({
           );
         }
         break;
-      case "checklist":
       case "quality-inspections":
         if (canFill) {
           actions.push(
-            { label: "Open checklist catalog", to: tool === "quality-inspections" ? "quality-inspections" : "checklist", primary: true },
-            { label: "Assign checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
+            { label: "QI checklist forms", to: "quality-inspections", primary: true },
+            { label: "Assign QI checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
             {
-              label: tool === "quality-inspections" ? "Raise QI fill RFI" : "Raise drawing fill RFI",
-              onClick: () =>
-                navigate(
-                  `/projects/${ctx.projectId}/rfis?kind=${tool === "quality-inspections" ? "QualityInspection" : "DrawingChecklist"}`
-                ),
+              label: "Raise QI fill RFI",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
               secondary: true,
             }
+          );
+        }
+        break;
+      case "checklist":
+        if (canFill) {
+          actions.push(
+            { label: "Final Index (site)", to: "checklist", primary: true },
+            { label: "Assign site checklist", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true }
+          );
+        }
+        break;
+      case "inspections":
+        if (canFill) {
+          actions.push(
+            { label: "Raise Quality Inspection", to: "inspections", primary: true },
+            {
+              label: "QI fill RFI",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
+              secondary: true,
+            },
+            { label: "Open Safety", to: "safety", secondary: true }
+          );
+        }
+        break;
+      case "safety":
+        if (canFill) {
+          actions.push(
+            { label: "Log safety observation", to: "safety", primary: true },
+            { label: "Quality Inspections", to: "inspections", secondary: true }
           );
         }
         break;
@@ -223,18 +248,12 @@ export function ToolRightPanel({
       case "cost":
         if (canUpload) actions.push({ label: "COP / vendor bills", to: "cost", primary: true }, { label: "Measurement sheet", to: "cost", secondary: true });
         break;
-      case "safety":
-        if (canFill) actions.push({ label: "Log observation", to: "safety", primary: true });
-        break;
       case "directory":
       case "vendors":
         if (canUpload) actions.push({ label: "Assign employee", to: "directory", primary: true }, { label: "Assign vendor", to: "vendors", secondary: true }, { label: "Open HRM master", onClick: () => navigate("/hrm"), secondary: true });
         break;
       case "coordination":
         if (canUpload) actions.push({ label: "Log coordination issue", to: "coordination", primary: true }, { label: "Escalate to RFI", to: "rfis", secondary: true });
-        break;
-      case "inspections":
-        if (canFill) actions.push({ label: "Open action plan", to: "inspections", primary: true });
         break;
       case "email":
         if (canEmail) actions.push({ label: "Compose email", onClick: () => openCompose(), primary: true }, { label: "Email settings", to: "email", secondary: true });
@@ -317,11 +336,11 @@ export function ToolRightPanel({
       </div>
 
       <div className="p-4 space-y-4 flex-1">
-        {(tool === "checklist" || tool === "quality-inspections" || tool === "rfis") && (
+        {(tool === "checklist" || tool === "quality-inspections" || tool === "inspections" || tool === "safety" || tool === "rfis") && (
           <div className="rounded-[var(--ui-radius,10px)] border border-line bg-sand/60 p-4">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">Fill flow</div>
+            <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">Quality module</div>
             <p className="text-xs text-steel-muted mt-2 leading-relaxed">
-              Assign checklist → raise Drawing or QI fill RFI → matrix parties / vendor fill (drawing optional). Documents live under Documents (DMS).
+              Quality Inspections and Safety are separate tools. QI checklist forms and QI fill RFIs are also under Quality — not mixed with Drawings.
             </p>
           </div>
         )}
@@ -421,17 +440,23 @@ export function ToolRightPanel({
                       ["rfis", "RFIs"],
                       ["reports", "DPR"],
                     ]
-                  : tool === "checklist" || tool === "quality-inspections"
+                  : tool === "inspections" || tool === "safety"
                     ? [
-                        ["drawings", "Drawings"],
-                        ["inspections", "Action plan"],
-                        ["email", "Email"],
+                        ["inspections", "Quality Inspections"],
+                        ["safety", "Safety"],
+                        ["rfis", "QI fill RFIs"],
                       ]
-                    : [
-                        ["drawings", "Drawings"],
-                        ["rfis", "RFIs"],
-                        ["email", "Email"],
-                      ]
+                    : tool === "checklist" || tool === "quality-inspections"
+                      ? [
+                          ["inspections", "Quality Inspections"],
+                          ["safety", "Safety"],
+                          ["email", "Email"],
+                        ]
+                      : [
+                          ["drawings", "Drawings"],
+                          ["rfis", "RFIs"],
+                          ["email", "Email"],
+                        ]
             ).map(([path, label]) => (
               <Link
                 key={path}

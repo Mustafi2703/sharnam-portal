@@ -55,11 +55,16 @@ export default function InspectionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Quality assurance"
-        title="Inspections & action plans"
-        subtitle="Raise an inspection with a checklist template — items become the form. Assign people, optionally link a drawing, mark Ready. Unresolved lines can spawn a separate QI fill RFI for matrix / vendor."
+        eyebrow="Quality module · inspections"
+        title="Quality Inspections"
+        subtitle="Separate Quality Inspection tool — raise inspections, assign, mark Ready. Unresolved lines can spawn a QI fill RFI. Safety is a separate tool in this same Quality module."
         actions={
-          <Badge tone="ok">QI flow open</Badge>
+          <div className="flex flex-wrap gap-2 items-center">
+            <Badge tone="ok">QI flow</Badge>
+            <Link to={`/projects/${id}/safety`} className="text-sm font-semibold text-brand">
+              Safety →
+            </Link>
+          </div>
         }
       />
 

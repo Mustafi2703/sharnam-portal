@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
@@ -65,13 +65,16 @@ export default function SafetyPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Site compliance"
+        eyebrow="Quality module · safety"
         title="Safety"
-        subtitle="Observations, near misses, incidents, toolbox talks, and JHAs — open/close with corrective actions."
+        subtitle="Separate Safety tool in the Quality module — observations, near misses, incidents, toolbox talks, and JHAs. Quality Inspections is its own tool beside this one."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{data?.stats.open ?? 0} open</Badge>
             <Badge tone="danger">{data?.stats.incidents ?? 0} incidents</Badge>
+            <Link to={`/projects/${id}/inspections`} className="text-sm font-semibold text-brand">
+              Quality Inspections →
+            </Link>
           </div>
         }
       />

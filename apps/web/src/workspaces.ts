@@ -27,11 +27,11 @@ export const WORKSPACES: {
   {
     key: "quality",
     title: "Quality",
-    desc: "QI checklists, action plans, and separate QI fill RFIs for matrix / vendor.",
-    path: "checklist",
+    desc: "Quality Inspections and Safety as separate tools, plus QI forms and QI fill RFIs.",
+    path: "inspections",
     accent: "#15803D",
     icon: "QA",
-    tools: ["", "checklist", "quality-inspections", "inspections", "safety", "rfis", "email"],
+    tools: ["", "inspections", "safety", "quality-inspections", "checklist", "rfis", "email"],
     roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
   },
   {

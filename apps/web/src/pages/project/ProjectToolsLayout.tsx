@@ -7,7 +7,7 @@ import { ToolRightPanel } from "../../components/ToolRightPanel";
 import type { RoleKey } from "@sharnam/shared";
 import { getActiveWorkspace, setActiveWorkspace, type WorkspaceKey } from "../../workspaces";
 
-type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[] };
+type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[]; query?: string };
 
 const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   home: [
@@ -21,23 +21,23 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     { to: "dms", label: "Documents (DMS)" },
     { to: "coordination", label: "Coordination", roles: ["admin", "office", "site_employee", "employee"] },
     { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
-    { to: "rfis", label: "Drawing fill RFIs", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
+    { to: "rfis", label: "Drawing fill RFIs", query: "kind=DrawingChecklist", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
   ],
   quality: [
-    { to: "checklist", label: "Final Index" },
-    { to: "quality-inspections", label: "QI checklists" },
-    { to: "inspections", label: "Action plan" },
-    { to: "rfis", label: "QI fill RFIs" },
+    { to: "inspections", label: "Quality Inspections" },
     { to: "safety", label: "Safety" },
+    { to: "quality-inspections", label: "QI checklist forms" },
+    { to: "checklist", label: "Final Index (site)" },
+    { to: "rfis", label: "QI fill RFIs", query: "kind=QualityInspection" },
   ],
   field: [
     { to: "diary", label: "Day log" },
     { to: "photos", label: "Photos" },
-    { to: "rfis", label: "RFIs" },
+    { to: "rfis", label: "Field RFIs" },
   ],
   comms: [
     { to: "comms", label: "Matrix / MoM" },
-    { to: "rfis", label: "PMC RFIs" },
+    { to: "rfis", label: "PMC RFIs", query: "kind=RequestForInformation" },
     { to: "reports", label: "DPR / WPR" },
   ],
   cost: [
@@ -49,7 +49,7 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
 const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; roles?: RoleKey[] }[] = [
   { key: "home", label: "Home", path: "" },
   { key: "drawings", label: "Drawings", path: "drawings" },
-  { key: "quality", label: "Quality", path: "checklist" },
+  { key: "quality", label: "Quality", path: "inspections" },
   { key: "field", label: "Field", path: "diary" },
   { key: "comms", label: "Comms", path: "comms" },
   { key: "cost", label: "Cost", path: "cost", roles: ["admin", "office", "employee"] },
@@ -64,7 +64,11 @@ function moduleFromPath(pathname: string): WorkspaceKey | "home" {
   if (["diary", "photos"].includes(tool)) return "field";
   if (["comms"].includes(tool)) return "comms";
   if (["cost"].includes(tool)) return "cost";
-  if (tool === "rfis") return getActiveWorkspace() === "field" ? "field" : "quality";
+  if (tool === "rfis") {
+    const ws = getActiveWorkspace();
+    if (ws === "drawings" || ws === "field" || ws === "comms" || ws === "quality") return ws;
+    return "quality";
+  }
   if (tool === "reports") return getActiveWorkspace() === "cost" ? "cost" : "comms";
   if (["directory", "vendors", "email"].includes(tool)) return "home";
   return "home";
@@ -170,18 +174,23 @@ export default function ProjectToolsLayout() {
               {moduleLabel}
             </div>
             <nav className="p-3 space-y-1">
-              {sideItems.map((t) => (
-                <NavLink
-                  key={t.to || "home"}
-                  to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
-                  end={t.end}
-                  className={({ isActive }) =>
-                    isActive ? "bg-brand-soft text-brand font-semibold" : "text-ink/85 hover:bg-sand"
-                  }
-                >
-                  {t.label}
-                </NavLink>
-              ))}
+              {sideItems.map((t) => {
+                const href = t.to
+                  ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}`
+                  : `/projects/${id}`;
+                return (
+                  <NavLink
+                    key={`${t.to || "home"}-${t.query || ""}`}
+                    to={href}
+                    end={t.end}
+                    className={({ isActive }) =>
+                      isActive ? "bg-brand-soft text-brand font-semibold" : "text-ink/85 hover:bg-sand"
+                    }
+                  >
+                    {t.label}
+                  </NavLink>
+                );
+              })}
             </nav>
           </aside>
         )}
