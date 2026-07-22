@@ -43,6 +43,7 @@ export class MockOneDriveService {
       "Documents/WPR",
       "Documents/QAP",
       "Documents/Communication-Matrix",
+      "Documents/Design-Coordination",
       "Photos",
       "Checklists",
       "Inspections",

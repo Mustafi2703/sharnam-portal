@@ -15,12 +15,6 @@ const primaryNav = [
   { to: "/options", label: "UI 1–5", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
 ];
 
-const moreNav = [
-  { to: "/audit", label: "Audit", roles: ["admin", "office"] },
-  { to: "/roles", label: "Permissions", roles: ["admin"] },
-  { to: "/themes", label: "Themes", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
-];
-
 type Proj = { id: string; code: string; name: string };
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -68,17 +62,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-sand">
       <header className="procore-topbar sticky top-0 z-40 shadow-sm">
-        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 h-12 border-b border-line bg-procore-navy text-white">
-          <Link to="/workspace" className="shrink-0 flex items-center gap-2" aria-label={`${BRAND_EN} home`}>
+        <div
+          className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 border-b border-white/10 bg-procore-navy text-white"
+          style={{ minHeight: "var(--ui-nav-h, 56px)" }}
+        >
+          <Link to="/workspace" className="shrink-0 flex items-center gap-2.5" aria-label={`${BRAND_EN} home`}>
             <BrandMark size="sm" tagTone="dark" compact showTag={false} />
-            <span className="hidden sm:inline font-display text-sm tracking-tight text-white">{BRAND_EN}</span>
+            <span className="hidden sm:inline font-display text-[15px] tracking-tight text-white">{BRAND_EN}</span>
           </Link>
 
-          {/* Project picker — select project then work */}
-          <label className="flex items-center gap-1.5 min-w-0 max-w-[42vw] sm:max-w-xs">
-            <span className="hidden lg:inline text-[10px] uppercase tracking-wider text-white/60 shrink-0">Project</span>
+          <label className="flex items-center gap-2 min-w-0 flex-1 max-w-md">
+            <span className="hidden lg:inline text-[11px] uppercase tracking-wider text-white/55 shrink-0">Project</span>
             <select
-              className="w-full min-w-0 rounded-sm border border-white/20 bg-white/10 text-white text-xs sm:text-[13px] px-2 py-1.5 outline-none focus:border-brand"
+              className="w-full min-w-0 rounded-[var(--ui-radius-sm,6px)] border border-white/20 bg-white/10 text-white text-sm px-3 py-2.5 outline-none focus:border-brand"
               value={projectId}
               onChange={(e) => selectProject(e.target.value)}
               aria-label="Select project"
@@ -92,41 +88,24 @@ export function AppShell({ children }: { children: ReactNode }) {
             </select>
           </label>
 
-          <div className="hidden md:flex items-center gap-1.5 text-[11px] text-white/70 min-w-0">
-            {wsLabel && (
-              <>
-                <span>/</span>
-                <span className="text-white font-medium truncate">{wsLabel}</span>
-              </>
-            )}
-          </div>
+          {wsLabel && (
+            <span className="hidden md:inline text-sm text-white/70 truncate max-w-[140px]">/ {wsLabel}</span>
+          )}
 
-          <div className="flex-1" />
-
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
             {canUpload && projectId && (
-              <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!hidden lg:!inline-flex !text-[11px] !py-1 !bg-white/10 !text-white !border-white/20 hover:!bg-white/20"
-                  onClick={() => navigate(`/projects/${projectId}/dms`)}
-                >
-                  Docs
-                </Button>
-                <Button
-                  type="button"
-                  className="!text-[11px] !py-1"
-                  onClick={() => navigate(`/projects/${projectId}/drawings?upload=1`)}
-                >
-                  Upload drawing
-                </Button>
-              </>
+              <Button
+                type="button"
+                className="!text-xs !py-2 !px-3 hidden sm:inline-flex"
+                onClick={() => navigate(`/projects/${projectId}/drawings?upload=1`)}
+              >
+                Upload drawing
+              </Button>
             )}
             <Badge tone="neutral">{user?.portal}</Badge>
             <Button
               variant="ghost"
-              className="!px-2 !py-1 !text-[11px] !text-white/80 hover:!text-white hover:!bg-white/10"
+              className="!px-2.5 !py-2 !text-xs !text-white/85 hover:!text-white hover:!bg-white/10"
               onClick={() => {
                 logout();
                 navigate("/options");
@@ -137,8 +116,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 px-2 sm:px-4 h-11 bg-paper">
-          <nav className="flex items-center gap-0.5 overflow-x-auto min-w-0 flex-1">
+        <div className="flex items-center gap-2 px-2 sm:px-4 min-h-12 bg-paper">
+          <nav className="flex items-center gap-0.5 overflow-x-auto min-w-0 flex-1 py-1">
             {primaryNav
               .filter((n) => !user || n.roles.includes(user.role))
               .map((n) => (
@@ -147,7 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   to={n.to}
                   end={n.to === "/workspace"}
                   className={({ isActive }) =>
-                    `px-3 py-2 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
+                    `px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -161,7 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   to={`/projects/${projectId}`}
                   end
                   className={({ isActive }) =>
-                    `px-3 py-2 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
+                    `px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -171,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <NavLink
                   to={`/projects/${projectId}/comms`}
                   className={({ isActive }) =>
-                    `hidden sm:inline-flex px-3 py-2 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
+                    `hidden sm:inline-flex px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -181,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <NavLink
                   to={`/projects/${projectId}/reports`}
                   className={({ isActive }) =>
-                    `hidden md:inline-flex px-3 py-2 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
+                    `hidden md:inline-flex px-3.5 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
                       isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
@@ -190,39 +169,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </NavLink>
               </>
             )}
-            {moreNav
-              .filter((n) => user && n.roles.includes(user.role))
-              .map((n) => (
-                <NavLink
-                  key={n.to}
-                  to={n.to}
-                  className={({ isActive }) =>
-                    `hidden xl:inline-flex px-3 py-2 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
-                      isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
-                    }`
-                  }
-                >
-                  {n.label}
-                </NavLink>
-              ))}
           </nav>
 
-          <div className="flex items-center gap-1 shrink-0 pl-2 border-l border-line">
-            <Link
-              to="/options"
-              className="hidden sm:inline text-[11px] font-semibold text-brand mr-1 whitespace-nowrap hover:underline"
-              title="Open all UI systems"
-            >
-              Styles 1–5
+          <div className="flex items-center gap-1.5 shrink-0 pl-3 border-l border-line py-2">
+            <Link to="/options" className="hidden sm:inline text-xs font-semibold text-brand mr-1 hover:underline">
+              Styles
             </Link>
-            <span className="sm:hidden text-[10px] font-mono uppercase text-steel-muted mr-1">UI</span>
             {LIVE_UI_OPTIONS.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 title={`${t.number}. ${t.name}`}
                 onClick={() => applyThemeOption(t.id)}
-                className={`h-8 min-w-[2rem] px-1.5 text-[12px] font-semibold border transition ${
+                className={`h-9 min-w-[2.25rem] px-2 text-sm font-semibold border transition ${
                   String(t.number) === activeUi
                     ? "bg-brand text-white border-brand"
                     : "bg-sand border-line text-steel-muted hover:border-brand"
@@ -236,16 +195,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         {selected && (
-          <div className="px-3 sm:px-5 py-1.5 bg-brand-soft/40 border-b border-line text-[11px] text-steel-muted flex flex-wrap gap-x-3 gap-y-1">
-            <span className="font-mono text-brand">{selected.code}</span>
+          <div className="px-4 sm:px-6 py-2 bg-brand-soft/50 border-b border-line text-xs text-steel-muted flex flex-wrap gap-x-4 gap-y-1">
+            <span className="font-mono text-brand font-semibold">{selected.code}</span>
             <span className="truncate">{selected.name}</span>
-            <span className="text-steel-muted/80">Select project above · then use modules / right Actions</span>
+            <span className="text-steel-muted/90">Select project · open a tool · Actions panel shows only that tool</span>
           </div>
         )}
       </header>
 
       <main className="flex-1 min-w-0">
-        <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8 py-6 sm:py-8">{children}</div>
+        <div className="mx-auto max-w-[1480px] px-4 sm:px-6 lg:px-8 py-7 sm:py-9">{children}</div>
       </main>
     </div>
   );

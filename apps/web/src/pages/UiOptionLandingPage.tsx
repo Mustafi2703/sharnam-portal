@@ -10,7 +10,7 @@ import { PORTAL_LOGINS } from "./PortalLogins";
 
 const HUB: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Per-option themed landing — same portals, different construction UI style */
+/** Professional themed landing — 4 portals + style switcher */
 export default function UiOptionLandingPage() {
   const { optionId } = useParams();
   const opt = getLiveOption(optionId || "1");
@@ -37,22 +37,22 @@ export default function UiOptionLandingPage() {
   return (
     <div className="min-h-screen bg-sand text-ink">
       <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <BrandMark size="sm" tagTone="light" showTag={false} />
-            <div>
-              <div className="font-display text-sm leading-none">{BRAND_EN}</div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mt-0.5">
-                UI Option {opt.number} · {opt.name}
+            <div className="min-w-0">
+              <div className="font-display text-[15px] leading-none truncate">{BRAND_EN}</div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-steel-muted mt-1">
+                Option {opt.number} · {opt.name}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
             {LIVE_UI_OPTIONS.map((t) => (
               <Link
                 key={t.id}
                 to={`/ui/${t.number}`}
-                className={`shrink-0 h-8 min-w-8 px-2 grid place-items-center text-xs font-semibold border transition ${
+                className={`shrink-0 h-9 min-w-9 px-2.5 grid place-items-center text-sm font-semibold border transition ${
                   t.number === opt.number
                     ? "bg-brand text-white border-brand"
                     : "bg-paper border-line text-steel-muted hover:border-brand"
@@ -62,55 +62,81 @@ export default function UiOptionLandingPage() {
                 {t.number}
               </Link>
             ))}
-            <Link to="/options" className="text-xs font-medium text-brand whitespace-nowrap ml-1">
-              All options
+            <Link to="/options" className="text-sm font-semibold text-brand whitespace-nowrap ml-2">
+              All styles
             </Link>
           </div>
         </div>
       </header>
 
-      <section className="max-w-6xl mx-auto px-5 py-10 sm:py-14 grid lg:grid-cols-2 gap-10 items-start">
-        <div className="space-y-5">
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-brand">
-            {BRAND_HI} · Construction PMC · Option {opt.number}
+      <section className="hero-field text-white">
+        <div className="max-w-6xl mx-auto px-5 py-12 sm:py-16">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/70 mb-3">
+            {BRAND_HI} · PMC desk · Option {opt.number}
           </p>
-          <h1 className="font-display text-4xl sm:text-5xl tracking-tight leading-[1.05]">{opt.name}</h1>
-          <p className="text-steel-muted leading-relaxed max-w-md">{opt.blurb}</p>
-          <ul className="grid sm:grid-cols-3 gap-2 text-xs">
-            {[
-              ["Style", opt.style],
-              ["Density", opt.density],
-              ["Corners", opt.radius],
-            ].map(([k, v]) => (
-              <li key={k} className="border border-line bg-paper px-3 py-2" style={{ borderRadius: "var(--ui-radius-sm)" }}>
-                <div className="font-mono text-[9px] uppercase text-steel-muted">{k}</div>
-                <div className="font-semibold mt-0.5 capitalize">{v}</div>
-              </li>
-            ))}
-          </ul>
+          <h1 className="font-display text-4xl sm:text-5xl tracking-tight leading-[1.05] max-w-xl">{opt.name}</h1>
+          <p className="mt-4 text-base text-white/85 max-w-lg leading-relaxed">{opt.blurb}</p>
+        </div>
+      </section>
 
-          {/* Designed module strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
-            {["Drawings", "Checklists", "Revisions", "Day log", "RFIs", "Cost"].map((m) => (
-              <div
-                key={m}
-                className="border border-line bg-paper px-3 py-3"
-                style={{ borderRadius: "var(--ui-radius)" }}
-              >
-                <div className="h-1.5 w-8 mb-2 rounded-full bg-brand" />
+      <section className="max-w-6xl mx-auto px-5 py-10 sm:py-14 grid lg:grid-cols-[1fr_420px] gap-10 items-start">
+        <div className="space-y-8">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-brand mb-2">Four portals</p>
+            <h2 className="font-display text-2xl sm:text-3xl tracking-tight">Same project spine. Role-right tools.</h2>
+            <p className="mt-3 text-steel-muted max-w-lg leading-relaxed">
+              Office runs drawings and the matrix. Site fills day logs and checklists. Vendors respond on packages.
+              Clients raise RFIs and read published packs — Procore-shaped, Sharnam-branded.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {HUB.map((key, i) => {
+              const p = PORTAL_LOGINS[key];
+              const on = active === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActive(key)}
+                  className={`portal-tile text-left p-5 rise rise-delay-${i} ${on ? "selected-ring border-brand" : ""}`}
+                >
+                  <div
+                    className="h-10 w-10 grid place-items-center text-white text-xs font-bold mb-3"
+                    style={{ background: p.tone, borderRadius: "var(--ui-radius-sm)" }}
+                  >
+                    {p.icon}
+                  </div>
+                  <div className="font-display text-lg">{p.title}</div>
+                  <p className="text-sm text-steel-muted mt-1.5 leading-relaxed">{p.subtitle}</p>
+                  <ul className="mt-3 space-y-1">
+                    {p.points.map((pt) => (
+                      <li key={pt} className="text-xs text-ink/80 flex gap-2">
+                        <span className="text-brand">▸</span> {pt}
+                      </li>
+                    ))}
+                  </ul>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {["GFC + revisions", "RFI + checklist", "Day log", "Comms matrix", "Submittals", "DPR / WPR"].map((m) => (
+              <div key={m} className="border border-line bg-paper px-4 py-4" style={{ borderRadius: "var(--ui-radius)" }}>
+                <div className="h-1 w-10 mb-3 rounded-full bg-brand" />
                 <div className="text-sm font-semibold">{m}</div>
-                <div className="text-[11px] text-steel-muted mt-0.5">Procore-style tool</div>
               </div>
             ))}
           </div>
         </div>
 
-        <Card className="!p-0 overflow-hidden ui-panel">
-          <div className="px-5 py-3 border-b border-line bg-procore-navy text-white flex justify-between items-center">
-            <span className="text-sm font-semibold">Sign in · same portals</span>
-            <span className="text-[10px] font-mono text-white/70">Demo@1234</span>
+        <Card className="!p-0 overflow-hidden sticky top-24">
+          <div className="px-5 py-4 border-b border-line bg-procore-navy text-white">
+            <div className="text-sm font-semibold">Sign in · {cfg.title}</div>
+            <div className="text-[11px] text-white/65 mt-1 font-mono">Password Demo@1234</div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-line">
+          <div className="grid grid-cols-4 gap-px bg-line">
             {HUB.map((key) => {
               const p = PORTAL_LOGINS[key];
               const on = active === key;
@@ -119,16 +145,15 @@ export default function UiOptionLandingPage() {
                   key={key}
                   type="button"
                   onClick={() => setActive(key)}
-                  className={`text-left p-3 transition ${on ? "bg-brand-soft" : "bg-paper hover:bg-sand"}`}
+                  className={`text-center py-3 text-xs font-semibold transition ${on ? "bg-brand text-white" : "bg-paper hover:bg-sand"}`}
                 >
-                  <div className="text-[10px] font-mono uppercase text-steel-muted">{p.shortLabel}</div>
-                  <div className={`text-sm font-semibold mt-0.5 ${on ? "text-brand" : ""}`}>{p.title}</div>
+                  {p.shortLabel}
                 </button>
               );
             })}
           </div>
           <form
-            className="p-5 space-y-3 bg-paper"
+            className="p-6 space-y-4 bg-paper"
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);
@@ -151,30 +176,25 @@ export default function UiOptionLandingPage() {
               }
             }}
           >
-            <p className="text-sm text-steel-muted">{cfg.subtitle}</p>
+            <p className="text-sm text-steel-muted leading-relaxed">{cfg.headline}</p>
             <label className="block text-sm">
               <span className="text-xs font-mono uppercase text-steel-muted">Email</span>
-              <Input className="mt-1" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input className="mt-1.5 !py-2.5" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
             </label>
             <label className="block text-sm">
               <span className="text-xs font-mono uppercase text-steel-muted">Password</span>
               <Input
                 type="password"
-                className="mt-1"
+                className="mt-1.5 !py-2.5"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
               />
             </label>
             {error && <p className="text-sm text-danger">{error}</p>}
-            <Button type="submit" disabled={busy} className="w-full !py-3">
+            <Button type="submit" disabled={busy} className="w-full !py-3 !text-sm">
               {busy ? "Signing in…" : cfg.cta}
             </Button>
-            <p className="text-center text-[11px] font-mono text-steel-muted">
-              Or{" "}
-              <Link to={`/login/${cfg.key}`} className="text-brand font-semibold">
-                full {cfg.shortLabel} page
-              </Link>
-            </p>
           </form>
         </Card>
       </section>

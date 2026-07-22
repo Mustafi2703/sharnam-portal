@@ -63,12 +63,12 @@ export default function RfisPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Issues & ball in court"
+        eyebrow="Issues · drawing & checklist"
         title={isClient ? "Concerns & RFIs" : "RFIs"}
         subtitle={
           isClient
-            ? "Raise concerns anytime. Only parties on the Communication Matrix (or Sharnam office) can respond and close."
-            : "Anyone can raise an RFI. Respond / close is limited to roles on the Communication Matrix (RFI rows) plus Sharnam office."
+            ? "Raise concerns anytime. Matrix parties (or Sharnam office) respond and close."
+            : "Procore-style RFI: link a drawing and optional checklist type. Anyone can raise; only Communication Matrix parties respond / close."
         }
       />
 

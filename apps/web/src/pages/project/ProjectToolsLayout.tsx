@@ -37,7 +37,7 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   comms: [
     { to: "comms", label: "Matrix / MoM" },
     { to: "rfis", label: "RFIs" },
-    { to: "reports", label: "DPR / reports" },
+    { to: "reports", label: "DPR / WPR" },
   ],
   cost: [
     { to: "cost", label: "Measurement / COP" },
@@ -65,7 +65,13 @@ function moduleFromPath(pathname: string): WorkspaceKey | "home" {
   if (["cost"].includes(tool)) return "cost";
   if (tool === "rfis") return getActiveWorkspace() === "field" ? "field" : "quality";
   if (tool === "reports") return getActiveWorkspace() === "cost" ? "cost" : "comms";
+  if (["directory", "vendors", "email"].includes(tool)) return "home";
   return "home";
+}
+
+function toolFromPath(pathname: string) {
+  const seg = pathname.split("/").filter(Boolean);
+  return seg[2] || "";
 }
 
 export default function ProjectToolsLayout() {
@@ -79,6 +85,7 @@ export default function ProjectToolsLayout() {
   const [rightOpen, setRightOpen] = useState(true);
 
   const activeMod = moduleFromPath(location.pathname);
+  const activeTool = toolFromPath(location.pathname);
   const sideItems = useMemo(() => {
     const items = SIDE_TOOLS[activeMod] || SIDE_TOOLS.home;
     return items.filter((t) => !t.roles || !user?.role || t.roles.includes(user.role));
@@ -90,6 +97,7 @@ export default function ProjectToolsLayout() {
   );
 
   const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
+  const toolLabel = sideItems.find((t) => (t.to || "") === activeTool)?.label || moduleLabel;
 
   useEffect(() => {
     if (!id) return;
@@ -103,27 +111,28 @@ export default function ProjectToolsLayout() {
     if (activeMod !== "home") setActiveWorkspace(activeMod);
   }, [activeMod]);
 
+  const shellClass =
+    sidebarOpen && rightOpen ? "has-both" : sidebarOpen ? "has-left" : rightOpen ? "has-right" : "";
+
   return (
-    <div className="min-h-[70vh] -mx-4 sm:-mx-6 lg:-mx-8 -mt-6 sm:-mt-8">
-      <div className="bg-white border-b border-line">
-        <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 justify-between">
+    <div className="min-h-[72vh] -mx-4 sm:-mx-6 lg:-mx-8 -mt-6 sm:-mt-8">
+      <div className="bg-paper border-b border-line sticky top-[calc(var(--ui-nav-h,56px)+2.75rem)] z-20">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center gap-4 justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
-              <Link to="/workspace" className="text-brand font-medium hover:underline">
-                Sharnam workspaces
+              <Link to="/workspace" className="text-brand font-semibold hover:underline">
+                Workspaces
               </Link>
               <span>/</span>
-              <span className="font-mono">{project?.code || "…"}</span>
+              <span className="font-mono text-brand">{project?.code || "…"}</span>
             </div>
-            <h1 className="font-display text-lg sm:text-xl text-ink truncate mt-0.5">
-              {project?.name || "Project"}
-            </h1>
+            <h1 className="font-display text-xl sm:text-2xl text-ink truncate mt-1">{project?.name || "Project"}</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" className="!text-xs lg:hidden" onClick={() => setSidebarOpen((o) => !o)}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button type="button" variant="ghost" className="!text-sm xl:hidden" onClick={() => setSidebarOpen((o) => !o)}>
               {sidebarOpen ? "Hide tools" : "Tools"}
             </Button>
-            <Button type="button" variant="ghost" className="!text-xs" onClick={() => setRightOpen((o) => !o)}>
+            <Button type="button" variant="ghost" className="!text-sm" onClick={() => setRightOpen((o) => !o)}>
               {rightOpen ? "Hide actions" : "Actions"}
             </Button>
             <Badge tone={gate.publishedCount > 0 ? "ok" : "warn"}>
@@ -132,7 +141,7 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
-        <nav className="px-2 sm:px-4 flex gap-0.5 overflow-x-auto border-t border-line" aria-label="Sharnam modules">
+        <nav className="px-2 sm:px-4 lg:px-6 flex gap-1 overflow-x-auto border-t border-line" aria-label="Modules">
           {topMods.map((m) => (
             <NavLink
               key={m.key}
@@ -144,7 +153,7 @@ export default function ProjectToolsLayout() {
               }}
               className={() => {
                 const on = activeMod === m.key;
-                return `px-3 sm:px-4 py-2.5 text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
+                return `px-4 sm:px-5 py-3.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
                   on ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
                 }`;
               }}
@@ -155,32 +164,20 @@ export default function ProjectToolsLayout() {
         </nav>
       </div>
 
-      <div
-        className={`min-h-[62vh] ${
-          sidebarOpen && rightOpen
-            ? "xl:grid xl:grid-cols-[168px_1fr_240px]"
-            : sidebarOpen
-              ? "lg:grid lg:grid-cols-[168px_1fr]"
-              : rightOpen
-                ? "xl:grid xl:grid-cols-[1fr_240px]"
-                : ""
-        }`}
-      >
+      <div className={`tool-shell ${shellClass} bg-sand`}>
         {sidebarOpen && (
-          <aside className="border-b xl:border-b-0 xl:border-r border-line bg-white">
-            <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-steel-muted border-b border-line">
+          <aside className="border-b xl:border-b-0 xl:border-r border-line bg-paper tool-side-nav">
+            <div className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-muted border-b border-line">
               {moduleLabel}
             </div>
-            <nav className="p-2 space-y-0.5">
+            <nav className="p-3 space-y-1">
               {sideItems.map((t) => (
                 <NavLink
                   key={t.to || "home"}
                   to={t.to ? `/projects/${id}/${t.to}` : `/projects/${id}`}
                   end={t.end}
                   className={({ isActive }) =>
-                    `block rounded-md px-2.5 py-2 text-[13px] transition ${
-                      isActive ? "bg-brand-soft text-brand font-semibold" : "text-ink/80 hover:bg-sand"
-                    }`
+                    isActive ? "bg-brand-soft text-brand font-semibold" : "text-ink/85 hover:bg-sand"
                   }
                 >
                   {t.label}
@@ -190,7 +187,7 @@ export default function ProjectToolsLayout() {
           </aside>
         )}
 
-        <div className="p-5 sm:p-7 bg-sand min-w-0">
+        <div className="p-5 sm:p-8 lg:p-10 min-w-0 page-stack">
           <Outlet
             context={{
               project,
@@ -209,7 +206,8 @@ export default function ProjectToolsLayout() {
               projectCode: project?.code,
               projectName: project?.name,
               publishedCount: gate.publishedCount,
-              moduleLabel,
+              tool: activeTool,
+              moduleLabel: toolLabel,
               role: user?.role,
             }}
             onUploadDrawing={() => navigate(`/projects/${id}/drawings?upload=1`)}

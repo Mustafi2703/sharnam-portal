@@ -47,12 +47,30 @@ export default function DmsPage() {
           ← Project
         </Link>
         <PageHeader
-          eyebrow="Documents · OneDrive contract"
+          eyebrow="Documents · OneDrive per project"
           title="Project drive"
-          subtitle="All project documents are browsable here. Opening a folder syncs that path (mock now → Microsoft Graph later). Uploads land in the current folder."
+          subtitle="Each project has its own OneDrive tree. Exact filepath is shown below — pipe uploads into the open folder (Drawings, Documents/Communication-Matrix, Design-Coordination, Inspections…). Sync-on-open; Graph later."
           actions={<Badge tone={syncing ? "warn" : "ok"}>{syncing ? "Syncing…" : "Live browse"}</Badge>}
         />
       </div>
+
+      <Card className="!py-3 !px-4 font-mono text-xs sm:text-sm break-all bg-sand/50">
+        <span className="text-steel-muted">OneDrive path · </span>
+        <span className="text-brand font-semibold">
+          /onedrive/{data?.projectCode || "…"}/{path || ""}
+        </span>
+        <button
+          type="button"
+          className="ml-3 text-brand font-semibold underline"
+          onClick={() => {
+            const full = `/onedrive/${data?.projectCode || ""}/${path || ""}`.replace(/\/+/g, "/");
+            void navigator.clipboard?.writeText(full);
+            setMsg(`Copied path: ${full}`);
+          }}
+        >
+          Copy path
+        </button>
+      </Card>
 
       <div className="flex flex-wrap gap-2 items-center">
         <Button
@@ -71,15 +89,12 @@ export default function DmsPage() {
             Up one level
           </Button>
         )}
-        <span className="text-xs font-mono text-steel-muted">
-          /{data?.projectCode}/{path || "(root)"}
-        </span>
       </div>
       {msg && <p className="text-sm text-brand bg-brand-soft/50 px-3 py-2 rounded-lg">{msg}</p>}
 
-      <div className="grid lg:grid-cols-[220px_1fr] gap-4">
+      <div className="grid lg:grid-cols-[240px_1fr] gap-4">
         <Card padding={false} className="overflow-hidden h-fit">
-          <div className="px-3 py-2.5 bg-procore-navy text-white text-xs font-semibold">Quick folders</div>
+          <div className="px-3 py-2.5 bg-procore-navy text-white text-xs font-semibold">Project folders</div>
           <ul className="p-2 space-y-0.5 text-sm">
             {[
               ["", "Root"],
@@ -89,8 +104,11 @@ export default function DmsPage() {
               ["Documents/WPR", "WPR"],
               ["Documents/QAP", "QAP"],
               ["Documents/Communication-Matrix", "Comm matrix"],
+              ["Documents/Design-Coordination", "Design coordination"],
               ["Checklists", "Checklists"],
+              ["Inspections", "Inspections"],
               ["RFIs", "RFIs"],
+              ["Submittals", "Submittals"],
               ["Safety", "Safety"],
               ["Cost-Bills", "Cost / bills"],
               ["Photos", "Photos"],
@@ -98,12 +116,15 @@ export default function DmsPage() {
               <li key={p || "root"}>
                 <button
                   type="button"
-                  className={`w-full text-left px-2 py-1.5 rounded-md ${
+                  className={`w-full text-left px-2 py-2 rounded-md ${
                     path === p ? "bg-brand-soft text-brand font-semibold" : "hover:bg-sand"
                   }`}
                   onClick={() => openFolder(p)}
                 >
                   {label}
+                  <span className="block text-[10px] font-mono text-steel-muted font-normal truncate">
+                    /{data?.projectCode}/{p || ""}
+                  </span>
                 </button>
               </li>
             ))}

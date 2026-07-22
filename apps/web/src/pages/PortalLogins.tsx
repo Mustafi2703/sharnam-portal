@@ -269,53 +269,61 @@ export function LoginHubPage() {
         </div>
       </header>
 
-      <section className="relative overflow-hidden border-b border-line bg-white">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(228,99,42,0.12),transparent_50%),radial-gradient(ellipse_at_80%_100%,rgba(11,106,120,0.1),transparent_45%)]" />
-        <div className="relative max-w-6xl mx-auto px-5 py-14 sm:py-20 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
+      <section className="hero-site text-white border-b border-line">
+        <div className="max-w-6xl mx-auto px-5 py-16 sm:py-20 grid lg:grid-cols-[1.15fr_0.85fr] gap-10 items-center">
           <div className="rise space-y-6">
-            <div className="logo-plate brand-frame rounded-2xl bg-white border border-line p-4 sm:p-5 inline-block shadow-sm">
-              <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className="h-16 sm:h-20 w-auto object-contain" />
+            <div className="logo-plate brand-frame inline-block">
+              <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className="h-14 sm:h-16 w-auto object-contain" />
             </div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-brand">
+            <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-white/70">
               {BRAND_HI} · {BRAND_TAG}
             </p>
-            <h1 className="font-display text-5xl sm:text-6xl tracking-tight leading-[0.95]">
-              <span className="text-brand">{BRAND_EN}</span>
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.02]">
+              {BRAND_EN}
+              <span className="block text-white/90 text-2xl sm:text-3xl mt-3 font-semibold">
+                Project control for construction PMCs
+              </span>
             </h1>
-            <p className="text-base sm:text-lg text-steel-muted max-w-md leading-relaxed">
-              Procore-style PMC spine — upload drawings, assign checklist types per sheet, engineer fills, client view.
-              Designed UI for every module.
+            <p className="text-base sm:text-lg text-white/80 max-w-md leading-relaxed">
+              Drawings, RFIs with checklist attach, day logs, communication matrix, submittals, and downloadable DPR/WPR —
+              Office · Site · Vendor · Client.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button type="button" className="!px-5 !py-3" onClick={() => openPortal("office")}>
                 Enter Sharnam Office
               </Button>
-              <Button type="button" variant="secondary" className="!px-5 !py-3" onClick={() => openPortal("client")}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!px-5 !py-3 !bg-white/10 !text-white !border-white/35"
+                onClick={() => openPortal("client")}
+              >
                 Client portal
               </Button>
             </div>
-            <p className="text-xs font-mono text-steel-muted">Demo password · Demo@1234</p>
+            <p className="text-xs font-mono text-white/55">Demo password · Demo@1234</p>
           </div>
 
-          <Card className="rise rise-delay-1 !p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between items-center">
-              <span className="text-sm font-semibold">{BRAND_EN} · Product preview</span>
-              <span className="text-[10px] font-mono text-white/70">Designed chrome</span>
+          <Card className="rise rise-delay-1 !p-0 overflow-hidden !bg-white/95">
+            <div className="px-5 py-3.5 border-b border-line bg-procore-navy text-white flex justify-between items-center">
+              <span className="text-sm font-semibold">Four portals</span>
+              <span className="text-[10px] font-mono text-white/70">Pick & sign in</span>
             </div>
-            <div className="grid grid-cols-3 gap-px bg-line">
-              {[
-                ["Upload", "Drawing"],
-                ["Assign", "Checklist"],
-                ["Fill", "Per sheet"],
-                ["Gate", "Published"],
-                ["Client", "View only"],
-                ["Actions", "Right panel"],
-              ].map(([k, v]) => (
-                <div key={k} className="bg-white p-4 min-h-[84px]">
-                  <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">{k}</div>
-                  <div className="font-display text-base mt-2 text-ink">{v}</div>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-px bg-line">
+              {(["office", "site", "vendor", "client"] as const).map((key) => {
+                const p = PORTAL_LOGINS[key];
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => openPortal(key)}
+                    className={`text-left p-4 transition ${active === key ? "bg-brand-soft" : "bg-paper hover:bg-sand"}`}
+                  >
+                    <div className="text-[10px] font-mono uppercase text-steel-muted">{p.shortLabel}</div>
+                    <div className={`text-sm font-semibold mt-1 ${active === key ? "text-brand" : ""}`}>{p.title}</div>
+                  </button>
+                );
+              })}
             </div>
           </Card>
         </div>

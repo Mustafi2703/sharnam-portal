@@ -6,6 +6,18 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip
 
 type Tab = "matrix" | "agenda" | "mom" | "followup" | "log";
 
+function roleLabel(role: string) {
+  const map: Record<string, string> = {
+    client: "Client",
+    office: "Sharnam PMC",
+    employee: "Design consultant",
+    vendor: "Main contractor",
+    site_employee: "Site / concrete works",
+    admin: "Admin",
+  };
+  return map[role] || role.replace(/_/g, " ");
+}
+
 /**
  * Client video flow:
  * 1) Communication matrix
@@ -18,6 +30,8 @@ export default function CommsPage() {
   const { token, user } = useAuth();
   const [tab, setTab] = useState<Tab>("matrix");
   const [matrix, setMatrix] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");
   const [logs, setLogs] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
   const [activeMeeting, setActiveMeeting] = useState<string | null>(null);
@@ -26,12 +40,32 @@ export default function CommsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [matrixForm, setMatrixForm] = useState({
-    communicationType: "Weekly coordination",
+    communicationType: "Technical coordination",
     fromRole: "office",
-    toRole: "site_employee",
+    toRole: "client",
     frequency: "Weekly",
     channel: "Meeting",
   });
+  const [contactForm, setContactForm] = useState({
+    orgSection: "Client",
+    orgName: "",
+    personName: "",
+    designation: "",
+    company: "",
+    spoc: "",
+    mobile: "",
+    email: "",
+    mailRole: "CC",
+    officeAddress: "",
+  });
+  const ORG_ROLES = [
+    { value: "client", label: "Client" },
+    { value: "office", label: "Sharnam PMC" },
+    { value: "employee", label: "Design consultant" },
+    { value: "vendor", label: "Main contractor" },
+    { value: "site_employee", label: "Site / concrete works" },
+  ];
+  const ORG_SECTIONS = ["Client", "PMC", "Consultant", "Contractor", "Other"];
   const [schedule, setSchedule] = useState({
     title: "Weekly Site Coordination",
     meetingDate: new Date().toISOString().slice(0, 16),
@@ -43,20 +77,22 @@ export default function CommsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
   const load = async () => {
-    const [m, l, meet] = await Promise.all([
+    const [m, l, meet, c] = await Promise.all([
       api<any[]>(`/api/comms/matrix/${id}`, { token }),
       api<any[]>(`/api/comms/logs/${id}`, { token }),
       api<any[]>(`/api/comms/meetings/${id}`, { token }),
+      api<any[]>(`/api/comms/contacts/${id}?kind=${matrixKind}`, { token }).catch(() => []),
     ]);
     setMatrix(m);
     setLogs(l);
     setMeetings(meet);
+    setContacts(c);
     if (!activeMeeting && meet[0]) setActiveMeeting(meet[0].id);
   };
 
   useEffect(() => {
     void load();
-  }, [id, token]);
+  }, [id, token, matrixKind]);
 
   const selected = meetings.find((m) => m.id === activeMeeting);
   const agendaMeetings = useMemo(() => meetings.filter((m) => m.status === "Agenda" || m.status === "Scheduled"), [meetings]);
@@ -153,7 +189,7 @@ export default function CommsPage() {
         <PageHeader
           eyebrow="Communications"
           title="Matrix · Agenda · MoM · Follow-up"
-          subtitle="Exact client flow: communication matrix, generate agenda before MoM, capture minutes/actions, then follow up open items."
+          subtitle="Maintain who is involved (Client, Sharnam PMC, consultant, contractor, concrete / site). Generate agenda before MoM, then follow up open actions."
         />
       </div>
 
@@ -196,83 +232,174 @@ export default function CommsPage() {
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
       {tab === "matrix" && (
-        <div className="space-y-4">
-          {canEdit && (
-            <Card>
-              <h3 className="font-semibold mb-3">Add matrix row</h3>
-              <form
-                className="grid sm:grid-cols-2 gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await api(`/api/comms/matrix/${id}`, { method: "POST", token, body: JSON.stringify(matrixForm) });
+        <div className="space-y-5">
+          <div className="flex flex-wrap gap-2 items-center">
+            {(["TECHNICAL", "COMMERCIAL"] as const).map((k) => (
+              <Button key={k} type="button" variant={matrixKind === k ? "primary" : "secondary"} onClick={() => setMatrixKind(k)}>
+                {k === "TECHNICAL" ? "Technical matrix" : "Commercial matrix"}
+              </Button>
+            ))}
+            {canEdit && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="!text-sm"
+                onClick={async () => {
+                  await api(`/api/comms/contacts/${id}/seed-demo`, {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify({ matrixKind }),
+                  });
+                  setMsg(`${matrixKind} matrix seeded from project client / PMC / consultant / contractor.`);
                   await load();
                 }}
               >
-                <Input
-                  placeholder="Communication type"
-                  value={matrixForm.communicationType}
-                  onChange={(e) => setMatrixForm({ ...matrixForm, communicationType: e.target.value })}
-                />
-                <Input
-                  placeholder="Frequency"
-                  value={matrixForm.frequency}
-                  onChange={(e) => setMatrixForm({ ...matrixForm, frequency: e.target.value })}
-                />
-                <Select value={matrixForm.fromRole} onChange={(e) => setMatrixForm({ ...matrixForm, fromRole: e.target.value })}>
-                  {["office", "site_employee", "vendor", "client", "employee"].map((r) => (
-                    <option key={r} value={r}>
-                      From · {r}
-                    </option>
+                Seed BPCL-style rows
+              </Button>
+            )}
+          </div>
+
+          <Card className="!bg-procore-navy !text-white !border-0">
+            <div className="text-[11px] uppercase tracking-wider text-white/60">Subject</div>
+            <div className="font-display text-xl mt-1">{matrixKind} COMMUNICATION MATRIX</div>
+            <p className="text-sm text-white/75 mt-2">
+              Per-project contact sheet — Name · Designation · Company · SPOC · Mobile · Email · TO/CC · Office address
+              (same columns as your BPCL Excel).
+            </p>
+          </Card>
+
+          {canEdit && (
+            <Card>
+              <h3 className="font-semibold mb-3">Add contact / org section</h3>
+              <form
+                className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  await api(`/api/comms/contacts/${id}`, {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify({ ...contactForm, matrixKind, company: contactForm.company || contactForm.orgName }),
+                  });
+                  setContactForm({
+                    orgSection: contactForm.orgSection,
+                    orgName: contactForm.orgName,
+                    personName: "",
+                    designation: "",
+                    company: "",
+                    spoc: "",
+                    mobile: "",
+                    email: "",
+                    mailRole: "CC",
+                    officeAddress: "",
+                  });
+                  await load();
+                }}
+              >
+                <Select value={contactForm.orgSection} onChange={(e) => setContactForm({ ...contactForm, orgSection: e.target.value })}>
+                  {ORG_SECTIONS.map((s) => (
+                    <option key={s}>{s}</option>
                   ))}
                 </Select>
-                <Select value={matrixForm.toRole} onChange={(e) => setMatrixForm({ ...matrixForm, toRole: e.target.value })}>
-                  {["office", "site_employee", "vendor", "client", "employee"].map((r) => (
-                    <option key={r} value={r}>
-                      To · {r}
-                    </option>
-                  ))}
+                <Input placeholder="Organisation name" value={contactForm.orgName} onChange={(e) => setContactForm({ ...contactForm, orgName: e.target.value })} required />
+                <Input placeholder="Person name" value={contactForm.personName} onChange={(e) => setContactForm({ ...contactForm, personName: e.target.value })} />
+                <Input placeholder="Designation" value={contactForm.designation} onChange={(e) => setContactForm({ ...contactForm, designation: e.target.value })} />
+                <Input placeholder="Company" value={contactForm.company} onChange={(e) => setContactForm({ ...contactForm, company: e.target.value })} />
+                <Input placeholder="Single point of contact (SPOC)" value={contactForm.spoc} onChange={(e) => setContactForm({ ...contactForm, spoc: e.target.value })} />
+                <Input placeholder="Mobile" value={contactForm.mobile} onChange={(e) => setContactForm({ ...contactForm, mobile: e.target.value })} />
+                <Input placeholder="Email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} />
+                <Select value={contactForm.mailRole} onChange={(e) => setContactForm({ ...contactForm, mailRole: e.target.value })}>
+                  <option value="TO">TO</option>
+                  <option value="CC">CC</option>
                 </Select>
-                <Select value={matrixForm.channel} onChange={(e) => setMatrixForm({ ...matrixForm, channel: e.target.value })}>
-                  {["Meeting", "Email", "WhatsApp", "In-App"].map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </Select>
-                <Button type="submit">Add to matrix</Button>
+                <Input className="sm:col-span-2" placeholder="Office address" value={contactForm.officeAddress} onChange={(e) => setContactForm({ ...contactForm, officeAddress: e.target.value })} />
+                <Button type="submit">Add to {matrixKind} matrix</Button>
               </form>
             </Card>
           )}
+
           <Card padding={false} className="overflow-x-auto">
-            <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white">Communication matrix</div>
-            <table className="w-full text-sm">
-              <thead className="bg-sand text-left text-[10px] uppercase text-steel-muted">
+            <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white flex justify-between gap-2">
+              <span>{matrixKind} · Contact register</span>
+              <span className="text-[11px] font-normal text-white/70">{contacts.length} rows</span>
+            </div>
+            <table className="w-full text-sm min-w-[900px]">
+              <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
                 <tr>
-                  <th className="p-3">Type</th>
-                  <th className="p-3">From</th>
-                  <th className="p-3">To</th>
-                  <th className="p-3">Frequency</th>
-                  <th className="p-3">Channel</th>
+                  <th className="p-3">Sr</th>
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Designation</th>
+                  <th className="p-3">Company</th>
+                  <th className="p-3">SPOC</th>
+                  <th className="p-3">Mobile</th>
+                  <th className="p-3">E-mail</th>
+                  <th className="p-3">TO/CC</th>
+                  <th className="p-3">Office address</th>
                 </tr>
               </thead>
               <tbody>
-                {matrix.map((r) => (
-                  <tr key={r.id} className="border-t border-line">
-                    <td className="p-3 font-medium">{r.communicationType}</td>
-                    <td className="p-3 capitalize">{r.fromRole.replace("_", " ")}</td>
-                    <td className="p-3 capitalize">{r.toRole.replace("_", " ")}</td>
-                    <td className="p-3">{r.frequency}</td>
-                    <td className="p-3">{r.channel}</td>
-                  </tr>
-                ))}
-                {!matrix.length && (
+                {contacts.map((r, idx) =>
+                  r.isSectionHeader ? (
+                    <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
+                      <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + (idx % 26))}</td>
+                      <td className="p-3 font-semibold text-ink" colSpan={8}>
+                        {r.orgName}
+                        <span className="ml-2 text-xs font-normal text-steel-muted">({r.orgSection})</span>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={r.id} className="border-t border-line hover:bg-sand/40">
+                      <td className="p-3 font-mono text-xs text-steel-muted">{r.sortOrder || idx + 1}</td>
+                      <td className="p-3 font-medium">{r.personName || "—"}</td>
+                      <td className="p-3">{r.designation || "—"}</td>
+                      <td className="p-3">{r.company || r.orgName || "—"}</td>
+                      <td className="p-3 text-xs">{r.spoc || "—"}</td>
+                      <td className="p-3 font-mono text-xs">{r.mobile || "—"}</td>
+                      <td className="p-3 text-xs break-all">{r.email || "—"}</td>
+                      <td className="p-3">
+                        <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge>
+                      </td>
+                      <td className="p-3 text-xs text-steel-muted max-w-[180px]">{r.officeAddress || "—"}</td>
+                    </tr>
+                  )
+                )}
+                {!contacts.length && (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-steel-muted text-sm">
-                      No matrix rows yet — add who communicates with whom.
+                    <td colSpan={9} className="p-10 text-center text-steel-muted text-sm">
+                      No contacts yet — click <strong>Seed BPCL-style rows</strong> or add people above.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </Card>
+
+          <details className="text-sm">
+            <summary className="cursor-pointer font-semibold text-steel-muted">Topic routing (who talks to whom)</summary>
+            <Card className="mt-3" padding={false}>
+              <table className="w-full text-sm">
+                <thead className="bg-sand text-left text-[10px] uppercase text-steel-muted">
+                  <tr>
+                    <th className="p-3">Type</th>
+                    <th className="p-3">From</th>
+                    <th className="p-3">To</th>
+                    <th className="p-3">Frequency</th>
+                    <th className="p-3">Channel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.map((r) => (
+                    <tr key={r.id} className="border-t border-line">
+                      <td className="p-3 font-medium">{r.communicationType}</td>
+                      <td className="p-3">{roleLabel(r.fromRole)}</td>
+                      <td className="p-3">{roleLabel(r.toRole)}</td>
+                      <td className="p-3">{r.frequency}</td>
+                      <td className="p-3">{r.channel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </details>
         </div>
       )}
 

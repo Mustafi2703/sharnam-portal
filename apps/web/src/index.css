@@ -1,30 +1,30 @@
 @import "tailwindcss";
 
 /*
-  शरणम् light theme — orange + logo cyan (no black chrome)
-  Logo sits on a warm plate; orange drives CTAs; cyan mark for registration ticks
+  Sharnam PMC — spacious Procore-like chrome
+  Tokens overridden per UI option 1–5 via themes.ts
 */
 @theme {
   --color-brand: #e4632a;
   --color-brand-dark: #c24d1a;
-  --color-brand-soft: #fff2eb;
+  --color-brand-soft: #fff4ed;
   --color-brand-glow: #f4a574;
   --color-mark: #0b6a78;
   --color-accent: #0b6a78;
-  --color-steel: #2a2a2a;
-  --color-steel-2: #3d3d3d;
-  --color-steel-muted: #6b6b6b;
-  --color-sand: #faf7f4;
-  --color-ink: #1c1c1c;
+  --color-steel: #1c2430;
+  --color-steel-2: #3d4450;
+  --color-steel-muted: #6b6560;
+  --color-sand: #f7f4f0;
+  --color-ink: #1a1a1a;
   --color-paper: #ffffff;
-  --color-line: #eadfd6;
+  --color-line: #e6ddd4;
   --color-ok: #1f7a3f;
   --color-warn: #b45309;
   --color-danger: #c23030;
-  --color-procore-navy: #2a2a2a;
+  --color-procore-navy: #1c2430;
   --color-procore-blue: #e4632a;
-  --font-sans: "Instrument Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Syne", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Syne", "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -39,14 +39,22 @@ body {
   font-family: var(--font-sans);
   color: var(--color-ink);
   background: var(--color-sand);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
 html[data-ui-style="night"] body {
   background: var(--color-sand);
 }
 
-html[data-ui-density="compact"] .surface {
+html[data-ui-style="night"] .surface {
+  background: var(--color-paper);
   box-shadow: none;
+}
+
+html[data-ui-density="compact"] .page-stack {
+  gap: 1rem;
 }
 
 html[data-ui-radius="sharp"] .surface,
@@ -61,7 +69,7 @@ html[data-ui-radius="sharp"] .rounded-lg {
 }
 
 .ui-panel {
-  border-radius: var(--ui-radius, 12px);
+  border-radius: var(--ui-radius, 10px);
 }
 
 .font-display {
@@ -75,31 +83,52 @@ html[data-ui-radius="sharp"] .rounded-lg {
 }
 
 .surface {
-  background: #ffffff;
+  background: var(--color-paper);
   border: 1px solid var(--color-line);
-  box-shadow: 0 1px 0 rgba(228, 99, 42, 0.04);
+  border-radius: var(--ui-radius, 10px);
+  box-shadow: 0 1px 2px rgba(28, 36, 48, 0.04);
 }
 
-.surface-dark {
-  background: #2a2a2a;
-  color: #f7f7f7;
-}
-
-.hero-readable {
-  background:
-    linear-gradient(135deg, rgba(28, 28, 28, 0.06) 0%, rgba(228, 99, 42, 0.08) 55%, rgba(11, 106, 120, 0.08) 100%);
-  color: var(--color-ink);
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-gap, 1.5rem);
 }
 
 .procore-topbar {
-  background: #ffffff;
+  background: var(--color-paper);
   border-bottom: 1px solid var(--color-line);
   color: var(--color-ink);
 }
 
 .procore-tool-header {
-  background: #ffffff;
+  background: var(--color-paper);
   border-bottom: 1px solid var(--color-line);
+}
+
+.tool-shell {
+  display: grid;
+  min-height: 70vh;
+}
+
+@media (min-width: 1280px) {
+  .tool-shell.has-both {
+    grid-template-columns: 220px minmax(0, 1fr) 280px;
+  }
+  .tool-shell.has-left {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  .tool-shell.has-right {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+.tool-side-nav a {
+  display: block;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--ui-radius-sm, 6px);
+  font-size: 0.9375rem;
+  line-height: 1.35;
 }
 
 .brand-frame {
@@ -113,17 +142,17 @@ html[data-ui-radius="sharp"] .rounded-lg {
   height: 14px;
   border-color: var(--color-mark);
   pointer-events: none;
-  opacity: 0.8;
+  opacity: 0.75;
 }
 .brand-frame::before {
-  top: 10px;
-  left: 10px;
+  top: 12px;
+  left: 12px;
   border-top: 2px solid;
   border-left: 2px solid;
 }
 .brand-frame::after {
-  bottom: 10px;
-  right: 10px;
+  bottom: 12px;
+  right: 12px;
   border-bottom: 2px solid var(--color-brand);
   border-right: 2px solid var(--color-brand);
 }
@@ -133,21 +162,22 @@ html[data-ui-radius="sharp"] .rounded-lg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.4rem 0.65rem;
+  padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-line);
-  box-shadow: 0 2px 8px rgba(228, 99, 42, 0.08);
+  border-radius: var(--ui-radius-sm, 6px);
+}
+
+html[data-ui-style="night"] .logo-plate {
+  background: #2a2420;
+  border-color: var(--color-line);
 }
 
 .interactive-lift {
-  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.2s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.2s ease;
 }
 .interactive-lift:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 32px rgba(228, 99, 42, 0.12);
-}
-
-.spotlight {
-  background: radial-gradient(500px circle at var(--mx, 50%) var(--my, 30%), rgba(228, 99, 42, 0.12), transparent 45%);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(28, 36, 48, 0.1);
 }
 
 .scroll-panel {
@@ -163,29 +193,49 @@ html[data-ui-radius="sharp"] .rounded-lg {
 }
 
 .list-roomy > * + * {
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
 }
 
-.workflow-step {
-  position: relative;
+.selected-ring {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  background: var(--color-brand-soft);
 }
-.workflow-step::after {
-  content: "";
-  position: absolute;
-  top: 14px;
-  left: calc(50% + 18px);
-  width: calc(100% - 36px);
-  height: 1px;
-  background: #e8dcd3;
+
+.hero-site {
+  background-color: #1c2430;
+  background-image:
+    linear-gradient(105deg, rgba(12, 18, 28, 0.88) 0%, rgba(12, 18, 28, 0.55) 48%, rgba(228, 99, 42, 0.25) 100%),
+    url("https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1800&q=80");
+  background-size: cover;
+  background-position: center;
 }
-.workflow-step:last-child::after {
-  display: none;
+
+.hero-field {
+  background-color: #1a2b22;
+  background-image:
+    linear-gradient(120deg, rgba(20, 32, 26, 0.9) 0%, rgba(20, 32, 26, 0.45) 55%, rgba(47, 111, 78, 0.35) 100%),
+    url("https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1600&q=80");
+  background-size: cover;
+  background-position: center;
+}
+
+.portal-tile {
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  border-radius: var(--ui-radius, 10px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.portal-tile:hover {
+  border-color: var(--color-brand);
+  box-shadow: 0 10px 28px rgba(28, 36, 48, 0.08);
+  transform: translateY(-2px);
 }
 
 @keyframes rise-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -194,46 +244,33 @@ html[data-ui-radius="sharp"] .rounded-lg {
 }
 
 .rise {
-  animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .rise-delay-1 {
-  animation-delay: 0.05s;
+  animation-delay: 0.06s;
 }
 .rise-delay-2 {
-  animation-delay: 0.1s;
+  animation-delay: 0.12s;
 }
 .rise-delay-3 {
-  animation-delay: 0.15s;
+  animation-delay: 0.18s;
 }
 .rise-delay-4 {
-  animation-delay: 0.2s;
+  animation-delay: 0.24s;
 }
 
 .blueprint-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
+    linear-gradient(rgba(27, 123, 140, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 123, 140, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
-.portal-card:hover {
-  border-color: rgba(228, 99, 42, 0.35);
-}
-
-.construction-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(28, 28, 28, 0.35);
-  backdrop-filter: blur(8px);
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  color: #fff;
-}
-
-.selected-ring {
-  outline: 2px solid var(--color-brand);
-  outline-offset: 2px;
-  background: var(--color-brand-soft);
+@media (max-width: 767px) {
+  body {
+    font-size: 14px;
+  }
+  .tool-shell {
+    display: block;
+  }
 }

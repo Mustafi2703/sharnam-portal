@@ -211,25 +211,47 @@ inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "s
     });
   }
 
-  const items: { description: string; autoGenerateRfi?: boolean }[] = req.body.items || [
-    { description: "Work matches approved drawing revision" },
-    { description: "Materials as specified" },
-    { description: "Workmanship acceptable" },
-    { description: "Safety compliance verified" },
-    { description: "Ready for next activity", autoGenerateRfi: true },
-  ];
+  const itemsFromBody: { description: string; autoGenerateRfi?: boolean }[] = req.body.items || [];
+  let items = itemsFromBody;
+
+  if (req.body.checklistTemplateId) {
+    const tpl = await prisma.checklistTemplate.findUnique({
+      where: { id: req.body.checklistTemplateId },
+      include: { items: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (tpl?.items?.length) {
+      items = tpl.items.map((it) => ({ description: `${it.itemCode ? it.itemCode + " — " : ""}${it.description}` }));
+    }
+  }
+
+  if (!items.length) {
+    items = [
+      { description: "Work matches approved drawing revision" },
+      { description: "Materials as specified" },
+      { description: "Workmanship acceptable" },
+      { description: "Safety compliance verified" },
+      { description: "Ready for next activity", autoGenerateRfi: true },
+    ];
+  }
 
   const inspection = await prisma.qualityInspection.create({
     data: {
       projectId: req.params.projectId,
       title: req.body.title,
       inspectionType: req.body.inspectionType || "Quality",
+      status: req.body.status || "Draft",
       location: req.body.location,
       linkedDrawingId: req.body.linkedDrawingId || null,
+      checklistTemplateId: req.body.checklistTemplateId || null,
       trade: req.body.trade,
       createdById: req.user!.id,
       assignedToId: req.body.assignedToId || null,
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      attachmentsJson: req.body.attachmentsJson
+        ? typeof req.body.attachmentsJson === "string"
+          ? req.body.attachmentsJson
+          : JSON.stringify(req.body.attachmentsJson)
+        : null,
       items: {
         create: items.map((it, i) => ({
           description: it.description,
@@ -238,7 +260,7 @@ inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "s
         })),
       },
     },
-    include: { items: true, drawing: true },
+    include: { items: true, drawing: true, assignedTo: { select: { fullName: true } } },
   });
 
   // Store under Mock OneDrive by drawing discipline (Procore-style folder by type)
@@ -276,6 +298,27 @@ inspectionsRouter.post("/:id/items", requireRoles("admin", "office", "site_emplo
     },
   });
   res.status(201).json(item);
+});
+
+inspectionsRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+  const row = await prisma.qualityInspection.update({
+    where: { id: req.params.id },
+    data: {
+      status: req.body.status,
+      title: req.body.title,
+      assignedToId: req.body.assignedToId,
+      linkedDrawingId: req.body.linkedDrawingId,
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+      completedAt: req.body.status === "Closed" ? new Date() : undefined,
+      attachmentsJson: req.body.attachmentsJson
+        ? typeof req.body.attachmentsJson === "string"
+          ? req.body.attachmentsJson
+          : JSON.stringify(req.body.attachmentsJson)
+        : undefined,
+    },
+    include: { items: true, assignedTo: { select: { fullName: true } }, drawing: true },
+  });
+  res.json(row);
 });
 
 inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_employee", "vendor", "employee"), async (req: AuthedRequest, res) => {
@@ -470,6 +513,10 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
       discipline: req.body.discipline,
       location: req.body.location,
       priority: req.body.priority || "Medium",
+      ballInCourt: req.body.ballInCourt || "Assignee",
+      linkedDrawingId: req.body.linkedDrawingId || null,
+      assignedToName: req.body.assignedToName || null,
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
     },
   });
   res.status(201).json(row);
@@ -484,6 +531,11 @@ directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "empl
       description: req.body.description,
       priority: req.body.priority,
       location: req.body.location,
+      discipline: req.body.discipline,
+      ballInCourt: req.body.ballInCourt,
+      assignedToName: req.body.assignedToName,
+      linkedDrawingId: req.body.linkedDrawingId,
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
     },
   });
   res.json(row);

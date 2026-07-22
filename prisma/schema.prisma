@@ -98,6 +98,7 @@ model Project {
   safetyRecords        SafetyRecord[]
   emailOutbox          EmailOutbox[]
   vendorBills          VendorBill[]
+  communicationContacts CommunicationContact[]
 }
 
 /** Mock / queued outbound emails (swap to SMTP/Graph later) */
@@ -327,6 +328,35 @@ model CommunicationMatrix {
   createdAt         DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** BPCL-style contact matrix (TECHNICAL / COMMERCIAL) — Name, Designation, Company, SPOC, Mobile, Email, TO/CC */
+model CommunicationContact {
+  id             String   @id @default(cuid())
+  projectId      String
+  /// TECHNICAL | COMMERCIAL
+  matrixKind     String   @default("TECHNICAL")
+  /// Client | PMC | Consultant | Contractor | Other
+  orgSection     String
+  orgName        String
+  /// true = section header row (org name only)
+  isSectionHeader Boolean @default(false)
+  sortOrder      Int      @default(0)
+  personName     String?
+  designation    String?
+  company        String?
+  spoc           String?
+  mobile         String?
+  email          String?
+  /// TO | CC
+  mailRole       String?
+  officeAddress  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, matrixKind])
 }
 
 model CommunicationLog {
@@ -669,14 +699,18 @@ model QualityInspection {
   projectId     String
   title         String
   inspectionType String  @default("Quality")
-  status        String   @default("Open")
+  /// Draft → Ready → In Progress → Closed
+  status        String   @default("Draft")
   location      String?
   linkedDrawingId String?
+  /// Checklist template that seeded the form items
+  checklistTemplateId String?
   trade         String?
   createdById   String
   assignedToId  String?
   dueDate       DateTime?
   completedAt   DateTime?
+  attachmentsJson String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -747,6 +781,10 @@ model DesignCoordinationIssue {
   discipline  String?
   location    String?
   priority    String   @default("Medium")
+  ballInCourt String   @default("Assignee")
+  linkedDrawingId String?
+  assignedToName String?
+  dueDate     DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

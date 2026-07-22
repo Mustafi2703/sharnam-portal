@@ -183,6 +183,7 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
   res.json({
     projectCode: project.code,
     path: folderPath,
+    fullPath: `/onedrive/${project.code}/${folderPath}`.replace(/\/+/g, "/").replace(/\/$/, "") || `/onedrive/${project.code}`,
     children,
     folders,
     syncedAt,

@@ -8,12 +8,17 @@ export function CoordinationPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
+  const [drawings, setDrawings] = useState<any[]>([]);
   const [form, setForm] = useState({
     title: "",
     description: "",
     discipline: "MEP",
     location: "",
     priority: "Medium",
+    assignedToName: "",
+    dueDate: "",
+    linkedDrawingId: "",
+    ballInCourt: "Assignee",
   });
   const [filter, setFilter] = useState("All");
   const canEdit =
@@ -22,8 +27,14 @@ export function CoordinationPage() {
     user?.role === "employee" ||
     user?.role === "site_employee";
 
-  const load = () =>
-    api<any>(`/api/directory/project/${id}/overview`, { token }).then((o) => setRows(o.coordination || []));
+  const load = async () => {
+    const [o, d] = await Promise.all([
+      api<any>(`/api/directory/project/${id}/overview`, { token }),
+      api<any[]>(`/api/drawings/project/${id}`, { token }).catch(() => []),
+    ]);
+    setRows(o.coordination || []);
+    setDrawings(d);
+  };
 
   useEffect(() => {
     void load();
@@ -34,16 +45,16 @@ export function CoordinationPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Design"
+        eyebrow="Design · Procore-style"
         title="Design coordination"
-        subtitle="Clash and coordination issues across Architecture, Structural, MEP, and Civil — open / close status."
+        subtitle="Clash / coordination register — discipline, drawing, assignee, due date, ball-in-court. Escalate open issues to RFIs. Files pipe into project OneDrive / Documents/Design-Coordination."
       />
 
       {canEdit && (
         <Card>
           <h3 className="font-semibold mb-3">Raise coordination issue</h3>
           <form
-            className="grid sm:grid-cols-2 gap-2"
+            className="grid sm:grid-cols-2 gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
               await api(`/api/directory/project/${id}/coordination`, {
@@ -51,7 +62,17 @@ export function CoordinationPage() {
                 token,
                 body: JSON.stringify(form),
               });
-              setForm({ title: "", description: "", discipline: "MEP", location: "", priority: "Medium" });
+              setForm({
+                title: "",
+                description: "",
+                discipline: "MEP",
+                location: "",
+                priority: "Medium",
+                assignedToName: "",
+                dueDate: "",
+                linkedDrawingId: "",
+                ballInCourt: "Assignee",
+              });
               await load();
             }}
           >
@@ -67,6 +88,21 @@ export function CoordinationPage() {
               ))}
             </Select>
             <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <Input placeholder="Assignee name" value={form.assignedToName} onChange={(e) => setForm({ ...form, assignedToName: e.target.value })} />
+            <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+            <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
+              <option value="">Linked drawing (optional)</option>
+              {drawings.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.drawingNumber} — {d.title}
+                </option>
+              ))}
+            </Select>
+            <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
+              {["Assignee", "Creator", "Consultant", "Contractor", "PMC"].map((b) => (
+                <option key={b}>{b}</option>
+              ))}
+            </Select>
             <TextArea
               className="sm:col-span-2"
               rows={2}
@@ -81,13 +117,13 @@ export function CoordinationPage() {
         </Card>
       )}
 
-      <div className="flex gap-1">
+      <div className="flex gap-1 flex-wrap">
         {["All", "Open", "Closed"].map((f) => (
           <button
             key={f}
             type="button"
             onClick={() => setFilter(f)}
-            className={`rounded px-3 py-1 text-xs border ${filter === f ? "bg-procore-navy text-white" : "bg-white border-line"}`}
+            className={`rounded px-3 py-1.5 text-xs border ${filter === f ? "bg-procore-navy text-white" : "bg-white border-line"}`}
           >
             {f}
           </button>
@@ -95,35 +131,53 @@ export function CoordinationPage() {
       </div>
 
       <Card padding={false}>
+        <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Coordination register</div>
         <ul className="divide-y">
           {filtered.map((r) => (
-            <li key={r.id} className="px-4 py-3 flex flex-wrap justify-between gap-3 text-sm">
+            <li key={r.id} className="px-4 py-4 flex flex-wrap justify-between gap-3 text-sm">
               <div className="min-w-0">
                 <div className="font-medium">{r.title}</div>
-                <div className="text-xs text-steel-muted mt-0.5">
+                <div className="text-xs text-steel-muted mt-1">
                   {r.discipline} · {r.priority}
                   {r.location ? ` · ${r.location}` : ""}
+                  {r.assignedToName ? ` · ${r.assignedToName}` : ""}
+                  {r.dueDate ? ` · due ${new Date(r.dueDate).toLocaleDateString()}` : ""}
                 </div>
-                {r.description && <p className="text-xs text-steel-muted mt-1">{r.description}</p>}
+                {r.description && <p className="text-xs text-steel-muted mt-1.5">{r.description}</p>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge tone="neutral">BIC: {r.ballInCourt || "Assignee"}</Badge>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
                 {canEdit && r.status === "Open" && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="!text-xs !py-1"
-                    onClick={async () => {
-                      await api(`/api/directory/coordination/${r.id}`, {
-                        method: "PATCH",
-                        token,
-                        body: JSON.stringify({ status: "Closed" }),
-                      });
-                      await load();
-                    }}
-                  >
-                    Close
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs !py-1"
+                      onClick={async () => {
+                        await api(`/api/directory/coordination/${r.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ status: "Closed" }),
+                        });
+                        await load();
+                      }}
+                    >
+                      Close
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="!text-xs !py-1"
+                      onClick={() => {
+                        window.location.href = `/projects/${id}/rfis`;
+                      }}
+                    >
+                      Escalate RFI
+                    </Button>
+                  </>
                 )}
               </div>
             </li>

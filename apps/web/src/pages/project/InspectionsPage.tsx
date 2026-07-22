@@ -1,36 +1,48 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
 
+/** Raise QA inspection with checklist → becomes fillable form when Ready; drawing + assignee */
 export default function InspectionsPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [drawings, setDrawings] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
-  const [title, setTitle] = useState("Quality action plan");
-  const [drawingId, setDrawingId] = useState("");
-  const [inspectionType, setInspectionType] = useState("Quality Action Plan");
+  const [form, setForm] = useState({
+    title: "Site quality inspection",
+    drawingId: "",
+    inspectionType: "Quality Inspection",
+    checklistTemplateId: "",
+    assignedToId: "",
+    dueDate: "",
+    location: "",
+  });
   const [itemText, setItemText] = useState("");
-  const [itemDue, setItemDue] = useState("");
   const [msg, setMsg] = useState("");
 
   const canManage =
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
 
   const load = async () => {
-    const [insp, d] = await Promise.all([
-      api<{
-        inspections: any[];
-        canInspect: boolean;
-        publishedDrawings: number;
-      }>(`/api/inspections/project/${id}`, { token }),
+    const [insp, d, u, t] = await Promise.all([
+      api<{ inspections: any[]; canInspect: boolean; publishedDrawings: number }>(`/api/inspections/project/${id}`, {
+        token,
+      }),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
+      api<any[]>("/api/users", { token }).catch(() => []),
+      api<any[]>("/api/checklist/templates", { token }).catch(() => []),
     ]);
     setData(insp);
     setDrawings(d.filter((x) => x.isPublished));
+    setUsers(u);
+    const list = Array.isArray(t) ? t : [];
+    const qi = list.filter((x: any) => /quality|qi|inspection/i.test(`${x.checklistType || ""} ${x.category || ""} ${x.name || ""}`));
+    setTemplates(qi.length ? qi : list.slice(0, 25));
     if (!active && insp.inspections?.[0]) setActive(insp.inspections[0].id);
   };
 
@@ -44,8 +56,8 @@ export default function InspectionsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Quality assurance"
-        title="Quality action plan"
-        subtitle="Corrective / follow-up action plans (separate from Final Index site checklists and Quality Inspection forms). Link items to drawings; unresolved can spawn RFIs."
+        title="Inspections & action plans"
+        subtitle="Raise an inspection with a checklist template — items become the form. Assign people, link a published drawing, mark Ready when the form can be filled. Docs land under project OneDrive / Inspections."
         actions={
           <Badge tone={data?.canInspect ? "ok" : "warn"}>
             {data?.canInspect ? "Drawings gate open" : "Publish drawings first"}
@@ -57,60 +69,95 @@ export default function InspectionsPage() {
         active={data?.canInspect ? 1 : 0}
         steps={[
           { label: "Drawing published", hint: "Required gate" },
-          { label: "Create action plan", hint: "Link to sheet" },
-          { label: "Track items", hint: "Pass / Fail / Unresolved" },
-          { label: "Close / RFI", hint: "Unresolved can spawn RFI" },
+          { label: "Raise inspection", hint: "Checklist → form" },
+          { label: "Mark Ready", hint: "Assignee fills" },
+          { label: "Close / RFI", hint: "Unresolved items" },
         ]}
       />
 
       {canManage && (
         <Card>
+          <h3 className="font-semibold mb-3">Raise inspection</h3>
           <form
-            className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end"
+            className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
               setMsg("");
               try {
-                await api(`/api/inspections/project/${id}`, {
+                const created = await api<any>(`/api/inspections/project/${id}`, {
                   method: "POST",
                   token,
                   body: JSON.stringify({
-                    title,
-                    linkedDrawingId: drawingId || null,
-                    inspectionType,
+                    title: form.title,
+                    linkedDrawingId: form.drawingId || null,
+                    inspectionType: form.inspectionType,
+                    checklistTemplateId: form.checklistTemplateId || null,
+                    assignedToId: form.assignedToId || null,
+                    dueDate: form.dueDate || null,
+                    location: form.location,
+                    status: "Draft",
                   }),
                 });
+                setActive(created.id);
+                setMsg("Inspection created as Draft — mark Ready when the checklist form should be filled.");
                 await load();
               } catch (err) {
                 setMsg(err instanceof Error ? err.message : "Failed");
               }
             }}
           >
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Action plan title" required />
-            <Select value={inspectionType} onChange={(e) => setInspectionType(e.target.value)}>
-              {["Quality Action Plan", "Quality", "Safety", "Handover"].map((t) => (
+            <Input
+              className="sm:col-span-2"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="Inspection title"
+              required
+            />
+            <Select value={form.inspectionType} onChange={(e) => setForm({ ...form, inspectionType: e.target.value })}>
+              {["Quality Inspection", "Quality Action Plan", "Safety", "Handover"].map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </Select>
-            <Select value={drawingId} onChange={(e) => setDrawingId(e.target.value)}>
-              <option value="">Link published drawing</option>
+            <Select
+              value={form.checklistTemplateId}
+              onChange={(e) => setForm({ ...form, checklistTemplateId: e.target.value })}
+            >
+              <option value="">Checklist template (optional → form lines)</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+            <Select value={form.drawingId} onChange={(e) => setForm({ ...form, drawingId: e.target.value })}>
+              <option value="">Published drawing</option>
               {drawings.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.drawingNumber} — {d.title}
                 </option>
               ))}
             </Select>
-            <Button type="submit" disabled={!data?.canInspect}>
-              Create plan
+            <Select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>
+              <option value="">Assignee</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.fullName} · {u.role}
+                </option>
+              ))}
+            </Select>
+            <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+            <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <Button type="submit" className="sm:col-span-2 lg:col-span-3" disabled={!data?.canInspect}>
+              Create draft inspection
             </Button>
           </form>
-          {msg && <p className="text-sm text-danger mt-2">{msg}</p>}
+          {msg && <p className="text-sm mt-2 text-steel-muted">{msg}</p>}
         </Card>
       )}
 
-      <div className="grid lg:grid-cols-[320px_1fr] gap-4">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-4">
         <Card padding={false}>
-          <div className="px-4 py-3 border-b font-semibold bg-sand/40">Action plans</div>
+          <div className="px-4 py-3 border-b font-semibold bg-sand/40">Inspections</div>
           <ul className="divide-y max-h-[55vh] overflow-y-auto">
             {data?.inspections?.map((i: any) => (
               <button
@@ -119,97 +166,137 @@ export default function InspectionsPage() {
                 className={`w-full text-left px-4 py-3 ${active === i.id ? "bg-brand-soft" : ""}`}
                 onClick={() => setActive(i.id)}
               >
-                <div className="font-medium text-sm">{i.title}</div>
-                <div className="text-[11px] text-steel-muted mt-1 flex gap-2 flex-wrap">
-                  <Badge tone={i.status === "Completed" ? "ok" : "warn"}>{i.status}</Badge>
-                  <span>{i.inspectionType}</span>
-                  {i.drawing?.drawingNumber}
+                <div className="flex justify-between gap-2">
+                  <span className="font-medium text-sm">{i.title}</span>
+                  <Badge tone={i.status === "Ready" || i.status === "Closed" ? "ok" : "warn"}>{i.status}</Badge>
+                </div>
+                <div className="text-[11px] text-steel-muted mt-1">
+                  {i.drawing?.drawingNumber || "No drawing"} · {i.assignedTo?.fullName || "Unassigned"} · {i.items?.length || 0} lines
                 </div>
               </button>
             ))}
+            {!data?.inspections?.length && <li className="p-4 text-sm text-steel-muted">No inspections yet.</li>}
           </ul>
         </Card>
 
         <Card>
-          {!selected && <p className="text-sm text-steel-muted">Select an action plan</p>}
+          {!selected && <p className="text-sm text-steel-muted">Select an inspection</p>}
           {selected && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold">{selected.title}</h2>
-                <p className="text-sm text-steel-muted mt-1">
-                  {selected.drawing ? `${selected.drawing.drawingNumber} — ${selected.drawing.title}` : "No drawing linked"} ·{" "}
-                  {selected.createdBy?.fullName}
+                <h2 className="font-display text-2xl">{selected.title}</h2>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <Badge>{selected.status}</Badge>
+                  <Badge tone="neutral">{selected.inspectionType}</Badge>
+                  {selected.drawing && <Badge tone="brand">{selected.drawing.drawingNumber}</Badge>}
+                </div>
+                <p className="text-sm text-steel-muted mt-2">
+                  Assignee: {selected.assignedTo?.fullName || "—"} · By {selected.createdBy?.fullName}
                 </p>
               </div>
-              <div className="space-y-2">
-                {selected.items.map((item: any) => (
-                  <div key={item.id} className="rounded-xl border border-line p-3">
-                    <div className="text-sm font-medium">{item.description}</div>
-                    {item.dueDate && (
-                      <div className="text-[11px] text-steel-muted mt-1">Due {new Date(item.dueDate).toLocaleDateString()}</div>
-                    )}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {["Pending", "Passed", "Failed", "Unresolved"].map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          className={`rounded px-3 py-1 text-xs border ${
-                            item.status === st ? "bg-procore-navy text-white border-procore-navy" : "border-line"
-                          }`}
-                          onClick={async () => {
-                            const res = await api<any>(`/api/inspections/items/${item.id}`, {
-                              method: "PATCH",
-                              token,
-                              body: JSON.stringify({ status: st }),
-                            });
-                            if (res.generatedRfi) setMsg(`RFI ${res.generatedRfi.number} created from unresolved item`);
-                            await load();
-                          }}
-                        >
-                          {st}
-                        </button>
-                      ))}
-                    </div>
-                    {item.linkedRfiId && <p className="text-xs text-brand mt-2">Linked RFI created</p>}
-                  </div>
-                ))}
-              </div>
-              {canManage && selected.status !== "Completed" && (
-                <div className="flex flex-wrap gap-2 items-end">
-                  <TextArea
-                    className="flex-1 min-w-[200px]"
-                    rows={2}
-                    placeholder="Add action item"
-                    value={itemText}
-                    onChange={(e) => setItemText(e.target.value)}
-                  />
-                  <Input type="date" value={itemDue} onChange={(e) => setItemDue(e.target.value)} />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={async () => {
-                      if (!itemText.trim()) return;
-                      await api(`/api/inspections/${selected.id}/items`, {
-                        method: "POST",
-                        token,
-                        body: JSON.stringify({ description: itemText, dueDate: itemDue || null }),
-                      });
-                      setItemText("");
-                      setItemDue("");
-                      await load();
-                    }}
-                  >
-                    Add item
-                  </Button>
-                  <Button
-                    onClick={async () => {
-                      await api(`/api/inspections/${selected.id}/complete`, { method: "POST", token });
-                      await load();
-                    }}
-                  >
-                    Complete plan
-                  </Button>
+
+              {canManage && (
+                <div className="flex flex-wrap gap-2">
+                  {selected.status === "Draft" && (
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        await api(`/api/inspections/${selected.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ status: "Ready" }),
+                        });
+                        await load();
+                      }}
+                    >
+                      Mark Ready (form open)
+                    </Button>
+                  )}
+                  {selected.status === "Ready" && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={async () => {
+                        await api(`/api/inspections/${selected.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ status: "In Progress" }),
+                        });
+                        await load();
+                      }}
+                    >
+                      Start fill
+                    </Button>
+                  )}
+                  {selected.status !== "Closed" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={async () => {
+                        await api(`/api/inspections/${selected.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ status: "Closed" }),
+                        });
+                        await load();
+                      }}
+                    >
+                      Close
+                    </Button>
+                  )}
+                  <Link to={`/projects/${id}/dms`} className="text-sm font-semibold text-brand self-center">
+                    Open Inspections folder →
+                  </Link>
                 </div>
+              )}
+
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Checklist form lines</h3>
+                <ul className="space-y-2">
+                  {selected.items?.map((it: any) => (
+                    <li key={it.id} className="border border-line rounded-lg p-3 text-sm flex flex-wrap justify-between gap-2">
+                      <span>{it.description}</span>
+                      <div className="flex gap-1">
+                        {["Pass", "Fail", "N/A", "Open"].map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            className={`text-[11px] px-2 py-1 border rounded ${it.status === st ? "bg-brand text-white border-brand" : "border-line"}`}
+                            onClick={async () => {
+                              await api(`/api/inspections/items/${it.id}`, {
+                                method: "PATCH",
+                                token,
+                                body: JSON.stringify({ status: st }),
+                              });
+                              await load();
+                            }}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {canManage && (
+                <form
+                  className="flex gap-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    await api(`/api/inspections/${selected.id}/items`, {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ description: itemText }),
+                    });
+                    setItemText("");
+                    await load();
+                  }}
+                >
+                  <Input className="flex-1" placeholder="Add form line" value={itemText} onChange={(e) => setItemText(e.target.value)} required />
+                  <Button type="submit">Add</Button>
+                </form>
               )}
             </div>
           )}
