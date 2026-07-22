@@ -246,8 +246,13 @@ model ChecklistSubmission {
 model ChecklistPhoto {
   id           String   @id @default(cuid())
   submissionId String
+  /// Checklist template item this evidence belongs to (null = whole submission)
+  itemId       String?
+  /// photo | doc
+  kind         String   @default("photo")
   fileUrl      String
   caption      String?
+  comment      String?
   createdAt    DateTime @default(now())
 
   submission ChecklistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
@@ -727,6 +732,8 @@ model InspectionItem {
   description   String
   status        String  @default("Pending")
   remarks       String?
+  /// JSON array of { url, name, kind, comment? }
+  attachmentsJson String?
   sortOrder     Int     @default(0)
   dueDate       DateTime?
   autoGenerateRfi Boolean @default(false)

@@ -6,8 +6,9 @@ import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/
 import { BrandMark } from "../components/Brand";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string };
+type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[] };
 
-/** Spacious Procore-style fill form: pick drawing → pick revision → fill lines */
+/** Spacious Procore-style fill form: pick drawing → pick revision → fill lines with evidence */
 export default function ChecklistFillPage() {
   const { id: projectId, assignmentId } = useParams();
   const [search] = useSearchParams();
@@ -17,11 +18,13 @@ export default function ChecklistFillPage() {
   const [drawings, setDrawings] = useState<any[]>([]);
   const [drawingId, setDrawingId] = useState("");
   const [revisionId, setRevisionId] = useState("");
-  const [responses, setResponses] = useState<Record<string, { answer: string; remarks: string }>>({});
+  const [responses, setResponses] = useState<Record<string, LineResponse>>({});
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<FileList | null>(null);
   const [msg, setMsg] = useState("");
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
+
+  const emptyLine = (): LineResponse => ({ answer: "", remarks: "", photos: [], docs: [] });
 
   const load = async () => {
     const [a, d] = await Promise.all([
@@ -31,9 +34,9 @@ export default function ChecklistFillPage() {
     setAssignment(a);
     const published = d.filter((x) => x.isPublished && (x.revisions?.length || 0) > 0);
     setDrawings(published);
-    const init: Record<string, { answer: string; remarks: string }> = {};
+    const init: Record<string, LineResponse> = {};
     a.template.items.forEach((i: Item) => {
-      init[i.id] = { answer: "", remarks: "" };
+      init[i.id] = emptyLine();
     });
     setResponses(init);
   };
@@ -60,6 +63,13 @@ export default function ChecklistFillPage() {
   const answered = Object.values(responses).filter((r) => r.answer).length;
   const selectedRev = revs.find((r: any) => r.id === revisionId);
 
+  function patchLine(itemId: string, patch: Partial<LineResponse>) {
+    setResponses((prev) => ({
+      ...prev,
+      [itemId]: { ...(prev[itemId] || emptyLine()), ...patch },
+    }));
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMsg("");
@@ -68,8 +78,16 @@ export default function ChecklistFillPage() {
       return;
     }
     try {
+      const payload: Record<string, { answer: string; remarks: string }> = {};
+      const itemComments: Record<string, string> = {};
+      Object.entries(responses).forEach(([id, r]) => {
+        payload[id] = { answer: r.answer, remarks: r.remarks };
+        if (r.remarks?.trim()) itemComments[id] = r.remarks.trim();
+      });
+
       const fd = new FormData();
-      fd.append("responsesJson", JSON.stringify(responses));
+      fd.append("responsesJson", JSON.stringify(payload));
+      fd.append("itemCommentsJson", JSON.stringify(itemComments));
       fd.append("drawingId", drawingId);
       fd.append("revisionId", revisionId);
       if (selectedRev?.revisionNumber) fd.append("revisionNumber", selectedRev.revisionNumber);
@@ -78,12 +96,28 @@ export default function ChecklistFillPage() {
       if (photos) {
         Array.from(photos).forEach((f) => fd.append("photos", f));
       }
+      let lineFiles = 0;
+      Object.entries(responses).forEach(([id, r]) => {
+        r.photos.forEach((f) => {
+          fd.append(`item_${id}_photo`, f);
+          lineFiles += 1;
+        });
+        r.docs.forEach((f) => {
+          fd.append(`item_${id}_doc`, f);
+          lineFiles += 1;
+        });
+      });
       await api(`/api/checklist/assignments/${assignmentId}/submit`, {
         method: "POST",
         token,
         body: fd,
       });
-      setMsg(photos?.length ? `Submitted with ${photos.length} photo(s).` : "Submitted — audit log updated.");
+      const overall = photos?.length || 0;
+      setMsg(
+        overall + lineFiles
+          ? `Submitted with ${lineFiles} line attachment(s)${overall ? ` + ${overall} overall` : ""}.`
+          : "Submitted — audit log updated."
+      );
       setPhotos(null);
       await load();
     } catch (err) {
@@ -138,7 +172,7 @@ export default function ChecklistFillPage() {
             <PageHeader
               eyebrow={assignment.template.category}
               title={assignment.template.name}
-              subtitle="Pick a published drawing and its revision (Procore-style), then fill the form. Fills are blocked until drawings are uploaded."
+              subtitle="Pick a published drawing and revision, then fill each line with Yes/No/N.A., comment, photos, and docs."
               actions={
                 <div className="text-right">
                   <div className="text-2xl font-display text-brand">
@@ -216,6 +250,7 @@ export default function ChecklistFillPage() {
                         <div className="mt-1 font-medium">{s.submittedBy?.fullName}</div>
                         <div className="text-xs text-steel-muted">
                           {s.drawing?.drawingNumber || "—"} · {s.revisionNumber || s.drawing?.currentRev || "—"}
+                          {s.photos?.length ? ` · ${s.photos.length} file(s)` : ""}
                         </div>
                       </li>
                     ))}
@@ -250,63 +285,96 @@ export default function ChecklistFillPage() {
                       <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-mark">{section}</h3>
                       {items
                         .filter((i) => (i.section || "General") === section)
-                        .map((item) => (
-                          <div key={item.id} className="border border-line bg-white p-5 space-y-3">
-                            <div className="text-[15px] leading-relaxed font-medium">
-                              {item.itemCode && <span className="font-mono text-brand mr-2">{item.itemCode}</span>}
-                              {item.description}
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {["Yes", "No", "N.A."].map((ans) => {
-                                const on = responses[item.id]?.answer === ans;
-                                return (
-                                  <button
-                                    key={ans}
-                                    type="button"
-                                    onClick={() =>
-                                      setResponses({
-                                        ...responses,
-                                        [item.id]: { ...responses[item.id], answer: ans },
+                        .map((item) => {
+                          const line = responses[item.id] || emptyLine();
+                          return (
+                            <div key={item.id} className="border border-line bg-white p-5 space-y-3">
+                              <div className="text-[15px] leading-relaxed font-medium">
+                                {item.itemCode && <span className="font-mono text-brand mr-2">{item.itemCode}</span>}
+                                {item.description}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {["Yes", "No", "N.A."].map((ans) => {
+                                  const on = line.answer === ans;
+                                  return (
+                                    <button
+                                      key={ans}
+                                      type="button"
+                                      onClick={() => patchLine(item.id, { answer: ans })}
+                                      className={`rounded-sm px-4 py-2 text-sm font-medium border ${
+                                        on
+                                          ? ans === "Yes"
+                                            ? "bg-emerald-50 border-emerald-300 text-ok"
+                                            : ans === "No"
+                                              ? "bg-red-50 border-red-300 text-danger"
+                                              : "bg-amber-50 border-amber-300 text-warn"
+                                          : "bg-sand border-line text-steel-muted"
+                                      }`}
+                                    >
+                                      {ans}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <TextArea
+                                rows={2}
+                                placeholder="Comment for this checklist item"
+                                value={line.remarks}
+                                onChange={(e) => patchLine(item.id, { remarks: e.target.value })}
+                              />
+                              <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                                <label className="text-xs text-steel-muted block">
+                                  Photos
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    className="block mt-1 text-xs w-full"
+                                    onChange={(e) =>
+                                      patchLine(item.id, {
+                                        photos: e.target.files ? Array.from(e.target.files) : [],
                                       })
                                     }
-                                    className={`rounded-sm px-4 py-2 text-sm font-medium border ${
-                                      on
-                                        ? ans === "Yes"
-                                          ? "bg-emerald-50 border-emerald-300 text-ok"
-                                          : ans === "No"
-                                            ? "bg-red-50 border-red-300 text-danger"
-                                            : "bg-amber-50 border-amber-300 text-warn"
-                                        : "bg-sand border-line text-steel-muted"
-                                    }`}
-                                  >
-                                    {ans}
-                                  </button>
-                                );
-                              })}
+                                  />
+                                  {line.photos.length > 0 && (
+                                    <span className="block mt-1 text-[11px] text-ink">
+                                      {line.photos.map((f) => f.name).join(", ")}
+                                    </span>
+                                  )}
+                                </label>
+                                <label className="text-xs text-steel-muted block">
+                                  Documents
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.dwg,.txt,application/pdf"
+                                    multiple
+                                    className="block mt-1 text-xs w-full"
+                                    onChange={(e) =>
+                                      patchLine(item.id, {
+                                        docs: e.target.files ? Array.from(e.target.files) : [],
+                                      })
+                                    }
+                                  />
+                                  {line.docs.length > 0 && (
+                                    <span className="block mt-1 text-[11px] text-ink">
+                                      {line.docs.map((f) => f.name).join(", ")}
+                                    </span>
+                                  )}
+                                </label>
+                              </div>
                             </div>
-                            <TextArea
-                              rows={2}
-                              placeholder="Line remarks"
-                              value={responses[item.id]?.remarks || ""}
-                              onChange={(e) =>
-                                setResponses({
-                                  ...responses,
-                                  [item.id]: { ...responses[item.id], remarks: e.target.value },
-                                })
-                              }
-                            />
-                          </div>
-                        ))}
+                          );
+                        })}
                     </section>
                   ))}
                 </div>
 
                 <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-line">
                   <label className="text-sm text-steel-muted">
-                    Photos / evidence
+                    Overall photos / docs
                     <input
                       type="file"
-                      accept="image/*,.pdf"
+                      accept="image/*,.pdf,.doc,.docx"
                       multiple
                       className="block mt-1 text-xs"
                       onChange={(e) => setPhotos(e.target.files)}

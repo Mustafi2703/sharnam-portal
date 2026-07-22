@@ -4,7 +4,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
@@ -57,6 +57,7 @@ checklistRouter.get("/assignments/:assignmentId", async (req, res) => {
           submittedBy: { select: { fullName: true, email: true, role: true } },
           drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
           revision: { select: { id: true, revisionNumber: true, createdAt: true } },
+          photos: true,
         },
       },
     },
@@ -114,7 +115,7 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
 checklistRouter.post(
   "/assignments/:assignmentId/submit",
   requireRoles("admin", "office", "site_employee", "employee", "vendor"),
-  upload.array("photos", 10),
+  upload.any(),
   async (req: AuthedRequest, res) => {
     const assignment = await prisma.checklistAssignment.findUnique({
       where: { id: req.params.assignmentId },
@@ -175,9 +176,23 @@ checklistRouter.post(
     });
 
     const files = (req.files as Express.Multer.File[]) || [];
+    let itemAttachCount = 0;
     if (files.length) {
       const { mockOneDrive } = await import("../services/mockOneDrive.js");
+      const commentsRaw = req.body.itemCommentsJson;
+      let itemComments: Record<string, string> = {};
+      if (typeof commentsRaw === "string" && commentsRaw) {
+        try {
+          itemComments = JSON.parse(commentsRaw);
+        } catch {
+          itemComments = {};
+        }
+      }
       for (const f of files) {
+        const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
+        const itemId = scoped?.[1] || null;
+        const kind = scoped?.[2] || (f.mimetype?.startsWith("image/") ? "photo" : "doc");
+        if (itemId) itemAttachCount += 1;
         const saved = await mockOneDrive.upload(
           assignment.project.code,
           "Checklists",
@@ -187,8 +202,11 @@ checklistRouter.post(
         await prisma.checklistPhoto.create({
           data: {
             submissionId: submission.id,
+            itemId,
+            kind,
             fileUrl: saved.url,
             caption: f.originalname,
+            comment: itemId ? itemComments[itemId] || null : null,
           },
         });
       }
@@ -198,7 +216,7 @@ checklistRouter.post(
       userId: req.user!.id,
       entity: "ChecklistSubmission",
       entityId: submission.id,
-      meta: { photos: files.length },
+      meta: { files: files.length, itemAttachments: itemAttachCount },
     });
 
     if (assignment.project.notifyOnChecklistSubmit) {

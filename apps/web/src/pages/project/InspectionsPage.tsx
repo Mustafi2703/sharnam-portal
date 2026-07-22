@@ -252,31 +252,96 @@ export default function InspectionsPage() {
 
               <div>
                 <h3 className="font-semibold text-sm mb-2">Checklist form lines</h3>
-                <ul className="space-y-2">
-                  {selected.items?.map((it: any) => (
-                    <li key={it.id} className="border border-line rounded-lg p-3 text-sm flex flex-wrap justify-between gap-2">
-                      <span>{it.description}</span>
-                      <div className="flex gap-1">
-                        {["Pass", "Fail", "N/A", "Open"].map((st) => (
-                          <button
-                            key={st}
-                            type="button"
-                            className={`text-[11px] px-2 py-1 border rounded ${it.status === st ? "bg-brand text-white border-brand" : "border-line"}`}
-                            onClick={async () => {
-                              await api(`/api/inspections/items/${it.id}`, {
-                                method: "PATCH",
-                                token,
-                                body: JSON.stringify({ status: st }),
-                              });
-                              await load();
-                            }}
-                          >
-                            {st}
-                          </button>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
+                <ul className="space-y-3">
+                  {selected.items?.map((it: any) => {
+                    let attachments: { url: string; name: string; kind: string; comment?: string }[] = [];
+                    try {
+                      attachments = JSON.parse(it.attachmentsJson || "[]");
+                    } catch {
+                      attachments = [];
+                    }
+                    return (
+                      <li key={it.id} className="border border-line rounded-lg p-3 text-sm space-y-2">
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <span className="font-medium">{it.description}</span>
+                          <div className="flex gap-1">
+                            {["Pass", "Fail", "N/A", "Open"].map((st) => (
+                              <button
+                                key={st}
+                                type="button"
+                                className={`text-[11px] px-2 py-1 border rounded ${it.status === st ? "bg-brand text-white border-brand" : "border-line"}`}
+                                onClick={async () => {
+                                  await api(`/api/inspections/items/${it.id}`, {
+                                    method: "PATCH",
+                                    token,
+                                    body: JSON.stringify({ status: st }),
+                                  });
+                                  await load();
+                                }}
+                              >
+                                {st}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <TextArea
+                          rows={2}
+                          placeholder="Comment for this line"
+                          defaultValue={it.remarks || ""}
+                          onBlur={async (e) => {
+                            const remarks = e.target.value;
+                            if (remarks === (it.remarks || "")) return;
+                            await api(`/api/inspections/items/${it.id}`, {
+                              method: "PATCH",
+                              token,
+                              body: JSON.stringify({ remarks }),
+                            });
+                            await load();
+                          }}
+                        />
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <label className="text-[11px] text-steel-muted block">
+                            Photos / docs
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                              className="block mt-1 text-xs w-full"
+                              onChange={async (e) => {
+                                const files = e.target.files;
+                                if (!files?.length) return;
+                                const fd = new FormData();
+                                Array.from(files).forEach((f) => fd.append("files", f));
+                                if (it.remarks) fd.append("remarks", it.remarks);
+                                await api(`/api/inspections/items/${it.id}/attachments`, {
+                                  method: "POST",
+                                  token,
+                                  body: fd,
+                                });
+                                e.target.value = "";
+                                await load();
+                              }}
+                            />
+                          </label>
+                          <div className="text-[11px] text-steel-muted">
+                            {attachments.length ? (
+                              <ul className="space-y-1">
+                                {attachments.map((a, idx) => (
+                                  <li key={`${a.url}-${idx}`}>
+                                    <a href={a.url} target="_blank" rel="noreferrer" className="text-brand font-medium">
+                                      {a.kind === "photo" ? "Photo" : "Doc"}: {a.name}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              "No attachments yet"
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 

@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Button, Card, Input, PageHeader } from "../components/ui";
+import { Button, Card, Input, PageHeader, TextArea } from "../components/ui";
 
 /** Per-project email distribution (used on drawing publish & checklist submit) */
 export default function ProjectEmailSettingsPage() {
@@ -17,7 +17,10 @@ export default function ProjectEmailSettingsPage() {
   });
   const [outbox, setOutbox] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [sendForm, setSendForm] = useState({ subject: "", body: "", toEmails: "" });
+  const [sendMsg, setSendMsg] = useState("");
   const canEdit = ["admin", "office", "employee"].includes(user?.role || "");
+  const canSend = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
 
   const load = async () => {
     const [p, e] = await Promise.all([
@@ -104,6 +107,57 @@ export default function ProjectEmailSettingsPage() {
           {msg && <p className="text-sm text-steel-muted">{msg}</p>}
         </form>
       </Card>
+
+      {canSend && (
+        <Card>
+          <h3 className="font-semibold mb-3">Send email</h3>
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setSendMsg("");
+              try {
+                await api(`/api/projects/${id}/emails/send`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify({
+                    subject: sendForm.subject,
+                    body: sendForm.body,
+                    toEmails: sendForm.toEmails || undefined,
+                    context: "manual",
+                  }),
+                });
+                setSendMsg("Sent to outbox.");
+                setSendForm({ subject: "", body: "", toEmails: "" });
+                await load();
+              } catch (err) {
+                setSendMsg(err instanceof Error ? err.message : "Failed");
+              }
+            }}
+          >
+            <Input
+              placeholder="To (optional override, comma-separated)"
+              value={sendForm.toEmails}
+              onChange={(e) => setSendForm({ ...sendForm, toEmails: e.target.value })}
+            />
+            <Input
+              placeholder="Subject"
+              value={sendForm.subject}
+              onChange={(e) => setSendForm({ ...sendForm, subject: e.target.value })}
+              required
+            />
+            <TextArea
+              rows={4}
+              placeholder="Message"
+              value={sendForm.body}
+              onChange={(e) => setSendForm({ ...sendForm, body: e.target.value })}
+              required
+            />
+            <Button type="submit">Send email</Button>
+            {sendMsg && <p className="text-sm text-steel-muted">{sendMsg}</p>}
+          </form>
+        </Card>
+      )}
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b font-semibold text-sm">Recent outbox</div>

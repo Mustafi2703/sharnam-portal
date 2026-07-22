@@ -181,6 +181,15 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
   res.json(rfi);
 });
 
+rfiRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "RFI not found" });
+  await prisma.rfiResponse.deleteMany({ where: { rfiId: existing.id } });
+  await prisma.rfi.delete({ where: { id: existing.id } });
+  await audit("rfi.delete", { userId: req.user!.id, entity: "Rfi", entityId: existing.id });
+  res.json({ ok: true });
+});
+
 export const inspectionsRouter = Router();
 inspectionsRouter.use(requireAuth);
 
@@ -328,6 +337,7 @@ inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_
       status: req.body.status,
       remarks: req.body.remarks,
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+      ...(req.body.attachmentsJson !== undefined ? { attachmentsJson: req.body.attachmentsJson } : {}),
     },
     include: { inspection: true },
   });
@@ -356,6 +366,54 @@ inspectionsRouter.patch("/items/:itemId", requireRoles("admin", "office", "site_
   }
 
   res.json(item);
+});
+
+inspectionsRouter.post(
+  "/items/:itemId/attachments",
+  requireRoles("admin", "office", "site_employee", "vendor", "employee"),
+  upload.array("files", 10),
+  async (req: AuthedRequest, res) => {
+    const item = await prisma.inspectionItem.findUnique({
+      where: { id: req.params.itemId },
+      include: { inspection: { include: { project: true } } },
+    });
+    if (!item) return res.status(404).json({ error: "Item not found" });
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (!files.length) return res.status(400).json({ error: "No files" });
+    const comment = typeof req.body.comment === "string" ? req.body.comment : "";
+    const existing: { url: string; name: string; kind: string; comment?: string }[] = (() => {
+      try {
+        return JSON.parse(item.attachmentsJson || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    for (const f of files) {
+      const kind = f.mimetype?.startsWith("image/") ? "photo" : "doc";
+      const saved = await mockOneDrive.upload(
+        item.inspection.project.code,
+        "Inspections",
+        f.originalname,
+        f.buffer
+      );
+      existing.push({ url: saved.url, name: f.originalname, kind, comment: comment || undefined });
+    }
+    const updated = await prisma.inspectionItem.update({
+      where: { id: item.id },
+      data: {
+        attachmentsJson: JSON.stringify(existing),
+        remarks: req.body.remarks !== undefined ? req.body.remarks : item.remarks,
+      },
+    });
+    res.json(updated);
+  }
+);
+
+inspectionsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.inspectionItem.deleteMany({ where: { inspectionId: req.params.id } });
+  await prisma.qualityInspection.delete({ where: { id: req.params.id } });
+  await audit("inspection.delete", { userId: req.user!.id, entity: "QualityInspection", entityId: req.params.id });
+  res.json({ ok: true });
 });
 
 inspectionsRouter.post("/:id/complete", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
@@ -503,6 +561,24 @@ directoryRouter.post(
     res.status(201).json(row);
   }
 );
+
+directoryRouter.delete("/photos/:id", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+  await prisma.projectPhoto.delete({ where: { id: req.params.id } });
+  await audit("photo.delete", { userId: req.user!.id, entity: "ProjectPhoto", entityId: req.params.id });
+  res.json({ ok: true });
+});
+
+directoryRouter.delete("/submittals/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.submittal.delete({ where: { id: req.params.id } });
+  await audit("submittal.delete", { userId: req.user!.id, entity: "Submittal", entityId: req.params.id });
+  res.json({ ok: true });
+});
+
+directoryRouter.delete("/coordination/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.designCoordinationIssue.delete({ where: { id: req.params.id } });
+  await audit("coordination.delete", { userId: req.user!.id, entity: "DesignCoordinationIssue", entityId: req.params.id });
+  res.json({ ok: true });
+});
 
 directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const row = await prisma.designCoordinationIssue.create({
