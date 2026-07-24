@@ -31,6 +31,7 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   ],
   drawings: [
     { to: "drawings", label: "GFC register" },
+    { to: "checklist-master", label: "Drawing check master", query: "family=DrawingCheck", roles: ["admin", "office", "employee"] },
     { to: "dms", label: "Documents (DMS)" },
     { to: "coordination", label: "Coordination", roles: ["admin", "office", "site_employee", "employee"] },
     { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
@@ -42,21 +43,25 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     },
   ],
   quality: [
-    { to: "inspections", label: "Quality inspections" },
+    { to: "inspections", label: "Quality dashboard / QI" },
+    { to: "checklist-master", label: "Checklist master", query: "family=QualityInspection", roles: ["admin", "office", "employee"] },
     { to: "checklist", label: "Site checklists" },
-    { to: "quality-inspections", label: "Checklist master / QAP", roles: ["admin", "office", "employee"] },
+    { to: "quality-inspections", label: "QI templates assign", roles: ["admin", "office", "employee"] },
     { to: "rfis", label: "Request QI fill", query: "kind=QualityInspection" },
   ],
   safety: [
-    { to: "safety", label: "Safety register" },
-    { to: "rfis", label: "Safety RFI", query: "kind=RequestForInformation" },
+    { to: "safety", label: "Safety dashboard" },
+    { to: "checklist-master", label: "Safety checklists", query: "family=Safety", roles: ["admin", "office", "employee"] },
+    { to: "rfis", label: "Safety checklist RFI", query: "kind=SafetyChecklist" },
   ],
   progress: [
     { to: "progress", label: "Overview", end: true },
     { to: "progress", label: "Milestones", query: "tab=milestones" },
     { to: "progress", label: "Planned vs Actual", query: "tab=planned" },
+    { to: "progress", label: "Monthly progress", query: "tab=monthly" },
     { to: "progress", label: "Hindrance", query: "tab=hindrance" },
     { to: "progress", label: "Risk", query: "tab=risk" },
+    { to: "progress", label: "Legal approvals", query: "tab=legal" },
   ],
   field: [
     { to: "diary", label: "Day log" },
@@ -69,10 +74,14 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     { to: "email", label: "Email / Outlook", roles: ["admin", "office", "employee", "site_employee"] },
   ],
   cost: [
-    { to: "cost", label: "Measurement / monitoring" },
-    { to: "cost", label: "MB / BBS", query: "tab=mb", activeTabs: ["mb", "bbs"] },
-    { to: "cost", label: "Cashflow", query: "tab=cashflow" },
+    { to: "cost", label: "BOQ / Monitoring", end: true },
+    { to: "cost", label: "MB sheets", query: "tab=mb" },
+    { to: "cost", label: "BBS", query: "tab=bbs" },
+    { to: "cost", label: "Budget WBS", query: "tab=budget" },
+    { to: "cost", label: "Cashflow Chart", query: "tab=cashflow" },
+    { to: "cost", label: "Rate difference", query: "tab=rates" },
     { to: "cost", label: "COP / Bills", query: "tab=bills" },
+    { to: "cost", label: "Structure upload", query: "tab=boq" },
   ],
   reports: [
     { to: "reports", label: "DPR / WPR packs" },
@@ -96,6 +105,12 @@ function moduleFromPath(pathname: string): WorkspaceKey | "home" {
   const tool = seg[2] || "";
   if (!tool) return "home";
   if (["drawings", "coordination", "submittals"].includes(tool)) return "drawings";
+  if (tool === "checklist-master") {
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("family") : null;
+    if (q === "Safety") return "safety";
+    if (q === "DrawingCheck") return "drawings";
+    return "quality";
+  }
   if (tool === "dms") {
     const ws = getActiveWorkspace();
     return ws === "drawings" ? "drawings" : "home";
@@ -157,10 +172,11 @@ function isSideToolActive(
     return [...expected.entries()].every(([k, v]) => params.get(k) === v);
   }
 
-  // Default tool (no query): active only when tab is unset / matches module default
+  // Default tool (no query): inactive when siblings use kind/family/tab filters
   if (t.to === "progress") return !currentTab;
   if (t.to === "cost") return !currentTab || currentTab === "monitoring";
-  return !currentTab;
+  if (params.get("kind") || params.get("family") || params.get("tab")) return false;
+  return true;
 }
 
 export default function ProjectToolsLayout() {
@@ -210,9 +226,9 @@ export default function ProjectToolsLayout() {
     sidebarOpen && rightOpen ? "has-both" : sidebarOpen ? "has-left" : rightOpen ? "has-right" : "";
 
   return (
-    <div className="min-h-[72vh] -mx-4 sm:-mx-6 lg:-mx-8 -mt-6 sm:-mt-8">
+    <div className="min-h-[calc(100vh-var(--ui-chrome-h,168px))] w-full">
       <div className="bg-paper border-b border-line sticky top-[calc(var(--ui-nav-h,64px)+3.5rem)] z-20">
-        <div className="px-4 sm:px-6 lg:px-8 py-5 flex flex-wrap items-center gap-4 justify-between">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center gap-4 justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
               <Link to="/workspace" className="text-brand font-semibold hover:underline">
@@ -286,7 +302,7 @@ export default function ProjectToolsLayout() {
           </aside>
         )}
 
-        <div className="p-5 sm:p-8 lg:p-10 xl:p-12 min-w-0 page-stack w-full max-w-none">
+        <div className="tool-main page-stack min-w-0">
           <Outlet
             context={{
               project,

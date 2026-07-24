@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA"];
@@ -11,6 +12,7 @@ export default function SafetyPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<{ records: any[]; stats: any } | null>(null);
+  const [dash, setDash] = useState<any>(null);
   const [filter, setFilter] = useState("All");
   const [active, setActive] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -26,8 +28,12 @@ export default function SafetyPage() {
   const canClose = user?.role === "admin" || user?.role === "office" || user?.role === "site_employee";
 
   const load = async () => {
-    const res = await api<{ records: any[]; stats: any }>(`/api/safety/project/${id}`, { token });
+    const [res, d] = await Promise.all([
+      api<{ records: any[]; stats: any }>(`/api/safety/project/${id}`, { token }),
+      api(`/api/checklist/project/${id}/safety-dashboard`, { token }).catch(() => null),
+    ]);
     setData(res);
+    setDash(d);
     if (!active && res.records[0]) setActive(res.records[0].id);
   };
 
@@ -65,19 +71,49 @@ export default function SafetyPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Quality module · safety"
-        title="Safety"
-        subtitle="Separate Safety tool in the Quality module — observations, near misses, incidents, toolbox talks, and JHAs. Quality Inspections is its own tool beside this one."
+        eyebrow="Safety module"
+        title="Safety dashboard & register"
+        subtitle="Log observations / NCR-style records. Create Safety checklists in Checklist master, raise SafetyChecklist RFI with checklist attached for the assignee to fill (3 photos)."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone="warn">{data?.stats.open ?? 0} open</Badge>
-            <Badge tone="danger">{data?.stats.incidents ?? 0} incidents</Badge>
-            <Link to={`/projects/${id}/inspections`} className="text-sm font-semibold text-brand">
-              Quality Inspections →
+            <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
+            <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
+            <Badge tone="brand">{dash?.totals?.checklistFills ?? 0} checklist fills</Badge>
+            <Link to={`/projects/${id}/checklist-master?family=Safety`} className="text-sm font-semibold text-brand">
+              Safety checklists →
+            </Link>
+            <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-sm font-semibold text-brand">
+              Raise fill RFI →
             </Link>
           </div>
         }
       />
+
+      {dash && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              ["Records", dash.totals.records],
+              ["Open", dash.totals.open],
+              ["Checklist fills", dash.totals.checklistFills],
+              ["Open fill RFIs", dash.totals.openFillRfis],
+            ].map(([l, v]) => (
+              <Card key={l as string} className="!p-4">
+                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                <div className="text-2xl font-display mt-1">{v as number}</div>
+              </Card>
+            ))}
+          </div>
+          <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">Workday-style safety dashboard</p>
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <PieChart title="By record type" items={dash.charts?.byType || []} />
+              <PieChart title="By severity" items={dash.charts?.bySeverity || []} />
+              <PieChart title="By status" items={dash.charts?.byStatus || []} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 

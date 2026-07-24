@@ -3,6 +3,7 @@ import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { consumeDrawingUnlockToken } from "../services/drawingUnlock.js";
 import { audit } from "../services/audit.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -253,17 +254,22 @@ drawingsRouter.post(
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Not found" });
 
-    const { drawingNumber, title, discipline, revisionNumber, publish, buildingArea, tlNo } = req.body;
-    if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
+    const unlock = await consumeDrawingUnlockToken({
+      projectId: project.id,
+      unlockToken: req.body.unlockToken || req.body.preCheckToken,
+      userId: req.user!.id,
+    });
+    if (!unlock.ok) return res.status(400).json({ error: unlock.error });
 
-    let fileUrl = "";
-    let fileName = "";
-    if (req.file) {
-      const folder = `Drawings/${discipline || "Architecture"}`;
-      const saved = await mockOneDrive.upload(project.code, folder, req.file.originalname, req.file.buffer);
-      fileUrl = saved.url;
-      fileName = req.file.originalname;
-    }
+    const { drawingNumber, title, discipline, revisionNumber, publish, buildingArea, tlNo, plannedDate, actualDate } =
+      req.body;
+    if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
+    if (!req.file) return res.status(400).json({ error: "Drawing file required after checklist" });
+
+    const folder = `Drawings/${discipline || "Architecture"}`;
+    const saved = await mockOneDrive.upload(project.code, folder, req.file.originalname, req.file.buffer);
+    const fileUrl = saved.url;
+    const fileName = req.file.originalname;
 
     const existing = await prisma.drawing.findUnique({
       where: { projectId_drawingNumber: { projectId: project.id, drawingNumber } },
@@ -272,6 +278,8 @@ drawingsRouter.post(
     const revIndex = existing?.revisions.length ?? 0;
     const rev = revisionNumber || `R${revIndex}`;
     const published = publish === "true" || publish === true;
+    const planned = plannedDate ? new Date(plannedDate) : null;
+    const actual = actualDate ? new Date(actualDate) : new Date();
 
     const drawing = await prisma.drawing.upsert({
       where: { projectId_drawingNumber: { projectId: project.id, drawingNumber } },
@@ -285,19 +293,20 @@ drawingsRouter.post(
         currentRev: rev,
         status: published ? "Approved" : "Draft",
         isPublished: published,
-        folderPath: `Drawings/${discipline || "Architecture"}`,
-        revisions: fileUrl
-          ? {
-              create: {
-                revisionNumber: rev,
-                revisionLabel: `${rev} — initial`,
-                fileUrl,
-                fileName,
-                published,
-                uploadedById: req.user!.id,
-              },
-            }
-          : undefined,
+        folderPath: folder,
+        revisions: {
+          create: {
+            revisionNumber: rev,
+            revisionLabel: `${rev} — initial`,
+            fileUrl,
+            fileName,
+            published,
+            plannedDate: planned,
+            actualDate: actual,
+            preCheckSubmissionId: unlock.submissionId,
+            uploadedById: req.user!.id,
+          },
+        },
       },
       update: {
         title,
@@ -311,7 +320,7 @@ drawingsRouter.post(
       include: { revisions: true },
     });
 
-    if (fileUrl && drawing.revisions.every((r) => r.fileUrl !== fileUrl)) {
+    if (drawing.revisions.every((r) => r.fileUrl !== fileUrl)) {
       await prisma.drawingRevision.create({
         data: {
           drawingId: drawing.id,
@@ -320,16 +329,24 @@ drawingsRouter.post(
           fileUrl,
           fileName,
           published,
+          plannedDate: planned,
+          actualDate: actual,
+          preCheckSubmissionId: unlock.submissionId,
           uploadedById: req.user!.id,
         },
       });
     }
 
+    await prisma.checklistSubmission.update({
+      where: { id: unlock.submissionId },
+      data: { drawingId: drawing.id },
+    });
+
     await audit("drawing.upload", {
       userId: req.user!.id,
       entity: "Drawing",
       entityId: drawing.id,
-      meta: { drawingNumber, revision: rev, fileName },
+      meta: { drawingNumber, revision: rev, fileName, preCheck: unlock.submissionId },
     });
     const fresh = await prisma.drawing.findUnique({
       where: { id: drawing.id },
@@ -382,9 +399,18 @@ drawingsRouter.post(
     });
     if (!drawing) return res.status(404).json({ error: "Drawing not found" });
 
+    const unlock = await consumeDrawingUnlockToken({
+      projectId: drawing.projectId,
+      unlockToken: req.body.unlockToken || req.body.preCheckToken,
+      userId: req.user!.id,
+    });
+    if (!unlock.ok) return res.status(400).json({ error: unlock.error });
+
     const revisionNumber = String(req.body.revisionNumber || `R${drawing.revisions.length}`);
     const revisionLabel = String(req.body.revisionLabel || `${revisionNumber} — ${new Date().toLocaleDateString()}`);
     const publish = req.body.publish === "true" || req.body.publish === true;
+    const planned = req.body.plannedDate ? new Date(req.body.plannedDate) : null;
+    const actual = req.body.actualDate ? new Date(req.body.actualDate) : new Date();
 
     let fileUrl = "";
     let fileName = "";
@@ -402,7 +428,6 @@ drawingsRouter.post(
       return res.status(400).json({ error: "File required for revision upload" });
     }
 
-    // Keep prior revision files; mark previous live revisions unpublished when publishing this one
     if (publish) {
       await prisma.drawingRevision.updateMany({
         where: { drawingId: drawing.id, published: true },
@@ -418,9 +443,17 @@ drawingsRouter.post(
         fileUrl,
         fileName,
         published: publish,
+        plannedDate: planned,
+        actualDate: actual,
+        preCheckSubmissionId: unlock.submissionId,
         uploadedById: req.user!.id,
       },
       include: { uploadedBy: { select: { fullName: true } } },
+    });
+
+    await prisma.checklistSubmission.update({
+      where: { id: unlock.submissionId },
+      data: { drawingId: drawing.id, revisionId: rev.id, revisionNumber },
     });
 
     const updated = await prisma.drawing.update({
@@ -441,7 +474,7 @@ drawingsRouter.post(
       userId: req.user!.id,
       entity: "DrawingRevision",
       entityId: rev.id,
-      meta: { drawingId: drawing.id, revisionNumber, fileName },
+      meta: { drawingId: drawing.id, revisionNumber, fileName, preCheck: unlock.submissionId },
     });
     res.status(201).json(updated);
   }

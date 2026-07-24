@@ -13,6 +13,52 @@ function fmtDate(d: Date | string | null | undefined) {
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** Progress Reports checklist mapping:
+ *  DrawingCheck → Drawing / GFC section
+ *  QualityInspection → Quality / QI section
+ *  Safety → Safety section
+ *  SiteExecution → DPR daily site checklist activity
+ */
+function groupSubmissionsByType<
+  T extends { assignment: { template: { checklistType: string; name: string } }; submittedBy: { fullName: string | null }; status: string }
+>(submissions: T[]) {
+  const buckets = {
+    DrawingCheck: [] as T[],
+    QualityInspection: [] as T[],
+    Safety: [] as T[],
+    SiteExecution: [] as T[],
+    Other: [] as T[],
+  };
+  for (const s of submissions) {
+    const t = s.assignment?.template?.checklistType || "Other";
+    if (t in buckets) (buckets as any)[t].push(s);
+    else buckets.Other.push(s);
+  }
+  return {
+    buckets,
+    counts: {
+      drawingChecks: buckets.DrawingCheck.length,
+      qualityChecks: buckets.QualityInspection.length,
+      safetyChecks: buckets.Safety.length,
+      siteChecks: buckets.SiteExecution.length,
+      otherChecks: buckets.Other.length,
+    },
+  };
+}
+
+function checklistRowsHtml(
+  rows: { assignment: { template: { name: string; checklistType: string } }; submittedBy: { fullName: string | null }; status: string }[]
+) {
+  return (
+    rows
+      .map(
+        (s) =>
+          `<tr><td>${esc(s.assignment.template.checklistType)}</td><td>${esc(s.assignment.template.name)}</td><td>${esc(s.submittedBy.fullName)}</td><td>${esc(s.status)}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=4>None</td></tr>"
+  );
+}
+
 export async function buildDprPack(projectId: string, dateInput?: string) {
   const date = dateInput ? new Date(dateInput) : new Date();
   date.setHours(0, 0, 0, 0);
@@ -20,7 +66,7 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
   next.setDate(next.getDate() + 1);
 
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
-  const [diary, submissions, rfis, safety, photos, drawings, hindrances] = await Promise.all([
+  const [diary, submissions, rfis, safety, photos, drawings, hindrances, qualityNcrs, cubes] = await Promise.all([
     prisma.dailyLog.findUnique({
       where: { projectId_logDate: { projectId, logDate: date } },
       include: { manpower: true, equipment: true, notes: true, photos: true },
@@ -52,9 +98,12 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
       take: 20,
       orderBy: { occurredAt: "desc" },
     }),
+    prisma.qualityNcr.findMany({ where: { projectId, status: "Open" }, take: 20 }),
+    prisma.cubeTest.count({ where: { projectId } }),
   ]);
 
   const manpowerTotal = diary?.manpower.reduce((s, m) => s + m.workerCount, 0) || 0;
+  const byType = groupSubmissionsByType(submissions);
   const pack = {
     type: "DPR" as const,
     generatedAt: new Date().toISOString(),
@@ -72,20 +121,25 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
       manpowerTotal,
       equipmentCount: diary?.equipment.length || 0,
       checklistsToday: submissions.length,
+      ...byType.counts,
       openRfis: rfis.filter((r) => r.status === "Open").length,
       safetyEvents: safety.length,
       photosToday: photos.length,
       diaryStatus: diary?.status || "Missing",
       weather: diary?.weatherCondition || "—",
       openHindrances: hindrances.length,
+      openQualityNcrs: qualityNcrs.length,
+      cubeTests: cubes,
     },
     diary,
     submissions,
+    submissionsByType: byType.buckets,
     rfis,
     safety,
     photos,
     drawings,
     hindrances,
+    qualityNcrs,
     hindranceNotes: [
       ...(diary?.notes || []).map((n) => n.noteText),
       ...hindrances.map((h) => h.description),
@@ -102,8 +156,24 @@ export async function buildWprPack(projectId: string, endInput?: string) {
   start.setHours(0, 0, 0, 0);
 
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
-  const [diaries, submissions, meetings, drawings, rfis, safety, submittals, cashflow, ncrLike, milestones, hindrances] =
-    await Promise.all([
+  const [
+    diaries,
+    submissions,
+    meetings,
+    drawings,
+    rfis,
+    safety,
+    submittals,
+    cashflow,
+    budget,
+    mbLines,
+    ncrLike,
+    milestones,
+    hindrances,
+    qualityNcrs,
+    cubes,
+    qap,
+  ] = await Promise.all([
     prisma.dailyLog.findMany({
       where: { projectId, logDate: { gte: start, lte: end } },
       include: { manpower: true, equipment: true, _count: { select: { notes: true } } },
@@ -127,18 +197,27 @@ export async function buildWprPack(projectId: string, endInput?: string) {
     prisma.safetyRecord.findMany({ where: { projectId, occurredAt: { gte: start, lte: end } } }),
     prisma.submittal.findMany({ where: { projectId }, orderBy: { updatedAt: "desc" }, take: 40 }),
     prisma.costCashflowPeriod.findMany({ where: { projectId } }),
+    prisma.costBudgetLine.findMany({ where: { projectId } }),
+    prisma.costMbLine.findMany({ where: { projectId } }),
     prisma.qualityInspection.findMany({
       where: { projectId, status: { in: ["Open", "Failed", "Rework"] } },
       take: 30,
     }),
     prisma.progressMilestone.findMany({ where: { projectId }, take: 40 }),
     prisma.progressHindrance.findMany({ where: { projectId }, take: 30 }),
+    prisma.qualityNcr.findMany({ where: { projectId }, take: 40 }),
+    prisma.cubeTest.findMany({ where: { projectId }, take: 40, orderBy: { castDate: "desc" } }),
+    prisma.qapActivity.findMany({ where: { projectId }, take: 40, orderBy: { weekLabel: "desc" } }),
   ]);
 
   const manpowerWeek = diaries.reduce(
     (s, d) => s + d.manpower.reduce((a, m) => a + m.workerCount, 0),
     0
   );
+  const budgeted = budget.reduce((s, b) => s + b.budgetedAmount, 0);
+  const certified = budget.reduce((s, b) => s + b.certifiedAmount, 0);
+  const mbQty = mbLines.reduce((s, m) => s + (m.qty || 0), 0);
+  const byType = groupSubmissionsByType(submissions);
 
   return {
     type: "WPR" as const,
@@ -159,6 +238,7 @@ export async function buildWprPack(projectId: string, endInput?: string) {
       manpowerWeek,
       checklistsSubmitted: submissions.length,
       checklistsApproved: submissions.filter((s) => s.status === "Approved").length,
+      ...byType.counts,
       meetings: meetings.length,
       openMeetingItems: meetings.flatMap((m) => m.items).filter((i) => i.resolutionStatus === "Open").length,
       openRfis: rfis.filter((r) => r.status === "Open").length,
@@ -167,18 +247,31 @@ export async function buildWprPack(projectId: string, endInput?: string) {
       safetyEvents: safety.length,
       openSubmittals: submittals.filter((s) => !["Approved", "Rejected"].includes(s.status)).length,
       openQi: ncrLike.length,
+      openQualityNcrs: qualityNcrs.filter((n) => n.status === "Open").length,
+      cubeTests: cubes.length,
+      qapOpen: qap.filter((q) => q.status === "Open").length,
       delayedMilestones: milestones.filter((m) => (m.varianceDays || 0) > 0).length,
       openHindrances: hindrances.filter((h) => h.status === "Open").length,
+      budgeted,
+      certified,
+      mbQty,
+      mbLines: mbLines.length,
     },
     diaries,
     submissions,
+    submissionsByType: byType.buckets,
     meetings,
     drawings,
     rfis,
     safety,
     submittals,
     cashflow,
+    budget,
+    mbLines,
     qualityActions: ncrLike,
+    qualityNcrs,
+    cubes,
+    qap,
     milestones,
     hindrances,
   };
@@ -209,21 +302,23 @@ export function renderDprHtml(pack: Awaited<ReturnType<typeof buildDprPack>>) {
     .join("");
   const notes = pack.hindranceNotes.map((n) => `<li>${esc(n)}</li>`).join("") || "<li>None recorded</li>";
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>DPR — ${esc(p.code)}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>DPR — ${esc(p.code)}</title>
 <style>
-  body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1a1f2c;margin:0;background:#f4f5f7}
-  .sheet{max-width:960px;margin:24px auto;background:#fff;border:1px solid #d8dce3;box-shadow:0 8px 24px rgba(20,30,50,.08)}
-  .bar{background:#1C2B3A;color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:flex-end}
-  .bar h1{margin:0;font-size:20px;letter-spacing:.02em}.bar .sub{opacity:.75;font-size:12px;margin-top:4px}
-  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;padding:16px 24px;border-bottom:1px solid #e6e9ef;font-size:13px}
-  .meta b{color:#5a6577;font-weight:600;display:inline-block;min-width:120px}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 24px;background:#fafbfc;border-bottom:1px solid #e6e9ef}
-  .kpi{border:1px solid #e6e9ef;border-radius:6px;padding:12px;background:#fff}
-  .kpi .n{font-size:22px;font-weight:700;color:#E4632A}.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#5a6577}
-  section{padding:18px 24px} h2{font-size:14px;text-transform:uppercase;letter-spacing:.12em;color:#1C2B3A;border-bottom:2px solid #E4632A;padding-bottom:6px;margin:0 0 12px}
-  table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #e6e9ef;padding:8px;text-align:left} th{background:#f0f2f5;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
-  .foot{padding:12px 24px;font-size:11px;color:#5a6577;border-top:1px solid #e6e9ef;display:flex;justify-content:space-between}
-  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;border:none}}
+  body{font-family:"IBM Plex Sans",Segoe UI,Helvetica,Arial,sans-serif;color:#16181C;margin:0;background:#F0F1F2}
+  .sheet{width:100%;max-width:1000px;margin:16px auto;background:#fff;border:1px solid #D8DCE3;box-shadow:0 8px 24px rgba(20,30,50,.08)}
+  .bar{background:#3D4450;color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+  .bar h1{margin:0;font-size:clamp(16px,2.5vw,20px);letter-spacing:.02em}.bar .sub{opacity:.75;font-size:12px;margin-top:4px}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;padding:14px 20px;border-bottom:1px solid #e6e9ef;font-size:13px}
+  .meta b{color:#64748b;font-weight:600;display:inline-block;min-width:110px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;padding:14px 20px;background:#fafbfc;border-bottom:1px solid #e6e9ef}
+  .kpi{border:1px solid #e6e9ef;border-radius:6px;padding:10px;background:#fff}
+  .kpi .n{font-size:20px;font-weight:700;color:#C45C26}.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b}
+  section{padding:16px 20px} h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#3D4450;border-bottom:2px solid #C45C26;padding-bottom:6px;margin:0 0 10px}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:12px;min-width:480px} th,td{border:1px solid #e6e9ef;padding:8px;text-align:left} th{background:#f0f2f5;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+  .foot{padding:12px 20px;font-size:11px;color:#64748b;border-top:1px solid #e6e9ef;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  @media (max-width:640px){.meta{grid-template-columns:1fr}.sheet{margin:0;border:none;box-shadow:none}}
+  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;border:none;max-width:none}}
 </style></head><body>
 <div class="sheet">
   <div class="bar"><div><div class="sub">शरणम् · Sharnam PMC</div><h1>Daily Progress Report (DPR)</h1></div>
@@ -237,13 +332,16 @@ export function renderDprHtml(pack: Awaited<ReturnType<typeof buildDprPack>>) {
   <div class="kpis">
     <div class="kpi"><div class="n">${pack.kpis.manpowerTotal}</div><div class="l">Manpower</div></div>
     <div class="kpi"><div class="n">${pack.kpis.equipmentCount}</div><div class="l">Equipment</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.checklistsToday}</div><div class="l">Checklists</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.siteChecks}</div><div class="l">Site checklists</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.drawingChecks}</div><div class="l">Drawing checks</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.qualityChecks}</div><div class="l">QI fills</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.safetyChecks}</div><div class="l">Safety fills</div></div>
     <div class="kpi"><div class="n">${pack.kpis.openRfis}</div><div class="l">Open RFIs</div></div>
   </div>
-  <section><h2>Manpower</h2><table><thead><tr><th>Company</th><th>Workers</th><th>Hours</th><th>Comments</th></tr></thead><tbody>${rowsMan}</tbody></table></section>
-  <section><h2>Equipment</h2><table><thead><tr><th>Company</th><th>Type</th><th>Hours</th><th>Comments</th></tr></thead><tbody>${rowsEq}</tbody></table></section>
+  <section><h2>Manpower</h2><div class="table-wrap"><table><thead><tr><th>Company</th><th>Workers</th><th>Hours</th><th>Comments</th></tr></thead><tbody>${rowsMan}</tbody></table></div></section>
+  <section><h2>Equipment</h2><div class="table-wrap"><table><thead><tr><th>Company</th><th>Type</th><th>Hours</th><th>Comments</th></tr></thead><tbody>${rowsEq}</tbody></table></div></section>
   <section><h2>Hindrance / site notes</h2><ul>${notes}</ul></section>
-  <section><h2>Hindrance register (open)</h2><table><thead><tr><th>Description</th><th>Location</th><th>Category</th><th>Days</th></tr></thead><tbody>
+  <section><h2>Hindrance register (open)</h2><div class="table-wrap"><table><thead><tr><th>Description</th><th>Location</th><th>Category</th><th>Days</th></tr></thead><tbody>
   ${
     (pack.hindrances || [])
       .map(
@@ -252,18 +350,12 @@ export function renderDprHtml(pack: Awaited<ReturnType<typeof buildDprPack>>) {
       )
       .join("") || "<tr><td colspan=4>None open</td></tr>"
   }
-  </tbody></table></section>
-  <section><h2>Open / today's RFIs (concern register)</h2><table><thead><tr><th>#</th><th>Subject</th><th>Status</th><th>Due</th></tr></thead><tbody>${rowsRfi || "<tr><td colspan=4>None</td></tr>"}</tbody></table></section>
-  <section><h2>Checklist activity</h2><table><thead><tr><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>
-  ${
-    pack.submissions
-      .map(
-        (s) =>
-          `<tr><td>${esc(s.assignment.template.name)}</td><td>${esc(s.submittedBy.fullName)}</td><td>${esc(s.status)}</td></tr>`
-      )
-      .join("") || "<tr><td colspan=3>None today</td></tr>"
-  }
-  </tbody></table></section>
+  </tbody></table></div></section>
+  <section><h2>Open / today's RFIs (concern register)</h2><div class="table-wrap"><table><thead><tr><th>#</th><th>Subject</th><th>Status</th><th>Due</th></tr></thead><tbody>${rowsRfi || "<tr><td colspan=4>None</td></tr>"}</tbody></table></div></section>
+  <section><h2>Site execution checklists (Progress)</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.SiteExecution)}</tbody></table></div></section>
+  <section><h2>Drawing check fills</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.DrawingCheck)}</tbody></table></div></section>
+  <section><h2>Quality inspection fills</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.QualityInspection)}</tbody></table></div></section>
+  <section><h2>Safety checklist fills</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.Safety)}</tbody></table></div></section>
   <div class="foot"><span>Generated ${fmtDate(pack.generatedAt)} · Sharnam Portal</span><span>Confidential — client pack</span></div>
 </div></body></html>`;
 }
@@ -290,68 +382,110 @@ export function renderWprHtml(pack: Awaited<ReturnType<typeof buildWprPack>>) {
     )
     .join("");
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>WPR — ${esc(p.code)}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>WPR — ${esc(p.code)}</title>
 <style>
-  body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1a1f2c;margin:0;background:#f4f5f7}
-  .sheet{max-width:1100px;margin:24px auto;background:#fff;border:1px solid #d8dce3;box-shadow:0 8px 24px rgba(20,30,50,.08)}
-  .bar{background:#1C2B3A;color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:flex-end}
-  .bar h1{margin:0;font-size:20px}.bar .sub{opacity:.75;font-size:12px;margin-top:4px}
-  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;padding:16px 24px;border-bottom:1px solid #e6e9ef;font-size:13px}
-  .meta b{color:#5a6577;font-weight:600;display:inline-block;min-width:130px}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px 24px;background:#fafbfc;border-bottom:1px solid #e6e9ef}
+  body{font-family:"IBM Plex Sans",Segoe UI,Helvetica,Arial,sans-serif;color:#16181C;margin:0;background:#F0F1F2}
+  .sheet{width:100%;max-width:1140px;margin:16px auto;background:#fff;border:1px solid #D8DCE3;box-shadow:0 8px 24px rgba(20,30,50,.08)}
+  .bar{background:#3D4450;color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+  .bar h1{margin:0;font-size:clamp(16px,2.5vw,20px)}.bar .sub{opacity:.75;font-size:12px;margin-top:4px}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;padding:14px 20px;border-bottom:1px solid #e6e9ef;font-size:13px}
+  .meta b{color:#64748b;font-weight:600;display:inline-block;min-width:110px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;padding:14px 20px;background:#fafbfc;border-bottom:1px solid #e6e9ef}
   .kpi{border:1px solid #e6e9ef;border-radius:6px;padding:10px;background:#fff}
-  .kpi .n{font-size:20px;font-weight:700;color:#0B6A78}.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#5a6577}
-  section{padding:16px 24px} h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:#1C2B3A;border-bottom:2px solid #0B6A78;padding-bottom:6px;margin:0 0 10px}
-  table{width:100%;border-collapse:collapse;font-size:11px} th,td{border:1px solid #e6e9ef;padding:7px;text-align:left} th{background:#f0f2f5;font-size:10px;text-transform:uppercase}
-  .foot{padding:12px 24px;font-size:11px;color:#5a6577;border-top:1px solid #e6e9ef;display:flex;justify-content:space-between}
-  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;border:none}}
+  .kpi .n{font-size:20px;font-weight:700;color:#C45C26}.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b}
+  section{padding:16px 20px} h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:#3D4450;border-bottom:2px solid #C45C26;padding-bottom:6px;margin:0 0 10px}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:12px;min-width:520px} th,td{border:1px solid #e6e9ef;padding:8px;text-align:left} th{background:#f0f2f5;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+  .foot{padding:12px 20px;font-size:11px;color:#64748b;border-top:1px solid #e6e9ef;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  @media (max-width:640px){.meta{grid-template-columns:1fr}.sheet{margin:0;border:none;box-shadow:none}}
+  @media print{body{background:#fff}.sheet{box-shadow:none;margin:0;border:none;max-width:none}}
 </style></head><body>
 <div class="sheet">
-  <div class="bar"><div><div class="sub">शरणम् · Sharnam PMC · Weekly pack</div><h1>Weekly Progress Report (WPR)</h1></div>
-  <div style="text-align:right"><div class="sub">Period</div><div style="font-size:15px;font-weight:600">${fmtDate(pack.start)} – ${fmtDate(pack.end)}</div></div></div>
+  <div class="bar"><div><div class="sub">शरणम् · Sharnam PMC</div><h1>Weekly Progress Report (WPR)</h1></div>
+  <div style="text-align:right"><div class="sub">Week ending</div><div style="font-size:16px;font-weight:600">${fmtDate(pack.end)}</div></div></div>
   <div class="meta">
     <div><b>Project</b> ${esc(p.name)}</div><div><b>Code</b> ${esc(p.code)}</div>
-    <div><b>Client</b> ${esc(p.clientName)}</div><div><b>PMC</b> ${esc(p.pmc)}</div>
+    <div><b>Client</b> ${esc(p.clientName)}</div><div><b>Location</b> ${esc(p.location)}</div>
     <div><b>Design consultant</b> ${esc(p.designConsultant)}</div><div><b>Contractor</b> ${esc(p.contractorName)}</div>
+    <div><b>PMC</b> ${esc(p.pmc)}</div><div><b>Period</b> ${fmtDate(pack.start)} → ${fmtDate(pack.end)}</div>
   </div>
   <div class="kpis">
     <div class="kpi"><div class="n">${pack.kpis.diaryDays}</div><div class="l">Diary days</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.manpowerWeek}</div><div class="l">Manpower (week)</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.checklistsSubmitted}</div><div class="l">Checklists</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.manpowerWeek}</div><div class="l">Manpower</div></div>
     <div class="kpi"><div class="n">${pack.kpis.openRfis}</div><div class="l">Open RFIs</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.publishedDrawings}/${pack.kpis.drawings}</div><div class="l">Drawings pub.</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.meetings}</div><div class="l">Meetings</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.openSubmittals}</div><div class="l">Open submittals</div></div>
-    <div class="kpi"><div class="n">${pack.kpis.safetyEvents}</div><div class="l">Safety</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.publishedDrawings}</div><div class="l">Published dwgs</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.drawingChecks}</div><div class="l">Drawing checks</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.qualityChecks}</div><div class="l">QI fills</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.safetyChecks}</div><div class="l">Safety fills</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.siteChecks}</div><div class="l">Site checks</div></div>
+    <div class="kpi"><div class="n">${Math.round(pack.kpis.budgeted / 100000) / 10}</div><div class="l">Budget ₹L</div></div>
+    <div class="kpi"><div class="n">${Math.round(pack.kpis.certified / 100000) / 10}</div><div class="l">Certified ₹L</div></div>
+    <div class="kpi"><div class="n">${Math.round(pack.kpis.mbQty)}</div><div class="l">MB qty</div></div>
+    <div class="kpi"><div class="n">${pack.kpis.openHindrances}</div><div class="l">Open hindrance</div></div>
   </div>
-  <section><h2>Master / site drawing register (snapshot)</h2><table><thead><tr><th>No.</th><th>Title</th><th>Discipline</th><th>Rev</th><th>Status</th></tr></thead><tbody>${drawingRows || "<tr><td colspan=5>None</td></tr>"}</tbody></table></section>
-  <section><h2>Submittals register</h2><table><thead><tr><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>BIC</th></tr></thead><tbody>${subRows || "<tr><td colspan=5>None</td></tr>"}</tbody></table></section>
-  <section><h2>Safety / observations</h2><table><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Date</th></tr></thead><tbody>${safetyRows || "<tr><td colspan=4>None this week</td></tr>"}</tbody></table></section>
-  <section><h2>Milestones (variance)</h2><table><thead><tr><th>Code</th><th>Activity</th><th>Plan</th><th>Actual</th><th>Var</th><th>Status</th></tr></thead><tbody>
+  <section><h2>Cost flow (cashflow)</h2><div class="table-wrap"><table><thead><tr><th>Period</th><th>Package</th><th>Planned</th><th>Actual</th></tr></thead><tbody>
   ${
-    (pack.milestones || [])
+    pack.cashflow
       .map(
-        (m) =>
-          `<tr><td>${esc(m.code)}</td><td>${esc(m.activity)}</td><td>${m.plannedDays}</td><td>${m.actualDays}</td><td>${m.varianceDays}</td><td>${esc(m.status)}</td></tr>`
+        (c) =>
+          `<tr><td>${esc(c.periodLabel)}</td><td>${esc(c.packageName)}</td><td>${Math.round(c.plannedAmount).toLocaleString("en-IN")}</td><td>${Math.round(c.actualAmount).toLocaleString("en-IN")}</td></tr>`
       )
-      .join("") || "<tr><td colspan=6>None</td></tr>"
+      .join("") || "<tr><td colspan=4>No cashflow rows</td></tr>"
   }
-  </tbody></table></section>
-  <section><h2>Hindrance register</h2><table><thead><tr><th>Description</th><th>Location</th><th>Status</th><th>Days</th></tr></thead><tbody>
+  </tbody></table></div></section>
+  <section><h2>Budget WBS (top)</h2><div class="table-wrap"><table><thead><tr><th>Sr</th><th>Description</th><th>Stakeholder</th><th>Budgeted</th><th>Certified</th></tr></thead><tbody>
   ${
-    (pack.hindrances || [])
+    (pack.budget || [])
+      .slice(0, 12)
       .map(
-        (h) =>
-          `<tr><td>${esc(h.description)}</td><td>${esc(h.location)}</td><td>${esc(h.status)}</td><td>${h.daysImpacted}</td></tr>`
+        (b) =>
+          `<tr><td>${esc(b.srNo)}</td><td>${esc(b.description)}</td><td>${esc(b.stakeholder)}</td><td>${Math.round(b.budgetedAmount).toLocaleString("en-IN")}</td><td>${Math.round(b.certifiedAmount).toLocaleString("en-IN")}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=5>No budget</td></tr>"
+  }
+  </tbody></table></div></section>
+  <section><h2>Drawing checklist fills (DrawingCheck)</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.DrawingCheck)}</tbody></table></div></section>
+  <section><h2>Quality checklist fills (QualityInspection)</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.QualityInspection)}</tbody></table></div></section>
+  <section><h2>Quality NCR / CAR</h2><div class="table-wrap"><table><thead><tr><th>#</th><th>Type</th><th>Description</th><th>Status</th></tr></thead><tbody>
+  ${
+    (pack.qualityNcrs || [])
+      .slice(0, 15)
+      .map(
+        (n) =>
+          `<tr><td>${esc(n.number)}</td><td>${esc(n.ncrType)}</td><td>${esc(n.description).slice(0, 120)}</td><td>${esc(n.status)}</td></tr>`
       )
       .join("") || "<tr><td colspan=4>None</td></tr>"
   }
-  </tbody></table></section>
-  <section><h2>Meetings & open actions</h2><p style="font-size:12px">Meetings: <b>${pack.kpis.meetings}</b> · Open MoM items: <b>${pack.kpis.openMeetingItems}</b> · QI / NCR-like open: <b>${pack.kpis.openQi}</b> · Delayed milestones: <b>${pack.kpis.delayedMilestones}</b></p></section>
-  <div class="foot"><span>Generated ${fmtDate(pack.generatedAt)} · Sharnam Portal</span><span>Aligned to WPR pack structure · Confidential</span></div>
+  </tbody></table></div></section>
+  <section><h2>Cube register (sample)</h2><div class="table-wrap"><table><thead><tr><th>Sr</th><th>Description</th><th>Grade</th><th>Strength</th><th>Result</th></tr></thead><tbody>
+  ${
+    (pack.cubes || [])
+      .slice(0, 12)
+      .map(
+        (c) =>
+          `<tr><td>${esc(c.srNo)}</td><td>${esc(c.description)}</td><td>${esc(c.grade)}</td><td>${c.strength ?? "—"}</td><td>${esc(c.result)}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=5>None</td></tr>"
+  }
+  </tbody></table></div></section>
+  <section><h2>GFC / drawings</h2><div class="table-wrap"><table><thead><tr><th>No</th><th>Title</th><th>Discipline</th><th>Rev</th><th>Status</th></tr></thead><tbody>${drawingRows || "<tr><td colspan=5>None</td></tr>"}</tbody></table></div></section>
+  <section><h2>Milestones</h2><div class="table-wrap"><table><thead><tr><th>Code</th><th>Activity</th><th>Plan/Act days</th><th>Status</th></tr></thead><tbody>
+  ${
+    pack.milestones
+      .slice(0, 15)
+      .map(
+        (m) =>
+          `<tr><td>${esc(m.code)}</td><td>${esc(m.activity)}</td><td>${m.plannedDays}/${m.actualDays}</td><td>${esc(m.status)}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=4>None</td></tr>"
+  }
+  </tbody></table></div></section>
+  <section><h2>Submittals</h2><div class="table-wrap"><table><thead><tr><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Ball</th></tr></thead><tbody>${subRows || "<tr><td colspan=5>None</td></tr>"}</tbody></table></div></section>
+  <section><h2>Safety checklist fills</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>${checklistRowsHtml(pack.submissionsByType.Safety)}</tbody></table></div></section>
+  <section><h2>Safety records</h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Date</th></tr></thead><tbody>${safetyRows || "<tr><td colspan=4>None</td></tr>"}</tbody></table></div></section>
+  <div class="foot"><span>Generated ${fmtDate(pack.generatedAt)} · Sharnam Portal</span><span>Confidential — client weekly pack</span></div>
 </div></body></html>`;
 }
-
 /** Role may respond/close RFIs if on communication matrix (or Sharnam office). */
 export async function roleOnRfiMatrix(projectId: string, role: string) {
   if (role === "admin" || role === "office") return true;
@@ -386,7 +520,7 @@ export async function canFillChecklistAssignment(opts: {
     where: {
       projectId,
       status: { in: ["Open", "Answered"] },
-      rfiKind: { in: ["DrawingChecklist", "QualityInspection"] },
+      rfiKind: { in: ["DrawingChecklist", "QualityInspection", "SafetyChecklist"] },
       OR: [{ linkedAssignmentId: assignmentId }, { linkedChecklistItemId: templateId }],
     },
     include: { vendor: { select: { id: true, email: true } } },

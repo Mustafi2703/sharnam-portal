@@ -9,7 +9,7 @@ export default function ChecklistAssignPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const navigate = useNavigate();
-  const [family, setFamily] = useState<"SiteExecution" | "QualityInspection">("SiteExecution");
+  const [family, setFamily] = useState<"SiteExecution" | "QualityInspection" | "Safety" | "DrawingCheck">("SiteExecution");
   const [templates, setTemplates] = useState<any[]>([]);
   const [assigned, setAssigned] = useState<any[]>([]);
   const [templateId, setTemplateId] = useState("");
@@ -105,10 +105,14 @@ export default function ChecklistAssignPage() {
             <Select
               className="mt-1.5"
               value={family}
-              onChange={(e) => setFamily(e.target.value as "SiteExecution" | "QualityInspection")}
+              onChange={(e) =>
+                setFamily(e.target.value as "SiteExecution" | "QualityInspection" | "Safety" | "DrawingCheck")
+              }
             >
               <option value="SiteExecution">Final Index (site execution)</option>
               <option value="QualityInspection">Quality Inspections</option>
+              <option value="Safety">Safety</option>
+              <option value="DrawingCheck">Drawing Check Master</option>
             </Select>
           </label>
           <label className="block text-sm">

@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
+import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
+import { seedChecklistFillsForReports, seedQualitySafetyFromSheets } from "./qualitySafetySheets.ts";
 import { PrismaClient } from "@prisma/client";
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -30,6 +32,28 @@ function readSheet(file: string, sheetIndex = 0) {
     defval: "",
   }) as unknown[][];
 }
+
+function excelDate(v: unknown): Date | null {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 20000) return null;
+  const ms = (n - 25569) * 86400 * 1000;
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function cellStr(v: unknown, max = 800): string | null {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  return s.slice(0, max);
+}
+
+function cellNum(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 
 async function seedRoles() {
   for (const key of ROLES) {
@@ -113,11 +137,14 @@ async function seedChecklistsFromExcel() {
     where: {
       OR: [
         { source: "Drwing check master checklist.xlt.xls" },
-        { source: "quality-inspection-catalog" },
         { name: { contains: "Drawing Review" } },
       ],
     },
-    data: { checklistType: "QualityInspection" },
+    data: { checklistType: "DrawingCheck", requirePhotosMin: 0 },
+  });
+  await prisma.checklistTemplate.updateMany({
+    where: { source: "quality-inspection-catalog" },
+    data: { checklistType: "QualityInspection", requirePhotosMin: 3 },
   });
 
   const indexRows = readSheet(indexFile);
@@ -211,50 +238,80 @@ async function seedChecklistsFromExcel() {
     }
   }
 
-  // Quality inspection — Drawing review master (+ fallback QI templates)
+  // Quality inspection — Drawing review master (one template per discipline section)
   const drawRows = readSheet(drawingFile);
   let section = "General";
-  const items: { itemCode: string; description: string; section: string; sortOrder: number }[] = [];
+  const bySection = new Map<string, { itemCode: string; description: string; section: string; sortOrder: number }[]>();
   let order = 0;
   for (let i = 0; i < drawRows.length; i++) {
+    const c0 = String(drawRows[i][0] ?? "").trim();
     const c1 = String(drawRows[i][1] ?? "").trim();
     const c2 = String(drawRows[i][2] ?? "").trim();
-    if (!c1 && !c2) continue;
-    if (/DRAWING REVIEW|CHECKLIST/i.test(c1) && !c2) {
-      section = c1.replace(/^\d+\.\s*/, "");
+    const header = c0 || c1;
+    if (/DRAWING REVIEW|CHECKLIST/i.test(header) && !c2) {
+      section = header.replace(/^\d+\.\s*/, "").trim();
+      if (!bySection.has(section)) bySection.set(section, []);
+      order = 0;
       continue;
     }
-    if (/^Sr\.?$/i.test(c1) || c1 === "Sr.") continue;
-    if (c2) {
-      order++;
-      items.push({
-        itemCode: c1 || String(order),
-        description: c2,
-        section,
-        sortOrder: order,
-      });
-    }
+    if (/^Sr\.?$/i.test(c0) || /^Sr\.?$/i.test(c1) || c1 === "Sr.") continue;
+    const code = c0 && /^\d+/.test(c0) ? c0 : c1;
+    const desc = c2 || (c0 && !/^\d+/.test(c0) ? "" : c1);
+    // sheet layout: Sr | Check Point | Yes | No | N.A.
+    const checkpoint = c1 && !/^Sr/i.test(c1) ? c1 : desc;
+    if (!checkpoint || /Yes|No|N\.A/i.test(checkpoint)) continue;
+    if (!bySection.has(section)) bySection.set(section, []);
+    order++;
+    bySection.get(section)!.push({
+      itemCode: String(order),
+      description: checkpoint,
+      section,
+      sortOrder: order,
+    });
   }
 
-  if (items.length) {
-    const name = "Architectural / Civil Drawing Review Checklist";
+  for (const [sec, items] of bySection) {
+    if (!items.length) continue;
+    const name = sec.length > 80 ? sec.slice(0, 77) + "…" : sec;
     const existing = await prisma.checklistTemplate.findFirst({ where: { name } });
     if (!existing) {
       await prisma.checklistTemplate.create({
         data: {
           name,
           category: "Drawings",
-          checklistType: "QualityInspection",
+          checklistType: "DrawingCheck",
           source: "Drwing check master checklist.xlt.xls",
+          instructions: "Complete before uploading any drawing or revision (GFC gate).",
+          requirePhotosMin: 0,
           items: { create: items },
         },
       });
     } else {
       await prisma.checklistTemplate.update({
         where: { id: existing.id },
-        data: { checklistType: "QualityInspection", source: "Drwing check master checklist.xlt.xls" },
+        data: {
+          checklistType: "DrawingCheck",
+          source: "Drwing check master checklist.xlt.xls",
+          instructions: "Complete before uploading any drawing or revision (GFC gate).",
+          requirePhotosMin: 0,
+        },
       });
+      if ((await prisma.checklistItem.count({ where: { templateId: existing.id } })) === 0) {
+        await prisma.checklistItem.createMany({
+          data: items.map((it) => ({ ...it, templateId: existing.id })),
+        });
+      }
     }
+  }
+  // Keep legacy single Architectural template updated if present
+  const legacy = await prisma.checklistTemplate.findFirst({
+    where: { name: "Architectural / Civil Drawing Review Checklist" },
+  });
+  if (legacy) {
+    await prisma.checklistTemplate.update({
+      where: { id: legacy.id },
+      data: { checklistType: "DrawingCheck", requirePhotosMin: 0 },
+    });
   }
 
   const qiFallback: { category: string; name: string; lines: string[] }[] = [
@@ -307,7 +364,12 @@ async function seedChecklistsFromExcel() {
     if (existing) {
       await prisma.checklistTemplate.update({
         where: { id: existing.id },
-        data: { checklistType: "QualityInspection", source: "quality-inspection-catalog" },
+        data: {
+          checklistType: "QualityInspection",
+          source: "quality-inspection-catalog",
+          requirePhotosMin: 3,
+          instructions: "Attach at least 3 site photos when filling this QI checklist.",
+        },
       });
       continue;
     }
@@ -317,12 +379,55 @@ async function seedChecklistsFromExcel() {
         category: q.category,
         checklistType: "QualityInspection",
         source: "quality-inspection-catalog",
+        requirePhotosMin: 3,
+        instructions: "Attach at least 3 site photos when filling this QI checklist.",
         items: {
           create: q.lines.map((description, i) => ({
             itemCode: `${i + 1}.0`,
             description,
+            instruction: "Verify against approved GFC / ITP.",
             sortOrder: i + 1,
             section: i === q.lines.length - 1 ? "Close-out" : "Inspection",
+            requirePhoto: i === 0,
+          })),
+        },
+      },
+    });
+  }
+
+  const safetyDefs = [
+    {
+      name: "PPE & Site Induction Checklist",
+      lines: ["Helmet / shoes / vest worn", "Induction completed", "Work area barricaded"],
+    },
+    {
+      name: "Safety NCR follow-up checklist",
+      lines: ["NCR acknowledged", "Corrective action in place", "Photo evidence attached", "Closed with PMC sign-off"],
+    },
+  ];
+  for (const s of safetyDefs) {
+    const existing = await prisma.checklistTemplate.findFirst({ where: { name: s.name } });
+    if (existing) {
+      await prisma.checklistTemplate.update({
+        where: { id: existing.id },
+        data: { checklistType: "Safety", requirePhotosMin: 3 },
+      });
+      continue;
+    }
+    await prisma.checklistTemplate.create({
+      data: {
+        name: s.name,
+        category: "Safety",
+        checklistType: "Safety",
+        source: "safety-catalog",
+        requirePhotosMin: 3,
+        instructions: "Safety fills require 3 photos. Raise SafetyChecklist RFI to assign filler.",
+        items: {
+          create: s.lines.map((description, i) => ({
+            itemCode: `${i + 1}`,
+            description,
+            sortOrder: i + 1,
+            requirePhoto: true,
           })),
         },
       },
@@ -331,7 +436,9 @@ async function seedChecklistsFromExcel() {
 
   const siteN = await prisma.checklistTemplate.count({ where: { checklistType: "SiteExecution" } });
   const qiN = await prisma.checklistTemplate.count({ where: { checklistType: "QualityInspection" } });
-  console.log(`Checklist families — SiteExecution: ${siteN}, QualityInspection: ${qiN}`);
+  const dwN = await prisma.checklistTemplate.count({ where: { checklistType: "DrawingCheck" } });
+  const safN = await prisma.checklistTemplate.count({ where: { checklistType: "Safety" } });
+  console.log(`Checklist families — Site: ${siteN}, QI: ${qiN}, DrawingCheck: ${dwN}, Safety: ${safN}`);
 }
 
 async function seedProjectAndCost(users: { id: string; role: string }[]) {
@@ -533,7 +640,12 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   const drawing = { id: firstDrawingId };
   const structuralDrawing = { id: structuralDrawingId || firstDrawingId };
 
-  // Cost sample from cashflow packages
+  const officeForSheets = users.find((u) => u.role === "office")?.id!;
+  const siteForSheets = users.find((u) => u.role === "site_employee")?.id!;
+  await seedQualitySafetyFromSheets(prisma, project.id, EXCEL_ROOT, siteForSheets || officeForSheets);
+  await seedChecklistFillsForReports(prisma, project.id, siteForSheets || officeForSheets);
+
+  // Cost sample from cashflow packages (fallback if budget workbook missing)
   const packages = [
     ["1", "Project Development Consultancy", "SPDC", 2400000, 1720000, 722795],
     ["3.1", "Construction cost for Dormitory blocks", "M/s Bhavna Infra", 57100727, 57673579, 20483680],
@@ -628,55 +740,100 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     console.log("Monitoring (measurement) lines seeded:", createdMon);
   }
 
-  // Progress: milestones, hindrance, risk, planned vs actual (from client Excel packs)
-  const mileCount = await prisma.progressMilestone.count({ where: { projectId: project.id } });
-  if (mileCount === 0) {
-    const miles = [
-      ["M01", "Site", "Site mobilisation", 5, 6, 1],
-      ["M02", "Excavation", "Bulk excavation", 8, 10, 2],
-      ["M03", "Foundation", "Raft / footing PCC", 4, 4, 0],
-      ["M04", "Foundation", "Footing RCC", 9, 12, 3],
-      ["M05", "Structure", "Column RCC", 9, 39, 30],
-    ] as const;
-    for (const [code, category, activity, plannedDays, actualDays, varianceDays] of miles) {
+  // Progress: refresh from client Excel packs (exact sheet data)
+  await prisma.progressActivityLine.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressManpower.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressSorStat.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressLegalApproval.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressPlannedActual.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressRisk.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressHindrance.deleteMany({ where: { projectId: project.id } });
+  await prisma.progressMilestone.deleteMany({ where: { projectId: project.id } });
+
+  const overviewFile = path.join(EXCEL_ROOT, "Progress Overview.xlsx");
+  const mileFile = path.join(EXCEL_ROOT, "Milestone tracking.xlsx");
+  const plannedFile = path.join(EXCEL_ROOT, "Planned Vs. Actual Dashboard (1).xlsx");
+  const monthlyFile = path.join(
+    EXCEL_ROOT,
+    fs.existsSync(path.join(EXCEL_ROOT, "Monthly Progress Dashboard (1).xlsx"))
+      ? "Monthly Progress Dashboard (1).xlsx"
+      : "Monthly Progress Dashboard.xlsx"
+  );
+  const hindFile = path.join(EXCEL_ROOT, "HInderance Register Dashboard (1).xlsx");
+
+  {
+    const file = fs.existsSync(mileFile) ? mileFile : overviewFile;
+    const wb = XLSX.readFile(file);
+    const sheet =
+      wb.Sheets["Data Input"] ||
+      wb.Sheets["Milestone"] ||
+      wb.Sheets[wb.SheetNames.find((n) => /milestone|data input/i.test(n)) || wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "" }) as unknown[][];
+    let n = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] as (string | number)[];
+      const code = cellStr(row[0], 40);
+      const activity = cellStr(row[2], 300);
+      if (!code || !activity || !/^M\d+/i.test(code)) continue;
+      const plannedDays = cellNum(row[5]);
+      const actualDays = cellNum(row[8]);
+      const delays = cellNum(row[14]);
+      const pct = cellNum(row[10]);
       await prisma.progressMilestone.create({
         data: {
           projectId: project.id,
           code,
-          category,
+          category: cellStr(row[1], 80),
           activity,
+          plannedStart: excelDate(row[3]),
+          plannedEnd: excelDate(row[4]),
           plannedDays,
-          actualDays,
-          varianceDays,
-          status: varianceDays > 0 ? "Delayed" : "On track",
+          actualStart: excelDate(row[6]),
+          actualEnd: excelDate(row[7]),
+          actualDays: actualDays > 0 ? actualDays : 0,
+          varianceDays: delays || actualDays - plannedDays,
+          weightage: cellNum(row[9]),
+          pctComplete: pct > 1 ? pct / 100 : pct,
+          stakeholder: cellStr(row[11], 80),
+          zone: cellStr(row[12], 40),
+          status: cellStr(row[13], 40) || "Planned",
         },
       });
+      n++;
     }
+    console.log("Milestones seeded:", n);
   }
 
-  const hindCount = await prisma.progressHindrance.count({ where: { projectId: project.id } });
-  if (hindCount === 0) {
-    const hindFile = path.join(EXCEL_ROOT, "HInderance Register Dashboard (1).xlsx");
-    if (fs.existsSync(hindFile)) {
-      const wb = XLSX.readFile(hindFile);
-      const sheet = wb.Sheets["Hinderance Register"] || wb.Sheets[wb.SheetNames[1]];
-      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "" }) as unknown as unknown[][];
+  if (fs.existsSync(hindFile) || fs.existsSync(overviewFile)) {
+    const file = fs.existsSync(hindFile) ? hindFile : overviewFile;
+    const wb = XLSX.readFile(file);
+    const sheetName = wb.SheetNames.find((n) => /hinder/i.test(n));
+    const sheet = wb.Sheets["Hinderance Register"] || (sheetName ? wb.Sheets[sheetName] : undefined);
+    if (sheet) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "" }) as unknown[][];
       let n = 0;
-      for (let i = 2; i < rows.length && n < 12; i++) {
+      for (let i = 2; i < rows.length; i++) {
         const row = rows[i] as (string | number)[];
-        const description = String(row[1] ?? "").trim();
+        const description = cellStr(row[1], 500);
         if (!description) continue;
-        const days = Number(row[9]) || 0;
         await prisma.progressHindrance.create({
           data: {
             projectId: project.id,
-            description: description.slice(0, 500),
-            location: String(row[2] || "") || null,
-            activity: String(row[3] || "") || null,
-            category: String(row[5] || "") || null,
-            type: String(row[6] || "") || null,
-            daysImpacted: days,
-            status: days && String(row[8] || "") ? "Resolved" : "Open",
+            description,
+            location: cellStr(row[2], 120),
+            activity: cellStr(row[3], 120),
+            correspondence: cellStr(row[4], 120),
+            category: cellStr(row[5], 80),
+            type: cellStr(row[6], 200),
+            occurredAt: excelDate(row[7]),
+            resolvedAt: excelDate(row[8]),
+            daysImpacted: cellNum(row[9]),
+            baselineStart: excelDate(row[10]),
+            scheduleImpact: cellNum(row[11]),
+            delayType: cellStr(row[12], 80),
+            accountable: cellStr(row[13], 80),
+            status: cellStr(row[14], 40) || "Open",
+            remarks: cellStr(row[15], 500),
           },
         });
         n++;
@@ -685,137 +842,196 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     }
   }
 
-  const riskCount = await prisma.progressRisk.count({ where: { projectId: project.id } });
-  if (riskCount === 0) {
-    await prisma.progressRisk.createMany({
-      data: [
-        {
-          projectId: project.id,
-          code: "R1",
-          category: "Execution",
-          opportunityThreat: "Threat",
-          name: "Manpower shortage",
-          description: "Observed shortfall vs planned crew for structure package.",
-          probability: 5,
-          consequence: 5,
-          severity: 25,
-          probabilityPct: 0.2,
-          costImpact: 100000,
-        },
-        {
-          projectId: project.id,
-          code: "R2",
-          category: "Schedule",
-          opportunityThreat: "Threat",
-          name: "GFC delay",
-          description: "Latest revisions pending for compound wall.",
-          probability: 4,
-          consequence: 3,
-          severity: 12,
-          probabilityPct: 0.4,
-          costImpact: 50000,
-        },
-      ],
-    });
-  }
+  if (fs.existsSync(overviewFile)) {
+    const wb = XLSX.readFile(overviewFile);
+    const sheet = wb.Sheets["Risk Register"];
+    if (sheet) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 2; i < rows.length && n < 40; i++) {
+        const row = rows[i] as (string | number)[];
+        const code = cellStr(row[0], 20);
+        const name = cellStr(row[3], 200);
+        if (!code || !name || !/^R\d+/i.test(code)) continue;
+        const probability = Math.min(5, Math.max(1, Math.round(cellNum(row[5]) || 1)));
+        const consequence = Math.min(5, Math.max(1, Math.round(cellNum(row[6]) || 1)));
+        await prisma.progressRisk.create({
+          data: {
+            projectId: project.id,
+            code,
+            category: cellStr(row[1], 80),
+            opportunityThreat: cellStr(row[2], 40) || "Threat",
+            name,
+            description: cellStr(row[4], 1000),
+            probability,
+            consequence,
+            severity: cellNum(row[7]) || probability * consequence,
+            probabilityPct: cellNum(row[8]),
+            costImpact: cellNum(row[9]),
+            status: /complete|close|mitigat/i.test(String(row[11] || "")) ? "Closed" : "Open",
+          },
+        });
+        n++;
+      }
+      console.log("Risks seeded:", n);
+    }
 
-  const paCount = await prisma.progressPlannedActual.count({ where: { projectId: project.id } });
-  if (paCount === 0) {
-    const periods = await prisma.costCashflowPeriod.findMany({ where: { projectId: project.id } });
-    for (const p of periods) {
-      await prisma.progressPlannedActual.create({
-        data: {
-          projectId: project.id,
-          periodLabel: p.periodLabel,
-          packageName: "Overall",
-          plannedPct: Math.min(1, p.plannedAmount ? 0.9 : 0),
-          actualPct: p.progressPct || 0,
-          plannedAmount: p.plannedAmount,
-          actualAmount: p.actualAmount,
-        },
-      });
+    const legal = wb.Sheets["Legal Approval Tracker"];
+    if (legal) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(legal, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 3; i < rows.length; i++) {
+        const row = rows[i] as (string | number)[];
+        const approvalId = cellStr(row[0], 40);
+        const description = cellStr(row[3], 400);
+        if (!approvalId || !description) continue;
+        await prisma.progressLegalApproval.create({
+          data: {
+            projectId: project.id,
+            approvalId,
+            category: cellStr(row[1], 80),
+            authority: cellStr(row[2], 120),
+            description,
+            packageName: cellStr(row[4], 120),
+            submissionDate: excelDate(row[5]),
+            requiredBy: excelDate(row[6]),
+            receivedDate: excelDate(row[7]),
+            status: cellStr(row[8], 40) || "Submitted",
+            delayDays: cellNum(row[9]),
+            responsible: cellStr(row[10], 80),
+            remarks: cellStr(row[11], 300),
+          },
+        });
+        n++;
+      }
+      console.log("Legal approvals seeded:", n);
     }
   }
 
-  // MB + BBS sample lines (Budget workbook structure)
-  const mbCount = await prisma.costMbLine.count({ where: { projectId: project.id } });
-  if (mbCount === 0) {
-    await prisma.costMbLine.createMany({
-      data: [
-        {
-          projectId: project.id,
-          packageName: "Dormitory Civil",
-          srNo: "2.0",
-          description: "Excavation 0.0 to 1.5 mt",
-          nos1: 1,
-          nos2: 1,
-          length: 40,
-          width: 12,
-          height: 1.5,
-          qty: 720,
-          unit: "Cmt",
-        },
-        {
-          projectId: project.id,
-          packageName: "UGWT",
-          srNo: "1",
-          description: "UGWT excavation",
-          nos1: 1,
-          nos2: 1,
-          length: 11.59,
-          width: 7.86,
-          height: 1.5,
-          qty: 136.65,
-          unit: "Cmt",
-        },
-        {
-          projectId: project.id,
-          packageName: "Electric",
-          srNo: "1.1",
-          description: "SITC of LDB as per SLD",
-          nos1: 12,
-          nos2: 1,
-          length: 0,
-          width: 0,
-          height: 0,
-          qty: 12,
-          unit: "Nos",
-        },
-      ],
-    });
+  if (fs.existsSync(plannedFile)) {
+    const wb = XLSX.readFile(plannedFile);
+    const cashName = wb.SheetNames.find((n) => /cashflow/i.test(n));
+    const cash = (cashName && wb.Sheets[cashName]) || wb.Sheets["Project Cashflow "];
+    if (cash) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(cash, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as (string | number)[];
+        const month = cellStr(row[0], 40);
+        const planned = cellNum(row[3]);
+        if (!month || !planned) continue;
+        const actual = cellNum(row[4]);
+        await prisma.progressPlannedActual.create({
+          data: {
+            projectId: project.id,
+            periodLabel: month,
+            packageName: cellStr(row[1], 40) || "Overall",
+            plannedAmount: planned,
+            actualAmount: actual,
+            plannedPct: planned ? 1 : 0,
+            actualPct: planned ? Math.min(1.5, actual / planned) : 0,
+          },
+        });
+        n++;
+      }
+      console.log("Planned vs Actual cashflow seeded:", n);
+    }
+
+    const man = wb.Sheets["Weekly Manpower"];
+    if (man) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(man, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 2; i < rows.length; i++) {
+        const row = rows[i] as (string | number)[];
+        const trade = cellStr(row[0], 80);
+        if (!trade || /total/i.test(trade) || /^date$/i.test(trade)) break;
+        if (!cellNum(row[1]) && !cellNum(row[2])) continue;
+        await prisma.progressManpower.create({
+          data: {
+            projectId: project.id,
+            trade,
+            required: cellNum(row[1]),
+            available: cellNum(row[2]),
+            shortage: cellNum(row[3]),
+            shortagePct: cellNum(row[4]),
+            rank: Math.round(cellNum(row[5])) || n + 1,
+          },
+        });
+        n++;
+      }
+      console.log("Manpower rows seeded:", n);
+    }
+
+    const actName = wb.SheetNames.find((n) => /planned vs actual/i.test(n) && !/dashboard/i.test(n));
+    const act = (actName && wb.Sheets[actName]) || wb.Sheets["Planned Vs Actual "];
+    if (act) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(act, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      let lastTower = "";
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] as (string | number)[];
+        const sr = cellNum(row[0]);
+        const activity = cellStr(row[2], 200);
+        if (!sr || !activity) continue;
+        const towerCell = cellStr(row[1], 80);
+        if (towerCell) lastTower = towerCell;
+        const tower = towerCell || lastTower || null;
+        const gfc = cellNum(row[7]);
+        const executed = cellNum(row[8]);
+        await prisma.progressActivityLine.create({
+          data: {
+            projectId: project.id,
+            srNo: sr,
+            tower,
+            activity,
+            unit: cellStr(row[5], 20),
+            plannedStart: excelDate(row[3]),
+            plannedEnd: excelDate(row[4]),
+            boqQty: cellNum(row[6]),
+            gfcQty: gfc,
+            executedQty: executed,
+            balanceQty: cellNum(row[9]),
+            weeklyPlanned: cellNum(row[10]),
+            weeklyActual: cellNum(row[11]),
+            cumulativeQty: cellNum(row[12]) || executed,
+            status: cellStr(row[16], 40),
+            pctComplete: gfc > 0 ? Math.min(1.2, executed / gfc) : cellNum(row[17]),
+          },
+        });
+        n++;
+      }
+      console.log("Activity lines seeded:", n);
+    }
   }
 
-  const bbsCount = await prisma.costBbsLine.count({ where: { projectId: project.id } });
-  if (bbsCount === 0) {
-    await prisma.costBbsLine.createMany({
-      data: [
-        {
-          projectId: project.id,
-          packageName: "Dormitory BBS",
-          barMark: "A1",
-          diameterMm: 12,
-          shape: "Straight",
-          lengthMm: 4500,
-          nos: 40,
-          totalLength: 180,
-          weightKg: 160.2,
-          location: "Raft",
-        },
-        {
-          projectId: project.id,
-          packageName: "Compound Wall BBS",
-          barMark: "B2",
-          diameterMm: 10,
-          shape: "L",
-          lengthMm: 1200,
-          nos: 80,
-          totalLength: 96,
-          weightKg: 59.3,
-          location: "Stem",
-        },
-      ],
-    });
+  if (fs.existsSync(monthlyFile)) {
+    const wb = XLSX.readFile(monthlyFile);
+    const sor = wb.Sheets["SOR Log"];
+    if (sor) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sor, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 1; i < Math.min(rows.length, 6); i++) {
+        const row = rows[i] as (string | number)[];
+        const observation = cellStr(row[1], 120);
+        if (!observation || !cellNum(row[0])) continue;
+        await prisma.progressSorStat.create({
+          data: {
+            projectId: project.id,
+            observation,
+            total: cellNum(row[2]),
+            openCount: cellNum(row[3]),
+            closedCount: cellNum(row[4]),
+            closureRate: cellNum(row[5]),
+          },
+        });
+        n++;
+      }
+      console.log("Monthly SOR stats seeded:", n);
+    }
   }
+
+  // Cost from SPDC Budget workbook (Budget / Monitoring / MB / BBS / rate diffs)
+  await seedCostFromBudgetWorkbook(prisma, project.id, EXCEL_ROOT);
 
   // Communications matrix defaults
   const matrixCount = await prisma.communicationMatrix.count({ where: { projectId: project.id } });
@@ -864,10 +1080,11 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
 
-  // Vendors (Procore-style company directory)
+  // Vendors / contractors / clients / PMC (directory parties)
   const vendorDefs = [
     {
       name: "M/s Bhavna Infra",
+      partyType: "Contractor",
       trade: "Civil / Main Contractor",
       city: "Ahmedabad",
       state: "Gujarat",
@@ -880,7 +1097,19 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       insuranceVerified: true,
     },
     {
+      name: "TCC Projects PVT. LTD.",
+      partyType: "Contractor",
+      trade: "Civil Structural",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      email: "site@tcc.demo",
+      primaryContactName: "Ramesh Desai",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
       name: "Pearl Electricals",
+      partyType: "Vendor",
       trade: "Electrical",
       city: "Vadodara",
       state: "Gujarat",
@@ -893,6 +1122,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     },
     {
       name: "AquaFlow MEP",
+      partyType: "Vendor",
       trade: "Plumbing",
       city: "Surat",
       state: "Gujarat",
@@ -903,6 +1133,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     },
     {
       name: "SteelForm Fabricators",
+      partyType: "Vendor",
       trade: "Structural steel",
       city: "Rajkot",
       state: "Gujarat",
@@ -911,22 +1142,58 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       isPrequalified: true,
       insuranceVerified: false,
     },
+    {
+      name: "Arvind Limited",
+      partyType: "Client",
+      trade: "Client / Owner",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      email: "projects@arvind.demo",
+      primaryContactName: "Client PM",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
+      name: "AK Consultant",
+      partyType: "Consultant",
+      trade: "Project Consultant",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      email: "ak@consultant.demo",
+      primaryContactName: "A. Kumar",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
+      name: "Sharnam Project Development Consultants & Co.",
+      partyType: "PMC",
+      trade: "PMC",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      email: "office@sharnam.demo",
+      primaryContactName: "Office Coordinator",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
   ] as const;
 
   for (const v of vendorDefs) {
     const existing = await prisma.vendor.findFirst({ where: { name: v.name } });
-    const vendor =
-      existing ||
-      (await prisma.vendor.create({
-        data: { ...v, country: "India", createdVia: "Seed" },
-      }));
+    const vendor = existing
+      ? await prisma.vendor.update({
+          where: { id: existing.id },
+          data: { partyType: v.partyType, trade: v.trade, email: v.email, primaryContactName: v.primaryContactName },
+        })
+      : await prisma.vendor.create({
+          data: { ...v, country: "India", createdVia: "Seed" },
+        });
     await prisma.projectVendor.upsert({
       where: { projectId_vendorId: { projectId: project.id, vendorId: vendor.id } },
       create: { projectId: project.id, vendorId: vendor.id, tradeRole: v.trade, assignedVia: "Seed" },
       update: { tradeRole: v.trade },
     });
   }
-  console.log("Vendors seeded:", vendorDefs.length);
+  console.log("Directory parties seeded:", vendorDefs.length);
 
   const adminId = users.find((u) => u.role === "admin")?.id!;
   const siteId = users.find((u) => u.role === "site_employee")?.id!;
@@ -1057,46 +1324,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
 
-  if ((await prisma.safetyRecord.count({ where: { projectId: project.id } })) === 0) {
-    await prisma.safetyRecord.createMany({
-      data: [
-        {
-          projectId: project.id,
-          recordType: "Toolbox Talk",
-          title: "Working at height — balcony guard rails",
-          description: "Morning toolbox talk completed with civil team before slab edge work.",
-          severity: "Medium",
-          status: "Closed",
-          location: "Block A — Level 2",
-          correctiveAction: "Guard rails confirmed in place before work start",
-          reportedById: siteId,
-          closedAt: new Date(),
-        },
-        {
-          projectId: project.id,
-          recordType: "Near Miss",
-          title: "Loose plank on scaffold access",
-          description: "Worker reported unstable plank on tower scaffold east face.",
-          severity: "High",
-          status: "Open",
-          location: "Block A — East scaffold",
-          correctiveAction: "Replace plank and inspect all platforms",
-          reportedById: siteId,
-          assignedToId: officeUserId,
-        },
-        {
-          projectId: project.id,
-          recordType: "Observation",
-          title: "PPE compliance — Helmets at rebar yard",
-          description: "Spot check: 2 workers without helmets in rebar cutting zone.",
-          severity: "Low",
-          status: "Open",
-          location: "Rebar yard",
-          reportedById: officeUserId,
-        },
-      ],
-    });
-  }
+  // Safety records are refreshed from Safety NCR.xlsx in seedQualitySafetyFromSheets
 
   // Ensure Inspections / RFIs folders exist in mock drive
   for (const rel of [

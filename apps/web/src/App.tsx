@@ -28,6 +28,7 @@ import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 import SafetyPage from "./pages/project/SafetyPage";
 import ProgressPage from "./pages/project/ProgressPage";
+import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
 import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import { applyThemeOption } from "./themes";
@@ -123,6 +124,7 @@ export default function App() {
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="progress" element={<ProgressPage />} />
+                  <Route path="checklist-master" element={<ChecklistMasterPage />} />
                   <Route path="rfis" element={<RfisPage />} />
                   <Route path="submittals" element={<SubmittalsPage />} />
                   <Route path="photos" element={<PhotosPage />} />

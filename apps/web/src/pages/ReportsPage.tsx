@@ -153,9 +153,32 @@ export default function ReportsPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Stat label="Manpower" value={String(dpr.kpis.manpowerTotal)} />
             <Stat label="Equipment" value={String(dpr.kpis.equipmentCount)} />
-            <Stat label="Checklists today" value={String(dpr.kpis.checklistsToday)} />
+            <Stat label="Site checklists" value={String(dpr.kpis.siteChecks || 0)} />
             <Stat label="Open RFIs" value={String(dpr.kpis.openRfis)} />
           </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Stat label="Drawing checks" value={String(dpr.kpis.drawingChecks || 0)} />
+            <Stat label="QI fills" value={String(dpr.kpis.qualityChecks || 0)} />
+            <Stat label="Safety fills" value={String(dpr.kpis.safetyChecks || 0)} />
+            <Stat label="Open QC NCRs" value={String(dpr.kpis.openQualityNcrs || 0)} />
+          </div>
+          <Card className="text-sm">
+            <h3 className="font-semibold mb-2">Checklist fills → Progress Reports</h3>
+            <ul className="grid sm:grid-cols-2 gap-2 text-xs text-steel-muted">
+              <li>
+                <span className="font-semibold text-ink">DrawingCheck</span> → Drawing / GFC gate section
+              </li>
+              <li>
+                <span className="font-semibold text-ink">QualityInspection</span> → Quality / QI section
+              </li>
+              <li>
+                <span className="font-semibold text-ink">Safety</span> → Safety section
+              </li>
+              <li>
+                <span className="font-semibold text-ink">SiteExecution</span> → DPR daily site checklists
+              </li>
+            </ul>
+          </Card>
           <div className="grid lg:grid-cols-2 gap-4">
             <Card>
               <h3 className="font-semibold text-sm mb-2">Diary · {dpr.kpis.diaryStatus}</h3>
@@ -199,6 +222,24 @@ export default function ReportsPage() {
             <Stat label="Drawings pub." value={`${wpr.kpis.publishedDrawings}/${wpr.kpis.drawings}`} />
             <Stat label="Open submittals" value={String(wpr.kpis.openSubmittals)} />
           </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Stat label="Drawing checks" value={String(wpr.kpis.drawingChecks || 0)} />
+            <Stat label="QI fills" value={String(wpr.kpis.qualityChecks || 0)} />
+            <Stat label="Safety fills" value={String(wpr.kpis.safetyChecks || 0)} />
+            <Stat label="Site checks" value={String(wpr.kpis.siteChecks || 0)} />
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Stat
+              label="Budget ₹L"
+              value={String(Math.round((wpr.kpis.budgeted || 0) / 100000) / 10)}
+            />
+            <Stat
+              label="Certified ₹L"
+              value={String(Math.round((wpr.kpis.certified || 0) / 100000) / 10)}
+            />
+            <Stat label="Open QC NCRs" value={String(wpr.kpis.openQualityNcrs || 0)} />
+            <Stat label="Cube tests" value={String(wpr.kpis.cubeTests || 0)} />
+          </div>
           <div className="grid lg:grid-cols-2 gap-4">
             <Card padding={false}>
               <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Drawing register snapshot</div>
@@ -215,8 +256,16 @@ export default function ReportsPage() {
               </ul>
             </Card>
             <Card padding={false}>
-              <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Submittals · Safety · Meetings</div>
+              <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Cost flow · Submittals · Safety</div>
               <div className="p-4 text-sm space-y-2">
+                <div className="flex justify-between">
+                  <span>Cashflow periods</span>
+                  <strong>{(wpr.cashflow || []).length}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Budget WBS lines</span>
+                  <strong>{(wpr.budget || []).length}</strong>
+                </div>
                 <div className="flex justify-between">
                   <span>Meetings this week</span>
                   <strong>{wpr.kpis.meetings}</strong>
@@ -236,7 +285,7 @@ export default function ReportsPage() {
                   </strong>
                 </div>
                 <p className="text-xs text-steel-muted pt-2">
-                  Download WPR for the full drawing register, submittals, and safety tables (client pack).
+                  Download WPR for budget WBS, cashflow, drawings, submittals, and safety (mobile-fitted HTML).
                 </p>
               </div>
             </Card>

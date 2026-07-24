@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Stat, WorkflowStrip } from "../../components/ui";
 
 export default function ProjectHomePage() {
@@ -9,14 +10,19 @@ export default function ProjectHomePage() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const [overview, setOverview] = useState<any>(null);
+  const [progress, setProgress] = useState<any>(null);
+  const [safety, setSafety] = useState<any>(null);
   const isClient = user?.role === "client";
   const canUpload = user && user.role !== "client";
 
   useEffect(() => {
     api(`/api/directory/project/${id}/overview`, { token }).then(setOverview).catch(console.error);
+    api(`/api/progress/${id}/summary`, { token }).then(setProgress).catch(() => setProgress(null));
+    api(`/api/checklist/project/${id}/safety-dashboard`, { token }).then(setSafety).catch(() => setSafety(null));
   }, [id, token]);
 
   const s = overview?.stats || {};
+  const pt = progress?.totals || {};
 
   const tools = isClient
     ? [
@@ -101,9 +107,58 @@ export default function ProjectHomePage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Published drawings" value={s.publishedDrawings ?? "—"} hint={`${s.drawings ?? 0} total`} />
         <Stat label="Open RFIs" value={s.openRfis ?? "—"} />
-        <Stat label="Inspections" value={s.inspections ?? "—"} />
-        <Stat label="Team + vendors" value={`${overview?.members?.length ?? 0} / ${overview?.vendors?.length ?? 0}`} />
+        <Stat label="Open hindrances" value={pt.openHindrance ?? "—"} />
+        <Stat
+          label="Project progress"
+          value={pt.projectProgressPct != null ? `${Math.round(pt.projectProgressPct * 100)}%` : "—"}
+        />
       </div>
+
+      {(progress || safety) && (
+        <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] via-white to-[#F0F4F3] p-4 sm:p-5 space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">Workday-style project dashboard</p>
+              <h3 className="font-display text-xl text-ink">Progress · Safety · Hindrance</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/projects/${id}/progress`} className="text-xs font-semibold text-brand">
+                Progress →
+              </Link>
+              <Link to={`/projects/${id}/safety`} className="text-xs font-semibold text-brand">
+                Safety →
+              </Link>
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <PieChart title="Milestones" items={progress?.charts?.milestoneByStatus || []} />
+            <PieChart title="Hindrances" items={progress?.charts?.hindranceByStatus || []} />
+            <PieChart title="Risks" items={progress?.charts?.riskByStatus || []} />
+            <PieChart title="Safety status" items={safety?.charts?.byStatus || []} />
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+            <Card className="!p-3">
+              <div className="text-[10px] uppercase text-steel-muted">Milestones</div>
+              <div className="font-display text-xl">{pt.milestones ?? 0}</div>
+              <div className="text-xs text-steel-muted">{pt.delayed ?? 0} delayed</div>
+            </Card>
+            <Card className="!p-3">
+              <div className="text-[10px] uppercase text-steel-muted">Hindrance open</div>
+              <div className="font-display text-xl">{pt.openHindrance ?? 0}</div>
+              <div className="text-xs text-steel-muted">from sheet register</div>
+            </Card>
+            <Card className="!p-3">
+              <div className="text-[10px] uppercase text-steel-muted">Open risks</div>
+              <div className="font-display text-xl">{pt.openRisk ?? 0}</div>
+            </Card>
+            <Card className="!p-3">
+              <div className="text-[10px] uppercase text-steel-muted">Safety open</div>
+              <div className="font-display text-xl">{safety?.totals?.open ?? 0}</div>
+              <div className="text-xs text-steel-muted">{safety?.totals?.records ?? 0} records</div>
+            </Card>
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
         {tools.map(([to, title, desc, icon, accent]) => (

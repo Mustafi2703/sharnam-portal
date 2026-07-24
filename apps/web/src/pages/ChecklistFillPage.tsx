@@ -77,15 +77,26 @@ export default function ChecklistFillPage() {
     }));
   }
 
+  const minPhotos = assignment?.template?.requirePhotosMin || 0;
+  const photoTotal = useMemo(() => {
+    const overall = photos?.length || 0;
+    const line = Object.values(responses).reduce((s, r) => s + (r.photos?.length || 0), 0);
+    return overall + line;
+  }, [photos, responses]);
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMsg("");
+    if (minPhotos > 0 && photoTotal < minPhotos) {
+      setMsg(`This checklist requires at least ${minPhotos} photos (you have ${photoTotal}).`);
+      return;
+    }
     try {
       const payload: Record<string, { answer: string; remarks: string }> = {};
       const itemComments: Record<string, string> = {};
-      Object.entries(responses).forEach(([id, r]) => {
-        payload[id] = { answer: r.answer, remarks: r.remarks };
-        if (r.remarks?.trim()) itemComments[id] = r.remarks.trim();
+      Object.entries(responses).forEach(([lineId, r]) => {
+        payload[lineId] = { answer: r.answer, remarks: r.remarks };
+        if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
       });
 
       const fd = new FormData();
@@ -100,13 +111,13 @@ export default function ChecklistFillPage() {
         Array.from(photos).forEach((f) => fd.append("photos", f));
       }
       let lineFiles = 0;
-      Object.entries(responses).forEach(([id, r]) => {
+      Object.entries(responses).forEach(([lineId, r]) => {
         r.photos.forEach((f) => {
-          fd.append(`item_${id}_photo`, f);
+          fd.append(`item_${lineId}_photo`, f);
           lineFiles += 1;
         });
         r.docs.forEach((f) => {
-          fd.append(`item_${id}_doc`, f);
+          fd.append(`item_${lineId}_doc`, f);
           lineFiles += 1;
         });
       });
@@ -144,35 +155,7 @@ export default function ChecklistFillPage() {
 
   async function uploadNewDrawing(e: FormEvent) {
     e.preventDefault();
-    if (!newFile || !newDw.drawingNumber || !newDw.title) {
-      setMsg("Drawing number, title, and file are required.");
-      return;
-    }
-    setUploadBusy(true);
-    setMsg("");
-    try {
-      const fd = new FormData();
-      fd.append("drawingNumber", newDw.drawingNumber);
-      fd.append("title", newDw.title);
-      fd.append("revisionNumber", newDw.revisionNumber || "R0");
-      fd.append("publish", "true");
-      fd.append("file", newFile);
-      const created = await api<any>(`/api/drawings/project/${projectId}`, { method: "POST", token, body: fd });
-      await load();
-      setDrawingId(created.id);
-      const latest = [...(created.revisions || [])].sort(
-        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )[0];
-      if (latest) setRevisionId(latest.id);
-      setUploadOpen(false);
-      setNewFile(null);
-      setNewDw({ drawingNumber: "", title: "", revisionNumber: "R0" });
-      setMsg("Drawing uploaded and linked to this fill.");
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploadBusy(false);
-    }
+    setMsg("Upload drawings from Drawings → GFC (Drawing Check Master opens first). Then link the sheet here.");
   }
 
   async function uploadRevision(e: FormEvent) {
@@ -234,7 +217,12 @@ export default function ChecklistFillPage() {
             <PageHeader
               eyebrow={assignment.template.category}
               title={assignment.template.name}
-              subtitle="Fill each line with Yes/No/N.A., comments, photos, and docs. Link an existing drawing/revision or upload a new sheet / revision here."
+              subtitle={
+                assignment.template.instructions ||
+                `Fill Yes/No/N.A. with comments and photos.${
+                  minPhotos ? ` At least ${minPhotos} photos required (${photoTotal} attached).` : ""
+                }`
+              }
               actions={
                 <div className="text-right">
                   <div className="text-2xl font-display text-brand">
@@ -516,6 +504,11 @@ export default function ChecklistFillPage() {
                 <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-line">
                   <label className="text-sm text-steel-muted">
                     Overall photos / docs
+                    {minPhotos > 0 && (
+                      <span className="ml-2 text-xs font-semibold text-brand">
+                        {photoTotal}/{minPhotos} photos (min)
+                      </span>
+                    )}
                     <input
                       type="file"
                       accept="image/*,.pdf,.doc,.docx"
@@ -525,7 +518,7 @@ export default function ChecklistFillPage() {
                     />
                   </label>
                   {canFill && (
-                    <Button type="submit">
+                    <Button type="submit" disabled={minPhotos > 0 && photoTotal < minPhotos}>
                       Submit checklist form
                     </Button>
                   )}

@@ -113,6 +113,13 @@ model Project {
   hindrances           ProgressHindrance[]
   risks                ProgressRisk[]
   plannedActual        ProgressPlannedActual[]
+  legalApprovals       ProgressLegalApproval[]
+  manpowerRows         ProgressManpower[]
+  activityLines        ProgressActivityLine[]
+  sorStats             ProgressSorStat[]
+  qapActivities        QapActivity[]
+  cubeTests            CubeTest[]
+  qualityNcrs          QualityNcr[]
 }
 
 /** Mock / queued outbound emails (swap to SMTP/Graph later) */
@@ -191,7 +198,13 @@ model DrawingRevision {
   fileUrl        String
   fileName       String?
   published      Boolean  @default(false)
+  /// Planned issue date (GFC register column)
+  plannedDate    DateTime?
+  /// Actual upload / issue date
+  actualDate     DateTime?
   uploadedById   String?
+  /// Pre-upload drawing check submission that unlocked this revision
+  preCheckSubmissionId String?
   createdAt      DateTime @default(now())
 
   drawing     Drawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
@@ -200,24 +213,34 @@ model DrawingRevision {
 }
 
 model ChecklistTemplate {
-  id           String   @id @default(cuid())
-  name         String
-  category     String
-  checklistType String  @default("Quality")
-  source       String?
-  createdAt    DateTime @default(now())
+  id            String   @id @default(cuid())
+  name          String
+  category      String
+  /// DrawingCheck | SiteExecution | QualityInspection | Safety
+  checklistType String   @default("SiteExecution")
+  source        String?
+  /// QA / fill instructions shown on the form
+  instructions  String?
+  /// Minimum photos required on submit (Quality/Safety typically 3)
+  requirePhotosMin Int   @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
 
   items       ChecklistItem[]
   assignments ChecklistAssignment[]
 }
 
 model ChecklistItem {
-  id          String  @id @default(cuid())
-  templateId  String
-  itemCode    String?
-  description String
-  sortOrder   Int     @default(0)
-  section     String?
+  id           String  @id @default(cuid())
+  templateId   String
+  itemCode     String?
+  description  String
+  /// Per-line quality / safety instruction
+  instruction  String?
+  sortOrder    Int     @default(0)
+  section      String?
+  requirePhoto Boolean @default(false)
 
   template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
@@ -246,6 +269,11 @@ model ChecklistSubmission {
   status       String   @default("Draft")
   responsesJson String
   remarks      String?
+  /// Fill | PreUploadDrawing
+  purpose      String   @default("Fill")
+  /// One-time token consumed when drawing/revision upload succeeds
+  unlockToken  String?  @unique
+  unlockUsedAt DateTime?
   reviewedAt   DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -662,6 +690,8 @@ model LeaveRequest {
 model Vendor {
   id                  String   @id @default(cuid())
   name                String
+  /// Contractor | Vendor | Client | Consultant | PMC
+  partyType           String   @default("Vendor")
   trade               String?
   address             String?
   city                String?
@@ -682,7 +712,7 @@ model Vendor {
   createdVia          String   @default("Manual")
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  updatedAt           DateTime @default(now()) @updatedAt
 
   projects ProjectVendor[]
   rfis     Rfi[]
@@ -870,12 +900,73 @@ model SafetyRecord {
   closedAt        DateTime?
   reportedById    String
   assignedToId    String?
+  linkedAssignmentId String?
+  linkedTemplateId   String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   reportedBy User    @relation("SafetyReporter", fields: [reportedById], references: [id])
   assignedTo User?   @relation("SafetyAssignee", fields: [assignedToId], references: [id])
+}
+
+/** Weekly QAP activity row for Quality dashboard */
+model QapActivity {
+  id           String   @id @default(cuid())
+  projectId    String
+  weekLabel    String
+  activity     String
+  discipline   String?
+  contractorOk Boolean  @default(false)
+  pmcOk        Boolean  @default(false)
+  clientOk     Boolean  @default(false)
+  status       String   @default("Open")
+  dueDate      DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Cube crushing register — SPDC CUBE REGISTER / Monthly Cube Test */
+model CubeTest {
+  id          String    @id @default(cuid())
+  projectId   String
+  srNo        String?
+  castDate    DateTime?
+  description String
+  grade       String?
+  cubeWeight  Float?
+  testDate7   DateTime?
+  testDate28  DateTime?
+  load7       Float?
+  load28      Float?
+  strength    Float?
+  avgStrength Float?
+  result      String?
+  source      String?
+  createdAt   DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Quality NCR / CAR register — NCR 01 / Monthly CAR register */
+model QualityNcr {
+  id             String    @id @default(cuid())
+  projectId      String
+  number         String?
+  issueDate      DateTime?
+  ncrType        String?
+  contractor     String?
+  description    String
+  location       String?
+  plannedClosure DateTime?
+  actualClosure  DateTime?
+  status         String    @default("Open")
+  source         String?
+  createdAt      DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model ProgressMilestone {
@@ -891,9 +982,13 @@ model ProgressMilestone {
   actualEnd        DateTime?
   actualDays       Float     @default(0)
   varianceDays     Float     @default(0)
+  weightage        Float     @default(0)
+  pctComplete      Float     @default(0)
+  stakeholder      String?
+  zone             String?
   status           String    @default("Planned")
   createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  updatedAt        DateTime  @default(now()) @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -910,10 +1005,14 @@ model ProgressHindrance {
   occurredAt      DateTime?
   resolvedAt      DateTime?
   daysImpacted    Float     @default(0)
+  baselineStart   DateTime?
+  scheduleImpact  Float     @default(0)
+  delayType       String?
   status          String    @default("Open")
   accountable     String?
+  remarks         String?
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  updatedAt       DateTime  @default(now()) @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -933,7 +1032,7 @@ model ProgressRisk {
   costImpact      Float    @default(0)
   status          String   @default("Open")
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime @default(now()) @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -948,6 +1047,77 @@ model ProgressPlannedActual {
   plannedAmount   Float    @default(0)
   actualAmount    Float    @default(0)
   createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Legal Approval Tracker (Progress Overview) */
+model ProgressLegalApproval {
+  id              String    @id @default(cuid())
+  projectId       String
+  approvalId      String
+  category        String?
+  authority       String?
+  description     String
+  packageName     String?
+  submissionDate  DateTime?
+  requiredBy      DateTime?
+  receivedDate    DateTime?
+  status          String    @default("Submitted")
+  delayDays       Float     @default(0)
+  responsible     String?
+  remarks         String?
+  createdAt       DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Weekly manpower planned vs actual (Shortage chart) */
+model ProgressManpower {
+  id           String @id @default(cuid())
+  projectId    String
+  trade        String
+  required     Float  @default(0)
+  available    Float  @default(0)
+  shortage     Float  @default(0)
+  shortagePct  Float  @default(0)
+  rank         Int    @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Planned Vs Actual activity quantity register */
+model ProgressActivityLine {
+  id             String    @id @default(cuid())
+  projectId      String
+  srNo           Int       @default(0)
+  tower          String?
+  activity       String
+  unit           String?
+  plannedStart   DateTime?
+  plannedEnd     DateTime?
+  boqQty         Float     @default(0)
+  gfcQty         Float     @default(0)
+  executedQty    Float     @default(0)
+  balanceQty     Float     @default(0)
+  weeklyPlanned  Float     @default(0)
+  weeklyActual   Float     @default(0)
+  cumulativeQty  Float     @default(0)
+  status         String?
+  pctComplete    Float     @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Monthly Progress · SOR / observation closure stats */
+model ProgressSorStat {
+  id           String @id @default(cuid())
+  projectId    String
+  observation  String
+  total        Float  @default(0)
+  openCount    Float  @default(0)
+  closedCount  Float  @default(0)
+  closureRate  Float  @default(0)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

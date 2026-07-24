@@ -11,8 +11,9 @@
     "build": "npm run build -w @sharnam/shared && npm run build -w @sharnam/api && npm run build -w @sharnam/web",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx seed/seed.ts",
-    "db:setup": "npm run db:generate && npm run db:push && npm run db:seed",
+  "db:seed": "tsx seed/seed.ts",
+  "db:verify-progress": "tsx seed/verify-progress.ts",
+  "db:setup": "npm run db:generate && npm run db:push && npm run db:seed",
     "start:api": "npm run start -w @sharnam/api",
     "postinstall": "prisma generate"
   },

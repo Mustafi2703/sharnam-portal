@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
 import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { UploadModal } from "../../components/UploadModal";
+import { DrawingPreCheckPanel } from "../../components/DrawingPreCheckPanel";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const REV_SLOTS = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
@@ -31,6 +32,10 @@ export default function DrawingsPage() {
   const [uploadForId, setUploadForId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ title: string; fileUrl: string; fileName?: string } | null>(null);
   const [showRegister, setShowRegister] = useState(false);
+  const [unlockToken, setUnlockToken] = useState<string | null>(null);
+  const [revUnlockToken, setRevUnlockToken] = useState<string | null>(null);
+  const [plannedDate, setPlannedDate] = useState("");
+  const [actualDate, setActualDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [formError, setFormError] = useState("");
@@ -162,12 +167,19 @@ export default function DrawingsPage() {
 
   async function registerDrawing(e: FormEvent) {
     e.preventDefault();
+    if (!unlockToken) {
+      setFormError("Complete Drawing Check Master first.");
+      return;
+    }
     setBusy(true);
     setMsg("");
     setFormError("");
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, String(v)));
+      fd.append("unlockToken", unlockToken);
+      if (plannedDate) fd.append("plannedDate", plannedDate);
+      if (actualDate) fd.append("actualDate", actualDate);
       if (file) fd.append("file", file);
       await api(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
       setForm({
@@ -180,8 +192,9 @@ export default function DrawingsPage() {
         publish: true,
       });
       setFile(null);
+      setUnlockToken(null);
       setShowRegister(false);
-      setMsg("Drawing saved to GFC register.");
+      setMsg("Drawing saved to GFC register (check + revision logged).");
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Upload failed");
@@ -194,11 +207,16 @@ export default function DrawingsPage() {
     setShowRegister(false);
     setFile(null);
     setFormError("");
+    setUnlockToken(null);
   }
 
   async function uploadRevision(e: FormEvent) {
     e.preventDefault();
     if (!uploadForId) return;
+    if (!revUnlockToken) {
+      setFormError("Complete Drawing Check Master before revision upload.");
+      return;
+    }
     setBusy(true);
     setMsg("");
     try {
@@ -206,12 +224,16 @@ export default function DrawingsPage() {
       fd.append("revisionNumber", revForm.revisionNumber);
       fd.append("revisionLabel", revForm.revisionLabel || revForm.revisionNumber);
       fd.append("publish", String(revForm.publish));
+      fd.append("unlockToken", revUnlockToken);
+      if (plannedDate) fd.append("plannedDate", plannedDate);
+      if (actualDate) fd.append("actualDate", actualDate);
       if (revFile) fd.append("file", revFile);
       await api(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
       setUploadForId(null);
       setRevFile(null);
+      setRevUnlockToken(null);
       setExpandedId(uploadForId);
-      setMsg("Revision uploaded — date logged on the register.");
+      setMsg("Revision uploaded — planned/actual logged on the GFC register.");
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Revision upload failed");
@@ -223,6 +245,10 @@ export default function DrawingsPage() {
   function openUploadRev(d: any) {
     const next = `R${Math.min(d.revisions?.length || 0, 5)}`;
     setUploadForId(d.id);
+    setRevUnlockToken(null);
+    setFormError("");
+    setPlannedDate("");
+    setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
     setRevForm({
       revisionNumber: next,
@@ -356,11 +382,23 @@ export default function DrawingsPage() {
         </Card>
       )}
 
+      {canUpload && showRegister && !unlockToken && id && (
+        <div className="fixed inset-0 z-[70] bg-ink/45 flex items-center justify-center p-3">
+          <div className="w-full max-w-2xl">
+            <DrawingPreCheckPanel
+              projectId={id}
+              onCancel={closeRegister}
+              onUnlocked={(tok) => setUnlockToken(tok)}
+            />
+          </div>
+        </div>
+      )}
+
       {canUpload && (
         <UploadModal
-          open={showRegister}
+          open={showRegister && !!unlockToken}
           title="Upload drawing"
-          context={`Project · GFC register · ${form.discipline}`}
+          context={`Project · GFC register · check complete · ${form.discipline}`}
           file={file}
           onFile={setFile}
           accept=".pdf,.png,.jpg,.jpeg,.dwg,.webp"
@@ -418,6 +456,22 @@ export default function DrawingsPage() {
               placeholder: "R0",
               value: form.revisionNumber,
               onChange: (v) => setForm({ ...form, revisionNumber: v }),
+            },
+            {
+              kind: "text",
+              name: "plannedDate",
+              label: "Planned date",
+              value: plannedDate,
+              onChange: setPlannedDate,
+              placeholder: "YYYY-MM-DD",
+            },
+            {
+              kind: "text",
+              name: "actualDate",
+              label: "Actual date",
+              value: actualDate,
+              onChange: setActualDate,
+              placeholder: "YYYY-MM-DD",
             },
             {
               kind: "checkbox",
@@ -491,11 +545,20 @@ export default function DrawingsPage() {
                           <span className="text-xs text-steel-muted">—</span>
                         )}
                       </td>
-                      {REV_SLOTS.map((_, i) => (
-                        <td key={i} className="px-2 py-2 text-[11px] text-center font-mono text-steel-muted whitespace-nowrap">
-                          {revsAsc[i] ? fmtDate(revsAsc[i].createdAt) : "—"}
-                        </td>
-                      ))}
+                      {REV_SLOTS.map((_, i) => {
+                        const r = revsAsc[i];
+                        const label = r
+                          ? r.actualDate || r.plannedDate
+                            ? `${r.plannedDate ? `P:${fmtDate(r.plannedDate)}` : ""} ${r.actualDate ? `A:${fmtDate(r.actualDate)}` : ""}`.trim() ||
+                              fmtDate(r.createdAt)
+                            : fmtDate(r.createdAt)
+                          : "—";
+                        return (
+                          <td key={i} className="px-2 py-2 text-[10px] text-center font-mono text-steel-muted whitespace-nowrap" title={r?.revisionLabel || ""}>
+                            {label}
+                          </td>
+                        );
+                      })}
                       <td className="px-2 py-2 text-center font-mono text-xs">{revsAsc.length}</td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap justify-end gap-1">
@@ -593,20 +656,37 @@ export default function DrawingsPage() {
         </div>
       </Card>
 
+      {canUpload && uploadForId && uploadTarget && !revUnlockToken && id && (
+        <div className="fixed inset-0 z-[70] bg-ink/45 flex items-center justify-center p-3">
+          <div className="w-full max-w-2xl">
+            <DrawingPreCheckPanel
+              projectId={id}
+              onCancel={() => {
+                setUploadForId(null);
+                setRevFile(null);
+                setFormError("");
+              }}
+              onUnlocked={(tok) => setRevUnlockToken(tok)}
+            />
+          </div>
+        </div>
+      )}
+
       {canUpload && uploadForId && uploadTarget && (
         <UploadModal
-          open={!!uploadForId}
+          open={!!revUnlockToken}
           title="Upload revision"
-          context={`${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · ${uploadTarget.revisions?.length || 0} file(s)`}
+          context={`${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · check complete`}
           file={revFile}
           onFile={setRevFile}
           accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg"
-          primaryLabel="Upload & log date"
+          primaryLabel="Upload & log planned/actual"
           busy={busy}
           error={formError}
           onClose={() => {
             setUploadForId(null);
             setRevFile(null);
+            setRevUnlockToken(null);
             setFormError("");
           }}
           onSubmit={uploadRevision}
@@ -626,6 +706,22 @@ export default function DrawingsPage() {
               label: "Label / note",
               value: revForm.revisionLabel,
               onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
+            },
+            {
+              kind: "text",
+              name: "plannedDate",
+              label: "Planned date",
+              value: plannedDate,
+              onChange: setPlannedDate,
+              placeholder: "YYYY-MM-DD",
+            },
+            {
+              kind: "text",
+              name: "actualDate",
+              label: "Actual date",
+              value: actualDate,
+              onChange: setActualDate,
+              placeholder: "YYYY-MM-DD",
             },
             {
               kind: "checkbox",

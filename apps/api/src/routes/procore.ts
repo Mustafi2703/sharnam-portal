@@ -10,19 +10,27 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 export const vendorsRouter = Router();
 vendorsRouter.use(requireAuth);
 
-vendorsRouter.get("/", async (_req, res) => {
+vendorsRouter.get("/", async (req, res) => {
+  const partyType = typeof req.query.partyType === "string" ? req.query.partyType : undefined;
   const vendors = await prisma.vendor.findMany({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...(partyType ? { partyType } : {}),
+    },
     include: { _count: { select: { projects: true } } },
-    orderBy: { name: "asc" },
+    orderBy: [{ partyType: "asc" }, { name: "asc" }],
   });
   res.json(vendors);
 });
 
 vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const partyType = ["Contractor", "Vendor", "Client", "Consultant", "PMC"].includes(req.body.partyType)
+    ? req.body.partyType
+    : "Vendor";
   const v = await prisma.vendor.create({
     data: {
       name: req.body.name,
+      partyType,
       trade: req.body.trade,
       address: req.body.address,
       city: req.body.city,
@@ -111,11 +119,13 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       ? "QI-RFI"
       : rfiKind === "DrawingChecklist"
         ? "DWG-RFI"
-        : rfiKind === "RequestForInformation"
-          ? "RFI"
-          : isClient
-            ? "CON"
-            : "RFI";
+        : rfiKind === "SafetyChecklist"
+          ? "SAF-RFI"
+          : rfiKind === "RequestForInformation"
+            ? "RFI"
+            : isClient
+              ? "CON"
+              : "RFI";
   const number = req.body.number || `${prefix}-${String(count + 1).padStart(3, "0")}`;
   const due = req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 7 * 86400000);
 
@@ -465,6 +475,13 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
   res.json({
     members,
     vendors,
+    parties: {
+      contractors: vendors.filter((v) => v.vendor.partyType === "Contractor"),
+      vendorsOnly: vendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType),
+      clients: vendors.filter((v) => v.vendor.partyType === "Client"),
+      consultants: vendors.filter((v) => v.vendor.partyType === "Consultant"),
+      pmc: vendors.filter((v) => v.vendor.partyType === "PMC"),
+    },
     stats: {
       drawings: drawings.length,
       publishedDrawings: drawings.filter((d) => d.isPublished).length,
@@ -473,6 +490,9 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
       submittals: submittals.length,
       photos: photos.length,
       coordinationOpen: coordination.filter((c) => c.status === "Open").length,
+      contractors: vendors.filter((v) => v.vendor.partyType === "Contractor").length,
+      vendorCompanies: vendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType).length,
+      clients: vendors.filter((v) => v.vendor.partyType === "Client").length,
     },
     photos,
     submittals,

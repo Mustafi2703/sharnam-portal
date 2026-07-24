@@ -9,10 +9,12 @@ export default function InspectionsPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
+  const [dash, setDash] = useState<any>(null);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
+  const [qapForm, setQapForm] = useState({ weekLabel: "", activity: "", discipline: "" });
   const [form, setForm] = useState({
     title: "Site quality inspection",
     drawingId: "",
@@ -29,20 +31,21 @@ export default function InspectionsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
 
   const load = async () => {
-    const [insp, d, u, t] = await Promise.all([
+    const [insp, d, u, t, dashRes] = await Promise.all([
       api<{ inspections: any[]; canInspect: boolean; publishedDrawings: number }>(`/api/inspections/project/${id}`, {
         token,
       }),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
-      api<any[]>("/api/checklist/templates", { token }).catch(() => []),
+      api<any[]>("/api/checklist/templates?type=QualityInspection", { token }).catch(() => []),
+      api(`/api/checklist/project/${id}/quality-dashboard`, { token }).catch(() => null),
     ]);
     setData(insp);
+    setDash(dashRes);
     setDrawings(d.filter((x) => x.isPublished));
     setUsers(u);
     const list = Array.isArray(t) ? t : [];
-    const qi = list.filter((x: any) => /quality|qi|inspection/i.test(`${x.checklistType || ""} ${x.category || ""} ${x.name || ""}`));
-    setTemplates(qi.length ? qi : list.slice(0, 25));
+    setTemplates(list.slice(0, 50));
     if (!active && insp.inspections?.[0]) setActive(insp.inspections[0].id);
   };
 
@@ -55,28 +58,206 @@ export default function InspectionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Quality module · Procore-style form"
-        title="Quality Inspections"
-        subtitle="This is the live QI check form (raise → Ready → fill lines → Pass/Fail). Different from site checklists and from Safety. Attach photos/docs on each line."
+        eyebrow="Quality module"
+        title="Quality dashboard & inspections"
+        subtitle="QAP status by week, QI forms (raise → Ready → fill with ≥3 photos), and checklist master for new types / line items."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone="ok">Procore-style QI</Badge>
+            <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
+            <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
+            <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
+            <Link to={`/projects/${id}/checklist-master?family=QualityInspection`} className="text-sm font-semibold text-brand">
+              Checklist master →
+            </Link>
+            <Link to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-sm font-semibold text-brand">
+              Request QI fill →
+            </Link>
             <Link to={`/projects/${id}/safety`} className="text-sm font-semibold text-brand">
               Safety →
-            </Link>
-            <Link to={`/projects/${id}/checklist`} className="text-sm font-semibold text-brand">
-              Site checklists →
             </Link>
           </div>
         }
       />
+
+      {dash && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            ["QI checklist fills", dash.totals.fills],
+            ["Open QI", dash.totals.openInspections],
+            ["Open NCRs", dash.totals.openNcrs ?? 0],
+            ["Cubes (pass)", `${dash.totals.cubesPass ?? 0}/${dash.totals.cubes ?? 0}`],
+            ["Open fill RFIs", dash.totals.openFillRfis],
+            ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`],
+          ].map(([l, v]) => (
+            <Card key={l as string} className="!p-4">
+              <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+              <div className="text-2xl font-display mt-1">{v as string | number}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {dash?.reportMapping && (
+        <Card className="text-xs text-steel-muted">
+          <h3 className="font-semibold text-sm text-ink mb-2">Which fills update Progress Reports?</h3>
+          <ul className="grid sm:grid-cols-2 gap-1.5">
+            {Object.entries(dash.reportMapping).map(([k, v]) => (
+              <li key={k}>
+                <span className="font-semibold text-ink">{k}</span> → {String(v)}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {dash?.ncrs?.length > 0 && (
+        <Card>
+          <h3 className="font-semibold mb-3">NCR / CAR register (from sheet)</h3>
+          <div className="overflow-x-auto max-h-64">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
+                  <th className="py-2 pr-3">No</th>
+                  <th className="py-2 pr-3">Type</th>
+                  <th className="py-2 pr-3">Description</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dash.ncrs.slice(0, 15).map((n: any) => (
+                  <tr key={n.id} className="border-b border-line/60">
+                    <td className="py-2 pr-3 font-mono text-xs">{n.number}</td>
+                    <td className="py-2 pr-3">{n.ncrType || "—"}</td>
+                    <td className="py-2 pr-3 max-w-md truncate">{n.description}</td>
+                    <td className="py-2">
+                      <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {dash?.cubes?.length > 0 && (
+        <Card>
+          <h3 className="font-semibold mb-3">Cube register (from sheet)</h3>
+          <div className="overflow-x-auto max-h-64">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
+                  <th className="py-2 pr-3">Sr</th>
+                  <th className="py-2 pr-3">Description</th>
+                  <th className="py-2 pr-3">Grade</th>
+                  <th className="py-2 pr-3">Strength</th>
+                  <th className="py-2">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dash.cubes.slice(0, 12).map((c: any) => (
+                  <tr key={c.id} className="border-b border-line/60">
+                    <td className="py-2 pr-3 font-mono text-xs">{c.srNo || "—"}</td>
+                    <td className="py-2 pr-3 max-w-xs truncate">{c.description}</td>
+                    <td className="py-2 pr-3">{c.grade || "—"}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">{c.strength ?? "—"}</td>
+                    <td className="py-2">
+                      <Badge tone={/pass/i.test(c.result || "") ? "ok" : "neutral"}>{c.result || "—"}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {dash?.qap?.length > 0 && (
+        <Card>
+          <h3 className="font-semibold mb-3">Quality Assurance Plan · status</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
+                  <th className="py-2 pr-3">Week</th>
+                  <th className="py-2 pr-3">Activity</th>
+                  <th className="py-2 pr-3">Discipline</th>
+                  <th className="py-2 pr-3">Ctr / PMC / Client</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dash.qap.slice(0, 12).map((q: any) => (
+                  <tr key={q.id} className="border-b border-line/60">
+                    <td className="py-2 pr-3 font-mono text-xs">{q.weekLabel}</td>
+                    <td className="py-2 pr-3">{q.activity}</td>
+                    <td className="py-2 pr-3 text-steel-muted">{q.discipline || "—"}</td>
+                    <td className="py-2 pr-3 text-xs">
+                      {q.contractorOk ? "✓" : "·"} / {q.pmcOk ? "✓" : "·"} / {q.clientOk ? "✓" : "·"}
+                    </td>
+                    <td className="py-2">
+                      <Badge tone={q.status === "Done" || q.completedAt ? "ok" : "warn"}>{q.status}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {canManage && (
+        <Card>
+          <h3 className="font-semibold mb-3">Add QAP activity</h3>
+          <form
+            className="grid sm:grid-cols-4 gap-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await api(`/api/checklist/project/${id}/qap`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify(qapForm),
+                });
+                setQapForm({ weekLabel: "", activity: "", discipline: "" });
+                setMsg("QAP row added");
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Failed");
+              }
+            }}
+          >
+            <Input
+              placeholder="Week label (e.g. W50)"
+              value={qapForm.weekLabel}
+              onChange={(e) => setQapForm({ ...qapForm, weekLabel: e.target.value })}
+              required
+            />
+            <Input
+              className="sm:col-span-2"
+              placeholder="Activity"
+              value={qapForm.activity}
+              onChange={(e) => setQapForm({ ...qapForm, activity: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Discipline"
+              value={qapForm.discipline}
+              onChange={(e) => setQapForm({ ...qapForm, discipline: e.target.value })}
+            />
+            <Button type="submit" className="sm:col-span-4 sm:w-auto">
+              Add to QAP
+            </Button>
+          </form>
+        </Card>
+      )}
 
       <WorkflowStrip
         active={1}
         steps={[
           { label: "Raise QI", hint: "Pick checklist template" },
           { label: "Mark Ready", hint: "Assignee fills form" },
-          { label: "Pass / Fail", hint: "Photos + docs" },
+          { label: "Pass / Fail", hint: "≥3 photos" },
           { label: "Close", hint: "Or request QI fill" },
         ]}
       />

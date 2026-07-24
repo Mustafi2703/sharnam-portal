@@ -5,7 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { getActiveWorkspace } from "../../workspaces";
 
-type RfiKind = "All" | "RequestForInformation" | "DrawingChecklist" | "QualityInspection" | "Manual" | "ClientConcern";
+type RfiKind = "All" | "RequestForInformation" | "DrawingChecklist" | "QualityInspection" | "SafetyChecklist" | "Manual" | "ClientConcern";
 
 export default function RfisPage() {
   const { id } = useParams();
@@ -43,6 +43,7 @@ export default function RfisPage() {
   const [answer, setAnswer] = useState("");
   const [siteAssignments, setSiteAssignments] = useState<any[]>([]);
   const [qiAssignments, setQiAssignments] = useState<any[]>([]);
+  const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
 
   const isClient = user?.role === "client";
   const canCreate = !!user;
@@ -50,7 +51,7 @@ export default function RfisPage() {
   const canClose = matrixCanRespond;
 
   const load = async () => {
-    const [rPayload, u, d, aSite, aQi, v] = await Promise.all([
+    const [rPayload, u, d, aSite, aQi, aSaf, v] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
@@ -58,6 +59,9 @@ export default function RfisPage() {
         assignments: [],
       })),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=QualityInspection`, { token }).catch(() => ({
+        assignments: [],
+      })),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=Safety`, { token }).catch(() => ({
         assignments: [],
       })),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
@@ -69,6 +73,7 @@ export default function RfisPage() {
     setDrawings(d);
     setSiteAssignments(aSite.assignments || []);
     setQiAssignments(aQi.assignments || []);
+    setSafetyAssignments(aSaf.assignments || []);
     setVendors(Array.isArray(v) ? v.map((row: any) => row.vendor || row) : []);
     if (!active && list[0]) setActive(list[0].id);
   };
@@ -87,13 +92,23 @@ export default function RfisPage() {
       setForm((f) => ({ ...f, rfiKind: "QualityInspection" }));
     } else if (kindFilter === "DrawingChecklist") {
       setForm((f) => ({ ...f, rfiKind: "DrawingChecklist" }));
+    } else if (kindFilter === "SafetyChecklist") {
+      setForm((f) => ({ ...f, rfiKind: "SafetyChecklist" }));
     } else if (kindFilter === "RequestForInformation" || kindFilter === "All") {
       setForm((f) => ({ ...f, rfiKind: "RequestForInformation" }));
     }
   }, [kindFilter]);
 
-  const needsChecklist = form.rfiKind === "DrawingChecklist" || form.rfiKind === "QualityInspection";
-  const checklistOptions = form.rfiKind === "QualityInspection" ? qiAssignments : siteAssignments;
+  const needsChecklist =
+    form.rfiKind === "DrawingChecklist" ||
+    form.rfiKind === "QualityInspection" ||
+    form.rfiKind === "SafetyChecklist";
+  const checklistOptions =
+    form.rfiKind === "QualityInspection"
+      ? qiAssignments
+      : form.rfiKind === "SafetyChecklist"
+        ? safetyAssignments
+        : siteAssignments;
 
   const filtered = useMemo(() => {
     return rfis.filter((r) => {
@@ -136,6 +151,7 @@ export default function RfisPage() {
             ["RequestForInformation", "Ask (PMC)"],
             ["DrawingChecklist", "Request checklist fill"],
             ["QualityInspection", "Request QI fill"],
+            ["SafetyChecklist", "Safety checklist fill"],
             ["ClientConcern", "Client"],
           ] as [RfiKind, string][]
         ).map(([k, label]) => (
@@ -190,6 +206,7 @@ export default function RfisPage() {
                 <option value="RequestForInformation">Ask — Request for Information (PMC)</option>
                 <option value="DrawingChecklist">Request checklist fill (site / drawings)</option>
                 <option value="QualityInspection">Request QI fill (separate from Procore QI form)</option>
+                <option value="SafetyChecklist">Safety checklist fill (attach safety checklist)</option>
               </Select>
             )}
             <Input required placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />

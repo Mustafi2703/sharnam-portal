@@ -1,4 +1,4 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useEffect, useState, type ReactNode } from "react";
 import { Badge, Button } from "./ui";
@@ -19,6 +19,8 @@ type Proj = { id: string; code: string; name: string };
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout, token } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const projectToolRoute = /^\/projects\/[^/]+/.test(location.pathname);
   const [projects, setProjects] = useState<Proj[]>([]);
   const [projectId, setProjectId] = useState(
     () => (typeof window !== "undefined" ? localStorage.getItem(WORKSPACE_PROJECT_KEY) || "" : "")
@@ -146,7 +148,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="flex-1 min-w-0 w-full">
-        <div className="page-canvas-wide px-4 sm:px-6 lg:px-10 xl:px-12 py-7 sm:py-9 lg:py-10">{children}</div>
+        <div
+          className={
+            projectToolRoute
+              ? "w-full max-w-none"
+              : "w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8"
+          }
+        >
+          {children}
+        </div>
       </main>
     </div>
   );

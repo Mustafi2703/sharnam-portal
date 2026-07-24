@@ -1,22 +1,28 @@
 # Cost module
 
-## Tools
+## Tools (each Excel sheet → portal tool)
 
-| Tool | Behaviour |
-|------|-----------|
-| Budget WBS | Stakeholder budgeted / WO / certified / forecast / non-tendered |
-| Monitoring | BOQ qty, Extra, **GFC qty** (user fills), Achieved, Excess/Saving vs BOQ |
-| Measurement books (MB) | Per package (Civil dormitory, Electric, Plumbing, UGWT…). Dimensions → qty; feeds GFC/achieved |
-| BBS | Bar bending schedules per package (Dormitory BBS, Compound Wall BBS…) |
-| Cashflow | Monthly planned vs actual + dashboard |
-| Rate difference | Steel / Cement / Tiles purchase vs basic |
-| COP / Bills | Vendor bill certify flow |
-| BOQ import | Upload BOQ → monitoring lines |
+| Tool | Source sheet |
+|------|----------------|
+| Budget WBS | `SPDC_Budget_Arvind 49.xls` → Budget (+ Cashflow Dashboard Budget) |
+| BOQ / Monitoring | Each `Monitoring *` package + Cashflow Dashboard Monitoring |
+| MB sheets | Each MB / structure sheet (Dormitory, Electric, Plumbing, UGWT, …) |
+| BBS | Dormitory / Compound Wall / Septic / Road / UGWT BBS |
+| Cashflow Chart | `Cashflow - Dashboard.xlsx` → Cash Flow Chart - INR |
+| Cashflow Forecast | same → Cash Flow - Forecast |
+| Tracking | same → Tracking |
+| Rate difference | Steel / Cement / Tiles |
+| COP / Bills | Payment Summary |
+| Structure upload | Multi-BOQ import → monitoring package |
 
-## Sheet sources
+## Downloads
 
-- `Cashflow - Dashboard.xlsx` — Dashboard, Tracking, Cash Flow, Budget, Monitoring, rate diffs  
-- `SPDC_Budget_Arvind 49.xls` — Budget + Monitoring* + `* MB` + `* BBS` sheets  
-- `Payment Summary - VIATRIX - Copy.xlsx` — RA / PEB / Civil bills  
+Each register has **Download CSV** (open in Excel) for the active package filter:
+`/api/cost/:projectId/download/{boq|mb|bbs|budget|cashflow|rates}.csv?package=`
 
-**Rule:** Multiple BOQs per project; each BOQ can have an MB. Fill GFC quantity; rest computes.
+## Rules
+
+- Multiple BOQs/structures per project; each package is its own tool chip.
+- Fill **GFC qty** on monitoring; excess / saving computes.
+- Comms / Drawings / Coordination / Submittals are separate modules (later).
+- Deploy (`render.yaml`) runs `prisma db push` + `seed/seed.ts` on start so sheet data is always loaded.
