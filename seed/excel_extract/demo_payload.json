@@ -1,0 +1,1249 @@
+{
+  "gfc": [
+    {
+      "discipline": "Architectural ",
+      "area": "Soil Filling  ",
+      "tlNo": "1 , 4 , 7 & 8  ",
+      "number": "C.E.101",
+      "title": " LAYOUT OF EARTH FILLING",
+      "revisions": [
+        "2026-01-30",
+        "2026-03-03",
+        "2026-03-30",
+        "2026-04-04",
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Compound Wall  ",
+      "tlNo": "2 ,6,14 , 19 , 26",
+      "number": "AG103",
+      "title": "COMPOUND WALL LAYOUT / COMPUND WALL ELEVATIONS",
+      "revisions": [
+        "2026-02-21",
+        "2026-03-21",
+        "2026-05-05",
+        "2026-05-22",
+        "2026-06-05",
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Compound Wall  ",
+      "tlNo": "2",
+      "number": "AG103A",
+      "title": "COMPOUND WALL DETAIL",
+      "revisions": [
+        "2026-02-22",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "3 , 9 , 21",
+      "number": " S.G.102",
+      "title": "FOUNDATION PLAN & DETAIL OF COMPOUND WALL",
+      "revisions": [
+        "2026-02-28",
+        "2026-04-04",
+        null,
+        "2026-05-26",
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "9 , 21",
+      "number": " S.G.102a ",
+      "title": "OUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-2",
+      "revisions": [
+        "2026-04-04",
+        null,
+        "2026-05-26",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "3 , 12",
+      "number": " S.G.103",
+      "title": "FOUNDATION PLAN & DETAIL OF COMPOUND WALL",
+      "revisions": [
+        "2026-02-28",
+        "2026-04-29",
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "5 , 21",
+      "number": "S.G.104",
+      "title": "FOUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-1A",
+      "revisions": [
+        "2026-03-10",
+        "2026-04-04",
+        "2026-05-26",
+        "2026-05-26",
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "5, 21",
+      "number": "S.G.105",
+      "title": "FOUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-2A",
+      "revisions": [
+        "2026-03-10",
+        "2026-04-04",
+        null,
+        "2026-05-26",
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "5",
+      "number": "S.G.106",
+      "title": "FOUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-3A",
+      "revisions": [
+        "2026-03-10",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "5",
+      "number": "S.G.107",
+      "title": "FOUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-4A",
+      "revisions": [
+        "2026-03-10",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "5 ,12 ,21",
+      "number": "S.G.108",
+      "title": "FOUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-5A",
+      "revisions": [
+        "2026-03-10",
+        "2026-04-29",
+        "2026-05-26",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Compound Wall  ",
+      "tlNo": "5 ,12 , 21",
+      "number": "S.G.109",
+      "title": "FOUNDATION PLAN & DETAILS OF COMPOUND WALL \nTYPE-6A",
+      "revisions": [
+        "2026-03-10",
+        "2026-04-29",
+        "2026-05-26",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Approch  Road ",
+      "tlNo": "10",
+      "number": "C.R.101",
+      "title": "LAYOUT OF ROAD",
+      "revisions": [
+        "2026-04-10",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Main Factory Building and Admin ",
+      "tlNo": "11",
+      "number": "C.E.102",
+      "title": "LAYOUT OF EARTH FILLING (FOR MPB & ADMIN AREA)",
+      "revisions": [
+        "2026-04-17",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Main Factory Building and Admin ",
+      "tlNo": "13",
+      "number": "S.1.101",
+      "title": "EXCAVATION PLAN & PEDESTAL SECTION FOR MAIN PLANT BUILDING",
+      "revisions": [
+        "2026-05-06",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Compound Wall  ",
+      "tlNo": "14 ,19",
+      "number": "A.G.103B",
+      "title": "COMPUND WALL ELEVATIONS",
+      "revisions": [
+        "2026-05-05",
+        "2026-05-22",
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Compound Wall  ",
+      "tlNo": "14",
+      "number": "A.G.102",
+      "title": "SETTING OUT",
+      "revisions": [
+        "2026-05-05",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Main Factory Building and Admin ",
+      "tlNo": "15 , 16, 18",
+      "number": "S.1.101",
+      "title": "FOUNDATION PLAN & DETAILS FOR MAIN PLANT BUILDING",
+      "revisions": [
+        "2026-05-09",
+        "2026-05-11",
+        "2026-05-20",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Main Factory Building and Admin ",
+      "tlNo": "17",
+      "number": "S.G.101",
+      "title": "GENERAL NOTES, SPECIFICATION & DETAILS",
+      "revisions": [
+        "2026-05-11",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Infra ",
+      "tlNo": "17",
+      "number": " S.SK.01",
+      "title": "FOUNDATION DETAILS FOR  LIGHT POLE",
+      "revisions": [
+        "2026-05-11",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Security Building 2",
+      "tlNo": "20",
+      "number": "A.3.101",
+      "title": "FLOOR PLANS, SECTIONS, ELEVATIONS & DETAILS",
+      "revisions": [
+        "2026-05-22",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Security Building 2",
+      "tlNo": "23 , 28",
+      "number": "S.4.101",
+      "title": "STRU.LAYOUT & DETAILS AT FOUNDATION & PLINTH \nBEAM & TERRACE LVL",
+      "revisions": [
+        "2026-06-04",
+        "2026-06-12",
+        "2026-06-15",
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Infra",
+      "area": "Road ",
+      "tlNo": "24",
+      "number": "C.R.101",
+      "title": " LAYOUT OF ROAD LEVELS",
+      "revisions": [
+        "2026-06-04",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Infra",
+      "area": "Road ",
+      "tlNo": "24",
+      "number": "C.R.101A",
+      "title": "LAYOUT OF ROAD COORDINATES",
+      "revisions": [
+        "2026-06-04",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Infra",
+      "area": "Road ",
+      "tlNo": "24",
+      "number": "C.R.102",
+      "title": "DETAILS OF ROAD SECTION",
+      "revisions": [
+        "2026-06-04",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Security",
+      "tlNo": "25",
+      "number": " A_G_102",
+      "title": "SETTING OUT",
+      "revisions": [
+        "2026-06-04",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Architectural ",
+      "area": "Compound Wall  ",
+      "tlNo": "26",
+      "number": "A.G.103C",
+      "title": "COMPUND WALL ELEVATIONS",
+      "revisions": [
+        "2026-06-07",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "discipline": "Structural ",
+      "area": "Security Building 1 ",
+      "tlNo": "27",
+      "number": "S.3.101",
+      "title": "FOUNDATION PLAN & STRUCTURAL DETAILS FOR \nSECURITY CABIN-01",
+      "revisions": [
+        "2026-06-12",
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  ],
+  "monitoring": [
+    {
+      "itemNo": "2",
+      "desc": "-do 0.0 mt to 1.5 mt",
+      "uom": "Cmt",
+      "rate": 178,
+      "boqQty": 1750,
+      "extraQty": 0,
+      "gfcQty": 924.8445099999999,
+      "achievedQty": 924.8499999999999
+    },
+    {
+      "itemNo": "3",
+      "desc": "-do 1.5 mt to 3.0 mt",
+      "uom": "Cmt",
+      "rate": 268,
+      "boqQty": 1625,
+      "extraQty": 0,
+      "gfcQty": 913.05,
+      "achievedQty": 913.05
+    },
+    {
+      "itemNo": "4",
+      "desc": "-do 3.0 mt to 4.5 mt",
+      "uom": "Cmt",
+      "rate": 375,
+      "boqQty": 550,
+      "extraQty": 0,
+      "gfcQty": 0,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "5",
+      "desc": "Filling in plinth with approved materials like yellow earth/murrum in layers of 150 mm thickness, consolidating each layer by ramming and watering and rolling with vibro roller for a compaction to the modified proctor density of 95 percent of approved borrow pit. (Minimum 1.60 gms / Cu.cm.) \n- Approved Good quality Earth brought from Outside",
+      "uom": "Cmt",
+      "rate": 495,
+      "boqQty": 110,
+      "extraQty": 0,
+      "gfcQty": 0,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "6",
+      "desc": "'Filling in plinth/plot with approved materials like yellow earth/murrum in layers of 150 mm thickness, consolidating each layer by ramming and watering and rolling with vibro roller for a compaction to the modified proctor density of 95 percent of approved borrow pit. (Minimum 1.60 gms / Cu.cm.) \nSelected earth obtained from available plote area - cutting and filling ",
+      "uom": "Cmt",
+      "rate": 200,
+      "boqQty": 10000,
+      "extraQty": 0,
+      "gfcQty": 1123.2190140000093,
+      "achievedQty": 1123.22
+    },
+    {
+      "itemNo": "7",
+      "desc": "Providing and laying of avg 0.23 mm thick rubble soling using avg 90 mm thick rubble , including Compacting and filling the interstices with good quality approved earth/stone dust as binding material, spreading, watering, and consolidation of binding materials as directed by the Engineer-in charge",
+      "uom": "Cmt",
+      "rate": 2000,
+      "boqQty": 195.5,
+      "extraQty": 0,
+      "gfcQty": 173.80939000000004,
+      "achievedQty": 173.81
+    },
+    {
+      "itemNo": "8",
+      "desc": "Providing, mixing and laying plain cement concrete with avg 20-40 mm nominal size graded aggregates of approved quality as a levelling course under the column foundation, wall foundation, cable trenches, other trenches, machinery foundations, raft foundations, pipe supports, plinth beam, as floor sub base, etc. including ramming, levelling, curing etc. complete at any level (i.e. up to any depth or height from ground level). Please consider the cost of form work if required any. - M10",
+      "uom": "Cmt",
+      "rate": 3925,
+      "boqQty": 265,
+      "extraQty": 0,
+      "gfcQty": 223.55048499999995,
+      "achievedQty": 223.55
+    },
+    {
+      "itemNo": "9",
+      "desc": "Providing, mixing, Batching, Transporting through Transit Mixers, Pumping and laying plain / Reinforced cement concrete M:25 with 20 mm and downsized aggregate in all type of works such as foundation and superstructures, footings, pile caps, raft beams, columns, runners, coping beam, walls, slabs, lintels, tie-beams, canopies, staircase, fins, ledge, etc. in any pattern & shapes all including making openings, leaving sleeves in pedestals, columns, beams, slabs,pocket etc. complete as per the drawing and specification excluding  the cost of formwork.  and excluding the cost of Reinforcement.\nNOTE: Minimum Cement content 350Kgs/Cum. For Moderate condition\n-up to PL",
+      "uom": "Cmt",
+      "rate": 5350,
+      "boqQty": 380,
+      "extraQty": 0,
+      "gfcQty": 519.0007687499998,
+      "achievedQty": 513.14
+    },
+    {
+      "itemNo": "10",
+      "desc": "-do PL to G.F. Slab",
+      "uom": "Cmt",
+      "rate": 5400,
+      "boqQty": 210,
+      "extraQty": 0,
+      "gfcQty": 208.277103,
+      "achievedQty": 206.57
+    },
+    {
+      "itemNo": "11",
+      "desc": "-do G.F. to F.F. Slab",
+      "uom": "Cmt",
+      "rate": 5550,
+      "boqQty": 210,
+      "extraQty": 0,
+      "gfcQty": 208.277103,
+      "achievedQty": 189.56
+    },
+    {
+      "itemNo": "12",
+      "desc": "-do F.F. to S.F. Slab",
+      "uom": "Cmt",
+      "rate": 5700,
+      "boqQty": 210,
+      "extraQty": 0,
+      "gfcQty": 208.277103,
+      "achievedQty": 172.28
+    },
+    {
+      "itemNo": "13",
+      "desc": "-do S.F. to T.F. Slab",
+      "uom": "Cmt",
+      "rate": 5800,
+      "boqQty": 210,
+      "extraQty": 0,
+      "gfcQty": 208.277103,
+      "achievedQty": 22.68
+    },
+    {
+      "itemNo": "14",
+      "desc": "-do T.F. to F.F. Slab",
+      "uom": "Cmt",
+      "rate": 5900,
+      "boqQty": 210,
+      "extraQty": 0,
+      "gfcQty": 208.277103,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "15",
+      "desc": "Providing, cutting, bending, binding, laying, transporting and fixing in position at up to any levels (depth & height) reinforcement bars for all concrete works including 16 gauge annealed M.S. wire, spacer blocks of C.M. 1:2 with embedded binding wire of suitable length, protective coat of neat cement slurry to be applied as per Engineer-in-charge etc. complete. Bar bending schedule to be prepared by contractor. Any variation in reinforcement will be adjusted as per B.B.S. (Bar bending schedule) subject to approval and joint record by Engineer-in-Charge.- FE 500 TMT",
+      "uom": "M.T.",
+      "rate": 69100,
+      "boqQty": 153.03324597,
+      "extraQty": 0,
+      "gfcQty": 177.44494847107413,
+      "achievedQty": 153.05
+    },
+    {
+      "itemNo": "16",
+      "desc": "Providing & fixing in position and removing any pattern and shape of good quality plastic coated high density shuttering plywood/MS formwork for all plain / reinforced concrete works including necessary centering and shuttering, applying approved shuttering oil, etc. complete as directed. No extra to be paid for curved, circular shuttering and staging for direct height if required for any level.",
+      "uom": "Smt",
+      "rate": 415,
+      "boqQty": 1075,
+      "extraQty": 0,
+      "gfcQty": 1651.253750000001,
+      "achievedQty": 1651.25
+    },
+    {
+      "itemNo": "17",
+      "desc": "-do PL to G.F. Slab",
+      "uom": "Smt",
+      "rate": 430,
+      "boqQty": 1680,
+      "extraQty": 0,
+      "gfcQty": 1933.9838000000002,
+      "achievedQty": 1905.76
+    },
+    {
+      "itemNo": "18",
+      "desc": "-do G.F. to F.F. Slab",
+      "uom": "Smt",
+      "rate": 455,
+      "boqQty": 1680,
+      "extraQty": 0,
+      "gfcQty": 1933.9838000000002,
+      "achievedQty": 1735.58
+    },
+    {
+      "itemNo": "19",
+      "desc": "-do F.F. to S.F. Slab",
+      "uom": "Smt",
+      "rate": 480,
+      "boqQty": 1680,
+      "extraQty": 0,
+      "gfcQty": 1933.9838000000002,
+      "achievedQty": 1389.23
+    },
+    {
+      "itemNo": "20",
+      "desc": "-do S.F. to T.F. Slab",
+      "uom": "Smt",
+      "rate": 505,
+      "boqQty": 1680,
+      "extraQty": 0,
+      "gfcQty": 1933.9838000000002,
+      "achievedQty": 846.42
+    },
+    {
+      "itemNo": "21",
+      "desc": "-do T.F. to F.F. Slab",
+      "uom": "Smt",
+      "rate": 530,
+      "boqQty": 1680,
+      "extraQty": 0,
+      "gfcQty": 1933.9838000000002,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "22",
+      "desc": "Providing and laying first class brick masonry works in C.M. 1:6 for foundation up to any depth from ground level and plinth up to any height from ground level including scaffolding, watering, racking out joints, etc. complete in all respect. (Minimum compressive strength of the brick shall be \n50 kg./Sq.Cm.) - do up to PL",
+      "uom": "Cmt",
+      "rate": 5790,
+      "boqQty": 130,
+      "extraQty": 0,
+      "gfcQty": 102.46165699999999,
+      "achievedQty": 100.38
+    },
+    {
+      "itemNo": "23",
+      "desc": "-do PL to G.F. Slab",
+      "uom": "Cmt",
+      "rate": 5790,
+      "boqQty": 80,
+      "extraQty": 0,
+      "gfcQty": 73.479825,
+      "achievedQty": 43.86
+    },
+    {
+      "itemNo": "24",
+      "desc": "-do G.F. to F.F. Slab",
+      "uom": "Cmt",
+      "rate": 5940,
+      "boqQty": 80,
+      "extraQty": 0,
+      "gfcQty": 73.479825,
+      "achievedQty": 28.63
+    },
+    {
+      "itemNo": "25",
+      "desc": "-do F.F. to S.F. Slab",
+      "uom": "Cmt",
+      "rate": 6090,
+      "boqQty": 80,
+      "extraQty": 0,
+      "gfcQty": 73.479825,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "26",
+      "desc": "-do S.F. to T.F. Slab",
+      "uom": "Cmt",
+      "rate": 6240,
+      "boqQty": 80,
+      "extraQty": 0,
+      "gfcQty": 73.47982500000002,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "27",
+      "desc": "-do T.F. to F.F. Slab",
+      "uom": "Cmt",
+      "rate": 6390,
+      "boqQty": 80,
+      "extraQty": 0,
+      "gfcQty": 92.81914500000002,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "28",
+      "desc": "Providing and laying brick masonry work for a 115 mm thick partition wall in C.M. 1:4 at all depth & heights including laying horizontally 2 nos. 8 mm. Dia. Reinforcement BARS at every 4th course including scaffolding, curing, etc. complete in all respect. (Reinforcement Bars to be paidseparately). (Minimum compressive strength of the brick shall be 50 kg. /Sq.Cm).- do up to GF",
+      "uom": "Smt",
+      "rate": 785,
+      "boqQty": 1170,
+      "extraQty": 0,
+      "gfcQty": 767.8539,
+      "achievedQty": 356.26
+    },
+    {
+      "itemNo": "29",
+      "desc": "-do G.F. to F.F. Slab",
+      "uom": "Smt",
+      "rate": 805,
+      "boqQty": 1170,
+      "extraQty": 0,
+      "gfcQty": 767.8539,
+      "achievedQty": 174.55
+    },
+    {
+      "itemNo": "30",
+      "desc": "-do F.F. to S.F. Slab",
+      "uom": "Smt",
+      "rate": 825,
+      "boqQty": 1170,
+      "extraQty": 0,
+      "gfcQty": 767.8539,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "31",
+      "desc": "-do S.F. to T.F. Slab",
+      "uom": "Smt",
+      "rate": 845,
+      "boqQty": 1170,
+      "extraQty": 0,
+      "gfcQty": 767.8539,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "32",
+      "desc": "-do T.F. to F.F. Slab",
+      "uom": "Smt",
+      "rate": 865,
+      "boqQty": 1170,
+      "extraQty": 0,
+      "gfcQty": 767.8539,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "33",
+      "desc": "-do F.F. to Terrace",
+      "uom": "Smt",
+      "rate": 885,
+      "boqQty": 215,
+      "extraQty": 0,
+      "gfcQty": 328.66999999999996,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "34",
+      "desc": "Providing and laying 12 mm thick cement plaster to all surfaces of brick masonry, and R.C.C. in C.M. 1:4 finished smooth with cement punning including scaffolding, racking of joints, racking of RCC surface, curing, etc. complete including providing and fixing G.I. chicken wire mesh either side of joint of the junction of R.C.C. / P.C.C. and masonry, Bonding chemical etc. as directed by Engineer-in-Charge. The item is inclusive of grooves up to 12 x 12mm, drip moulds (50 mm wide x 12 mm thick), bands of any width etc. complete.- do up to PL ",
+      "uom": "Smt",
+      "rate": 270,
+      "boqQty": 140,
+      "extraQty": 0,
+      "gfcQty": 0,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "35",
+      "desc": "-do PL to G.F. Slab",
+      "uom": "Smt",
+      "rate": 285,
+      "boqQty": 3325,
+      "extraQty": 0,
+      "gfcQty": 1733.7924999999998,
+      "achievedQty": 663
+    },
+    {
+      "itemNo": "36",
+      "desc": "-do G.F. to F.F. Slab",
+      "uom": "Smt",
+      "rate": 305,
+      "boqQty": 3325,
+      "extraQty": 0,
+      "gfcQty": 1733.7924999999998,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "37",
+      "desc": "-do F.F. to S.F. Slab",
+      "uom": "Smt",
+      "rate": 325,
+      "boqQty": 3325,
+      "extraQty": 0,
+      "gfcQty": 1733.7924999999998,
+      "achievedQty": 0
+    },
+    {
+      "itemNo": "38",
+      "desc": "-do S.F. to T.F. Slab",
+      "uom": "Smt",
+      "rate": 345,
+      "boqQty": 3325,
+      "extraQty": 0,
+      "gfcQty": 1733.7924999999998,
+      "achievedQty": 0
+    }
+  ],
+  "cashflowPeriods": [
+    {
+      "month": "2025-10",
+      "planned": 6485619.232694704,
+      "actual": 5650000
+    },
+    {
+      "month": "2025-11",
+      "planned": 8564401.232694704,
+      "actual": 6735532
+    },
+    {
+      "month": "2025-12",
+      "planned": 5975619.232694705,
+      "actual": 4993250
+    },
+    {
+      "month": "2026-01",
+      "planned": 5975619.232694705,
+      "actual": 4930000
+    },
+    {
+      "month": "2026-02",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-03",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-04",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-05",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-06",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-07",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-08",
+      "planned": 5975619.232694705,
+      "actual": 0
+    },
+    {
+      "month": "2026-09",
+      "planned": 5975619.232694705,
+      "actual": 0
+    }
+  ],
+  "milestonePreview": [
+    [
+      "Milestone Dashboard - Project # - Week #",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      "Total Milestone",
+      null,
+      "10",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      "% Complete",
+      null,
+      "0.675",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      "Delayed  Milestone",
+      null,
+      "4",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      "In Progress Milstone",
+      null,
+      "2",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  ],
+  "hindrance": [
+    {
+      "desc": "Staircase work ",
+      "location": "Building A",
+      "activity": "Shutterting",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Design & Technical",
+      "type": "Storage and handling constraints",
+      "occurred": "2026-11-19",
+      "resolved": "2026-11-22",
+      "days": 4
+    },
+    {
+      "desc": "Column reinforcement and formwork for part 1A",
+      "location": "Building B",
+      "activity": "Casting",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Approval",
+      "type": "Delay in mock-up / sample approvals",
+      "occurred": "2026-12-24",
+      "resolved": "2026-12-28",
+      "days": 5
+    },
+    {
+      "desc": "basement 1 slab for Part 1B,1C",
+      "location": "Building C",
+      "activity": "Reinforcement",
+      "correspondence": "2027-01-12 00:00:00",
+      "category": "Execution",
+      "type": "Variation / change order approval delays",
+      "occurred": "2027-01-05",
+      "resolved": "2027-01-17",
+      "days": 13
+    },
+    {
+      "desc": "Basement 1 slab for Part 1D",
+      "location": "Building D",
+      "activity": "Excavation",
+      "correspondence": "2027-01-12 00:00:00",
+      "category": "Material Procurement",
+      "type": "Work front not available / handed over",
+      "occurred": "2027-01-12",
+      "resolved": "2027-01-17",
+      "days": 6
+    },
+    {
+      "desc": "Ground floor slab for Block A",
+      "location": "Building E",
+      "activity": "Shutterting",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Material Procurement",
+      "type": "Import / logistics clearance delays",
+      "occurred": "2027-01-20",
+      "resolved": "2027-02-08",
+      "days": 20
+    },
+    {
+      "desc": "Basement 3 slab for Part 2",
+      "location": "Building A",
+      "activity": "Casting",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Approval",
+      "type": "Delay in statutory approvals (Fire, Local Authority, Utilities)",
+      "occurred": "2027-01-20",
+      "resolved": "2027-02-07",
+      "days": 19
+    },
+    {
+      "desc": "Lift 4 ",
+      "location": "Building B",
+      "activity": "Reinforcement",
+      "correspondence": "2027-01-28 00:00:00",
+      "category": "Execution",
+      "type": "Vendor / supplier non-performance",
+      "occurred": "2027-01-18",
+      "resolved": "2027-01-31",
+      "days": 14
+    },
+    {
+      "desc": "Stair 5,6,2 - Part 2",
+      "location": "Building C",
+      "activity": "Excavation",
+      "correspondence": "2027-02-22 00:00:00",
+      "category": "Design & Technical",
+      "type": "Insufficient skilled manpower",
+      "occurred": "2027-02-10",
+      "resolved": "2027-03-01",
+      "days": 20
+    },
+    {
+      "desc": "Block B & C - ground floor slab",
+      "location": "Building D",
+      "activity": "Reinforcement",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Approval",
+      "type": "Constructability issues at site",
+      "occurred": "2027-02-15",
+      "resolved": "2027-02-19",
+      "days": 5
+    },
+    {
+      "desc": "Block A - ground floor ",
+      "location": "Building E",
+      "activity": "Excavation",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Execution",
+      "type": "Delay in issue of GFC / IFC drawings",
+      "occurred": "2027-02-20",
+      "resolved": "2027-02-23",
+      "days": 4
+    },
+    {
+      "desc": "Block C - ground floor",
+      "location": "Building A",
+      "activity": "Shutterting",
+      "correspondence": "2027-02-27 00:00:00",
+      "category": "Design & Technical",
+      "type": "Delay in issue of GFC / IFC drawings",
+      "occurred": "2027-02-26",
+      "resolved": "2027-02-28",
+      "days": 3
+    },
+    {
+      "desc": "Block A - ground floor ",
+      "location": "Building B",
+      "activity": "Casting",
+      "correspondence": "2026-12-26 00:00:00",
+      "category": "Execution",
+      "type": "Delay in design clarifications (RFIs)",
+      "occurred": "2027-02-27",
+      "resolved": "2027-03-02",
+      "days": 4
+    },
+    {
+      "desc": "Part 2- ramp work",
+      "location": "Building C",
+      "activity": "Excavation",
+      "correspondence": "2027-02-27 00:00:00",
+      "category": "Material Procurement",
+      "type": "Delay in approval from Client / PMC",
+      "occurred": "2027-02-17",
+      "resolved": "2027-03-04",
+      "days": 16
+    }
+  ],
+  "concerns": [
+    {
+      "building": "General",
+      "concern": "The mobilization activities of the appointed civil contractor are progressing at a significantly slower pace than originally planned. Critical tasks such as site establishment, manpower deployment, material procurement, machinery mobilization, safety arrangements, and initial site clearance are either delayed or not being executed efficiently, potentially impacting the timely commencement of construction works.",
+      "impact": "Medium",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "Ready Mix Concrete (RMC) mix design has been submitted for your review and approval. The design includes detailed proportions for each grade of concrete as per project specifications and relevant IS codes.\n\nAdditionally, the Weigh Batching Calibration has been completed and relevant calibration certificates have been enclosed. The calibration ensures the accuracy of batching equipment, and was conducted in accordance with standard procedures to maintain the quality and consistency of the concrete mix.",
+      "impact": "Low",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "3-phase electrical power supply is required at the site to facilitate ongoing construction and execution activities. Kindly arrange for the same on priority to avoid delays in project progress.",
+      "impact": "High",
+      "resp": "Arvind Limited"
+    },
+    {
+      "building": "General",
+      "concern": "Updated and approved drawings are required for site execution. Without the latest revisions, construction activities may face delays or errors. All recent changes must be reflected in the issued drawings to ensure accurate implementation as per the design intent. Please ensure timely availability of updated drawings to proceed with the work efficiently.",
+      "impact": "Low",
+      "resp": "A.K.Bhavsar"
+    },
+    {
+      "building": "General",
+      "concern": "labour colony is required at the site to accommodate the workforce involved in construction activities. This facility should include adequate housing, sanitation, drinking water, electricity, and waste disposal arrangements as per applicable labour welfare norms and statutory compliance",
+      "impact": "Low",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "To ensure adherence to the project\u2019s technical specifications, quality standards, and timely verification of construction materials and workmanship, a testing laboratory is required to be established on-site. This facility will support the Quality Control (QC) process by enabling immediate sampling and testing of materials such as concrete, cement, aggregates, bricks, steel, and water.",
+      "impact": "Low",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "It has been observed that the necessary shuttering materials required for upcoming PCC and RCC footing concreting activities have not yet been supplied in full, nor properly stacked at the designated storage area at the site.The delay in material availability and improper site organization may affect the concrete pouring schedule and the quality of shuttering alignment. Timely supply and organized stacking is essential to avoid work disruption and ensure efficient progress.",
+      "impact": "Medium",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "As observed men power available on site is not sufficient contractor is instructed to deploy remaining manpower and submit treadwise men power planning for every activity.",
+      "impact": "High",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "As Vendor has already informed about using AJAX FIORI for concreting work with site mix. Nominal mix design shall required and will be approved based on compliance with IS standards, using either the ACT result or the 7- day compressive strength test, whichever is applicable. Also Calibration report is required of the Ajax Fiori",
+      "impact": "High",
+      "resp": "Bhavna Infra"
+    },
+    {
+      "building": "General",
+      "concern": "Detailed Project Schedule has been already shared with vendor.  Vendor has to review and submit signed off copy of the shared schedule with in 1 days",
+      "impact": "High",
+      "resp": "Bhavna Infra"
+    }
+  ],
+  "drawingChecklist": [
+    {
+      "no": "",
+      "point": 1.0
+    },
+    {
+      "no": "",
+      "point": 2.0
+    },
+    {
+      "no": "",
+      "point": 3.0
+    },
+    {
+      "no": "",
+      "point": 4.0
+    },
+    {
+      "no": "",
+      "point": 5.0
+    },
+    {
+      "no": "",
+      "point": 6.0
+    },
+    {
+      "no": "",
+      "point": 7.0
+    },
+    {
+      "no": "",
+      "point": 8.0
+    },
+    {
+      "no": "",
+      "point": 9.0
+    },
+    {
+      "no": "",
+      "point": 10.0
+    },
+    {
+      "no": "",
+      "point": 11.0
+    },
+    {
+      "no": "",
+      "point": 12.0
+    },
+    {
+      "no": "",
+      "point": 13.0
+    },
+    {
+      "no": "",
+      "point": 14.0
+    },
+    {
+      "no": "",
+      "point": 15.0
+    },
+    {
+      "no": "",
+      "point": "2. CIVIL & STRUCTURAL DRAWING REVIEW CHECKLIST"
+    },
+    {
+      "no": "",
+      "point": "Sr."
+    },
+    {
+      "no": "",
+      "point": 1.0
+    },
+    {
+      "no": "",
+      "point": 2.0
+    },
+    {
+      "no": "",
+      "point": 3.0
+    },
+    {
+      "no": "",
+      "point": 4.0
+    },
+    {
+      "no": "",
+      "point": 5.0
+    },
+    {
+      "no": "",
+      "point": 6.0
+    },
+    {
+      "no": "",
+      "point": 7.0
+    },
+    {
+      "no": "",
+      "point": 8.0
+    },
+    {
+      "no": "",
+      "point": 9.0
+    },
+    {
+      "no": "",
+      "point": 10.0
+    },
+    {
+      "no": "",
+      "point": 11.0
+    },
+    {
+      "no": "",
+      "point": 12.0
+    },
+    {
+      "no": "",
+      "point": 13.0
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
-import { WORKSPACE_PROJECT_KEY, setActiveWorkspace } from "../workspaces";
+import { WORKSPACE_PROJECT_KEY, setActiveWorkspace, WORKSPACES, DEFAULT_ENABLED_MODULES, type WorkspaceKey } from "../workspaces";
 
 type Project = {
   id: string;
@@ -12,6 +12,8 @@ type Project = {
   status: string;
   clientName?: string;
   location?: string;
+  enabledModules?: string;
+  workPackages?: string;
   _count?: { drawings: number; members: number };
 };
 
@@ -234,6 +236,46 @@ export default function MasterModulePage() {
               >
                 Seed Meeting + RFI matrix
               </Button>
+            </div>
+
+            <div className="border border-line rounded-[var(--ui-radius)] p-4 bg-sand/30 space-y-3">
+              <h3 className="font-semibold text-sm">Enabled modules</h3>
+              <p className="text-xs text-steel-muted">
+                Office controls which Procore-style modules appear on this project’s top bar.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {WORKSPACES.map((w) => {
+                  let enabled: WorkspaceKey[] = DEFAULT_ENABLED_MODULES;
+                  try {
+                    const parsed = JSON.parse(dirProject.enabledModules || "null");
+                    if (Array.isArray(parsed) && parsed.length) enabled = parsed;
+                  } catch {
+                    /* ignore */
+                  }
+                  const on = enabled.includes(w.key);
+                  return (
+                    <button
+                      key={w.key}
+                      type="button"
+                      className={`px-3 py-1.5 text-xs font-semibold border rounded-sm ${
+                        on ? "bg-brand text-white border-brand" : "bg-white border-line text-steel-muted"
+                      }`}
+                      onClick={async () => {
+                        const next = on ? enabled.filter((k) => k !== w.key) : [...enabled, w.key];
+                        const updated = await api<Project>(`/api/progress/${dirProject.id}/modules`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ enabledModules: next }),
+                        });
+                        setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+                        setDirMsg(`Modules updated for ${dirProject.code}.`);
+                      }}
+                    >
+                      {w.title}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="grid lg:grid-cols-2 gap-4">

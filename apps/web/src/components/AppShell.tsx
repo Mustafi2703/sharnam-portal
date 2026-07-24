@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Badge, Button } from "./ui";
 import { BrandMark, BRAND_EN } from "./Brand";
 import { getActiveWorkspace, WORKSPACE_PROJECT_KEY, WORKSPACES } from "../workspaces";
-import { LIVE_UI_OPTIONS, THEME_STORAGE_KEY, applyThemeOption } from "../themes";
 import { api } from "../api";
 
 const primaryNav = [
@@ -13,7 +12,6 @@ const primaryNav = [
   { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/crm", label: "CRM", roles: ["admin", "office", "employee"] },
   { to: "/hrm", label: "HR / Directory", roles: ["admin", "office"] },
-  { to: "/options", label: "Styles", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
 ];
 
 type Proj = { id: string; code: string; name: string };
@@ -44,14 +42,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [token]);
 
   const selected = projects.find((p) => p.id === projectId);
-
-  let activeUi = "1";
-  try {
-    const id = localStorage.getItem(THEME_STORAGE_KEY) || "ui-1";
-    activeUi = String(LIVE_UI_OPTIONS.find((t) => t.id === id)?.number || 1);
-  } catch {
-    /* ignore */
-  }
 
   function selectProject(id: string) {
     setProjectId(id);
@@ -99,7 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="!px-2.5 !py-2 !text-xs !text-white/85 hover:!text-white hover:!bg-white/10"
               onClick={() => {
                 logout();
-                navigate("/options");
+                navigate("/login");
               }}
             >
               Sign out
@@ -139,31 +129,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </NavLink>
             )}
           </nav>
-
-          <div className="flex items-center gap-1.5 shrink-0 pl-3 border-l border-line py-2">
-            <Link to="/options" className="hidden sm:inline text-xs font-semibold text-brand mr-1 hover:underline">
-              Styles
-            </Link>
-            {LIVE_UI_OPTIONS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                title={`${t.name} — ${t.blurb}`}
-                onClick={() => applyThemeOption(t.id)}
-                className={`h-9 min-w-[2.75rem] px-2 text-[11px] font-semibold border transition inline-flex items-center justify-center gap-1 ${
-                  String(t.number) === activeUi
-                    ? "bg-brand text-white border-brand"
-                    : "bg-sand border-line text-steel-muted hover:border-brand"
-                }`}
-                style={{ borderRadius: "var(--ui-radius-sm, 6px)" }}
-              >
-                <span aria-hidden style={{ color: String(t.number) === activeUi ? "#fff" : t.vars["--color-brand"] }}>
-                  {t.icon}
-                </span>
-                <span className="hidden lg:inline">{t.chip}</span>
-              </button>
-            ))}
-          </div>
+          <span className="hidden sm:inline text-[11px] font-mono uppercase tracking-wider text-steel-muted shrink-0 pl-3 border-l border-line">
+            Graphite Procore
+          </span>
         </div>
 
         {selected && (
@@ -171,7 +139,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="font-mono text-brand font-semibold">{selected.code}</span>
             <span className="truncate">{selected.name}</span>
             <span className="text-steel-muted/90">
-              Open a module → use that module’s tools only. Upload drawings in Drawings. Email in Home → Email / Outlook.
+              Modules → tools. Office Master toggles which modules appear on this project.
             </span>
           </div>
         )}

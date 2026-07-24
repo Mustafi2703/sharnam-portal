@@ -20,7 +20,7 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
   next.setDate(next.getDate() + 1);
 
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
-  const [diary, submissions, rfis, safety, photos, drawings] = await Promise.all([
+  const [diary, submissions, rfis, safety, photos, drawings, hindrances] = await Promise.all([
     prisma.dailyLog.findUnique({
       where: { projectId_logDate: { projectId, logDate: date } },
       include: { manpower: true, equipment: true, notes: true, photos: true },
@@ -47,6 +47,11 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
       orderBy: { createdAt: "desc" },
     }),
     prisma.drawing.findMany({ where: { projectId }, take: 30, orderBy: { updatedAt: "desc" } }),
+    prisma.progressHindrance.findMany({
+      where: { projectId, status: "Open" },
+      take: 20,
+      orderBy: { occurredAt: "desc" },
+    }),
   ]);
 
   const manpowerTotal = diary?.manpower.reduce((s, m) => s + m.workerCount, 0) || 0;
@@ -72,6 +77,7 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
       photosToday: photos.length,
       diaryStatus: diary?.status || "Missing",
       weather: diary?.weatherCondition || "—",
+      openHindrances: hindrances.length,
     },
     diary,
     submissions,
@@ -79,7 +85,11 @@ export async function buildDprPack(projectId: string, dateInput?: string) {
     safety,
     photos,
     drawings,
-    hindranceNotes: (diary?.notes || []).map((n) => n.noteText),
+    hindrances,
+    hindranceNotes: [
+      ...(diary?.notes || []).map((n) => n.noteText),
+      ...hindrances.map((h) => h.description),
+    ],
   };
   return pack;
 }
@@ -92,7 +102,8 @@ export async function buildWprPack(projectId: string, endInput?: string) {
   start.setHours(0, 0, 0, 0);
 
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
-  const [diaries, submissions, meetings, drawings, rfis, safety, submittals, cashflow, ncrLike] = await Promise.all([
+  const [diaries, submissions, meetings, drawings, rfis, safety, submittals, cashflow, ncrLike, milestones, hindrances] =
+    await Promise.all([
     prisma.dailyLog.findMany({
       where: { projectId, logDate: { gte: start, lte: end } },
       include: { manpower: true, equipment: true, _count: { select: { notes: true } } },
@@ -120,6 +131,8 @@ export async function buildWprPack(projectId: string, endInput?: string) {
       where: { projectId, status: { in: ["Open", "Failed", "Rework"] } },
       take: 30,
     }),
+    prisma.progressMilestone.findMany({ where: { projectId }, take: 40 }),
+    prisma.progressHindrance.findMany({ where: { projectId }, take: 30 }),
   ]);
 
   const manpowerWeek = diaries.reduce(
@@ -154,6 +167,8 @@ export async function buildWprPack(projectId: string, endInput?: string) {
       safetyEvents: safety.length,
       openSubmittals: submittals.filter((s) => !["Approved", "Rejected"].includes(s.status)).length,
       openQi: ncrLike.length,
+      delayedMilestones: milestones.filter((m) => (m.varianceDays || 0) > 0).length,
+      openHindrances: hindrances.filter((h) => h.status === "Open").length,
     },
     diaries,
     submissions,
@@ -164,6 +179,8 @@ export async function buildWprPack(projectId: string, endInput?: string) {
     submittals,
     cashflow,
     qualityActions: ncrLike,
+    milestones,
+    hindrances,
   };
 }
 
@@ -226,6 +243,16 @@ export function renderDprHtml(pack: Awaited<ReturnType<typeof buildDprPack>>) {
   <section><h2>Manpower</h2><table><thead><tr><th>Company</th><th>Workers</th><th>Hours</th><th>Comments</th></tr></thead><tbody>${rowsMan}</tbody></table></section>
   <section><h2>Equipment</h2><table><thead><tr><th>Company</th><th>Type</th><th>Hours</th><th>Comments</th></tr></thead><tbody>${rowsEq}</tbody></table></section>
   <section><h2>Hindrance / site notes</h2><ul>${notes}</ul></section>
+  <section><h2>Hindrance register (open)</h2><table><thead><tr><th>Description</th><th>Location</th><th>Category</th><th>Days</th></tr></thead><tbody>
+  ${
+    (pack.hindrances || [])
+      .map(
+        (h) =>
+          `<tr><td>${esc(h.description)}</td><td>${esc(h.location)}</td><td>${esc(h.category)}</td><td>${h.daysImpacted}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=4>None open</td></tr>"
+  }
+  </tbody></table></section>
   <section><h2>Open / today's RFIs (concern register)</h2><table><thead><tr><th>#</th><th>Subject</th><th>Status</th><th>Due</th></tr></thead><tbody>${rowsRfi || "<tr><td colspan=4>None</td></tr>"}</tbody></table></section>
   <section><h2>Checklist activity</h2><table><thead><tr><th>Template</th><th>By</th><th>Status</th></tr></thead><tbody>
   ${
@@ -300,7 +327,27 @@ export function renderWprHtml(pack: Awaited<ReturnType<typeof buildWprPack>>) {
   <section><h2>Master / site drawing register (snapshot)</h2><table><thead><tr><th>No.</th><th>Title</th><th>Discipline</th><th>Rev</th><th>Status</th></tr></thead><tbody>${drawingRows || "<tr><td colspan=5>None</td></tr>"}</tbody></table></section>
   <section><h2>Submittals register</h2><table><thead><tr><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>BIC</th></tr></thead><tbody>${subRows || "<tr><td colspan=5>None</td></tr>"}</tbody></table></section>
   <section><h2>Safety / observations</h2><table><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Date</th></tr></thead><tbody>${safetyRows || "<tr><td colspan=4>None this week</td></tr>"}</tbody></table></section>
-  <section><h2>Meetings & open actions</h2><p style="font-size:12px">Meetings: <b>${pack.kpis.meetings}</b> · Open MoM items: <b>${pack.kpis.openMeetingItems}</b> · QI / NCR-like open: <b>${pack.kpis.openQi}</b></p></section>
+  <section><h2>Milestones (variance)</h2><table><thead><tr><th>Code</th><th>Activity</th><th>Plan</th><th>Actual</th><th>Var</th><th>Status</th></tr></thead><tbody>
+  ${
+    (pack.milestones || [])
+      .map(
+        (m) =>
+          `<tr><td>${esc(m.code)}</td><td>${esc(m.activity)}</td><td>${m.plannedDays}</td><td>${m.actualDays}</td><td>${m.varianceDays}</td><td>${esc(m.status)}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=6>None</td></tr>"
+  }
+  </tbody></table></section>
+  <section><h2>Hindrance register</h2><table><thead><tr><th>Description</th><th>Location</th><th>Status</th><th>Days</th></tr></thead><tbody>
+  ${
+    (pack.hindrances || [])
+      .map(
+        (h) =>
+          `<tr><td>${esc(h.description)}</td><td>${esc(h.location)}</td><td>${esc(h.status)}</td><td>${h.daysImpacted}</td></tr>`
+      )
+      .join("") || "<tr><td colspan=4>None</td></tr>"
+  }
+  </tbody></table></section>
+  <section><h2>Meetings & open actions</h2><p style="font-size:12px">Meetings: <b>${pack.kpis.meetings}</b> · Open MoM items: <b>${pack.kpis.openMeetingItems}</b> · QI / NCR-like open: <b>${pack.kpis.openQi}</b> · Delayed milestones: <b>${pack.kpis.delayedMilestones}</b></p></section>
   <div class="foot"><span>Generated ${fmtDate(pack.generatedAt)} · Sharnam Portal</span><span>Aligned to WPR pack structure · Confidential</span></div>
 </div></body></html>`;
 }

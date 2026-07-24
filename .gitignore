@@ -13,3 +13,4 @@ coverage
 .prisma
 apps/web/dist
 apps/api/dist
+.py_pkgs

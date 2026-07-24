@@ -12,7 +12,7 @@ costRouter.use(requireAuth);
 
 costRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [budget, monitoring, cashflow, rateDiffs, boqBatches] = await Promise.all([
+  const [budget, monitoring, cashflow, rateDiffs, boqBatches, mbLines, bbsLines] = await Promise.all([
     prisma.costBudgetLine.findMany({ where: { projectId } }),
     prisma.costMonitoringLine.findMany({ where: { projectId } }),
     prisma.costCashflowPeriod.findMany({ where: { projectId } }),
@@ -22,6 +22,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       include: { _count: { select: { items: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.costMbLine.findMany({ where: { projectId }, take: 200, orderBy: { packageName: "asc" } }),
+    prisma.costBbsLine.findMany({ where: { projectId }, take: 200, orderBy: { packageName: "asc" } }),
   ]);
 
   const budgeted = budget.reduce((s, b) => s + b.budgetedAmount, 0);
@@ -37,6 +39,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     cashflow,
     rateDiffs,
     boqBatches,
+    mbLines,
+    bbsLines,
   });
 });
 

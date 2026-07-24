@@ -1,21 +1,7 @@
-# Sharnam UI — five live systems
+# UI direction — locked
 
-## On Render (public)
+**Selected:** Graphite Procore (`ui-2`) — dense IBM Plex registers, sharp corners, charcoal/navy chrome.
 
-| Route | What |
-|-------|------|
-| `/` or `/options` | Hub — pick UI **1–5** (designed previews, no photos) |
-| `/ui/1` … `/ui/5` | Themed landing + same Office/Site/Vendor/Client login |
-| `/login` | Classic portal hub |
+Live reference (historical path redirects to login): https://sharnam-portal.onrender.com/ui/2
 
-After login: Procore **two-row top nav**, **right Actions** panel, full pages for **upload revision** and **assign checklist**.
-
-## Options
-
-1. **Site Amber** — warm soft PMC  
-2. **Graphite Procore** — dense sharp steel  
-3. **Forest Field** — green roomy  
-4. **Blueprint Desk** — technical cyan hairlines  
-5. **Night Shift** — dark ops orange  
-
-Same portal data/tools under every option. Switch with top-nav **UI 1–5** buttons or `/themes`.
+Multi-theme hub removed. Tokens live in `apps/web/src/themes.ts` only.

@@ -1,11 +1,16 @@
-import { NavLink, Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useParams, Link, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
 import { ToolRightPanel } from "../../components/ToolRightPanel";
 import type { RoleKey } from "@sharnam/shared";
-import { getActiveWorkspace, setActiveWorkspace, type WorkspaceKey } from "../../workspaces";
+import {
+  DEFAULT_ENABLED_MODULES,
+  getActiveWorkspace,
+  setActiveWorkspace,
+  type WorkspaceKey,
+} from "../../workspaces";
 
 type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[]; query?: string };
 
@@ -14,19 +19,36 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     { to: "", label: "Overview", end: true },
     { to: "directory", label: "Directory" },
     { to: "vendors", label: "Vendors", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
+    { to: "dms", label: "Documents (DMS)" },
   ],
   drawings: [
     { to: "drawings", label: "GFC register" },
     { to: "dms", label: "Documents (DMS)" },
     { to: "coordination", label: "Coordination", roles: ["admin", "office", "site_employee", "employee"] },
     { to: "submittals", label: "Submittals", roles: ["admin", "office", "site_employee", "employee", "vendor"] },
-    { to: "rfis", label: "Request checklist fill", query: "kind=DrawingChecklist", roles: ["admin", "office", "site_employee", "employee", "vendor", "client"] },
+    {
+      to: "rfis",
+      label: "Request checklist fill",
+      query: "kind=DrawingChecklist",
+      roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
+    },
   ],
   quality: [
-    { to: "inspections", label: "Quality Inspections" },
-    { to: "safety", label: "Safety" },
+    { to: "inspections", label: "Quality inspections" },
     { to: "checklist", label: "Site checklists" },
+    { to: "quality-inspections", label: "Checklist master / QAP", roles: ["admin", "office", "employee"] },
     { to: "rfis", label: "Request QI fill", query: "kind=QualityInspection" },
+  ],
+  safety: [
+    { to: "safety", label: "Safety register" },
+    { to: "rfis", label: "Safety RFI", query: "kind=RequestForInformation" },
+  ],
+  progress: [
+    { to: "progress", label: "Overview", end: true },
+    { to: "progress", label: "Milestones", query: "tab=milestones" },
+    { to: "progress", label: "Planned vs Actual", query: "tab=planned" },
+    { to: "progress", label: "Hindrance", query: "tab=hindrance" },
+    { to: "progress", label: "Risk", query: "tab=risk" },
   ],
   field: [
     { to: "diary", label: "Day log" },
@@ -34,14 +56,18 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
     { to: "rfis", label: "Field RFIs" },
   ],
   comms: [
-    { to: "comms", label: "Meetings · MoM" },
+    { to: "comms", label: "Matrix · Meetings · MoM" },
     { to: "rfis", label: "Ask (PMC RFI)", query: "kind=RequestForInformation" },
     { to: "email", label: "Email / Outlook", roles: ["admin", "office", "employee", "site_employee"] },
-    { to: "reports", label: "DPR / WPR" },
   ],
   cost: [
-    { to: "cost", label: "Measurement / COP" },
-    { to: "reports", label: "Reports" },
+    { to: "cost", label: "Measurement / monitoring" },
+    { to: "cost", label: "MB / BBS", query: "tab=mb" },
+    { to: "cost", label: "Cashflow", query: "tab=cashflow" },
+    { to: "cost", label: "COP / Bills", query: "tab=bills" },
+  ],
+  reports: [
+    { to: "reports", label: "DPR / WPR packs" },
   ],
 };
 
@@ -49,26 +75,35 @@ const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; ro
   { key: "home", label: "Home", path: "" },
   { key: "drawings", label: "Drawings", path: "drawings" },
   { key: "quality", label: "Quality", path: "inspections" },
+  { key: "safety", label: "Safety", path: "safety" },
+  { key: "progress", label: "Progress", path: "progress" },
   { key: "field", label: "Field", path: "diary" },
   { key: "comms", label: "Comms", path: "comms" },
   { key: "cost", label: "Cost", path: "cost", roles: ["admin", "office", "employee"] },
+  { key: "reports", label: "Reports", path: "reports" },
 ];
 
 function moduleFromPath(pathname: string): WorkspaceKey | "home" {
   const seg = pathname.split("/").filter(Boolean);
   const tool = seg[2] || "";
   if (!tool) return "home";
-  if (["drawings", "dms", "coordination", "submittals"].includes(tool)) return "drawings";
-  if (["checklist", "quality-inspections", "inspections", "safety"].includes(tool)) return "quality";
+  if (["drawings", "coordination", "submittals"].includes(tool)) return "drawings";
+  if (tool === "dms") {
+    const ws = getActiveWorkspace();
+    return ws === "drawings" ? "drawings" : "home";
+  }
+  if (["checklist", "quality-inspections", "inspections"].includes(tool)) return "quality";
+  if (tool === "safety") return "safety";
+  if (tool === "progress") return "progress";
   if (["diary", "photos"].includes(tool)) return "field";
   if (["comms", "email"].includes(tool)) return "comms";
-  if (["cost"].includes(tool)) return "cost";
+  if (tool === "cost") return "cost";
+  if (tool === "reports") return "reports";
   if (tool === "rfis") {
     const ws = getActiveWorkspace();
-    if (ws === "drawings" || ws === "field" || ws === "comms" || ws === "quality") return ws;
+    if (ws && ws !== "progress" && ws !== "reports" && ws !== "cost") return ws;
     return "quality";
   }
-  if (tool === "reports") return getActiveWorkspace() === "cost" ? "cost" : "comms";
   if (["directory", "vendors"].includes(tool)) return "home";
   return "home";
 }
@@ -78,10 +113,19 @@ function toolFromPath(pathname: string) {
   return seg[2] || "";
 }
 
+function parseEnabled(raw?: string | null): WorkspaceKey[] {
+  try {
+    const arr = JSON.parse(raw || "null");
+    if (Array.isArray(arr) && arr.length) return arr as WorkspaceKey[];
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_ENABLED_MODULES;
+}
+
 export default function ProjectToolsLayout() {
   const { id } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
@@ -90,14 +134,21 @@ export default function ProjectToolsLayout() {
 
   const activeMod = moduleFromPath(location.pathname);
   const activeTool = toolFromPath(location.pathname);
+  const enabled = useMemo(() => parseEnabled(project?.enabledModules), [project?.enabledModules]);
+
   const sideItems = useMemo(() => {
     const items = SIDE_TOOLS[activeMod] || SIDE_TOOLS.home;
     return items.filter((t) => !t.roles || !user?.role || t.roles.includes(user.role));
   }, [activeMod, user?.role]);
 
   const topMods = useMemo(
-    () => TOP_MODULES.filter((m) => !m.roles || !user?.role || m.roles.includes(user.role)),
-    [user?.role]
+    () =>
+      TOP_MODULES.filter((m) => {
+        if (m.roles && user?.role && !m.roles.includes(user.role)) return false;
+        if (m.key === "home") return true;
+        return enabled.includes(m.key as WorkspaceKey);
+      }),
+    [user?.role, enabled]
   );
 
   const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
@@ -112,7 +163,7 @@ export default function ProjectToolsLayout() {
   }, [id, token]);
 
   useEffect(() => {
-    if (activeMod !== "home") setActiveWorkspace(activeMod);
+    if (activeMod !== "home") setActiveWorkspace(activeMod as WorkspaceKey);
   }, [activeMod]);
 
   const shellClass =
@@ -125,7 +176,7 @@ export default function ProjectToolsLayout() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
               <Link to="/workspace" className="text-brand font-semibold hover:underline">
-                Workspaces
+                Modules
               </Link>
               <span>/</span>
               <span className="font-mono text-brand">{project?.code || "…"}</span>
@@ -151,7 +202,7 @@ export default function ProjectToolsLayout() {
               end={!m.path}
               onClick={() => {
                 if (m.key === "home") setActiveWorkspace(null);
-                else setActiveWorkspace(m.key);
+                else setActiveWorkspace(m.key as WorkspaceKey);
               }}
               className={() => {
                 const on = activeMod === m.key;
@@ -179,7 +230,7 @@ export default function ProjectToolsLayout() {
                   : `/projects/${id}`;
                 return (
                   <NavLink
-                    key={`${t.to || "home"}-${t.query || ""}`}
+                    key={`${t.to || "home"}-${t.query || ""}-${t.label}`}
                     to={href}
                     end={t.end}
                     className={({ isActive }) =>
@@ -199,9 +250,9 @@ export default function ProjectToolsLayout() {
             context={{
               project,
               gate,
-              reloadProject: () => api(`/api/projects/${id}`, { token }).then(setProject),
-              reloadGate: () =>
-                api<{ publishedCount: number }>(`/api/drawings/project/${id}/gate`, { token }).then(setGate),
+              toolLabel,
+              refreshProject: () =>
+                id ? api(`/api/projects/${id}`, { token }).then(setProject) : Promise.resolve(),
             }}
           />
         </div>
@@ -217,8 +268,6 @@ export default function ProjectToolsLayout() {
               moduleLabel: toolLabel,
               role: user?.role,
             }}
-            onUploadDrawing={() => navigate(`/projects/${id}/drawings?upload=1`)}
-            onAssignChecklist={() => navigate(`/projects/${id}/checklist/assign`)}
           />
         )}
       </div>

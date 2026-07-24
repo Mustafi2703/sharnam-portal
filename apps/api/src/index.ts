@@ -16,6 +16,7 @@ import { commsRouter } from "./routes/comms.js";
 import { costRouter } from "./routes/cost.js";
 import { reportsRouter, auditRouter, crmRouter, hrmRouter } from "./routes/reports.js";
 import { vendorsRouter, rfiRouter, inspectionsRouter, directoryRouter, safetyRouter } from "./routes/procore.js";
+import { progressRouter } from "./routes/progress.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -46,7 +47,7 @@ app.get("/api/health", (_req, res) => {
     time: new Date().toISOString(),
     commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local",
     webDist,
-    uiOptions: "1-5 at / and /options",
+    ui: "ui-2 Graphite Procore",
   });
 });
 
@@ -69,6 +70,7 @@ app.use("/api/rfis", rfiRouter);
 app.use("/api/inspections", inspectionsRouter);
 app.use("/api/directory", directoryRouter);
 app.use("/api/safety", safetyRouter);
+app.use("/api/progress", progressRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {

@@ -11,9 +11,16 @@ export default function CostPage() {
   const [summary, setSummary] = useState<any>(null);
   const [billsData, setBillsData] = useState<{ bills: any[]; totals: any } | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [tab, setTab] = useState<"budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills">(
-    searchParams.get("tab") === "bills" ? "bills" : "monitoring"
-  );
+  const initialTab = (searchParams.get("tab") || "monitoring") as
+    | "budget"
+    | "monitoring"
+    | "cashflow"
+    | "rates"
+    | "boq"
+    | "bills"
+    | "mb"
+    | "bbs";
+  const [tab, setTab] = useState(initialTab);
   const [billForm, setBillForm] = useState({
     vendorName: "",
     billNo: "",
@@ -51,6 +58,8 @@ export default function CostPage() {
 
   const tabs = [
     ["monitoring", "Measurement"],
+    ["mb", "MB sheets"],
+    ["bbs", "BBS"],
     ["bills", "COP / Bills"],
     ["cashflow", "Cashflow"],
     ["budget", "Budget WBS"],
@@ -234,19 +243,60 @@ export default function CostPage() {
       )}
       {tab === "monitoring" && (
         <div className="space-y-3">
-          <p className="text-sm text-steel-muted">Measurement items from the Monitoring sheet.</p>
+          <p className="text-sm text-steel-muted">
+            Monitoring from Cashflow / Budget — fill GFC qty; excess/saving vs BOQ computes.
+          </p>
           <Table
-            headers={["Item", "Description", "UOM", "Rate", "BOQ Qty", "GFC", "Achieved", "Excess", "BOQ Cost"]}
+            headers={["Pkg", "Item", "Description", "UOM", "Rate", "BOQ", "Extra", "GFC", "Achieved", "Excess"]}
             rows={summary.monitoring.map((b: any) => [
+              b.packageName,
               b.itemNo,
               b.description,
               b.uom,
               b.rate,
               b.boqQty,
+              b.extraQty,
               b.gfcQty,
               b.achievedQty,
               b.excessQty,
-              formatINR(b.boqCost),
+            ])}
+          />
+        </div>
+      )}
+      {tab === "mb" && (
+        <div className="space-y-3">
+          <p className="text-sm text-steel-muted">Measurement books (MB) from SPDC Budget package sheets.</p>
+          <Table
+            headers={["Package", "Sr", "Description", "Nos", "L", "W", "H", "Qty", "Unit"]}
+            rows={(summary.mbLines || []).map((b: any) => [
+              b.packageName,
+              b.srNo,
+              b.description,
+              b.nos1,
+              b.length,
+              b.width,
+              b.height,
+              b.qty,
+              b.unit,
+            ])}
+          />
+        </div>
+      )}
+      {tab === "bbs" && (
+        <div className="space-y-3">
+          <p className="text-sm text-steel-muted">Bar bending schedules (BBS) per package.</p>
+          <Table
+            headers={["Package", "Mark", "Dia mm", "Shape", "Length", "Nos", "Total L", "Weight kg", "Location"]}
+            rows={(summary.bbsLines || []).map((b: any) => [
+              b.packageName,
+              b.barMark,
+              b.diameterMm,
+              b.shape,
+              b.lengthMm,
+              b.nos,
+              b.totalLength,
+              b.weightKg,
+              b.location,
             ])}
           />
         </div>

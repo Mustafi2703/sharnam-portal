@@ -14,15 +14,16 @@ The app is a single Node service (Express serves `apps/web/dist`). Blueprint: [r
 
 | # | Step | Expect |
 |---|------|--------|
-| 1 | Open `/login` | Four portals: Office, Site, Vendor, Client |
-| 2 | Login `office@sharnam.demo` / `Demo@1234` | CRM, HRM, project tools |
-| 3 | CRM → Leads → Convert | New project with members/vendors |
-| 4 | Project → Drawings | GFC table + revision panel; publish works |
-| 5 | Login `site@sharnam.demo` | Checklist / Daily Log editable |
-| 6 | Login `vendor@sharnam.demo` | Assigned project; checklist + RFI respond |
-| 7 | Login `client@sharnam.demo` | Drawings view-only; raise concern as RFI |
-| 8 | `/api/health` | `ok: true`, `mockOneDrive: true` |
+| 1 | Open `/login` | Portal logins (Graphite Procore chrome) |
+| 2 | Login `office@sharnam.demo` / `Demo@1234` | Master, CRM, HRM, project tools |
+| 3 | Master → module toggles | Modules show/hide on project top bar |
+| 4 | Project → Drawings | GFC table + revision panel |
+| 5 | Project → Progress | Milestones / hindrance / risk seeded |
+| 6 | Project → Cost | Measurement + MB + BBS + cashflow |
+| 7 | Project → Reports | Download DPR / WPR HTML |
+| 8 | Login `site@sharnam.demo` | Day log / checklists |
+| 9 | `/api/health` | `ok: true`, `ui: "ui-2 Graphite Procore"` |
 
 ## After smoke
 
-Share the Render URL with the client and send [CLIENT_MICROSOFT_REQUEST.md](CLIENT_MICROSOFT_REQUEST.md) when ready for Graph.
+Share the Render URL with the client and send [docs/M365_SETUP.md](docs/M365_SETUP.md) when ready for Graph.

@@ -27,11 +27,12 @@ import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 import SafetyPage from "./pages/project/SafetyPage";
-import ThemeOptionsPage from "./pages/ThemeOptionsPage";
-import UiOptionsHubPage from "./pages/UiOptionsHubPage";
-import UiOptionLandingPage from "./pages/UiOptionLandingPage";
+import ProgressPage from "./pages/project/ProgressPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
 import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
+import { applyThemeOption } from "./themes";
+
+applyThemeOption("ui-2");
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -42,7 +43,7 @@ function Protected({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/options" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
@@ -70,10 +71,11 @@ function HomeRedirect() {
 export default function App() {
   return (
     <Routes>
-      {/* Public: five UI systems live on Render */}
-      <Route path="/" element={<UiOptionsHubPage />} />
-      <Route path="/options" element={<UiOptionsHubPage />} />
-      <Route path="/ui/:optionId" element={<UiOptionLandingPage />} />
+      {/* Locked to Graphite Procore (ui-2) */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/options" element={<Navigate to="/login" replace />} />
+      <Route path="/themes" element={<Navigate to="/workspace" replace />} />
+      <Route path="/ui/:optionId" element={<Navigate to="/login" replace />} />
 
       <Route path="/login" element={<LoginHubPage />} />
       <Route path="/login/master" element={<PortalLoginPage portalKey="master" />} />
@@ -105,7 +107,6 @@ export default function App() {
                 <Route path="/app" element={<HomeRedirect />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/master" element={<MasterModulePage />} />
-                <Route path="/themes" element={<ThemeOptionsPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
@@ -121,6 +122,7 @@ export default function App() {
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="safety" element={<SafetyPage />} />
+                  <Route path="progress" element={<ProgressPage />} />
                   <Route path="rfis" element={<RfisPage />} />
                   <Route path="submittals" element={<SubmittalsPage />} />
                   <Route path="photos" element={<PhotosPage />} />

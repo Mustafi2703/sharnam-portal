@@ -628,6 +628,195 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     console.log("Monitoring (measurement) lines seeded:", createdMon);
   }
 
+  // Progress: milestones, hindrance, risk, planned vs actual (from client Excel packs)
+  const mileCount = await prisma.progressMilestone.count({ where: { projectId: project.id } });
+  if (mileCount === 0) {
+    const miles = [
+      ["M01", "Site", "Site mobilisation", 5, 6, 1],
+      ["M02", "Excavation", "Bulk excavation", 8, 10, 2],
+      ["M03", "Foundation", "Raft / footing PCC", 4, 4, 0],
+      ["M04", "Foundation", "Footing RCC", 9, 12, 3],
+      ["M05", "Structure", "Column RCC", 9, 39, 30],
+    ] as const;
+    for (const [code, category, activity, plannedDays, actualDays, varianceDays] of miles) {
+      await prisma.progressMilestone.create({
+        data: {
+          projectId: project.id,
+          code,
+          category,
+          activity,
+          plannedDays,
+          actualDays,
+          varianceDays,
+          status: varianceDays > 0 ? "Delayed" : "On track",
+        },
+      });
+    }
+  }
+
+  const hindCount = await prisma.progressHindrance.count({ where: { projectId: project.id } });
+  if (hindCount === 0) {
+    const hindFile = path.join(EXCEL_ROOT, "HInderance Register Dashboard (1).xlsx");
+    if (fs.existsSync(hindFile)) {
+      const wb = XLSX.readFile(hindFile);
+      const sheet = wb.Sheets["Hinderance Register"] || wb.Sheets[wb.SheetNames[1]];
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "" }) as unknown as unknown[][];
+      let n = 0;
+      for (let i = 2; i < rows.length && n < 12; i++) {
+        const row = rows[i] as (string | number)[];
+        const description = String(row[1] ?? "").trim();
+        if (!description) continue;
+        const days = Number(row[9]) || 0;
+        await prisma.progressHindrance.create({
+          data: {
+            projectId: project.id,
+            description: description.slice(0, 500),
+            location: String(row[2] || "") || null,
+            activity: String(row[3] || "") || null,
+            category: String(row[5] || "") || null,
+            type: String(row[6] || "") || null,
+            daysImpacted: days,
+            status: days && String(row[8] || "") ? "Resolved" : "Open",
+          },
+        });
+        n++;
+      }
+      console.log("Hindrances seeded:", n);
+    }
+  }
+
+  const riskCount = await prisma.progressRisk.count({ where: { projectId: project.id } });
+  if (riskCount === 0) {
+    await prisma.progressRisk.createMany({
+      data: [
+        {
+          projectId: project.id,
+          code: "R1",
+          category: "Execution",
+          opportunityThreat: "Threat",
+          name: "Manpower shortage",
+          description: "Observed shortfall vs planned crew for structure package.",
+          probability: 5,
+          consequence: 5,
+          severity: 25,
+          probabilityPct: 0.2,
+          costImpact: 100000,
+        },
+        {
+          projectId: project.id,
+          code: "R2",
+          category: "Schedule",
+          opportunityThreat: "Threat",
+          name: "GFC delay",
+          description: "Latest revisions pending for compound wall.",
+          probability: 4,
+          consequence: 3,
+          severity: 12,
+          probabilityPct: 0.4,
+          costImpact: 50000,
+        },
+      ],
+    });
+  }
+
+  const paCount = await prisma.progressPlannedActual.count({ where: { projectId: project.id } });
+  if (paCount === 0) {
+    const periods = await prisma.costCashflowPeriod.findMany({ where: { projectId: project.id } });
+    for (const p of periods) {
+      await prisma.progressPlannedActual.create({
+        data: {
+          projectId: project.id,
+          periodLabel: p.periodLabel,
+          packageName: "Overall",
+          plannedPct: Math.min(1, p.plannedAmount ? 0.9 : 0),
+          actualPct: p.progressPct || 0,
+          plannedAmount: p.plannedAmount,
+          actualAmount: p.actualAmount,
+        },
+      });
+    }
+  }
+
+  // MB + BBS sample lines (Budget workbook structure)
+  const mbCount = await prisma.costMbLine.count({ where: { projectId: project.id } });
+  if (mbCount === 0) {
+    await prisma.costMbLine.createMany({
+      data: [
+        {
+          projectId: project.id,
+          packageName: "Dormitory Civil",
+          srNo: "2.0",
+          description: "Excavation 0.0 to 1.5 mt",
+          nos1: 1,
+          nos2: 1,
+          length: 40,
+          width: 12,
+          height: 1.5,
+          qty: 720,
+          unit: "Cmt",
+        },
+        {
+          projectId: project.id,
+          packageName: "UGWT",
+          srNo: "1",
+          description: "UGWT excavation",
+          nos1: 1,
+          nos2: 1,
+          length: 11.59,
+          width: 7.86,
+          height: 1.5,
+          qty: 136.65,
+          unit: "Cmt",
+        },
+        {
+          projectId: project.id,
+          packageName: "Electric",
+          srNo: "1.1",
+          description: "SITC of LDB as per SLD",
+          nos1: 12,
+          nos2: 1,
+          length: 0,
+          width: 0,
+          height: 0,
+          qty: 12,
+          unit: "Nos",
+        },
+      ],
+    });
+  }
+
+  const bbsCount = await prisma.costBbsLine.count({ where: { projectId: project.id } });
+  if (bbsCount === 0) {
+    await prisma.costBbsLine.createMany({
+      data: [
+        {
+          projectId: project.id,
+          packageName: "Dormitory BBS",
+          barMark: "A1",
+          diameterMm: 12,
+          shape: "Straight",
+          lengthMm: 4500,
+          nos: 40,
+          totalLength: 180,
+          weightKg: 160.2,
+          location: "Raft",
+        },
+        {
+          projectId: project.id,
+          packageName: "Compound Wall BBS",
+          barMark: "B2",
+          diameterMm: 10,
+          shape: "L",
+          lengthMm: 1200,
+          nos: 80,
+          totalLength: 96,
+          weightKg: 59.3,
+          location: "Stem",
+        },
+      ],
+    });
+  }
+
   // Communications matrix defaults
   const matrixCount = await prisma.communicationMatrix.count({ where: { projectId: project.id } });
   if (matrixCount === 0) {

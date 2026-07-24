@@ -1,5 +1,7 @@
 # Five UI directions — construction management ERP
 
+**LOCKED for product:** Option B / **ui-2 Graphite Procore**. Do not re-enable the multi-theme hub unless the client asks.
+
 Pick **one**. Implement by mapping tokens into `apps/web/src/index.css` (`--color-brand`, `--color-mark`, `--color-sand`, topbar, logo plate).  
 Logo (`logo.png`) stays on a **light plate** for A–D; option E uses charcoal plate with orange mark.
 

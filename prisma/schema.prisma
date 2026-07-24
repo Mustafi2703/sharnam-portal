@@ -75,6 +75,10 @@ model Project {
   outlookMailbox     String?
   outlookConnected   Boolean  @default(false)
   outlookConnectedAt DateTime?
+  /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
+  enabledModules     String   @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"reports\"]")
+  /// JSON array of work packages e.g. Civil, PEB, Electrical
+  workPackages       String   @default("[\"Civil\",\"PEB\"]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -91,6 +95,8 @@ model Project {
   cashflowPeriods      CostCashflowPeriod[]
   boqBatches           BoqImportBatch[]
   rateDiffs            CostRateDifference[]
+  mbLines              CostMbLine[]
+  bbsLines             CostBbsLine[]
   leads                Lead[]
   deals                Deal[]
   vendors              ProjectVendor[]
@@ -103,6 +109,10 @@ model Project {
   emailOutbox          EmailOutbox[]
   vendorBills          VendorBill[]
   communicationContacts CommunicationContact[]
+  milestones           ProgressMilestone[]
+  hindrances           ProgressHindrance[]
+  risks                ProgressRisk[]
+  plannedActual        ProgressPlannedActual[]
 }
 
 /** Mock / queued outbound emails (swap to SMTP/Graph later) */
@@ -457,11 +467,13 @@ model CostBudgetLine {
 model CostMonitoringLine {
   id             String   @id @default(cuid())
   projectId      String
+  packageName    String   @default("Civil")
   itemNo         String?
   description    String
   uom            String?
   rate           Float    @default(0)
   boqQty         Float    @default(0)
+  extraQty       Float    @default(0)
   gfcQty         Float    @default(0)
   achievedQty    Float    @default(0)
   certifiedQty   Float    @default(0)
@@ -469,6 +481,43 @@ model CostMonitoringLine {
   savingQty      Float    @default(0)
   boqCost        Float    @default(0)
   createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Measurement book line (from SPDC Budget * MB sheets) */
+model CostMbLine {
+  id          String   @id @default(cuid())
+  projectId   String
+  packageName String   @default("Civil")
+  srNo        String?
+  description String
+  nos1        Float    @default(0)
+  nos2        Float    @default(0)
+  length      Float    @default(0)
+  width       Float    @default(0)
+  height      Float    @default(0)
+  qty         Float    @default(0)
+  unit        String?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Bar bending schedule line (from * BBS sheets) */
+model CostBbsLine {
+  id          String   @id @default(cuid())
+  projectId   String
+  packageName String   @default("Civil")
+  barMark     String?
+  diameterMm  Float    @default(0)
+  shape       String?
+  lengthMm    Float    @default(0)
+  nos         Float    @default(0)
+  totalLength Float    @default(0)
+  weightKg    Float    @default(0)
+  location    String?
+  createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -827,4 +876,78 @@ model SafetyRecord {
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   reportedBy User    @relation("SafetyReporter", fields: [reportedById], references: [id])
   assignedTo User?   @relation("SafetyAssignee", fields: [assignedToId], references: [id])
+}
+
+model ProgressMilestone {
+  id               String    @id @default(cuid())
+  projectId        String
+  code             String?
+  category         String?
+  activity         String
+  plannedStart     DateTime?
+  plannedEnd       DateTime?
+  plannedDays      Float     @default(0)
+  actualStart      DateTime?
+  actualEnd        DateTime?
+  actualDays       Float     @default(0)
+  varianceDays     Float     @default(0)
+  status           String    @default("Planned")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProgressHindrance {
+  id              String    @id @default(cuid())
+  projectId       String
+  description     String
+  location        String?
+  activity        String?
+  correspondence  String?
+  category        String?
+  type            String?
+  occurredAt      DateTime?
+  resolvedAt      DateTime?
+  daysImpacted    Float     @default(0)
+  status          String    @default("Open")
+  accountable     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProgressRisk {
+  id              String   @id @default(cuid())
+  projectId       String
+  code            String?
+  category        String?
+  opportunityThreat String @default("Threat")
+  name            String
+  description     String?
+  probability     Int      @default(1)
+  consequence     Int      @default(1)
+  severity        Int      @default(1)
+  probabilityPct  Float    @default(0)
+  costImpact      Float    @default(0)
+  status          String   @default("Open")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProgressPlannedActual {
+  id              String   @id @default(cuid())
+  projectId       String
+  periodLabel     String
+  packageName     String   @default("Overall")
+  plannedPct      Float    @default(0)
+  actualPct       Float    @default(0)
+  plannedAmount   Float    @default(0)
+  actualAmount    Float    @default(0)
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
