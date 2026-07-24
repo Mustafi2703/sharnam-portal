@@ -1,40 +1,42 @@
-# What you need to do (Baibhab) — review + OneDrive
+# What you need to do next
 
-## 1. Review the product on Render (after this push)
+## 1. Push + review on Render
 
-1. Wait ~5–10 min for Render to build after GitHub `main` updates.
-2. Open https://sharnam-portal.onrender.com/login  
-3. Login: `office@sharnam.demo` / `Demo@1234`
-4. Walkthrough:
-   - **Master** → module toggles on the demo project  
-   - Project → **Drawings** (GFC) · **Progress** · **Cost** (MB/BBS) · **Reports** (DPR/WPR download)  
-5. Also try `site@sharnam.demo` for day log.
+```bash
+cd /Users/baibhabmustafi/workspace/sharnam-portal
+git push origin main
+```
 
-If the site is sleeping (free plan), first load can take ~1 minute.
+(Use a GitHub **Personal Access Token** as the password — see earlier note.)
 
-Health check: https://sharnam-portal.onrender.com/api/health  
-Expect `"ui": "ui-2 Graphite Procore"`.
+Then: https://sharnam-portal.onrender.com/login → `office@sharnam.demo` / `Demo@1234`
 
 ---
 
-## 2. OneDrive — what to ask Sharnam (they have Business M365 only)
+## 2. Ask Sharnam for M365 (OneDrive + Outlook + Project)
 
-They do **not** need an IT department. One **admin** user on their Microsoft 365 Business subscription is enough.
+Send them **[docs/M365_SETUP.md](M365_SETUP.md)** (or short list **[CLIENT_MICROSOFT_REQUEST.md](../CLIENT_MICROSOFT_REQUEST.md)**).
 
-Send them: **[docs/M365_SETUP.md](docs/M365_SETUP.md)** and ask them to return:
+They return:
 
-1. Tenant ID  
-2. Client ID  
-3. Client secret (+ expiry)  
-4. SharePoint site URL for project folders  
+1. Tenant ID, Client ID, Client secret  
+2. SharePoint site URL (**OneDrive files**)  
+3. Shared mailbox `pmc-portal@…` (**Outlook mail APIs**)  
+4. Whether they have **Microsoft Project** licenses + Project ID / PWA URL (**S-curve**)
 
-You then paste those into **Render → Environment** and set `MOCK_ONEDRIVE=false` (see that doc Part 4).
+You paste into **Render → Environment** (full list in M365_SETUP section E) and redeploy.
 
-Until they send this, leave mock OneDrive on — portal is fully reviewable.
+| Connection | Without their reply | With their reply |
+|------------|---------------------|------------------|
+| Files | Mock OneDrive | Live SharePoint |
+| Mail | Outbox queue | Graph `Mail.Send` |
+| S-curve | Progress manual / Excel | MS Project sync if licensed |
 
 ---
 
-## 3. Optional next
+## 3. Order
 
-- Upgrade Render to a paid plan or attach Postgres if the demo must keep data between free-tier sleeps/redeploys.  
-- After Graph creds: wire live upload (code path already planned; env swap first).
+A. You push → review UI  
+B. They finish Entra app + consent + SharePoint + mailbox  
+C. You set env on Render  
+D. Test Documents upload, then mail, then Project/S-curve (or Excel % if no Project)

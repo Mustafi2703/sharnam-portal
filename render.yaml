@@ -30,3 +30,24 @@ services:
         value: ""
       - key: SHARNAM_EXCEL_ROOT
         value: "."
+      # Set after client Entra app (see docs/M365_SETUP.md)
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+      - key: SHAREPOINT_SITE_URL
+        sync: false
+      - key: GRAPH_MAIL_FROM
+        sync: false
+      - key: GRAPH_MAIL_ENABLED
+        value: "false"
+      - key: MS_PROJECT_ENABLED
+        value: "false"
+      - key: MS_PROJECT_MODE
+        value: "project_for_web"
+      - key: MS_PROJECT_PWA_URL
+        sync: false
+      - key: MS_PROJECT_DEFAULT_PROJECT_ID
+        sync: false
