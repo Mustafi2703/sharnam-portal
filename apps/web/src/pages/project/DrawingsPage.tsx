@@ -263,12 +263,12 @@ export default function DrawingsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Approval & GFC Drawing Log"
+        eyebrow="Drawings module · GFC"
         title="Drawing register"
         subtitle={
           clientOnly
             ? "View published sheets and revision dates. Clients cannot upload."
-            : "GFC-style log with R0–R5 dates. After publish, upload more revisions anytime. View PDFs/images in the reader."
+            : "Upload opens Drawing Check Master (same fill pattern as Quality/Safety). Complete the linked checklist, then upload the sheet. Raise Ask (drawing RFI) for clarifications, or Request checklist fill for matrix/vendor."
         }
         actions={
           <div className="flex flex-wrap gap-2">

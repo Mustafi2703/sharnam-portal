@@ -1,4 +1,4 @@
-/** Locked product UI — Graphite Procore (ui-2 / Navy Desk) */
+/** Locked modern UI — Blue · Red · Yellow · White · Black */
 export type ThemeOption = {
   id: string;
   number: 1 | 2 | 3 | 4 | 5;
@@ -14,43 +14,45 @@ export type ThemeOption = {
 };
 
 const F = {
-  plex: '"IBM Plex Sans", "Source Sans 3", system-ui, sans-serif',
+  display: '"Outfit", "Source Sans 3", system-ui, sans-serif',
+  sans: '"Source Sans 3", "Outfit", system-ui, sans-serif',
 };
 
-/** Single live UI — matches https://sharnam-portal.onrender.com/ui/2 */
+/** Single live UI — modern SaaS chrome for Sharnam PMC */
 export const LIVE_UI_OPTIONS: ThemeOption[] = [
   {
     id: "ui-2",
     number: 2,
     letter: "2",
-    name: "Graphite Procore",
-    blurb: "Dense register · IBM Plex · sharp corners · charcoal chrome",
-    icon: "▣",
-    chip: "Procore",
-    style: "graphite",
-    density: "compact",
-    radius: "sharp",
+    name: "Modern Signal",
+    blurb: "Blue actions · red alerts · yellow attention · white surfaces · black chrome",
+    icon: "◆",
+    chip: "Modern",
+    style: "blueprint",
+    density: "comfortable",
+    radius: "soft",
     vars: {
       "--color-brand": "#2563EB",
-      "--color-brand-dark": "#0F172A",
-      "--color-brand-soft": "#E2E8F0",
-      "--color-brand-glow": "#60A5FA",
-      "--color-mark": "#B91C1C",
-      "--color-sand": "#E8EDF3",
-      "--color-ink": "#020617",
-      "--color-line": "#94A3B8",
-      "--color-paper": "#F8FAFC",
-      "--color-procore-navy": "#020617",
+      "--color-brand-dark": "#1E3A8A",
+      "--color-brand-soft": "#EFF6FF",
+      "--color-brand-glow": "#FACC15",
+      "--color-mark": "#DC2626",
+      "--color-sand": "#F8FAFC",
+      "--color-ink": "#0A0A0A",
+      "--color-line": "#E5E7EB",
+      "--color-paper": "#FFFFFF",
+      "--color-procore-navy": "#0A0A0A",
       "--color-procore-blue": "#2563EB",
-      "--color-steel-muted": "#475569",
-      "--color-ok": "#15803D",
+      "--color-steel-muted": "#6B7280",
+      "--color-ok": "#2563EB",
+      "--color-warn": "#CA8A04",
       "--color-danger": "#DC2626",
-      "--ui-radius": "4px",
-      "--ui-radius-sm": "2px",
-      "--ui-nav-h": "56px",
-      "--ui-gap": "1.1rem",
-      "--font-display": F.plex,
-      "--font-sans": F.plex,
+      "--ui-radius": "14px",
+      "--ui-radius-sm": "10px",
+      "--ui-nav-h": "60px",
+      "--ui-gap": "1.5rem",
+      "--font-display": F.display,
+      "--font-sans": F.sans,
     },
   },
 ];

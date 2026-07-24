@@ -169,11 +169,7 @@ export default function WorkspacePage() {
           )}
 
           <p className="text-xs text-steel-muted">
-            Tip:{" "}
-            <Link to={`/projects/${selected.id}`} className="text-brand font-medium underline">
-              project home
-            </Link>{" "}
-            shows the Procore-style left tools + right Actions panel.
+            Tip: open a module hub first, then use the sub-tool chips. Right Actions stay page-specific — no left tools rail.
           </p>
         </section>
       )}

@@ -15,10 +15,10 @@ export function PageHeader({
     <header className="rise flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
       <div>
         {eyebrow && (
-          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-brand mb-2">{eyebrow}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{eyebrow}</p>
         )}
-        <h1 className="text-2xl sm:text-3xl font-semibold leading-tight text-ink">{title}</h1>
-        {subtitle && <p className="mt-2 text-steel-muted max-w-4xl xl:max-w-5xl text-sm leading-relaxed">{subtitle}</p>}
+        <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-2 text-steel-muted max-w-4xl xl:max-w-5xl text-[15px] leading-relaxed">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
@@ -35,7 +35,7 @@ export function Card({
   padding?: boolean;
 }) {
   return (
-    <div className={`surface rounded ${padding ? "p-4 sm:p-5" : ""} ${className}`}>{children}</div>
+    <div className={`surface ${padding ? "p-5 sm:p-6" : ""} ${className}`}>{children}</div>
   );
 }
 
@@ -47,15 +47,15 @@ export function Badge({
   tone?: "neutral" | "brand" | "ok" | "warn" | "danger";
 }) {
   const tones = {
-    neutral: "bg-steel/5 text-steel-muted border-steel/10",
-    brand: "bg-brand-soft text-brand-dark border-brand/20",
-    ok: "bg-emerald-50 text-ok border-emerald-200",
+    neutral: "bg-black/[0.04] text-steel-muted border-line",
+    brand: "bg-brand-soft text-brand-dark border-brand/25",
+    ok: "bg-brand-soft text-brand border-brand/25",
     warn: "bg-amber-50 text-warn border-amber-200",
     danger: "bg-red-50 text-danger border-red-200",
   };
   return (
     <span
-      className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium tracking-wide ${tones[tone]}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${tones[tone]}`}
     >
       {children}
     </span>
@@ -72,13 +72,13 @@ export function Button({
 }) {
   const variants = {
     primary: "bg-brand hover:bg-brand-dark text-white shadow-sm",
-    secondary: "bg-white border border-line text-ink hover:bg-sand",
-    ghost: "text-steel-muted hover:text-ink hover:bg-black/5",
-    dark: "bg-steel text-white hover:bg-steel-2",
+    secondary: "bg-white border border-line text-ink hover:bg-sand hover:border-brand/30",
+    ghost: "text-steel-muted hover:text-ink hover:bg-black/[0.04]",
+    dark: "bg-ink text-white hover:bg-black",
   };
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-sm px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[var(--ui-radius-sm,10px)] px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${variants[variant]} ${className}`}
       {...props}
     >
       {children}

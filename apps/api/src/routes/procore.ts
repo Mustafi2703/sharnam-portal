@@ -159,6 +159,18 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
     },
   });
   await audit("rfi.create", { userId: req.user!.id, entity: "Rfi", entityId: rfi.id });
+  try {
+    const { queueProjectEmail } = await import("../services/email.js");
+    await queueProjectEmail({
+      projectId: req.params.projectId,
+      subject: `New ${prefix} ${number} — ${rfi.subject}`,
+      body: `A new request was raised on the project.\n\n${number}: ${rfi.subject}\nKind: ${rfiKind}\nBall in court: ${rfi.ballInCourt}\n\n${rfi.question}`,
+      context: "rfi.create",
+      createdById: req.user!.id,
+    });
+  } catch {
+    /* email optional */
+  }
   res.status(201).json(rfi);
 });
 
@@ -189,6 +201,18 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
       closedAt: req.body.close ? new Date() : null,
     },
   });
+  try {
+    const { queueProjectEmail } = await import("../services/email.js");
+    await queueProjectEmail({
+      projectId: existing.projectId,
+      subject: `Response on ${existing.number} — ${existing.subject}`,
+      body: `A response was posted on ${existing.number}.\n\n${req.body.responseText || ""}`,
+      context: "rfi.respond",
+      createdById: req.user!.id,
+    });
+  } catch {
+    /* email optional */
+  }
   res.status(201).json(response);
 });
 

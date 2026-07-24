@@ -221,9 +221,9 @@ export default function CostPage() {
           ← Project
         </Link>
         <PageHeader
-          eyebrow="Cost module · sheet tools"
-          title="Cost tracking · BOQ · MB · BBS · Cashflow"
-          subtitle="Every sheet from Cashflow Dashboard and SPDC Budget is a tool below. Filter by package, fill GFC on monitoring, download BOQ/MB/BBS CSV for Excel."
+          eyebrow="Cost module"
+          title="Cost"
+          subtitle="One tool at a time — use the sub-tool chips above (Monitoring, MB, BBS, Budget, Cashflow, Bills). Workday-style sheet registers."
           actions={
             <div className="flex flex-wrap gap-2">
               {(tab === "monitoring" || tab === "boq") && (

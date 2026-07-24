@@ -131,17 +131,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               </NavLink>
             )}
           </nav>
-          <span className="hidden sm:inline text-[11px] font-mono uppercase tracking-wider text-steel-muted shrink-0 pl-3 border-l border-line">
-            Graphite Procore
+          <span className="hidden sm:inline text-[11px] font-semibold uppercase tracking-wider text-steel-muted shrink-0 pl-3 border-l border-line">
+            Blue · Red · Yellow
           </span>
         </div>
 
         {selected && (
-          <div className="px-4 sm:px-6 py-2 bg-brand-soft/50 border-b border-line text-xs text-steel-muted flex flex-wrap gap-x-4 gap-y-1">
+          <div className="px-4 sm:px-6 py-2 bg-paper border-b border-line text-xs text-steel-muted flex flex-wrap gap-x-4 gap-y-1">
             <span className="font-mono text-brand font-semibold">{selected.code}</span>
-            <span className="truncate">{selected.name}</span>
-            <span className="text-steel-muted/90">
-              Modules → tools. Office Master toggles which modules appear on this project.
+            <span className="truncate text-ink">{selected.name}</span>
+            <span>
+              Module bar → hub → tools. Right Actions only. Admin controls modules in Master.
             </span>
           </div>
         )}

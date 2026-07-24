@@ -1,45 +1,45 @@
 # Sharnam Portal — Product IA (locked)
 
-**UI direction:** [Graphite Procore / Navy Desk](https://sharnam-portal.onrender.com/ui/2) only (`ui-2`).  
-**Shape:** Procore-style project workspace — top **modules**, left **tools**.
+**UI:** Modern Signal — **Blue** (actions) · **Red** (alerts) · **Yellow** (attention) · **White** (surfaces) · **Black** (chrome).  
+**Shape:** Top **module** bar · horizontal **sub-tool** chips · right **Actions** only. **No left tools rail.**
 
 ## Office Master (after login)
 
-Office / admin sees Master + can open any project and **enable/disable modules** per project. CRM + HRM feed project directory.
+Office / admin: Master + enable/disable modules per project. CRM + HRM feed directory. Site and Office landings stay open.
 
 | Office tool | Purpose |
 |-------------|---------|
-| Master | Project create, packages (Civil / PEB / …), PMC roster, module toggles |
+| Master | Project create, packages, PMC roster, module toggles |
 | CRM | Leads → projects + client card |
-| HRM | Employee + vendor pool → assign into project Directory |
+| HRM | Employee + vendor pool → project Directory |
 | Audit / Roles | Who did what; role matrix |
 
 ## Project modules → tools
 
-| Module | Tools (from Excel + prompts) | Source sheets |
-|--------|------------------------------|---------------|
-| **Home** | Overview, Directory, Vendors, Documents (DMS) | Project master |
-| **Drawings** | GFC register, Drawing checklist master, Coordination, Submittals, RFI (drawing checklist fill) | Approval & GFC Drawing Log, Drawing check master |
-| **Quality** | QAP, Inspections, Cube register, Site checklists, NCR / observations, RFI (QI fill) | QAP Week 50, Cube Register, NCR, Final Index |
-| **Safety** | Safety dashboard, NCR, Site instructions, RFI + checklist attach | Safety NCR, Safety Dashboard |
-| **Progress** | Overview dashboard, Milestones, Planned vs Actual, Monthly progress, Hindrance, Risk | Progress Overview, Milestone, Planned Vs Actual, Monthly Progress, Hindrance |
-| **Field** | Day log, Photos, Field RFIs | DPR day sheets |
-| **Comms** | Matrix, Meetings / Agenda / MoM / Follow-up, PMC RFI, Email | Communication matrix videos |
-| **Cost** | Budget WBS, Monitoring (GFC qty), Measurement books (MB), BBS, Cashflow, Rate diff, COP/Bills, BOQ | Cashflow Dashboard, SPDC Budget (MB + BBS), Payment Summary |
-| **Reports** | DPR pack, WPR pack, printable dashboards | DPR Arvind pack, WPR registers |
+Aligned with `module_prompts/`.
 
-## Gates & integrity
+| Module | Tools | Notes |
+|--------|-------|-------|
+| **Home** | Overview, Directory, Vendors, Documents (DMS) | |
+| **Drawings** | GFC, Drawing check master, DMS, Coordination, Request checklist fill, Ask (drawing RFI) | No Submittals. Check master before upload. |
+| **Quality** | QI dashboard, Checklist master, Site checklists, Request QI fill | Checklist + RFI visible |
+| **Safety** | Dashboard, Safety checklists, Safety RFI | Checklist + RFI visible |
+| **Progress** | Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal | One tool per dataset |
+| **Field** | Day log, Photos, Field RFIs | |
+| **Comms** | Matrix · MoM, Ask (PMC RFI), Email / Outlook | |
+| **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, COP/Bills, Structure | One tool at a time |
+| **Reports** | DPR / WPR packs | |
 
-1. Project-scoped queries only  
-2. Drawing publish gate before checklist / QI submit  
-3. Upload via modal + revision log  
-4. Client: view / raise concerns only  
+Hub route: `/projects/:id/hub/{module}`.
 
-## Microsoft 365
+## Gates
 
-See [CLIENT_MICROSOFT_REQUEST.md](CLIENT_MICROSOFT_REQUEST.md) and [docs/M365_SETUP.md](docs/M365_SETUP.md).
+1. Project-scoped only  
+2. Drawing Check Master unlock before upload  
+3. RFI create/respond → email + open badge  
+4. Client: view / concerns only  
 
 ## Deploy
 
-See [DEPLOY_RENDER.md](DEPLOY_RENDER.md). Live: https://sharnam-portal.onrender.com  
-Demo password: `Demo@1234`
+https://sharnam-portal.onrender.com · Demo@1234  
+See `DEPLOY_RENDER.md`, `docs/M365_SETUP.md`.

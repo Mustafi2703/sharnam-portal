@@ -8,8 +8,9 @@
 | Drawing checklist master | Pre-upload checklist (Architectural / Structural… Yes/No/N.A.). Must complete before upload/revision. Dummy sign/code auth OK for now. |
 | Documents (DMS) | Folder tree under Drawings/{discipline}/{revision}. Sync OneDrive path on open. |
 | Coordination | Design coordination issues (Procore-like); elevate → RFI. |
-| Submittals | Status / ball-in-court register. |
-| Request checklist fill | RFI kind = DrawingChecklist; assign filler; notify by email when Graph live. |
+| Submittals | _(Excluded for now)_ | — |
+| Request checklist fill | RFI kind = DrawingChecklist; notify on create/respond. |
+| Ask (drawing RFI) | RequestForInformation linked to drawings — raise only. |
 
 ## Sheet sources
 

@@ -5,26 +5,26 @@
   Tokens overridden per UI option 1–5 via themes.ts
 */
 @theme {
-  --color-brand: #1d4ed8;
+  --color-brand: #2563eb;
   --color-brand-dark: #1e3a8a;
   --color-brand-soft: #eff6ff;
-  --color-brand-glow: #93c5fd;
+  --color-brand-glow: #facc15;
   --color-mark: #dc2626;
-  --color-accent: #1d4ed8;
-  --color-steel: #0f172a;
-  --color-steel-2: #334155;
-  --color-steel-muted: #64748b;
+  --color-accent: #2563eb;
+  --color-steel: #0a0a0a;
+  --color-steel-2: #262626;
+  --color-steel-muted: #6b7280;
   --color-sand: #f8fafc;
-  --color-ink: #0f172a;
+  --color-ink: #0a0a0a;
   --color-paper: #ffffff;
-  --color-line: #e2e8f0;
-  --color-ok: #15803d;
-  --color-warn: #b45309;
+  --color-line: #e5e7eb;
+  --color-ok: #2563eb;
+  --color-warn: #ca8a04;
   --color-danger: #dc2626;
-  --color-procore-navy: #1e3a8a;
-  --color-procore-blue: #1d4ed8;
-  --font-sans: "IBM Plex Sans", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Outfit", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-procore-navy: #0a0a0a;
+  --color-procore-blue: #2563eb;
+  --font-sans: "Source Sans 3", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -66,11 +66,18 @@ html[data-ui-density="compact"] .page-stack {
   gap: 1rem;
 }
 
-html[data-ui-radius="sharp"] .surface,
-html[data-ui-radius="sharp"] .rounded-xl,
-html[data-ui-radius="sharp"] .rounded-2xl,
-html[data-ui-radius="sharp"] .rounded-lg {
-  border-radius: var(--ui-radius, 4px) !important;
+html[data-ui-radius="soft"] .surface,
+html[data-ui-radius="soft"] .rounded-xl,
+html[data-ui-radius="soft"] .rounded-2xl,
+html[data-ui-radius="soft"] .rounded-lg,
+html[data-ui-radius="soft"] .rounded-sm {
+  border-radius: var(--ui-radius, 14px) !important;
+}
+
+.surface {
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 1px 2px rgb(10 10 10 / 0.04);
 }
 
 .bg-paper {
@@ -89,13 +96,6 @@ html[data-ui-radius="sharp"] .rounded-lg {
 
 .font-mono {
   font-family: var(--font-mono);
-}
-
-.surface {
-  background: var(--color-paper);
-  border: 1px solid var(--color-line);
-  border-radius: var(--ui-radius, 10px);
-  box-shadow: 0 1px 2px rgba(28, 36, 48, 0.04);
 }
 
 .page-stack {
@@ -119,39 +119,22 @@ html[data-ui-radius="sharp"] .rounded-lg {
   display: grid;
   min-height: calc(100vh - var(--ui-chrome-h, 168px));
   width: 100%;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (min-width: 1280px) {
-  .tool-shell.has-both {
-    grid-template-columns: 220px minmax(0, 1fr) 280px;
-  }
-  .tool-shell.has-left {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
   .tool-shell.has-right {
     grid-template-columns: minmax(0, 1fr) 280px;
   }
 }
 
 @media (min-width: 1536px) {
-  .tool-shell.has-both {
-    grid-template-columns: 240px minmax(0, 1fr) 300px;
-  }
-  .tool-shell.has-left {
-    grid-template-columns: 240px minmax(0, 1fr);
-  }
   .tool-shell.has-right {
     grid-template-columns: minmax(0, 1fr) 300px;
   }
 }
 
 @media (min-width: 1920px) {
-  .tool-shell.has-both {
-    grid-template-columns: 260px minmax(0, 1fr) 320px;
-  }
-  .tool-shell.has-left {
-    grid-template-columns: 260px minmax(0, 1fr);
-  }
   .tool-shell.has-right {
     grid-template-columns: minmax(0, 1fr) 320px;
   }

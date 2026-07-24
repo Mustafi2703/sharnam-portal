@@ -31,6 +31,7 @@ import ProgressPage from "./pages/project/ProgressPage";
 import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
 import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
+import ModuleHubPage from "./pages/project/ModuleHubPage";
 import { applyThemeOption } from "./themes";
 
 applyThemeOption("ui-2");
@@ -112,6 +113,14 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
+                  <Route path="hub/drawings" element={<ModuleHubPage moduleKey="drawings" />} />
+                  <Route path="hub/quality" element={<ModuleHubPage moduleKey="quality" />} />
+                  <Route path="hub/safety" element={<ModuleHubPage moduleKey="safety" />} />
+                  <Route path="hub/progress" element={<ModuleHubPage moduleKey="progress" />} />
+                  <Route path="hub/field" element={<ModuleHubPage moduleKey="field" />} />
+                  <Route path="hub/comms" element={<ModuleHubPage moduleKey="comms" />} />
+                  <Route path="hub/cost" element={<ModuleHubPage moduleKey="cost" />} />
+                  <Route path="hub/reports" element={<ModuleHubPage moduleKey="reports" />} />
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />

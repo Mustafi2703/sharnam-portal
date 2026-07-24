@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 type Tab = "overview" | "milestones" | "planned" | "monthly" | "hindrance" | "risk" | "legal";
@@ -296,9 +295,9 @@ export default function ProgressPage() {
           ← Project
         </Link>
         <PageHeader
-          eyebrow="Progress module · sheet registers"
-          title="Progress overview"
-          subtitle="Dashboard, milestones, planned vs actual (cashflow + manpower + qty), monthly SOR, hindrance, risk, and legal tracker — seeded from your Excel packs."
+          eyebrow="Progress module"
+          title="Progress"
+          subtitle="One tool at a time — use the sub-tool chips above for Overview, Milestones, Hindrance, Risk, and more. Calm Workday-style KPIs on Overview."
           actions={
             <div className="flex flex-wrap gap-2 items-center">
               <Badge tone="brand">{pct(data.totals.projectProgressPct)} weighted</Badge>
@@ -386,40 +385,45 @@ export default function ProgressPage() {
 
       {tab === "overview" && (
         <div className="space-y-4 w-full">
-          <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4 sm:p-5">
+          <div className="rounded-sm border border-line bg-paper p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">Workday-style overview</p>
-                <h3 className="font-display text-lg text-ink">Progress · hindrance · risk · legal</h3>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ok">Workday overview</p>
+                <h3 className="font-display text-lg text-ink">Key registers at a glance</h3>
               </div>
-              <p className="text-xs text-steel-muted">Seeded sheet data · live registers</p>
+              <Link to={`/projects/${id}/hub/progress`} className="text-sm font-semibold text-brand">
+                All Progress tools →
+              </Link>
             </div>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <PieChart title="Milestone status" items={data.charts.milestoneByStatus || []} />
-              <PieChart title="Hindrance status" items={data.charts.hindranceByStatus || []} />
-              <PieChart title="Risk status" items={data.charts.riskByStatus || []} />
-              <PieChart title="Legal approvals" items={data.charts.legalByStatus || []} />
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {(
+                [
+                  ["Milestones", data.charts.milestoneByStatus, "milestones"],
+                  ["Hindrance", data.charts.hindranceByStatus, "hindrance"],
+                  ["Risk", data.charts.riskByStatus, "risk"],
+                  ["Legal", data.charts.legalByStatus, "legal"],
+                ] as const
+              ).map(([title, items, tabKey]) => {
+                const rows = items || [];
+                const total = rows.reduce((s: number, r: any) => s + (Number(r.value) || 0), 0);
+                const open = rows.find((r: any) => /open|active|pending/i.test(String(r.label || "")));
+                return (
+                  <Link
+                    key={title}
+                    to={`/projects/${id}/progress?tab=${tabKey}`}
+                    className="block rounded-sm border border-line bg-sand/50 p-4 hover:border-brand/40 transition"
+                  >
+                    <div className="text-[11px] font-mono uppercase tracking-wider text-steel-muted">{title}</div>
+                    <div className="mt-2 text-2xl font-display text-ink">{total}</div>
+                    <div className="text-xs text-steel-muted mt-1">
+                      {open ? `${open.label}: ${open.value}` : "Open tool →"}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </div>
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-3 gap-4 w-full">
-            <BarChart title="Hindrance by critical activity" items={data.charts.hindranceByActivity} />
-            <BarChart title="Hindrance by category" items={data.charts.hindranceByCategory || []} />
-            <BarChart title="Risk by severity" items={data.charts.riskBySeverity || []} />
-            <BarChart
-              title="Cashflow planned vs actual (₹)"
-              items={data.charts.cashflow}
-              valueKey="planned"
-              compareKey="actual"
-            />
-            <BarChart
-              title="Manpower required vs available"
-              items={data.charts.manpower}
-              valueKey="required"
-              compareKey="available"
-            />
-            <BarChart title="Monthly SOR open vs closed" items={data.charts.sor} valueKey="open" compareKey="closed" />
-          </div>
-          <div className="grid lg:grid-cols-2 gap-4 w-full">
+          <div className="grid md:grid-cols-2 gap-4 w-full">
             <Card>
               <h3 className="font-semibold text-sm mb-3">Recent hindrances</h3>
               <div className="scroll-panel max-h-64 space-y-2 text-sm">

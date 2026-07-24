@@ -4,7 +4,7 @@ PMC construction portal for **Sharnam Project Development Consultants** — Proc
 
 ## Locked UI
 
-Use **ui-2** Graphite / Navy Desk: https://sharnam-portal.onrender.com/ui/2
+**Modern Signal** — Blue · Red · Yellow · White · Black. Top module bar + hub + sub-tool chips + right Actions. No left rail.
 
 ## Master project setup
 

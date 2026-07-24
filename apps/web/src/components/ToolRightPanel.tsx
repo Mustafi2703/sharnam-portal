@@ -156,9 +156,26 @@ export function ToolRightPanel({
       case "drawings":
         if (canUpload) {
           actions.push(
-            { label: "Upload drawing", onClick: () => (onUploadDrawing ? onUploadDrawing() : navigate(`/projects/${ctx.projectId}/drawings?upload=1`)), primary: true },
-            { label: "Upload revision", to: "drawings/upload-revision", secondary: true },
-            { label: "Assign checklist type", onClick: () => (onAssignChecklist ? onAssignChecklist() : navigate(`/projects/${ctx.projectId}/checklist/assign`)), secondary: true }
+            {
+              label: "Upload (check master first)",
+              onClick: () => (onUploadDrawing ? onUploadDrawing() : navigate(`/projects/${ctx.projectId}/drawings?upload=1`)),
+              primary: true,
+            },
+            {
+              label: "Drawing check master",
+              onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=DrawingCheck`),
+              secondary: true,
+            },
+            {
+              label: "Request checklist fill",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=DrawingChecklist`),
+              secondary: true,
+            },
+            {
+              label: "Ask (drawing RFI)",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=RequestForInformation`),
+              secondary: true,
+            }
           );
         }
         break;
@@ -214,15 +231,59 @@ export function ToolRightPanel({
         if (canFill) {
           actions.push(
             { label: "Log safety observation", to: "safety", primary: true },
-            { label: "Quality Inspections", to: "inspections", secondary: true }
+            {
+              label: "Safety checklists",
+              onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=Safety`),
+              secondary: true,
+            },
+            {
+              label: "Safety checklist RFI",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=SafetyChecklist`),
+              secondary: true,
+            }
           );
         }
         break;
+      case "progress":
+        actions.push(
+          { label: "Progress hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/progress`), primary: true },
+          { label: "Hindrance", onClick: () => navigate(`/projects/${ctx.projectId}/progress?tab=hindrance`), secondary: true },
+          { label: "Milestones", onClick: () => navigate(`/projects/${ctx.projectId}/progress?tab=milestones`), secondary: true }
+        );
+        break;
+      case "cost":
+        if (canUpload) {
+          actions.push(
+            { label: "Cost hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/cost`), primary: true },
+            { label: "MB sheets", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=mb`), secondary: true },
+            { label: "COP / Bills", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=bills`), secondary: true }
+          );
+        }
+        break;
+      case "quality":
+        actions.push(
+          { label: "Quality Inspections", to: "inspections", primary: true },
+          { label: "Site checklists", to: "checklist", secondary: true },
+          {
+            label: "Request QI fill",
+            onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
+            secondary: true,
+          }
+        );
+        break;
+      case "field":
+        actions.push(
+          { label: "Day log", to: "diary", primary: true },
+          { label: "Photos", to: "photos", secondary: true }
+        );
+        break;
+      case "reports":
+        actions.push({ label: "Open DPR / WPR", to: "reports", primary: true });
+        break;
       case "rfis":
         actions.push(
-          { label: "Create RFI", to: "rfis", primary: true },
-          { label: "Link drawing / checklist", to: "rfis", secondary: true },
-          { label: "Open Final Index", to: "checklist", secondary: true }
+          { label: "Create request", to: "rfis", primary: true },
+          { label: "Site checklists", to: "checklist", secondary: true }
         );
         break;
       case "diary":
@@ -230,9 +291,6 @@ export function ToolRightPanel({
         break;
       case "photos":
         if (canUpload || canFill) actions.push({ label: "Upload photo", to: "photos", primary: true });
-        break;
-      case "submittals":
-        if (canUpload) actions.push({ label: "Create submittal", to: "submittals", primary: true }, { label: "Open register", to: "submittals", secondary: true });
         break;
       case "comms":
         if (canUpload) {
@@ -242,12 +300,6 @@ export function ToolRightPanel({
             { label: "Start MoM", to: "comms", secondary: true }
           );
         }
-        break;
-      case "reports":
-        actions.push({ label: "Download DPR", to: "reports", primary: true }, { label: "Download WPR", to: "reports", secondary: true }, { label: "Open day log", to: "diary", secondary: true });
-        break;
-      case "cost":
-        if (canUpload) actions.push({ label: "COP / vendor bills", to: "cost", primary: true }, { label: "Measurement sheet", to: "cost", secondary: true });
         break;
       case "directory":
       case "vendors":
@@ -261,9 +313,8 @@ export function ToolRightPanel({
         break;
       default:
         actions.push(
-          { label: "Open Drawings", to: "drawings", primary: true },
-          { label: "Open Quality", to: "inspections", secondary: true },
-          { label: "Meetings / MoM", to: "comms", secondary: true }
+          { label: "Open Drawings hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/drawings`), primary: true },
+          { label: "Open Quality hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/quality`), secondary: true }
         );
         break;
     }
