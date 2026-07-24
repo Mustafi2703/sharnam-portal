@@ -12,7 +12,15 @@ import {
   type WorkspaceKey,
 } from "../../workspaces";
 
-type ToolItem = { to: string; label: string; end?: boolean; roles?: RoleKey[]; query?: string };
+type ToolItem = {
+  to: string;
+  label: string;
+  end?: boolean;
+  roles?: RoleKey[];
+  query?: string;
+  /** When set, sidebar item is active if ?tab= is one of these */
+  activeTabs?: string[];
+};
 
 const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   home: [
@@ -62,7 +70,7 @@ const SIDE_TOOLS: Record<WorkspaceKey | "home", ToolItem[]> = {
   ],
   cost: [
     { to: "cost", label: "Measurement / monitoring" },
-    { to: "cost", label: "MB / BBS", query: "tab=mb" },
+    { to: "cost", label: "MB / BBS", query: "tab=mb", activeTabs: ["mb", "bbs"] },
     { to: "cost", label: "Cashflow", query: "tab=cashflow" },
     { to: "cost", label: "COP / Bills", query: "tab=bills" },
   ],
@@ -115,12 +123,44 @@ function toolFromPath(pathname: string) {
 
 function parseEnabled(raw?: string | null): WorkspaceKey[] {
   try {
-    const arr = JSON.parse(raw || "null");
-    if (Array.isArray(arr) && arr.length) return arr as WorkspaceKey[];
+    if (raw == null || raw === "") return DEFAULT_ENABLED_MODULES;
+    const arr = JSON.parse(raw);
+    // Empty array is intentional (all modules off) — do not fall back to defaults
+    if (Array.isArray(arr)) return arr as WorkspaceKey[];
   } catch {
     /* ignore */
   }
   return DEFAULT_ENABLED_MODULES;
+}
+
+/** Path + query aware active check (Progress/Cost tabs share one pathname) */
+function isSideToolActive(
+  t: ToolItem,
+  pathname: string,
+  search: string,
+  projectId: string | undefined
+): boolean {
+  if (!projectId) return false;
+  const base = t.to ? `/projects/${projectId}/${t.to}` : `/projects/${projectId}`;
+  const pathOk = t.end ? pathname === base : pathname === base || pathname.startsWith(`${base}/`);
+  if (!pathOk) return false;
+
+  const params = new URLSearchParams(search);
+  const currentTab = params.get("tab");
+
+  if (t.activeTabs?.length) {
+    return pathOk && !!currentTab && t.activeTabs.includes(currentTab);
+  }
+
+  if (t.query) {
+    const expected = new URLSearchParams(t.query);
+    return [...expected.entries()].every(([k, v]) => params.get(k) === v);
+  }
+
+  // Default tool (no query): active only when tab is unset / matches module default
+  if (t.to === "progress") return !currentTab;
+  if (t.to === "cost") return !currentTab || currentTab === "monitoring";
+  return !currentTab;
 }
 
 export default function ProjectToolsLayout() {
@@ -228,13 +268,14 @@ export default function ProjectToolsLayout() {
                 const href = t.to
                   ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}`
                   : `/projects/${id}`;
+                const on = isSideToolActive(t, location.pathname, location.search, id);
                 return (
                   <NavLink
                     key={`${t.to || "home"}-${t.query || ""}-${t.label}`}
                     to={href}
                     end={t.end}
-                    className={({ isActive }) =>
-                      isActive ? "bg-brand-soft text-brand font-semibold" : "text-ink/85 hover:bg-sand"
+                    className={() =>
+                      on ? "bg-brand-soft text-brand font-semibold" : "text-ink/85 hover:bg-sand"
                     }
                   >
                     {t.label}

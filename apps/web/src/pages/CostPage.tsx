@@ -4,23 +4,23 @@ import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 
+type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
+
+const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
+
 export default function CostPage() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [summary, setSummary] = useState<any>(null);
   const [billsData, setBillsData] = useState<{ bills: any[]; totals: any } | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const initialTab = (searchParams.get("tab") || "monitoring") as
-    | "budget"
-    | "monitoring"
-    | "cashflow"
-    | "rates"
-    | "boq"
-    | "bills"
-    | "mb"
-    | "bbs";
-  const [tab, setTab] = useState(initialTab);
+  const rawTab = searchParams.get("tab") || "monitoring";
+  const tab: CostTab = COST_TABS.includes(rawTab as CostTab) ? (rawTab as CostTab) : "monitoring";
+  const setTab = (next: CostTab) => {
+    if (next === "monitoring") setSearchParams({});
+    else setSearchParams({ tab: next });
+  };
   const [billForm, setBillForm] = useState({
     vendorName: "",
     billNo: "",

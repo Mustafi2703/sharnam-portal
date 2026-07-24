@@ -247,8 +247,10 @@ export default function MasterModulePage() {
                 {WORKSPACES.map((w) => {
                   let enabled: WorkspaceKey[] = DEFAULT_ENABLED_MODULES;
                   try {
-                    const parsed = JSON.parse(dirProject.enabledModules || "null");
-                    if (Array.isArray(parsed) && parsed.length) enabled = parsed;
+                    if (dirProject.enabledModules != null && dirProject.enabledModules !== "") {
+                      const parsed = JSON.parse(dirProject.enabledModules);
+                      if (Array.isArray(parsed)) enabled = parsed as WorkspaceKey[];
+                    }
                   } catch {
                     /* ignore */
                   }
