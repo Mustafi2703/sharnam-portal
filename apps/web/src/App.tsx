@@ -12,6 +12,7 @@ import ProjectEmailSettingsPage from "./pages/ProjectEmailSettingsPage";
 import DiaryPage from "./pages/DiaryPage";
 import CommsPage from "./pages/CommsPage";
 import CostPage from "./pages/CostPage";
+import FinancePage from "./pages/FinancePage";
 import DmsPage from "./pages/DmsPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
@@ -32,6 +33,7 @@ import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
 import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import ModuleHubPage from "./pages/project/ModuleHubPage";
+import QapPage from "./pages/project/QapPage";
 import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
 import { applyThemeOption } from "./themes";
 
@@ -111,6 +113,7 @@ export default function App() {
                   <Route path="hub/field" element={<ModuleHubPage moduleKey="field" />} />
                   <Route path="hub/comms" element={<ModuleHubPage moduleKey="comms" />} />
                   <Route path="hub/cost" element={<ModuleHubPage moduleKey="cost" />} />
+                  <Route path="hub/finance" element={<ModuleHubPage moduleKey="finance" />} />
                   <Route path="hub/reports" element={<ModuleHubPage moduleKey="reports" />} />
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
@@ -122,6 +125,7 @@ export default function App() {
                   <Route path="checklist/assign" element={<ChecklistAssignPage />} />
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
+                  <Route path="qap" element={<QapPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="checklist-master" element={<ChecklistMasterPage />} />
@@ -133,6 +137,7 @@ export default function App() {
                   <Route path="coordination" element={<CoordinationPage />} />
                   <Route path="email" element={<ProjectEmailSettingsPage />} />
                   <Route path="cost" element={<CostPage />} />
+                  <Route path="finance" element={<FinancePage />} />
                   <Route path="reports" element={<ReportsPage />} />
                 </Route>
                 <Route path="/audit" element={<AuditPage />} />

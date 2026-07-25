@@ -1,34 +1,38 @@
 # Sharnam Portal — Product IA (locked)
 
 **UI:** Modern Signal — **Blue** (actions) · **Red** (alerts) · **Yellow** (attention) · **White** (surfaces) · **Black** (chrome).  
-**Shape:** Top **module** bar · horizontal **sub-tool** chips · right **Actions** only. **No left tools rail.**
+**Shape:** Top **module** bar · horizontal **sub-tool** chips · right **Actions** only. **No left tools rail.**  
+**Login:** Ops dashboard (open RFIs / alerts) → module selection.
 
 ## Office Master (after login)
 
-Office / admin: Master + enable/disable modules per project. CRM + HRM feed directory. Site and Office landings stay open.
+Office / admin: Master + enable/disable modules per project. **CRM (leads)** and **HRMS** are linked but **to be discussed** in detail. Site and Office landings stay open.
 
-| Office tool | Purpose |
-|-------------|---------|
-| Master | Project create, packages, PMC roster, module toggles |
-| CRM | Leads → projects + client card |
-| HRM | Employee + vendor pool → project Directory |
-| Audit / Roles | Who did what; role matrix |
+| Office tool | Purpose | Status |
+|-------------|---------|--------|
+| Master | Project create, packages, PMC roster, module toggles, Directory (4 users) | Build |
+| CRM | Lead management → projects + client card | Discuss later |
+| HRM / HRMS | Employee + vendor pool → project Directory | Discuss later |
+| Audit / Roles | Who did what; role matrix | Build |
 
 ## Project modules → tools
 
-Aligned with `module_prompts/`.
+Aligned with `docs/CLIENT_REQUIREMENTS.md` and `module_prompts/`. Sheet → dashboard map: `docs/SHEET_TO_DASHBOARD.md`.
 
 | Module | Tools | Notes |
 |--------|-------|-------|
-| **Home** | Overview, Directory, Vendors, Documents (DMS) | |
-| **Drawings** | GFC, Drawing check master, DMS, Coordination, Request checklist fill, Ask (drawing RFI) | No Submittals. Check master before upload. |
-| **Quality** | QI dashboard, Checklist master, Site checklists, Request QI fill | Checklist + RFI visible |
-| **Safety** | Dashboard, Safety checklists, Safety RFI | Checklist + RFI visible |
-| **Progress** | Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal | One tool per dataset |
+| **Home** | Overview, Directory (Office/Site/Client/Contractor), Vendors, Documents | |
+| **Drawings** | GFC, Checklist manager, DMS, Coordination, Request checklist fill, Ask | No Submittals. Check window before upload. |
+| **Quality** | QI dashboard, Checklist master (Excel upload + choose), **QAP**, Site checklists, Request QI fill | Checklist + RFI + QAP |
+| **Safety** | Dashboard, Safety checklists (Excel upload + choose), Safety RFI | Checklist + RFI |
+| **Progress** | Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal | One tool per shared sheet |
 | **Field** | Day log, Photos, Field RFIs | |
 | **Comms** | Matrix · MoM, Ask (PMC RFI), Email / Outlook | |
-| **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, COP/Bills, Structure | One tool at a time |
+| **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, Structure | Engineering cost — **not** commercial finance |
+| **Finance** | Overview, Invoice, PO, RA bill, COP | **Separate from Cost**; shell now, detail later |
 | **Reports** | DPR / WPR packs | |
+
+**Discuss later:** Snag list · Project closure · CRM detail · HRMS detail · Finance field-level. See `docs/ROADMAP_DISCUSS_LATER.md`.
 
 Hub route: `/projects/:id/hub/{module}`.
 
@@ -37,7 +41,8 @@ Hub route: `/projects/:id/hub/{module}`.
 1. Project-scoped only  
 2. Drawing Check Master unlock before upload  
 3. RFI create/respond → email + open badge  
-4. Client: view / concerns only  
+4. Client: view / concerns; Quality/Safety checklist create where enabled  
+5. Shared Excel templates become portal dashboards  
 
 ## Deploy
 

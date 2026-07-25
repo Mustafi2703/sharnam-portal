@@ -263,14 +263,33 @@ export function ToolRightPanel({
           actions.push(
             { label: "Cost hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/cost`), primary: true },
             { label: "MB sheets", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=mb`), secondary: true },
-            { label: "COP / Bills", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=bills`), secondary: true }
+            { label: "Cashflow", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=cashflow`), secondary: true }
+          );
+        }
+        break;
+      case "finance":
+        if (canUpload) {
+          actions.push(
+            { label: "Finance hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/finance`), primary: true },
+            { label: "Invoices", onClick: () => navigate(`/projects/${ctx.projectId}/finance?tab=invoices`), secondary: true },
+            { label: "RA bills", onClick: () => navigate(`/projects/${ctx.projectId}/finance?tab=ra`), secondary: true },
+            { label: "COP", onClick: () => navigate(`/projects/${ctx.projectId}/finance?tab=cop`), secondary: true }
           );
         }
         break;
       case "quality":
         actions.push(
           { label: "Quality Inspections", to: "inspections", primary: true },
-          { label: "Site checklists", to: "checklist", secondary: true },
+          {
+            label: "Checklist master (Excel)",
+            onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=QualityInspection`),
+            secondary: true,
+          },
+          {
+            label: "QAP",
+            onClick: () => navigate(`/projects/${ctx.projectId}/qap`),
+            secondary: true,
+          },
           {
             label: "Request QI fill",
             onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),

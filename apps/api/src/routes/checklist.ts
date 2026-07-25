@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
@@ -340,10 +341,10 @@ checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
 
 const TEMPLATE_TYPES = ["DrawingCheck", "SiteExecution", "QualityInspection", "Safety"] as const;
 
-/** Master: create checklist template (office) */
+/** Master: create checklist template (office + client for QI/Safety) */
 checklistRouter.post(
   "/templates",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "client"),
   async (req: AuthedRequest, res) => {
     const {
       name,
@@ -401,9 +402,85 @@ checklistRouter.post(
   }
 );
 
+/** Upload Excel → create checklist template (columns: description | instruction | section | requirePhoto) */
+checklistRouter.post(
+  "/templates/import-excel",
+  requireRoles("admin", "office", "employee", "client"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "Excel file required" });
+    const checklistType = String(req.body?.checklistType || "QualityInspection");
+    const type = TEMPLATE_TYPES.includes(checklistType as any) ? checklistType : "QualityInspection";
+    const name = String(req.body?.name || req.file.originalname.replace(/\.(xlsx|xls|csv)$/i, "") || "Imported checklist");
+    const category = String(req.body?.category || "Imported");
+
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    } catch {
+      return res.status(400).json({ error: "Could not read Excel file" });
+    }
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const lineItems = rows
+      .map((row, idx) => {
+        const description = String(
+          row.description || row.Description || row.item || row.Item || row.check || row.Check || row["Line item"] || ""
+        ).trim();
+        if (!description) return null;
+        const instruction = String(row.instruction || row.Instruction || row.QI || row.guidance || "").trim();
+        const section = String(row.section || row.Section || row.category || row.Category || "General").trim();
+        const requirePhoto = /y|yes|true|1/i.test(String(row.requirePhoto || row.photo || row.Photo || ""));
+        return {
+          itemCode: String(row.itemCode || row.code || idx + 1),
+          description,
+          instruction: instruction || undefined,
+          section: section || "General",
+          sortOrder: idx + 1,
+          requirePhoto,
+        };
+      })
+      .filter(Boolean) as {
+      itemCode: string;
+      description: string;
+      instruction?: string;
+      section: string;
+      sortOrder: number;
+      requirePhoto: boolean;
+    }[];
+
+    if (!lineItems.length) {
+      return res.status(400).json({
+        error: "No line items found. Use columns: description, instruction, section, requirePhoto",
+      });
+    }
+
+    const photoMin = type === "QualityInspection" || type === "Safety" ? 3 : 0;
+    const template = await prisma.checklistTemplate.create({
+      data: {
+        name,
+        category,
+        checklistType: type,
+        instructions: `Imported from ${req.file.originalname}`,
+        requirePhotosMin: photoMin,
+        source: "excel",
+        items: { create: lineItems },
+      },
+      include: { items: { orderBy: { sortOrder: "asc" } }, _count: { select: { items: true } } },
+    });
+    await audit("checklist.template.import", {
+      userId: req.user!.id,
+      entity: "ChecklistTemplate",
+      entityId: template.id,
+      meta: { file: req.file.originalname, lines: lineItems.length },
+    });
+    res.status(201).json(template);
+  }
+);
+
 checklistRouter.patch(
   "/templates/:id",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "client"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const data: Record<string, unknown> = {};
@@ -424,7 +501,7 @@ checklistRouter.patch(
 
 checklistRouter.post(
   "/templates/:id/items",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "client"),
   async (req: AuthedRequest, res) => {
     const { itemCode, description, instruction, section, requirePhoto } = req.body || {};
     if (!description) return res.status(400).json({ error: "description required" });

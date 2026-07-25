@@ -12,6 +12,7 @@ export type WorkspaceKey =
   | "comms"
   | "field"
   | "cost"
+  | "finance"
   | "reports";
 
 export type ModuleToolItem = {
@@ -76,8 +77,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "checklist-master",
       label: "Checklist master",
       query: "family=QualityInspection",
-      roles: ["admin", "office", "employee"],
-      blurb: "QI templates and checklist library.",
+      roles: ["admin", "office", "employee", "client"],
+      blurb: "Create checklists, upload Excel, choose template for fills.",
+    },
+    {
+      to: "qap",
+      label: "Quality Assurance Plan",
+      roles: ["admin", "office", "employee", "client", "site_employee"],
+      blurb: "Upload and update the QAP (Week-50 sheet style).",
     },
     { to: "checklist", label: "Site checklists", blurb: "Assign and fill site execution forms." },
     {
@@ -93,8 +100,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "checklist-master",
       label: "Safety checklists",
       query: "family=Safety",
-      roles: ["admin", "office", "employee"],
-      blurb: "Safety checklist forms.",
+      roles: ["admin", "office", "employee", "client"],
+      blurb: "Create / upload Excel safety checklists and choose for fills.",
     },
     {
       to: "rfis",
@@ -139,8 +146,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "cost", label: "Budget WBS", query: "tab=budget", blurb: "Budget structure." },
     { to: "cost", label: "Cashflow", query: "tab=cashflow", blurb: "Cashflow chart." },
     { to: "cost", label: "Rate difference", query: "tab=rates", blurb: "Rate variance." },
-    { to: "cost", label: "COP / Bills", query: "tab=bills", blurb: "Bills and COP." },
     { to: "cost", label: "Structure upload", query: "tab=boq", blurb: "Import BOQ structure." },
+  ],
+  finance: [
+    { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
+    { to: "finance", label: "Invoice tracking", query: "tab=invoices", blurb: "Invoice register." },
+    { to: "finance", label: "PO tracking", query: "tab=po", blurb: "Purchase order register." },
+    { to: "finance", label: "RA bill tracking", query: "tab=ra", blurb: "Running account bills." },
+    { to: "finance", label: "COP tracking", query: "tab=cop", blurb: "Certificate of payment." },
   ],
   reports: [{ to: "reports", label: "DPR / WPR packs", blurb: "Daily and weekly report packs." }],
 };
@@ -158,14 +171,14 @@ export const MODULE_META: Record<
   },
   quality: {
     title: "Quality",
-    desc: "Procore-style QI, site checklists, and Request QI fill — checklist and RFI always visible.",
+    desc: "QI dashboard, Excel checklist upload, QAP, and Request QI fill.",
     path: "hub/quality",
     accent: "#1E3A8A",
     icon: "QA",
   },
   safety: {
     title: "Safety",
-    desc: "Safety dashboard, checklists, and safety RFIs.",
+    desc: "Safety dashboard, Excel checklists, and safety RFIs.",
     path: "hub/safety",
     accent: "#DC2626",
     icon: "HSE",
@@ -193,10 +206,17 @@ export const MODULE_META: Record<
   },
   cost: {
     title: "Cost",
-    desc: "Monitoring, MB, BBS, budget, cashflow, bills — one tool at a time.",
+    desc: "MB, BBS, budget, cashflow — engineering cost. Commercial tracking is Finance.",
     path: "hub/cost",
     accent: "#0A0A0A",
     icon: "₹",
+  },
+  finance: {
+    title: "Finance",
+    desc: "Invoice, PO, RA bill, and COP tracking — separate from Cost.",
+    path: "hub/finance",
+    accent: "#1E3A8A",
+    icon: "FIN",
   },
   reports: {
     title: "Reports",
@@ -219,7 +239,7 @@ export const WORKSPACES: {
 }[] = (Object.keys(MODULE_META) as WorkspaceKey[]).map((key) => {
   const m = MODULE_META[key];
   let roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
-  if (key === "cost") roles = ["admin", "office", "employee"];
+  if (key === "cost" || key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
   return {
     key,
@@ -265,5 +285,6 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "comms",
   "field",
   "cost",
+  "finance",
   "reports",
 ];

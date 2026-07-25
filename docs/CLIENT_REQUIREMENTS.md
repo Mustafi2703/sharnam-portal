@@ -5,7 +5,7 @@
 **Audience:** Sharnam office, site, client, contractor  
 **UI:** Modern Signal — Blue · Red · Yellow · White · Black  
 
-This document is the **requirements baseline** for module finalization. Snag list, project closure, and extra client-facing packs will be scoped in biweekly meetings (see sprint plan).
+This document is the **requirements baseline** for module finalization. Items marked **to be discussed** are scoped in biweekly meetings (see sprint plan + roadmap docs).
 
 ---
 
@@ -13,9 +13,9 @@ This document is the **requirements baseline** for module finalization. Snag lis
 
 | User | Who | Primary use |
 |------|-----|-------------|
-| **Sharnam Office** | PMC / admin / office | Master setup, modules on/off, directory, RFIs, Comms, Cost, Reports |
+| **Sharnam Office** | PMC / admin / office | Master setup, modules on/off, directory, RFIs, Comms, Cost, Finance, Reports |
 | **Site** | Site engineer / site staff | Day log, photos, checklist fills, QI/Safety, Field RFIs |
-| **Client** | Owner / client stakeholder | View published drawings, raise concerns, read DPR/WPR |
+| **Client** | Owner / client stakeholder | View published drawings, raise concerns, read DPR/WPR; create/upload Quality & Safety checklists where allowed |
 | **Contractor** | Main contractor / vendor | Fill assigned checklists / RFIs, photos, bills where allowed |
 
 Directory Master lists these four as **tools** (Office · Site · Client · Contractor) and assigns them onto each project.
@@ -31,25 +31,50 @@ Directory Master lists these four as **tools** (Office · Site · Client · Cont
 
 ---
 
-## 3. Module requirements
+## 3. Sheet data → live dashboards (required)
 
-### 3.1 Master (office)
+Every Excel register / dashboard the client shared must become a **portal dashboard or tool** (not a download-only file). Source sheets live under `templates/` and project root for reference; the product of record is the in-app view.
 
-| Tool | Requirement |
-|------|-------------|
-| Projects | Create / edit project, packages, enable/disable modules |
-| Directory | Four party tools: Office, Site, Client, Contractor |
-| PMC roster | Master people pool → assign into project |
-| CRM | Leads → project / client card |
-| HRM | Employees & vendors → directory |
-| Docs | Master / project document links |
-| Matrix seed | Meeting + RFI communication matrix |
+| Client sheet / pack | Lives as portal |
+|---------------------|-----------------|
+| Approval & GFC Drawing Log | Drawings → GFC register |
+| Communication Matrix (BPCL) | Comms → Matrix |
+| Quality Assurance Plan (QAP Week 50) | Quality → **QAP** tool (upload / update / view) |
+| NCR / Quality registers | Quality → QI / NCR dashboards |
+| Safety NCR | Safety → Safety dashboard |
+| Progress Overview, Planned vs Actual, Monthly Progress, Milestone, Hindrance | Progress → matching tools |
+| Cashflow Dashboard | Cost → Cashflow |
+| Payment Summary / invoice-style sheets | **Finance** → Invoice / RA / COP tools |
+| DPR / WPR packs | Reports → DPR / WPR |
+| Cube register & similar QA sheets | Quality checklists / registers |
 
-### 3.2 Home (project)
+Import / seed into the **pilot project only** during build; UAT uses the same dashboards with client data.
+
+Full map: [SHEET_TO_DASHBOARD.md](./SHEET_TO_DASHBOARD.md)
+
+---
+
+## 4. Module requirements
+
+### 4.1 Master (office)
+
+| Tool | Requirement | Status |
+|------|-------------|--------|
+| Projects | Create / edit project, packages, enable/disable modules | In build |
+| Directory | Four party tools: Office, Site, Client, Contractor | In build |
+| PMC roster | Master people pool → assign into project | In build |
+| Docs | Master / project document links | In build |
+| Matrix seed | Meeting + RFI communication matrix | In build |
+| **CRM** | **Lead management** (leads → project / client card) | **To be discussed** |
+| **HRM / HRMS** | Employees & vendors → directory | **To be discussed** |
+
+CRM and HRMS detail (fields, workflows, approvals) are **not finalized** in this 5-week build — see [ROADMAP_DISCUSS_LATER.md](./ROADMAP_DISCUSS_LATER.md).
+
+### 4.2 Home (project)
 
 Overview, Directory (4 types), Vendors, Documents (DMS).
 
-### 3.3 Drawings
+### 4.3 Drawings
 
 | Tool | Requirement |
 |------|-------------|
@@ -62,61 +87,110 @@ Overview, Directory (4 types), Vendors, Documents (DMS).
 | Ask (drawing RFI) | Clarification only (information) |
 | Submittals | **Out of scope for now** |
 
-### 3.4 Quality
+### 4.4 Quality
 
-QI dashboard (Procore-style), Checklist master, Site checklists, Request QI fill. Checklist + RFI always visible.
+| Tool | Requirement |
+|------|-------------|
+| Quality dashboard / QI | Procore-style quality inspections |
+| **Checklist master** | Create checklists; **upload Excel** checklist file; choose which checklist to use for fills / RFIs |
+| **Quality Assurance Plan (QAP)** | Upload and **update** the QAP (from client Week-50 sheet); keep it visible as a Quality tool |
+| Site checklists | Assign and fill site / QI forms |
+| Request QI fill | Matrix / vendor notified to complete |
+| NCR / assurance registers | Dashboards matching shared NCR sheets |
 
-### 3.5 Safety
+Checklist + RFI always visible. Office, Site, and **Client** (where enabled) can create / upload checklist Excel; Contractor fills assigned forms.
 
-Safety dashboard, Safety checklists, Safety RFI. Checklist + RFI always visible.
+### 4.5 Safety
 
-### 3.6 Progress
+| Tool | Requirement |
+|------|-------------|
+| Safety dashboard | Observations, incidents, open items (incl. Safety NCR style) |
+| **Safety checklists** | Create checklists; **upload Excel** checklist file; choose checklist for fills / RFIs |
+| Safety checklist RFI | Request fill |
 
-Separate tools: Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal.
+Same Excel create / upload / choose pattern as Quality.
 
-### 3.7 Field
+### 4.6 Progress
+
+Separate tools (each from shared sheets): Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal.
+
+### 4.7 Field
 
 Day log, Photos, Field RFIs.
 
-### 3.8 Comms
+### 4.8 Comms
 
 Matrix → Meeting → Agenda → MoM → Follow-up; Ask (PMC RFI); Email / Outlook.
 
-### 3.9 Cost
+### 4.9 Cost (design / measurement — not commercial finance)
 
-Monitoring, MB, BBS, Budget, Cashflow, Rates, COP/Bills, Structure upload.
+**Separate from Finance.** Cost is engineering cost control:
 
-### 3.10 Reports
+| Tool | Requirement |
+|------|-------------|
+| Monitoring | BOQ / monitoring desk |
+| MB sheets | Measurement books |
+| BBS | Bar bending schedule |
+| Budget WBS | Budget structure |
+| Cashflow | Cashflow dashboard (from shared Cashflow sheet) |
+| Rate difference | Rate variance |
+| Structure upload | Import BOQ structure |
 
-DPR / WPR packs from live registers.
+### 4.10 Finance (commercial tracking — **new module**)
 
-### 3.11 Later (discussed, not built yet)
+**Separate from Cost.** Finance tracks commercial documents and payments. Detail design later; **module shell + tools** are in the product now.
 
-| Module / pack | Status |
-|---------------|--------|
-| **Snag list** | Tab / module to be designed in biweekly finalization |
-| **Project closure** | Client-facing closure pack — to be scoped |
-| Extra client dashboards | To be discussed |
+| Tool | Requirement (baseline) |
+|------|------------------------|
+| Overview | Finance desk / open items |
+| **Invoice tracking** | Invoices raised / received / status |
+| **PO tracking** | Purchase orders vs delivery / billing |
+| **RA bill tracking** | Running account bills |
+| **COP tracking** | Certificate of payment / payment certificates |
+
+Deep fields, approvals, and Excel import for Finance will be finalized in biweekly meetings / post-Week-5 detail sessions. See [MODULE_FINANCE.md](./MODULE_FINANCE.md).
+
+### 4.11 Reports
+
+DPR / WPR packs from live registers (matching shared DPR / WPR sheets).
 
 ---
 
-## 4. Cross-cutting rules
+## 5. To be discussed (not full product yet)
+
+| Topic | Notes |
+|-------|--------|
+| **Snag list** | Module / tab — discuss in biweekly + UAT gate |
+| **Project closure** | Client-facing closure pack — discuss later |
+| **CRM / Lead management** | Scope, stages, handoff to project |
+| **HRMS** | Payroll vs roster vs attendance — discuss later |
+| **Finance detail** | Field-level invoice / PO / RA / COP after shell |
+| Extra client-facing widgets | Beyond ops dashboard |
+
+Tracker: [ROADMAP_DISCUSS_LATER.md](./ROADMAP_DISCUSS_LATER.md)
+
+---
+
+## 6. Cross-cutting rules
 
 1. **Project isolation** — all data scoped to one project; pilot uses **client’s real data** on one project only.  
 2. **Drawing Check Master** must be completed before upload / revision.  
 3. **RFI notifications** — create / respond → project email outbox (+ Outlook when Graph is live).  
-4. **Client** cannot upload drawings or edit cost.  
-5. **Microsoft 365** — OneDrive + Outlook connection tested per `docs/M365_SETUP.md` and sprint test checklist.
+4. **Client** cannot upload drawings or edit Cost / Finance commercial numbers unless Office enables a specific permission.  
+5. **Quality / Safety checklist Excel** — upload template → choose template → fill / request fill.  
+6. **QAP** must remain updatable and always available under Quality.  
+7. **Microsoft 365** — OneDrive + Outlook connection tested per `docs/M365_SETUP.md` and sprint test checklist.  
+8. **Sheet → dashboard** — shared Excel is the template; the portal dashboard is the working system of record.
 
 ---
 
-## 5. Acceptance (module finalization)
+## 7. Acceptance (module finalization)
 
 A module is “final” when:
 
 - Tools match this doc + `module_prompts/`  
 - Biweekly review sign-off recorded  
-- Pilot project flow verified with real data  
+- Pilot project flow verified with real data (including sheet-backed dashboards)  
 - Open critical bugs = 0 for that module  
 
 **UAT** starts only after **one month** of build + pilot (see sprint plan).

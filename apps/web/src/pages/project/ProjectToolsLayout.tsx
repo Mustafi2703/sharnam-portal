@@ -24,6 +24,7 @@ const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; ro
   { key: "field", label: "Field", path: "hub/field" },
   { key: "comms", label: "Comms", path: "hub/comms" },
   { key: "cost", label: "Cost", path: "hub/cost", roles: ["admin", "office", "employee"] },
+  { key: "finance", label: "Finance", path: "hub/finance", roles: ["admin", "office", "employee"] },
   { key: "reports", label: "Reports", path: "hub/reports" },
 ];
 
@@ -49,6 +50,8 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
   if (["diary", "photos"].includes(tool)) return "field";
   if (["comms", "email"].includes(tool)) return "comms";
   if (tool === "cost") return "cost";
+  if (tool === "finance") return "finance";
+  if (tool === "qap") return "quality";
   if (tool === "reports") return "reports";
   if (tool === "rfis") {
     const kind = new URLSearchParams(search).get("kind");
@@ -61,7 +64,7 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
     const ws = getActiveWorkspace();
-    if (ws && ws !== "progress" && ws !== "reports" && ws !== "cost") return ws;
+    if (ws && ws !== "progress" && ws !== "reports" && ws !== "cost" && ws !== "finance") return ws;
     return "quality";
   }
   if (["directory", "vendors"].includes(tool)) return "home";

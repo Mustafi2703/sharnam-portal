@@ -31,7 +31,13 @@ export default function ChecklistMasterPage() {
     requirePhotosMin: family === "QualityInspection" || family === "Safety" ? 3 : 0,
   });
   const [itemForm, setItemForm] = useState({ description: "", instruction: "", section: "General", requirePhoto: false });
-  const canEdit = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
+  const canEdit =
+    user?.role === "admin" ||
+    user?.role === "office" ||
+    user?.role === "employee" ||
+    ((family === "QualityInspection" || family === "Safety") && user?.role === "client");
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelBusy, setExcelBusy] = useState(false);
 
   const load = async () => {
     const list = await api<any[]>(`/api/checklist/templates?type=${family}`, { token });
@@ -112,8 +118,8 @@ export default function ChecklistMasterPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Checklist master"
-        title="Create & edit checklists"
-        subtitle="Separate catalogs for Drawing check, Site fills, Quality, and Safety. Add instructions and require photos on Quality/Safety forms."
+        title="Create, upload & choose checklists"
+        subtitle="Create manually or upload an Excel checklist (description / instruction / section). Choose a template, assign to the project, then request fill. Quality and Safety support Client create/upload."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -132,6 +138,56 @@ export default function ChecklistMasterPage() {
       </div>
 
       {msg && <p className="text-sm text-steel-muted">{msg}</p>}
+
+      {canEdit && (family === "QualityInspection" || family === "Safety") && (
+        <Card className="space-y-3">
+          <h3 className="font-display text-base">Upload Excel checklist</h3>
+          <p className="text-sm text-steel-muted">
+            Columns: <span className="font-mono text-xs">description</span>, optional{" "}
+            <span className="font-mono text-xs">instruction</span>, <span className="font-mono text-xs">section</span>,{" "}
+            <span className="font-mono text-xs">requirePhoto</span>. Then choose the new template below.
+          </p>
+          <form
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!excelFile) return;
+              setExcelBusy(true);
+              setMsg("");
+              try {
+                const fd = new FormData();
+                fd.append("file", excelFile);
+                fd.append("checklistType", family);
+                fd.append("name", excelFile.name.replace(/\.(xlsx|xls|csv)$/i, ""));
+                fd.append("category", "Excel import");
+                const t = await api<any>("/api/checklist/templates/import-excel", {
+                  method: "POST",
+                  token,
+                  body: fd,
+                });
+                setMsg(`Imported ${t.name} · ${t._count?.items ?? t.items?.length ?? 0} lines — select it to edit or assign.`);
+                setExcelFile(null);
+                setActiveId(t.id);
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Excel import failed");
+              } finally {
+                setExcelBusy(false);
+              }
+            }}
+          >
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+              className="text-sm"
+            />
+            <Button type="submit" disabled={!excelFile || excelBusy}>
+              {excelBusy ? "Importing…" : "Upload & create checklist"}
+            </Button>
+          </form>
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="space-y-3">

@@ -4,7 +4,8 @@
 **UAT:** Starts only **after one month** (Week 5 end → UAT window).  
 **Cadence:** **Biweekly meetings** for module finalization (end of Week 2 and Week 4; optional Week 5 gate).  
 **Pilot:** **One isolated project** loaded with client data to verify end-to-end flows.  
-**Microsoft:** Connection testing (OneDrive + Outlook) runs in parallel from Week 1.
+**Microsoft:** Connection testing (OneDrive + Outlook) runs in parallel from Week 1.  
+**Sheets:** Every shared Excel becomes a **portal dashboard** — see `docs/SHEET_TO_DASHBOARD.md`.
 
 ---
 
@@ -12,25 +13,26 @@
 
 | Week | Sprint focus | Biweekly? | Exit criteria |
 |------|--------------|-----------|---------------|
-| **1** | Shell, Master, Directory (4 users), Dashboard, Drawings checklist manager + popup fill | — | Login → dashboard → modules; Drawings upload gate works |
-| **2** | Quality + Safety + Comms + RFI notify; M365 dry-run | **Meeting 1 — finalize Master / Drawings / Home** | QI/Safety/Comms usable on pilot |
-| **3** | Progress + Field + Reports; pilot data load | — | Progress/Field/Reports on pilot project |
-| **4** | Cost + Outlook/OneDrive live test; harden notifications | **Meeting 2 — finalize Quality / Safety / Comms / Progress / Field** | Cost usable; Graph send/upload smoke test pass |
-| **5** | Snag/closure **design only**, bug bash, UAT pack | **Gate — ready for UAT** | UAT start checklist signed |
+| **1** | Shell, Master, Directory (4 users), Dashboard, Drawings checklist manager + popup fill, **Finance shell** | — | Login → dashboard → modules; Drawings upload gate; Finance tools visible |
+| **2** | Quality + Safety (Excel checklist upload + **QAP**) + Comms + RFI notify; M365 dry-run | **Meeting 1 — finalize Master / Drawings / Home** | QI/Safety/QAP/Comms usable on pilot |
+| **3** | Progress + Field + Reports; pilot sheet → dashboard load | — | Progress/Field/Reports match shared sheets on pilot |
+| **4** | Cost + Finance baseline registers + Outlook/OneDrive live test | **Meeting 2 — finalize Quality / Safety / Comms / Progress / Field** | Cost usable; Finance trackers stubbed; Graph smoke test pass |
+| **5** | Snag / closure / CRM / HRMS **design only**, bug bash, UAT pack | **Gate — ready for UAT** | UAT start checklist signed |
 
 **UAT (Month 2):** Client + Sharnam walk pilot project; formal defects → fix sprints (out of this 5-week build plan).
 
 ---
 
-## Week 1 — Foundation & Drawings
+## Week 1 — Foundation & Drawings & Finance shell
 
 **Build**
 
 - [ ] Ops dashboard (open RFIs, alerts, diary signals, QI/Safety Ask shortcuts)  
 - [ ] Module selection after dashboard  
-- [ ] Master as module with tools (Projects, Directory, Roster, CRM, HRM, toggles)  
+- [ ] Master as module with tools (Projects, Directory, Roster, toggles; CRM/HRM links only)  
 - [ ] Directory tools: **Office · Site · Client · Contractor**  
 - [ ] Drawings: Checklist manager; upload opens **new window** for check fill → then upload  
+- [ ] **Finance module shell** — Overview, Invoice, PO, RA bill, COP (detail later)  
 - [ ] Deploy to Render  
 
 **Pilot**
@@ -45,12 +47,13 @@
 
 ---
 
-## Week 2 — Quality, Safety, Comms + Meeting 1
+## Week 2 — Quality, Safety, QAP, Comms + Meeting 1
 
 **Build**
 
-- [ ] Quality: QI form, checklists, Request QI fill  
-- [ ] Safety: dashboard, checklists, Safety RFI  
+- [ ] Quality: QI form, **create checklist**, **upload Excel checklist**, choose checklist, Request QI fill  
+- [ ] Quality: **QAP** tool — upload / update Quality Assurance Plan (Week-50 sheet)  
+- [ ] Safety: dashboard, create / **upload Excel** checklists, Safety RFI  
 - [ ] Comms: Matrix → MoM flow; Ask (PMC RFI); Email settings  
 - [ ] RFI email notifications verified in outbox  
 
@@ -65,26 +68,27 @@
 
 ---
 
-## Week 3 — Progress, Field, Reports + pilot data
+## Week 3 — Progress, Field, Reports + pilot sheet data
 
 **Build**
 
-- [ ] Progress tools (Overview … Legal) clean Workday-style  
+- [ ] Progress tools (Overview … Legal) as dashboards matching shared Progress / Milestone / Hindrance sheets  
 - [ ] Field day log / photos / Field RFIs  
-- [ ] DPR / WPR packs  
+- [ ] DPR / WPR packs from shared report templates  
 
 **Pilot isolation**
 
 - [ ] Import **client Excel / register data** into the single pilot project only  
-- [ ] Verify: drawing upload → check fill window → publish → fill RFI → QI/Safety Ask  
+- [ ] Verify: drawing upload → check fill window → publish → fill RFI → QI/Safety Ask → QAP visible  
 
 ---
 
-## Week 4 — Cost + Microsoft live test + Meeting 2
+## Week 4 — Cost + Finance registers + Microsoft live test + Meeting 2
 
 **Build**
 
-- [ ] Cost tools (MB, BBS, Budget, Cashflow, Bills…)  
+- [ ] Cost tools (MB, BBS, Budget, Cashflow…) — **no** commercial invoice/PO (those stay in Finance)  
+- [ ] Finance: baseline registers for Invoice / PO / RA / COP (from Payment Summary style)  
 - [ ] Harden open-issue dashboard counts  
 
 **M365 live test**
@@ -95,8 +99,9 @@
 
 **Biweekly Meeting 2 (finalize)**
 
-- Quality, Safety, Comms, Progress, Field, Reports  
-- Cost interim review  
+- Quality (incl. Excel checklists + QAP), Safety, Comms, Progress, Field, Reports  
+- Cost + Finance interim review  
+- Confirm CRM / HRMS / Snag / Closure stay on discuss-later list  
 
 ---
 
@@ -112,12 +117,16 @@
 
 - [ ] **Snag list** module outline  
 - [ ] **Project closure** + client-facing pack outline  
-- [ ] Capture decisions in `docs/ROADMAP_SNAG_CLOSURE.md`  
+- [ ] **CRM lead management** scope  
+- [ ] **HRMS** scope  
+- [ ] Finance field-level detail (if not done in Week 4)  
+- [ ] Capture decisions in `docs/ROADMAP_DISCUSS_LATER.md`  
 
 **Gate**
 
 - [ ] All critical Week 1–4 items green  
 - [ ] M365 smoke tests signed  
+- [ ] Sheet → dashboard map covered for pilot  
 - [ ] **UAT may start** (Month 2)  
 
 ---
@@ -129,6 +138,7 @@
 3. Punch list (P0 / P1 / P2)  
 4. Sign-off: **Final** / **Conditional** / **Rework**  
 5. Next sprint priorities  
+6. Discuss-later items: Snag · Closure · CRM · HRMS · Finance detail  
 
 ---
 
@@ -156,11 +166,14 @@ Details: `docs/M365_SETUP.md`
 
 ---
 
-## Out of this 5-week build
+## Out of this 5-week full build
 
 - Full Snag list product  
 - Full Project closure workflow  
+- Full CRM lead pipeline  
+- Full HRMS  
+- Finance deep approvals / accounting integrations  
 - Extra client marketing dashboards  
 - Submittals (explicitly deferred)  
 
-These are tracked for post-UAT / Month 2+.
+Tracked in `docs/ROADMAP_DISCUSS_LATER.md` for post-UAT / Month 2+.
