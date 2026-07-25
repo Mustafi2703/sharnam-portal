@@ -15,7 +15,7 @@ This document is the **requirements baseline** for module finalization. Items ma
 |------|-----|-------------|
 | **Sharnam Office** | PMC / admin / office | Master setup, modules on/off, directory, RFIs, Comms, Cost, Finance, Reports |
 | **Site** | Site engineer / site staff | Day log, photos, checklist fills, QI/Safety, Field RFIs |
-| **Client** | Owner / client stakeholder | View published drawings, raise concerns, read DPR/WPR; create/upload Quality & Safety checklists where allowed |
+| Client | Owner / client stakeholder | Civil-side view: schedule / S-curve / progress, procurement, generated docs & PDFs, published drawings, concerns, DPR/WPR; QI/Safety checklist create where allowed |
 | **Contractor** | Main contractor / vendor | Fill assigned checklists / RFIs, photos, bills where allowed |
 
 Directory Master lists these four as **tools** (Office · Site · Client · Contractor) and assigns them onto each project.
@@ -47,10 +47,32 @@ Every Excel register / dashboard the client shared must become a **portal dashbo
 | Payment Summary / invoice-style sheets | **Finance** → Invoice / RA / COP tools |
 | DPR / WPR packs | Reports → DPR / WPR |
 | Cube register & similar QA sheets | Quality checklists / registers |
+| **Project summary schedule** (file client will share) | Progress → **Project summary schedule** + client civil view |
+| **MS Project** file / export | Progress → **S-curve** + **MS Project progress** |
+| **Procurement plan** | Progress or Field → **Procurement plan** (client-visible) |
+| Custom meeting sheet templates | Comms → **Meeting sheet maker** |
 
 Import / seed into the **pilot project only** during build; UAT uses the same dashboards with client data.
 
 Full map: [SHEET_TO_DASHBOARD.md](./SHEET_TO_DASHBOARD.md)
+
+---
+
+## 3A. Client civil-side requirements (understood from client)
+
+These must be **visible to the Client** on the civil / project side (read-first; Office uploads / syncs).
+
+| # | Requirement | Where it lives | Notes |
+|---|-------------|----------------|-------|
+| 1 | **S-curve from MS Project file** | Progress → Planned vs Actual / **S-curve** | Built from MS Project % complete / baseline (Graph sync if licensed) **or** from shared Project export / summary schedule until sync is live. See `docs/M365_SETUP.md` § D. |
+| 2 | **Project summary schedule** | Progress → **Summary schedule** | Client will **share the file**; portal stores it and shows schedule summary on client civil view. |
+| 3 | **MS Project progress** | Progress → **MS Project progress** | Live or imported progress from MS Project (tasks / % / milestones) shown to Client. |
+| 4 | **Document generations → shown to Client (civil side)** | Reports / Comms / DMS → **Generated documents** | Agenda, MoM, DPR/WPR, meeting sheets, and other generated packs must appear on the **client civil** surface — not Office-only. |
+| 5 | **Procurement plan** | Progress (or dedicated tool) → **Procurement plan** | Upload / maintain procurement plan; Client can view status. |
+| 6 | **PDF upload + in-app view** | DMS / module attachments | **PDF upload supported**; uploaded PDFs must be **viewable in the portal** (browser viewer). Applies to schedule PDFs, procurement PDFs, generated packs, and at least the key civil packs below. |
+| 7 | **Three key PDF packs (viewable)** | Client civil desk | At minimum these three must upload + view: (1) **Project summary schedule PDF**, (2) **Procurement plan PDF**, (3) **Generated civil / meeting document PDF** (e.g. MoM or progress pack). |
+
+Detail design of layouts can refine in biweekly meetings; this list is the **requirements baseline** the client has already understood.
 
 ---
 
@@ -112,7 +134,18 @@ Same Excel create / upload / choose pattern as Quality.
 
 ### 4.6 Progress
 
-Separate tools (each from shared sheets): Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal.
+Separate tools (each from shared sheets / MS Project):
+
+| Tool | Requirement |
+|------|-------------|
+| Overview | Progress KPIs |
+| Milestones | Milestone register |
+| Planned vs Actual / **S-curve** | From **MS Project** file/sync or Excel seed |
+| **Project summary schedule** | File client shares → viewable on portal + PDF |
+| **MS Project progress** | Task / % progress from MS Project (client-visible) |
+| **Procurement plan** | Plan register + PDF view for Client |
+| Monthly | Month-by-month view |
+| Hindrance / Risk / Legal | Matching shared sheets |
 
 ### 4.7 Field
 
@@ -120,7 +153,14 @@ Day log, Photos, Field RFIs.
 
 ### 4.8 Comms
 
-Matrix → Meeting → Agenda → MoM → Follow-up; Ask (PMC RFI); Email / Outlook.
+| Tool | Requirement |
+|------|-------------|
+| Matrix | Meeting + RFI parties |
+| Meeting → Agenda → MoM → Follow-up | Standard flow |
+| **Custom meeting sheet maker** | **Module / tool to create custom meeting sheet templates** (columns, sections, party blocks) and use them when scheduling meetings — not a single fixed form only |
+| Ask (PMC RFI) | Classic RFI |
+| Email / Outlook | Outbox + Graph when live |
+| Generated docs → Client | MoM / agenda / meeting PDFs visible on **client civil** side |
 
 ### 4.9 Cost (design / measurement — not commercial finance)
 
@@ -152,7 +192,15 @@ Deep fields, approvals, and Excel import for Finance will be finalized in biweek
 
 ### 4.11 Reports
 
-DPR / WPR packs from live registers (matching shared DPR / WPR sheets).
+DPR / WPR packs from live registers (matching shared DPR / WPR sheets). **Generated report PDFs** must be viewable and shown on the **client civil** side.
+
+### 4.12 Documents / PDF (cross-module)
+
+| Requirement | Detail |
+|-------------|--------|
+| PDF upload | Supported on DMS and relevant module attachments |
+| In-app PDF view | Uploaded PDFs open in a **viewer** (not download-only) |
+| Three civil packs | Summary schedule · Procurement plan · Generated civil/meeting PDF — all upload + view |
 
 ---
 
@@ -179,8 +227,11 @@ Tracker: [ROADMAP_DISCUSS_LATER.md](./ROADMAP_DISCUSS_LATER.md)
 4. **Client** cannot upload drawings or edit Cost / Finance commercial numbers unless Office enables a specific permission.  
 5. **Quality / Safety checklist Excel** — upload template → choose template → fill / request fill.  
 6. **QAP** must remain updatable and always available under Quality.  
-7. **Microsoft 365** — OneDrive + Outlook connection tested per `docs/M365_SETUP.md` and sprint test checklist.  
-8. **Sheet → dashboard** — shared Excel is the template; the portal dashboard is the working system of record.
+7. **Microsoft 365** — OneDrive + Outlook + **MS Project (S-curve / progress)** tested per `docs/M365_SETUP.md` and sprint test checklist.  
+8. **Sheet → dashboard** — shared Excel is the template; the portal dashboard is the working system of record.  
+9. **Custom meeting sheets** — meeting sheet maker templates drive Comms meetings.  
+10. **Client civil visibility** — S-curve, summary schedule, MS Project progress, procurement plan, and generated documents/PDFs are shown to Client.  
+11. **PDF viewable** — uploads support PDF and must be viewable in-portal.
 
 ---
 

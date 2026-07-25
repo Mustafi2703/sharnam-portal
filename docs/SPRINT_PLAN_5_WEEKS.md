@@ -15,8 +15,8 @@
 |------|--------------|-----------|---------------|
 | **1** | Shell, Master, Directory (4 users), Dashboard, Drawings checklist manager + popup fill, **Finance shell** | — | Login → dashboard → modules; Drawings upload gate; Finance tools visible |
 | **2** | Quality + Safety (Excel checklist upload + **QAP**) + Comms + RFI notify; M365 dry-run | **Meeting 1 — finalize Master / Drawings / Home** | QI/Safety/QAP/Comms usable on pilot |
-| **3** | Progress + Field + Reports; pilot sheet → dashboard load | — | Progress/Field/Reports match shared sheets on pilot |
-| **4** | Cost + Finance baseline registers + Outlook/OneDrive live test | **Meeting 2 — finalize Quality / Safety / Comms / Progress / Field** | Cost usable; Finance trackers stubbed; Graph smoke test pass |
+| **3** | Progress (incl. S-curve / MS Project / summary schedule / procurement) + Field + Reports; pilot sheet → dashboard load | — | Progress/Field/Reports + client civil views on pilot |
+| **4** | Cost + Finance baseline + custom meeting sheet maker + PDF viewer + Outlook/OneDrive live test | **Meeting 2 — finalize Quality / Safety / Comms / Progress / Field** | Cost usable; meeting maker; PDF view; Graph smoke test pass |
 | **5** | Snag / closure / CRM / HRMS **design only**, bug bash, UAT pack | **Gate — ready for UAT** | UAT start checklist signed |
 
 **UAT (Month 2):** Client + Sharnam walk pilot project; formal defects → fix sprints (out of this 5-week build plan).
@@ -73,35 +73,46 @@
 **Build**
 
 - [ ] Progress tools (Overview … Legal) as dashboards matching shared Progress / Milestone / Hindrance sheets  
+- [ ] **S-curve** from MS Project file / sync (or Excel fallback) — **client civil visible**  
+- [ ] **Project summary schedule** upload (file client shares) + view  
+- [ ] **MS Project progress** view for Client  
+- [ ] **Procurement plan** tool + Client view  
 - [ ] Field day log / photos / Field RFIs  
 - [ ] DPR / WPR packs from shared report templates  
+- [ ] **Generated documents** surface on client civil side  
 
 **Pilot isolation**
 
 - [ ] Import **client Excel / register data** into the single pilot project only  
+- [ ] Client shares **project summary schedule** file into Pilot  
 - [ ] Verify: drawing upload → check fill window → publish → fill RFI → QI/Safety Ask → QAP visible  
+- [ ] Verify Client can open S-curve / schedule / procurement / generated docs  
 
 ---
 
-## Week 4 — Cost + Finance registers + Microsoft live test + Meeting 2
+## Week 4 — Cost + Finance + meeting sheet maker + PDF + Microsoft live test + Meeting 2
 
 **Build**
 
 - [ ] Cost tools (MB, BBS, Budget, Cashflow…) — **no** commercial invoice/PO (those stay in Finance)  
 - [ ] Finance: baseline registers for Invoice / PO / RA / COP (from Payment Summary style)  
+- [ ] **Custom meeting sheet maker** (Comms) — create templates → use on meetings  
+- [ ] **PDF upload + in-app viewer** for civil packs (summary schedule, procurement, generated MoM/progress)  
 - [ ] Harden open-issue dashboard counts  
 
 **M365 live test**
 
 - [ ] OneDrive / SharePoint: upload one drawing + one DMS file on pilot  
 - [ ] Outlook: send one RFI notice + one publish notice to test mailbox  
+- [ ] **MS Project:** sync or import % for S-curve / progress (or Excel fallback recorded)  
 - [ ] Record pass/fail in test log below  
 
 **Biweekly Meeting 2 (finalize)**
 
-- Quality (incl. Excel checklists + QAP), Safety, Comms, Progress, Field, Reports  
+- Quality (incl. Excel checklists + QAP), Safety, Comms (incl. meeting sheet maker), Progress (S-curve / schedule / procurement), Field, Reports  
 - Cost + Finance interim review  
 - Confirm CRM / HRMS / Snag / Closure stay on discuss-later list  
+- Confirm client civil PDF / document generation visibility 
 
 ---
 
@@ -152,6 +163,8 @@
 | 4 | DMS file sync | | | ☐ | |
 | 5 | Outlook RFI mail | | | ☐ | Test mailbox |
 | 6 | Outlook publish notice | | | ☐ | |
+| 7 | MS Project sync / import → S-curve | | | ☐ | Or Excel fallback |
+| 8 | Client civil: schedule + procurement + PDF view | | | ☐ | Pilot |
 
 Details: `docs/M365_SETUP.md`
 

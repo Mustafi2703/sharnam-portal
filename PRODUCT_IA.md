@@ -25,12 +25,14 @@ Aligned with `docs/CLIENT_REQUIREMENTS.md` and `module_prompts/`. Sheet → dash
 | **Drawings** | GFC, Checklist manager, DMS, Coordination, Request checklist fill, Ask | No Submittals. Check window before upload. |
 | **Quality** | QI dashboard, Checklist master (Excel upload + choose), **QAP**, Site checklists, Request QI fill | Checklist + RFI + QAP |
 | **Safety** | Dashboard, Safety checklists (Excel upload + choose), Safety RFI | Checklist + RFI |
-| **Progress** | Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal | One tool per shared sheet |
+| **Progress** | Overview, Milestones, Planned vs Actual / **S-curve**, **Summary schedule**, **MS Project progress**, **Procurement plan**, Monthly, Hindrance, Risk, Legal | Client civil visible for schedule / S-curve / procurement |
 | **Field** | Day log, Photos, Field RFIs | |
-| **Comms** | Matrix · MoM, Ask (PMC RFI), Email / Outlook | |
+| **Comms** | Matrix · MoM, **Custom meeting sheet maker**, Ask (PMC RFI), Email / Outlook | Generated docs → Client |
 | **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, Structure | Engineering cost — **not** commercial finance |
 | **Finance** | Overview, Invoice, PO, RA bill, COP | **Separate from Cost**; shell now, detail later |
-| **Reports** | DPR / WPR packs | |
+| **Reports** | DPR / WPR packs | PDFs viewable on client civil side |
+
+**PDF:** upload supported; in-app **viewable** (min. summary schedule, procurement plan, generated civil/meeting PDF).
 
 **Discuss later:** Snag list · Project closure · CRM detail · HRMS detail · Finance field-level. See `docs/ROADMAP_DISCUSS_LATER.md`.
 

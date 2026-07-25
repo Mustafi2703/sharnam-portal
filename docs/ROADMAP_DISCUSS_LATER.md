@@ -74,12 +74,25 @@ Detail columns / approvals / Excel import — see [MODULE_FINANCE.md](./MODULE_F
 
 ---
 
-## 6. Client-facing extras (future)
+## 6. Client civil-side extras (baseline understood — refine in meetings)
+
+Already in requirements (`CLIENT_REQUIREMENTS.md` § 3A). Capture layout decisions here:
+
+| Topic | Decision |
+|-------|----------|
+| Custom meeting sheet maker fields | |
+| S-curve period (week / month) | |
+| Where procurement plan sits (Progress vs own module) | |
+| Which generated docs auto-publish to Client | |
+| PDF viewer (inline vs new tab) | |
+
+---
+
+## 7. Client-facing extras (future)
 
 | Topic | Decision |
 |-------|----------|
 | Client home widgets | |
-| Read-only dashboards | |
 | Concern SLA | |
 
 ---

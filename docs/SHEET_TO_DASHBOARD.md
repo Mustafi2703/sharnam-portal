@@ -20,10 +20,17 @@ Every shared Excel pack becomes an **in-app dashboard or tool**. Files under `te
 | 14 | WPR File | Reports | WPR pack |
 | 15 | SPDC Cube Register | Quality | Checklist / cube register (QI library) |
 | 16 | Final Index | Master / DMS | Document index |
+| 17 | **MS Project** file / export | Progress | **S-curve** + **MS Project progress** (client civil) |
+| 18 | **Project summary schedule** (client shares) | Progress | Summary schedule tool + PDF viewer |
+| 19 | **Procurement plan** | Progress | Procurement plan + PDF viewer |
+| 20 | Custom meeting sheet templates | Comms | **Meeting sheet maker** |
+| 21 | Generated Agenda / MoM / packs | Comms / Reports | Shown on **client civil** side + PDF view |
 
 ## Rules
 
 1. Do not leave critical registers as “Excel only” after pilot.  
 2. Pilot import uses **one project** only.  
 3. Quality / Safety checklist Excel uploads create **selectable** templates in Checklist master.  
-4. QAP is a first-class Quality tool and must stay updateable.
+4. QAP is a first-class Quality tool and must stay updateable.  
+5. Client civil side must see S-curve, summary schedule, MS Project progress, procurement, and generated documents.  
+6. PDF uploads must be **viewable** in-app (minimum three civil packs: summary schedule, procurement plan, generated civil/meeting PDF).
