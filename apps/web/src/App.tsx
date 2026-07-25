@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
 import MasterModulePage from "./pages/MasterModulePage";
-import { LoginHubPage, PortalLoginPage, consumeLoginLanding } from "./pages/PortalLogins";
+import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ChecklistPage from "./pages/ChecklistPage";
@@ -32,6 +32,7 @@ import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
 import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import ModuleHubPage from "./pages/project/ModuleHubPage";
+import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
 import { applyThemeOption } from "./themes";
 
 applyThemeOption("ui-2");
@@ -50,30 +51,12 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function HomeRedirect() {
-  const { user } = useAuth();
-  if (user?.role === "admin" || user?.role === "office" || user?.portal === "office" || user?.portal === "admin") {
-    try {
-      const landing = localStorage.getItem("sharnam_login_landing");
-      if (landing) return <Navigate to={consumeLoginLanding()} replace />;
-    } catch {
-      /* ignore */
-    }
-    return <Navigate to="/master" replace />;
-  }
-  if (
-    user?.portal === "site" ||
-    user?.role === "site_employee" ||
-    user?.role === "vendor"
-  ) {
-    return <Navigate to={consumeLoginLanding()} replace />;
-  }
-  return <Navigate to={consumeLoginLanding()} replace />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 export default function App() {
   return (
     <Routes>
-      {/* Locked to Graphite Procore (ui-2) */}
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/options" element={<Navigate to="/login" replace />} />
       <Route path="/themes" element={<Navigate to="/workspace" replace />} />
@@ -99,6 +82,14 @@ export default function App() {
           </Protected>
         }
       />
+      <Route
+        path="/projects/:id/drawings/precheck"
+        element={
+          <Protected>
+            <DrawingPreCheckPage />
+          </Protected>
+        }
+      />
 
       <Route
         path="/*"
@@ -107,10 +98,10 @@ export default function App() {
             <AppShell>
               <Routes>
                 <Route path="/app" element={<HomeRedirect />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/master" element={<MasterModulePage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
                   <Route path="hub/drawings" element={<ModuleHubPage moduleKey="drawings" />} />

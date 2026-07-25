@@ -25,25 +25,14 @@ export type ModuleToolItem = {
 
 /** Sub-tools for hub cards + horizontal strip (no left rail) */
 export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
-  home: [
-    { to: "", label: "Overview", end: true, blurb: "Project desk and module shortcuts." },
-    { to: "directory", label: "Directory", blurb: "People assigned to this project." },
-    {
-      to: "vendors",
-      label: "Vendors",
-      roles: ["admin", "office", "site_employee", "employee", "vendor"],
-      blurb: "Contractors and vendors on the job.",
-    },
-    { to: "dms", label: "Documents (DMS)", blurb: "Project folders and files." },
-  ],
   drawings: [
     { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish." },
     {
       to: "checklist-master",
-      label: "Drawing check master",
+      label: "Checklist manager",
       query: "family=DrawingCheck",
       roles: ["admin", "office", "employee"],
-      blurb: "Linked review form — fill while uploading.",
+      blurb: "Manage Drawing Check Master templates; upload opens fill in a new window.",
     },
     { to: "dms", label: "Documents (DMS)", blurb: "Drawing folders." },
     {
@@ -57,7 +46,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Request checklist fill",
       query: "kind=DrawingChecklist",
       roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
-      blurb: "Ask matrix / vendor to fill a site checklist.",
+      blurb: "Ask matrix / contractor to fill a site checklist.",
     },
     {
       to: "rfis",
@@ -66,6 +55,20 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
       blurb: "Raise clarification on a drawing — information only.",
     },
+  ],
+  home: [
+    { to: "", label: "Overview", end: true, blurb: "Project desk and module shortcuts." },
+    { to: "directory", label: "Directory · Office", query: "party=PMC", blurb: "Sharnam Office / PMC people." },
+    { to: "directory", label: "Directory · Site", query: "party=Site", blurb: "Site staff on this project." },
+    { to: "directory", label: "Directory · Client", query: "party=Client", blurb: "Client contacts." },
+    { to: "directory", label: "Directory · Contractor", query: "party=Contractor", blurb: "Contractors on the job." },
+    {
+      to: "vendors",
+      label: "Vendors",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Vendor assignments.",
+    },
+    { to: "dms", label: "Documents (DMS)", blurb: "Project folders and files." },
   ],
   quality: [
     { to: "inspections", label: "Quality dashboard / QI", blurb: "Procore-style quality inspections." },

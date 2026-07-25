@@ -157,12 +157,19 @@ export function ToolRightPanel({
         if (canUpload) {
           actions.push(
             {
-              label: "Upload (check master first)",
-              onClick: () => (onUploadDrawing ? onUploadDrawing() : navigate(`/projects/${ctx.projectId}/drawings?upload=1`)),
+              label: "Upload drawing",
+              onClick: () =>
+                onUploadDrawing
+                  ? onUploadDrawing()
+                  : window.open(
+                      `/projects/${ctx.projectId}/drawings/precheck`,
+                      "sharnam-drawing-precheck",
+                      "noopener,noreferrer,width=1100,height=900"
+                    ),
               primary: true,
             },
             {
-              label: "Drawing check master",
+              label: "Checklist manager",
               onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=DrawingCheck`),
               secondary: true,
             },

@@ -5,7 +5,6 @@ import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
 import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { UploadModal } from "../../components/UploadModal";
-import { DrawingPreCheckPanel } from "../../components/DrawingPreCheckPanel";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const REV_SLOTS = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
@@ -78,13 +77,64 @@ export default function DrawingsPage() {
     void load();
   }, [id, token]);
 
+  function startUploadFlow() {
+    if (!id) return;
+    setFormError("");
+    setUnlockToken(null);
+    setShowRegister(false);
+    setMsg("Complete Drawing Check Master in the new window — upload opens when it unlocks.");
+    window.open(
+      `/projects/${id}/drawings/precheck`,
+      "sharnam-drawing-precheck",
+      "noopener,noreferrer,width=1100,height=900"
+    );
+  }
+
   useEffect(() => {
-    if (searchParams.get("upload") === "1" && canUpload) {
+    if (!id || !canUpload) return;
+
+    function applyUnlock(tok: string) {
+      if (!tok) return;
+      setUnlockToken(tok);
       setShowRegister(true);
+      setRevUnlockToken(tok);
       setFormError("");
+      setMsg("Checklist unlocked — finish the upload form.");
+      try {
+        localStorage.removeItem(`sharnam_drawing_unlock_${id}`);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function onMsg(ev: MessageEvent) {
+      if (ev.origin !== window.location.origin) return;
+      const data = ev.data;
+      if (data?.type === "sharnam-drawing-unlock" && data.projectId === id && data.unlockToken) {
+        applyUnlock(String(data.unlockToken));
+      }
+    }
+
+    window.addEventListener("message", onMsg);
+    const poll = window.setInterval(() => {
+      try {
+        const tok = localStorage.getItem(`sharnam_drawing_unlock_${id}`);
+        if (tok) applyUnlock(tok);
+      } catch {
+        /* ignore */
+      }
+    }, 1200);
+
+    if (searchParams.get("upload") === "1") {
+      startUploadFlow();
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, canUpload, setSearchParams]);
+
+    return () => {
+      window.removeEventListener("message", onMsg);
+      window.clearInterval(poll);
+    };
+  }, [id, canUpload, searchParams, setSearchParams]);
 
   const disciplines = ["All", ...Array.from(new Set(drawings.map((d) => d.discipline)))];
   const filtered = useMemo(
@@ -243,6 +293,7 @@ export default function DrawingsPage() {
   }
 
   function openUploadRev(d: any) {
+    if (!id) return;
     const next = `R${Math.min(d.revisions?.length || 0, 5)}`;
     setUploadForId(d.id);
     setRevUnlockToken(null);
@@ -256,6 +307,12 @@ export default function DrawingsPage() {
       publish: true,
     });
     setRevFile(null);
+    setMsg("Complete Drawing Check Master in the new window — revision upload unlocks after.");
+    window.open(
+      `/projects/${id}/drawings/precheck`,
+      "sharnam-drawing-precheck",
+      "noopener,noreferrer,width=1100,height=900"
+    );
   }
 
   const viewerKind = fileKind(viewer?.fileName || viewer?.fileUrl);
@@ -268,21 +325,20 @@ export default function DrawingsPage() {
         subtitle={
           clientOnly
             ? "View published sheets and revision dates. Clients cannot upload."
-            : "Upload opens Drawing Check Master (same fill pattern as Quality/Safety). Complete the linked checklist, then upload the sheet. Raise Ask (drawing RFI) for clarifications, or Request checklist fill for matrix/vendor."
+            : "Upload opens Drawing Check Master in a new window (like QI/Safety fill). When complete, return here to upload the sheet. Manage templates in Checklist manager."
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={() => void exportCsv()}>
               Export GFC CSV
             </Button>
+            <Link to={`/projects/${id}/checklist-master?family=DrawingCheck`}>
+              <Button type="button" variant="secondary">
+                Checklist manager
+              </Button>
+            </Link>
             {canUpload && (
-              <Button
-                type="button"
-                onClick={() => {
-                  setShowRegister(true);
-                  setFormError("");
-                }}
-              >
+              <Button type="button" onClick={() => startUploadFlow()}>
                 Upload drawing
               </Button>
             )}
@@ -382,16 +438,16 @@ export default function DrawingsPage() {
         </Card>
       )}
 
-      {canUpload && showRegister && !unlockToken && id && (
-        <div className="fixed inset-0 z-[70] bg-ink/45 flex items-center justify-center p-3">
-          <div className="w-full max-w-2xl">
-            <DrawingPreCheckPanel
-              projectId={id}
-              onCancel={closeRegister}
-              onUnlocked={(tok) => setUnlockToken(tok)}
-            />
-          </div>
-        </div>
+      {canUpload && showRegister && !unlockToken && (
+        <Card className="border-warn/40 bg-amber-50/50">
+          <div className="font-semibold text-ink">Waiting for Drawing Check Master</div>
+          <p className="text-sm text-steel-muted mt-1">
+            Finish the checklist in the popup window. If it closed, open it again.
+          </p>
+          <Button type="button" className="mt-3" onClick={() => startUploadFlow()}>
+            Re-open checklist window
+          </Button>
+        </Card>
       )}
 
       {canUpload && (
@@ -656,20 +712,28 @@ export default function DrawingsPage() {
         </div>
       </Card>
 
-      {canUpload && uploadForId && uploadTarget && !revUnlockToken && id && (
-        <div className="fixed inset-0 z-[70] bg-ink/45 flex items-center justify-center p-3">
-          <div className="w-full max-w-2xl">
-            <DrawingPreCheckPanel
-              projectId={id}
-              onCancel={() => {
-                setUploadForId(null);
-                setRevFile(null);
-                setFormError("");
-              }}
-              onUnlocked={(tok) => setRevUnlockToken(tok)}
-            />
-          </div>
-        </div>
+      {canUpload && uploadForId && uploadTarget && !revUnlockToken && (
+        <Card className="border-brand/40 bg-brand-soft/40">
+          <h3 className="font-semibold text-sm">Waiting for Drawing Check Master</h3>
+          <p className="text-sm text-steel-muted mt-1">
+            Fill the checklist in the popup window for revision of {uploadTarget.drawingNumber}. When it unlocks, the upload form opens here.
+          </p>
+          <Button type="button" className="mt-3" onClick={() => openUploadRev(uploadTarget)}>
+            Re-open check window
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-3 ml-2"
+            onClick={() => {
+              setUploadForId(null);
+              setRevFile(null);
+              setFormError("");
+            }}
+          >
+            Cancel
+          </Button>
+        </Card>
       )}
 
       {canUpload && uploadForId && uploadTarget && (
