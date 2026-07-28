@@ -1,12 +1,11 @@
-import { NavLink, Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { NavLink, Outlet, useParams, Link, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
 import { ToolRightPanel } from "../../components/ToolRightPanel";
-import type { RoleKey } from "@sharnam/shared";
+import { ModuleIcon, type ModuleIconKey } from "../../components/icons";
 import {
-  DEFAULT_ENABLED_MODULES,
   getActiveWorkspace,
   setActiveWorkspace,
   MODULE_TOOLS,
@@ -15,7 +14,7 @@ import {
   type ModuleToolItem,
 } from "../../workspaces";
 
-const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; roles?: RoleKey[] }[] = [
+const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string }[] = [
   { key: "home", label: "Project home", path: "" },
   { key: "drawings", label: "Drawings", path: "hub/drawings" },
   { key: "quality", label: "Quality", path: "hub/quality" },
@@ -23,8 +22,8 @@ const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; ro
   { key: "progress", label: "Progress", path: "hub/progress" },
   { key: "field", label: "Field", path: "hub/field" },
   { key: "comms", label: "Comms", path: "hub/comms" },
-  { key: "cost", label: "Cost", path: "hub/cost", roles: ["admin", "office", "employee"] },
-  { key: "finance", label: "Finance", path: "hub/finance", roles: ["admin", "office", "employee"] },
+  { key: "cost", label: "Cost", path: "hub/cost" },
+  { key: "finance", label: "Finance", path: "hub/finance" },
   { key: "reports", label: "Reports", path: "hub/reports" },
 ];
 
@@ -83,17 +82,6 @@ function toolFromPath(pathname: string) {
   return seg[2] || "";
 }
 
-function parseEnabled(raw?: string | null): WorkspaceKey[] {
-  try {
-    if (raw == null || raw === "") return DEFAULT_ENABLED_MODULES;
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return arr as WorkspaceKey[];
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_ENABLED_MODULES;
-}
-
 function isToolActive(t: ModuleToolItem, pathname: string, search: string, projectId: string | undefined): boolean {
   if (!projectId) return false;
   if (pathname.includes("/hub/")) return false;
@@ -118,35 +106,22 @@ function isToolActive(t: ModuleToolItem, pathname: string, search: string, proje
 export default function ProjectToolsLayout() {
   const { id } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
   const [rightOpen, setRightOpen] = useState(true);
   const [openRfis, setOpenRfis] = useState(0);
-  const [switcherOpen, setSwitcherOpen] = useState(false);
-  const switcherRef = useRef<HTMLDivElement>(null);
 
   const activeMod = moduleFromPath(location.pathname, location.search);
   const activeTool = toolFromPath(location.pathname);
-  const enabled = useMemo(() => parseEnabled(project?.enabledModules), [project?.enabledModules]);
 
   const stripItems = useMemo(() => {
     const items = MODULE_TOOLS[activeMod] || MODULE_TOOLS.home;
     return items.filter((t) => !t.roles || !user?.role || t.roles.includes(user.role));
   }, [activeMod, user?.role]);
 
-  const topMods = useMemo(
-    () =>
-      TOP_MODULES.filter((m) => {
-        if (m.roles && user?.role && !m.roles.includes(user.role)) return false;
-        if (m.key === "home") return true;
-        return enabled.includes(m.key as WorkspaceKey);
-      }),
-    [user?.role, enabled]
-  );
-
   const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
+  const accent = activeMod !== "home" ? MODULE_META[activeMod as WorkspaceKey]?.accent : "#0f766e";
   const toolLabel =
     stripItems.find((t) => isToolActive(t, location.pathname, location.search, id))?.label ||
     (activeTool === "hub" ? `${moduleLabel} hub` : moduleLabel);
@@ -169,91 +144,24 @@ export default function ProjectToolsLayout() {
     if (activeMod !== "home") setActiveWorkspace(activeMod as WorkspaceKey);
   }, [activeMod]);
 
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (!switcherRef.current?.contains(e.target as Node)) setSwitcherOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
-
-  function switchModule(m: (typeof TOP_MODULES)[number]) {
-    if (!id) return;
-    if (m.key === "home") setActiveWorkspace(null);
-    else setActiveWorkspace(m.key as WorkspaceKey);
-    setSwitcherOpen(false);
-    navigate(m.path ? `/projects/${id}/${m.path}` : `/projects/${id}`);
-  }
-
   return (
-    <div className="min-h-[calc(100vh-var(--ui-chrome-h,56px))] w-full">
-      <div className="bg-paper border-b border-line sticky top-[var(--ui-nav-h,56px)] z-20">
-        <div className="px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-3 justify-between">
-          <div className="min-w-0 flex flex-wrap items-center gap-3">
+    <div className="min-h-[calc(100vh-var(--ui-chrome-h,48px))] w-full">
+      <div className="bg-paper border-b border-line sticky top-[var(--ui-nav-h,48px)] z-20">
+        <div className="px-3 sm:px-5 py-2.5 flex flex-wrap items-center gap-3 justify-between">
+          <div className="min-w-0 flex items-center gap-3">
+            <span
+              className="h-10 w-10 rounded-xl grid place-items-center text-white shrink-0 shadow-sm"
+              style={{ background: accent || "#0f766e" }}
+            >
+              <ModuleIcon name={(activeMod === "home" ? "home" : activeMod) as ModuleIconKey} size={18} className="text-white" />
+            </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
-                <Link to="/dashboard" className="font-semibold hover:text-ink">
-                  Dashboard
-                </Link>
-                <span>/</span>
-                <Link to="/workspace" className="font-semibold hover:text-ink">
-                  Modules
-                </Link>
-                <span>/</span>
                 <span className="font-mono text-ink">{project?.code || "…"}</span>
+                <span>·</span>
+                <span className="font-semibold text-brand">{moduleLabel}</span>
               </div>
-              <h1 className="font-display text-lg sm:text-xl text-ink truncate mt-0.5">{project?.name || "Project"}</h1>
-            </div>
-
-            {/* Single active module + switcher — not a full module strip */}
-            <div className="module-switcher" ref={switcherRef}>
-              <button
-                type="button"
-                onClick={() => setSwitcherOpen((o) => !o)}
-                className="inline-flex items-center gap-2 rounded-lg border border-line bg-sand px-3 py-2 text-sm font-semibold text-ink hover:border-brand/40 hover:bg-white transition"
-                aria-expanded={switcherOpen}
-                aria-haspopup="listbox"
-              >
-                <span className="h-2 w-2 rounded-full bg-brand shrink-0" />
-                <span className="text-steel-muted font-medium text-xs uppercase tracking-wider">Module</span>
-                <span>{moduleLabel}</span>
-                <svg width="12" height="12" viewBox="0 0 12 12" className="text-steel-muted" aria-hidden>
-                  <path d="M3 4.5L6 7.5L9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
-              {switcherOpen && (
-                <div className="module-switcher__menu" role="listbox" aria-label="Switch module">
-                  <p className="px-2.5 py-2 text-[10px] uppercase tracking-wider text-steel-muted font-semibold">
-                    Switch module
-                  </p>
-                  {topMods.map((m) => {
-                    const on = activeMod === m.key;
-                    return (
-                      <button
-                        key={m.key}
-                        type="button"
-                        role="option"
-                        aria-selected={on}
-                        onClick={() => switchModule(m)}
-                        className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-                          on ? "bg-brand-soft text-brand" : "text-ink hover:bg-sand"
-                        }`}
-                      >
-                        {m.label}
-                      </button>
-                    );
-                  })}
-                  <div className="border-t border-line mt-1 pt-1">
-                    <Link
-                      to="/workspace"
-                      className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-brand hover:bg-brand-soft"
-                      onClick={() => setSwitcherOpen(false)}
-                    >
-                      All modules →
-                    </Link>
-                  </div>
-                </div>
-              )}
+              <h1 className="font-display text-base sm:text-lg text-ink truncate">{project?.name || "Project"}</h1>
             </div>
           </div>
 
@@ -270,17 +178,16 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
-        {/* Sub-tools only for the active module */}
         <div
-          className="px-2 sm:px-4 lg:px-6 py-2.5 flex gap-2 overflow-x-auto border-t border-line bg-sand/40"
+          className="px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto border-t border-line bg-gradient-to-r from-brand-soft/50 to-white"
           aria-label={`${moduleLabel} tools`}
         >
           {activeMod !== "home" && (
             <Link
               to={`/projects/${id}/hub/${activeMod}`}
-              className={`shrink-0 rounded-md px-3.5 py-1.5 text-xs font-semibold border transition ${
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition ${
                 activeTool === "hub"
-                  ? "bg-brand text-white border-brand"
+                  ? "bg-brand text-white border-brand shadow-sm"
                   : "bg-white border-line text-steel-muted hover:border-brand hover:text-brand"
               }`}
             >
@@ -296,9 +203,9 @@ export default function ProjectToolsLayout() {
                 to={href}
                 end={t.end}
                 className={() =>
-                  `shrink-0 rounded-md px-3.5 py-1.5 text-xs font-semibold border transition ${
+                  `shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition ${
                     on
-                      ? "bg-brand text-white border-brand"
+                      ? "bg-brand text-white border-brand shadow-sm"
                       : "bg-white border-line text-steel-muted hover:border-brand hover:text-brand"
                   }`
                 }

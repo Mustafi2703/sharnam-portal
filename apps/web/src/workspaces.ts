@@ -182,7 +182,7 @@ export const MODULE_META: Record<
 > = {
   drawings: {
     title: "Drawings",
-    desc: "GFC register, Drawing Check Master on upload, coordination, request fill, and drawing Ask RFIs. Submittals excluded.",
+    desc: "GFC register, Drawing Check Master on upload, coordination, request fill, and drawing Ask RFIs.",
     path: "hub/drawings",
     accent: "#2563EB",
     icon: "DWG",
@@ -191,7 +191,7 @@ export const MODULE_META: Record<
     title: "Quality",
     desc: "QI dashboard, Excel checklist upload, QAP, and Request QI fill.",
     path: "hub/quality",
-    accent: "#1E3A8A",
+    accent: "#0f766e",
     icon: "QA",
   },
   safety: {
@@ -203,9 +203,9 @@ export const MODULE_META: Record<
   },
   progress: {
     title: "Progress",
-    desc: "Each dataset is its own tool — Overview, Milestones, Hindrance, Risk, and more.",
+    desc: "Overview, Milestones, Hindrance, Risk, and more.",
     path: "hub/progress",
-    accent: "#0A0A0A",
+    accent: "#7c3aed",
     icon: "PRG",
   },
   field: {
@@ -219,28 +219,28 @@ export const MODULE_META: Record<
     title: "Comms",
     desc: "Matrix, meetings / MoM, Ask (PMC RFI), Email / Outlook.",
     path: "hub/comms",
-    accent: "#2563EB",
+    accent: "#0891b2",
     icon: "MTG",
   },
   cost: {
     title: "Cost",
     desc: "MB, BBS, budget, cashflow — engineering cost. Commercial tracking is Finance.",
     path: "hub/cost",
-    accent: "#0A0A0A",
+    accent: "#1a1d26",
     icon: "₹",
   },
   finance: {
     title: "Finance",
     desc: "Invoice, PO, RA bill, and COP tracking — separate from Cost.",
     path: "hub/finance",
-    accent: "#1E3A8A",
+    accent: "#126e82",
     icon: "FIN",
   },
   reports: {
     title: "Reports",
     desc: "DPR and WPR packs from live registers.",
     path: "hub/reports",
-    accent: "#CA8A04",
+    accent: "#ea580c",
     icon: "RPT",
   },
 };

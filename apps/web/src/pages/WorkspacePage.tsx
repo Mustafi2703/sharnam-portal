@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Button, Card, PageHero } from "../components/ui";
+import { ModuleIcon, type ModuleIconKey } from "../components/icons";
 import {
   WORKSPACES,
   WORKSPACE_PROJECT_KEY,
@@ -12,7 +13,7 @@ import {
 
 type Project = { id: string; code: string; name: string; status: string; clientName?: string };
 
-/** Module picker — Parikh card language; enter module for full detail */
+/** Module picker with shared icons — enter module for detail */
 export default function WorkspacePage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ export default function WorkspacePage() {
     <div className="space-y-6">
       <PageHero
         title={`Modules · ${firstName}`}
-        subtitle="Choose a module to work in detail. You can return to the Dashboard anytime from the top bar."
+        subtitle="Pick a module from the left nav anytime, or enter from here. Same icons and colours throughout."
         actions={
           <Link to="/dashboard">
             <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary">
@@ -57,7 +58,7 @@ export default function WorkspacePage() {
       />
 
       <Card className="!p-4">
-        <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block mb-2">Project</label>
+        <label className="text-xs font-semibold uppercase tracking-wider text-brand block mb-2">Project</label>
         <select
           className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
           value={projectId}
@@ -83,13 +84,14 @@ export default function WorkspacePage() {
             disabled={!selected}
             onClick={() => enterWorkspace(w.key, w.path)}
             className="module-card group"
+            style={{ borderLeftColor: w.accent }}
           >
             <div className="flex items-start gap-3">
               <span
-                className="h-11 w-11 rounded-xl grid place-items-center text-white text-xs font-display shrink-0"
+                className="h-11 w-11 rounded-xl grid place-items-center text-white shrink-0 shadow-sm"
                 style={{ background: w.accent }}
               >
-                {w.icon}
+                <ModuleIcon name={w.key as ModuleIconKey} size={20} className="text-white" />
               </span>
               <div className="min-w-0">
                 <div className="font-display text-lg text-slate-800 group-hover:text-brand">{w.title}</div>
