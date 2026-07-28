@@ -2,9 +2,30 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { buildDprPack, buildWprPack, renderDprHtml, renderWprHtml } from "../services/reportPacks.js";
+import {
+  analyticsToHtml,
+  analyticsToSheets,
+  buildAnalyticsPack,
+  buildModuleExport,
+  dprToSheets,
+  workbookBuffer,
+  wprToSheets,
+  type ModuleExportKey,
+} from "../services/brandedExport.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
+
+const MODULE_KEYS: ModuleExportKey[] = [
+  "rfis",
+  "comms",
+  "quality",
+  "safety",
+  "drawings",
+  "progress",
+  "field",
+  "cost",
+];
 
 reportsRouter.get("/daily/:projectId", async (req, res) => {
   const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
@@ -67,6 +88,73 @@ reportsRouter.get("/wpr/:projectId/download.html", async (req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(html);
+});
+
+reportsRouter.get("/dpr/:projectId/download.xlsx", async (req, res) => {
+  const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
+  const buf = workbookBuffer(dprToSheets(pack), { title: "Daily Progress Report (DPR)", projectCode: pack.project.code });
+  const fname = `DPR-${pack.project.code}-${new Date(pack.date).toISOString().slice(0, 10)}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+reportsRouter.get("/wpr/:projectId/download.xlsx", async (req, res) => {
+  const pack = await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined);
+  const buf = workbookBuffer(wprToSheets(pack), { title: "Weekly Progress Report (WPR)", projectCode: pack.project.code });
+  const fname = `WPR-${pack.project.code}-${new Date(pack.end).toISOString().slice(0, 10)}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+/** Workday-style analytics dashboard pack */
+reportsRouter.get("/analytics/:projectId/pack", async (req, res) => {
+  res.json(await buildAnalyticsPack(req.params.projectId));
+});
+
+reportsRouter.get("/analytics/:projectId/download.xlsx", async (req, res) => {
+  const pack = await buildAnalyticsPack(req.params.projectId);
+  const buf = workbookBuffer(analyticsToSheets(pack), {
+    title: "Project analytics dashboard",
+    projectCode: pack.project.code,
+  });
+  const fname = `Sharnam-Analytics-${pack.project.code}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+reportsRouter.get("/analytics/:projectId/download.html", async (req, res) => {
+  const pack = await buildAnalyticsPack(req.params.projectId);
+  const html = analyticsToHtml(pack);
+  const fname = `Sharnam-Analytics-${pack.project.code}.html`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(html);
+});
+
+reportsRouter.get("/module/:projectId/:module/download.xlsx", async (req, res) => {
+  const module = String(req.params.module) as ModuleExportKey;
+  if (!MODULE_KEYS.includes(module)) return res.status(400).json({ error: "Unknown module" });
+  const pack = await buildModuleExport(req.params.projectId, module);
+  const code = (await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } }))?.code || "project";
+  const buf = workbookBuffer(pack.sheets, { title: pack.title, projectCode: code });
+  const fname = `Sharnam-${module}-${code}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+reportsRouter.get("/module/:projectId/:module/download.html", async (req, res) => {
+  const module = String(req.params.module) as ModuleExportKey;
+  if (!MODULE_KEYS.includes(module)) return res.status(400).json({ error: "Unknown module" });
+  const pack = await buildModuleExport(req.params.projectId, module);
+  const code = (await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } }))?.code || "project";
+  const fname = `Sharnam-${module}-${code}.html`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(pack.html);
 });
 
 export const auditRouter = Router();

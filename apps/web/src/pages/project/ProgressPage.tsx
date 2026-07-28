@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { ReportExportButtons } from "../../components/ReportExportButtons";
 
 type Tab = "overview" | "milestones" | "planned" | "monthly" | "hindrance" | "risk" | "legal";
 
@@ -301,6 +302,7 @@ export default function ProgressPage() {
           actions={
             <div className="flex flex-wrap gap-2 items-center">
               <Badge tone="brand">{pct(data.totals.projectProgressPct)} weighted</Badge>
+              <ReportExportButtons projectId={id} kind="progress" compact />
               {canVerify && (
                 <Button type="button" variant="secondary" disabled={verifyBusy} onClick={() => void runVerify()}>
                   {verifyBusy ? "Verifying…" : "Verify vs Excel"}

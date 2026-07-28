@@ -2,24 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHeader, Stat } from "../components/ui";
+import { ReportExportButtons } from "../components/ReportExportButtons";
+import { downloadAuthFile } from "../lib/downloadReport";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-async function downloadReport(path: string, token: string | null, filename: string) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
-  if (!res.ok) throw new Error("Download failed");
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/** Procore-style DPR / WPR dashboard with professional HTML pack downloads */
+/** DPR / WPR dashboard with branded Excel + PDF (HTML print) client packs */
 export default function ReportsPage() {
   const { id } = useParams();
   const { token } = useAuth();
@@ -55,45 +43,26 @@ export default function ReportsPage() {
         <PageHeader
           eyebrow="Client packs · Sharnam PMC"
           title="DPR / WPR dashboard"
-          subtitle="Live field data in a Procore-style pack. Download a filled HTML report (open in browser / Print → PDF) matching your DPR and WPR formats."
+          subtitle="Live field data with Sharnam-branded Excel workbooks and Print→PDF HTML packs for client sharing."
           actions={
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setMsg("");
-                  try {
-                    await downloadReport(
-                      `/api/reports/dpr/${id}/download.html`,
-                      token,
-                      `DPR-${project?.code || "pack"}.html`
-                    );
-                    setMsg("DPR downloaded — open the file and Print → Save as PDF for the client.");
-                  } catch (e) {
-                    setMsg(e instanceof Error ? e.message : "Failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Download DPR
-              </Button>
+            <div className="flex flex-wrap gap-2 items-start">
+              <ReportExportButtons projectId={id} kind="dpr" label="DPR" />
+              <ReportExportButtons projectId={id} kind="wpr" label="WPR" />
               <Button
                 type="button"
                 variant="secondary"
-                disabled={busy}
+                disabled={busy || !id}
                 onClick={async () => {
+                  if (!id) return;
                   setBusy(true);
                   setMsg("");
                   try {
-                    await downloadReport(
-                      `/api/reports/wpr/${id}/download.html`,
+                    await downloadAuthFile(
+                      `/api/reports/analytics/${id}/download.xlsx`,
                       token,
-                      `WPR-${project?.code || "pack"}.html`
+                      `Sharnam-Analytics-${project?.code || "pack"}.xlsx`
                     );
-                    setMsg("WPR downloaded — open and Print → PDF for the weekly client pack.");
+                    setMsg("Full analytics Excel downloaded.");
                   } catch (e) {
                     setMsg(e instanceof Error ? e.message : "Failed");
                   } finally {
@@ -101,7 +70,7 @@ export default function ReportsPage() {
                   }
                 }}
               >
-                Download WPR
+                Full analytics Excel
               </Button>
             </div>
           }

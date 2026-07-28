@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
+import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA"];
@@ -79,6 +80,7 @@ export default function SafetyPage() {
             <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
             <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
             <Badge tone="brand">{dash?.totals?.checklistFills ?? 0} checklist fills</Badge>
+            <ReportExportButtons projectId={id} kind="safety" compact />
             <Link to={`/projects/${id}/checklist-master?family=Safety`} className="text-sm font-semibold text-brand">
               Safety checklists →
             </Link>

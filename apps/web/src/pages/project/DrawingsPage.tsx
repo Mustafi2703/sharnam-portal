@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
 import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
+import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -328,7 +329,8 @@ export default function DrawingsPage() {
             : "Upload opens Drawing Check Master in a new window (like QI/Safety fill). When complete, return here to upload the sheet. Manage templates in Checklist manager."
         }
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <ReportExportButtons projectId={id} kind="drawings" compact />
             <Button type="button" variant="secondary" onClick={() => void exportCsv()}>
               Export GFC CSV
             </Button>

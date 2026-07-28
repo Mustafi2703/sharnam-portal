@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
+import { ReportExportButtons } from "../components/ReportExportButtons";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -220,9 +221,10 @@ export default function CostPage() {
         title="Cost"
         subtitle="Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+              <ReportExportButtons projectId={id} kind="cost" compact />
               {(tab === "monitoring" || tab === "boq") && (
-                <Button type="button" className="!bg-amber-500" onClick={() => downloadSheet("boq")}>
+                <Button type="button" onClick={() => downloadSheet("boq")}>
                   Download BOQ CSV
                 </Button>
               )}
