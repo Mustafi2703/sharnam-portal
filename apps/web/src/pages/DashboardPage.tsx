@@ -5,17 +5,18 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHero } from "../components/ui";
 import { PieChart } from "../components/PieChart";
 import { ReportExportButtons } from "../components/ReportExportButtons";
+import { ModuleIcon, type ModuleIconKey } from "../components/icons";
 import { WORKSPACE_PROJECT_KEY } from "../workspaces";
 
 type Project = { id: string; code: string; name: string; status: string };
 type Tab = "rfis" | "comms" | "logs" | "safety" | "analytics";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "analytics", label: "Analytics" },
-  { id: "rfis", label: "RFIs" },
-  { id: "comms", label: "Comms" },
-  { id: "logs", label: "Checklist logs" },
-  { id: "safety", label: "Safety" },
+const TABS: { id: Tab; label: string; icon: ModuleIconKey }[] = [
+  { id: "analytics", label: "Analytics", icon: "reports" },
+  { id: "rfis", label: "RFIs", icon: "comms" },
+  { id: "comms", label: "Comms", icon: "comms" },
+  { id: "logs", label: "Checklist logs", icon: "quality" },
+  { id: "safety", label: "Safety", icon: "safety" },
 ];
 
 /** Workday-style analytics desk + action tabs; branded Excel/PDF exports */
@@ -79,12 +80,12 @@ export default function DashboardPage() {
   }, [pid, token]);
 
   const stats = [
-    { label: "Open RFIs", value: kpis?.openRfis ?? openRfis.length, color: "bg-rose-500", tab: "rfis" as Tab },
-    { label: "Meetings", value: kpis?.meetings ?? meetings.length, color: "bg-[#126e82]", tab: "comms" as Tab },
-    { label: "Checklist fills", value: kpis?.checklistFills ?? logs.length, color: "bg-brand", tab: "logs" as Tab },
-    { label: "Safety open", value: kpis?.openSafety ?? safetyOpen, color: "bg-rose-600", tab: "safety" as Tab },
-    { label: "Published GFC", value: kpis?.publishedDrawings ?? 0, color: "bg-slate-700", tab: "analytics" as Tab },
-    { label: "Delayed MS", value: kpis?.delayedMilestones ?? 0, color: "bg-amber-700", tab: "analytics" as Tab },
+    { label: "Open RFIs", value: kpis?.openRfis ?? openRfis.length, color: "bg-rose-500", tab: "rfis" as Tab, icon: "comms" as ModuleIconKey },
+    { label: "Meetings", value: kpis?.meetings ?? meetings.length, color: "bg-[#126e82]", tab: "comms" as Tab, icon: "comms" as ModuleIconKey },
+    { label: "Checklist fills", value: kpis?.checklistFills ?? logs.length, color: "bg-brand", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
+    { label: "Safety open", value: kpis?.openSafety ?? safetyOpen, color: "bg-rose-600", tab: "safety" as Tab, icon: "safety" as ModuleIconKey },
+    { label: "Published GFC", value: kpis?.publishedDrawings ?? 0, color: "bg-slate-700", tab: "analytics" as Tab, icon: "drawings" as ModuleIconKey },
+    { label: "Delayed MS", value: kpis?.delayedMilestones ?? 0, color: "bg-amber-700", tab: "analytics" as Tab, icon: "progress" as ModuleIconKey },
   ];
 
   return (
@@ -92,6 +93,7 @@ export default function DashboardPage() {
       <PageHero
         title={`Analytics · ${firstName}`}
         subtitle="Workday-style project KPIs with live referenced data. Download branded Excel or PDF packs for clients."
+        icon={<ModuleIcon name="dashboard" size={22} className="text-white" />}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <ReportExportButtons projectId={pid} kind="analytics" label="Full pack" />
@@ -108,7 +110,7 @@ export default function DashboardPage() {
         <div className="flex-1 min-w-0">
           <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block mb-2">Project</label>
           <select
-            className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+            className="w-full max-w-md rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
             value={pid || ""}
             onChange={(e) => setProjectId(e.target.value)}
           >
@@ -128,10 +130,12 @@ export default function DashboardPage() {
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {stats.map((s) => (
           <button key={s.label} type="button" className="stat-tile w-full text-left" onClick={() => setSearchParams({ tab: s.tab })}>
-            <div className={`stat-tile__icon ${s.color}`}>{String(s.value).slice(0, 3)}</div>
+            <div className={`stat-tile__icon ${s.color}`}>
+              <ModuleIcon name={s.icon} size={18} className="text-white" />
+            </div>
             <div className="min-w-0">
-              <p className="text-sm text-slate-500 truncate">{s.label}</p>
-              <p className="text-xl font-bold text-slate-800 tabular-nums">{s.value}</p>
+              <p className="text-sm text-steel-muted truncate">{s.label}</p>
+              <p className="text-xl font-bold text-ink tabular-nums">{s.value}</p>
             </div>
           </button>
         ))}
@@ -144,12 +148,13 @@ export default function DashboardPage() {
               key={t.id}
               type="button"
               onClick={() => setSearchParams({ tab: t.id })}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold border transition ${
+              className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold border transition ${
                 tab === t.id
                   ? "bg-brand text-white border-brand"
-                  : "bg-white border-line text-steel-muted hover:border-brand/50"
+                  : "bg-paper border-line text-steel-muted hover:border-brand/50"
               }`}
             >
+              <ModuleIcon name={t.icon} size={16} />
               {t.label}
             </button>
           ))}

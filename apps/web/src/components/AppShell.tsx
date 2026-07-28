@@ -7,6 +7,10 @@ import {
   ModuleIcon,
   IconClose,
   IconMenu,
+  IconSun,
+  IconMoon,
+  IconPanel,
+  IconPanelRight,
   type ModuleIconKey,
 } from "./icons";
 import {
@@ -16,6 +20,13 @@ import {
   type WorkspaceKey,
 } from "../workspaces";
 import { api } from "../api";
+import {
+  applyColorMode,
+  getColorMode,
+  SIDEBAR_HIDDEN_KEY,
+  toggleColorMode,
+  type ColorMode,
+} from "../themes";
 
 const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[]; end?: boolean }[] = [
   {
@@ -36,18 +47,36 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
 
 type Proj = { id: string; code: string; name: string };
 
+function moduleActive(pathname: string, key: WorkspaceKey) {
+  if (pathname.includes(`/hub/${key}`)) return true;
+  const map: Record<string, string[]> = {
+    drawings: ["/drawings", "/coordination"],
+    quality: ["/inspections", "/checklist", "/qap", "/quality-inspections"],
+    safety: ["/safety"],
+    progress: ["/progress"],
+    field: ["/diary", "/photos"],
+    comms: ["/comms", "/email"],
+    cost: ["/cost"],
+    finance: ["/finance"],
+    reports: ["/reports"],
+  };
+  return (map[key] || []).some((p) => pathname.includes(p));
+}
+
 function SideNavBody({
   projectId,
   projects,
   onSelectProject,
   onNavigate,
-  inProject,
+  colorMode,
+  onToggleTheme,
 }: {
   projectId: string;
   projects: Proj[];
   onSelectProject: (id: string) => void;
   onNavigate?: () => void;
-  inProject: boolean;
+  colorMode: ColorMode;
+  onToggleTheme: () => void;
 }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -57,112 +86,105 @@ function SideNavBody({
     () => WORKSPACES.filter((w) => !user || w.roles.includes(user.role)),
     [user]
   );
-
   const projectMatch = location.pathname.match(/^\/projects\/([^/]+)/);
   const activeProjectId = projectMatch?.[1] || projectId;
+  const dark = colorMode === "dark";
 
   return (
     <div className="side-nav__inner">
-      <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
-        <BrandMark size="sm" tagTone="light" compact showTag={false} />
-        <div className="min-w-0">
-          <div className="font-display text-[15px] text-ink tracking-tight truncate">{BRAND_EN}</div>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-brand font-semibold">PMC portal</div>
-        </div>
-      </Link>
-
-      <p className="side-nav__label">Workspace</p>
-      <nav className="side-nav__group" aria-label="App">
-        {navItems.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end={n.end}
-            onClick={onNavigate}
-            className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
-          >
-            <ModuleIcon name={n.icon} size={18} />
-            <span>{n.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-
-      <div className="side-nav__project">
-        <label className="side-nav__label !mb-1.5 block">Project</label>
-        <select
-          className="side-nav__select"
-          value={projectId}
-          onChange={(e) => onSelectProject(e.target.value)}
-          aria-label="Select project"
-        >
-          {!projects.length && <option value="">No projects</option>}
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.code} — {p.name}
-            </option>
-          ))}
-        </select>
+      <div className="side-nav__head">
+        <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
+          <BrandMark size="sm" tagTone={dark ? "dark" : "light"} compact showTag={false} />
+          <div className="side-nav__brand-text min-w-0">
+            <div className="font-display text-[15px] text-ink tracking-tight truncate">{BRAND_EN}</div>
+            <div className="text-[10px] uppercase tracking-[0.14em] text-brand font-semibold">PMC portal</div>
+          </div>
+        </Link>
       </div>
 
-      {projectId && (
-        <>
-          <p className="side-nav__label">Modules</p>
-          <nav className="side-nav__group side-nav__modules" aria-label="Project modules">
+      <div className="side-nav__scroll">
+        <p className="side-nav__label">Workspace</p>
+        <nav className="side-nav__group" aria-label="App">
+          {navItems.map((n) => (
             <NavLink
-              to={`/projects/${activeProjectId || projectId}`}
-              end
-              onClick={() => {
-                setActiveWorkspace(null);
-                onNavigate?.();
-              }}
-              className={({ isActive }) => `side-nav__item ${isActive && !location.pathname.includes("/hub/") && location.pathname.split("/").length <= 3 ? "is-active" : ""}`}
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              onClick={onNavigate}
+              className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
             >
-              <ModuleIcon name="home" size={18} />
-              <span>Project home</span>
+              <ModuleIcon name={n.icon} size={18} />
+              <span>{n.label}</span>
             </NavLink>
-            {modules.map((m) => {
-              const href = `/projects/${activeProjectId || projectId}/${m.path}`;
-              const on =
-                inProject &&
-                (location.pathname.includes(`/hub/${m.key}`) ||
-                  location.pathname.includes(`/${m.key}`) ||
-                  (m.key === "comms" && location.pathname.includes("/email")) ||
-                  (m.key === "field" && (location.pathname.includes("/diary") || location.pathname.includes("/photos"))) ||
-                  (m.key === "quality" &&
-                    (location.pathname.includes("/inspections") ||
-                      location.pathname.includes("/checklist") ||
-                      location.pathname.includes("/qap"))) ||
-                  (m.key === "drawings" &&
-                    (location.pathname.includes("/drawings") || location.pathname.includes("/coordination"))) ||
-                  (m.key === "cost" && location.pathname.includes("/cost")) ||
-                  (m.key === "finance" && location.pathname.includes("/finance")) ||
-                  (m.key === "reports" && location.pathname.includes("/reports")) ||
-                  (m.key === "progress" && location.pathname.includes("/progress")) ||
-                  (m.key === "safety" && location.pathname.includes("/safety")));
-              return (
-                <Link
-                  key={m.key}
-                  to={href}
-                  onClick={() => {
-                    setActiveWorkspace(m.key as WorkspaceKey);
-                    onNavigate?.();
-                  }}
-                  className={`side-nav__item ${on ? "is-active" : ""}`}
-                  style={{ ["--mod-accent" as string]: m.accent }}
-                >
-                  <span className="side-nav__icon-wrap" style={{ color: m.accent }}>
-                    <ModuleIcon name={m.key as ModuleIconKey} size={18} />
-                  </span>
-                  <span>{m.title}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </>
-      )}
+          ))}
+        </nav>
+
+        <div className="side-nav__project">
+          <label className="side-nav__label !mb-1.5 block">Project</label>
+          <select
+            className="side-nav__select"
+            value={projectId}
+            onChange={(e) => onSelectProject(e.target.value)}
+            aria-label="Select project"
+          >
+            {!projects.length && <option value="">No projects</option>}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} — {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {projectId && (
+          <>
+            <p className="side-nav__label">Modules</p>
+            <nav className="side-nav__group" aria-label="Project modules">
+              <NavLink
+                to={`/projects/${activeProjectId || projectId}`}
+                end
+                onClick={() => {
+                  setActiveWorkspace(null);
+                  onNavigate?.();
+                }}
+                className={({ isActive }) =>
+                  `side-nav__item ${isActive && location.pathname.split("/").filter(Boolean).length <= 2 ? "is-active" : ""}`
+                }
+              >
+                <ModuleIcon name="home" size={18} />
+                <span>Project home</span>
+              </NavLink>
+              {modules.map((m) => {
+                const href = `/projects/${activeProjectId || projectId}/${m.path}`;
+                const on = moduleActive(location.pathname, m.key);
+                return (
+                  <Link
+                    key={m.key}
+                    to={href}
+                    onClick={() => {
+                      setActiveWorkspace(m.key as WorkspaceKey);
+                      onNavigate?.();
+                    }}
+                    className={`side-nav__item ${on ? "is-active" : ""}`}
+                  >
+                    <span className="side-nav__icon-wrap" style={{ color: m.accent }}>
+                      <ModuleIcon name={m.key as ModuleIconKey} size={18} />
+                    </span>
+                    <span>{m.title}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </>
+        )}
+      </div>
 
       <div className="side-nav__foot">
-        <div className="text-xs text-steel-muted truncate">{user?.fullName}</div>
+        <button type="button" className="side-nav__item w-full" onClick={onToggleTheme}>
+          {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
+          <span>{dark ? "Light mode" : "Dark mode"}</span>
+        </button>
+        <div className="text-xs text-steel-muted truncate px-2">{user?.fullName}</div>
         <button
           type="button"
           className="side-nav__signout"
@@ -178,7 +200,7 @@ function SideNavBody({
   );
 }
 
-/** Left sidebar shell — common interactive design system */
+/** Left sidebar shell — hideable, scrollable, light/dark */
 export function AppShell({ children }: { children: ReactNode }) {
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -186,7 +208,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inProject = /^\/projects\/[^/]+/.test(location.pathname);
   const [projects, setProjects] = useState<Proj[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [colorMode, setColorMode] = useState<ColorMode>(() => getColorMode());
   const [projectId, setProjectId] = useState(
     () => (typeof window !== "undefined" ? localStorage.getItem(WORKSPACE_PROJECT_KEY) || "" : "")
   );
@@ -194,6 +223,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    applyColorMode(colorMode);
+  }, [colorMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_HIDDEN_KEY, hidden ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [hidden]);
 
   useEffect(() => {
     if (!token) return;
@@ -216,16 +257,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (inProject) navigate(`/projects/${id}`);
   }
 
+  function onToggleTheme() {
+    setColorMode(toggleColorMode());
+  }
+
+  const dark = colorMode === "dark";
+
   return (
-    <div className={`app-frame ${collapsed ? "is-collapsed" : ""}`}>
-      {/* Desktop sidebar */}
-      <aside className="side-nav hidden md:flex" aria-label="Primary">
-        <SideNavBody
-          projectId={projectId}
-          projects={projects}
-          onSelectProject={selectProject}
-          inProject={inProject}
-        />
+    <div className={`app-frame ${hidden ? "is-hidden" : ""}`}>
+      <aside className={`side-nav hidden md:flex ${hidden ? "is-off" : ""}`} aria-label="Primary" aria-hidden={hidden}>
+        {!hidden && (
+          <SideNavBody
+            projectId={projectId}
+            projects={projects}
+            onSelectProject={selectProject}
+            colorMode={colorMode}
+            onToggleTheme={onToggleTheme}
+          />
+        )}
       </aside>
 
       <div className="app-frame__main">
@@ -233,7 +282,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 px-3 sm:px-4 h-12">
             <button
               type="button"
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-white text-ink"
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-paper text-ink"
               aria-label="Open menu"
               onClick={() => setDrawerOpen(true)}
             >
@@ -241,11 +290,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <button
               type="button"
-              className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg text-steel-muted hover:bg-brand-soft hover:text-brand"
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              onClick={() => setCollapsed((c) => !c)}
+              className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft hover:text-brand"
+              aria-label={hidden ? "Show sidebar" : "Hide sidebar"}
+              title={hidden ? "Show sidebar" : "Hide sidebar"}
+              onClick={() => setHidden((h) => !h)}
             >
-              <IconMenu size={16} />
+              {hidden ? <IconPanelRight size={16} /> : <IconPanel size={16} />}
             </button>
             <div className="min-w-0 flex-1">
               <div className="text-[11px] uppercase tracking-wider text-brand font-semibold">
@@ -255,25 +305,32 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {projects.find((p) => p.id === projectId)?.name || "Select a project"}
               </div>
             </div>
-            <BrandMark size="sm" tagTone="light" compact showTag={false} />
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft"
+              aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+              onClick={onToggleTheme}
+            >
+              {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
+            </button>
+            <BrandMark size="sm" tagTone={dark ? "dark" : "light"} compact showTag={false} />
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 w-full">
+        <main className="flex-1 min-w-0 w-full overflow-auto">
           <div className={inProject ? "w-full max-w-none" : "w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6"}>
             {children}
           </div>
         </main>
       </div>
 
-      {/* Mobile drawer */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <button type="button" className="absolute inset-0 bg-ink/40" aria-label="Close" onClick={() => setDrawerOpen(false)} />
+          <button type="button" className="absolute inset-0 bg-ink/50" aria-label="Close" onClick={() => setDrawerOpen(false)} />
           <aside className="side-nav side-nav--drawer absolute left-0 top-0 bottom-0 w-[min(88vw,300px)] flex shadow-2xl">
             <button
               type="button"
-              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg bg-white border border-line grid place-items-center"
+              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg bg-paper border border-line grid place-items-center text-ink"
               onClick={() => setDrawerOpen(false)}
               aria-label="Close menu"
             >
@@ -284,7 +341,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               projects={projects}
               onSelectProject={selectProject}
               onNavigate={() => setDrawerOpen(false)}
-              inProject={inProject}
+              colorMode={colorMode}
+              onToggleTheme={onToggleTheme}
             />
           </aside>
         </div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
+import { ModuleIcon } from "../components/icons";
 import {
   WORKSPACE_PROJECT_KEY,
   setActiveWorkspace,
@@ -123,6 +124,7 @@ export default function MasterModulePage() {
         eyebrow="Master module"
         title="Project setup desk"
         subtitle="Master is a module with tools — like Drawings or Quality. Create projects, build the four-user directory, toggle modules, then open the ops dashboard."
+        icon={<ModuleIcon name="master" size={20} className="text-white" />}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/dashboard">
@@ -144,7 +146,9 @@ export default function MasterModulePage() {
             type="button"
             onClick={() => setMasterTab(t.id)}
             className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
-              masterTab === t.id ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted hover:border-ink"
+              masterTab === t.id
+                ? "bg-brand text-white border-brand"
+                : "bg-paper border-line text-steel-muted hover:border-brand"
             }`}
           >
             {t.label}

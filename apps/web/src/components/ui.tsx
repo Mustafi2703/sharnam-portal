@@ -5,11 +5,13 @@ export function PageHero({
   subtitle,
   actions,
   accent = "navy",
+  icon,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
   accent?: "navy" | "emerald" | "indigo";
+  icon?: ReactNode;
 }) {
   const gradients = {
     navy: "from-[#0f766e] via-[#126e82] to-[#1a1d26]",
@@ -23,9 +25,16 @@ export function PageHero({
       <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-amber-400/20 blur-2xl" />
       <div className="absolute -left-6 bottom-0 w-28 h-28 rounded-full bg-teal-300/15 blur-2xl" />
       <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold text-white tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-slate-200/90 mt-1.5 max-w-2xl leading-relaxed">{subtitle}</p>}
+        <div className="flex items-start gap-3 min-w-0">
+          {icon ? (
+            <span className="mt-0.5 h-11 w-11 shrink-0 rounded-xl grid place-items-center bg-white/15 text-white border border-white/20">
+              {icon}
+            </span>
+          ) : null}
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-display font-bold text-white tracking-tight">{title}</h1>
+            {subtitle && <p className="text-sm text-white/85 mt-1.5 max-w-2xl leading-relaxed">{subtitle}</p>}
+          </div>
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
@@ -38,20 +47,29 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  icon,
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  icon?: ReactNode;
 }) {
   return (
     <header className="rise flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
-      <div>
-        {eyebrow && (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{eyebrow}</p>
-        )}
-        <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
-        {subtitle && <p className="mt-2 text-steel-muted max-w-4xl xl:max-w-5xl text-[15px] leading-relaxed">{subtitle}</p>}
+      <div className="flex items-start gap-3 min-w-0">
+        {icon ? (
+          <span className="mt-1 h-11 w-11 shrink-0 rounded-xl grid place-items-center bg-brand text-white shadow-sm">
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          {eyebrow && (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{eyebrow}</p>
+          )}
+          <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
+          {subtitle && <p className="mt-2 text-steel-muted max-w-4xl xl:max-w-5xl text-[15px] leading-relaxed">{subtitle}</p>}
+        </div>
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>

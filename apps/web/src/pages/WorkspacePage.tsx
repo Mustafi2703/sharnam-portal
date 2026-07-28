@@ -48,6 +48,7 @@ export default function WorkspacePage() {
       <PageHero
         title={`Modules · ${firstName}`}
         subtitle="Pick a module from the left nav anytime, or enter from here. Same icons and colours throughout."
+        icon={<ModuleIcon name="modules" size={22} className="text-white" />}
         actions={
           <Link to="/dashboard">
             <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary">
@@ -60,7 +61,7 @@ export default function WorkspacePage() {
       <Card className="!p-4">
         <label className="text-xs font-semibold uppercase tracking-wider text-brand block mb-2">Project</label>
         <select
-          className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+          className="w-full max-w-md rounded-xl border border-line bg-paper text-ink px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
           value={projectId}
           onChange={(e) => {
             setProjectId(e.target.value);
@@ -94,8 +95,8 @@ export default function WorkspacePage() {
                 <ModuleIcon name={w.key as ModuleIconKey} size={20} className="text-white" />
               </span>
               <div className="min-w-0">
-                <div className="font-display text-lg text-slate-800 group-hover:text-brand">{w.title}</div>
-                <p className="text-sm text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">{w.desc}</p>
+                <div className="font-display text-lg text-ink group-hover:text-brand">{w.title}</div>
+                <p className="text-sm text-steel-muted mt-1.5 line-clamp-2 leading-relaxed">{w.desc}</p>
               </div>
             </div>
             <div className="mt-4 text-sm font-semibold text-brand group-hover:text-brand-dark">Enter module →</div>

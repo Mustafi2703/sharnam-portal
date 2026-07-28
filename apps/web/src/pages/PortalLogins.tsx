@@ -6,6 +6,8 @@ import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { Button, Input } from "../components/ui";
 import { BrandLink, BrandLockup, BRAND_EN, BRAND_HI, BRAND_TAG } from "../components/Brand";
 import { setActiveWorkspace, type WorkspaceKey } from "../workspaces";
+import { getColorMode, toggleColorMode } from "../themes";
+import { IconMoon, IconSun } from "../components/icons";
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
@@ -345,14 +347,20 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   );
 }
 
-/** Sign-in focused — narrower hero, larger form typography */
+/** Compact viewport-fit login — theme-aware sign-in panel */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
+  const [mode, setMode] = useState(() => getColorMode());
 
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   const cfg = PORTAL_LOGINS[active];
+  const dark = mode === "dark";
+
+  function flipTheme() {
+    setMode(toggleColorMode());
+  }
 
   return (
     <div className="login-shell flex flex-col lg:grid lg:grid-cols-[minmax(0,0.85fr)_minmax(400px,1.15fr)]">
@@ -376,15 +384,27 @@ export function LoginHubPage() {
       />
 
       <section id="signin" className="login-panel flex flex-col h-full min-h-0 lg:border-l border-line">
-        <div className="flex-1 flex flex-col justify-center px-5 sm:px-8 py-5 sm:py-6">
+        <div className="shrink-0 px-5 sm:px-8 pt-4 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={flipTheme}
+            className="inline-flex items-center gap-2 rounded-full border border-line bg-sand px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand hover:text-brand"
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {dark ? <IconSun size={14} /> : <IconMoon size={14} />}
+            {dark ? "Light" : "Dark"} mode
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col justify-center px-5 sm:px-8 py-4 sm:py-5">
           <div className="w-full max-w-[400px] mx-auto">
             <BrandLockup />
 
-            <p className="mt-5 text-sm text-steel-muted">
-              Demo password <span className="font-semibold text-brand">Demo@1234</span>
-            </p>
+            <div className="login-card mt-5">
+              <p className="text-sm text-steel-muted mb-4">
+                Demo password <span className="font-semibold text-brand">Demo@1234</span>
+              </p>
 
-            <div className="mt-5">
               <p className="text-[11px] uppercase tracking-[0.16em] text-brand font-semibold mb-2.5">Sign in as</p>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {HUB_ROLES.map((key) => {
@@ -411,7 +431,7 @@ export function LoginHubPage() {
           </div>
         </div>
 
-        <footer className="shrink-0 px-5 sm:px-8 py-3 border-t border-line flex items-center justify-between gap-2 bg-brand-soft/40">
+        <footer className="shrink-0 px-5 sm:px-8 py-3 border-t border-line flex items-center justify-between gap-2">
           <p className="text-xs text-steel-muted">© {new Date().getFullYear()} {BRAND_EN}</p>
           <p className="text-[11px] text-brand font-semibold">{BRAND_HI}</p>
         </footer>
