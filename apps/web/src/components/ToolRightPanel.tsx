@@ -403,19 +403,31 @@ export function ToolRightPanel({
   }
 
   return (
-    <aside className="border-t xl:border-t-0 xl:border-l border-line bg-paper flex flex-col min-h-full">
-      <div className="px-4 py-4 border-b border-line">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-muted">Actions</div>
+    <aside className="border-t xl:border-t-0 xl:border-l border-line bg-paper flex flex-col min-h-full shadow-[-8px_0_24px_rgb(26_29_38/0.04)]">
+      <div className="px-4 py-4 border-b border-line bg-gradient-to-br from-brand-soft/80 to-white">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Actions</div>
+          <span className="h-1.5 w-1.5 rounded-full bg-brand login-live-dot" aria-hidden />
+        </div>
         <div className="font-display text-base mt-1.5 text-ink leading-snug">{ctx.moduleLabel}</div>
-        <div className="text-xs text-steel-muted mt-1 capitalize">{tool || "overview"}</div>
+        <div className="text-xs text-steel-muted mt-1 capitalize">{tool || "overview"} · contextual</div>
       </div>
 
       <div className="p-4 space-y-4 flex-1">
+        <div className="rounded-xl border border-line bg-sand/70 p-3.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-steel-muted">Focus</div>
+          <p className="text-xs text-steel-muted mt-1.5 leading-relaxed">
+            Working inside <span className="font-semibold text-ink">{ctx.moduleLabel}</span>. Switch modules from the
+            project bar — this panel stays tied to the active tool.
+          </p>
+        </div>
+
         {(tool === "checklist" || tool === "quality-inspections" || tool === "inspections" || tool === "safety" || tool === "rfis") && (
-          <div className="rounded-[var(--ui-radius,10px)] border border-line bg-sand/60 p-4">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-steel-muted">Quality module</div>
+          <div className="rounded-xl border border-brand/20 bg-brand-soft/50 p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-brand">Quality note</div>
             <p className="text-xs text-steel-muted mt-2 leading-relaxed">
-              Quality Inspections and Safety are separate tools. QI checklist forms and QI fill RFIs are also under Quality — not mixed with Drawings.
+              Quality Inspections and Safety stay separate. QI checklist forms and QI fill RFIs live under Quality — not
+              Drawings.
             </p>
           </div>
         )}

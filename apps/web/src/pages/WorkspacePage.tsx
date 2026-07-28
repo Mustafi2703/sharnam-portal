@@ -59,7 +59,7 @@ export default function WorkspacePage() {
       <Card className="!p-4">
         <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block mb-2">Project</label>
         <select
-          className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/25"
+          className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
           value={projectId}
           onChange={(e) => {
             setProjectId(e.target.value);
@@ -92,11 +92,11 @@ export default function WorkspacePage() {
                 {w.icon}
               </span>
               <div className="min-w-0">
-                <div className="font-display text-lg text-slate-800 group-hover:text-[#1e3a5f]">{w.title}</div>
+                <div className="font-display text-lg text-slate-800 group-hover:text-brand">{w.title}</div>
                 <p className="text-sm text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">{w.desc}</p>
               </div>
             </div>
-            <div className="mt-4 text-sm font-semibold text-amber-600 group-hover:text-amber-700">Enter module →</div>
+            <div className="mt-4 text-sm font-semibold text-brand group-hover:text-brand-dark">Enter module →</div>
           </button>
         ))}
       </div>

@@ -73,9 +73,9 @@ export default function DashboardPage() {
 
   const stats = [
     { label: "Open RFIs", value: openRfis.length, color: "bg-rose-500", tab: "rfis" as Tab },
-    { label: "Meetings", value: meetings.length, color: "bg-[#1e3a5f]", tab: "comms" as Tab },
-    { label: "Checklist fills", value: logs.length, color: "bg-amber-500", tab: "logs" as Tab },
-    { label: "Safety open", value: safetyOpen, color: "bg-orange-600", tab: "safety" as Tab },
+    { label: "Meetings", value: meetings.length, color: "bg-[#126e82]", tab: "comms" as Tab },
+    { label: "Checklist fills", value: logs.length, color: "bg-brand", tab: "logs" as Tab },
+    { label: "Safety open", value: safetyOpen, color: "bg-rose-600", tab: "safety" as Tab },
   ];
 
   return (
@@ -85,9 +85,7 @@ export default function DashboardPage() {
         subtitle="Address open RFIs, Comms, and checklist logs here. Open Modules for full project detail."
         actions={
           <Link to="/workspace">
-            <Button type="button" className="!bg-amber-500 hover:!bg-amber-600 !text-white">
-              Modules →
-            </Button>
+            <Button type="button">Modules →</Button>
           </Link>
         }
       />
@@ -95,7 +93,7 @@ export default function DashboardPage() {
       <Card className="!p-4">
         <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block mb-2">Project</label>
         <select
-          className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/25"
+          className="w-full max-w-md rounded-xl border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
           value={pid || ""}
           onChange={(e) => setProjectId(e.target.value)}
         >
@@ -126,10 +124,10 @@ export default function DashboardPage() {
             key={t.id}
             type="button"
             onClick={() => setSearchParams({ tab: t.id })}
-            className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
+            className={`rounded-lg px-4 py-2 text-sm font-semibold border transition ${
               tab === t.id
-                ? "bg-[#1e3a5f] text-white border-[#1e3a5f]"
-                : "bg-white border-line text-steel-muted hover:border-amber-400/60"
+                ? "bg-brand text-white border-brand"
+                : "bg-white border-line text-steel-muted hover:border-brand/50"
             }`}
           >
             {t.label}
@@ -144,7 +142,7 @@ export default function DashboardPage() {
           <div className="px-4 py-3 border-b border-line bg-slate-50 flex justify-between items-center">
             <span className="font-semibold text-sm">Open RFIs</span>
             {pid && (
-              <Link to={`/projects/${pid}/rfis`} className="text-sm font-semibold text-amber-600 hover:text-amber-700">
+              <Link to={`/projects/${pid}/rfis`} className="text-sm font-semibold text-brand hover:text-brand-dark">
                 Open in module →
               </Link>
             )}
@@ -153,7 +151,7 @@ export default function DashboardPage() {
             {openRfis.map((r) => (
               <li key={r.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-50/80">
                 <div className="min-w-0">
-                  <span className="font-mono text-xs text-amber-600 mr-2">{r.number}</span>
+                  <span className="font-mono text-xs text-brand mr-2">{r.number}</span>
                   <span className="text-ink">{r.subject || r.title || "—"}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -178,7 +176,7 @@ export default function DashboardPage() {
           <div className="px-4 py-3 border-b border-line bg-slate-50 flex justify-between items-center">
             <span className="font-semibold text-sm">Meetings / MoM</span>
             {pid && (
-              <Link to={`/projects/${pid}/comms`} className="text-sm font-semibold text-amber-600">
+              <Link to={`/projects/${pid}/comms`} className="text-sm font-semibold text-brand">
                 Open Comms →
               </Link>
             )}
@@ -202,7 +200,7 @@ export default function DashboardPage() {
           <div className="px-4 py-3 border-b border-line bg-slate-50 flex justify-between items-center">
             <span className="font-semibold text-sm">Recent checklist fills</span>
             {pid && (
-              <Link to={`/projects/${pid}/checklist-logs`} className="text-sm font-semibold text-amber-600">
+              <Link to={`/projects/${pid}/checklist-logs`} className="text-sm font-semibold text-brand">
                 Full log →
               </Link>
             )}
@@ -233,9 +231,7 @@ export default function DashboardPage() {
             </div>
             {pid && (
               <Link to={`/projects/${pid}/safety`}>
-                <Button type="button" className="!bg-amber-500 hover:!bg-amber-600">
-                  Open Safety module
-                </Button>
+                <Button type="button">Open Safety module</Button>
               </Link>
             )}
           </div>

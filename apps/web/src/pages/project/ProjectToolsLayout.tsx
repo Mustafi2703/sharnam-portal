@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useParams, Link, useLocation } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { NavLink, Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
@@ -16,7 +16,7 @@ import {
 } from "../../workspaces";
 
 const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string; roles?: RoleKey[] }[] = [
-  { key: "home", label: "Home", path: "" },
+  { key: "home", label: "Project home", path: "" },
   { key: "drawings", label: "Drawings", path: "hub/drawings" },
   { key: "quality", label: "Quality", path: "hub/quality" },
   { key: "safety", label: "Safety", path: "hub/safety" },
@@ -118,11 +118,14 @@ function isToolActive(t: ModuleToolItem, pathname: string, search: string, proje
 export default function ProjectToolsLayout() {
   const { id } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
   const [rightOpen, setRightOpen] = useState(true);
   const [openRfis, setOpenRfis] = useState(0);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const switcherRef = useRef<HTMLDivElement>(null);
 
   const activeMod = moduleFromPath(location.pathname, location.search);
   const activeTool = toolFromPath(location.pathname);
@@ -166,27 +169,97 @@ export default function ProjectToolsLayout() {
     if (activeMod !== "home") setActiveWorkspace(activeMod as WorkspaceKey);
   }, [activeMod]);
 
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!switcherRef.current?.contains(e.target as Node)) setSwitcherOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  function switchModule(m: (typeof TOP_MODULES)[number]) {
+    if (!id) return;
+    if (m.key === "home") setActiveWorkspace(null);
+    else setActiveWorkspace(m.key as WorkspaceKey);
+    setSwitcherOpen(false);
+    navigate(m.path ? `/projects/${id}/${m.path}` : `/projects/${id}`);
+  }
+
   return (
-    <div className="min-h-[calc(100vh-var(--ui-chrome-h,64px))] w-full">
-      <div className="bg-paper border-b border-line sticky top-[var(--ui-nav-h,64px)] z-20">
+    <div className="min-h-[calc(100vh-var(--ui-chrome-h,56px))] w-full">
+      <div className="bg-paper border-b border-line sticky top-[var(--ui-nav-h,56px)] z-20">
         <div className="px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-3 justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
-              <Link to="/dashboard" className="font-semibold hover:text-ink">
-                Dashboard
-              </Link>
-              <span>/</span>
-              <Link to="/workspace" className="font-semibold hover:text-ink">
-                Modules
-              </Link>
-              <span>/</span>
-              <span className="font-mono text-ink">{project?.code || "…"}</span>
+          <div className="min-w-0 flex flex-wrap items-center gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
+                <Link to="/dashboard" className="font-semibold hover:text-ink">
+                  Dashboard
+                </Link>
+                <span>/</span>
+                <Link to="/workspace" className="font-semibold hover:text-ink">
+                  Modules
+                </Link>
+                <span>/</span>
+                <span className="font-mono text-ink">{project?.code || "…"}</span>
+              </div>
+              <h1 className="font-display text-lg sm:text-xl text-ink truncate mt-0.5">{project?.name || "Project"}</h1>
             </div>
-            <h1 className="font-display text-lg sm:text-xl text-ink truncate mt-0.5">{project?.name || "Project"}</h1>
+
+            {/* Single active module + switcher — not a full module strip */}
+            <div className="module-switcher" ref={switcherRef}>
+              <button
+                type="button"
+                onClick={() => setSwitcherOpen((o) => !o)}
+                className="inline-flex items-center gap-2 rounded-lg border border-line bg-sand px-3 py-2 text-sm font-semibold text-ink hover:border-brand/40 hover:bg-white transition"
+                aria-expanded={switcherOpen}
+                aria-haspopup="listbox"
+              >
+                <span className="h-2 w-2 rounded-full bg-brand shrink-0" />
+                <span className="text-steel-muted font-medium text-xs uppercase tracking-wider">Module</span>
+                <span>{moduleLabel}</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" className="text-steel-muted" aria-hidden>
+                  <path d="M3 4.5L6 7.5L9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+              {switcherOpen && (
+                <div className="module-switcher__menu" role="listbox" aria-label="Switch module">
+                  <p className="px-2.5 py-2 text-[10px] uppercase tracking-wider text-steel-muted font-semibold">
+                    Switch module
+                  </p>
+                  {topMods.map((m) => {
+                    const on = activeMod === m.key;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        role="option"
+                        aria-selected={on}
+                        onClick={() => switchModule(m)}
+                        className={`w-full text-left rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                          on ? "bg-brand-soft text-brand" : "text-ink hover:bg-sand"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                  <div className="border-t border-line mt-1 pt-1">
+                    <Link
+                      to="/workspace"
+                      className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-brand hover:bg-brand-soft"
+                      onClick={() => setSwitcherOpen(false)}
+                    >
+                      All modules →
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
           <div className="flex items-center gap-2 flex-wrap">
             <Button type="button" variant="ghost" className="!text-sm" onClick={() => setRightOpen((o) => !o)}>
-              {rightOpen ? "Hide actions" : "Actions"}
+              {rightOpen ? "Hide panel" : "Actions"}
             </Button>
             {openRfis > 0 && (
               <Link to={`/projects/${id}/rfis`}>
@@ -197,86 +270,44 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
-        <nav className="px-2 sm:px-4 lg:px-6 flex gap-0.5 overflow-x-auto border-t border-line" aria-label="Project modules">
-          {topMods.map((m) => (
-            <NavLink
-              key={m.key}
-              to={m.path ? `/projects/${id}/${m.path}` : `/projects/${id}`}
-              end={!m.path}
-              onClick={() => {
-                if (m.key === "home") setActiveWorkspace(null);
-                else setActiveWorkspace(m.key as WorkspaceKey);
-              }}
-              className={() => {
-                const on = activeMod === m.key;
-                return `px-3.5 sm:px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
-                  on ? "border-amber-500 text-[#1e3a5f]" : "border-transparent text-steel-muted hover:text-ink"
-                }`;
-              }}
-            >
-              {m.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        {activeMod !== "home" && (
-          <div className="px-2 sm:px-4 lg:px-6 py-2.5 flex gap-2 overflow-x-auto border-t border-line bg-white" aria-label="Sub-tools">
+        {/* Sub-tools only for the active module */}
+        <div
+          className="px-2 sm:px-4 lg:px-6 py-2.5 flex gap-2 overflow-x-auto border-t border-line bg-sand/40"
+          aria-label={`${moduleLabel} tools`}
+        >
+          {activeMod !== "home" && (
             <Link
               to={`/projects/${id}/hub/${activeMod}`}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition ${
+              className={`shrink-0 rounded-md px-3.5 py-1.5 text-xs font-semibold border transition ${
                 activeTool === "hub"
-                  ? "bg-ink text-white border-ink"
-                  : "bg-sand border-line text-steel-muted hover:border-brand hover:text-brand"
+                  ? "bg-brand text-white border-brand"
+                  : "bg-white border-line text-steel-muted hover:border-brand hover:text-brand"
               }`}
             >
               Hub
             </Link>
-            {stripItems.map((t) => {
-              const href = t.to ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}` : `/projects/${id}`;
-              const on = isToolActive(t, location.pathname, location.search, id);
-              return (
-                <NavLink
-                  key={`${t.to}-${t.query || ""}-${t.label}`}
-                  to={href}
-                  end={t.end}
-                  className={() =>
-                    `shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition ${
-                      on
-                        ? "bg-brand text-white border-brand"
-                        : "bg-sand border-line text-steel-muted hover:border-brand hover:text-brand"
-                    }`
-                  }
-                >
-                  {t.label}
-                </NavLink>
-              );
-            })}
-          </div>
-        )}
-        {activeMod === "home" && (
-          <div className="px-2 sm:px-4 lg:px-6 py-2.5 flex gap-2 overflow-x-auto border-t border-line bg-white" aria-label="Home tools">
-            {stripItems.map((t) => {
-              const href = t.to ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}` : `/projects/${id}`;
-              const on = isToolActive(t, location.pathname, location.search, id);
-              return (
-                <NavLink
-                  key={`${t.to}-${t.query || ""}-${t.label}`}
-                  to={href}
-                  end={t.end}
-                  className={() =>
-                    `shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold border transition ${
-                      on
-                        ? "bg-brand text-white border-brand"
-                        : "bg-sand border-line text-steel-muted hover:border-brand hover:text-brand"
-                    }`
-                  }
-                >
-                  {t.label}
-                </NavLink>
-              );
-            })}
-          </div>
-        )}
+          )}
+          {stripItems.map((t) => {
+            const href = t.to ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}` : `/projects/${id}`;
+            const on = isToolActive(t, location.pathname, location.search, id);
+            return (
+              <NavLink
+                key={`${t.to}-${t.query || ""}-${t.label}`}
+                to={href}
+                end={t.end}
+                className={() =>
+                  `shrink-0 rounded-md px-3.5 py-1.5 text-xs font-semibold border transition ${
+                    on
+                      ? "bg-brand text-white border-brand"
+                      : "bg-white border-line text-steel-muted hover:border-brand hover:text-brand"
+                  }`
+                }
+              >
+                {t.label}
+              </NavLink>
+            );
+          })}
+        </div>
       </div>
 
       <div className={`tool-shell ${rightOpen ? "has-right" : ""} bg-sand w-full`}>

@@ -261,7 +261,7 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
         />
       </label>
       {error && <p className="text-sm text-danger bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-      <Button disabled={busy} className="w-full !py-3.5 !text-[15px] !bg-[#1e3a5f] hover:!bg-[#254a73]">
+      <Button disabled={busy} className="w-full !py-3.5 !text-[15px]">
         {busy ? "Signing in…" : "Sign in"}
       </Button>
       <p className="text-center text-[11px] text-steel-muted">
@@ -285,34 +285,34 @@ function ConstructionHeroPanel({
   return (
     <aside className="relative hidden lg:flex min-h-screen flex-col justify-end overflow-hidden text-white">
       <img
-        src="/bg.webp"
-        alt="Construction site"
-        className="absolute inset-0 h-full w-full object-cover"
+        src="/hero-login.jpg"
+        alt="Modern construction project"
+        className="absolute inset-0 h-full w-full object-cover scale-[1.02]"
       />
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(160deg, rgba(15,27,45,0.55) 0%, rgba(30,58,95,0.72) 45%, rgba(15,27,45,0.88) 100%)",
+            "linear-gradient(160deg, rgba(17,19,24,0.45) 0%, rgba(26,29,38,0.62) 40%, rgba(15,118,110,0.55) 100%)",
         }}
       />
       <div className="relative z-10 p-10 xl:p-14 max-w-xl">
-        <p className="text-[11px] uppercase tracking-[0.28em] text-amber-300/90 font-semibold">
+        <p className="text-[11px] uppercase tracking-[0.28em] text-teal-200/95 font-semibold">
           {BRAND_HI} · Construction PMC
         </p>
         <h1 className="font-display text-4xl xl:text-5xl tracking-tight mt-4 leading-[1.1]">{title}</h1>
-        <p className="mt-4 text-base text-slate-200/90 leading-relaxed">{subtitle}</p>
+        <p className="mt-4 text-base text-slate-100/90 leading-relaxed">{subtitle}</p>
         {points && points.length > 0 && (
-          <ul className="mt-8 space-y-2.5 border-t border-white/15 pt-6">
+          <ul className="mt-8 space-y-2.5 border-t border-white/20 pt-6">
             {points.map((p) => (
-              <li key={p} className="text-sm text-slate-100/90 flex gap-2.5">
-                <span className="text-amber-400 mt-0.5 shrink-0">▸</span>
+              <li key={p} className="text-sm text-slate-50/95 flex gap-2.5">
+                <span className="text-teal-300 mt-0.5 shrink-0">▸</span>
                 <span>{p}</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-10 text-xs text-white/45">{BRAND_TAG}</p>
+        <p className="mt-10 text-xs text-white/50">{BRAND_TAG}</p>
       </div>
     </aside>
   );
@@ -331,7 +331,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
       <section className="flex flex-col min-h-screen bg-white">
         <header className="px-6 sm:px-10 pt-6 flex items-center justify-between">
           <BrandLink to="/login" tagTone="light" />
-          <Link to="/login" className="text-xs font-medium text-steel-muted hover:text-[#1e3a5f]">
+          <Link to="/login" className="text-xs font-medium text-steel-muted hover:text-brand">
             All portals
           </Link>
         </header>
@@ -351,23 +351,23 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   );
 }
 
-/** Professional construction landing — left hero image, right white login with Sharnam logo */
+/** Professional construction landing — left hero image, right interactive white login */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
+  const [emailFocused, setEmailFocused] = useState(false);
 
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   const cfg = PORTAL_LOGINS[active];
 
-return (
-    <div className="min-h-screen flex flex-col lg:grid lg:grid-cols-[1.1fr_0.9fr] bg-white text-ink">
-      {/* Mobile construction strip */}
+  return (
+    <div className="min-h-screen flex flex-col lg:grid lg:grid-cols-[1.1fr_0.9fr] bg-[#f7f8fa] text-ink">
       <div className="lg:hidden relative h-40 overflow-hidden shrink-0">
-        <img src="/bg.webp" alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-[#1e3a5f]/80" />
+        <img src="/hero-login.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-[#1a1d26]/75" />
         <div className="relative z-10 h-full flex flex-col justify-end p-5 text-white">
-          <p className="text-[10px] uppercase tracking-[0.24em] text-amber-300/90 font-semibold">
+          <p className="text-[10px] uppercase tracking-[0.24em] text-teal-200 font-semibold">
             {BRAND_HI} · Construction PMC
           </p>
           <p className="font-display text-xl mt-1">Built for construction delivery</p>
@@ -379,21 +379,26 @@ return (
         subtitle="Sharnam’s PMC portal keeps drawings, quality, field logs, and communications aligned across office, site, contractors, and clients."
         points={[
           "Open RFIs, Comms, and checklist logs on one dashboard",
-          "Modules for drawings, quality, field, and cost detail",
+          "Switch into one module at a time for focused work",
           "Four clear desks — Office, Site, Contractor, Client",
         ]}
       />
 
-      <section id="signin" className="flex flex-col flex-1 min-h-0 lg:min-h-screen bg-white lg:border-l border-slate-100">
+      <section id="signin" className="flex flex-col flex-1 min-h-0 lg:min-h-screen bg-white lg:border-l border-line">
         <div className="flex-1 flex flex-col justify-center px-6 sm:px-10 xl:px-14 py-10">
           <div className="w-full max-w-md mx-auto">
             <BrandLockup />
 
-            <div className="mt-10">
+            <div className="mt-8 flex items-center gap-2 text-xs text-steel-muted">
+              <span className="login-live-dot inline-block h-2 w-2 rounded-full bg-brand" />
+              Secure demo portal · password Demo@1234
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-line bg-[#f7f8fa]/80 p-5 sm:p-6 shadow-sm">
               <p className="text-[11px] uppercase tracking-[0.2em] text-steel-muted font-semibold mb-3">
                 Sign in as
               </p>
-              <div className="grid grid-cols-2 gap-2 mb-6">
+              <div className="grid grid-cols-2 gap-2 mb-5">
                 {HUB_ROLES.map((key) => {
                   const role = PORTAL_LOGINS[key];
                   const selected = active === key;
@@ -402,26 +407,56 @@ return (
                       key={key}
                       type="button"
                       onClick={() => setActive(key)}
-                      className={`rounded-lg px-3 py-2.5 text-left text-sm font-semibold border transition ${
+                      className={`login-focus-ring rounded-xl px-3 py-3 text-left border transition ${
                         selected
-                          ? "bg-[#1e3a5f] text-white border-[#1e3a5f] shadow-sm"
-                          : "bg-white border-slate-200 text-steel-muted hover:border-[#1e3a5f]/40 hover:text-ink"
+                          ? "is-active bg-white border-brand shadow-sm"
+                          : "bg-white/70 border-line text-steel-muted hover:border-brand/40 hover:text-ink"
                       }`}
                     >
-                      {role.shortLabel === "Vendor" ? "Contractor" : role.shortLabel}
+                      <div className={`text-sm font-semibold ${selected ? "text-brand" : ""}`}>
+                        {role.shortLabel === "Vendor" ? "Contractor" : role.shortLabel}
+                      </div>
+                      <div className="text-[11px] text-steel-muted mt-0.5 line-clamp-1">{role.points[0]}</div>
                     </button>
                   );
                 })}
               </div>
 
-              <h2 className="font-display text-2xl text-[#1e3a5f] tracking-tight">{cfg.title}</h2>
-              <p className="text-sm text-steel-muted mt-1.5 mb-6 leading-relaxed">{cfg.subtitle}</p>
-              <PortalSignInForm cfg={cfg} />
+              <div
+                key={cfg.key}
+                className="rise mb-5 rounded-xl border border-brand/20 bg-brand-soft/60 px-4 py-3"
+              >
+                <h2 className="font-display text-xl text-ink tracking-tight">{cfg.title}</h2>
+                <p className="text-sm text-steel-muted mt-1 leading-relaxed">{cfg.subtitle}</p>
+              </div>
+
+              <div
+                className={`login-focus-ring rounded-xl border border-line bg-white p-4 ${emailFocused ? "is-active" : ""}`}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setEmailFocused(false);
+                }}
+              >
+                <PortalSignInForm cfg={cfg} />
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-2 text-center">
+              {[
+                ["01", "Dashboard"],
+                ["02", "One module"],
+                ["03", "Actions"],
+              ].map(([n, label]) => (
+                <div key={n} className="rounded-lg border border-line bg-white px-2 py-2.5">
+                  <div className="text-[10px] font-mono text-brand font-semibold">{n}</div>
+                  <div className="text-[11px] text-steel-muted mt-0.5 font-medium">{label}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        <footer className="px-6 sm:px-10 py-5 border-t border-slate-100 flex items-center justify-between gap-3">
+        <footer className="px-6 sm:px-10 py-5 border-t border-line flex items-center justify-between gap-3 bg-[#f7f8fa]/50">
           <p className="text-xs text-steel-muted">© {new Date().getFullYear()} {BRAND_EN}</p>
           <p className="text-[11px] text-steel-muted/80 hidden sm:block">{BRAND_TAG}</p>
         </footer>

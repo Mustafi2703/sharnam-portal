@@ -12,15 +12,15 @@ export function PageHero({
   accent?: "navy" | "emerald" | "indigo";
 }) {
   const gradients = {
-    navy: "from-[#1e3a5f] via-[#254a73] to-[#2d5f8f]",
-    emerald: "from-emerald-900 via-emerald-800 to-teal-700",
-    indigo: "from-indigo-900 via-indigo-800 to-indigo-700",
+    navy: "from-[#1a1d26] via-[#243447] to-[#126e82]",
+    emerald: "from-teal-950 via-teal-900 to-teal-700",
+    indigo: "from-slate-900 via-slate-800 to-teal-800",
   };
   return (
     <div
       className={`rounded-2xl bg-gradient-to-br ${gradients[accent]} p-6 sm:p-7 shadow-lg border border-white/10 relative overflow-hidden mb-6`}
     >
-      <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-amber-400/10 blur-2xl" />
+      <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-teal-400/15 blur-2xl" />
       <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-white tracking-tight">{title}</h1>
@@ -103,10 +103,10 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "dark";
 }) {
   const variants = {
-    primary: "bg-amber-500 hover:bg-amber-600 text-white shadow-sm",
+    primary: "bg-brand hover:bg-brand-dark text-white shadow-sm",
     secondary: "bg-white border border-slate-200 text-ink hover:bg-slate-50",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/[0.04]",
-    dark: "bg-[#1e3a5f] text-white hover:bg-[#254a73]",
+    dark: "bg-ink text-white hover:bg-steel-2",
   };
   return (
     <button
