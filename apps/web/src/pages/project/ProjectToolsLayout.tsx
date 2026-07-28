@@ -167,16 +167,20 @@ export default function ProjectToolsLayout() {
   }, [activeMod]);
 
   return (
-    <div className="min-h-[calc(100vh-var(--ui-chrome-h,168px))] w-full">
-      <div className="bg-paper border-b border-line sticky top-[calc(var(--ui-nav-h,64px)+3.5rem)] z-20">
+    <div className="min-h-[calc(100vh-var(--ui-chrome-h,64px))] w-full">
+      <div className="bg-paper border-b border-line sticky top-[var(--ui-nav-h,64px)] z-20">
         <div className="px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-3 justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
-              <Link to="/workspace" className="text-brand font-semibold hover:underline">
+              <Link to="/dashboard" className="font-semibold hover:text-ink">
+                Dashboard
+              </Link>
+              <span>/</span>
+              <Link to="/workspace" className="font-semibold hover:text-ink">
                 Modules
               </Link>
               <span>/</span>
-              <span className="font-mono text-brand">{project?.code || "…"}</span>
+              <span className="font-mono text-ink">{project?.code || "…"}</span>
             </div>
             <h1 className="font-display text-lg sm:text-xl text-ink truncate mt-0.5">{project?.name || "Project"}</h1>
           </div>
@@ -193,7 +197,7 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
-        <nav className="px-2 sm:px-4 lg:px-6 flex gap-0.5 overflow-x-auto border-t border-line" aria-label="Modules">
+        <nav className="px-2 sm:px-4 lg:px-6 flex gap-0.5 overflow-x-auto border-t border-line" aria-label="Project modules">
           {topMods.map((m) => (
             <NavLink
               key={m.key}
@@ -206,7 +210,7 @@ export default function ProjectToolsLayout() {
               className={() => {
                 const on = activeMod === m.key;
                 return `px-3.5 sm:px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
-                  on ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
+                  on ? "border-ink text-ink" : "border-transparent text-steel-muted hover:text-ink"
                 }`;
               }}
             >

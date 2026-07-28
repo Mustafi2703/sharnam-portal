@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -192,7 +192,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
 
 export function consumeLoginLanding() {
   try {
-    const path = localStorage.getItem(LOGIN_LANDING_KEY) || "/workspace";
+    const path = localStorage.getItem(LOGIN_LANDING_KEY) || "/dashboard";
     localStorage.removeItem(LOGIN_LANDING_KEY);
     return path;
   } catch {
@@ -200,14 +200,6 @@ export function consumeLoginLanding() {
   }
 }
 
-function useSpotlight() {
-  return (e: MouseEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    const r = el.getBoundingClientRect();
-    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
-    el.style.setProperty("--my", `${e.clientY - r.top}px`);
-  };
-}
 
 function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
@@ -241,7 +233,7 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
               }),
             });
             try {
-              localStorage.setItem(LOGIN_LANDING_KEY, cfg.landingPath || "/workspace");
+              localStorage.setItem(LOGIN_LANDING_KEY, cfg.landingPath || "/dashboard");
               if (cfg.workspaceKey) setActiveWorkspace(cfg.workspaceKey);
               else setActiveWorkspace(null);
             } catch {
@@ -345,12 +337,10 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 const MODULE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "field"];
 const ROLE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Designed landing — module + role logins (Parikh-style, no UI option picker) */
+/** Black chrome + Sharnam logo — construction PMC login */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
-  const spotlight = useSpotlight();
-  const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("master");
-  const [showDoor, setShowDoor] = useState(true);
+  const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
 
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
@@ -358,172 +348,67 @@ export function LoginHubPage() {
 
   function openPortal(key: keyof typeof PORTAL_LOGINS) {
     setActive(key);
-    setShowDoor(true);
   }
 
   return (
     <div className="min-h-screen bg-sand text-ink">
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-line">
-        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
-          <BrandMark size="md" tagTone="light" />
-          <a href="#modules" className="text-sm text-steel-muted hover:text-brand font-medium">
-            Module logins
+      <header className="sticky top-0 z-50 bg-black text-white border-b border-white/10">
+        <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <BrandMark size="md" tagTone="dark" showTag={false} />
+            <span className="font-display text-white hidden sm:inline">{BRAND_EN}</span>
+          </div>
+          <a href="#signin" className="text-sm text-white/70 hover:text-white font-medium">
+            Sign in
           </a>
         </div>
       </header>
 
-      <section className="hero-site text-white border-b border-line">
-        <div className="max-w-6xl mx-auto px-5 py-16 sm:py-20 grid lg:grid-cols-[1.15fr_0.85fr] gap-10 items-center">
-          <div className="rise space-y-6">
-            <div className="logo-plate brand-frame inline-block">
-              <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className="h-14 sm:h-16 w-auto object-contain" />
+      <section className="bg-black text-white">
+        <div className="max-w-5xl mx-auto px-5 py-14 grid lg:grid-cols-2 gap-10 items-center">
+          <div className="space-y-5">
+            <div className="logo-plate inline-block">
+              <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className="h-16 sm:h-20 w-auto object-contain" />
             </div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-white/70">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-white/50">
               {BRAND_HI} · {BRAND_TAG}
             </p>
-            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.02]">
+            <h1 className="font-display text-4xl sm:text-5xl tracking-tight">
               {BRAND_EN}
-              <span className="block text-amber-300 text-2xl sm:text-3xl mt-3 font-semibold">
-                Modern SAP / Workday PMC portal
-              </span>
+              <span className="block text-xl sm:text-2xl text-white/75 mt-3 font-semibold">Construction PMC portal</span>
             </h1>
-            <p className="text-base sm:text-lg text-white/80 max-w-md leading-relaxed">
-              Sign in → ops dashboard → switch modules anytime. Admin allocates who can see what. Same flow pattern as Parikh procurement.
+            <p className="text-white/65 text-base max-w-md leading-relaxed">
+              Dashboard for open RFIs, Comms, and checklist logs. Modules for full project detail.
             </p>
-            <div className="flex flex-wrap gap-3">
-              <Button type="button" className="!px-5 !py-3 !bg-amber-500 hover:!bg-amber-600" onClick={() => openPortal("master")}>
-                Master module
-              </Button>
-              <Button type="button" variant="secondary" className="!px-5 !py-3 !bg-white/10 !text-white !border-white/35" onClick={() => openPortal("office")}>
-                Office login
-              </Button>
-            </div>
-            <p className="text-xs font-mono text-white/55">Demo password · Demo@1234</p>
+            <p className="text-xs font-mono text-white/40">Demo password · Demo@1234</p>
           </div>
-
-          <Card className="rise rise-delay-1 !p-0 overflow-hidden !bg-white/95">
-            <div className="px-5 py-3.5 border-b border-line bg-procore-navy text-white flex justify-between items-center">
-              <span className="text-sm font-semibold">Module doors</span>
-              <span className="text-[10px] font-mono text-white/70">Pick & sign in</span>
-            </div>
-            <div className="grid grid-cols-2 gap-px bg-line">
-              {MODULE_KEYS.map((key) => {
-                const p = PORTAL_LOGINS[key];
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => openPortal(key)}
-                    className={`text-left p-4 transition ${active === key ? "bg-brand-soft" : "bg-paper hover:bg-sand"}`}
-                  >
-                    <div className="text-[10px] font-mono uppercase text-steel-muted">{p.shortLabel}</div>
-                    <div className={`text-sm font-semibold mt-1 ${active === key ? "text-brand" : ""}`}>{p.title}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      <section id="modules" className="max-w-6xl mx-auto px-5 py-12 space-y-10">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Everyone manages their module</p>
-          <h2 className="font-display text-2xl sm:text-3xl">Module logins</h2>
-          <p className="text-sm text-steel-muted mt-2 max-w-2xl">
-            Master holds project setup, HRM, and documents. Drawings, Quality, Comms, and Field each have their own door.
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {MODULE_KEYS.map((key, i) => {
-            const p = PORTAL_LOGINS[key];
-            const selected = active === key && showDoor;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => openPortal(key)}
-                onMouseMove={spotlight}
-                className={`spotlight text-left rounded-xl border p-4 transition rise rise-delay-${Math.min(i + 1, 4)} ${
-                  selected ? "border-brand ring-2 ring-brand/25 bg-brand-soft/30" : "border-line hover:border-brand/40 bg-white"
-                }`}
-              >
-                <span
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-white text-xs font-display"
-                  style={{ background: p.tone }}
-                >
-                  {p.icon}
-                </span>
-                <div className="font-display text-base mt-3">{p.title}</div>
-                <p className="text-xs text-steel-muted mt-1.5 line-clamp-2 leading-relaxed">{p.subtitle}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="rounded-2xl border border-line bg-white overflow-hidden shadow-sm">
-          <div className="grid lg:grid-cols-[1fr_0.95fr]">
-            <div className="p-8 sm:p-10 bg-sand/50 border-b lg:border-b-0 lg:border-r border-line">
-              <span
-                className="inline-flex h-12 w-12 items-center justify-center rounded-xl text-white font-display"
-                style={{ background: cfg.tone }}
-              >
-                {cfg.icon}
-              </span>
-              <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-brand mt-5">Indoor desk</p>
-              <h3 className="font-display text-3xl mt-2">{cfg.title}</h3>
-              <p className="mt-3 text-sm text-steel-muted max-w-sm leading-relaxed">{cfg.headline}</p>
-              <ul className="mt-5 space-y-2">
-                {cfg.points.map((pt) => (
-                  <li key={pt} className="text-sm flex gap-2 items-center">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand" />
-                    {pt}
-                  </li>
-                ))}
-              </ul>
-              <Link to={`/login/${cfg.key}`} className="mt-6 inline-flex text-sm font-medium text-brand hover:underline">
-                Full-page {cfg.shortLabel} login →
-              </Link>
-            </div>
-            <div className="p-6 sm:p-8 flex flex-col justify-center">
-              <div className="rise" key={cfg.key}>
-                <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-brand mb-2">Sign in · {cfg.shortLabel}</p>
-                <h3 className="font-display text-2xl mb-1">{cfg.title}</h3>
-                <p className="text-sm text-steel-muted mb-5">{cfg.subtitle}</p>
-                <PortalSignInForm cfg={cfg} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="font-display text-xl mb-3">Role portals</h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {ROLE_KEYS.map((key) => {
-              const p = PORTAL_LOGINS[key];
-              return (
+          <div id="signin" className="bg-white text-ink rounded-xl p-6 sm:p-8">
+            <p className="text-[11px] uppercase tracking-wider text-steel-muted font-semibold mb-2">Sign in as</p>
+            <div className="flex flex-wrap gap-2 mb-5">
+              {[...MODULE_KEYS, ...ROLE_KEYS].map((key) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => openPortal(key)}
-                  className="text-left rounded-xl border border-line bg-white p-4 hover:border-brand/40"
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold border ${
+                    active === key ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted"
+                  }`}
                 >
-                  <div className="font-display text-lg">{p.title}</div>
-                  <p className="text-xs text-steel-muted mt-1">{p.subtitle}</p>
+                  {PORTAL_LOGINS[key].shortLabel}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+            <h2 className="font-display text-2xl mb-1">{cfg.title}</h2>
+            <p className="text-sm text-steel-muted mb-4">{cfg.subtitle}</p>
+            <PortalSignInForm cfg={cfg} />
           </div>
         </div>
       </section>
 
       <footer className="border-t border-line bg-white">
-        <div className="max-w-6xl mx-auto px-5 py-8 flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-5xl mx-auto px-5 py-6 flex items-center justify-between gap-4">
           <BrandMark size="sm" tagTone="light" />
-          <p className="text-xs text-steel-muted">
-            © {BRAND_EN} · {BRAND_TAG}
-          </p>
+          <p className="text-xs text-steel-muted">© {BRAND_EN}</p>
         </div>
       </footer>
     </div>
