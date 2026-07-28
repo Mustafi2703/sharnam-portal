@@ -15,10 +15,12 @@ React (Vite) + Express + Prisma. Mock OneDrive DMS until Azure Graph credentials
 | Client | `client@sharnam.demo` | `Demo@1234` |
 | Employee | `employee@sharnam.demo` | `Demo@1234` |
 
-## Local setup
+## Local setup (any machine)
 
 ```bash
+git clone https://github.com/Mustafi2703/sharnam-portal.git
 cd sharnam-portal
+cp .env.example .env
 npm install
 npm run db:setup
 npm run dev
@@ -26,22 +28,15 @@ npm run dev
 
 - Web: http://localhost:5173  
 - API: http://localhost:4000/api/health  
+- Login: http://localhost:5173/login — demo password `Demo@1234`
 
-Optional: `SHARNAM_EXCEL_ROOT` pointing at the folder with `Final Index.xlsx` (defaults to repo root).
+`.env` is **not** in git (secrets). Always create it from `.env.example` on a new machine. Optional: set `SHARNAM_EXCEL_ROOT` if Excel templates live outside the repo root.
 
-## Live UI options (Render)
+Client Excel samples in the repo root (`Communication Matrix_BPCL`, `Quality Assurance Plan`, `DPR`, `WPR`) are included for local/template work.
 
-Public hub (no login): **`/`** or **`/options`** — five construction UI systems.
+## Appearance
 
-| Option | Route | Look |
-|--------|-------|------|
-| 1 Site Amber | `/ui/1` | Warm soft PMC |
-| 2 Graphite Procore | `/ui/2` | Dense sharp steel |
-| 3 Forest Field | `/ui/3` | Green roomy |
-| 4 Blueprint Desk | `/ui/4` | Technical cyan |
-| 5 Night Shift | `/ui/5` | Dark ops orange |
-
-Same portals (Office / Site / Vendor / Client) under every option. Demo password: `Demo@1234`.
+Use the **Light / Dark** toggle on login or in the app top bar. Preference is stored in the browser.
 
 ## Modules ready for client demo
 
