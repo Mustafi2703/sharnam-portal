@@ -210,7 +210,7 @@ export default function ProjectToolsLayout() {
               className={() => {
                 const on = activeMod === m.key;
                 return `px-3.5 sm:px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
-                  on ? "border-ink text-ink" : "border-transparent text-steel-muted hover:text-ink"
+                  on ? "border-amber-500 text-[#1e3a5f]" : "border-transparent text-steel-muted hover:text-ink"
                 }`;
               }}
             >

@@ -103,10 +103,10 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "dark";
 }) {
   const variants = {
-    primary: "bg-ink hover:bg-black text-white shadow-sm",
-    secondary: "bg-white border border-line text-ink hover:bg-sand",
+    primary: "bg-amber-500 hover:bg-amber-600 text-white shadow-sm",
+    secondary: "bg-white border border-slate-200 text-ink hover:bg-slate-50",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/[0.04]",
-    dark: "bg-ink text-white hover:bg-black",
+    dark: "bg-[#1e3a5f] text-white hover:bg-[#254a73]",
   };
   return (
     <button

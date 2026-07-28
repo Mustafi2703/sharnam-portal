@@ -337,7 +337,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 const MODULE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "field"];
 const ROLE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Black chrome + Sharnam logo — construction PMC login */
+/** Parikh design philosophy · Sharnam logo — construction PMC login */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
@@ -352,55 +352,59 @@ export function LoginHubPage() {
 
   return (
     <div className="min-h-screen bg-sand text-ink">
-      <header className="sticky top-0 z-50 bg-black text-white border-b border-white/10">
+      <header className="sticky top-0 z-50 bg-[#1e3a5f] text-white border-b border-white/10">
         <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <BrandMark size="md" tagTone="dark" showTag={false} />
             <span className="font-display text-white hidden sm:inline">{BRAND_EN}</span>
           </div>
-          <a href="#signin" className="text-sm text-white/70 hover:text-white font-medium">
+          <a href="#signin" className="text-sm text-amber-300/90 hover:text-amber-200 font-medium">
             Sign in
           </a>
         </div>
       </header>
 
-      <section className="bg-black text-white">
+      <section className="hero-site text-white">
         <div className="max-w-5xl mx-auto px-5 py-14 grid lg:grid-cols-2 gap-10 items-center">
           <div className="space-y-5">
             <div className="logo-plate inline-block">
               <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className="h-16 sm:h-20 w-auto object-contain" />
             </div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-white/50">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-amber-300/80">
               {BRAND_HI} · {BRAND_TAG}
             </p>
             <h1 className="font-display text-4xl sm:text-5xl tracking-tight">
               {BRAND_EN}
-              <span className="block text-xl sm:text-2xl text-white/75 mt-3 font-semibold">Construction PMC portal</span>
+              <span className="block text-xl sm:text-2xl text-slate-200 mt-3 font-semibold">Construction PMC portal</span>
             </h1>
-            <p className="text-white/65 text-base max-w-md leading-relaxed">
+            <p className="text-slate-300 text-base max-w-md leading-relaxed">
               Dashboard for open RFIs, Comms, and checklist logs. Modules for full project detail.
             </p>
             <p className="text-xs font-mono text-white/40">Demo password · Demo@1234</p>
           </div>
-          <div id="signin" className="bg-white text-ink rounded-xl p-6 sm:p-8">
-            <p className="text-[11px] uppercase tracking-wider text-steel-muted font-semibold mb-2">Sign in as</p>
-            <div className="flex flex-wrap gap-2 mb-5">
-              {[...MODULE_KEYS, ...ROLE_KEYS].map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => openPortal(key)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold border ${
-                    active === key ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted"
-                  }`}
-                >
-                  {PORTAL_LOGINS[key].shortLabel}
-                </button>
-              ))}
+          <div id="signin" className="bg-white/[0.07] backdrop-blur-xl border border-white/15 text-ink rounded-2xl p-6 sm:p-8 shadow-lg">
+            <div className="bg-white rounded-xl p-5 sm:p-6">
+              <p className="text-[11px] uppercase tracking-wider text-steel-muted font-semibold mb-2">Sign in as</p>
+              <div className="flex flex-wrap gap-2 mb-5">
+                {[...MODULE_KEYS, ...ROLE_KEYS].map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => openPortal(key)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
+                      active === key
+                        ? "bg-amber-500 text-white border-amber-500"
+                        : "bg-white border-slate-200 text-steel-muted hover:border-amber-400/50"
+                    }`}
+                  >
+                    {PORTAL_LOGINS[key].shortLabel}
+                  </button>
+                ))}
+              </div>
+              <h2 className="font-display text-2xl mb-1 text-[#1e3a5f]">{cfg.title}</h2>
+              <p className="text-sm text-steel-muted mb-4">{cfg.subtitle}</p>
+              <PortalSignInForm cfg={cfg} />
             </div>
-            <h2 className="font-display text-2xl mb-1">{cfg.title}</h2>
-            <p className="text-sm text-steel-muted mb-4">{cfg.subtitle}</p>
-            <PortalSignInForm cfg={cfg} />
           </div>
         </div>
       </section>
