@@ -30,6 +30,7 @@ import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/Ex
 import SafetyPage from "./pages/project/SafetyPage";
 import ProgressPage from "./pages/project/ProgressPage";
 import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
+import ChecklistLogsPage from "./pages/project/ChecklistLogsPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
 import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import ModuleHubPage from "./pages/project/ModuleHubPage";
@@ -129,6 +130,7 @@ export default function App() {
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="checklist-master" element={<ChecklistMasterPage />} />
+                  <Route path="checklist-logs" element={<ChecklistLogsPage />} />
                   <Route path="rfis" element={<RfisPage />} />
                   <Route path="submittals" element={<SubmittalsPage />} />
                   <Route path="photos" element={<PhotosPage />} />

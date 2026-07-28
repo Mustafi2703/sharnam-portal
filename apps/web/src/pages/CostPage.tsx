@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -216,50 +216,49 @@ export default function CostPage() {
 
   return (
     <div className="space-y-5 w-full min-w-0">
-      <div>
-        <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
-          ← Project
-        </Link>
-        <PageHeader
-          eyebrow="Cost module"
-          title="Cost"
-          subtitle="One tool at a time — use the sub-tool chips above (Monitoring, MB, BBS, Budget, Cashflow, Bills). Workday-style sheet registers."
-          actions={
-            <div className="flex flex-wrap gap-2">
+      <PageHero
+        title="Cost"
+        subtitle="Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance."
+        actions={
+          <div className="flex flex-wrap gap-2">
               {(tab === "monitoring" || tab === "boq") && (
-                <Button type="button" variant="secondary" onClick={() => downloadSheet("boq")}>
+                <Button type="button" className="!bg-amber-500" onClick={() => downloadSheet("boq")}>
                   Download BOQ CSV
                 </Button>
               )}
               {tab === "mb" && (
-                <Button type="button" variant="secondary" onClick={() => downloadSheet("mb")}>
+                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("mb")}>
                   Download MB CSV
                 </Button>
               )}
               {tab === "bbs" && (
-                <Button type="button" variant="secondary" onClick={() => downloadSheet("bbs")}>
+                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("bbs")}>
                   Download BBS CSV
                 </Button>
               )}
               {tab === "budget" && (
-                <Button type="button" variant="secondary" onClick={() => downloadSheet("budget")}>
+                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("budget")}>
                   Download Budget
                 </Button>
               )}
               {tab === "cashflow" && (
-                <Button type="button" variant="secondary" onClick={() => downloadSheet("cashflow")}>
+                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("cashflow")}>
                   Download Cashflow
                 </Button>
               )}
               {tab === "rates" && (
-                <Button type="button" variant="secondary" onClick={() => downloadSheet("rates")}>
+                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("rates")}>
                   Download rates
                 </Button>
               )}
-            </div>
-          }
-        />
-      </div>
+              <Link to={`/projects/${id}/hub/finance`}>
+                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary">
+                  Finance →
+                </Button>
+              </Link>
+          </div>
+        }
+      />
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 

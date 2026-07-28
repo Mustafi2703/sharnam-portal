@@ -5,7 +5,6 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { Button, Card, Input } from "../components/ui";
 import { BrandLink, BrandMark, BRAND_EN, BRAND_HI, BRAND_TAG } from "../components/Brand";
-import { LIVE_UI_OPTIONS, RECOMMENDED_UI, applyThemeOption } from "../themes";
 import { setActiveWorkspace, type WorkspaceKey } from "../workspaces";
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
@@ -294,9 +293,6 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
         <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between gap-3">
           <BrandLink to="/login" tagTone="light" />
           <div className="flex items-center gap-3">
-            <Link to="/options" className="text-xs font-semibold text-brand hover:underline">
-              Finalize UI
-            </Link>
             <Link to="/login" className="text-xs font-medium text-steel-muted hover:text-brand">
               All logins
             </Link>
@@ -349,7 +345,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 const MODULE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "field"];
 const ROLE_KEYS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Designed landing — finalize UI, then module + role logins */
+/** Designed landing — module + role logins (Parikh-style, no UI option picker) */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const spotlight = useSpotlight();
@@ -370,16 +366,9 @@ export function LoginHubPage() {
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-line">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
           <BrandMark size="md" tagTone="light" />
-          <div className="flex items-center gap-2 sm:gap-3">
-            <a href="#modules" className="hidden sm:inline text-sm text-steel-muted hover:text-brand font-medium">
-              Module logins
-            </a>
-            <Link to="/options">
-              <Button type="button" className="!text-xs !py-2" onClick={() => applyThemeOption(RECOMMENDED_UI)}>
-                Finalize UI 1–5
-              </Button>
-            </Link>
-          </div>
+          <a href="#modules" className="text-sm text-steel-muted hover:text-brand font-medium">
+            Module logins
+          </a>
         </div>
       </header>
 
@@ -394,23 +383,20 @@ export function LoginHubPage() {
             </p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.02]">
               {BRAND_EN}
-              <span className="block text-white/90 text-2xl sm:text-3xl mt-3 font-semibold">
-                Master setup · module logins · clear RFIs
+              <span className="block text-amber-300 text-2xl sm:text-3xl mt-3 font-semibold">
+                Modern SAP / Workday PMC portal
               </span>
             </h1>
             <p className="text-base sm:text-lg text-white/80 max-w-md leading-relaxed">
-              Finalize a blue / red / white / green UI, then sign into Master or the module you manage. Checklist fills need a
-              Drawing or QI RFI; PMC can also raise classic Requests for Information.
+              Sign in → ops dashboard → switch modules anytime. Admin allocates who can see what. Same flow pattern as Parikh procurement.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button type="button" className="!px-5 !py-3" onClick={() => openPortal("master")}>
+              <Button type="button" className="!px-5 !py-3 !bg-amber-500 hover:!bg-amber-600" onClick={() => openPortal("master")}>
                 Master module
               </Button>
-              <Link to="/options">
-                <Button type="button" variant="secondary" className="!px-5 !py-3 !bg-white/10 !text-white !border-white/35">
-                  Finalize UI first
-                </Button>
-              </Link>
+              <Button type="button" variant="secondary" className="!px-5 !py-3 !bg-white/10 !text-white !border-white/35" onClick={() => openPortal("office")}>
+                Office login
+              </Button>
             </div>
             <p className="text-xs font-mono text-white/55">Demo password · Demo@1234</p>
           </div>

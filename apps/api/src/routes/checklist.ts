@@ -302,6 +302,27 @@ checklistRouter.get("/submissions/:id", async (req, res) => {
 });
 
 /** Export project checklist fills for site engineers (shared dual-fill audit) */
+checklistRouter.get("/project/:projectId/submissions", async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
+  const submissions = await prisma.checklistSubmission.findMany({
+    where: {
+      assignment: {
+        projectId: req.params.projectId,
+        ...(type ? { template: { checklistType: type } } : {}),
+      },
+    },
+    include: {
+      assignment: { include: { template: true } },
+      submittedBy: { select: { fullName: true, role: true, email: true } },
+      drawing: { select: { drawingNumber: true, title: true } },
+      revision: { select: { revisionNumber: true, createdAt: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+  });
+  res.json(submissions);
+});
+
 checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const submissions = await prisma.checklistSubmission.findMany({

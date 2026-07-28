@@ -35,6 +35,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "employee"],
       blurb: "Manage Drawing Check Master templates; upload opens fill in a new window.",
     },
+    {
+      to: "checklist-logs",
+      label: "Checklist fill log",
+      query: "family=DrawingCheck",
+      blurb: "Who filled what — branded download with Sharnam logo.",
+    },
     { to: "dms", label: "Documents (DMS)", blurb: "Drawing folders." },
     {
       to: "coordination",
@@ -81,6 +87,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Create checklists, upload Excel, choose template for fills.",
     },
     {
+      to: "checklist-logs",
+      label: "QI fill log",
+      query: "family=QualityInspection",
+      blurb: "Quality checklist fills — branded download.",
+    },
+    {
       to: "qap",
       label: "Quality Assurance Plan",
       roles: ["admin", "office", "employee", "client", "site_employee"],
@@ -102,6 +114,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       query: "family=Safety",
       roles: ["admin", "office", "employee", "client"],
       blurb: "Create / upload Excel safety checklists and choose for fills.",
+    },
+    {
+      to: "checklist-logs",
+      label: "Safety fill log",
+      query: "family=Safety",
+      blurb: "Safety checklist fills — branded download.",
     },
     {
       to: "rfis",

@@ -3,7 +3,7 @@
 **Product:** Sharnam PMC Portal (शरणम्)  
 **Live demo:** https://sharnam-portal.onrender.com  
 **Audience:** Sharnam office, site, client, contractor  
-**UI:** Modern Signal — Blue · Red · Yellow · White · Black  
+**UI:** Modern SAP / Workday (navy + amber) · Parikh-style module switch · not classic ERP  
 
 This document is the **requirements baseline** for module finalization. Items marked **to be discussed** are scoped in biweekly meetings (see sprint plan + roadmap docs).
 

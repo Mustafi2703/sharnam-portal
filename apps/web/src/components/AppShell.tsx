@@ -3,15 +3,15 @@ import { useAuth } from "../auth";
 import { useEffect, useState, type ReactNode } from "react";
 import { Badge, Button } from "./ui";
 import { BrandMark, BRAND_EN } from "./Brand";
-import { getActiveWorkspace, WORKSPACE_PROJECT_KEY, WORKSPACES } from "../workspaces";
+import { getActiveWorkspace, setActiveWorkspace, WORKSPACE_PROJECT_KEY, WORKSPACES } from "../workspaces";
 import { api } from "../api";
 
 const primaryNav = [
-  { to: "/master", label: "Master", roles: ["admin", "office"] },
+  { to: "/dashboard", label: "Dashboard", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
   { to: "/workspace", label: "Modules", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
+  { to: "/master", label: "Master", roles: ["admin", "office"] },
   { to: "/projects", label: "Projects", roles: ["admin", "office", "site_employee", "client", "employee", "vendor"] },
-  { to: "/crm", label: "CRM", roles: ["admin", "office", "employee"] },
-  { to: "/hrm", label: "HR / Directory", roles: ["admin", "office"] },
+  { to: "/roles", label: "Access", roles: ["admin"] },
 ];
 
 type Proj = { id: string; code: string; name: string };
@@ -21,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const projectToolRoute = /^\/projects\/[^/]+/.test(location.pathname);
+  const onModulePicker = location.pathname === "/workspace";
   const [projects, setProjects] = useState<Proj[]>([]);
   const [projectId, setProjectId] = useState(
     () => (typeof window !== "undefined" ? localStorage.getItem(WORKSPACE_PROJECT_KEY) || "" : "")
@@ -51,14 +52,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     navigate(`/projects/${id}`);
   }
 
+  function switchModule() {
+    setActiveWorkspace(null);
+    navigate("/workspace");
+  }
+
+  if (onModulePicker) {
+    return <div className="min-h-screen bg-[#0f1b2d]">{children}</div>;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-sand">
       <header className="procore-topbar sticky top-0 z-40 shadow-sm">
         <div
-          className="flex items-center gap-4 sm:gap-5 px-5 sm:px-8 border-b border-white/10 bg-procore-navy text-white"
-          style={{ minHeight: "var(--ui-nav-h, 64px)" }}
+          className="flex items-center gap-4 sm:gap-5 px-5 sm:px-8 border-b border-white/10 bg-[#0f1b2d] text-white"
+          style={{ minHeight: "var(--ui-nav-h, 58px)" }}
         >
-          <Link to="/workspace" className="shrink-0 flex items-center gap-2.5" aria-label={`${BRAND_EN} home`}>
+          <Link to="/dashboard" className="shrink-0 flex items-center gap-2.5" aria-label={`${BRAND_EN} home`}>
             <BrandMark size="sm" tagTone="dark" compact showTag={false} />
             <span className="hidden sm:inline font-display text-base tracking-tight text-white">{BRAND_EN}</span>
           </Link>
@@ -66,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <label className="flex items-center gap-2 min-w-0 flex-1 max-w-md">
             <span className="hidden lg:inline text-[11px] uppercase tracking-wider text-white/55 shrink-0">Project</span>
             <select
-              className="w-full min-w-0 rounded-[var(--ui-radius-sm,6px)] border border-white/20 bg-white/10 text-white text-sm px-3 py-2.5 outline-none focus:border-brand"
+              className="w-full min-w-0 rounded-lg border border-white/20 bg-white/10 text-white text-sm px-3 py-2 outline-none focus:border-amber-400/60"
               value={projectId}
               onChange={(e) => selectProject(e.target.value)}
               aria-label="Select project"
@@ -81,10 +91,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </label>
 
           {wsLabel && (
-            <span className="hidden md:inline text-sm text-white/70 truncate max-w-[140px]">/ {wsLabel}</span>
+            <span className="hidden md:inline text-sm text-amber-300/90 truncate max-w-[140px] font-semibold">/ {wsLabel}</span>
           )}
 
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <Button type="button" className="!bg-amber-500 !text-white !text-xs !py-2 hover:!bg-amber-600" onClick={switchModule}>
+              Switch module
+            </Button>
             <Badge tone="neutral">{user?.portal}</Badge>
             <Button
               variant="ghost"
@@ -99,18 +112,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 sm:px-6 min-h-14 bg-paper">
-          <nav className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1 py-2">
+        <div className="flex items-center gap-2 px-3 sm:px-6 min-h-12 bg-white border-b border-line">
+          <nav className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1 py-1.5">
             {primaryNav
               .filter((n) => !user || n.roles.includes(user.role))
               .map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
-                  end={n.to === "/workspace"}
+                  end={n.to === "/dashboard"}
                   className={({ isActive }) =>
-                    `px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
-                      isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
+                    `px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
+                      isActive ? "border-amber-500 text-[#1e3a5f]" : "border-transparent text-steel-muted hover:text-ink"
                     }`
                   }
                 >
@@ -122,8 +135,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 to={`/projects/${projectId}`}
                 end
                 className={({ isActive }) =>
-                  `px-4 py-3 text-[15px] font-semibold whitespace-nowrap border-b-[3px] transition ${
-                    isActive ? "border-brand text-brand" : "border-transparent text-steel-muted hover:text-ink"
+                  `px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-[3px] transition ${
+                    isActive ? "border-amber-500 text-[#1e3a5f]" : "border-transparent text-steel-muted hover:text-ink"
                   }`
                 }
               >
@@ -131,18 +144,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </NavLink>
             )}
           </nav>
-          <span className="hidden sm:inline text-[11px] font-semibold uppercase tracking-wider text-steel-muted shrink-0 pl-3 border-l border-line">
-            Blue · Red · Yellow
-          </span>
         </div>
 
         {selected && (
-          <div className="px-4 sm:px-6 py-2 bg-paper border-b border-line text-xs text-steel-muted flex flex-wrap gap-x-4 gap-y-1">
-            <span className="font-mono text-brand font-semibold">{selected.code}</span>
+          <div className="px-4 sm:px-6 py-2 bg-slate-50 border-b border-line text-xs text-steel-muted flex flex-wrap gap-x-4 gap-y-1">
+            <span className="font-mono text-[#1e3a5f] font-semibold">{selected.code}</span>
             <span className="truncate text-ink">{selected.name}</span>
-            <span>
-              Module bar → hub → tools. Right Actions only. Admin controls modules in Master.
-            </span>
+            <span>SAP-style modules · Switch module anytime · Admin allocates access in Access</span>
           </div>
         )}
       </header>
@@ -150,9 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="flex-1 min-w-0 w-full">
         <div
           className={
-            projectToolRoute
-              ? "w-full max-w-none"
-              : "w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8"
+            projectToolRoute ? "w-full max-w-none" : "w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8"
           }
         >
           {children}

@@ -2,19 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, PageHeader } from "../components/ui";
+import { Badge, Button, Card, PageHero } from "../components/ui";
 import { WORKSPACE_PROJECT_KEY } from "../workspaces";
 
 type Project = { id: string; code: string; name: string; status: string };
 
-type AlertBox = {
-  tone: "danger" | "warn" | "brand";
-  title: string;
-  detail: string;
-  to: string;
-};
-
-/** Post-login ops desk — open RFIs / issues / diary alerts, then go to modules */
+/** Workday / SAP-style ops dashboard — alerts, KPI tiles, CSS charts, then modules */
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -59,84 +52,51 @@ export default function DashboardPage() {
         const list = Array.isArray(r) ? r : r.rfis || [];
         setOpenRfis(list.filter((x: any) => x.status === "Open" || x.status === "Draft"));
         const logs = Array.isArray(d) ? d : (d as any)?.logs || (d as any)?.entries || [];
-        setDiaryHint(logs[0] ? `Latest day log ${new Date(logs[0].logDate || logs[0].createdAt || Date.now()).toLocaleDateString()}` : "No day log yet");
+        setDiaryHint(
+          logs[0]
+            ? `Latest day log ${new Date(logs[0].logDate || logs[0].createdAt || Date.now()).toLocaleDateString()}`
+            : "No day log yet"
+        );
         setSafetyOpen(s?.stats?.open ?? 0);
       })
       .finally(() => setBusy(false));
   }, [pid, token]);
 
-  const alerts: AlertBox[] = useMemo(() => {
-    if (!pid) return [];
-    const boxes: AlertBox[] = [];
-    if (openRfis.length) {
-      boxes.push({
-        tone: "danger",
-        title: `${openRfis.length} open RFI / request`,
-        detail: openRfis
-          .slice(0, 3)
-          .map((r) => r.number)
-          .join(" · "),
-        to: `/projects/${pid}/rfis`,
-      });
-    }
-    if (safetyOpen > 0) {
-      boxes.push({
-        tone: "warn",
-        title: `${safetyOpen} open safety items`,
-        detail: "Review Safety dashboard and Safety RFIs.",
-        to: `/projects/${pid}/safety`,
-      });
-    }
-    boxes.push({
-      tone: "brand",
-      title: "Day log",
-      detail: diaryHint,
-      to: `/projects/${pid}/diary`,
-    });
-    boxes.push({
-      tone: "warn",
-      title: "Quality · Request for Information",
-      detail: "Raise or fill QI requests for this project.",
-      to: `/projects/${pid}/rfis?kind=QualityInspection`,
-    });
-    boxes.push({
-      tone: "danger",
-      title: "Safety · Request for Information",
-      detail: "Raise or fill Safety checklist RFIs.",
-      to: `/projects/${pid}/rfis?kind=SafetyChecklist`,
-    });
-    return boxes;
-  }, [pid, openRfis, safetyOpen, diaryHint]);
+  const rfiPct = Math.min(100, openRfis.length * 12 + 8);
+  const safetyPct = Math.min(100, safetyOpen * 15 + 10);
+  const health = Math.max(12, 100 - openRfis.length * 8 - safetyOpen * 6);
 
-  const isClient = user?.role === "client";
+  const stats = useMemo(
+    () => [
+      { label: "Open RFIs", value: openRfis.length, tone: "danger" as const, to: pid ? `/projects/${pid}/rfis` : "/workspace" },
+      { label: "Safety open", value: safetyOpen, tone: "warn" as const, to: pid ? `/projects/${pid}/safety` : "/workspace" },
+      { label: "Project health", value: `${health}%`, tone: "ok" as const, to: "/workspace" },
+      { label: "Day log", value: diaryHint.includes("No") ? "—" : "Live", tone: "brand" as const, to: pid ? `/projects/${pid}/diary` : "/workspace" },
+    ],
+    [openRfis.length, safetyOpen, health, diaryHint, pid]
+  );
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto px-4 sm:px-0">
-      <PageHeader
-        eyebrow="Ops dashboard"
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <PageHero
         title={`Hello, ${user?.fullName?.split(" ")[0] || "there"}`}
-        subtitle="Open issues first — then choose a module. Pilot and UAT use one isolated project."
+        subtitle="Modern SAP / Workday-style ops desk — review open work, then switch into a module."
         actions={
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{user?.portal || user?.role}</Badge>
             <Link to="/workspace">
-              <Button type="button">Select module →</Button>
+              <Button type="button" className="!bg-amber-500 !text-white hover:!bg-amber-600">
+                Switch module →
+              </Button>
             </Link>
-            {(user?.role === "admin" || user?.role === "office") && (
-              <Link to="/master">
-                <Button type="button" variant="secondary">
-                  Master
-                </Button>
-              </Link>
-            )}
           </div>
         }
       />
 
       <Card className="!p-4">
-        <label className="text-sm font-semibold text-ink block mb-2">Active project</label>
+        <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block mb-2">Active project</label>
         <select
-          className="w-full max-w-lg rounded-[var(--ui-radius-sm,10px)] border border-line bg-white px-3 py-2.5 text-sm"
+          className="w-full max-w-lg rounded-xl border border-line bg-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-amber-400/40 outline-none"
           value={pid || ""}
           onChange={(e) => setProjectId(e.target.value)}
         >
@@ -149,49 +109,85 @@ export default function DashboardPage() {
         </select>
       </Card>
 
-      {busy && <p className="text-sm text-steel-muted">Loading alerts…</p>}
+      {busy && <p className="text-sm text-steel-muted">Loading workspace metrics…</p>}
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {alerts.map((a) => (
-          <Link key={a.title} to={a.to} className="block group">
-            <Card
-              className={`h-full !p-5 border-l-4 transition group-hover:shadow-md ${
-                a.tone === "danger"
-                  ? "border-l-mark"
-                  : a.tone === "warn"
-                    ? "border-l-warn"
-                    : "border-l-brand"
-              }`}
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-steel-muted mb-1">Alert</div>
-              <div className="font-display text-lg font-semibold text-ink">{a.title}</div>
-              <p className="text-sm text-steel-muted mt-2 leading-relaxed">{a.detail}</p>
-              <div className="mt-4 text-sm font-semibold text-brand">Open →</div>
-            </Card>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {stats.map((s) => (
+          <Link key={s.label} to={s.to} className="block">
+            <div className="sap-stat h-full hover:border-amber-300 transition">
+              <div className="text-[10px] uppercase tracking-wider text-steel-muted font-semibold">{s.label}</div>
+              <div className="text-2xl font-display mt-2 tabular-nums">{s.value}</div>
+            </div>
           </Link>
         ))}
       </div>
 
-      <Card className="!p-6 bg-brand-soft/40 border-brand/20">
-        <h2 className="font-display text-xl font-semibold">Next: module selection</h2>
-        <p className="text-sm text-steel-muted mt-2 max-w-2xl">
-          {isClient
-            ? "Open Modules for Drawings (view), concerns, and reports."
-            : "Open Modules for Drawings, Quality, Safety, Progress, Field, Comms, Cost, and Reports. Master stays for Office setup."}
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link to="/workspace">
-            <Button type="button">Go to modules</Button>
-          </Link>
-          {pid && (
-            <Link to={`/projects/${pid}`}>
-              <Button type="button" variant="secondary">
-                Project home
-              </Button>
-            </Link>
-          )}
-        </div>
-      </Card>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card>
+          <h3 className="font-semibold text-ink mb-4">Workload mix</h3>
+          <div className="flex items-center gap-6">
+            <div className="sap-donut shrink-0" style={{ ["--pct" as string]: `${health}%` }} />
+            <ul className="space-y-3 text-sm flex-1">
+              <li>
+                <div className="flex justify-between mb-1">
+                  <span>Open RFIs pressure</span>
+                  <span className="tabular-nums text-steel-muted">{rfiPct}%</span>
+                </div>
+                <div className="sap-bar-track">
+                  <div className="sap-bar-fill" style={{ width: `${rfiPct}%` }} />
+                </div>
+              </li>
+              <li>
+                <div className="flex justify-between mb-1">
+                  <span>Safety attention</span>
+                  <span className="tabular-nums text-steel-muted">{safetyPct}%</span>
+                </div>
+                <div className="sap-bar-track">
+                  <div className="sap-bar-fill" style={{ width: `${safetyPct}%`, background: "linear-gradient(90deg,#dc2626,#f59e0b)" }} />
+                </div>
+              </li>
+            </ul>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="font-semibold text-ink mb-3">Quick actions</h3>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {[
+              { label: "Select module", to: "/workspace", primary: true },
+              { label: "Quality Ask", to: pid ? `/projects/${pid}/rfis?kind=QualityInspection` : "/workspace" },
+              { label: "Safety Ask", to: pid ? `/projects/${pid}/rfis?kind=SafetyChecklist` : "/workspace" },
+              { label: "Checklist logs", to: pid ? `/projects/${pid}/checklist-logs` : "/workspace" },
+              { label: "Master", to: "/master", hide: user?.role !== "admin" && user?.role !== "office" },
+              { label: "Module access", to: "/roles", hide: user?.role !== "admin" },
+            ]
+              .filter((a) => !a.hide)
+              .map((a) => (
+                <Link key={a.label} to={a.to}>
+                  <Button type="button" variant={a.primary ? "primary" : "secondary"} className="w-full !justify-start">
+                    {a.label}
+                  </Button>
+                </Link>
+              ))}
+          </div>
+          <p className="text-xs text-steel-muted mt-4">{diaryHint}</p>
+        </Card>
+      </div>
+
+      {!!openRfis.length && (
+        <Card padding={false}>
+          <div className="px-5 py-3 border-b border-line bg-slate-50 font-semibold text-sm">Open RFIs</div>
+          <ul className="divide-y divide-line text-sm">
+            {openRfis.slice(0, 6).map((r) => (
+              <li key={r.id} className="px-5 py-3 flex justify-between gap-3">
+                <span className="font-mono text-xs text-brand">{r.number}</span>
+                <span className="truncate text-steel-muted">{r.subject || r.title || "—"}</span>
+                <Badge tone="danger">{r.status}</Badge>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }

@@ -40,6 +40,12 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
     if (q === "DrawingCheck") return "drawings";
     return "quality";
   }
+  if (tool === "checklist-logs") {
+    const q = new URLSearchParams(search).get("family");
+    if (q === "Safety") return "safety";
+    if (q === "DrawingCheck" || q === "SiteExecution") return "drawings";
+    return "quality";
+  }
   if (tool === "dms") {
     const ws = getActiveWorkspace();
     return ws === "drawings" ? "drawings" : "home";

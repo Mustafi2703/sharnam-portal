@@ -1,12 +1,11 @@
 # Sharnam Portal — Product IA (locked)
 
-**UI:** Modern Signal — **Blue** (actions) · **Red** (alerts) · **Yellow** (attention) · **White** (surfaces) · **Black** (chrome).  
-**Shape:** Top **module** bar · horizontal **sub-tool** chips · right **Actions** only. **No left tools rail.**  
-**Login:** Ops dashboard (open RFIs / alerts) → module selection.
+**UI:** Modern SAP / Workday — **navy** chrome · **amber** accent · slate canvas (Parikh-style).  
+**Shape:** Login → ops dashboard → **Switch module** picker · top module bar · sub-tool chips · right Actions. **No left tools rail. No UI options picker.**
 
 ## Office Master (after login)
 
-Office / admin: Master + enable/disable modules per project. **CRM (leads)** and **HRMS** are linked but **to be discussed** in detail. Site and Office landings stay open.
+Office / admin: Master + enable/disable modules per project. **Access** (`/roles`) allocates who can see / do what. **CRM** and **HRMS** are linked but **to be discussed** in detail.
 
 | Office tool | Purpose | Status |
 |-------------|---------|--------|
