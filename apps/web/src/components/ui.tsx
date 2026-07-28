@@ -12,15 +12,16 @@ export function PageHero({
   accent?: "navy" | "emerald" | "indigo";
 }) {
   const gradients = {
-    navy: "from-[#1a1d26] via-[#243447] to-[#126e82]",
-    emerald: "from-teal-950 via-teal-900 to-teal-700",
-    indigo: "from-slate-900 via-slate-800 to-teal-800",
+    navy: "from-[#0f766e] via-[#126e82] to-[#1a1d26]",
+    emerald: "from-teal-800 via-teal-700 to-cyan-800",
+    indigo: "from-slate-900 via-teal-900 to-teal-700",
   };
   return (
     <div
       className={`rounded-2xl bg-gradient-to-br ${gradients[accent]} p-6 sm:p-7 shadow-lg border border-white/10 relative overflow-hidden mb-6`}
     >
-      <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-teal-400/15 blur-2xl" />
+      <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-amber-400/20 blur-2xl" />
+      <div className="absolute -left-6 bottom-0 w-28 h-28 rounded-full bg-teal-300/15 blur-2xl" />
       <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-white tracking-tight">{title}</h1>

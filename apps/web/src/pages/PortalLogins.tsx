@@ -261,12 +261,10 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
         />
       </label>
       {error && <p className="text-sm text-danger bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-      <Button disabled={busy} className="w-full !py-2.5 !text-sm !rounded-xl">
+      <Button disabled={busy} className="w-full !py-3 !text-[15px] !rounded-xl">
         {busy ? "Signing in…" : "Sign in"}
       </Button>
-      <p className="text-center text-[10px] text-steel-muted leading-snug">
-        {cfg.demoEmail}
-      </p>
+      <p className="text-center text-[11px] text-steel-muted leading-snug">{cfg.demoEmail}</p>
     </form>
   );
 }
@@ -293,20 +291,20 @@ function ConstructionHeroPanel({
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(165deg, rgba(26,29,38,0.5) 0%, rgba(18,110,130,0.45) 55%, rgba(15,118,110,0.72) 100%)",
+            "linear-gradient(165deg, rgba(15,118,110,0.55) 0%, rgba(18,110,130,0.5) 50%, rgba(26,29,38,0.78) 100%)",
         }}
       />
-      <div className="relative z-10 p-8 xl:p-10 max-w-lg">
-        <p className="text-[10px] uppercase tracking-[0.22em] text-teal-200 font-semibold">
+      <div className="relative z-10 p-6 xl:p-8 max-w-md">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-200 font-semibold">
           {BRAND_HI} · Construction PMC
         </p>
-        <h1 className="font-display text-3xl xl:text-4xl tracking-tight mt-3 leading-[1.15]">{title}</h1>
-        <p className="mt-3 text-sm text-white/85 leading-relaxed">{subtitle}</p>
+        <h1 className="font-display text-2xl xl:text-[1.75rem] tracking-tight mt-2.5 leading-[1.2]">{title}</h1>
+        <p className="mt-2.5 text-[13px] text-white/88 leading-relaxed">{subtitle}</p>
         {points && points.length > 0 && (
-          <ul className="mt-5 space-y-2 border-t border-white/20 pt-4">
+          <ul className="mt-4 space-y-1.5 border-t border-white/20 pt-3">
             {points.map((p) => (
-              <li key={p} className="text-[13px] text-white/90 flex gap-2">
-                <span className="text-teal-300 shrink-0">▸</span>
+              <li key={p} className="text-[12px] text-white/90 flex gap-2">
+                <span className="text-amber-300 shrink-0">▸</span>
                 <span>{p}</span>
               </li>
             ))}
@@ -324,21 +322,21 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
-    <div className="login-shell grid lg:grid-cols-[1fr_minmax(320px,420px)]">
+    <div className="login-shell grid lg:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
       <ConstructionHeroPanel title={cfg.headline} subtitle={cfg.subtitle} points={cfg.points} />
-      <section className="login-panel flex flex-col h-full bg-white border-l border-line">
-        <header className="px-5 pt-4 pb-2 flex items-center justify-between shrink-0">
+      <section className="login-panel flex flex-col h-full border-l border-line">
+        <header className="px-6 pt-5 pb-2 flex items-center justify-between shrink-0">
           <BrandLink to="/login" tagTone="light" />
-          <Link to="/login" className="text-xs font-semibold text-brand">
+          <Link to="/login" className="text-sm font-semibold text-brand">
             All portals
           </Link>
         </header>
-        <div className="flex-1 flex items-center px-5 pb-6">
-          <div className="w-full max-w-[340px] mx-auto">
-            <BrandLockup compact className="mb-5 lg:hidden" />
-            <p className="text-[10px] uppercase tracking-[0.18em] text-brand font-semibold mb-1">{BRAND_EN}</p>
-            <h2 className="font-display text-2xl text-ink tracking-tight">{cfg.title}</h2>
-            <p className="text-steel-muted mt-1 mb-4 text-sm leading-snug">{cfg.subtitle}</p>
+        <div className="flex-1 flex items-center px-6 pb-8">
+          <div className="w-full max-w-[400px] mx-auto">
+            <BrandLockup className="mb-6 lg:hidden" />
+            <p className="text-[11px] uppercase tracking-[0.18em] text-brand font-semibold mb-1">{BRAND_EN}</p>
+            <h2 className="font-display text-3xl text-ink tracking-tight">{cfg.title}</h2>
+            <p className="text-steel-muted mt-2 mb-5 text-[15px] leading-relaxed">{cfg.subtitle}</p>
             <PortalSignInForm cfg={cfg} />
           </div>
         </div>
@@ -347,7 +345,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   );
 }
 
-/** Compact viewport-fit login — teal brand colors, mobile-first */
+/** Sign-in focused — narrower hero, larger form typography */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
@@ -357,39 +355,38 @@ export function LoginHubPage() {
   const cfg = PORTAL_LOGINS[active];
 
   return (
-    <div className="login-shell flex flex-col lg:grid lg:grid-cols-[1.15fr_minmax(300px,400px)]">
-      {/* Mobile hero — short */}
-      <div className="lg:hidden relative h-[22vw] min-h-[88px] max-h-[120px] overflow-hidden shrink-0">
+    <div className="login-shell flex flex-col lg:grid lg:grid-cols-[minmax(0,0.85fr)_minmax(400px,1.15fr)]">
+      <div className="lg:hidden relative h-[18vw] min-h-[76px] max-h-[100px] overflow-hidden shrink-0">
         <img src="/hero-login.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1d26]/90 to-[#126e82]/50" />
-        <div className="relative z-10 h-full flex flex-col justify-end px-4 pb-3 text-white">
-          <p className="text-[9px] uppercase tracking-[0.2em] text-teal-200 font-semibold">{BRAND_HI} · PMC</p>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0f766e]/90 to-[#126e82]/45" />
+        <div className="relative z-10 h-full flex flex-col justify-end px-4 pb-2.5 text-white">
+          <p className="text-[9px] uppercase tracking-[0.2em] text-amber-200 font-semibold">{BRAND_HI} · PMC</p>
           <p className="font-display text-base leading-tight">Construction delivery portal</p>
         </div>
       </div>
 
       <ConstructionHeroPanel
         title="Built for construction delivery"
-        subtitle="Drawings, quality, field, and communications — aligned for office, site, contractors, and clients."
+        subtitle="Drawings, quality, field, and communications — aligned across teams."
         points={[
-          "Dashboard for open RFIs, Comms, and logs",
-          "One module at a time for focused work",
-          "Office · Site · Contractor · Client desks",
+          "Dashboard for RFIs, Comms, and logs",
+          "One module at a time",
+          "Office · Site · Contractor · Client",
         ]}
       />
 
-      <section id="signin" className="login-panel flex flex-col h-full min-h-0 bg-white lg:border-l border-line">
-        <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 py-4 sm:py-5">
-          <div className="w-full max-w-[340px] mx-auto">
-            <BrandLockup compact />
+      <section id="signin" className="login-panel flex flex-col h-full min-h-0 lg:border-l border-line">
+        <div className="flex-1 flex flex-col justify-center px-5 sm:px-8 py-5 sm:py-6">
+          <div className="w-full max-w-[400px] mx-auto">
+            <BrandLockup />
 
-            <p className="mt-4 text-[11px] text-steel-muted">
-              Demo password <span className="font-semibold text-ink">Demo@1234</span>
+            <p className="mt-5 text-sm text-steel-muted">
+              Demo password <span className="font-semibold text-brand">Demo@1234</span>
             </p>
 
-            <div className="mt-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-steel-muted font-semibold mb-2">Sign in as</p>
-              <div className="grid grid-cols-2 gap-1.5 mb-3">
+            <div className="mt-5">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-brand font-semibold mb-2.5">Sign in as</p>
+              <div className="grid grid-cols-2 gap-2 mb-4">
                 {HUB_ROLES.map((key) => {
                   const role = PORTAL_LOGINS[key];
                   const selected = active === key;
@@ -400,7 +397,7 @@ export function LoginHubPage() {
                       onClick={() => setActive(key)}
                       className={`login-role-btn ${selected ? "is-on" : ""}`}
                     >
-                      <div className={`text-[13px] font-semibold ${selected ? "text-brand" : "text-ink"}`}>
+                      <div className={`text-[15px] font-semibold ${selected ? "text-brand" : "text-ink"}`}>
                         {role.shortLabel === "Vendor" ? "Contractor" : role.shortLabel}
                       </div>
                     </button>
@@ -408,15 +405,15 @@ export function LoginHubPage() {
                 })}
               </div>
 
-              <p className="text-xs text-steel-muted mb-3 leading-snug line-clamp-2">{cfg.subtitle}</p>
+              <p className="text-sm text-steel-muted mb-4 leading-relaxed">{cfg.subtitle}</p>
               <PortalSignInForm cfg={cfg} />
             </div>
           </div>
         </div>
 
-        <footer className="shrink-0 px-4 sm:px-6 py-2.5 border-t border-line flex items-center justify-between gap-2">
-          <p className="text-[11px] text-steel-muted">© {new Date().getFullYear()} {BRAND_EN}</p>
-          <p className="text-[10px] text-brand font-semibold">{BRAND_HI}</p>
+        <footer className="shrink-0 px-5 sm:px-8 py-3 border-t border-line flex items-center justify-between gap-2 bg-brand-soft/40">
+          <p className="text-xs text-steel-muted">© {new Date().getFullYear()} {BRAND_EN}</p>
+          <p className="text-[11px] text-brand font-semibold">{BRAND_HI}</p>
         </footer>
       </section>
     </div>
