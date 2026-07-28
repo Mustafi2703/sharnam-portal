@@ -4,6 +4,7 @@ const BRAND_EN = "Sharnam";
 const BRAND_HI = "शरणम्";
 const BRAND_TAG = "Project Development Consultants & Co.";
 
+/** Clean logo — white plate so the mark sits properly on light or dark chrome */
 export function BrandMark({
   size = "md",
   showTag = true,
@@ -15,17 +16,22 @@ export function BrandMark({
   tagTone?: "light" | "dark";
   compact?: boolean;
 }) {
-  const heights = { sm: "h-8", md: "h-11", lg: "h-14", xl: "h-20 sm:h-24" };
+  const heights = { sm: "h-9", md: "h-11", lg: "h-14", xl: "h-16 sm:h-20" };
+  const pads = { sm: "p-1.5", md: "p-2", lg: "p-2.5", xl: "p-3" };
   const tone = tagTone === "dark" ? "text-white" : "text-ink";
   return (
-    <div className={`flex items-center min-w-0 ${compact ? "gap-2" : "gap-3"}`}>
-      <div className={`logo-plate shrink-0 rounded-md ${compact ? "" : "brand-frame"}`}>
-        <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className={`${heights[size]} w-auto object-contain block`} />
+    <div className={`flex items-center min-w-0 ${compact ? "gap-2.5" : "gap-3"}`}>
+      <div className={`shrink-0 rounded-lg bg-white shadow-sm border border-black/5 ${pads[size]}`}>
+        <img
+          src="/logo.png"
+          alt={`${BRAND_HI} ${BRAND_EN}`}
+          className={`${heights[size]} w-auto max-w-[160px] object-contain object-left block`}
+        />
       </div>
       {showTag && !compact && (
         <div className={tone}>
           <div className="font-display text-base tracking-tight leading-none">{BRAND_EN}</div>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-steel-muted mt-1 font-medium">
+          <div className={`text-[10px] uppercase tracking-[0.18em] mt-1 font-medium ${tagTone === "dark" ? "text-white/60" : "text-steel-muted"}`}>
             {BRAND_HI} · PMC
           </div>
         </div>
@@ -51,18 +57,20 @@ export function BrandLink({
   );
 }
 
-export function BrandHero({ className = "", light = false }: { className?: string; light?: boolean }) {
+/** Large logo on white login panels — sits directly on white so the mark blends cleanly */
+export function BrandLockup({ className = "" }: { className?: string }) {
   return (
-    <div className={`inline-flex flex-col items-start ${className}`}>
-      <div className="logo-plate brand-frame rounded-xl p-5 sm:p-6">
-        <img src="/logo.png" alt={`${BRAND_HI} ${BRAND_EN}`} className="h-14 sm:h-20 w-auto object-contain" />
+    <div className={`flex flex-col items-start ${className}`}>
+      <img
+        src="/logo.png"
+        alt={`${BRAND_HI} ${BRAND_EN}`}
+        className="h-14 sm:h-[4.5rem] w-auto max-w-[240px] object-contain object-left block"
+      />
+      <div className="mt-5">
+        <div className="font-display text-2xl text-ink tracking-tight">{BRAND_EN}</div>
+        <p className="text-sm text-steel-muted mt-1 leading-snug">{BRAND_TAG}</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-steel-muted/80 mt-2 font-medium">{BRAND_HI}</p>
       </div>
-      <h1 className={`mt-5 font-display text-3xl sm:text-4xl tracking-tight ${light ? "text-ink" : "text-white"}`}>
-        {BRAND_EN}
-      </h1>
-      <p className={`mt-1 font-mono text-[10px] uppercase tracking-[0.28em] ${light ? "text-steel-muted" : "text-white/75"}`}>
-        {BRAND_HI} · {BRAND_TAG}
-      </p>
     </div>
   );
 }
