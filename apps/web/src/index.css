@@ -30,8 +30,8 @@
 }
 
 :root {
-  --ui-chrome-h: 56px;
-  --ui-nav-h: 56px;
+  --ui-chrome-h: 48px;
+  --ui-nav-h: 48px;
   --ui-gap: 1.25rem;
   --ui-radius: 10px;
   --ui-radius-sm: 6px;
@@ -40,6 +40,13 @@
   --wd-chrome: #ffffff;
   --wd-chrome-border: #dde1e8;
   --wd-accent: #0f766e;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --ui-chrome-h: 56px;
+    --ui-nav-h: 56px;
+  }
 }
 
 html,
@@ -80,12 +87,45 @@ body {
   font-family: var(--font-mono);
 }
 
-/* Workday-style light chrome */
+/* Modern light top bar */
+.app-topbar,
 .procore-topbar {
-  background: var(--wd-chrome);
+  background: #ffffff;
   border-bottom: 1px solid var(--wd-chrome-border);
   color: var(--color-ink);
   box-shadow: 0 1px 0 rgb(26 29 38 / 0.03);
+}
+
+/* Login: fit viewport, not oversized */
+.login-shell {
+  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.login-panel {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.login-role-btn {
+  border: 1px solid var(--color-line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.login-role-btn:hover {
+  border-color: rgb(15 118 110 / 0.45);
+}
+.login-role-btn.is-on {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  box-shadow: 0 0 0 2px rgb(15 118 110 / 0.12);
 }
 
 .tool-shell {

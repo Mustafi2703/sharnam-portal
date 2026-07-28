@@ -216,7 +216,7 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-3"
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
@@ -261,11 +261,11 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
         />
       </label>
       {error && <p className="text-sm text-danger bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-      <Button disabled={busy} className="w-full !py-3.5 !text-[15px]">
+      <Button disabled={busy} className="w-full !py-2.5 !text-sm !rounded-xl">
         {busy ? "Signing in…" : "Sign in"}
       </Button>
-      <p className="text-center text-[11px] text-steel-muted">
-        Demo · {cfg.demoEmail} · Demo@1234
+      <p className="text-center text-[10px] text-steel-muted leading-snug">
+        {cfg.demoEmail}
       </p>
     </form>
   );
@@ -283,36 +283,35 @@ function ConstructionHeroPanel({
   points?: string[];
 }) {
   return (
-    <aside className="relative hidden lg:flex min-h-screen flex-col justify-end overflow-hidden text-white">
+    <aside className="relative hidden lg:flex h-full min-h-0 flex-col justify-end overflow-hidden text-white">
       <img
         src="/hero-login.jpg"
         alt="Modern construction project"
-        className="absolute inset-0 h-full w-full object-cover scale-[1.02]"
+        className="absolute inset-0 h-full w-full object-cover"
       />
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(160deg, rgba(17,19,24,0.45) 0%, rgba(26,29,38,0.62) 40%, rgba(15,118,110,0.55) 100%)",
+            "linear-gradient(165deg, rgba(26,29,38,0.5) 0%, rgba(18,110,130,0.45) 55%, rgba(15,118,110,0.72) 100%)",
         }}
       />
-      <div className="relative z-10 p-10 xl:p-14 max-w-xl">
-        <p className="text-[11px] uppercase tracking-[0.28em] text-teal-200/95 font-semibold">
+      <div className="relative z-10 p-8 xl:p-10 max-w-lg">
+        <p className="text-[10px] uppercase tracking-[0.22em] text-teal-200 font-semibold">
           {BRAND_HI} · Construction PMC
         </p>
-        <h1 className="font-display text-4xl xl:text-5xl tracking-tight mt-4 leading-[1.1]">{title}</h1>
-        <p className="mt-4 text-base text-slate-100/90 leading-relaxed">{subtitle}</p>
+        <h1 className="font-display text-3xl xl:text-4xl tracking-tight mt-3 leading-[1.15]">{title}</h1>
+        <p className="mt-3 text-sm text-white/85 leading-relaxed">{subtitle}</p>
         {points && points.length > 0 && (
-          <ul className="mt-8 space-y-2.5 border-t border-white/20 pt-6">
+          <ul className="mt-5 space-y-2 border-t border-white/20 pt-4">
             {points.map((p) => (
-              <li key={p} className="text-sm text-slate-50/95 flex gap-2.5">
-                <span className="text-teal-300 mt-0.5 shrink-0">▸</span>
+              <li key={p} className="text-[13px] text-white/90 flex gap-2">
+                <span className="text-teal-300 shrink-0">▸</span>
                 <span>{p}</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-10 text-xs text-white/50">{BRAND_TAG}</p>
       </div>
     </aside>
   );
@@ -325,24 +324,21 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-[1.05fr_0.95fr] bg-white">
+    <div className="login-shell grid lg:grid-cols-[1fr_minmax(320px,420px)]">
       <ConstructionHeroPanel title={cfg.headline} subtitle={cfg.subtitle} points={cfg.points} />
-
-      <section className="flex flex-col min-h-screen bg-white">
-        <header className="px-6 sm:px-10 pt-6 flex items-center justify-between">
+      <section className="login-panel flex flex-col h-full bg-white border-l border-line">
+        <header className="px-5 pt-4 pb-2 flex items-center justify-between shrink-0">
           <BrandLink to="/login" tagTone="light" />
-          <Link to="/login" className="text-xs font-medium text-steel-muted hover:text-brand">
+          <Link to="/login" className="text-xs font-semibold text-brand">
             All portals
           </Link>
         </header>
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-10">
-          <div className="w-full max-w-sm">
-            <BrandLockup className="mb-8 lg:hidden" />
-            <p className="text-[11px] uppercase tracking-[0.22em] text-steel-muted font-semibold mb-2">
-              {BRAND_EN} sign in
-            </p>
-            <h2 className="font-display text-3xl text-ink tracking-tight">{cfg.title}</h2>
-            <p className="text-steel-muted mt-2 mb-6 text-sm leading-relaxed">{cfg.subtitle}</p>
+        <div className="flex-1 flex items-center px-5 pb-6">
+          <div className="w-full max-w-[340px] mx-auto">
+            <BrandLockup compact className="mb-5 lg:hidden" />
+            <p className="text-[10px] uppercase tracking-[0.18em] text-brand font-semibold mb-1">{BRAND_EN}</p>
+            <h2 className="font-display text-2xl text-ink tracking-tight">{cfg.title}</h2>
+            <p className="text-steel-muted mt-1 mb-4 text-sm leading-snug">{cfg.subtitle}</p>
             <PortalSignInForm cfg={cfg} />
           </div>
         </div>
@@ -351,54 +347,49 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   );
 }
 
-/** Professional construction landing — left hero image, right interactive white login */
+/** Compact viewport-fit login — teal brand colors, mobile-first */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
-  const [emailFocused, setEmailFocused] = useState(false);
 
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   const cfg = PORTAL_LOGINS[active];
 
   return (
-    <div className="min-h-screen flex flex-col lg:grid lg:grid-cols-[1.1fr_0.9fr] bg-[#f7f8fa] text-ink">
-      <div className="lg:hidden relative h-40 overflow-hidden shrink-0">
+    <div className="login-shell flex flex-col lg:grid lg:grid-cols-[1.15fr_minmax(300px,400px)]">
+      {/* Mobile hero — short */}
+      <div className="lg:hidden relative h-[22vw] min-h-[88px] max-h-[120px] overflow-hidden shrink-0">
         <img src="/hero-login.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-[#1a1d26]/75" />
-        <div className="relative z-10 h-full flex flex-col justify-end p-5 text-white">
-          <p className="text-[10px] uppercase tracking-[0.24em] text-teal-200 font-semibold">
-            {BRAND_HI} · Construction PMC
-          </p>
-          <p className="font-display text-xl mt-1">Built for construction delivery</p>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#1a1d26]/90 to-[#126e82]/50" />
+        <div className="relative z-10 h-full flex flex-col justify-end px-4 pb-3 text-white">
+          <p className="text-[9px] uppercase tracking-[0.2em] text-teal-200 font-semibold">{BRAND_HI} · PMC</p>
+          <p className="font-display text-base leading-tight">Construction delivery portal</p>
         </div>
       </div>
 
       <ConstructionHeroPanel
         title="Built for construction delivery"
-        subtitle="Sharnam’s PMC portal keeps drawings, quality, field logs, and communications aligned across office, site, contractors, and clients."
+        subtitle="Drawings, quality, field, and communications — aligned for office, site, contractors, and clients."
         points={[
-          "Open RFIs, Comms, and checklist logs on one dashboard",
-          "Switch into one module at a time for focused work",
-          "Four clear desks — Office, Site, Contractor, Client",
+          "Dashboard for open RFIs, Comms, and logs",
+          "One module at a time for focused work",
+          "Office · Site · Contractor · Client desks",
         ]}
       />
 
-      <section id="signin" className="flex flex-col flex-1 min-h-0 lg:min-h-screen bg-white lg:border-l border-line">
-        <div className="flex-1 flex flex-col justify-center px-6 sm:px-10 xl:px-14 py-10">
-          <div className="w-full max-w-md mx-auto">
-            <BrandLockup />
+      <section id="signin" className="login-panel flex flex-col h-full min-h-0 bg-white lg:border-l border-line">
+        <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 py-4 sm:py-5">
+          <div className="w-full max-w-[340px] mx-auto">
+            <BrandLockup compact />
 
-            <div className="mt-8 flex items-center gap-2 text-xs text-steel-muted">
-              <span className="login-live-dot inline-block h-2 w-2 rounded-full bg-brand" />
-              Secure demo portal · password Demo@1234
-            </div>
+            <p className="mt-4 text-[11px] text-steel-muted">
+              Demo password <span className="font-semibold text-ink">Demo@1234</span>
+            </p>
 
-            <div className="mt-8 rounded-2xl border border-line bg-[#f7f8fa]/80 p-5 sm:p-6 shadow-sm">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-steel-muted font-semibold mb-3">
-                Sign in as
-              </p>
-              <div className="grid grid-cols-2 gap-2 mb-5">
+            <div className="mt-4">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-steel-muted font-semibold mb-2">Sign in as</p>
+              <div className="grid grid-cols-2 gap-1.5 mb-3">
                 {HUB_ROLES.map((key) => {
                   const role = PORTAL_LOGINS[key];
                   const selected = active === key;
@@ -407,58 +398,25 @@ export function LoginHubPage() {
                       key={key}
                       type="button"
                       onClick={() => setActive(key)}
-                      className={`login-focus-ring rounded-xl px-3 py-3 text-left border transition ${
-                        selected
-                          ? "is-active bg-white border-brand shadow-sm"
-                          : "bg-white/70 border-line text-steel-muted hover:border-brand/40 hover:text-ink"
-                      }`}
+                      className={`login-role-btn ${selected ? "is-on" : ""}`}
                     >
-                      <div className={`text-sm font-semibold ${selected ? "text-brand" : ""}`}>
+                      <div className={`text-[13px] font-semibold ${selected ? "text-brand" : "text-ink"}`}>
                         {role.shortLabel === "Vendor" ? "Contractor" : role.shortLabel}
                       </div>
-                      <div className="text-[11px] text-steel-muted mt-0.5 line-clamp-1">{role.points[0]}</div>
                     </button>
                   );
                 })}
               </div>
 
-              <div
-                key={cfg.key}
-                className="rise mb-5 rounded-xl border border-brand/20 bg-brand-soft/60 px-4 py-3"
-              >
-                <h2 className="font-display text-xl text-ink tracking-tight">{cfg.title}</h2>
-                <p className="text-sm text-steel-muted mt-1 leading-relaxed">{cfg.subtitle}</p>
-              </div>
-
-              <div
-                className={`login-focus-ring rounded-xl border border-line bg-white p-4 ${emailFocused ? "is-active" : ""}`}
-                onFocus={() => setEmailFocused(true)}
-                onBlur={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setEmailFocused(false);
-                }}
-              >
-                <PortalSignInForm cfg={cfg} />
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-              {[
-                ["01", "Dashboard"],
-                ["02", "One module"],
-                ["03", "Actions"],
-              ].map(([n, label]) => (
-                <div key={n} className="rounded-lg border border-line bg-white px-2 py-2.5">
-                  <div className="text-[10px] font-mono text-brand font-semibold">{n}</div>
-                  <div className="text-[11px] text-steel-muted mt-0.5 font-medium">{label}</div>
-                </div>
-              ))}
+              <p className="text-xs text-steel-muted mb-3 leading-snug line-clamp-2">{cfg.subtitle}</p>
+              <PortalSignInForm cfg={cfg} />
             </div>
           </div>
         </div>
 
-        <footer className="px-6 sm:px-10 py-5 border-t border-line flex items-center justify-between gap-3 bg-[#f7f8fa]/50">
-          <p className="text-xs text-steel-muted">© {new Date().getFullYear()} {BRAND_EN}</p>
-          <p className="text-[11px] text-steel-muted/80 hidden sm:block">{BRAND_TAG}</p>
+        <footer className="shrink-0 px-4 sm:px-6 py-2.5 border-t border-line flex items-center justify-between gap-2">
+          <p className="text-[11px] text-steel-muted">© {new Date().getFullYear()} {BRAND_EN}</p>
+          <p className="text-[10px] text-brand font-semibold">{BRAND_HI}</p>
         </footer>
       </section>
     </div>

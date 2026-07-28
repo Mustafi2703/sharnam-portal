@@ -16,8 +16,8 @@ export function BrandMark({
   tagTone?: "light" | "dark";
   compact?: boolean;
 }) {
-  const heights = { sm: "h-9", md: "h-11", lg: "h-14", xl: "h-16 sm:h-20" };
-  const pads = { sm: "p-1.5", md: "p-2", lg: "p-2.5", xl: "p-3" };
+  const heights = { sm: "h-7", md: "h-9", lg: "h-11", xl: "h-14 sm:h-16" };
+  const pads = { sm: "p-1", md: "p-1.5", lg: "p-2", xl: "p-2.5" };
   const tone = tagTone === "dark" ? "text-white" : "text-ink";
   return (
     <div className={`flex items-center min-w-0 ${compact ? "gap-2.5" : "gap-3"}`}>
@@ -57,19 +57,18 @@ export function BrandLink({
   );
 }
 
-/** Large logo on white login panels — sits directly on white so the mark blends cleanly */
-export function BrandLockup({ className = "" }: { className?: string }) {
+/** Compact logo for login — scales down on small screens */
+export function BrandLockup({ className = "", compact = false }: { className?: string; compact?: boolean }) {
   return (
     <div className={`flex flex-col items-start ${className}`}>
       <img
         src="/logo.png"
         alt={`${BRAND_HI} ${BRAND_EN}`}
-        className="h-14 sm:h-[4.5rem] w-auto max-w-[240px] object-contain object-left block"
+        className={`${compact ? "h-9 sm:h-11 max-w-[160px]" : "h-10 sm:h-12 max-w-[180px]"} w-auto object-contain object-left block`}
       />
-      <div className="mt-5">
-        <div className="font-display text-2xl text-ink tracking-tight">{BRAND_EN}</div>
-        <p className="text-sm text-steel-muted mt-1 leading-snug">{BRAND_TAG}</p>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-steel-muted/80 mt-2 font-medium">{BRAND_HI}</p>
+      <div className={compact ? "mt-2" : "mt-3"}>
+        <div className={`font-display tracking-tight text-ink ${compact ? "text-lg" : "text-xl sm:text-2xl"}`}>{BRAND_EN}</div>
+        <p className="text-xs sm:text-sm text-steel-muted mt-0.5 leading-snug">{BRAND_TAG}</p>
       </div>
     </div>
   );
