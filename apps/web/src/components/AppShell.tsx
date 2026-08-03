@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useEffect, useMemo, useState } from "react";
-import { BrandMark, BRAND_EN, BRAND_HI } from "./Brand";
+import { BRAND_EN, BRAND_HI } from "./Brand";
 import {
   ModuleIcon,
   IconClose,
@@ -104,12 +104,9 @@ function SideNavBody({
     <div className="side-nav__inner">
       <div className="side-nav__head">
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
-          <span className="inline-flex rounded-md bg-white/95 p-1.5 shadow-sm shrink-0">
-            <BrandMark size="sm" tagTone="light" compact showTag={false} />
-          </span>
           <div className="side-nav__brand-text min-w-0">
             <div className="side-nav__brand-name truncate">{BRAND_EN}</div>
-            <div className="side-nav__brand-sub">{BRAND_HI} · PMC</div>
+            <div className="side-nav__brand-sub">Construction · {BRAND_HI}</div>
           </div>
         </Link>
       </div>
@@ -249,9 +246,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [hidden, setHidden] = useState(() => {
     try {
-      return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === "1";
+      const v = localStorage.getItem(SIDEBAR_HIDDEN_KEY);
+      // Default hidden for a clean workspace; user can reopen from top bar
+      if (v === null) return true;
+      return v === "1";
     } catch {
-      return false;
+      return true;
     }
   });
   const [colorMode, setColorMode] = useState<ColorMode>(() => getColorMode());
@@ -319,7 +319,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="app-frame__main">
-        <header className="app-topbar sticky top-0 z-40">
+        <header className="app-topbar">
           <div className="flex items-center gap-2.5 px-3 sm:px-4 h-[52px]">
             <button
               type="button"
@@ -332,19 +332,28 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft hover:text-brand"
-              aria-label={hidden ? "Show sidebar" : "Hide sidebar"}
-              title={hidden ? "Show sidebar" : "Hide sidebar"}
+              aria-label={hidden ? "Show left navigation" : "Hide left navigation"}
+              title={hidden ? "Show left navigation" : "Hide left navigation"}
               onClick={() => setHidden((h) => !h)}
             >
               {hidden ? <IconPanelRight size={16} /> : <IconPanel size={16} />}
             </button>
 
+            <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
+              <span className="app-topbar__brand-name">{BRAND_EN}</span>
+              <span className="app-topbar__brand-tag">Construction</span>
+            </Link>
+
             <div className="app-topbar__meta">
               <div className="app-topbar__eyebrow">
-                {isOffice ? "Sharnam Office · Full control" : inProject ? "Project workspace" : "Sharnam PMC"}
+                {isOffice ? "Office · Full control" : inProject ? "Project workspace" : "PMC portal"}
               </div>
               <div className="app-topbar__title truncate">
-                {activeProject ? `${activeProject.code} — ${activeProject.name}` : "Select a project in the sidebar"}
+                {activeProject
+                  ? `${activeProject.code} — ${activeProject.name}`
+                  : hidden
+                    ? "Open left navigation to pick a project"
+                    : "Select a project in the sidebar"}
               </div>
             </div>
 
@@ -370,13 +379,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
             </button>
-            <span className="hidden sm:inline-flex rounded-md bg-paper border border-line p-1">
-              <BrandMark size="sm" tagTone="light" compact showTag={false} />
-            </span>
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 w-full overflow-auto">
+        <main className="app-frame__scroll">
           <div className={inProject ? "w-full max-w-none" : "w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6"}>
             {children}
           </div>
