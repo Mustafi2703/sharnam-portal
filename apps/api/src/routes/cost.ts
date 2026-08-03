@@ -39,7 +39,7 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       prisma.costMonitoringLine.findMany({
         where: monWhere,
         take: pkg ? 2000 : 800,
-        orderBy: [{ packageName: "asc" }, { itemNo: "asc" }],
+        orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
       }),
       prisma.costCashflowPeriod.findMany({ where: { projectId }, orderBy: { periodLabel: "asc" } }),
       prisma.costRateDifference.findMany({ where: { projectId } }),
@@ -152,11 +152,15 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
   const where = { projectId, ...(pkg ? { packageName: pkg } : {}) };
 
   if (kind === "monitoring" || kind === "boq") {
-    const rows = await prisma.costMonitoringLine.findMany({ where, orderBy: [{ packageName: "asc" }, { itemNo: "asc" }] });
+    const rows = await prisma.costMonitoringLine.findMany({
+      where,
+      orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
+    });
     const csv = toCsv(
-      ["Package", "Item", "Description", "UOM", "Rate", "BOQ Qty", "Extra", "GFC", "Achieved", "Excess", "Saving", "BOQ Cost"],
+      ["Package", "Section", "Item", "Description", "UOM", "Rate", "BOQ Qty", "Extra", "GFC", "Achieved", "Excess", "Saving", "BOQ Cost"],
       rows.map((r) => [
         r.packageName,
+        r.section,
         r.itemNo,
         r.description,
         r.uom,
@@ -291,6 +295,7 @@ costRouter.post(
       await prisma.costMonitoringLine.create({
         data: {
           projectId: req.params.projectId,
+          section: r.section || null,
           itemNo: r.srNo,
           description: r.description,
           uom: r.unit,
@@ -475,23 +480,97 @@ costRouter.patch(
   "/monitoring/:lineId",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
-    const gfcQty = req.body.gfcQty != null ? Number(req.body.gfcQty) : undefined;
-    const achievedQty = req.body.achievedQty != null ? Number(req.body.achievedQty) : undefined;
     const existing = await prisma.costMonitoringLine.findUnique({ where: { id: req.params.lineId } });
     if (!existing) return res.status(404).json({ error: "Not found" });
-    const nextGfc = gfcQty ?? existing.gfcQty;
-    const excessQty = Math.max(0, nextGfc - existing.boqQty);
-    const savingQty = Math.max(0, existing.boqQty - nextGfc);
+
+    const body = req.body || {};
+    const nextBoq = body.boqQty != null ? Number(body.boqQty) : existing.boqQty;
+    const nextGfc = body.gfcQty != null ? Number(body.gfcQty) : existing.gfcQty;
+    const nextRate = body.rate != null ? Number(body.rate) : existing.rate;
+    const excessQty = Math.max(0, nextGfc - nextBoq);
+    const savingQty = Math.max(0, nextBoq - nextGfc);
+    const boqCost = nextBoq * nextRate;
+
     const row = await prisma.costMonitoringLine.update({
       where: { id: req.params.lineId },
       data: {
-        ...(gfcQty != null ? { gfcQty } : {}),
-        ...(achievedQty != null ? { achievedQty } : {}),
+        ...(body.packageName != null ? { packageName: String(body.packageName) } : {}),
+        ...(body.section !== undefined ? { section: body.section ? String(body.section) : null } : {}),
+        ...(body.itemNo !== undefined ? { itemNo: body.itemNo ? String(body.itemNo) : null } : {}),
+        ...(body.description != null ? { description: String(body.description) } : {}),
+        ...(body.uom !== undefined ? { uom: body.uom ? String(body.uom) : null } : {}),
+        ...(body.rate != null ? { rate: nextRate } : {}),
+        ...(body.boqQty != null ? { boqQty: nextBoq } : {}),
+        ...(body.extraQty != null ? { extraQty: Number(body.extraQty) } : {}),
+        ...(body.gfcQty != null ? { gfcQty: nextGfc } : {}),
+        ...(body.achievedQty != null ? { achievedQty: Number(body.achievedQty) } : {}),
+        ...(body.certifiedQty != null ? { certifiedQty: Number(body.certifiedQty) } : {}),
         excessQty,
         savingQty,
+        boqCost,
       },
     });
+    await audit("cost.monitoring.update", {
+      userId: req.user!.id,
+      entity: "CostMonitoringLine",
+      entityId: row.id,
+      meta: { projectId: row.projectId },
+    });
     res.json(row);
+  }
+);
+
+costRouter.post(
+  "/:projectId/monitoring",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const boqQty = Number(body.boqQty || 0);
+    const rate = Number(body.rate || 0);
+    const gfcQty = Number(body.gfcQty || 0);
+    const row = await prisma.costMonitoringLine.create({
+      data: {
+        projectId: req.params.projectId,
+        packageName: String(body.packageName || "Civil"),
+        section: body.section ? String(body.section) : null,
+        itemNo: body.itemNo ? String(body.itemNo) : null,
+        description: String(body.description || "New line"),
+        uom: body.uom ? String(body.uom) : null,
+        rate,
+        boqQty,
+        extraQty: Number(body.extraQty || 0),
+        gfcQty,
+        achievedQty: Number(body.achievedQty || 0),
+        certifiedQty: Number(body.certifiedQty || 0),
+        excessQty: Math.max(0, gfcQty - boqQty),
+        savingQty: Math.max(0, boqQty - gfcQty),
+        boqCost: boqQty * rate,
+      },
+    });
+    await audit("cost.monitoring.create", {
+      userId: req.user!.id,
+      entity: "CostMonitoringLine",
+      entityId: row.id,
+      meta: { projectId: row.projectId },
+    });
+    res.status(201).json(row);
+  }
+);
+
+costRouter.delete(
+  "/monitoring/:lineId",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.costMonitoringLine.findUnique({ where: { id: req.params.lineId } });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    await prisma.costMonitoringLine.delete({ where: { id: req.params.lineId } });
+    await audit("cost.monitoring.delete", {
+      userId: req.user!.id,
+      entity: "CostMonitoringLine",
+      entityId: req.params.lineId,
+      meta: { projectId: existing.projectId },
+    });
+    res.json({ ok: true });
   }
 );
 
@@ -530,6 +609,7 @@ costRouter.post(
         data: {
           projectId: req.params.projectId,
           packageName,
+          section: r.section || packageName,
           itemNo: r.srNo,
           description: r.description,
           uom: r.unit,

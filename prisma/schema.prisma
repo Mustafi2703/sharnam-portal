@@ -496,6 +496,8 @@ model CostMonitoringLine {
   id             String   @id @default(cuid())
   projectId      String
   packageName    String   @default("Civil")
+  /// BOQ section heading (e.g. SECTION A — EARTH WORK)
+  section        String?
   itemNo         String?
   description    String
   uom            String?

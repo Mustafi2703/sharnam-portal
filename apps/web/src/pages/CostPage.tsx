@@ -4,6 +4,7 @@ import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
+import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -111,6 +112,7 @@ export default function CostPage() {
     if (pkgFilter !== "All") setMbForm((f) => ({ ...f, packageName: pkgFilter }));
   }, [pkgFilter]);
   const canEdit = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
+  const canSiteEdit = user?.role === "site_employee";
   const clientBlocked = user?.role === "client";
 
   const load = () => {
@@ -402,24 +404,16 @@ export default function CostPage() {
       {tab === "monitoring" && (
         <div className="space-y-3">
           <p className="text-sm text-steel-muted">
-            Cost tracking BOQ vs GFC — fill GFC on site; excess / saving computes. Packages from Budget workbook Monitoring sheets.
+            Edit sections and line items inline. Office can change BOQ fields; site can update GFC / Achieved. Excess and saving recompute on save.
           </p>
-          <SheetTable
-            title="Measurement / monitoring register"
-            headers={["Package", "Item", "Description", "UOM", "Rate", "BOQ", "Extra", "GFC", "Achieved", "Excess", "Saving"]}
-            rows={monRows.map((b: any) => [
-              b.packageName,
-              b.itemNo,
-              b.description,
-              b.uom,
-              b.rate,
-              b.boqQty,
-              b.extraQty,
-              b.gfcQty,
-              b.achievedQty,
-              b.excessQty,
-              b.savingQty,
-            ])}
+          <BoqMonitoringEditor
+            projectId={id!}
+            token={token}
+            rows={monRows}
+            packages={(summary.packages || []).length ? summary.packages : ["Civil"]}
+            canFullEdit={canEdit}
+            canSiteEdit={canSiteEdit}
+            onChanged={() => void load()}
           />
         </div>
       )}

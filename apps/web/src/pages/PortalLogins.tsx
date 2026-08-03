@@ -5,7 +5,7 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { Button, Input } from "../components/ui";
 import { BrandLink, BrandLockup, BRAND_EN, BRAND_HI, BRAND_TAG } from "../components/Brand";
-import { setActiveWorkspace, type WorkspaceKey } from "../workspaces";
+import { MODULE_META, setActiveWorkspace, type WorkspaceKey } from "../workspaces";
 import { getColorMode, toggleColorMode } from "../themes";
 import { IconMoon, IconSun } from "../components/icons";
 
@@ -292,45 +292,81 @@ function portalDisplayName(key: string, shortLabel: string) {
   return shortLabel;
 }
 
+const HERO_MODULES = (Object.keys(MODULE_META) as WorkspaceKey[]).map((key) => ({
+  key,
+  ...MODULE_META[key],
+}));
+
 function ConstructionHeroPanel({
   title,
   subtitle,
   points,
   badge = `${BRAND_HI} · Construction PMC`,
   imageSrc = "/hero-login-wide.jpg",
+  showModules = false,
 }: {
   title: string;
   subtitle: string;
   points?: string[];
   badge?: string;
   imageSrc?: string;
+  showModules?: boolean;
 }) {
   return (
-    <aside className="relative hidden lg:flex h-full min-h-0 flex-col justify-end overflow-hidden text-white">
-      <img
-        src={imageSrc}
-        alt="Sharnam construction project"
-        className="absolute inset-0 h-full w-full object-cover scale-[1.02]"
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).src = "/hero-login.jpg";
-        }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(165deg, rgba(11,106,120,0.48) 0%, rgba(28,34,43,0.4) 40%, rgba(10,12,15,0.9) 100%)",
-        }}
-      />
-      <div className="absolute top-0 left-0 right-0 p-6 xl:p-8 flex items-start justify-between gap-4">
-        <span className="inline-flex rounded-lg bg-white/95 p-2.5 shadow-lg">
+    <aside className="hero-3d relative hidden lg:flex h-full min-h-0 flex-col justify-end overflow-hidden text-white">
+      <div className="hero-3d__stage" aria-hidden>
+        <img
+          src={imageSrc}
+          alt=""
+          className="hero-3d__photo"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src = "/hero-login.jpg";
+          }}
+        />
+        <div className="hero-3d__veil" />
+        <div className="hero-3d__orb hero-3d__orb--a" />
+        <div className="hero-3d__orb hero-3d__orb--b" />
+        <div className="hero-3d__grid" />
+      </div>
+
+      <div className="absolute top-0 left-0 right-0 p-6 xl:p-8 flex items-start justify-between gap-4 z-20">
+        <span className="hero-3d__logo-plate inline-flex rounded-xl bg-white/95 p-2.5 shadow-xl">
           <img src="/logo.png" alt={BRAND_EN} className="h-10 w-auto object-contain" />
         </span>
-        <span className="rounded-full border border-white/25 bg-black/30 backdrop-blur px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] font-semibold text-teal-100">
+        <span className="rounded-full border border-white/25 bg-black/35 backdrop-blur px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] font-semibold text-teal-100">
           All portals · One brand
         </span>
       </div>
-      <div className="relative z-10 p-6 xl:p-10 max-w-xl">
+
+      {showModules && (
+        <div className="hero-3d__modules absolute inset-x-0 top-[22%] bottom-[42%] px-6 xl:px-8 z-10 pointer-events-none">
+          <div className="hero-3d__deck">
+            {HERO_MODULES.map((m, i) => (
+              <div
+                key={m.key}
+                className="hero-3d__card"
+                style={{
+                  ["--card-accent" as string]: m.accent,
+                  ["--card-glow" as string]: m.glow,
+                  ["--card-delay" as string]: `${i * 0.08}s`,
+                  ["--card-y" as string]: `${(i % 3) * 8 - 8}px`,
+                  ["--card-rot" as string]: `${(i % 2 === 0 ? -1 : 1) * (4 + (i % 3))}deg`,
+                }}
+              >
+                <span className="hero-3d__card-icon" style={{ background: m.accent }}>
+                  {m.icon}
+                </span>
+                <span className="hero-3d__card-title">{m.title}</span>
+                <span className="hero-3d__card-tools">
+                  {m.desc.split(",")[0]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="relative z-20 p-6 xl:p-10 max-w-xl hero-3d__copy">
         <p className="text-[11px] uppercase tracking-[0.22em] text-teal-200 font-semibold">{badge}</p>
         <h1 className="font-display text-3xl xl:text-[2.35rem] tracking-tight mt-3 leading-[1.12] text-white">
           {title}
@@ -434,6 +470,7 @@ export function LoginHubPage() {
         ]}
         badge={`${BRAND_HI} · शरणम् Project Development Consultants`}
         imageSrc="/hero-login-wide.jpg"
+        showModules
       />
 
       <section id="signin" className="login-panel flex flex-col h-full min-h-0 lg:border-l border-line overflow-hidden">
@@ -456,8 +493,8 @@ export function LoginHubPage() {
           <div className="w-full max-w-[440px] mx-auto">
             <BrandLockup compact />
 
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {HUB_ROLES.map((key) => {
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5 perspective-login">
+              {HUB_ROLES.map((key, i) => {
                 const role = PORTAL_LOGINS[key];
                 const selected = active === key;
                 const accent = PORTAL_ACCENTS[key] || "#0B6A78";
@@ -466,21 +503,26 @@ export function LoginHubPage() {
                     key={key}
                     type="button"
                     onClick={() => setActive(key)}
-                    className={`relative overflow-hidden rounded-xl border text-left transition ${
-                      selected ? "border-brand shadow-md ring-2 ring-brand/25" : "border-line hover:border-brand/40"
+                    className={`login-portal-3d relative overflow-hidden rounded-xl border text-left transition ${
+                      selected ? "is-on border-transparent" : "border-line hover:border-brand/40"
                     }`}
-                    style={{ minHeight: 72 }}
+                    style={{
+                      minHeight: 78,
+                      ["--portal-accent" as string]: accent,
+                      animationDelay: `${i * 0.05}s`,
+                    }}
                   >
                     <span
-                      className="absolute inset-0 opacity-90"
+                      className="absolute inset-0 opacity-95"
                       style={{
-                        background: `linear-gradient(145deg, ${accent} 0%, #1C222B 100%)`,
+                        background: `linear-gradient(145deg, ${accent} 0%, #12161c 100%)`,
                       }}
                     />
                     <span
-                      className="absolute inset-0 opacity-35 bg-cover bg-center mix-blend-overlay"
+                      className="absolute inset-0 opacity-30 bg-cover bg-center mix-blend-overlay"
                       style={{ backgroundImage: "url(/hero-login-wide.jpg)" }}
                     />
+                    <span className="login-portal-3d__shine" aria-hidden />
                     <span className="relative z-10 block p-2.5 text-white">
                       <span className="text-[10px] uppercase tracking-wider font-semibold text-white/75">
                         Portal
@@ -490,11 +532,25 @@ export function LoginHubPage() {
                       </span>
                     </span>
                     {selected && (
-                      <span className="absolute top-2 right-2 z-10 h-2 w-2 rounded-full bg-[#C45C26] ring-2 ring-white/80" />
+                      <span className="absolute top-2 right-2 z-10 h-2.5 w-2.5 rounded-full bg-[#C45C26] ring-2 ring-white/80 login-live-dot" />
                     )}
                   </button>
                 );
               })}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {HERO_MODULES.map((m) => (
+                <span
+                  key={m.key}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border border-line"
+                  style={{ background: m.soft, color: m.ink, borderColor: `${m.accent}33` }}
+                  title={m.desc}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: m.accent }} />
+                  {m.title}
+                </span>
+              ))}
             </div>
 
             <div className="login-card mt-4">

@@ -121,7 +121,9 @@ export default function ProjectToolsLayout() {
   }, [activeMod, user?.role]);
 
   const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
-  const accent = activeMod !== "home" ? MODULE_META[activeMod as WorkspaceKey]?.accent : "#0f766e";
+  const modMeta = activeMod !== "home" ? MODULE_META[activeMod as WorkspaceKey] : null;
+  const accent = modMeta?.accent || "#0B6A78";
+  const soft = modMeta?.soft || "color-mix(in srgb, var(--color-brand) 12%, white)";
   const toolLabel =
     stripItems.find((t) => isToolActive(t, location.pathname, location.search, id))?.label ||
     (activeTool === "hub" ? `${moduleLabel} hub` : moduleLabel);
@@ -179,7 +181,8 @@ export default function ProjectToolsLayout() {
         </div>
 
         <div
-          className="px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto border-t border-line bg-gradient-to-r from-brand-soft/50 to-white"
+          className="px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto border-t border-line"
+          style={{ background: `linear-gradient(90deg, ${soft} 0%, var(--color-paper) 70%)` }}
           aria-label={`${moduleLabel} tools`}
         >
           {activeMod !== "home" && (

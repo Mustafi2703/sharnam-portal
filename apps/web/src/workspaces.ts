@@ -178,20 +178,35 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
 
 export const MODULE_META: Record<
   WorkspaceKey,
-  { title: string; desc: string; path: string; accent: string; icon: string }
+  {
+    title: string;
+    desc: string;
+    path: string;
+    accent: string;
+    soft: string;
+    glow: string;
+    ink: string;
+    icon: string;
+  }
 > = {
   drawings: {
     title: "Drawings",
     desc: "GFC register, Drawing Check Master on upload, coordination, request fill, and drawing Ask RFIs.",
     path: "hub/drawings",
     accent: "#2563EB",
+    soft: "#DBEAFE",
+    glow: "rgba(37,99,235,0.35)",
+    ink: "#1E3A8A",
     icon: "DWG",
   },
   quality: {
     title: "Quality",
     desc: "QI dashboard, Excel checklist upload, QAP, and Request QI fill.",
     path: "hub/quality",
-    accent: "#0f766e",
+    accent: "#0D9488",
+    soft: "#CCFBF1",
+    glow: "rgba(13,148,136,0.35)",
+    ink: "#115E59",
     icon: "QA",
   },
   safety: {
@@ -199,48 +214,69 @@ export const MODULE_META: Record<
     desc: "Safety dashboard, Excel checklists, and safety RFIs.",
     path: "hub/safety",
     accent: "#DC2626",
+    soft: "#FEE2E2",
+    glow: "rgba(220,38,38,0.32)",
+    ink: "#7F1D1D",
     icon: "HSE",
   },
   progress: {
     title: "Progress",
     desc: "Overview, Milestones, Hindrance, Risk, and more.",
     path: "hub/progress",
-    accent: "#7c3aed",
+    accent: "#7C3AED",
+    soft: "#EDE9FE",
+    glow: "rgba(124,58,237,0.32)",
+    ink: "#4C1D95",
     icon: "PRG",
   },
   field: {
     title: "Field",
     desc: "Day log, photos, and field RFIs.",
     path: "hub/field",
-    accent: "#CA8A04",
+    accent: "#D97706",
+    soft: "#FEF3C7",
+    glow: "rgba(217,119,6,0.32)",
+    ink: "#92400E",
     icon: "FLD",
   },
   comms: {
     title: "Comms",
     desc: "Matrix, meetings / MoM, Ask (PMC RFI), Email / Outlook.",
     path: "hub/comms",
-    accent: "#0891b2",
+    accent: "#0891B2",
+    soft: "#CFFAFE",
+    glow: "rgba(8,145,178,0.32)",
+    ink: "#155E75",
     icon: "MTG",
   },
   cost: {
     title: "Cost",
     desc: "MB, BBS, budget, cashflow — engineering cost. Commercial tracking is Finance.",
     path: "hub/cost",
-    accent: "#1a1d26",
+    accent: "#0B6A78",
+    soft: "#CCFBF1",
+    glow: "rgba(11,106,120,0.35)",
+    ink: "#134E4A",
     icon: "₹",
   },
   finance: {
     title: "Finance",
     desc: "Invoice, PO, RA bill, and COP tracking — separate from Cost.",
     path: "hub/finance",
-    accent: "#126e82",
+    accent: "#0369A1",
+    soft: "#E0F2FE",
+    glow: "rgba(3,105,161,0.32)",
+    ink: "#0C4A6E",
     icon: "FIN",
   },
   reports: {
     title: "Reports",
     desc: "DPR and WPR packs from live registers.",
     path: "hub/reports",
-    accent: "#ea580c",
+    accent: "#EA580C",
+    soft: "#FFEDD5",
+    glow: "rgba(234,88,12,0.32)",
+    ink: "#9A3412",
     icon: "RPT",
   },
 };
