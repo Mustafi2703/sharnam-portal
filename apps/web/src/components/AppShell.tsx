@@ -458,8 +458,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="app-frame__scroll">
-          <div className={inProject ? "w-full max-w-none" : "w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6"}>
+        <main className={`app-frame__scroll ${inProject ? "app-frame__scroll--project" : ""}`}>
+          <div
+            className={
+              inProject
+                ? "w-full max-w-none h-full min-h-0 flex flex-col"
+                : "w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6"
+            }
+          >
             {children}
           </div>
         </main>

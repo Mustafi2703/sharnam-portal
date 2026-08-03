@@ -406,7 +406,7 @@ export function ToolRightPanel({
 
   return (
     <aside
-      className="tool-actions border-t xl:border-t-0 xl:border-l border-line bg-paper flex flex-col min-h-full"
+      className="tool-actions border-t xl:border-t-0 xl:border-l border-line bg-paper flex flex-col min-h-0 h-full"
       style={{ ["--tool-accent" as string]: accent || "var(--color-brand)" }}
     >
       <div className="tool-actions__head px-4 py-4 border-b border-line">
@@ -418,7 +418,7 @@ export function ToolRightPanel({
         <div className="text-xs text-steel-muted mt-1 capitalize">{tool || "overview"} · contextual</div>
       </div>
 
-      <div className="p-4 space-y-4 flex-1">
+      <div className="tool-actions__body p-4 space-y-4">
         <div className="rounded-lg border border-line bg-sand/70 p-3.5">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-steel-muted">Focus</div>
           <p className="text-xs text-steel-muted mt-1.5 leading-relaxed">
@@ -504,7 +504,13 @@ export function ToolRightPanel({
                 </option>
               ))}
             </select>
-            <Button type="button" variant="ghost" className="w-full !text-danger border border-danger/30" disabled={busy} onClick={() => void confirmDelete()}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full !text-danger border border-danger/30"
+              disabled={busy}
+              onClick={() => void confirmDelete()}
+            >
               Confirm delete
             </Button>
             {deleteMsg && <p className="text-xs text-steel-muted">{deleteMsg}</p>}
@@ -562,7 +568,7 @@ export function ToolRightPanel({
         </div>
       </div>
 
-      <div className="px-4 py-3 border-t border-line text-xs text-steel-muted">
+      <div className="tool-actions__foot px-4 py-3 border-t border-line text-xs text-steel-muted shrink-0">
         <div className="font-mono truncate">{ctx.projectCode || "—"}</div>
         <div className="truncate mt-0.5">{ctx.projectName || "Project"}</div>
       </div>

@@ -34,7 +34,8 @@ const H = {
   site: { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "50% 42%", label: "Site execution" },
   field: { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "52% 40%", label: "Field work" },
   struct: { src: "/heroes/site-07.jpg", w: 2400, h: 1600, focus: "50% 42%", label: "Structure rising" },
-  ops: { src: "/heroes/site-08.jpg", w: 2400, h: 1600, focus: "50% 30%", label: "Operations desk" },
+  /** Blueprint / CAD-style planning (not coding) */
+  cad: { src: "/heroes/site-02.jpg", w: 2400, h: 1350, focus: "50% 42%", label: "Drawings & CAD" },
 } as const;
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
@@ -53,7 +54,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/master",
     workspaceKey: null,
     group: "master",
-    heroes: [H.plan, H.eng, H.ops],
+    heroes: [H.plan, H.eng, H.cad],
     policies: [
       "Enable only the modules each project needs",
       "Directory parties before first RFI or meeting",
@@ -78,7 +79,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/dashboard",
     workspaceKey: null,
     group: "role",
-    heroes: [H.plan, H.eng, H.ops, H.site],
+    heroes: [H.plan, H.eng, H.cad, H.site],
     policies: [
       "One project spine for office, site, and contractors",
       "Publish GFC before QI and site checklist fills",
@@ -130,7 +131,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     icon: "EM",
     landingPath: "/dashboard",
     group: "role",
-    heroes: [H.eng, H.plan, H.ops],
+    heroes: [H.eng, H.plan, H.cad],
     policies: [
       "Work only on projects you are assigned to",
       "Revision control before marking drawings published",
@@ -180,7 +181,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/dashboard",
     workspaceKey: "progress",
     group: "role",
-    heroes: [H.plan, H.site, H.eng, H.ops],
+    heroes: [H.plan, H.site, H.eng, H.cad],
     policies: [
       "View published drawings — upload stays with PMC / design",
       "Civil packs: schedule, procurement, S-curve when shared",
@@ -206,7 +207,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "drawings",
     group: "module",
-    heroes: [H.eng, H.plan, H.ops],
+    heroes: [H.cad, H.eng, H.plan],
     policies: [
       "Drawing Check Master unlocks before upload",
       "Revisions R0–R5 with audit who / when",
@@ -256,7 +257,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "comms",
     group: "module",
-    heroes: [H.ops, H.plan, H.eng],
+    heroes: [H.cad, H.plan, H.eng],
     policies: [
       "Matrix parties before first meeting or RFI",
       "Agenda generated before MoM starts",
