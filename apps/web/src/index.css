@@ -594,18 +594,22 @@ body {
 .side-nav__brand {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.35rem 0.4rem;
+  justify-content: center;
+  gap: 0;
+  padding: 0.55rem 0.5rem;
   border-radius: 8px;
+  width: 100%;
 }
 .side-nav__logo {
-  height: 2.15rem;
-  width: auto;
-  max-width: 72px;
+  height: auto;
+  width: 100%;
+  max-width: 100%;
+  max-height: 3.75rem;
   object-fit: contain;
-  object-position: left center;
+  object-position: center;
   mix-blend-mode: normal;
   flex-shrink: 0;
+  display: block;
 }
 .side-nav__brand:hover {
   background: var(--side-hover);
@@ -890,18 +894,18 @@ body {
   font-weight: 650;
 }
 .app-topbar__brand {
+  display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.15rem 0.35rem 0.15rem 0;
+  gap: 0;
+  padding: 0.1rem 0.85rem 0.1rem 0;
   text-decoration: none;
   border-right: 1px solid var(--color-line);
-  padding-right: 0.85rem;
   margin-right: 0.15rem;
 }
 .app-topbar__logo {
-  height: 1.65rem;
+  height: 2.35rem;
   width: auto;
-  max-width: 64px;
+  max-width: 9.5rem;
   object-fit: contain;
   display: block;
 }

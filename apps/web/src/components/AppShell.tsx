@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useEffect, useMemo, useState } from "react";
-import { BRAND_EN, BRAND_HI } from "./Brand";
+import { BRAND_EN } from "./Brand";
 import {
   ModuleIcon,
   IconClose,
@@ -123,11 +123,7 @@ function SideNavBody({
     <div className="side-nav__inner">
       <div className="side-nav__head">
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
-          <img src="/logo.png" alt="" className="side-nav__logo" width={120} height={58} />
-          <div className="side-nav__brand-text min-w-0">
-            <div className="side-nav__brand-name truncate">{BRAND_EN}</div>
-            <div className="side-nav__brand-sub">PMC · {BRAND_HI}</div>
-          </div>
+          <img src="/logo.png" alt={BRAND_EN} className="side-nav__logo" width={200} height={96} />
         </Link>
       </div>
 
@@ -399,27 +395,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </button>
 
-            {!inProject && (
-              <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0 items-center gap-2" aria-label={`${BRAND_EN} home`}>
-                <img src="/logo.png" alt="" className="app-topbar__logo" width={88} height={42} />
-                <span className="app-topbar__brand-name">{BRAND_EN}</span>
-                <span className="app-topbar__brand-tag">PMC</span>
-              </Link>
-            )}
+            <Link to="/dashboard" className="app-topbar__brand min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
+              <img src="/logo.png" alt={BRAND_EN} className="app-topbar__logo" width={160} height={76} />
+            </Link>
 
             <div className={`app-topbar__meta ${inProject ? "app-topbar__meta--slim" : ""}`}>
-              {!inProject && (
-                <div className="app-topbar__eyebrow">
-                  {isOffice ? "Office · Full control" : "PMC portal"}
-                </div>
-              )}
               <div className="app-topbar__title truncate">
                 {inProject
                   ? activeProject
                     ? `${activeProject.code}`
                     : "Project"
                   : activeProject
-                    ? `${activeProject.code} — ${activeProject.name}`
+                    ? `${activeProject.code}`
                     : hidden
                       ? "Open left navigation to pick a project"
                       : "Select a project in the sidebar"}

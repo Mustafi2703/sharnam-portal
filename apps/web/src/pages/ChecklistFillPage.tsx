@@ -3,7 +3,6 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
-import { BrandMark } from "../components/Brand";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string };
 type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[] };
@@ -189,7 +188,9 @@ export default function ChecklistFillPage() {
       <header className="sticky top-0 z-30 bg-paper border-b border-line text-ink">
         <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <BrandMark size="sm" tagTone="light" compact showTag={false} />
+            <Link to={`/projects/${projectId}`} className="inline-flex items-center" aria-label="Sharnam home">
+              <img src="/logo.png" alt="Sharnam" className="h-9 w-auto max-w-[9rem] object-contain" width={160} height={76} />
+            </Link>
             <span className="text-xs text-steel-muted truncate">
               {assignment?.project?.code} · Checklist form
             </span>

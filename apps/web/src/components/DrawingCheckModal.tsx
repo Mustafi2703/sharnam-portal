@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, TextArea } from "./ui";
-import { BrandMark, BRAND_EN, BRAND_HI } from "./Brand";
+import { BRAND_EN, BRAND_HI } from "./Brand";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string; instruction?: string };
 
@@ -113,7 +113,7 @@ export function DrawingCheckModal({
         <header className="shrink-0 border-b border-line bg-[#1c222b] text-white">
           <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
             <span className="inline-flex rounded-md bg-white p-1.5 shrink-0">
-              <BrandMark size="sm" tagTone="light" compact showTag={false} />
+              <img src="/logo.png" alt="" className="h-7 w-auto max-w-[6.5rem] object-contain" width={120} height={58} />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] uppercase tracking-[0.16em] text-teal-300 font-semibold">
