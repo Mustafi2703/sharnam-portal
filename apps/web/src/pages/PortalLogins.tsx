@@ -198,14 +198,14 @@ export function consumeLoginLanding() {
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
 
-/** Project / building slides — brighter site photography */
+/** Modern architecture / site photography */
 const HERO_SLIDES = [
-  { src: "/heroes/site-06.jpg", w: 2400, h: 1597, focus: "50% 38%" },
-  { src: "/heroes/site-02.jpg", w: 2400, h: 1600, focus: "50% 40%" },
-  { src: "/heroes/site-08.jpg", w: 2400, h: 1590, focus: "52% 42%" },
-  { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "48% 35%" },
+  { src: "/heroes/site-02.jpg", w: 2400, h: 1600, focus: "50% 38%" },
+  { src: "/heroes/site-08.jpg", w: 2400, h: 1590, focus: "48% 40%" },
+  { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "52% 35%" },
+  { src: "/heroes/site-06.jpg", w: 2400, h: 1597, focus: "50% 42%" },
+  { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "50% 40%" },
   { src: "/heroes/site-07.jpg", w: 2400, h: 1600, focus: "50% 28%" },
-  { src: "/heroes/site-01.jpg", w: 2400, h: 1350, focus: "50% 38%" },
 ];
 
 const HERO_POLICIES = [
@@ -331,19 +331,17 @@ function HeroStage() {
       </div>
 
       <div className="auth-hero__center">
-        <div className="auth-hero__brand">
-          <img
-            src="/logo.png"
-            alt="शरणम्"
-            className="auth-hero__logo"
-            width={720}
-            height={350}
-            decoding="sync"
-            fetchPriority="high"
-          />
-          <p className="auth-hero__name">Sharnam</p>
-          <p className="auth-hero__trade">Project Management Consultants</p>
-        </div>
+        <img
+          src="/logo.png"
+          alt="शरणम्"
+          className="auth-hero__logo"
+          width={720}
+          height={350}
+          decoding="sync"
+          fetchPriority="high"
+        />
+        <p className="auth-hero__name">Sharnam</p>
+        <p className="auth-hero__trade">Project Management Consultants</p>
 
         <div className="auth-hero__policies" aria-live="polite">
           {HERO_POLICIES.map((text, i) => (

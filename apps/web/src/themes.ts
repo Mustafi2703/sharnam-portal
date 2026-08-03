@@ -53,17 +53,17 @@ const LIGHT: Record<string, string> = {
 const DARK: Record<string, string> = {
   "--color-brand": "#2EC4B6",
   "--color-brand-dark": "#5EEAD4",
-  "--color-brand-soft": "#0F2A2E",
+  "--color-brand-soft": "#12353A",
   "--color-brand-glow": "#5EEAD4",
   "--color-mark": "#F0783A",
   "--color-accent": "#2EC4B6",
   "--color-steel": "#E8ECF0",
   "--color-steel-2": "#CBD5E1",
-  "--color-steel-muted": "#94A3B8",
-  "--color-sand": "#0C0E11",
-  "--color-ink": "#F1F5F9",
-  "--color-paper": "#161A20",
-  "--color-line": "#2A313C",
+  "--color-steel-muted": "#A8B4C4",
+  "--color-sand": "#0B0D10",
+  "--color-ink": "#F8FAFC",
+  "--color-paper": "#151A21",
+  "--color-line": "#2E3744",
   "--color-ok": "#34D399",
   "--color-warn": "#FBBF24",
   "--color-danger": "#F87171",
@@ -75,17 +75,17 @@ const DARK: Record<string, string> = {
   "--color-kpi-4": "#A78BFA",
   "--color-kpi-5": "#34D399",
   "--color-kpi-6": "#F472B6",
-  "--wd-chrome": "#12151A",
-  "--wd-chrome-border": "#2A313C",
-  "--side-bg": "#0A0C0F",
-  "--side-fg": "#F1F5F9",
-  "--side-muted": "#94A3B8",
-  "--side-hover": "#1A1F27",
+  "--wd-chrome": "#10141A",
+  "--wd-chrome-border": "#2E3744",
+  "--side-bg": "#0B0E13",
+  "--side-fg": "#F8FAFC",
+  "--side-muted": "#B6C0CE",
+  "--side-hover": "#1C2430",
   "--side-active": "#2EC4B6",
-  "--side-active-bg": "rgba(46, 196, 182, 0.18)",
-  "--side-border": "#1E2430",
-  "--login-panel-bg": "#12151A",
-  "--login-panel-muted": "#94A3B8",
+  "--side-active-bg": "rgba(46, 196, 182, 0.24)",
+  "--side-border": "#243040",
+  "--login-panel-bg": "#151A21",
+  "--login-panel-muted": "#A8B4C4",
   "--ui-radius": "8px",
   "--ui-radius-sm": "6px",
   "--ui-nav-h": "52px",
@@ -173,24 +173,26 @@ function withAlpha(hex: string, alpha: number) {
  */
 export function applyModuleAccent(accent: string, soft: string) {
   const root = document.documentElement;
-  const ink = mixHex(accent, "#000000", 0.28);
+  const dark = getColorMode() === "dark";
+  const ink = dark ? mixHex(accent, "#ffffff", 0.35) : mixHex(accent, "#000000", 0.28);
+  const softBg = dark ? mixHex(accent, "#0B0E13", 0.78) : soft;
   const glow = mixHex(accent, "#ffffff", 0.35);
-  const kpi2 = getColorMode() === "dark" ? "#F0783A" : "#C45C26";
+  const kpi2 = dark ? "#F0783A" : "#C45C26";
   const kpi3 = mixHex(accent, "#2563EB", 0.45);
   const kpi4 = mixHex(accent, "#7C3AED", 0.4);
   const kpi5 = mixHex(accent, "#059669", 0.35);
   const kpi6 = mixHex(accent, "#DB2777", 0.4);
 
   root.style.setProperty("--mod-accent", accent);
-  root.style.setProperty("--mod-soft", soft);
+  root.style.setProperty("--mod-soft", softBg);
   root.style.setProperty("--color-brand", accent);
   root.style.setProperty("--color-brand-dark", ink);
-  root.style.setProperty("--color-brand-soft", soft);
+  root.style.setProperty("--color-brand-soft", softBg);
   root.style.setProperty("--color-brand-glow", glow);
   root.style.setProperty("--color-accent", accent);
   root.style.setProperty("--color-procore-blue", accent);
   root.style.setProperty("--side-active", accent);
-  root.style.setProperty("--side-active-bg", withAlpha(accent, 0.22));
+  root.style.setProperty("--side-active-bg", withAlpha(accent, dark ? 0.28 : 0.22));
   root.style.setProperty("--wd-accent", accent);
   root.style.setProperty("--color-kpi-1", accent);
   root.style.setProperty("--color-kpi-2", kpi2);
