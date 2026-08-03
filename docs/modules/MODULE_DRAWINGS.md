@@ -2,6 +2,7 @@
 
 **Prompt:** `module_prompts/Drawings_ChecklistsRFI.md`  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.3 · §3B  
+**Hub:** `/projects/:id/hub/drawings`  
 **LLD:** [system-design/04-LLD-Project-Modules.md](../system-design/04-LLD-Project-Modules.md)
 
 ---
@@ -12,18 +13,23 @@ Drawing register, revision control, pre-upload checklist gate, coordination issu
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
 
-| Tool | Status | Behaviour |
-|------|--------|-----------|
-| GFC register | Built | Log + revisions R0–R5; publish; view |
-| Checklist manager | Built | Drawing Check Master; unlock before upload |
-| Upload / revision | Built | Modal + checklist fill window |
-| Documents (DMS) | Partial | Folders under Drawings |
-| Coordination | Built | Design issues → escalate to Ask |
-| Request checklist fill | Built | Kind `DrawingChecklist` |
-| **Ask — Request for Information** | Built (label) | Kind `RequestForInformation` — **not** inspection |
-| Submittals | Out of scope | Dormant |
+| Tool | Hub / route | Status | Behaviour |
+|------|-------------|--------|-----------|
+| GFC register | `/drawings` | Built | Log + revisions R0–R5; publish |
+| Checklist manager | `/checklist-master?family=DrawingCheck` | Built | Drawing Check Master gate |
+| Checklist fill log | `/checklist-logs?family=DrawingCheck` | Built | Branded download |
+| Documents (DMS) | `/dms` | Partial | Folders under Drawings |
+| Coordination | `/coordination` | Built | Design issues → Ask |
+| Request checklist fill | `/rfis?kind=DrawingChecklist` | Built | |
+| Ask — Request for Information | `/rfis?kind=RequestForInformation` | Built | **not** inspection |
+
+### Awaiting next sheets
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| Extra discipline drawing logs | Ready | Extend GFC columns / filters from next pack |
 
 ---
 

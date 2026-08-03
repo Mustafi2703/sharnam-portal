@@ -9,18 +9,20 @@
 
 Client stakeholders see civil/project progress and documents; raise concerns; do **not** upload drawings or edit Cost/Finance numbers (unless Office grants a specific permission).
 
+Civil tools (S-curve, summary schedule, MS Project, procurement) are **Ready** on Progress hub — Client reads them when sheets land.
+
 ---
 
 ## 2. What Client can see / do
 
 | Area | Access |
 |------|--------|
-| Progress | S-curve, summary schedule, MS Project progress, procurement (read) |
+| Progress | Live registers + Ready civil tools (read when published) |
 | Drawings | **Published** drawings only (view) |
 | Meetings / MoM | Generated docs on civil side |
 | Reports | DPR / WPR packs (view / PDF) |
 | DMS | Shared / published folders |
-| Quality / Safety | Checklist create where enabled; view QI/Safety summaries |
+| Quality / Safety | Checklist create where enabled; view QI / NCR / Safety summaries |
 | Concerns | Raise as ClientConcern / RFI |
 | Cost / Finance | No edit; optional read-only summary (TBD) |
 

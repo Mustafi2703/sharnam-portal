@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../components/ui";
@@ -27,8 +27,15 @@ function roleLabel(role: string) {
  */
 export default function CommsPage() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
-  const [tab, setTab] = useState<Tab>("matrix");
+  const tabRaw = searchParams.get("tab") || "matrix";
+  const tab: Tab =
+    tabRaw === "agenda" || tabRaw === "mom" || tabRaw === "followup" || tabRaw === "log" ? tabRaw : "matrix";
+  const setTab = (t: Tab) => {
+    if (t === "matrix") setSearchParams({});
+    else setSearchParams({ tab: t });
+  };
   const [matrix, setMatrix] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");

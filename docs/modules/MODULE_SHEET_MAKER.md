@@ -1,15 +1,30 @@
 # MODULE — Sheet Maker (fields)
 
-**Status:** Refine → then build  
+**Status:** Ready for templates (hub under Office / Comms bind)  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.16  
 **LLD:** [system-design/06-LLD-Sheet-Maker.md](../system-design/06-LLD-Sheet-Maker.md)  
-**Consumers:** Comms meetings (primary), optional HR / CRM / Audit registers
+**Consumers:** Comms meetings (primary), optional HR / CRM / Audit registers  
+**Prompt:** `module_prompts/sheet_maker.md`
 
 ---
 
 ## 1. Purpose
 
 Office designs **reusable sheet templates** (not one fixed form): sections, columns, party blocks → fill instances in meetings and export Excel/PDF.
+
+When new custom meeting sheets arrive, add a **Ready** hub card under Comms or Master that opens the designer — do not invent a parallel IA.
+
+---
+
+## 2. Tools (awaiting build)
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| Template designer | Ready | Sections, columns, party blocks |
+| Publish version | Ready | Idempotent version bump |
+| Import / export Excel | Ready | Round-trip client packs |
+| Fill instance | Ready | Bind to Meeting |
+| Bind to Meeting | Ready | From Comms Agenda tool |
 
 ---
 

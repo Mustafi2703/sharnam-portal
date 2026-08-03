@@ -1,23 +1,25 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
-const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA"];
+const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
 
 export default function SafetyPage() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ncrView = searchParams.get("view") === "ncr";
   const { token, user } = useAuth();
   const [data, setData] = useState<{ records: any[]; stats: any } | null>(null);
   const [dash, setDash] = useState<any>(null);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState(ncrView ? "NCR" : "All");
   const [active, setActive] = useState<string | null>(null);
   const [form, setForm] = useState({
-    recordType: "Observation",
+    recordType: ncrView ? "NCR" : "Observation",
     title: "",
     description: "",
     severity: "Low",
@@ -27,6 +29,13 @@ export default function SafetyPage() {
   const [msg, setMsg] = useState("");
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canClose = user?.role === "admin" || user?.role === "office" || user?.role === "site_employee";
+
+  useEffect(() => {
+    if (ncrView) {
+      setFilter("NCR");
+      setForm((f) => ({ ...f, recordType: "NCR" }));
+    }
+  }, [ncrView]);
 
   const load = async () => {
     const [res, d] = await Promise.all([
@@ -44,10 +53,13 @@ export default function SafetyPage() {
 
   const filtered = useMemo(() => {
     const rows = data?.records || [];
+    if (ncrView) {
+      return rows.filter((r) => /ncr/i.test(r.recordType || "") || /ncr/i.test(r.title || ""));
+    }
     if (filter === "All") return rows;
     if (filter === "Open" || filter === "Closed") return rows.filter((r) => r.status === filter);
     return rows.filter((r) => r.recordType === filter);
-  }, [data, filter]);
+  }, [data, filter, ncrView]);
 
   const selected = data?.records.find((r) => r.id === active);
 
@@ -60,7 +72,14 @@ export default function SafetyPage() {
         token,
         body: JSON.stringify(form),
       });
-      setForm({ recordType: "Observation", title: "", description: "", severity: "Low", location: "", correctiveAction: "" });
+      setForm({
+        recordType: ncrView ? "NCR" : "Observation",
+        title: "",
+        description: "",
+        severity: "Low",
+        location: "",
+        correctiveAction: "",
+      });
       setActive(row.id);
       setMsg("Safety record logged.");
       await load();
@@ -73,8 +92,12 @@ export default function SafetyPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Safety module"
-        title="Safety dashboard & register"
-        subtitle="Log observations / NCR-style records. Create Safety checklists in Checklist master, raise SafetyChecklist RFI with checklist attached for the assignee to fill (3 photos)."
+        title={ncrView ? "Safety NCR register" : "Safety dashboard & register"}
+        subtitle={
+          ncrView
+            ? "Safety NCR sheet as a separate tool — log and close non-conformance records."
+            : "Log observations / incidents. Create Safety checklists in Checklist master, raise SafetyChecklist RFI with checklist attached for the assignee to fill (3 photos)."
+        }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
@@ -91,7 +114,40 @@ export default function SafetyPage() {
         }
       />
 
-      {dash && (
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setSearchParams({});
+            setFilter("All");
+          }}
+          className={`rounded-sm px-3 py-1.5 text-sm font-medium border ${
+            !ncrView ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
+          }`}
+        >
+          Dashboard
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setSearchParams({ view: "ncr" });
+            setFilter("NCR");
+          }}
+          className={`rounded-sm px-3 py-1.5 text-sm font-medium border ${
+            ncrView ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
+          }`}
+        >
+          Safety NCR
+        </button>
+        <Link
+          to={`/projects/${id}/hub/safety`}
+          className="rounded-sm px-3 py-1.5 text-sm font-medium border border-line text-steel-muted"
+        >
+          Safety hub →
+        </Link>
+      </div>
+
+      {!ncrView && dash && (
         <div className="space-y-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[

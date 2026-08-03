@@ -1,8 +1,8 @@
 # MODULE — Finance (commercial tracking)
 
-**Prompt:** `module_prompts/fiannce.md` (points at Cost historically; Finance is separate)  
+**Prompt:** `module_prompts/fiannce.md`  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.10  
-**Also:** [../MODULE_FINANCE.md](../MODULE_FINANCE.md)  
+**Hub:** `/projects/:id/hub/finance`  
 **Separate from:** [MODULE_COST.md](./MODULE_COST.md)
 
 ---
@@ -10,94 +10,44 @@
 ## 1. Purpose
 
 Track **commercial** documents: invoices, POs, RA bills, COP/payment certificates.  
-Shell UI exists; field-level depth is phased.
+Shell UI + hub cards exist; deepen when Payment Summary commercial columns / new sheets arrive.
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
 
-| Tool | Status | Tracks |
-|------|--------|--------|
-| Overview | Shell | Open invoices, POs, RAs, COPs |
-| Invoice tracking | Design | Invoice lifecycle |
-| PO tracking | Design | PO vs delivery / billed |
-| RA bill tracking | Design | Running account cycles |
-| COP tracking | Design | Payment certificates |
+| Tool | Hub / route | Status | Tracks |
+|------|-------------|--------|--------|
+| Overview | `/finance` | Shell | Open invoices, POs, RAs, COPs |
+| Invoice tracking | `/finance?tab=invoices` | Shell | Invoice lifecycle |
+| PO tracking | `/finance?tab=po` | Shell | PO vs delivery / billed |
+| RA bill tracking | `/finance?tab=ra` | Shell | Running account cycles |
+| COP tracking | `/finance?tab=cop` | Shell | Payment certificates |
 
----
+### Awaiting next sheets
 
-## 3. Invoice fields (proposed)
-
-| Field | Type | Required | Notes / review |
-|-------|------|----------|----------------|
-| invoiceNo | text | Y | |
-| partyName / vendorId | text/link | Y | |
-| invoiceDate | date | Y | |
-| amount / gstAmount | money | Y | |
-| status | enum | Y | Draft / Submitted / Under review / Certified / Paid / Rejected |
-| linkedPoId / linkedRaId | link | N | |
-| attachmentUrl | file | N | |
-| projectId | link | Y | |
+| Tool | Status | Notes |
+|------|--------|-------|
+| Full Payment Summary commercial map | Ready | Expand field tables from next client export |
+| Vendor self-serve invoice submit | Ready | Role matrix TBD |
 
 ---
 
-## 4. PO fields (proposed)
+## 3–6. Field tables (proposed)
 
-| Field | Type | Notes |
-|-------|------|-------|
-| poNo | text | |
-| vendorId | link | |
-| value | money | |
-| deliveryStatus | enum | |
-| billedAmount | money | |
-| status | enum | |
+Invoice / PO / RA / COP — keep baselines; mark Keep/Change/Drop when sheet lands.
 
 ---
 
-## 5. RA bill fields (proposed)
+## 7. Relation to Cost
 
-| Field | Type | Notes |
-|-------|------|-------|
-| raNo / cycle | text | |
-| periodFrom / periodTo | date | |
-| amount claimed / certified | money | |
-| status | enum | |
-| linkedMbRefs | text | Link to Cost MB (discussion) |
-
----
-
-## 6. COP fields (proposed)
-
-| Field | Type | Notes |
-|-------|------|-------|
-| copNo | text | |
-| certificateDate | date | |
-| amount | money | |
-| status | enum | |
-| linkedRaId / invoiceId | link | |
-
----
-
-## 7. Roles (baseline — confirm)
-
-| Role | Access |
-|------|--------|
-| Office / Admin | Full |
-| Site | View / attach evidence (TBD) |
-| Client | Read-only summary (TBD) |
-| Contractor | Submit / view own RA / invoice (TBD) |
-
----
-
-## 8. Relation to Cost
-
-- Cost = quantities, MB, BBS, budget, cashflow.  
+- Cost = quantities, MB, BBS, budget, cashflow charts.  
 - Finance = invoices, POs, RA, COP.  
-- COP tracking moves **out of Cost** into Finance.
+- Cost retains engineering COP / Bills entry; commercial COP tracking is Finance.
 
 ---
 
-## 9. Review checklist
+## 8. Review checklist
 
 - [ ] Exact columns vs Payment Summary sheet  
 - [ ] Who certifies RA / COP  

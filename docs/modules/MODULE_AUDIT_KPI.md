@@ -1,24 +1,27 @@
 # MODULE — Site Audit & Master KPI / KRA (fields)
 
-**Status:** Refine → then build  
+**Status:** Ready for packs — UI aligned to hub card pattern when enabled  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.15  
 **LLD:** [system-design/05-LLD-Audit-KPI.md](../system-design/05-LLD-Audit-KPI.md)  
-**Sources:** `docs/SITE_AUDIT_Pack.xlsx`, `docs/MASTER_KPI_DASHBOARD.xlsx`
+**Sources:** `docs/SITE_AUDIT_Pack.xlsx`, `docs/MASTER_KPI_DASHBOARD.xlsx`  
+**Prompt:** `module_prompts/audit_kpi.md`
+
+When packs go live, expose **one hub card per sheet** (Dashboard, Plan, DC Interview, Site Walk, Folder Sample, Findings, KPI subjects) — same pattern as Progress / Cost.
 
 ---
 
 ## A. Site Audit
 
-### A1. Tools (from pack sheets)
+### A1. Tools (from pack sheets → future hub cards)
 
-| Tool | Sheet | Purpose |
-|------|-------|---------|
-| Dashboard | DASHBOARD | Open/closed findings, RAG summary |
-| Plan | PLAN | Scope, schedule, auditors |
-| DC Interview | DC_INTERVIEW | Document controller interview items |
-| Site Walk | SITE_WALK | Walkthrough checklist |
-| Folder Sample | FOLDER_SAMPLE | Controlled folder sampling |
-| Findings | FINDINGS | NC / observation + CAPA |
+| Tool | Sheet | Status | Purpose |
+|------|-------|--------|---------|
+| Dashboard | DASHBOARD | Ready | Open/closed findings, RAG |
+| Plan | PLAN | Ready | Scope, schedule, auditors |
+| DC Interview | DC_INTERVIEW | Ready | Document controller interview |
+| Site Walk | SITE_WALK | Ready | Walkthrough checklist |
+| Folder Sample | FOLDER_SAMPLE | Ready | Controlled folder sampling |
+| Findings | FINDINGS | Ready | NC / observation + CAPA |
 
 ### A2. Site audit header
 

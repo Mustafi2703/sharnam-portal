@@ -2,126 +2,88 @@
 
 **Prompt:** `module_prompts/Cost_Module.md`  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.9  
+**Hub:** `/projects/:id/hub/cost`  
 **Separate from:** [MODULE_FINANCE.md](./MODULE_FINANCE.md)
 
 ---
 
 ## 1. Purpose
 
-Engineering cost control: BOQ monitoring, MB, BBS, budget WBS, cashflow, rate variance.  
-**Not** commercial invoice/PO/RA/COP (those are Finance).
+Engineering cost control: BOQ monitoring, MB, BBS, budget WBS, **Cashflow Chart / Forecast / Tracking** as separate tools, rate variance, COP/bills entry.  
+**Not** commercial invoice/PO/RA (those are Finance).
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
 
-| Tool | Source sheet | Status |
-|------|--------------|--------|
-| Monitoring / BOQ | Monitoring * packages + Cashflow Monitoring | Built |
-| MB sheets | Dormitory, Electric, Plumbing, UGWT, … | Built |
-| BBS | Dormitory / Compound Wall / Septic / Road / UGWT | Built |
-| Budget WBS | SPDC_Budget + Cashflow Budget | Built |
-| Cashflow chart | Cashflow Dashboard — Chart INR | Built |
-| Cashflow forecast | Cash Flow - Forecast | Built |
-| Tracking | Cashflow Tracking | Built |
-| Rate difference | Steel / Cement / Tiles | Built |
-| Structure upload | Multi-BOQ import | Built |
-| Vendor bills (legacy in cost) | Payment Summary seed | Prefer Finance COP going forward |
+| Tool | Hub / route | Status | Source sheet |
+|------|-------------|--------|--------------|
+| BOQ / Monitoring | `/cost` | Built | Monitoring packages |
+| MB sheets | `/cost?tab=mb` | Built | SPDC Budget · MB |
+| BBS | `/cost?tab=bbs` | Built | SPDC Budget · BBS |
+| Budget WBS | `/cost?tab=budget` | Built | SPDC_Budget · Budget |
+| **Cash Flow Chart** | `/cost?tab=cashflow&cf=chart` | Built | Cashflow Dashboard · Chart |
+| **Cash Flow Forecast** | `/cost?tab=cashflow&cf=forecast` | Built | Cashflow Dashboard · Forecast |
+| **Cashflow Tracking** | `/cost?tab=cashflow&cf=tracking` | Built | Cashflow Dashboard · Tracking |
+| Rate difference | `/cost?tab=rates` | Built | Steel / Cement / Tiles |
+| COP / Bills | `/cost?tab=bills` | Built | Payment Summary (engineering) |
+| Structure upload | `/cost?tab=boq` | Built | Multi-BOQ import |
+
+### Awaiting next sheets
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| New structure / package MB·BBS | Ready | Seed package → chip inside MB/BBS/Monitoring |
+| Extra rate materials | Ready | Extend rate difference register |
 
 ---
 
 ## 3. Package filter
 
-Multiple BOQs/structures per project → each **package** is a tool chip / filter on registers.
+Multiple BOQs/structures per project → each **package** is a chip / filter on registers.
 
 ---
 
-## 4. Monitoring / BOQ line fields
+## 4–11. Field tables
 
-| Field | Type | Required | Notes / review |
-|-------|------|----------|----------------|
+(Unchanged — monitoring, MB, BBS, budget, cashflow period, rate difference, CSV downloads.)
+
+See prior sections in git history or expand when the next sheet arrives.
+
+### Monitoring / BOQ line (baseline)
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
 | package | text | Y | |
 | srNo / itemCode | text | N | |
-| description | text | Y | |
+| description | text | Y | Readable wrap in UI |
 | unit | text | Y | |
-| boqQty | number | N | |
-| gfcQty | number | N | Fill on monitoring |
-| rate | money | N | |
-| amount | money | N | |
-| excess / saving | number | N | Computed vs BOQ |
+| boqQty / gfcQty | number | N | Trim long decimals in UI |
+| rate / amount | money | N | |
+| excess / saving | number | N | Computed |
 
----
-
-## 5. MB line
+### Cashflow period
 
 | Field | Notes |
 |-------|-------|
-| package, item, description, unit | |
-| previous / this period / cumulative qty | |
-| location / remarks | |
+| periodLabel | Month / RA |
+| packageName | Chart / Forecast / Tracking sheet tag |
+| plannedAmount / actualAmount | |
+| progressPct | |
 
 ---
 
-## 6. BBS line
-
-| Field | Notes |
-|-------|-------|
-| package, bar mark, diameter, shape | |
-| length, nos, weight | |
-| location | |
-
----
-
-## 7. Budget line
-
-| Field | Notes |
-|-------|-------|
-| wbsCode, description | |
-| budgetAmount, committed, spent | |
-| package | |
-
----
-
-## 8. Cashflow period
-
-| Field | Notes |
-|-------|-------|
-| period (month) | |
-| plannedInflow / plannedOutflow | |
-| actualInflow / actualOutflow | |
-| forecast | |
-
----
-
-## 9. Rate difference
-
-| Field | Notes |
-|-------|-------|
-| material (Steel / Cement / Tiles) | |
-| baseRate / currentRate | |
-| variance | |
-
----
-
-## 10. Downloads
-
-CSV per register:
-
-`/api/cost/:projectId/download/{boq|mb|bbs|budget|cashflow|rates}.csv?package=`
-
----
-
-## 11. Rules
+## 12. Rules
 
 1. Cost ≠ Finance.  
-2. Fill GFC qty on monitoring; excess/saving computes.  
-3. Client cannot edit commercial/cost numbers unless permitted.  
+2. Cashflow Chart / Forecast / Tracking are **three hub tools**.  
+3. Fill GFC qty on monitoring; excess/saving computes.  
 4. Seed loads sheet data on deploy for pilot.
 
 ---
 
-## 12. Review checklist
+## 13. Review checklist
 
 - [ ] Confirm package list for pilot project  
-- [ ] Confirm which Payment Summary rows stay in Cost vs move to Finance  
+- [ ] Confirm Payment Summary rows in Cost COP vs Finance  
 - [ ] Confirm CSV column order for client Excel  

@@ -2,100 +2,52 @@
 
 **Prompt:** `module_prompts/communication.md`  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.8  
-**Related:** [MODULE_SHEET_MAKER.md](./MODULE_SHEET_MAKER.md) · [system-design/07-LLD-Microsoft-Graph.md](../system-design/07-LLD-Microsoft-Graph.md)
+**Hub:** `/projects/:id/hub/comms`  
+**Related:** [MODULE_SHEET_MAKER.md](./MODULE_SHEET_MAKER.md)
 
 ---
 
 ## 1. Purpose
 
-Communication matrix, meetings (Agenda → MoM), Teams links, Ask (Request for Information), email outbox, generated docs to client civil.
+Communication matrix, Agenda → MoM → Follow-up as **separate tools**, Teams links, Ask (Request for Information), email outbox.
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
+
+| Tool | Hub / route | Status | Source |
+|------|-------------|--------|--------|
+| Communication matrix | `/comms?tab=matrix` | Built | Communication Matrix_BPCL |
+| Agenda | `/comms?tab=agenda` | Built | Meeting flow |
+| MoM | `/comms?tab=mom` | Built | Minutes + actions |
+| Follow-up | `/comms?tab=followup` | Built | Open actions |
+| Ask (PMC RFI) | `/rfis?kind=RequestForInformation` | Built | Information |
+| Email / Outlook | `/email` | Partial | Outbox; Graph when live |
+
+### Awaiting next sheets
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| Matrix | Built | Meeting + request parties |
-| Meetings | Partial | Create → Agenda → MoM → Follow-up |
-| Teams integration | Design | **Teams only** via Graph |
-| Sheet Maker bind | Design | Published template on meeting |
-| Ask | Built | Request for Information (PMC) |
-| Email / Outlook | Partial | Outbox; Graph when live |
-| Generated docs → Client | Partial | MoM/agenda PDFs |
+| Sheet Maker bind | Ready | Published template on meeting — see MODULE_SHEET_MAKER |
+| Generated docs → Client PDF | Partial | MoM/agenda packs |
 
 ---
 
-## 3. Communication matrix fields
+## 3–6. Fields
 
-| Field | Type | Notes |
-|-------|------|-------|
-| projectId | link | |
-| role / partyType | text | Client / PMC / Consultant / Contractor |
-| contactName, email, phone | | |
-| meetingRow / rfiRow | bool | Which rows apply |
-| org | text | |
+Matrix, Meeting, Ask, Email — unchanged baselines in prompt.
 
----
+### Meeting flow
 
-## 4. Meeting fields
-
-| Field | Type | Required | Notes / review |
-|-------|------|----------|----------------|
-| title | text | Y | |
-| meetingNo | text | N | Auto |
-| scheduledStart / end | datetime | Y | |
-| location | text | N | Default Teams |
-| teamsMeetingUrl / teamsMeetingId | url | N | From Graph |
-| sheetTemplateId | link | N | Sheet Maker |
-| sheetInstanceId | link | N | Filled sheet |
-| agenda | rich text | N | |
-| mom | rich text | N | |
-| attendees | users/contacts | N | |
-| status | enum | Y | Draft / Scheduled / Completed |
-| followUps[] | | | action, owner, due, status |
-
-### Meeting item (follow-up)
-
-| Field | Notes |
-|-------|-------|
-| description | |
-| owner | |
-| dueDate | |
-| status | Open / Closed |
-
----
-
-## 5. Ask (PMC) — Request for Information
-
-| Field | Notes |
-|-------|--------|
-| rfiKind | `RequestForInformation` |
-| UI label | Request for Information |
-| matrix distribution | |
-| ball in court | |
-
-Coordination issues may escalate from Drawings into Ask.
-
----
-
-## 6. Email outbox
-
-| Field | Notes |
-|-------|-------|
-| to, subject, body | |
-| status | Queued / Sent / Failed |
-| relatedEntity | Meeting / RFI / Publish |
-| Graph send when configured | |
+Create → Agenda → MoM → Follow-up. Video = **Microsoft Teams only**.
 
 ---
 
 ## 7. Rules
 
-1. Meetings = **Microsoft Teams only** (no Zoom/Meet as first-class).  
+1. Matrix / Agenda / MoM / Follow-up are **four hub tools**.  
 2. Sheet Maker templates optional but preferred for custom meeting sheets.  
 3. Generated MoM/agenda visible on **client civil**.  
-4. Matrix parties gate RFI respond/close.
 
 ---
 

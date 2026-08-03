@@ -1,13 +1,20 @@
 # Quality module
 
-| Tool | Notes |
-|------|-------|
-| QAP | Weekly activity matrix Contractor / PMC / Client (`Quality Assurance Plan Week 50.xlsx`) |
-| Inspections | Procore QI templates + fill |
-| Cube register | `SPDC CUBE REGISTER` — cast / test results |
-| Site checklists | Final Index catalog + assign / fill (3 photos per item where required) |
-| NCR / observations | Against quality instructions (`NCR 01 .xlsx`) |
-| Checklist master | Create/edit templates; upload sheet or custom items |
-| Request for **Inspection** | Kind `QualityInspection` — request QI / checklist inspection fill (not “information”) |
+## Tools (each sheet → separate hub card)
 
-Master checklist tool lives here for quality family; drawing checklist master lives under Drawings.
+| Tool | Route | Source sheet |
+|------|-------|----------------|
+| Quality dashboard / QI | `/inspections` | QI process + QAP status |
+| **NCR / CAR** | `/inspections?view=ncr` | `NCR 01.xlsx` |
+| **Cube register** | `/inspections?view=cube` | `SPDC CUBE REGISTER` |
+| QAP | `/qap` | `Quality Assurance Plan Week 50.xlsx` |
+| Checklist master | `/checklist-master?family=QualityInspection` | Excel QI templates |
+| QI fill log | `/checklist-logs?family=QualityInspection` | Fill audit |
+| Site checklists | `/checklist` | Final Index |
+| Request QI fill | `/rfis?kind=QualityInspection` | Inspection request (not information) |
+
+## Rules
+
+- NCR and Cube are **first-class hub tools**, not buried only inside the QI dashboard.
+- Master checklist tool lives here for quality family; drawing checklist master lives under Drawings.
+- Request for **Inspection** uses kind `QualityInspection`.

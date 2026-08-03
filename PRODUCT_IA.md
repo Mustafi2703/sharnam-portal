@@ -27,14 +27,14 @@ Sheet → dashboard map: `docs/SHEET_TO_DASHBOARD.md`.
 |--------|-------|-------|
 | **Home** | Overview, Directory (Office/Site/Client/Contractor), Vendors, Documents | |
 | **Drawings** | GFC, Checklist manager, DMS, Coordination, Request checklist fill, **Request for Information** | No Submittals. Check window before upload. |
-| **Quality** | QI dashboard, Checklist master (Excel + choose), **QAP**, Site checklists, **Request for Inspection** | |
-| **Safety** | Dashboard, Safety checklists (Excel + choose), **Request for Inspection** | |
-| **Progress** | Overview, Milestones, Planned vs Actual / **S-curve**, **Summary schedule**, **MS Project progress**, **Procurement plan**, Monthly, Hindrance, Risk, Legal | Client civil visible |
+| **Quality** | QI dashboard, **NCR / CAR**, **Cube register**, Checklist master, **QAP**, Site checklists, **Request for Inspection** | |
+| **Safety** | Dashboard, **Safety NCR**, Safety checklists, **Request for Inspection** | |
+| **Progress** | Overview, Milestones, Planned vs Actual, Monthly, Hindrance, Risk, Legal | Client civil visible |
 | **Field** | Day log, Photos, Field requests | ≠ HRMS personal diary |
-| **Comms** | Matrix · Meetings (Teams) · Sheet Maker bind · MoM · Ask (Information) · Email / Outlook | Generated docs → Client |
-| **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, Structure | Engineering — **not** Finance |
+| **Comms** | Matrix · Agenda · MoM · Follow-up · Ask (Information) · Email / Outlook | Generated docs → Client |
+| **Cost** | Monitoring, MB, BBS, Budget, **Cashflow Chart / Forecast / Tracking**, Rates, COP/Bills, Structure | Engineering — **not** Finance |
 | **Finance** | Overview, Invoice, PO, RA bill, COP | Shell now; field detail later |
-| **Reports** | DPR / WPR packs | PDFs on client civil side |
+| **Reports** | **DPR** · **WPR** (separate tools) | PDFs on client civil side |
 | **Assurance** (optional hub) | Site Audit · KPI dashboard | May live under Master or project hub |
 
 **PDF:** upload supported; in-app **viewable** (min. summary schedule, procurement plan, generated civil/meeting PDF).

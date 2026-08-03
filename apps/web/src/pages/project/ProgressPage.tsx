@@ -4,8 +4,46 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
+import { BarChart, PieChart } from "../../components/PieChart";
 
-type Tab = "overview" | "milestones" | "planned" | "monthly" | "hindrance" | "risk" | "legal";
+type Tab =
+  | "overview"
+  | "milestones"
+  | "planned"
+  | "monthly"
+  | "hindrance"
+  | "risk"
+  | "legal"
+  | "scurve"
+  | "schedule"
+  | "msproject"
+  | "procurement";
+
+const READY_TABS: Record<
+  "scurve" | "schedule" | "msproject" | "procurement",
+  { title: string; sheet: string; blurb: string }
+> = {
+  scurve: {
+    title: "S-curve",
+    sheet: "MS Project / S-curve pack",
+    blurb: "Hub tool is reserved. Drop the client MS Project or S-curve sheet and we wire charts + PDF here.",
+  },
+  schedule: {
+    title: "Summary schedule",
+    sheet: "Project summary schedule",
+    blurb: "Upload + in-app PDF viewer will land here when the client schedule pack is shared.",
+  },
+  msproject: {
+    title: "MS Project progress",
+    sheet: "MS Project export",
+    blurb: "Task % / baseline register — ready for import as soon as the sheet arrives.",
+  },
+  procurement: {
+    title: "Procurement plan",
+    sheet: "Procurement plan",
+    blurb: "Line items + PDF viewer reserved for the client procurement pack.",
+  },
+};
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
@@ -19,83 +57,6 @@ function pct(n: number) {
 
 function inr(n: number) {
   return `₹${Math.round(n || 0).toLocaleString("en-IN")}`;
-}
-
-/** Simple dual/single bar chart from sheet-style series */
-function BarChart({
-  title,
-  items,
-  valueKey = "value",
-  compareKey,
-  maxBars = 10,
-}: {
-  title: string;
-  items: any[];
-  valueKey?: string;
-  compareKey?: string;
-  maxBars?: number;
-}) {
-  const rows = (items || []).slice(0, maxBars);
-  const max = Math.max(
-    1,
-    ...rows.map((r) => Math.max(Number(r[valueKey]) || 0, compareKey ? Number(r[compareKey]) || 0 : 0))
-  );
-  return (
-    <Card className="!p-4 h-full flex flex-col min-h-[140px]">
-      <h3 className="text-sm font-semibold text-ink mb-3">{title}</h3>
-      {!rows.length ? (
-        <p className="text-sm text-steel-muted">No chart data.</p>
-      ) : (
-        <div className="space-y-2.5 flex-1">
-          {rows.map((r) => {
-            const a = Number(r[valueKey]) || 0;
-            const b = compareKey ? Number(r[compareKey]) || 0 : 0;
-            return (
-              <div key={r.label} className="grid grid-cols-[110px_1fr_auto] gap-2 items-center text-xs">
-                <div className="truncate text-steel-muted" title={r.label}>
-                  {r.label}
-                </div>
-                <div className="space-y-1">
-                  <div className="h-2 rounded-sm bg-line overflow-hidden">
-                    <div
-                      className="h-full"
-                      style={{ width: `${(a / max) * 100}%`, background: "var(--mod-accent, var(--color-brand))" }}
-                    />
-                  </div>
-                  {compareKey != null && (
-                    <div className="h-2 rounded-sm bg-line overflow-hidden">
-                      <div
-                        className="h-full"
-                        style={{ width: `${(b / max) * 100}%`, background: "var(--color-mark, #C45C26)" }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="font-mono text-[11px] text-right whitespace-nowrap">
-                  {compareKey != null ? `${Math.round(a)} / ${Math.round(b)}` : Number.isInteger(a) ? a : a.toFixed(2)}
-                </div>
-              </div>
-            );
-          })}
-          {compareKey != null && (
-            <div className="flex gap-3 text-[10px] uppercase tracking-wide text-steel-muted pt-1">
-              <span className="inline-flex items-center gap-1">
-                <span
-                  className="w-2.5 h-2.5 inline-block rounded-sm"
-                  style={{ background: "var(--mod-accent, var(--color-brand))" }}
-                />{" "}
-                Planned / primary
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 inline-block rounded-sm" style={{ background: "var(--color-mark, #C45C26)" }} />{" "}
-                Actual / compare
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
 }
 
 export default function ProgressPage() {
@@ -192,6 +153,10 @@ export default function ProgressPage() {
       { key: "hindrance", label: "Hindrance" },
       { key: "risk", label: "Risk" },
       { key: "legal", label: "Legal approvals" },
+      { key: "scurve", label: "S-curve" },
+      { key: "schedule", label: "Summary schedule" },
+      { key: "msproject", label: "MS Project" },
+      { key: "procurement", label: "Procurement" },
     ],
     []
   );
@@ -408,13 +373,13 @@ export default function ProgressPage() {
                 All Progress tools →
               </Link>
             </div>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
               {(
                 [
-                  ["Milestones", data.charts.milestoneByStatus, "milestones"],
-                  ["Hindrance", data.charts.hindranceByStatus, "hindrance"],
-                  ["Risk", data.charts.riskByStatus, "risk"],
-                  ["Legal", data.charts.legalByStatus, "legal"],
+                  ["Milestones", data.charts?.milestoneByStatus, "milestones"],
+                  ["Hindrance", data.charts?.hindranceByStatus, "hindrance"],
+                  ["Risk", data.charts?.riskByStatus, "risk"],
+                  ["Legal", data.charts?.legalByStatus, "legal"],
                 ] as const
               ).map(([title, items, tabKey]) => {
                 const rows = items || [];
@@ -435,6 +400,21 @@ export default function ProgressPage() {
                 );
               })}
             </div>
+            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <PieChart title="Milestones by status" items={data.charts?.milestoneByStatus || []} />
+              <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
+              <PieChart title="Risk by status" items={data.charts?.riskByStatus || []} />
+              <PieChart title="Legal by status" items={data.charts?.legalByStatus || []} />
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4 w-full">
+            <BarChart
+              title="Cashflow planned vs actual"
+              items={data.charts?.cashflow || []}
+              valueKey="planned"
+              compareKey="actual"
+            />
+            <BarChart title="Hindrance by activity" items={data.charts?.hindranceByActivity || []} />
           </div>
           <div className="grid md:grid-cols-2 gap-4 w-full">
             <Card>
@@ -458,9 +438,10 @@ export default function ProgressPage() {
                       {r.code ? `${r.code} · ` : ""}
                       {r.name}
                     </span>
-                    <span className="font-mono text-xs">Sev {r.severity}</span>
+                    <Badge tone={Number(r.severity) >= 4 ? "danger" : "warn"}>Sev {r.severity}</Badge>
                   </div>
                 ))}
+                {!data.risks?.length && <p className="text-steel-muted text-sm">No risks seeded.</p>}
               </div>
             </Card>
           </div>
@@ -469,6 +450,16 @@ export default function ProgressPage() {
 
       {tab === "milestones" && (
         <div className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-3">
+            <PieChart title="Milestones by status" items={data.charts?.milestoneByStatus || []} />
+            <BarChart
+              title="Avg % complete by phase"
+              items={(data.charts?.milestoneByPhase || []).map((x: any) => ({
+                label: x.label,
+                value: Math.round((Number(x.value) || 0) * 100),
+              }))}
+            />
+          </div>
           {canEdit && (
             <Card>
               <h3 className="font-semibold text-sm mb-3">Add milestone</h3>
@@ -546,8 +537,19 @@ export default function ProgressPage() {
       {tab === "planned" && (
         <div className="space-y-4 w-full">
           <div className="grid lg:grid-cols-2 gap-4 w-full">
-            <BarChart title="Cashflow planned vs actual" items={data.charts.cashflow} valueKey="planned" compareKey="actual" />
-            <BarChart title="Manpower shortage %" items={data.charts.manpower.map((m: any) => ({ label: m.label, value: (m.shortagePct || 0) * 100 }))} />
+            <BarChart
+              title="Cashflow planned vs actual"
+              items={data.charts?.cashflow || []}
+              valueKey="planned"
+              compareKey="actual"
+            />
+            <BarChart
+              title="Manpower shortage %"
+              items={(data.charts?.manpower || []).map((m: any) => ({
+                label: m.label,
+                value: (m.shortagePct || 0) * 100,
+              }))}
+            />
           </div>
           <Card className="overflow-x-auto !p-0 w-full">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Project cashflow · Planned Vs Actual</div>
@@ -647,7 +649,12 @@ export default function ProgressPage() {
 
       {tab === "monthly" && (
         <div className="space-y-4">
-          <BarChart title="SOR / observation closure" items={data.charts.sor} valueKey="closed" compareKey="open" />
+          <BarChart
+            title="SOR / observation closure"
+            items={data.charts?.sor || []}
+            valueKey="closed"
+            compareKey="open"
+          />
           <Card className="overflow-x-auto !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Monthly Progress · SOR Log</div>
             <table className="w-full text-sm">
@@ -685,7 +692,10 @@ export default function ProgressPage() {
 
       {tab === "hindrance" && (
         <div className="space-y-4">
-          <BarChart title="Hindrance by critical activity" items={data.charts.hindranceByActivity} />
+          <div className="grid md:grid-cols-2 gap-3">
+            <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
+            <BarChart title="Hindrance by critical activity" items={data.charts?.hindranceByActivity || []} />
+          </div>
           {canEdit && (
             <Card>
               <h3 className="font-semibold text-sm mb-3">Log hindrance</h3>
@@ -766,7 +776,10 @@ export default function ProgressPage() {
 
       {tab === "risk" && (
         <div className="space-y-4">
-          <BarChart title="Risk by status" items={data.charts.riskByStatus} />
+          <div className="grid md:grid-cols-2 gap-3">
+            <PieChart title="Risk by status" items={data.charts?.riskByStatus || []} />
+            <BarChart title="Risk by severity" items={data.charts?.riskBySeverity || []} />
+          </div>
           {canEdit && (
             <Card>
               <h3 className="font-semibold text-sm mb-3">Identify risk</h3>
@@ -840,7 +853,10 @@ export default function ProgressPage() {
 
       {tab === "legal" && (
         <div className="space-y-4">
-          <BarChart title="Legal approvals by status" items={data.charts.legalByStatus} />
+          <div className="grid md:grid-cols-2 gap-3">
+            <PieChart title="Legal by status" items={data.charts?.legalByStatus || []} />
+            <BarChart title="Legal approvals by status" items={data.charts?.legalByStatus || []} />
+          </div>
           {canEdit && (
             <Card>
               <h3 className="font-semibold text-sm mb-3">Add legal approval</h3>
@@ -906,6 +922,22 @@ export default function ProgressPage() {
             </table>
           </Card>
         </div>
+      )}
+
+      {tab in READY_TABS && (
+        <Card className="!p-6 max-w-2xl">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-2">Awaiting client sheet</p>
+          <h3 className="font-display text-xl text-ink">{READY_TABS[tab as keyof typeof READY_TABS].title}</h3>
+          <p className="text-sm text-steel-muted mt-2 leading-relaxed">
+            {READY_TABS[tab as keyof typeof READY_TABS].blurb}
+          </p>
+          <p className="mt-4 text-xs font-mono text-steel-muted">
+            Sheet → {READY_TABS[tab as keyof typeof READY_TABS].sheet}
+          </p>
+          <Link to={`/projects/${id}/hub/progress`} className="inline-block mt-5 text-sm font-semibold text-brand">
+            ← Progress hub
+          </Link>
+        </Card>
       )}
     </div>
   );

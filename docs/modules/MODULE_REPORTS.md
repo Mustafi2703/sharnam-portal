@@ -1,73 +1,36 @@
 # MODULE — Reports (DPR · WPR)
 
 **Prompts:** `module_prompts/dpr_generation.md`, `module_prompts/WPR_generation.md`  
-**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.11
+**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.11  
+**Hub:** `/projects/:id/hub/reports`
 
 ---
 
 ## 1. Purpose
 
-Generate Daily / Weekly packs from **live registers** (not a separate data silo). Match client Excel layouts; show PDFs on client civil side.
+Generate Daily / Weekly packs from **live registers**. DPR and WPR are **separate hub tools**.
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
+
+| Tool | Hub / route | Status | Source |
+|------|-------------|--------|--------|
+| **DPR pack** | `/reports` or `?kind=dpr` | Built | DPR-Sharnam PMC |
+| **WPR pack** | `/reports?kind=wpr` | Built | WPR File |
+| Pack viewer | Partial | In-app HTML/PDF for Client |
+
+### Awaiting next sheets
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| Generate DPR | Built | Date picker → HTML/JSON pack |
-| Generate WPR | Built | Week-ending → HTML/PDF |
-| Pack viewer | Partial | In-app PDF/HTML view for Client |
+| Extra client pack layouts | Ready | New Excel → section map in this doc + generate service |
 
 ---
 
-## 3. DPR sections (from DPR-Sharnam PMC template)
+## 3–5. Sections
 
-| # | Section | Source modules |
-|---|---------|----------------|
-| 1 | Summary | Project, client, consultant, PMC |
-| 2 | Manpower, Equipments, Materials | Field day log |
-| 3 | Concern Register | Concerns / RFIs (building, impact, responsibility, day status) |
-| 4 | Hindrance Register | Progress hindrance |
-| 5 | Daily Progress Dashboard | Progress + day log |
-| 6 | Site Photographs | Field photos |
-| 7 | Checklist fills by type | See mapping below |
-
-### DPR generate fields
-
-| Field | Notes |
-|-------|-------|
-| projectId | |
-| reportDate | Selected day |
-| generatedBy / at | |
-| packUrl | HTML/JSON/PDF artifact |
-
----
-
-## 4. WPR contents (assembled)
-
-| Block | Source |
-|-------|--------|
-| Drawing / GFC snapshot + DrawingCheck fills | Drawings |
-| Milestones & Planned vs Actual | Progress |
-| Cashflow / budget status | Cost |
-| Quality NCR + cube + QI fills + QAP | Quality |
-| Safety NCR + Safety fills | Safety |
-| Hindrance & risk | Progress |
-| SiteExecution → weekly KPIs | Checklists / Field |
-
-### WPR generate fields
-
-| Field | Notes |
-|-------|-------|
-| projectId | |
-| weekEndingDate | |
-| generatedBy / at | |
-| packUrl | |
-
----
-
-## 5. Checklist type → report section
+DPR / WPR section maps and checklist → report mapping — see prior content / prompts.
 
 | Fill type | DPR / WPR section |
 |-----------|-------------------|
@@ -78,26 +41,15 @@ Generate Daily / Weekly packs from **live registers** (not a separate data silo)
 
 ---
 
-## 6. Roles
-
-| Role | Can |
-|------|-----|
-| Site | Fill day log / checklists that feed packs |
-| Office | Generate DPR/WPR |
-| Client | View published packs / PDFs |
-
----
-
-## 7. Rules
+## 6. Rules
 
 1. Packs pull live data at generate time.  
-2. Seed keeps sheet-backed registers maintainable.  
-3. Client civil must see generated report PDFs.
+2. Client civil must see generated report PDFs.  
 
 ---
 
-## 8. Review checklist
+## 7. Review checklist
 
 - [ ] Confirm DPR section order vs latest client Excel  
-- [ ] Confirm WPR week definition (Mon–Sun vs custom)  
+- [ ] Confirm WPR week definition  
 - [ ] Confirm auto-publish to Client vs manual share  

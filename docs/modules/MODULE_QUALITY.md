@@ -1,27 +1,35 @@
-# MODULE — Quality (QI · QAP · NCR · Inspection)
+# MODULE — Quality (QI · QAP · NCR · Cube · Inspection)
 
 **Prompt:** `module_prompts/Quality.md`  
-**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.4 · §3B
+**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.4 · §3B  
+**Hub:** `/projects/:id/hub/quality`
 
 ---
 
 ## 1. Purpose
 
-Quality inspections, QAP, NCR/cube registers, checklist master (Excel), and **Request for Inspection**.
+Quality inspections, QAP, **NCR / CAR** and **Cube** as separate tools, checklist master (Excel), and **Request for Inspection**.
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
+
+| Tool | Hub / route | Status | Source sheet |
+|------|-------------|--------|--------------|
+| Quality dashboard / QI | `/inspections` | Built | QI process |
+| **NCR / CAR** | `/inspections?view=ncr` | Built | `NCR 01.xlsx` |
+| **Cube register** | `/inspections?view=cube` | Built | `SPDC CUBE REGISTER` |
+| Checklist master | `/checklist-master?family=QualityInspection` | Built | Excel QI templates |
+| QI fill log | `/checklist-logs?family=QualityInspection` | Built | Fill audit |
+| QAP | `/qap` | Built | `Quality Assurance Plan Week 50.xlsx` |
+| Site checklists | `/checklist` | Built | Final Index |
+| Request for Inspection | `/rfis?kind=QualityInspection` | Built | Inspection request |
+
+### Awaiting next sheets
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| QI dashboard | Built | Procore-style inspections |
-| Checklist master | Built | Create; **upload Excel**; choose template |
-| QAP | Built | Upload / update Week-50 plan |
-| Site checklists | Built | Assign / fill (Final Index family) |
-| Cube register | Built | Cast / test results |
-| NCR / observations | Built | Quality NCRs |
-| **Request for Inspection** | Built (label) | Kind `QualityInspection` |
+| Extra QI families / trade packs | Ready | New Excel → Checklist master family; add hub card if first-class |
 
 ---
 
@@ -65,8 +73,9 @@ Quality inspections, QAP, NCR/cube registers, checklist master (Excel), and **Re
 
 | Field | Type | Notes |
 |-------|------|-------|
+| srNo | text | |
 | castDate / testDate | date | |
-| grade / location / sampleId | text | |
+| description / grade | text | |
 | result / strength | number/text | |
 | status | | |
 
@@ -76,12 +85,13 @@ Quality inspections, QAP, NCR/cube registers, checklist master (Excel), and **Re
 
 | Field | Type | Notes |
 |-------|------|-------|
-| number | auto | |
+| number | text | |
+| ncrType | text | |
 | description | text | |
-| againstInstruction | text | |
+| location | text | |
 | severity / status | enum | |
+| plannedClosure / actualClosure | date | |
 | linkedInspectionId | link | optional |
-| closedAt | | |
 
 ---
 
@@ -133,3 +143,4 @@ Drawing checklist master lives under **Drawings**, not here.
 - [ ] Confirm photo count rules per checklist type  
 - [ ] Confirm drawing gate for QI create  
 - [ ] Confirm QAP update ownership  
+- [ ] Confirm any new NCR columns from next sheet drop  

@@ -1,25 +1,18 @@
 # Progress module
 
-## Tools
+## Tools (each sheet → separate hub card)
 
-| Tool | Behaviour |
-|------|-----------|
-| Overview dashboard | Printable summary (PDF later) of milestones, risk, hindrance |
-| Milestones | Code, category, activity, planned/actual dates & duration, variance |
-| Planned vs Actual | Same editable input layout as sheet; charts for print |
-| Monthly progress | Monthly package progress register |
-| Hindrance register | Description, location, activity, category, type, dates, days |
-| Risk register | Identify → assess (probability × consequence), cost impact |
+| Tool | Route | Source sheet |
+|------|-------|----------------|
+| Overview dashboard | `/progress` | `Progress Overview.xlsx` |
+| Milestones | `/progress?tab=milestones` | `Milestone tracking.xlsx` |
+| Planned vs Actual | `/progress?tab=planned` | `Planned Vs. Actual Dashboard` |
+| Monthly progress | `/progress?tab=monthly` | `Monthly Progress Dashboard` · SOR |
+| Hindrance | `/progress?tab=hindrance` | `Hindrance Register Dashboard` |
+| Risk | `/progress?tab=risk` | Progress Overview · Risk |
+| Legal approvals | `/progress?tab=legal` | Progress Overview · Legal Approval |
 
-## Sheet sources
-
-- `Progress Overview.xlsx` — Dashboard, Legal Approval, Milestone, Risk, Hindrance  
-- `Milestone tracking.xlsx`  
-- `Planned Vs. Actual Dashboard (1).xlsx` — cashflow, manpower, qty register  
-- `Monthly Progress Dashboard (1).xlsx` — SOR log  
-- `HInderance Register Dashboard (1).xlsx`
-
-## Portal tabs (seeded 1:1 from sheets)
+## Portal behaviour
 
 | Tab | Data |
 |-----|------|
@@ -41,3 +34,14 @@
 | **Safety** | WPR / DPR **Safety** section |
 
 Seed refreshes sheet-backed registers on `npm run db:seed` so Excel edits stay maintained.
+
+## Future civil tools (PRODUCT_IA) — Ready hub cards
+
+| Tool | Route | Status |
+|------|-------|--------|
+| S-curve | `/progress?tab=scurve` | Ready — awaits sheet |
+| Summary schedule | `/progress?tab=schedule` | Ready — awaits sheet |
+| MS Project progress | `/progress?tab=msproject` | Ready — awaits sheet |
+| Procurement plan | `/progress?tab=procurement` | Ready — awaits sheet |
+
+Do not fold into Overview. Drop the sheet → fill placeholder → keep hub card.

@@ -22,18 +22,23 @@ export type ModuleToolItem = {
   roles?: RoleKey[];
   query?: string;
   blurb?: string;
+  /** Source Excel sheet name when this tool maps 1:1 from sheet mode */
+  sheet?: string;
+  /** live = seeded UI; ready = hub reserved, awaits client sheet drop */
+  status?: "live" | "ready";
 };
 
-/** Sub-tools for hub cards + horizontal strip (no left rail) */
+/** Sub-tools for hub cards + horizontal strip (no left rail) — one card per sheet/tool */
 export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   drawings: [
-    { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish." },
+    { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish.", sheet: "Drawing & GFC Drawing Log" },
     {
       to: "checklist-master",
       label: "Checklist manager",
       query: "family=DrawingCheck",
       roles: ["admin", "office", "employee"],
-    blurb: "Manage Drawing Check Master templates; upload opens checklist overlay then file dialog.",
+      blurb: "Manage Drawing Check Master templates; upload opens checklist overlay then file dialog.",
+      sheet: "Drawing check master",
     },
     {
       to: "checklist-logs",
@@ -78,7 +83,25 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "dms", label: "Documents (DMS)", blurb: "Project folders and files." },
   ],
   quality: [
-    { to: "inspections", label: "Quality dashboard / QI", blurb: "Procore-style quality inspections." },
+    {
+      to: "inspections",
+      label: "Quality dashboard / QI",
+      blurb: "Procore-style quality inspections and QAP status.",
+    },
+    {
+      to: "inspections",
+      label: "NCR / CAR",
+      query: "view=ncr",
+      blurb: "Non-conformance / corrective action register.",
+      sheet: "NCR 01.xlsx",
+    },
+    {
+      to: "inspections",
+      label: "Cube register",
+      query: "view=cube",
+      blurb: "Cube cast / test results.",
+      sheet: "SPDC CUBE REGISTER",
+    },
     {
       to: "checklist-master",
       label: "Checklist master",
@@ -97,8 +120,9 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Quality Assurance Plan",
       roles: ["admin", "office", "employee", "client", "site_employee"],
       blurb: "Upload and update the QAP (Week-50 sheet style).",
+      sheet: "Quality Assurance Plan Week 50",
     },
-    { to: "checklist", label: "Site checklists", blurb: "Assign and fill site execution forms." },
+    { to: "checklist", label: "Site checklists", blurb: "Assign and fill site execution forms.", sheet: "Final Index" },
     {
       to: "rfis",
       label: "Request QI fill",
@@ -108,6 +132,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   safety: [
     { to: "safety", label: "Safety dashboard", blurb: "Observations, incidents, open items." },
+    {
+      to: "safety",
+      label: "Safety NCR",
+      query: "view=ncr",
+      blurb: "Safety NCR register from sheet.",
+      sheet: "Safety NCR.xlsx",
+    },
     {
       to: "checklist-master",
       label: "Safety checklists",
@@ -129,13 +160,81 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   progress: [
-    { to: "progress", label: "Overview", end: true, blurb: "Workday-style progress KPIs." },
-    { to: "progress", label: "Milestones", query: "tab=milestones", blurb: "Milestone register." },
-    { to: "progress", label: "Planned vs Actual", query: "tab=planned", blurb: "Plan vs actual progress." },
-    { to: "progress", label: "Monthly progress", query: "tab=monthly", blurb: "Month-by-month view." },
-    { to: "progress", label: "Hindrance", query: "tab=hindrance", blurb: "Hindrance register." },
-    { to: "progress", label: "Risk", query: "tab=risk", blurb: "Risk register." },
-    { to: "progress", label: "Legal approvals", query: "tab=legal", blurb: "Legal / approval tracker." },
+    {
+      to: "progress",
+      label: "Overview",
+      end: true,
+      blurb: "Workday-style progress KPIs and charts.",
+      sheet: "Progress Overview.xlsx",
+    },
+    {
+      to: "progress",
+      label: "Milestones",
+      query: "tab=milestones",
+      blurb: "Milestone register.",
+      sheet: "Milestone tracking.xlsx",
+    },
+    {
+      to: "progress",
+      label: "Planned vs Actual",
+      query: "tab=planned",
+      blurb: "Cashflow, manpower, qty register.",
+      sheet: "Planned Vs. Actual Dashboard",
+    },
+    {
+      to: "progress",
+      label: "Monthly progress",
+      query: "tab=monthly",
+      blurb: "SOR / monthly package progress.",
+      sheet: "Monthly Progress Dashboard",
+    },
+    {
+      to: "progress",
+      label: "Hindrance",
+      query: "tab=hindrance",
+      blurb: "Hindrance register.",
+      sheet: "Hindrance Register Dashboard",
+    },
+    { to: "progress", label: "Risk", query: "tab=risk", blurb: "Risk register.", sheet: "Progress Overview · Risk" },
+    {
+      to: "progress",
+      label: "Legal approvals",
+      query: "tab=legal",
+      blurb: "Legal / approval tracker.",
+      sheet: "Progress Overview · Legal Approval",
+    },
+    {
+      to: "progress",
+      label: "S-curve",
+      query: "tab=scurve",
+      blurb: "Client civil S-curve — ready when MS Project / sheet lands.",
+      sheet: "MS Project / S-curve pack",
+      status: "ready",
+    },
+    {
+      to: "progress",
+      label: "Summary schedule",
+      query: "tab=schedule",
+      blurb: "Summary schedule + PDF viewer — awaiting client sheet.",
+      sheet: "Project summary schedule",
+      status: "ready",
+    },
+    {
+      to: "progress",
+      label: "MS Project progress",
+      query: "tab=msproject",
+      blurb: "MS Project % / baseline — reserved hub tool.",
+      sheet: "MS Project export",
+      status: "ready",
+    },
+    {
+      to: "progress",
+      label: "Procurement plan",
+      query: "tab=procurement",
+      blurb: "Procurement plan + PDF — reserved hub tool.",
+      sheet: "Procurement plan",
+      status: "ready",
+    },
   ],
   field: [
     { to: "diary", label: "Day log", blurb: "Manpower and site notes." },
@@ -143,7 +242,16 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "rfis", label: "Field RFIs", blurb: "Field questions and fills." },
   ],
   comms: [
-    { to: "comms", label: "Matrix · Meetings · MoM", blurb: "Matrix → agenda → MoM → follow-up." },
+    {
+      to: "comms",
+      label: "Communication matrix",
+      query: "tab=matrix",
+      blurb: "Who talks to whom (roles / channels).",
+      sheet: "Communication Matrix_BPCL",
+    },
+    { to: "comms", label: "Agenda", query: "tab=agenda", blurb: "Create meeting → generate agenda before MoM." },
+    { to: "comms", label: "MoM", query: "tab=mom", blurb: "Minutes + action items." },
+    { to: "comms", label: "Follow-up", query: "tab=followup", blurb: "Open actions from MoM." },
     {
       to: "rfis",
       label: "Ask (PMC RFI)",
@@ -158,22 +266,81 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   cost: [
-    { to: "cost", label: "Monitoring", end: true, blurb: "BOQ / monitoring desk." },
-    { to: "cost", label: "MB sheets", query: "tab=mb", blurb: "Measurement books." },
-    { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Bar bending schedule." },
-    { to: "cost", label: "Budget WBS", query: "tab=budget", blurb: "Budget structure." },
-    { to: "cost", label: "Cashflow", query: "tab=cashflow", blurb: "Cashflow chart." },
-    { to: "cost", label: "Rate difference", query: "tab=rates", blurb: "Rate variance." },
-    { to: "cost", label: "Structure upload", query: "tab=boq", blurb: "Import BOQ structure." },
+    {
+      to: "cost",
+      label: "BOQ / Monitoring",
+      end: true,
+      blurb: "Monitoring packages — GFC qty, excess / saving.",
+      sheet: "Cashflow Dashboard · Monitoring",
+    },
+    { to: "cost", label: "MB sheets", query: "tab=mb", blurb: "Measurement books by package.", sheet: "SPDC Budget · MB" },
+    { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Bar bending schedule by package.", sheet: "SPDC Budget · BBS" },
+    {
+      to: "cost",
+      label: "Budget WBS",
+      query: "tab=budget",
+      blurb: "Budget structure.",
+      sheet: "SPDC_Budget · Budget",
+    },
+    {
+      to: "cost",
+      label: "Cash Flow Chart",
+      query: "tab=cashflow&cf=chart",
+      blurb: "Planned vs actual chart (INR).",
+      sheet: "Cashflow - Dashboard · Chart",
+    },
+    {
+      to: "cost",
+      label: "Cash Flow Forecast",
+      query: "tab=cashflow&cf=forecast",
+      blurb: "Forecast periods.",
+      sheet: "Cashflow - Dashboard · Forecast",
+    },
+    {
+      to: "cost",
+      label: "Cashflow Tracking",
+      query: "tab=cashflow&cf=tracking",
+      blurb: "Tracking sheet rows.",
+      sheet: "Cashflow - Dashboard · Tracking",
+    },
+    {
+      to: "cost",
+      label: "Rate difference",
+      query: "tab=rates",
+      blurb: "Steel / Cement / Tiles variance.",
+      sheet: "Rate difference sheets",
+    },
+    {
+      to: "cost",
+      label: "COP / Bills",
+      query: "tab=bills",
+      blurb: "Payment summary / vendor bills.",
+      sheet: "Payment Summary",
+    },
+    {
+      to: "cost",
+      label: "Structure upload",
+      query: "tab=boq",
+      blurb: "Import BOQ structure into monitoring.",
+    },
   ],
   finance: [
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
-    { to: "finance", label: "Invoice tracking", query: "tab=invoices", blurb: "Invoice register." },
+    {
+      to: "finance",
+      label: "Invoice tracking",
+      query: "tab=invoices",
+      blurb: "Invoice register.",
+      sheet: "Payment Summary",
+    },
     { to: "finance", label: "PO tracking", query: "tab=po", blurb: "Purchase order register." },
     { to: "finance", label: "RA bill tracking", query: "tab=ra", blurb: "Running account bills." },
     { to: "finance", label: "COP tracking", query: "tab=cop", blurb: "Certificate of payment." },
   ],
-  reports: [{ to: "reports", label: "DPR / WPR packs", blurb: "Daily and weekly report packs." }],
+  reports: [
+    { to: "reports", label: "DPR pack", query: "kind=dpr", blurb: "Daily progress report pack.", sheet: "DPR-Sharnam PMC" },
+    { to: "reports", label: "WPR pack", query: "kind=wpr", blurb: "Weekly progress report pack.", sheet: "WPR File" },
+  ],
 };
 
 export const MODULE_META: Record<
@@ -201,7 +368,7 @@ export const MODULE_META: Record<
   },
   quality: {
     title: "Quality",
-    desc: "QI dashboard, Excel checklist upload, QAP, and Request QI fill.",
+    desc: "QI dashboard, NCR / CAR, Cube register, QAP, Excel checklists, and Request QI fill — each sheet is its own tool.",
     path: "hub/quality",
     accent: "#0D9488",
     soft: "#CCFBF1",
@@ -211,7 +378,7 @@ export const MODULE_META: Record<
   },
   safety: {
     title: "Safety",
-    desc: "Safety dashboard, Excel checklists, and safety RFIs.",
+    desc: "Safety dashboard, Safety NCR, Excel checklists, and safety RFIs — separate tools per sheet.",
     path: "hub/safety",
     accent: "#DC2626",
     soft: "#FEE2E2",
@@ -221,7 +388,7 @@ export const MODULE_META: Record<
   },
   progress: {
     title: "Progress",
-    desc: "Overview, Milestones, Hindrance, Risk, and more.",
+    desc: "Live Progress sheets plus Ready stubs for S-curve, schedule, MS Project, and procurement.",
     path: "hub/progress",
     accent: "#7C3AED",
     soft: "#EDE9FE",
@@ -241,7 +408,7 @@ export const MODULE_META: Record<
   },
   comms: {
     title: "Comms",
-    desc: "Matrix, meetings / MoM, Ask (PMC RFI), Email / Outlook.",
+    desc: "Matrix, Agenda, MoM, Follow-up, Ask (PMC RFI), Email — separate tools.",
     path: "hub/comms",
     accent: "#0891B2",
     soft: "#CFFAFE",
@@ -251,7 +418,7 @@ export const MODULE_META: Record<
   },
   cost: {
     title: "Cost",
-    desc: "MB, BBS, budget, cashflow — engineering cost. Commercial tracking is Finance.",
+    desc: "Monitoring, MB, BBS, Budget, Cashflow Chart / Forecast / Tracking, Rates, COP — sheet-mode tools. Commercial registers live in Finance.",
     path: "hub/cost",
     accent: "#0B6A78",
     soft: "#CCFBF1",
@@ -261,7 +428,7 @@ export const MODULE_META: Record<
   },
   finance: {
     title: "Finance",
-    desc: "Invoice, PO, RA bill, and COP tracking — separate from Cost.",
+    desc: "Invoice, PO, RA bill, and COP tracking — separate from engineering Cost sheets.",
     path: "hub/finance",
     accent: "#0369A1",
     soft: "#E0F2FE",
@@ -271,7 +438,7 @@ export const MODULE_META: Record<
   },
   reports: {
     title: "Reports",
-    desc: "DPR and WPR packs from live registers.",
+    desc: "DPR and WPR packs as separate tools from live registers.",
     path: "hub/reports",
     accent: "#EA580C",
     soft: "#FFEDD5",

@@ -5,20 +5,20 @@ Every shared Excel pack becomes an **in-app dashboard or tool**. Files under `te
 | # | Shared sheet | Portal module | Portal tool / dashboard |
 |---|--------------|---------------|-------------------------|
 | 1 | Approval & GFC Drawing Log | Drawings | GFC register |
-| 2 | Communication Matrix_BPCL | Comms | Matrix · Meetings · MoM |
+| 2 | Communication Matrix_BPCL | Comms | Matrix · Agenda · MoM · Follow-up (separate tools) |
 | 3 | Quality Assurance Plan Week 50 | Quality | **QAP** (upload / update / view) |
-| 4 | NCR 01 | Quality | QI / NCR dashboard |
-| 5 | Safety NCR | Safety | Safety dashboard |
+| 4 | NCR 01 | Quality | **NCR / CAR** tool (`/inspections?view=ncr`) |
+| 5 | Safety NCR | Safety | **Safety NCR** tool (`/safety?view=ncr`) |
 | 6 | Progress Overview | Progress | Overview |
 | 7 | Planned Vs. Actual Dashboard | Progress | Planned vs Actual |
 | 8 | Monthly Progress Dashboard | Progress | Monthly progress |
 | 9 | Milestone tracking | Progress | Milestones |
 | 10 | Hindrance Register Dashboard | Progress | Hindrance |
-| 11 | Cashflow - Dashboard | Cost | Cashflow |
+| 11 | Cashflow - Dashboard | Cost | **Cash Flow Chart** · **Forecast** · **Tracking** (3 tools) |
 | 12 | Payment Summary (VIATRIX etc.) | **Finance** | Invoice / RA / COP tracking |
 | 13 | DPR-Sharnam PMC | Reports | DPR pack |
 | 14 | WPR File | Reports | WPR pack |
-| 15 | SPDC Cube Register | Quality | Checklist / cube register (QI library) |
+| 15 | SPDC Cube Register | Quality | **Cube register** tool (`/inspections?view=cube`) |
 | 16 | Final Index | Master / DMS | Document index |
 | 17 | **MS Project** file / export | Progress | **S-curve** + **MS Project progress** (client civil) |
 | 18 | **Project summary schedule** (client shares) | Progress | Summary schedule tool + PDF viewer |

@@ -1,7 +1,8 @@
 # MODULE — Field (Day log · Photos · Field requests)
 
 **Prompt:** (covered under Field in IA / diary routes; related to DPR)  
-**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.7
+**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.7  
+**Hub:** `/projects/:id/hub/field`
 
 ---
 
@@ -12,13 +13,19 @@ Site daily log for manpower, equipment, notes, photos, and field operational req
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
+
+| Tool | Hub / route | Status | Notes |
+|------|-------------|--------|-------|
+| Day log | `/diary` | Built | Manpower / equipment / notes / photos |
+| Photos | `/photos` | Built | Project photos |
+| Field requests | `/rfis` | Built | Operational RFI kinds |
+
+### Awaiting next sheets
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| Day log | Built | `DailyLog` + manpower / equipment / notes / photos |
-| Photos | Built | Project photos |
-| Field requests | Built | Operational RFI kinds |
+| Extra day-log Excel packs | Ready | Map columns into DailyLog lines without new hub IA |
 
 ---
 

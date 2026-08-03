@@ -1,19 +1,19 @@
 # Cost module
 
-## Tools (each Excel sheet → portal tool)
+## Tools (each Excel sheet → portal hub tool)
 
-| Tool | Source sheet |
-|------|----------------|
-| Budget WBS | `SPDC_Budget_Arvind 49.xls` → Budget (+ Cashflow Dashboard Budget) |
-| BOQ / Monitoring | Each `Monitoring *` package + Cashflow Dashboard Monitoring |
-| MB sheets | Each MB / structure sheet (Dormitory, Electric, Plumbing, UGWT, …) |
-| BBS | Dormitory / Compound Wall / Septic / Road / UGWT BBS |
-| Cashflow Chart | `Cashflow - Dashboard.xlsx` → Cash Flow Chart - INR |
-| Cashflow Forecast | same → Cash Flow - Forecast |
-| Tracking | same → Tracking |
-| Rate difference | Steel / Cement / Tiles |
-| COP / Bills | Payment Summary |
-| Structure upload | Multi-BOQ import → monitoring package |
+| Tool | Route | Source sheet |
+|------|-------|----------------|
+| BOQ / Monitoring | `/cost` | Monitoring packages + Cashflow Dashboard Monitoring |
+| MB sheets | `/cost?tab=mb` | SPDC Budget · MB structures |
+| BBS | `/cost?tab=bbs` | Dormitory / Compound Wall / Septic / Road / UGWT BBS |
+| Budget WBS | `/cost?tab=budget` | `SPDC_Budget_Arvind 49.xls` → Budget |
+| **Cash Flow Chart** | `/cost?tab=cashflow&cf=chart` | `Cashflow - Dashboard.xlsx` → Cash Flow Chart - INR |
+| **Cash Flow Forecast** | `/cost?tab=cashflow&cf=forecast` | same → Cash Flow - Forecast |
+| **Cashflow Tracking** | `/cost?tab=cashflow&cf=tracking` | same → Tracking |
+| Rate difference | `/cost?tab=rates` | Steel / Cement / Tiles |
+| COP / Bills | `/cost?tab=bills` | Payment Summary (engineering COP entry) |
+| Structure upload | `/cost?tab=boq` | Multi-BOQ import → monitoring package |
 
 ## Downloads
 
@@ -22,7 +22,7 @@ Each register has **Download CSV** (open in Excel) for the active package filter
 
 ## Rules
 
-- Multiple BOQs/structures per project; each package is its own tool chip.
-- Fill **GFC qty** on monitoring; excess / saving computes.
-- Comms / Drawings / Coordination / Submittals are separate modules (later).
+- Cashflow Chart / Forecast / Tracking are **three separate hub tools** (not one combined Cashflow card).
+- Multiple BOQs/structures per project; each package is its own chip inside Monitoring / MB / BBS.
+- Commercial Invoice / PO / RA tracking lives in **Finance** (separate module).
 - Deploy (`render.yaml`) runs `prisma db push` + `seed/seed.ts` on start so sheet data is always loaded.

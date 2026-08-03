@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
 
+type QiView = "qi" | "ncr" | "cube";
+
 /** Raise QA inspection with checklist → becomes fillable form when Ready; drawing + assignee */
 export default function InspectionsPage() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewRaw = searchParams.get("view") || "qi";
+  const view: QiView = viewRaw === "ncr" || viewRaw === "cube" ? viewRaw : "qi";
+  const setView = (v: QiView) => {
+    if (v === "qi") setSearchParams({});
+    else setSearchParams({ view: v });
+  };
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [dash, setDash] = useState<any>(null);
@@ -54,13 +63,21 @@ export default function InspectionsPage() {
   }, [id, token]);
 
   const selected = data?.inspections?.find((i: any) => i.id === active);
+  const pageTitle =
+    view === "ncr" ? "NCR / CAR register" : view === "cube" ? "Cube register" : "Quality dashboard & inspections";
+  const pageSubtitle =
+    view === "ncr"
+      ? "Non-conformance / corrective action register from NCR 01 sheet — separate Quality tool."
+      : view === "cube"
+        ? "Cube cast / test results from SPDC Cube Register — separate Quality tool."
+        : "QAP status by week, QI forms (raise → Ready → fill with ≥3 photos), and checklist master for new types / line items.";
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Quality module"
-        title="Quality dashboard & inspections"
-        subtitle="QAP status by week, QI forms (raise → Ready → fill with ≥3 photos), and checklist master for new types / line items."
+        title={pageTitle}
+        subtitle={pageSubtitle}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
@@ -79,7 +96,34 @@ export default function InspectionsPage() {
         }
       />
 
-      {dash && (
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["qi", "QI dashboard"],
+            ["ncr", "NCR / CAR"],
+            ["cube", "Cube register"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setView(k)}
+            className={`rounded-sm px-3 py-1.5 text-sm font-medium border transition ${
+              view === k ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink hover:border-brand/40"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        <Link
+          to={`/projects/${id}/hub/quality`}
+          className="rounded-sm px-3 py-1.5 text-sm font-medium border border-line text-steel-muted hover:border-brand/40"
+        >
+          Quality hub →
+        </Link>
+      </div>
+
+      {view === "qi" && dash && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             ["QI checklist fills", dash.totals.fills],
@@ -97,7 +141,7 @@ export default function InspectionsPage() {
         </div>
       )}
 
-      {dash?.reportMapping && (
+      {view === "qi" && dash?.reportMapping && (
         <Card className="text-xs text-steel-muted">
           <h3 className="font-semibold text-sm text-ink mb-2">Which fills update Progress Reports?</h3>
           <ul className="grid sm:grid-cols-2 gap-1.5">
@@ -110,10 +154,12 @@ export default function InspectionsPage() {
         </Card>
       )}
 
-      {dash?.ncrs?.length > 0 && (
+      {(view === "ncr" || (view === "qi" && dash?.ncrs?.length > 0)) && (
         <Card>
-          <h3 className="font-semibold mb-3">NCR / CAR register (from sheet)</h3>
-          <div className="overflow-x-auto max-h-64">
+          <h3 className="font-semibold mb-3">
+            NCR / CAR register {view === "ncr" ? "(NCR 01 sheet)" : "(from sheet)"}
+          </h3>
+          <div className="overflow-x-auto max-h-[28rem]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
@@ -124,7 +170,7 @@ export default function InspectionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {dash.ncrs.slice(0, 15).map((n: any) => (
+                {(dash?.ncrs || []).map((n: any) => (
                   <tr key={n.id} className="border-b border-line/60">
                     <td className="py-2 pr-3 font-mono text-xs">{n.number}</td>
                     <td className="py-2 pr-3">{n.ncrType || "—"}</td>
@@ -134,16 +180,25 @@ export default function InspectionsPage() {
                     </td>
                   </tr>
                 ))}
+                {!dash?.ncrs?.length && (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-steel-muted">
+                      No NCR rows seeded yet — re-seed from NCR 01.xlsx.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </Card>
       )}
 
-      {dash?.cubes?.length > 0 && (
+      {(view === "cube" || (view === "qi" && dash?.cubes?.length > 0)) && (
         <Card>
-          <h3 className="font-semibold mb-3">Cube register (from sheet)</h3>
-          <div className="overflow-x-auto max-h-64">
+          <h3 className="font-semibold mb-3">
+            Cube register {view === "cube" ? "(SPDC Cube Register)" : "(from sheet)"}
+          </h3>
+          <div className="overflow-x-auto max-h-[28rem]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
@@ -155,23 +210,32 @@ export default function InspectionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {dash.cubes.slice(0, 12).map((c: any) => (
+                {(dash?.cubes || []).map((c: any) => (
                   <tr key={c.id} className="border-b border-line/60">
                     <td className="py-2 pr-3 font-mono text-xs">{c.srNo || "—"}</td>
-                    <td className="py-2 pr-3 max-w-xs truncate">{c.description}</td>
+                    <td className="py-2 pr-3 max-w-md truncate">{c.description}</td>
                     <td className="py-2 pr-3">{c.grade || "—"}</td>
                     <td className="py-2 pr-3 font-mono text-xs">{c.strength ?? "—"}</td>
                     <td className="py-2">
-                      <Badge tone={/pass/i.test(c.result || "") ? "ok" : "neutral"}>{c.result || "—"}</Badge>
+                      <Badge tone={/pass/i.test(c.result || "") ? "ok" : "warn"}>{c.result || "—"}</Badge>
                     </td>
                   </tr>
                 ))}
+                {!dash?.cubes?.length && (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-steel-muted">
+                      No cube rows seeded yet — re-seed from SPDC Cube Register.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </Card>
       )}
 
+      {view === "qi" && (
+        <>
       {dash?.qap?.length > 0 && (
         <Card>
           <h3 className="font-semibold mb-3">Quality Assurance Plan · status</h3>
@@ -554,6 +618,8 @@ export default function InspectionsPage() {
           )}
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }

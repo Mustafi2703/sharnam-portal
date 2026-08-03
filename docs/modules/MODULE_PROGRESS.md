@@ -1,122 +1,65 @@
 # MODULE — Progress
 
 **Prompt:** `module_prompts/Progress_overview.md`  
-**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.6 · §3A
+**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.6 · §3A  
+**Hub:** `/projects/:id/hub/progress`
 
 ---
 
 ## 1. Purpose
 
-Schedule / milestone / planned-vs-actual / hindrance / risk / legal progress registers, plus client civil views (S-curve, summary schedule, MS Project progress, procurement).
+Schedule / milestone / planned-vs-actual / hindrance / risk / legal registers.  
+Client civil tools (**S-curve**, **Summary schedule**, **MS Project**, **Procurement**) are **Ready** hub cards awaiting sheets.
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
 
-| Tool | Status | Notes |
-|------|--------|-------|
-| Overview | Partial | KPI charts |
-| Milestones | Built | Full register |
-| Planned vs Actual / S-curve | Partial | Excel/manual; MS Project later |
-| Summary schedule | Design | Client file + PDF |
-| MS Project progress | Design | Import / sync |
-| Procurement plan | Design | Client-visible + PDF |
-| Monthly | Built | SOR-style |
-| Hindrance | Built | |
-| Risk | Built | |
-| Legal | Built | Legal Approval Tracker |
-| Manpower / activity lines | Built | With PvA |
+| Tool | Hub / route | Status | Source sheet |
+|------|-------------|--------|--------------|
+| Overview | `/progress` | Built | Progress Overview.xlsx |
+| Milestones | `/progress?tab=milestones` | Built | Milestone tracking.xlsx |
+| Planned vs Actual | `/progress?tab=planned` | Built | Planned Vs. Actual Dashboard |
+| Monthly | `/progress?tab=monthly` | Built | Monthly Progress Dashboard |
+| Hindrance | `/progress?tab=hindrance` | Built | Hindrance Register Dashboard |
+| Risk | `/progress?tab=risk` | Built | Progress Overview · Risk |
+| Legal | `/progress?tab=legal` | Built | Progress Overview · Legal Approval |
+| **S-curve** | `/progress?tab=scurve` | **Ready** | MS Project / S-curve pack |
+| **Summary schedule** | `/progress?tab=schedule` | **Ready** | Project summary schedule + PDF |
+| **MS Project progress** | `/progress?tab=msproject` | **Ready** | MS Project export |
+| **Procurement plan** | `/progress?tab=procurement` | **Ready** | Procurement plan + PDF |
+
+Ready tools open a placeholder that matches hub IA — drop the sheet and wire fields without new navigation.
 
 ---
 
-## 3. Milestone fields
+## 3–8. Field tables
 
-| Field | Type | Required | Notes / review |
-|-------|------|----------|----------------|
+Milestone, Planned vs Actual, Hindrance, Risk, Legal, Monthly / SOR — see prompt + seeded registers.
+
+### Milestone (baseline)
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
 | code | text | Y | |
 | category | text | N | |
 | activity | text | Y | |
 | plannedStart / plannedEnd | date | N | |
 | actualStart / actualEnd | date | N | |
-| plannedDuration / actualDuration | number | N | |
-| variance | number | N | computed |
-| weight / percentComplete | number | N | |
-| stakeholder | text | N | |
-| zone | text | N | |
+| plannedDays / actualDays / varianceDays | number | N | |
+| weightage / pctComplete | number | N | |
+| stakeholder / zone | text | N | |
 | status | enum | N | |
 
 ---
 
-## 4. Planned vs Actual
-
-| Sub-register | Fields (baseline) |
-|--------------|-------------------|
-| Cashflow P/A | period, planned, actual |
-| Manpower | period, planned, actual, trade |
-| Activity qty | activity, planned qty, actual qty, unit |
-
-S-curve: from MS Project % / baseline or Excel until Graph sync.
-
----
-
-## 5. Hindrance
-
-| Field | Type | Notes |
-|-------|------|-------|
-| description | text | |
-| location | text | |
-| activity | text | |
-| category / type | text | |
-| startDate / endDate | date | |
-| days | number | |
-| status | enum | |
-| impact notes | text | |
-
----
-
-## 6. Risk
-
-| Field | Type | Notes |
-|-------|------|-------|
-| title / description | text | |
-| probability | number/enum | |
-| consequence | number/enum | |
-| score | computed | P × C |
-| costImpact | money/text | |
-| owner | user | |
-| mitigation | text | |
-| status | enum | |
-
----
-
-## 7. Legal approval
-
-| Field | Type | Notes |
-|-------|------|-------|
-| approvalItem | text | |
-| authority | text | |
-| submittedOn / approvedOn | date | |
-| status | enum | |
-| remarks | text | |
-
----
-
-## 8. Monthly / SOR
-
-| Field | Notes |
-|-------|-------|
-| period | month |
-| open / closed counts | |
-| closure rate | computed |
-
----
-
-## 9. Client civil extras (fields)
+## 9. Client civil Ready tools (fields when sheet lands)
 
 | Tool | Fields / artifacts |
 |------|-------------------|
 | Summary schedule | fileUrl (PDF), title, uploadedAt |
 | MS Project progress | task, % complete, baseline |
+| S-curve | period, planned %, actual % |
 | Procurement plan | line items or PDF pack |
 
 ---
@@ -135,11 +78,12 @@ S-curve: from MS Project % / baseline or Excel until Graph sync.
 ## 11. Sheet sources
 
 - Progress Overview, Milestone tracking, Planned Vs Actual, Monthly Progress, Hindrance Register  
+- **Next:** MS Project, summary schedule PDF, procurement plan  
 
 ---
 
 ## 12. Review checklist
 
-- [ ] Confirm S-curve period (week/month)  
+- [ ] Confirm S-curve period (week/month) when pack arrives  
 - [ ] Confirm procurement plan home (Progress vs own)  
 - [ ] Confirm Client PDF viewer UX  

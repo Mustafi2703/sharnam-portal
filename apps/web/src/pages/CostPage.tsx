@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
+import { BarChart, PieChart } from "../components/PieChart";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -73,18 +74,34 @@ export default function CostPage() {
   const [file, setFile] = useState<File | null>(null);
   const [structureName, setStructureName] = useState("New structure");
   const [msg, setMsg] = useState("");
-  const [cfView, setCfView] = useState<"chart" | "forecast" | "tracking" | "all">("chart");
+  const [cfView, setCfView] = useState<"chart" | "forecast" | "tracking" | "all">(
+    (["chart", "forecast", "tracking", "all"].includes(searchParams.get("cf") || "")
+      ? (searchParams.get("cf") as "chart" | "forecast" | "tracking" | "all")
+      : "chart")
+  );
   const rawTab = searchParams.get("tab") || "monitoring";
   const tab: CostTab = COST_TABS.includes(rawTab as CostTab) ? (rawTab as CostTab) : "monitoring";
   const pkgFilter = searchParams.get("pkg") || "All";
-  const setTab = (next: CostTab, pkg?: string) => {
+  const setTab = (next: CostTab, pkg?: string, cf?: string) => {
     const nextParams: Record<string, string> = {};
     if (next !== "monitoring") nextParams.tab = next;
     const p = pkg ?? pkgFilter;
     if (p && p !== "All") nextParams.pkg = p;
+    if (next === "cashflow") {
+      nextParams.cf = cf ?? cfView ?? "chart";
+    }
     setSearchParams(nextParams);
   };
   const setPkg = (p: string) => setTab(tab, p);
+  const setCashflowView = (k: "chart" | "forecast" | "tracking" | "all") => {
+    setCfView(k);
+    setTab("cashflow", pkgFilter, k);
+  };
+
+  useEffect(() => {
+    const cf = searchParams.get("cf");
+    if (cf === "chart" || cf === "forecast" || cf === "tracking" || cf === "all") setCfView(cf);
+  }, [searchParams]);
   const [billForm, setBillForm] = useState({
     vendorId: "",
     vendorName: "",
@@ -531,7 +548,7 @@ export default function CostPage() {
               <button
                 key={k}
                 type="button"
-                onClick={() => setCfView(k)}
+                onClick={() => setCashflowView(k)}
                 className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
                   cfView === k ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink"
                 }`}
@@ -543,6 +560,29 @@ export default function CostPage() {
           <p className="text-xs text-steel-muted">
             From <code className="font-mono">Cashflow - Dashboard.xlsx</code> — Chart / Forecast / Tracking sheets.
           </p>
+          <div className="grid lg:grid-cols-2 gap-3">
+            <BarChart
+              title="Planned vs actual by period"
+              items={(cashflowRows || []).map((b: any) => ({
+                label: b.periodLabel || b.packageName || "—",
+                planned: Number(b.plannedAmount) || 0,
+                actual: Number(b.actualAmount) || 0,
+              }))}
+              valueKey="planned"
+              compareKey="actual"
+              maxBars={14}
+            />
+            <PieChart
+              title="Period progress share"
+              items={(cashflowRows || [])
+                .map((b: any) => ({
+                  label: String(b.periodLabel || b.packageName || "—"),
+                  value: Math.max(Number(b.actualAmount) || 0, Number(b.plannedAmount) || 0),
+                }))
+                .filter((x: { value: number }) => x.value > 0)
+                .slice(0, 8)}
+            />
+          </div>
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}

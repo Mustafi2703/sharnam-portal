@@ -1,25 +1,32 @@
 # MODULE — Safety
 
 **Prompt:** `module_prompts/safety.md`  
-**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.5 · §3B
+**SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.5 · §3B  
+**Hub:** `/projects/:id/hub/safety`
 
 ---
 
 ## 1. Purpose
 
-Safety observations/incidents, Safety NCR-style register, checklists (Excel), and **Request for Inspection**.
+Safety dashboard, **Safety NCR** as its own tool, Excel checklists, and **Request for Inspection**.
 
 ---
 
-## 2. Tools
+## 2. Tools (sheet → hub card)
+
+| Tool | Hub / route | Status | Source sheet |
+|------|-------------|--------|--------------|
+| Safety dashboard | `/safety` | Built | Observations / incidents |
+| **Safety NCR** | `/safety?view=ncr` | Built | `Safety NCR.xlsx` |
+| Safety checklists | `/checklist-master?family=Safety` | Built | Excel safety templates |
+| Safety fill log | `/checklist-logs?family=Safety` | Built | Fill audit |
+| Request for Inspection | `/rfis?kind=SafetyChecklist` | Built | Inspection fill |
+
+### Awaiting next sheets
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| Safety dashboard | Built | Open items, observations, incidents |
-| Safety NCR / records | Built | From Safety NCR sheet |
-| Checklist master | Built | Upload Excel; choose template |
-| Site instructions | Built | Checklist-backed |
-| **Request for Inspection** | Built (label) | Kind `SafetyChecklist` |
+| Extra HSE packs / toolbox libraries | Ready | Upload via Checklist master; promote to hub card if standalone register |
 
 ---
 
@@ -28,7 +35,7 @@ Safety observations/incidents, Safety NCR-style register, checklists (Excel), an
 | Field | Type | Required | Notes / review |
 |-------|------|----------|----------------|
 | title / description | text | Y | |
-| recordType | enum | Y | Observation / Incident / NCR / … |
+| recordType | enum | Y | Observation / Incident / **NCR** / Toolbox / JHA / … |
 | severity | enum | N | |
 | location | text | N | |
 | status | enum | Y | Open / Closed / … |
@@ -82,3 +89,4 @@ Same pattern as Quality: Office/Site create; Contractor fills assigned; Client p
 - [ ] Confirm severity taxonomy  
 - [ ] Confirm incident escalation path  
 - [ ] Confirm Inspection label in UI  
+- [ ] Confirm NCR columns vs latest Safety NCR sheet  

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHeader, Stat } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
@@ -10,8 +10,10 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 /** DPR / WPR dashboard with branded Excel + PDF (HTML print) client packs */
 export default function ReportsPage() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token } = useAuth();
-  const [tab, setTab] = useState<"dpr" | "wpr">("dpr");
+  const tab = searchParams.get("kind") === "wpr" ? "wpr" : "dpr";
+  const setTab = (t: "dpr" | "wpr") => setSearchParams(t === "dpr" ? {} : { kind: "wpr" });
   const [dpr, setDpr] = useState<any>(null);
   const [wpr, setWpr] = useState<any>(null);
   const [busy, setBusy] = useState(false);
