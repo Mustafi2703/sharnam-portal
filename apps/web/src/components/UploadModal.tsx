@@ -66,9 +66,9 @@ export function UploadModal({
     >
       <div
         ref={panelRef}
-        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-xl border border-line bg-white shadow-2xl"
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-xl border border-line bg-paper shadow-2xl"
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-line bg-white">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-line bg-paper">
           <div>
             <h2 id={titleId} className="font-display text-xl text-ink">
               {title}
@@ -127,8 +127,16 @@ export function UploadModal({
             );
           })}
 
-          {error && <p className="text-sm text-danger bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
-          {success && <p className="text-sm text-ok bg-emerald-50 border border-emerald-100 px-3 py-2 rounded-lg">{success}</p>}
+          {error && (
+            <p className="text-sm text-danger bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)] px-3 py-2 rounded-lg">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-sm text-ok bg-[color-mix(in_srgb,var(--color-ok)_12%,var(--color-paper))] border border-[color-mix(in_srgb,var(--color-ok)_35%,transparent)] px-3 py-2 rounded-lg">
+              {success}
+            </p>
+          )}
 
           <Button type="submit" disabled={busy || !file} className="w-full !py-3">
             {busy ? "Uploading…" : primaryLabel}

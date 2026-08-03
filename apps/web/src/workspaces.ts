@@ -33,7 +33,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Checklist manager",
       query: "family=DrawingCheck",
       roles: ["admin", "office", "employee"],
-      blurb: "Manage Drawing Check Master templates; upload opens fill in a new window.",
+    blurb: "Manage Drawing Check Master templates; upload opens checklist overlay then file dialog.",
     },
     {
       to: "checklist-logs",
