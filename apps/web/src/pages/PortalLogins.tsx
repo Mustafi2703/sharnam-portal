@@ -198,14 +198,14 @@ export function consumeLoginLanding() {
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
 
-/** Modern architecture / site photography */
+/** Brighter modern site / architecture photography */
 const HERO_SLIDES = [
-  { src: "/heroes/site-02.jpg", w: 2400, h: 1600, focus: "50% 38%" },
-  { src: "/heroes/site-08.jpg", w: 2400, h: 1590, focus: "48% 40%" },
-  { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "52% 35%" },
-  { src: "/heroes/site-06.jpg", w: 2400, h: 1597, focus: "50% 42%" },
-  { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "50% 40%" },
-  { src: "/heroes/site-07.jpg", w: 2400, h: 1600, focus: "50% 28%" },
+  { src: "/heroes/site-01.jpg", w: 2400, h: 1350, focus: "50% 38%" },
+  { src: "/heroes/site-02.jpg", w: 2400, h: 1600, focus: "50% 40%" },
+  { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "48% 35%" },
+  { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "52% 42%" },
+  { src: "/heroes/site-05.jpg", w: 2400, h: 1597, focus: "50% 40%" },
+  { src: "/heroes/site-06.jpg", w: 2400, h: 1600, focus: "50% 30%" },
 ];
 
 const HERO_POLICIES = [

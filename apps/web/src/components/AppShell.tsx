@@ -247,7 +247,7 @@ function SideNavBody({
                       } as CSSProperties
                     }
                   >
-                    <span className="side-nav__icon-wrap" style={{ color: on ? "#fff" : m.accent }}>
+                    <span className="side-nav__icon-wrap" style={{ color: m.accent }}>
                       <ModuleIcon name={m.key as ModuleIconKey} size={18} />
                     </span>
                     <span className="min-w-0 truncate">{m.title}</span>
