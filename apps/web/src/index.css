@@ -841,6 +841,13 @@ body {
   position: relative;
   z-index: 40;
 }
+.app-topbar--project {
+  border-top-width: 2px;
+}
+.app-topbar--project .app-topbar__title {
+  font-size: 0.8rem;
+  font-weight: 650;
+}
 .app-topbar__brand {
   align-items: center;
   gap: 0.45rem;
@@ -1195,8 +1202,8 @@ body {
   max-height: 100%;
   min-height: 0;
   display: grid;
-  /* Hero dominates; sign-in column stays compact and proportional */
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 360px);
+  /* Wider sign-in column */
+  grid-template-columns: minmax(0, 1.25fr) minmax(440px, 500px);
   overflow: hidden;
   background: #0e141b;
   font-family: "Manrope", var(--font-sans);
@@ -1206,7 +1213,7 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #1a222b;
+  background: #dce4ea;
 }
 .auth-hero__stage {
   position: absolute;
@@ -1222,7 +1229,7 @@ body {
   opacity: 0;
   transition: opacity 1.15s ease;
   pointer-events: none;
-  filter: brightness(1.08) contrast(1.04) saturate(1.08);
+  filter: brightness(1.22) contrast(1.02) saturate(1.12);
 }
 .auth-hero__img.is-active {
   opacity: 1;
@@ -1231,8 +1238,8 @@ body {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(8, 14, 22, 0.28) 0%, rgba(8, 14, 22, 0.08) 42%, rgba(8, 14, 22, 0.55) 100%),
-    linear-gradient(90deg, rgba(8, 14, 22, 0.05) 0%, rgba(8, 14, 22, 0.42) 100%);
+    linear-gradient(180deg, rgba(12, 22, 32, 0.18) 0%, rgba(12, 22, 32, 0.04) 45%, rgba(12, 22, 32, 0.38) 100%),
+    linear-gradient(90deg, rgba(12, 22, 32, 0.02) 0%, rgba(12, 22, 32, 0.22) 100%);
   pointer-events: none;
 }
 .auth-hero__center {
@@ -1249,14 +1256,14 @@ body {
 }
 .auth-hero__logo {
   display: block;
-  height: clamp(9.5rem, 23vw, 15rem);
+  height: clamp(11.5rem, 28vw, 18rem);
   width: auto;
-  max-width: min(94%, 680px);
+  max-width: min(96%, 760px);
   object-fit: contain;
   object-position: center;
-  margin: 0 auto 0.7rem;
+  margin: 0 auto 0.75rem;
   mix-blend-mode: screen;
-  filter: contrast(1.1) brightness(1.25) drop-shadow(0 14px 40px rgba(0, 0, 0, 0.35));
+  filter: contrast(1.12) brightness(1.3) drop-shadow(0 16px 44px rgba(0, 0, 0, 0.32));
 }
 .auth-hero__name {
   margin: 0;
@@ -1344,8 +1351,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0 1.1rem;
-  background: linear-gradient(180deg, #101820 0%, #0c1218 100%);
+  padding: 0 1.75rem;
+  background: linear-gradient(180deg, #141c26 0%, #0f151c 100%);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   overflow-x: hidden;
   overflow-y: auto;
@@ -1355,34 +1362,34 @@ body {
 .auth-side::before,
 .auth-side::after {
   content: "";
-  flex: 1 0 1rem;
+  flex: 1 0 1.15rem;
   width: 100%;
   pointer-events: none;
 }
 
 .auth-card {
   width: 100%;
-  max-width: 320px;
+  max-width: 440px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   flex-shrink: 0;
-  padding: 1.25rem 1.15rem 1.35rem;
-  border-radius: 14px;
+  padding: 1.7rem 1.6rem 1.8rem;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(22, 28, 36, 0.92);
+  background: rgba(24, 32, 42, 0.94);
   backdrop-filter: blur(16px);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
 }
 .auth-card__logo {
   display: block;
-  height: clamp(4.25rem, 9vw, 5.5rem);
+  height: clamp(5rem, 10vw, 6.25rem);
   width: auto;
-  max-width: 220px;
+  max-width: 260px;
   object-fit: contain;
   object-position: center;
-  margin: 0 auto 0.25rem;
+  margin: 0 auto 0.3rem;
   mix-blend-mode: screen;
   filter: brightness(1.18) contrast(1.05);
 }
@@ -1397,23 +1404,77 @@ body {
   text-align: center;
 }
 .auth-card__welcome {
-  margin: 1.05rem 0 0;
+  margin: 1.15rem 0 0;
   font-family: "Sora", var(--font-display);
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   font-weight: 650;
   letter-spacing: -0.03em;
   color: #f8fafc;
   align-self: stretch;
   text-align: left;
 }
+.auth-card__sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #94a3b8;
+  align-self: stretch;
+  text-align: left;
+}
 .auth-card__back {
-  margin-top: 0.65rem;
+  margin-top: 0.55rem;
   font-size: 0.8rem;
   font-weight: 650;
   color: #2ec4b6;
   text-decoration: none;
   align-self: stretch;
   text-align: left;
+}
+.auth-portals {
+  width: 100%;
+  margin-top: 1rem;
+  text-align: left;
+}
+.auth-portals__label {
+  margin: 0 0 0.45rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.auth-portals__label--sub {
+  margin-top: 0.85rem;
+}
+.auth-portals__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.auth-portals__chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.auth-portals__chip:hover {
+  border-color: rgba(46, 196, 182, 0.55);
+  color: #f8fafc;
+}
+.auth-portals__chip.is-on {
+  border-color: #2ec4b6;
+}
+.auth-portals__chip--mod {
+  border-style: dashed;
+  opacity: 0.92;
 }
 .auth-card__field {
   display: flex;
@@ -1518,20 +1579,21 @@ body {
     grid-template-rows: minmax(280px, 44vh) minmax(0, 1fr);
   }
   .auth-hero__logo {
-    height: clamp(6.5rem, 22vw, 9.5rem);
+    height: clamp(8rem, 26vw, 12rem);
   }
   .auth-side {
     border-left: 0;
     border-top: 1px solid #2a313c;
     height: auto;
     max-height: 100%;
+    padding: 0 1.35rem;
   }
   .auth-card {
-    max-width: 340px;
+    max-width: 440px;
   }
   .auth-card__logo {
-    height: 4.75rem;
-    max-width: 200px;
+    height: 5.5rem;
+    max-width: 240px;
   }
 }
 

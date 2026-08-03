@@ -376,8 +376,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="app-frame__main">
-        <header className="app-topbar">
-          <div className="flex items-center gap-2.5 px-3 sm:px-4 h-[52px]">
+        <header className={`app-topbar ${inProject ? "app-topbar--project" : ""}`}>
+          <div className={`flex items-center gap-2.5 px-3 sm:px-4 ${inProject ? "h-11" : "h-[52px]"}`}>
             <button
               type="button"
               className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-paper text-ink"
@@ -399,26 +399,34 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </button>
 
-            <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0 items-center gap-2" aria-label={`${BRAND_EN} home`}>
-              <img src="/logo.png" alt="" className="app-topbar__logo" width={88} height={42} />
-              <span className="app-topbar__brand-name">{BRAND_EN}</span>
-              <span className="app-topbar__brand-tag">PMC</span>
-            </Link>
+            {!inProject && (
+              <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0 items-center gap-2" aria-label={`${BRAND_EN} home`}>
+                <img src="/logo.png" alt="" className="app-topbar__logo" width={88} height={42} />
+                <span className="app-topbar__brand-name">{BRAND_EN}</span>
+                <span className="app-topbar__brand-tag">PMC</span>
+              </Link>
+            )}
 
-            <div className="app-topbar__meta">
-              <div className="app-topbar__eyebrow">
-                {isOffice ? "Office · Full control" : inProject ? "Project workspace" : "PMC portal"}
-              </div>
+            <div className={`app-topbar__meta ${inProject ? "app-topbar__meta--slim" : ""}`}>
+              {!inProject && (
+                <div className="app-topbar__eyebrow">
+                  {isOffice ? "Office · Full control" : "PMC portal"}
+                </div>
+              )}
               <div className="app-topbar__title truncate">
-                {activeProject
-                  ? `${activeProject.code} — ${activeProject.name}`
-                  : hidden
-                    ? "Open left navigation to pick a project"
-                    : "Select a project in the sidebar"}
+                {inProject
+                  ? activeProject
+                    ? `${activeProject.code}`
+                    : "Project"
+                  : activeProject
+                    ? `${activeProject.code} — ${activeProject.name}`
+                    : hidden
+                      ? "Open left navigation to pick a project"
+                      : "Select a project in the sidebar"}
               </div>
             </div>
 
-            {isOffice && (
+            {!inProject && isOffice && (
               <div className="hidden lg:flex items-center gap-1.5">
                 <Link to="/roles" className="app-topbar__chip hover:border-brand">
                   <strong>Access</strong>
@@ -432,14 +440,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
 
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft"
-              aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-              onClick={onToggleTheme}
-            >
-              {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
-            </button>
+            <div className="ml-auto flex items-center gap-1.5">
+              {inProject && (
+                <Link to="/workspace" className="app-topbar__chip hidden sm:inline-flex hover:border-brand">
+                  Modules
+                </Link>
+              )}
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft"
+                aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+                onClick={onToggleTheme}
+              >
+                {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
+              </button>
+            </div>
           </div>
         </header>
 
