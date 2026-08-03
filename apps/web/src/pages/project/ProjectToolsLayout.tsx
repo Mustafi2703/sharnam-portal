@@ -125,10 +125,21 @@ export default function ProjectToolsLayout() {
 
   const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
   const modMeta = activeMod !== "home" ? MODULE_META[activeMod as WorkspaceKey] : null;
-  const accent = modMeta?.accent || "#0B6A78";
+  const accent = modMeta?.accent || "#3D4450";
+  const soft = modMeta?.soft || "#F0F1F2";
   const toolLabel =
     stripItems.find((t) => isToolActive(t, location.pathname, location.search, id))?.label ||
     (activeTool === "hub" ? `${moduleLabel} hub` : moduleLabel);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--mod-accent", accent);
+    root.style.setProperty("--mod-soft", soft);
+    return () => {
+      root.style.removeProperty("--mod-accent");
+      root.style.removeProperty("--mod-soft");
+    };
+  }, [accent, soft]);
 
   useEffect(() => {
     if (!id) return;
@@ -216,10 +227,9 @@ export default function ProjectToolsLayout() {
             <Link
               to={`/projects/${id}/hub/${activeMod}`}
               className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
-                activeTool === "hub"
-                  ? "bg-brand text-white border-brand"
-                  : "bg-paper border-line text-steel-muted hover:border-brand hover:text-brand"
+                activeTool === "hub" ? "text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
               }`}
+              style={activeTool === "hub" ? { background: accent, borderColor: accent } : undefined}
             >
               Hub
             </Link>
@@ -234,11 +244,10 @@ export default function ProjectToolsLayout() {
                 end={t.end}
                 className={() =>
                   `shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
-                    on
-                      ? "bg-brand text-white border-brand"
-                      : "bg-paper border-line text-steel-muted hover:border-brand hover:text-brand"
+                    on ? "text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
                   }`
                 }
+                style={on ? { background: accent, borderColor: accent } : undefined}
               >
                 {t.label}
               </NavLink>

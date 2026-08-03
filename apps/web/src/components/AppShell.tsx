@@ -50,7 +50,7 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/crm", label: "CRM · Bids", icon: "modules" },
   { to: "/hrm", label: "HRMS", icon: "modules" },
-  { to: "/roles", label: "Access · Roles", icon: "master" },
+  { to: "/roles", label: "Access · Users", icon: "master" },
   { to: "/audit", label: "Audit trail", icon: "reports" },
 ];
 

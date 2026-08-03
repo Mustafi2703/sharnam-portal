@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../lib/csvTemplates";
 
 /**
  * HRM — company people + assign into project directory (employees & vendors).
@@ -24,6 +25,7 @@ export default function HrmPage() {
     empCode: "",
     department: "Site",
     designation: "",
+    password: "Demo@1234",
   });
   const [assign, setAssign] = useState({ userId: "", projectId: "", role: "site_employee" });
   const [vendorAssign, setVendorAssign] = useState({ vendorId: "", projectId: "", trade: "" });
@@ -60,8 +62,9 @@ export default function HrmPage() {
       empCode: "",
       department: "Site",
       designation: "",
+      password: "Demo@1234",
     });
-    setMsg("Employee created.");
+    setMsg("Employee login created.");
     await load();
   }
 
@@ -95,25 +98,41 @@ export default function HrmPage() {
       {canManage && (
         <div className="grid lg:grid-cols-3 gap-4">
           <Card>
-            <h3 className="font-semibold mb-3">Add employee</h3>
+            <h3 className="font-semibold mb-3">Add employee with login</h3>
             <form className="grid sm:grid-cols-2 gap-2" onSubmit={createEmployee}>
               <Input required placeholder="Full name" value={empForm.fullName} onChange={(e) => setEmpForm({ ...empForm, fullName: e.target.value })} />
-              <Input required type="email" placeholder="Email" value={empForm.email} onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })} />
+              <Input required type="email" placeholder="Login email" value={empForm.email} onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })} />
               <Select value={empForm.role} onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}>
-                {["site_employee", "office", "employee", "vendor"].map((r) => (
+                {["site_employee", "office", "employee", "vendor", "client"].map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </Select>
+              <Input placeholder="Password" value={empForm.password} onChange={(e) => setEmpForm({ ...empForm, password: e.target.value })} />
               <Input placeholder="Phone" value={empForm.phone} onChange={(e) => setEmpForm({ ...empForm, phone: e.target.value })} />
               <Input placeholder="Emp code" value={empForm.empCode} onChange={(e) => setEmpForm({ ...empForm, empCode: e.target.value })} />
               <Input placeholder="Department" value={empForm.department} onChange={(e) => setEmpForm({ ...empForm, department: e.target.value })} />
-              <Input className="sm:col-span-2" placeholder="Designation" value={empForm.designation} onChange={(e) => setEmpForm({ ...empForm, designation: e.target.value })} />
+              <Input placeholder="Designation" value={empForm.designation} onChange={(e) => setEmpForm({ ...empForm, designation: e.target.value })} />
               <Button type="submit" className="sm:col-span-2">
-                Create login (password: Demo@1234)
+                Create login
               </Button>
             </form>
+            <div className="flex flex-wrap gap-2 mt-3 border-t border-line pt-3">
+              <Button type="button" variant="secondary" onClick={() => downloadCsv("users-empty.csv", [...USER_CSV_HEADERS], [])}>
+                Empty CSV
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => downloadCsv("users-detailed.csv", [...USER_CSV_HEADERS], USER_CSV_DETAILED_SAMPLE)}
+              >
+                Detailed CSV
+              </Button>
+              <Link to="/roles" className="text-sm font-semibold text-brand self-center">
+                Users management →
+              </Link>
+            </div>
           </Card>
 
           <Card>

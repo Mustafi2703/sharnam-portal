@@ -116,12 +116,14 @@ export function Button({
   children,
   variant = "primary",
   className = "",
+  style,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "dark";
 }) {
   const variants = {
-    primary: "bg-brand hover:bg-brand-dark text-white shadow-sm",
+    primary:
+      "bg-[var(--mod-accent,var(--color-brand))] hover:brightness-95 text-white shadow-sm border border-transparent",
     secondary: "bg-white border border-slate-200 text-ink hover:bg-slate-50",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/[0.04]",
     dark: "bg-ink text-white hover:bg-steel-2",
@@ -129,6 +131,7 @@ export function Button({
   return (
     <button
       className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${variants[variant]} ${className}`}
+      style={style}
       {...props}
     >
       {children}

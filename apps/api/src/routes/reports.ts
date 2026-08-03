@@ -307,7 +307,7 @@ hrmRouter.use(requireAuth);
 
 hrmRouter.get("/employees", async (_req, res) => {
   const users = await prisma.user.findMany({
-    where: { role: { in: ["office", "site_employee", "employee", "admin", "vendor"] } },
+    where: { role: { in: ["office", "site_employee", "employee", "admin", "vendor", "client"] } },
     select: {
       id: true,
       fullName: true,
@@ -328,11 +328,13 @@ hrmRouter.post("/employees", requireRoles("admin", "office"), async (req, res) =
   const { portalForRole } = await import("@sharnam/shared");
   const { email, fullName, role, phone, empCode, department, designation, password } = req.body;
   if (!email || !fullName || !role) return res.status(400).json({ error: "email, fullName, role required" });
+  const existing = await prisma.user.findUnique({ where: { email: String(email).trim().toLowerCase() } });
+  if (existing) return res.status(409).json({ error: "Email already has a login" });
   const hash = await bcrypt.hash(password || process.env.SEED_PASSWORD || "Demo@1234", 10);
   const roleKey = role as import("@sharnam/shared").RoleKey;
   const user = await prisma.user.create({
     data: {
-      email,
+      email: String(email).trim().toLowerCase(),
       fullName,
       role: roleKey,
       portal: portalForRole(roleKey),

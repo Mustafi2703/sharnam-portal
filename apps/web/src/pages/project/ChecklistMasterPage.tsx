@@ -3,6 +3,11 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import {
+  CHECKLIST_CSV_DETAILED_SAMPLE,
+  CHECKLIST_CSV_HEADERS,
+  downloadCsv,
+} from "../../lib/csvTemplates";
 
 const FAMILIES = [
   { value: "DrawingCheck", label: "Drawing check (pre-upload)" },
@@ -129,8 +134,9 @@ export default function ChecklistMasterPage() {
             type="button"
             onClick={() => setSearchParams({ family: f.value })}
             className={`px-3 py-1.5 text-sm font-semibold border rounded-sm ${
-              family === f.value ? "bg-brand text-white border-brand" : "bg-white border-line"
+              family === f.value ? "text-white border-transparent" : "bg-white border-line"
             }`}
+            style={family === f.value ? { background: "var(--mod-accent, var(--color-brand))" } : undefined}
           >
             {f.label}
           </button>
@@ -139,16 +145,59 @@ export default function ChecklistMasterPage() {
 
       {msg && <p className="text-sm text-steel-muted">{msg}</p>}
 
-      {canEdit && (family === "QualityInspection" || family === "Safety") && (
+      {canEdit && (
         <Card className="space-y-3">
-          <h3 className="font-display text-base">Upload Excel checklist</h3>
+          <h3 className="font-display text-base">CSV / Excel templates</h3>
           <p className="text-sm text-steel-muted">
-            Columns: <span className="font-mono text-xs">description</span>, optional{" "}
-            <span className="font-mono text-xs">instruction</span>, <span className="font-mono text-xs">section</span>,{" "}
-            <span className="font-mono text-xs">requirePhoto</span>. Then choose the new template below.
+            Download an empty or detailed CSV, fill rows, then upload. Columns:{" "}
+            <span className="font-mono text-xs">description, instruction, section, requirePhoto</span>
           </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                downloadCsv(`checklist-${family}-empty.csv`, [...CHECKLIST_CSV_HEADERS], [])
+              }
+            >
+              Empty CSV template
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                downloadCsv(
+                  `checklist-${family}-detailed.csv`,
+                  [...CHECKLIST_CSV_HEADERS],
+                  CHECKLIST_CSV_DETAILED_SAMPLE
+                )
+              }
+            >
+              Detailed sample CSV
+            </Button>
+            {detail?.items?.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  downloadCsv(
+                    `${detail.name || "checklist"}-export.csv`,
+                    [...CHECKLIST_CSV_HEADERS],
+                    (detail.items as any[]).map((i) => [
+                      i.description || "",
+                      i.instruction || "",
+                      i.section || "General",
+                      i.requirePhoto ? "true" : "false",
+                    ])
+                  )
+                }
+              >
+                Export current as CSV
+              </Button>
+            )}
+          </div>
           <form
-            className="flex flex-wrap items-end gap-3"
+            className="flex flex-wrap items-end gap-3 border-t border-line pt-3"
             onSubmit={async (e) => {
               e.preventDefault();
               if (!excelFile) return;
@@ -159,7 +208,7 @@ export default function ChecklistMasterPage() {
                 fd.append("file", excelFile);
                 fd.append("checklistType", family);
                 fd.append("name", excelFile.name.replace(/\.(xlsx|xls|csv)$/i, ""));
-                fd.append("category", "Excel import");
+                fd.append("category", "CSV/Excel import");
                 const t = await api<any>("/api/checklist/templates/import-excel", {
                   method: "POST",
                   token,
@@ -170,7 +219,7 @@ export default function ChecklistMasterPage() {
                 setActiveId(t.id);
                 await load();
               } catch (err) {
-                setMsg(err instanceof Error ? err.message : "Excel import failed");
+                setMsg(err instanceof Error ? err.message : "Import failed");
               } finally {
                 setExcelBusy(false);
               }
@@ -183,7 +232,7 @@ export default function ChecklistMasterPage() {
               className="text-sm"
             />
             <Button type="submit" disabled={!excelFile || excelBusy}>
-              {excelBusy ? "Importing…" : "Upload & create checklist"}
+              {excelBusy ? "Importing…" : "Upload CSV / Excel"}
             </Button>
           </form>
         </Card>
