@@ -198,21 +198,23 @@ export function consumeLoginLanding() {
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
 
-/** Brighter modern site / architecture photography */
+/** Planning + site execution photography for PMC login */
 const HERO_SLIDES = [
-  { src: "/heroes/site-01.jpg", w: 2400, h: 1350, focus: "50% 38%" },
-  { src: "/heroes/site-02.jpg", w: 2400, h: 1600, focus: "50% 40%" },
-  { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "48% 35%" },
-  { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "52% 42%" },
-  { src: "/heroes/site-05.jpg", w: 2400, h: 1597, focus: "50% 40%" },
-  { src: "/heroes/site-06.jpg", w: 2400, h: 1600, focus: "50% 30%" },
+  { src: "/heroes/site-01.jpg", w: 2400, h: 1600, focus: "48% 40%", label: "Planning desk" },
+  { src: "/heroes/site-02.jpg", w: 2400, h: 1350, focus: "50% 38%", label: "Drawings & design" },
+  { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "50% 42%", label: "Site execution" },
+  { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "52% 40%", label: "Field work" },
+  { src: "/heroes/site-05.jpg", w: 2400, h: 1600, focus: "50% 35%", label: "Engineering review" },
+  { src: "/heroes/site-06.jpg", w: 2400, h: 1600, focus: "48% 40%", label: "Built form" },
+  { src: "/heroes/site-07.jpg", w: 2400, h: 1600, focus: "50% 42%", label: "Structure rising" },
+  { src: "/heroes/site-08.jpg", w: 2400, h: 1600, focus: "50% 30%", label: "Site operations" },
 ];
 
 const HERO_POLICIES = [
-  "Published GFC before site execution",
-  "Revision control with full audit trail",
+  "Plan GFC packages before site execution",
+  "Execute with revision control and audit trail",
   "Quality & safety checklists on every package",
-  "Project-scoped access for office, site & contractors",
+  "Office, site & contractors — one project spine",
 ];
 
 function portalDisplayName(key: string, shortLabel: string) {
@@ -353,12 +355,12 @@ function HeroStage() {
         </div>
       </div>
 
-      <div className="auth-hero__dots" role="tablist" aria-label="Project photos">
+      <div className="auth-hero__dots" role="tablist" aria-label="Planning and execution photos">
         {HERO_SLIDES.map((s, i) => (
           <button
             key={s.src}
             type="button"
-            aria-label={`Photo ${i + 1}`}
+            aria-label={s.label}
             className={`auth-hero__dot ${i === slide ? "is-on" : ""}`}
             onClick={() => setSlide(i)}
           />
