@@ -123,7 +123,7 @@ function SideNavBody({
     <div className="side-nav__inner">
       <div className="side-nav__head">
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
-          <img src="/logo.png" alt={BRAND_EN} className="side-nav__logo" width={200} height={96} />
+          <img src="/logo.png" alt={BRAND_EN} className="side-nav__logo" width={240} height={116} />
         </Link>
       </div>
 

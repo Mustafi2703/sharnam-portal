@@ -29,15 +29,16 @@ export type PortalConfig = {
 };
 
 const H = {
-  crane: { src: "/heroes/viz-crane.jpg?v=3", w: 1920, h: 1280, focus: "55% 40%", label: "Tower crane" },
-  frame: { src: "/heroes/viz-frame.jpg?v=3", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
-  cad: { src: "/heroes/viz-cad-warm.jpg?v=3", w: 1920, h: 1280, focus: "50% 58%", label: "BIM overlay" },
-  lift: { src: "/heroes/viz-lift-warm.jpg?v=3", w: 1920, h: 1280, focus: "48% 38%", label: "Facade lift" },
+  crane: { src: "/heroes/viz-crane.jpg?v=4", w: 1920, h: 1280, focus: "55% 40%", label: "Tower crane" },
+  frame: { src: "/heroes/viz-amber-frame.jpg?v=4", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
+  cad: { src: "/heroes/viz-amber-cad.jpg?v=4", w: 1920, h: 1280, focus: "50% 58%", label: "BIM overlay" },
+  lift: { src: "/heroes/viz-amber-lift.jpg?v=4", w: 1920, h: 1280, focus: "48% 38%", label: "Facade lift" },
 } as const;
 
-const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.lift, H.cad];
-const VIZ_SITE: HeroSlide[] = [H.frame, H.lift, H.crane, H.cad];
-const VIZ_PLAN: HeroSlide[] = [H.crane, H.cad, H.frame, H.lift];
+/** Lead with warm amber / dusk slides so the orange heroes show first */
+const VIZ_SET: HeroSlide[] = [H.lift, H.frame, H.crane, H.cad];
+const VIZ_SITE: HeroSlide[] = [H.lift, H.frame, H.crane, H.cad];
+const VIZ_PLAN: HeroSlide[] = [H.frame, H.lift, H.cad, H.crane];
 const VIZ_FIELD: HeroSlide[] = [H.lift, H.frame, H.crane, H.cad];
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
