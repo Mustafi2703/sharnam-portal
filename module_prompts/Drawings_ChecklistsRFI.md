@@ -10,7 +10,8 @@
 | Coordination | Design coordination issues (Procore-like); elevate → RFI. |
 | Submittals | _(Excluded for now)_ | — |
 | Request checklist fill | RFI kind = DrawingChecklist; notify on create/respond. |
-| Ask (drawing RFI) | RequestForInformation linked to drawings — raise only. |
+| Ask — **Request for Information** | Clarification / information **only** (not inspection). Kind `RequestForInformation`. |
+| Quality / Safety Ask | Use **Request for Inspection** (QI / Safety checklist) — see Quality.md / safety.md |
 
 ## Sheet sources
 

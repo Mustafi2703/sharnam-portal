@@ -1,13 +1,18 @@
-# Roadmap — discuss later (Snag, Closure, CRM, HRMS, Finance detail)
+# Roadmap — remaining discuss / later items
 
-**Status:** Design / discussion only during the 5-week build (except Finance **shell**, which is live as a module page).  
-**When:** Biweekly finalization meetings (Week 2 / 4 / 5 gate) + post-UAT.
+**Updated:** 2026-08-03  
 
-Capture decisions here so client and Sharnam share one page.
+CRM, HRMS, Sheet Maker, Site Audit, and Master KPI/KRA are **no longer “discuss later”** — they are specified in:
+
+- [`CLIENT_REQUIREMENTS.md`](./CLIENT_REQUIREMENTS.md)  
+- [`modules/`](./modules/) (field specs to refine)  
+- [`system-design/`](./system-design/) (HLD/LLD)
+
+Use this file only for items still **out of current build** or needing layout polish.
 
 ---
 
-## 1. Snag list (future module / tab)
+## 1. Snag list (future)
 
 | Topic | Decision (fill in meeting) |
 |-------|----------------------------|
@@ -34,36 +39,10 @@ Capture decisions here so client and Sharnam share one page.
 
 ---
 
-## 3. CRM — Lead management (to be discussed)
-
-| Topic | Decision |
-|-------|----------|
-| Lead stages | |
-| Handoff to project create | |
-| Who owns leads (Office only?) | |
-| Link to client directory | |
-
-**Note:** CRM = **lead management** (not project delivery). Exists as Master link today; full product TBD.
-
----
-
-## 4. HRMS (to be discussed)
-
-| Topic | Decision |
-|-------|----------|
-| Scope vs Directory / roster | |
-| Attendance / timesheets? | |
-| Payroll in / out of portal? | |
-| Vendor / contractor people | |
-
-**Note:** HRM link exists for people pool; full HRMS TBD with client.
-
----
-
-## 5. Finance detail (shell already live)
+## 3. Finance detail (shell already live)
 
 Shell tools: Overview · Invoice · PO · RA bill · COP.  
-Detail columns / approvals / Excel import — see [MODULE_FINANCE.md](./MODULE_FINANCE.md).
+See [MODULE_FINANCE.md](./MODULE_FINANCE.md).
 
 | Topic | Decision |
 |-------|----------|
@@ -74,21 +53,33 @@ Detail columns / approvals / Excel import — see [MODULE_FINANCE.md](./MODULE_F
 
 ---
 
-## 6. Client civil-side extras (baseline understood — refine in meetings)
+## 4. Client civil-side layout refine
 
-Already in requirements (`CLIENT_REQUIREMENTS.md` § 3A). Capture layout decisions here:
+Baseline in `CLIENT_REQUIREMENTS.md` §3A. Capture layout decisions:
 
 | Topic | Decision |
 |-------|----------|
-| Custom meeting sheet maker fields | |
 | S-curve period (week / month) | |
 | Where procurement plan sits (Progress vs own module) | |
 | Which generated docs auto-publish to Client | |
 | PDF viewer (inline vs new tab) | |
 
+Sheet Maker **fields** are in [`modules/MODULE_SHEET_MAKER.md`](./modules/MODULE_SHEET_MAKER.md) — refine there, not as “missing module”.
+
 ---
 
-## 7. Client-facing extras (future)
+## 5. Payroll engine (after payslip v1)
+
+Payslip PDF + compensation master is **in scope v1**. Full PF/ESIC calc / bank file = later.
+
+| Topic | Decision |
+|-------|----------|
+| Statutory calc in portal vs external payroll | |
+| Bank export format | |
+
+---
+
+## 6. Client-facing extras (future)
 
 | Topic | Decision |
 |-------|----------|
@@ -101,4 +92,5 @@ Already in requirements (`CLIENT_REQUIREMENTS.md` § 3A). Capture layout decisio
 
 | Date | Attendees | Decisions | Next |
 |------|-----------|-----------|------|
+| 2026-08-03 | — | CRM/HRMS/Audit/KPI/Sheet Maker moved to requirements + modules/ | Team mark up field docs, then build |
 | | | | |

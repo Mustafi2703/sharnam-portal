@@ -3,37 +3,43 @@
 **UI:** Modern SAP / Workday — **navy** chrome · **amber** accent · slate canvas (Parikh-style).  
 **Shape:** Login → ops dashboard → **Switch module** picker · top module bar · sub-tool chips · right Actions. **No left tools rail. No UI options picker.**
 
+**SRS:** `docs/CLIENT_REQUIREMENTS.md` · **Fields:** `docs/modules/` · **HLD/LLD:** `docs/system-design/`
+
 ## Office Master (after login)
 
-Office / admin: Master + enable/disable modules per project. **Access** (`/roles`) allocates who can see / do what. **CRM** and **HRMS** are linked but **to be discussed** in detail.
+Office / admin: Master + enable/disable modules per project. **Access** (`/roles`) allocates who can see / do what.
 
 | Office tool | Purpose | Status |
 |-------------|---------|--------|
-| Master | Project create, packages, PMC roster, module toggles, Directory (4 users) | Build |
-| CRM | Lead management → projects + client card | Discuss later |
-| HRM / HRMS | Employee + vendor pool → project Directory | Discuss later |
-| Audit / Roles | Who did what; role matrix | Build |
+| Master | Project create, packages, PMC roster, module toggles, Directory (4 users) | Built |
+| **CRM** | Leads · orgs · quotation · comparative bid → project | In scope (MVP exists; deepen) |
+| **HRMS** | Recruit → onboard → geo attendance → leave → diary → payslips → KRA | In scope (MVP exists; deepen) |
+| **Sheet Maker** | Custom sheet / meeting templates | In scope |
+| **Site Audit** | Plan, walk, findings | In scope |
+| **KPI / KRA** | ISO subject dashboard + role KRA | In scope |
+| Audit trail / Roles | Who did what; role matrix | Built |
 
 ## Project modules → tools
 
-Aligned with `docs/CLIENT_REQUIREMENTS.md` and `module_prompts/`. Sheet → dashboard map: `docs/SHEET_TO_DASHBOARD.md`.
+Sheet → dashboard map: `docs/SHEET_TO_DASHBOARD.md`.
 
 | Module | Tools | Notes |
 |--------|-------|-------|
 | **Home** | Overview, Directory (Office/Site/Client/Contractor), Vendors, Documents | |
-| **Drawings** | GFC, Checklist manager, DMS, Coordination, Request checklist fill, Ask | No Submittals. Check window before upload. |
-| **Quality** | QI dashboard, Checklist master (Excel upload + choose), **QAP**, Site checklists, Request QI fill | Checklist + RFI + QAP |
-| **Safety** | Dashboard, Safety checklists (Excel upload + choose), Safety RFI | Checklist + RFI |
-| **Progress** | Overview, Milestones, Planned vs Actual / **S-curve**, **Summary schedule**, **MS Project progress**, **Procurement plan**, Monthly, Hindrance, Risk, Legal | Client civil visible for schedule / S-curve / procurement |
-| **Field** | Day log, Photos, Field RFIs | |
-| **Comms** | Matrix · MoM, **Custom meeting sheet maker**, Ask (PMC RFI), Email / Outlook | Generated docs → Client |
-| **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, Structure | Engineering cost — **not** commercial finance |
-| **Finance** | Overview, Invoice, PO, RA bill, COP | **Separate from Cost**; shell now, detail later |
-| **Reports** | DPR / WPR packs | PDFs viewable on client civil side |
+| **Drawings** | GFC, Checklist manager, DMS, Coordination, Request checklist fill, **Request for Information** | No Submittals. Check window before upload. |
+| **Quality** | QI dashboard, Checklist master (Excel + choose), **QAP**, Site checklists, **Request for Inspection** | |
+| **Safety** | Dashboard, Safety checklists (Excel + choose), **Request for Inspection** | |
+| **Progress** | Overview, Milestones, Planned vs Actual / **S-curve**, **Summary schedule**, **MS Project progress**, **Procurement plan**, Monthly, Hindrance, Risk, Legal | Client civil visible |
+| **Field** | Day log, Photos, Field requests | ≠ HRMS personal diary |
+| **Comms** | Matrix · Meetings (Teams) · Sheet Maker bind · MoM · Ask (Information) · Email / Outlook | Generated docs → Client |
+| **Cost** | Monitoring, MB, BBS, Budget, Cashflow, Rates, Structure | Engineering — **not** Finance |
+| **Finance** | Overview, Invoice, PO, RA bill, COP | Shell now; field detail later |
+| **Reports** | DPR / WPR packs | PDFs on client civil side |
+| **Assurance** (optional hub) | Site Audit · KPI dashboard | May live under Master or project hub |
 
 **PDF:** upload supported; in-app **viewable** (min. summary schedule, procurement plan, generated civil/meeting PDF).
 
-**Discuss later:** Snag list · Project closure · CRM detail · HRMS detail · Finance field-level. See `docs/ROADMAP_DISCUSS_LATER.md`.
+**Future only:** Snag list · Project closure · Finance field-level · Full statutory payroll. See `docs/ROADMAP_DISCUSS_LATER.md`.
 
 Hub route: `/projects/:id/hub/{module}`.
 
@@ -41,9 +47,10 @@ Hub route: `/projects/:id/hub/{module}`.
 
 1. Project-scoped only  
 2. Drawing Check Master unlock before upload  
-3. RFI create/respond → email + open badge  
+3. Request create/respond → email + open badge  
 4. Client: view / concerns; Quality/Safety checklist create where enabled  
 5. Shared Excel templates become portal dashboards  
+6. Information vs Inspection labels correct in UI  
 
 ## Deploy
 
