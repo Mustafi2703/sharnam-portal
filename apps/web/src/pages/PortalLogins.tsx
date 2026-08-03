@@ -356,8 +356,8 @@ function portalDisplayName(key: string, shortLabel: string) {
 function chipOnStyle(tone: string): CSSProperties {
   return {
     borderColor: tone,
-    background: `${tone}55`,
-    color: "#ffffff",
+    background: `${tone}18`,
+    color: tone,
   };
 }
 
