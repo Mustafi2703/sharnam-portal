@@ -1296,8 +1296,8 @@ body {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(18, 16, 12, 0.18) 0%, rgba(18, 16, 12, 0.04) 45%, rgba(18, 16, 12, 0.34) 100%),
-    linear-gradient(90deg, rgba(18, 16, 12, 0.06) 0%, rgba(18, 16, 12, 0.12) 58%, rgba(18, 16, 12, 0.4) 100%);
+    linear-gradient(180deg, rgba(15, 23, 32, 0.22) 0%, rgba(15, 23, 32, 0.06) 45%, rgba(15, 23, 32, 0.36) 100%),
+    linear-gradient(90deg, rgba(15, 23, 32, 0.08) 0%, rgba(15, 23, 32, 0.14) 55%, rgba(15, 23, 32, 0.42) 100%);
   pointer-events: none;
 }
 .auth-hero__center {
@@ -1446,14 +1446,14 @@ body {
   background:
     linear-gradient(
       105deg,
-      rgba(12, 18, 24, 0) 0%,
-      rgba(12, 18, 24, 0.2) 18%,
-      rgba(12, 18, 24, 0.38) 100%
+      rgba(15, 23, 32, 0) 0%,
+      rgba(15, 23, 32, 0.22) 20%,
+      rgba(15, 23, 32, 0.4) 100%
     );
-  backdrop-filter: blur(10px) saturate(1.08);
-  -webkit-backdrop-filter: blur(10px) saturate(1.08);
-  border-left: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: -16px 0 40px rgba(8, 12, 16, 0.18);
+  backdrop-filter: blur(12px) saturate(1.05);
+  -webkit-backdrop-filter: blur(12px) saturate(1.05);
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: -16px 0 40px rgba(8, 12, 16, 0.16);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1477,11 +1477,11 @@ body {
   flex-shrink: 0;
   padding: 1.55rem 1.45rem 1.6rem;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  box-shadow: 0 16px 44px rgba(8, 12, 16, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(22px) saturate(1.15);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  box-shadow: 0 16px 44px rgba(8, 12, 16, 0.2);
   animation: auth-card-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes auth-card-in {
@@ -1629,16 +1629,17 @@ body {
   width: 100%;
   box-sizing: border-box;
   border-radius: 12px;
-  border: 1px solid #c9d0d6;
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #b8c0c8;
+  background: #ffffff;
   color: #121417;
   padding: 0.9rem 1rem;
   font: inherit;
   font-size: 0.98rem;
-  font-weight: 500;
+  font-weight: 550;
   outline: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 32, 0.04);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .auth-card__select option {
