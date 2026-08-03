@@ -14,6 +14,7 @@ import {
   type WorkspaceKey,
   type ModuleToolItem,
 } from "../../workspaces";
+import { applyModuleAccent, clearModuleAccent, MODULE_THEME_EVENT } from "../../themes";
 
 const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string }[] = [
   { key: "home", label: "Project home", path: "" },
@@ -132,14 +133,24 @@ export default function ProjectToolsLayout() {
     (activeTool === "hub" ? `${moduleLabel} hub` : moduleLabel);
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty("--mod-accent", accent);
-    root.style.setProperty("--mod-soft", soft);
-    return () => {
-      root.style.removeProperty("--mod-accent");
-      root.style.removeProperty("--mod-soft");
+    const brand = modMeta?.accent || "#0B6A78";
+    const softBg = modMeta?.soft || "#E6F4F6";
+    applyModuleAccent(brand, softBg);
+  }, [accent, soft, modMeta]);
+
+  useEffect(() => {
+    const reapply = () => {
+      const brand = modMeta?.accent || "#0B6A78";
+      const softBg = modMeta?.soft || "#E6F4F6";
+      applyModuleAccent(brand, softBg);
     };
-  }, [accent, soft]);
+    window.addEventListener(MODULE_THEME_EVENT, reapply);
+    return () => window.removeEventListener(MODULE_THEME_EVENT, reapply);
+  }, [modMeta]);
+
+  useEffect(() => {
+    return () => clearModuleAccent();
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -189,13 +200,13 @@ export default function ProjectToolsLayout() {
   }
 
   return (
-    <div className="w-full">
-      <div className="bg-paper border-b border-line sticky top-0 z-20">
+    <div className="w-full tool-workspace" style={{ ["--tool-accent" as string]: accent }}>
+      <div className="tool-chrome bg-paper border-b border-line sticky top-0 z-20">
         <div className="px-3 sm:px-5 py-2.5 flex flex-wrap items-center gap-3 justify-between">
           <div className="min-w-0 flex items-center gap-3">
             <span
-              className="h-9 w-9 rounded-lg grid place-items-center text-white shrink-0"
-              style={{ background: accent || "#0f766e" }}
+              className="h-9 w-9 rounded-lg grid place-items-center text-white shrink-0 shadow-sm"
+              style={{ background: accent || "var(--color-brand)" }}
             >
               <ModuleIcon name={(activeMod === "home" ? "home" : activeMod) as ModuleIconKey} size={18} className="text-white" />
             </span>
@@ -203,7 +214,9 @@ export default function ProjectToolsLayout() {
               <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
                 <span className="font-mono text-ink">{project?.code || "…"}</span>
                 <span>·</span>
-                <span className="font-semibold text-brand">{moduleLabel}</span>
+                <span className="font-semibold" style={{ color: accent }}>
+                  {moduleLabel}
+                </span>
               </div>
               <h1 className="font-display text-base sm:text-lg text-ink truncate">{project?.name || "Project"}</h1>
             </div>
@@ -222,12 +235,12 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
-        <div className="px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto border-t border-line bg-paper" aria-label={`${moduleLabel} tools`}>
+        <div className="tool-strip px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto border-t border-line bg-paper" aria-label={`${moduleLabel} tools`}>
           {activeMod !== "home" && (
             <Link
               to={`/projects/${id}/hub/${activeMod}`}
-              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
-                activeTool === "hub" ? "text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
+              className={`tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
+                activeTool === "hub" ? "is-on text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
               }`}
               style={activeTool === "hub" ? { background: accent, borderColor: accent } : undefined}
             >
@@ -243,8 +256,8 @@ export default function ProjectToolsLayout() {
                 to={href}
                 end={t.end}
                 className={() =>
-                  `shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
-                    on ? "text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
+                  `tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
+                    on ? "is-on text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
                   }`
                 }
                 style={on ? { background: accent, borderColor: accent } : undefined}
@@ -271,6 +284,7 @@ export default function ProjectToolsLayout() {
 
         {rightOpen && id && (
           <ToolRightPanel
+            accent={accent}
             ctx={{
               projectId: id,
               projectCode: project?.code,

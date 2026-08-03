@@ -22,7 +22,7 @@ export function PageHero({
     <div
       className={`rounded-xl bg-gradient-to-br ${gradients[accent]} p-5 sm:p-6 border border-white/8 relative overflow-hidden mb-5`}
     >
-      <div className="absolute inset-x-0 top-0 h-[3px] bg-[var(--color-mark,#C45C26)]" />
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-[var(--wd-accent,var(--color-brand))]" />
       <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
           {icon ? (
@@ -123,8 +123,8 @@ export function Button({
 }) {
   const variants = {
     primary:
-      "bg-[var(--mod-accent,var(--color-brand))] hover:brightness-95 text-white shadow-sm border border-transparent",
-    secondary: "bg-white border border-slate-200 text-ink hover:bg-slate-50",
+      "bg-[var(--mod-accent,var(--color-brand))] hover:brightness-[0.94] text-white shadow-sm border border-transparent",
+    secondary: "bg-white border border-line text-ink hover:bg-[var(--mod-soft,var(--color-brand-soft))]",
     ghost: "text-steel-muted hover:text-ink hover:bg-black/[0.04]",
     dark: "bg-ink text-white hover:bg-steel-2",
   };

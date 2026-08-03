@@ -7,10 +7,12 @@ import { ModuleIcon, type ModuleIconKey } from "../components/icons";
 import {
   WORKSPACES,
   WORKSPACE_PROJECT_KEY,
+  MODULE_META,
   resolveStoredProjectId,
   setActiveWorkspace,
   type WorkspaceKey,
 } from "../workspaces";
+import { applyModuleAccent } from "../themes";
 
 type Project = { id: string; code: string; name: string; status: string; clientName?: string };
 
@@ -38,6 +40,8 @@ export default function WorkspacePage() {
     if (!selected) return;
     setActiveWorkspace(key);
     localStorage.setItem(WORKSPACE_PROJECT_KEY, selected.id);
+    const meta = MODULE_META[key];
+    if (meta) applyModuleAccent(meta.accent, meta.soft);
     navigate(`/projects/${selected.id}/${path}`);
   }
 
@@ -83,7 +87,7 @@ export default function WorkspacePage() {
             disabled={!selected}
             onClick={() => enterWorkspace(w.key, w.path)}
             className="module-card group"
-            style={{ borderLeftColor: w.accent }}
+            style={{ borderLeftColor: w.accent, ["--mod-accent" as string]: w.accent }}
           >
             <div className="flex items-start gap-3">
               <span
@@ -97,7 +101,9 @@ export default function WorkspacePage() {
                 <p className="text-sm text-steel-muted mt-1 line-clamp-2 leading-relaxed">{w.desc}</p>
               </div>
             </div>
-            <div className="mt-3 text-sm font-semibold text-brand">Enter module →</div>
+            <div className="mt-3 text-sm font-semibold" style={{ color: w.accent }}>
+              Enter module →
+            </div>
           </button>
         ))}
       </div>

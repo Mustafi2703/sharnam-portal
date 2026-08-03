@@ -22,8 +22,9 @@ import {
 } from "../workspaces";
 import { api } from "../api";
 import {
-  applyColorMode,
+  applyModuleAccent,
   getColorMode,
+  notifyModuleTheme,
   SIDEBAR_HIDDEN_KEY,
   toggleColorMode,
   type ColorMode,
@@ -219,6 +220,7 @@ function SideNavBody({
                     to={href}
                     onClick={() => {
                       setActiveWorkspace(m.key as WorkspaceKey);
+                      applyModuleAccent(m.accent, m.soft);
                       onNavigate?.();
                     }}
                     className={`side-nav__item side-nav__item--module ${on ? "is-active" : ""}`}
@@ -293,10 +295,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   useEffect(() => {
-    applyColorMode(colorMode);
-  }, [colorMode]);
-
-  useEffect(() => {
     try {
       localStorage.setItem(SIDEBAR_HIDDEN_KEY, hidden ? "1" : "0");
     } catch {
@@ -324,6 +322,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   function onToggleTheme() {
     setColorMode(toggleColorMode());
+    // Module accent must sit on top of light/dark tokens
+    notifyModuleTheme();
   }
 
   const dark = colorMode === "dark";

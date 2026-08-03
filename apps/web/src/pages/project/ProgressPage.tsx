@@ -57,11 +57,17 @@ function BarChart({
                 </div>
                 <div className="space-y-1">
                   <div className="h-2 rounded-sm bg-line overflow-hidden">
-                    <div className="h-full bg-brand" style={{ width: `${(a / max) * 100}%` }} />
+                    <div
+                      className="h-full"
+                      style={{ width: `${(a / max) * 100}%`, background: "var(--mod-accent, var(--color-brand))" }}
+                    />
                   </div>
                   {compareKey != null && (
                     <div className="h-2 rounded-sm bg-line overflow-hidden">
-                      <div className="h-full bg-mark/80" style={{ width: `${(b / max) * 100}%` }} />
+                      <div
+                        className="h-full"
+                        style={{ width: `${(b / max) * 100}%`, background: "var(--color-mark, #C45C26)" }}
+                      />
                     </div>
                   )}
                 </div>
@@ -74,10 +80,15 @@ function BarChart({
           {compareKey != null && (
             <div className="flex gap-3 text-[10px] uppercase tracking-wide text-steel-muted pt-1">
               <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 bg-brand inline-block rounded-sm" /> Planned / primary
+                <span
+                  className="w-2.5 h-2.5 inline-block rounded-sm"
+                  style={{ background: "var(--mod-accent, var(--color-brand))" }}
+                />{" "}
+                Planned / primary
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 bg-mark/80 inline-block rounded-sm" /> Actual / compare
+                <span className="w-2.5 h-2.5 inline-block rounded-sm" style={{ background: "var(--color-mark, #C45C26)" }} />{" "}
+                Actual / compare
               </span>
             </div>
           )}

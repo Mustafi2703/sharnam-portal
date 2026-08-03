@@ -287,6 +287,7 @@ export const WORKSPACES: {
   desc: string;
   path: string;
   accent: string;
+  soft: string;
   icon: string;
   tools: string[];
   roles: string[];
@@ -301,6 +302,7 @@ export const WORKSPACES: {
     desc: m.desc,
     path: m.path,
     accent: m.accent,
+    soft: m.soft,
     icon: m.icon,
     tools: [...new Set(MODULE_TOOLS[key].map((t) => t.to).filter(Boolean)), "hub"],
     roles,

@@ -1,16 +1,16 @@
-/** Vibrant Sharnam donut charts */
-const PALETTE = [
-  "#0f766e",
-  "#126e82",
-  "#f59e0b",
-  "#e11d48",
-  "#7c3aed",
-  "#0891b2",
-  "#65a30d",
-  "#ea580c",
-];
+/** Module-aware donut charts — palette follows --chart-* / --color-brand */
 
 export type PieItem = { label: string; value: number; color?: string };
+
+const FALLBACK = ["#0B6A78", "#C45C26", "#2563EB", "#7C3AED", "#059669", "#DB2777", "#0891B2", "#D97706"];
+
+function readChartPalette(): string[] {
+  if (typeof window === "undefined") return FALLBACK;
+  const s = getComputedStyle(document.documentElement);
+  const keys = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6", "--color-brand", "--color-mark"];
+  const found = keys.map((k) => s.getPropertyValue(k).trim()).filter(Boolean);
+  return found.length >= 2 ? found : FALLBACK;
+}
 
 export function PieChart({
   title,
@@ -21,6 +21,8 @@ export function PieChart({
   items: PieItem[];
   size?: number;
 }) {
+  const palette = readChartPalette();
+  const brand = palette[0] || FALLBACK[0];
   const rows = (items || []).filter((i) => Number(i.value) > 0);
   const total = rows.reduce((s, r) => s + Number(r.value || 0), 0) || 1;
   const r = size / 2;
@@ -45,13 +47,13 @@ export function PieChart({
       ) : (
         <div className="flex flex-wrap items-center gap-4 flex-1 relative">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 mx-auto drop-shadow-sm">
-            <circle cx={r} cy={r} r={r - 1} fill="#f0fdfa" />
+            <circle cx={r} cy={r} r={r - 1} fill="var(--mod-soft, var(--color-brand-soft, #E6F4F6))" />
             {rows.map((row, i) => {
               const slice = (Number(row.value) / total) * Math.PI * 2;
               const a0 = angle;
               const a1 = angle + Math.max(slice, 0.02);
               angle += slice;
-              const color = row.color || PALETTE[i % PALETTE.length];
+              const color = row.color || palette[i % palette.length];
               if (slice >= Math.PI * 2 - 0.001) {
                 return <circle key={row.label} cx={r} cy={r} r={r - 4} fill={color} />;
               }
@@ -68,7 +70,7 @@ export function PieChart({
               );
             })}
             <circle cx={r} cy={r} r={ir - 1} fill="#fff" />
-            <text x={r} y={r - 2} textAnchor="middle" fill="#0f766e" style={{ fontSize: 20, fontWeight: 700 }}>
+            <text x={r} y={r - 2} textAnchor="middle" fill={brand} style={{ fontSize: 20, fontWeight: 700 }}>
               {Math.round(total)}
             </text>
             <text x={r} y={r + 14} textAnchor="middle" fill="#5c6578" style={{ fontSize: 9, letterSpacing: "0.08em" }}>
@@ -77,7 +79,7 @@ export function PieChart({
           </svg>
           <ul className="text-xs space-y-2 min-w-[128px] flex-1">
             {rows.map((row, i) => {
-              const color = row.color || PALETTE[i % PALETTE.length];
+              const color = row.color || palette[i % palette.length];
               const pct = Math.round((Number(row.value) / total) * 100);
               return (
                 <li key={row.label} className="flex items-center justify-between gap-2">

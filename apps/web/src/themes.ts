@@ -128,6 +128,99 @@ export function loadSavedTheme() {
   return applyColorMode(getColorMode());
 }
 
+/** Fired after light/dark flip so project modules can re-apply accent on top. */
+export const MODULE_THEME_EVENT = "sharnam:module-theme";
+
+function clampByte(n: number) {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function parseHex(hex: string): [number, number, number] | null {
+  const h = hex.trim().replace("#", "");
+  if (h.length === 3) {
+    return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
+  }
+  if (h.length === 6) {
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  return null;
+}
+
+function toHex(r: number, g: number, b: number) {
+  return `#${[r, g, b].map((v) => clampByte(v).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mixHex(hex: string, toward: string, amount: number) {
+  const a = parseHex(hex);
+  const b = parseHex(toward);
+  if (!a || !b) return hex;
+  return toHex(
+    a[0] + (b[0] - a[0]) * amount,
+    a[1] + (b[1] - a[1]) * amount,
+    a[2] + (b[2] - a[2]) * amount
+  );
+}
+
+function withAlpha(hex: string, alpha: number) {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+/**
+ * Apply module accent across chrome, buttons, charts, and action panel.
+ * Construction amber stays as secondary contrast (--color-mark / kpi-2).
+ */
+export function applyModuleAccent(accent: string, soft: string) {
+  const root = document.documentElement;
+  const ink = mixHex(accent, "#000000", 0.28);
+  const glow = mixHex(accent, "#ffffff", 0.35);
+  const kpi2 = getColorMode() === "dark" ? "#F0783A" : "#C45C26";
+  const kpi3 = mixHex(accent, "#2563EB", 0.45);
+  const kpi4 = mixHex(accent, "#7C3AED", 0.4);
+  const kpi5 = mixHex(accent, "#059669", 0.35);
+  const kpi6 = mixHex(accent, "#DB2777", 0.4);
+
+  root.style.setProperty("--mod-accent", accent);
+  root.style.setProperty("--mod-soft", soft);
+  root.style.setProperty("--color-brand", accent);
+  root.style.setProperty("--color-brand-dark", ink);
+  root.style.setProperty("--color-brand-soft", soft);
+  root.style.setProperty("--color-brand-glow", glow);
+  root.style.setProperty("--color-accent", accent);
+  root.style.setProperty("--color-procore-blue", accent);
+  root.style.setProperty("--side-active", accent);
+  root.style.setProperty("--side-active-bg", withAlpha(accent, 0.22));
+  root.style.setProperty("--wd-accent", accent);
+  root.style.setProperty("--color-kpi-1", accent);
+  root.style.setProperty("--color-kpi-2", kpi2);
+  root.style.setProperty("--color-kpi-3", kpi3);
+  root.style.setProperty("--color-kpi-4", kpi4);
+  root.style.setProperty("--color-kpi-5", kpi5);
+  root.style.setProperty("--color-kpi-6", kpi6);
+  root.style.setProperty("--chart-1", accent);
+  root.style.setProperty("--chart-2", kpi2);
+  root.style.setProperty("--chart-3", kpi3);
+  root.style.setProperty("--chart-4", kpi4);
+  root.style.setProperty("--chart-5", kpi5);
+  root.style.setProperty("--chart-6", kpi6);
+  root.dataset.moduleAccent = accent;
+}
+
+export function clearModuleAccent() {
+  const root = document.documentElement;
+  delete root.dataset.moduleAccent;
+  applyColorMode(getColorMode());
+}
+
+export function notifyModuleTheme() {
+  try {
+    window.dispatchEvent(new Event(MODULE_THEME_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
 export type ThemeOption = {
   id: string;
   number: 1 | 2 | 3 | 4 | 5;
