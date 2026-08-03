@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useEffect, useMemo, useState } from "react";
@@ -114,25 +114,33 @@ function SideNavBody({
       </div>
 
       <div className="side-nav__scroll">
-        <p className="side-nav__label">Workspace</p>
-        <nav className="side-nav__group" aria-label="App">
-          {navItems.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              onClick={onNavigate}
-              className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
-            >
-              <ModuleIcon name={n.icon} size={18} />
-              <span>{n.label}</span>
-            </NavLink>
-          ))}
-        </nav>
+        <section className="side-nav__section" aria-label="Workspace">
+          <div className="side-nav__section-head">
+            <p className="side-nav__label">Workspace</p>
+            <span className="side-nav__section-hint">App</span>
+          </div>
+          <nav className="side-nav__group" aria-label="App">
+            {navItems.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.end}
+                onClick={onNavigate}
+                className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+              >
+                <ModuleIcon name={n.icon} size={18} />
+                <span>{n.label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        </section>
 
         {isOffice && (
-          <>
-            <p className="side-nav__label">Office admin</p>
+          <section className="side-nav__section side-nav__section--office" aria-label="Office admin">
+            <div className="side-nav__section-head">
+              <p className="side-nav__label">Office admin</p>
+              <span className="side-nav__section-hint">Control</span>
+            </div>
             <nav className="side-nav__group" aria-label="Office admin">
               {officeAdminNav.map((n) => (
                 <NavLink
@@ -146,34 +154,47 @@ function SideNavBody({
                 </NavLink>
               ))}
             </nav>
-          </>
+          </section>
         )}
 
-        <div className="side-nav__project">
-          <label className="side-nav__label !mb-1.5 !mt-2 block">Active project</label>
-          <select
-            className="side-nav__select"
-            value={projectId}
-            onChange={(e) => onSelectProject(e.target.value)}
-            aria-label="Select project"
-          >
-            {!projects.length && <option value="">No projects</option>}
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code} — {p.name}
-              </option>
-            ))}
-          </select>
-          {activeProject && (
-            <p className="text-[10px] text-[var(--side-muted)] mt-1.5 px-0.5 truncate">
-              Controlling: <span className="text-white/90 font-semibold">{activeProject.code}</span>
-            </p>
-          )}
-        </div>
+        <section className="side-nav__section side-nav__section--project" aria-label="Active project">
+          <div className="side-nav__section-head">
+            <p className="side-nav__label">Project</p>
+            <span className="side-nav__section-hint">Choose</span>
+          </div>
+          <div className="side-nav__project">
+            <select
+              className="side-nav__select"
+              value={projectId}
+              onChange={(e) => onSelectProject(e.target.value)}
+              aria-label="Select project"
+            >
+              {!projects.length && <option value="">No projects</option>}
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} — {p.name}
+                </option>
+              ))}
+            </select>
+            {activeProject ? (
+              <div className="side-nav__project-chip">
+                <span className="side-nav__project-dot" aria-hidden />
+                <span className="truncate">
+                  Active · <strong>{activeProject.code}</strong>
+                </span>
+              </div>
+            ) : (
+              <p className="side-nav__project-empty">Select a project to open modules</p>
+            )}
+          </div>
+        </section>
 
         {projectId && (
-          <>
-            <p className="side-nav__label">Project modules</p>
+          <section className="side-nav__section side-nav__section--modules" aria-label="Project modules">
+            <div className="side-nav__section-head">
+              <p className="side-nav__label">Modules</p>
+              <span className="side-nav__section-hint">{modules.length}</span>
+            </div>
             <nav className="side-nav__group" aria-label="Project modules">
               <NavLink
                 to={`/projects/${activeProjectId || projectId}`}
@@ -200,17 +221,23 @@ function SideNavBody({
                       setActiveWorkspace(m.key as WorkspaceKey);
                       onNavigate?.();
                     }}
-                    className={`side-nav__item ${on ? "is-active" : ""}`}
+                    className={`side-nav__item side-nav__item--module ${on ? "is-active" : ""}`}
+                    style={
+                      {
+                        ["--item-accent" as string]: m.accent,
+                      } as CSSProperties
+                    }
                   >
                     <span className="side-nav__icon-wrap" style={{ color: on ? "#fff" : m.accent }}>
                       <ModuleIcon name={m.key as ModuleIconKey} size={18} />
                     </span>
-                    <span>{m.title}</span>
+                    <span className="min-w-0 truncate">{m.title}</span>
+                    {on && <span className="side-nav__item-live" aria-hidden />}
                   </Link>
                 );
               })}
             </nav>
-          </>
+          </section>
         )}
       </div>
 

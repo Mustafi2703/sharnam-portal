@@ -555,18 +555,60 @@ body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: 0.4rem 0.75rem 0.6rem;
+  padding: 0.65rem 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
   scrollbar-width: thin;
   scrollbar-color: var(--color-brand) transparent;
 }
 
+.side-nav__section {
+  border: 1px solid var(--side-border, #2e3642);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.55rem 0.45rem 0.55rem;
+}
+.side-nav__section--office {
+  border-color: color-mix(in srgb, #c45c26 35%, var(--side-border, #2e3642));
+  background: color-mix(in srgb, #c45c26 7%, transparent);
+}
+.side-nav__section--project {
+  border-color: color-mix(in srgb, #2ec4b6 28%, var(--side-border, #2e3642));
+  background: color-mix(in srgb, #2ec4b6 6%, transparent);
+  padding-bottom: 0.7rem;
+}
+.side-nav__section--modules {
+  border-color: color-mix(in srgb, #60a5fa 28%, var(--side-border, #2e3642));
+  background: color-mix(in srgb, #3b82f6 5%, transparent);
+}
+
+.side-nav__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0.4rem 0.45rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--side-border, #2e3642) 85%, transparent);
+  margin-bottom: 0.4rem;
+}
 .side-nav__label {
-  margin: 0.85rem 0.5rem 0.35rem;
+  margin: 0;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--side-muted, #9aa3ae);
+}
+.side-nav__section-hint {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
 }
 
 .side-nav__group {
@@ -578,13 +620,13 @@ body {
 .side-nav__item {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.55rem 0.7rem;
+  gap: 0.65rem;
+  padding: 0.52rem 0.65rem;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--side-muted, #9aa3ae);
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
   border: 1px solid transparent;
 }
 .side-nav__item:hover {
@@ -597,32 +639,79 @@ body {
   border-color: transparent;
   box-shadow: inset 3px 0 0 var(--side-active, var(--color-brand));
 }
+.side-nav__item--module.is-active {
+  background: color-mix(in srgb, var(--item-accent, var(--color-brand)) 22%, transparent);
+  box-shadow: inset 3px 0 0 var(--item-accent, var(--color-brand));
+}
+.side-nav__item-live {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--item-accent, #fff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--item-accent, #fff) 25%, transparent);
+  flex-shrink: 0;
+}
 .side-nav__icon-wrap {
   display: grid;
   place-items: center;
   flex-shrink: 0;
+  width: 1.35rem;
 }
 
 .side-nav__project {
-  margin: 0.5rem 0.2rem 0.25rem;
+  margin: 0;
+  padding: 0 0.25rem;
 }
 .side-nav__select {
   width: 100%;
   border-radius: 8px;
-  border: 1px solid var(--side-border, #2e3642);
-  background: #12161c;
+  border: 1px solid color-mix(in srgb, #2ec4b6 35%, var(--side-border, #2e3642));
+  background: #0f141a;
   color: #f1f5f9;
   font-size: 12px;
-  padding: 0.55rem 0.65rem;
+  font-weight: 600;
+  padding: 0.6rem 0.7rem;
   outline: none;
 }
 .side-nav__select:focus {
-  border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 28%, transparent);
+  border-color: #2ec4b6;
+  box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.2);
 }
 .side-nav__select option {
   background: #1c222b;
   color: #f1f5f9;
+}
+.side-nav__project-chip {
+  margin-top: 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(15, 20, 26, 0.75);
+  border: 1px solid rgba(46, 196, 182, 0.25);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+}
+.side-nav__project-chip strong {
+  color: #fff;
+  font-weight: 700;
+}
+.side-nav__project-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+  flex-shrink: 0;
+}
+.side-nav__project-empty {
+  margin: 0.5rem 0 0;
+  font-size: 11px;
+  color: var(--side-muted);
+  padding: 0 0.15rem;
 }
 
 .side-nav__foot {
