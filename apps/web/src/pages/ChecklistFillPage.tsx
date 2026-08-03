@@ -186,7 +186,7 @@ export default function ChecklistFillPage() {
 
   return (
     <div className="min-h-screen bg-sand">
-      <header className="sticky top-0 z-30 bg-white border-b border-line">
+      <header className="sticky top-0 z-30 bg-paper border-b border-line text-ink">
         <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <BrandMark size="sm" tagTone="light" compact showTag={false} />
@@ -420,8 +420,8 @@ export default function ChecklistFillPage() {
                         .map((item) => {
                           const line = responses[item.id] || emptyLine();
                           return (
-                            <div key={item.id} className="border border-line bg-white p-5 space-y-3">
-                              <div className="text-[15px] leading-relaxed font-medium">
+                            <div key={item.id} className="border border-line bg-paper p-5 space-y-3 text-ink">
+                              <div className="text-[15px] leading-relaxed font-semibold text-ink">
                                 {item.itemCode && <span className="font-mono text-brand mr-2">{item.itemCode}</span>}
                                 {item.description}
                               </div>
@@ -433,14 +433,14 @@ export default function ChecklistFillPage() {
                                       key={ans}
                                       type="button"
                                       onClick={() => patchLine(item.id, { answer: ans })}
-                                      className={`rounded-sm px-4 py-2 text-sm font-medium border ${
+                                      className={`rounded-sm px-4 py-2 text-sm font-semibold border ${
                                         on
                                           ? ans === "Yes"
-                                            ? "bg-emerald-50 border-emerald-300 text-ok"
+                                            ? "bg-brand text-white border-brand"
                                             : ans === "No"
-                                              ? "bg-red-50 border-red-300 text-danger"
-                                              : "bg-amber-50 border-amber-300 text-warn"
-                                          : "bg-sand border-line text-steel-muted"
+                                              ? "bg-danger text-white border-danger"
+                                              : "bg-warn text-white border-warn"
+                                          : "bg-sand border-line text-ink hover:border-brand"
                                       }`}
                                     >
                                       {ans}

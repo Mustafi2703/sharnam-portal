@@ -329,7 +329,7 @@ export default function DrawingsPage() {
             type="button"
             onClick={() => setFilter(d)}
             className={`rounded px-3 py-1 text-xs font-medium border ${
-              filter === d ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line"
+              filter === d ? "bg-procore-navy text-white border-procore-navy" : "bg-paper text-ink border-line"
             }`}
           >
             {d}
@@ -338,11 +338,11 @@ export default function DrawingsPage() {
       </div>
 
       {canUpload && (
-        <Card className="!p-5 border-brand/25 bg-brand-soft/20">
+        <Card className="!p-5 border-brand/30 bg-paper text-ink">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
             <div>
-              <h3 className="font-display text-lg">Checklist + request fill (latest revision)</h3>
-              <p className="text-sm text-steel-muted mt-1 max-w-2xl">
+              <h3 className="font-display text-lg text-ink">Checklist + request fill (latest revision)</h3>
+              <p className="text-sm text-ink/75 mt-1 max-w-2xl">
                 Assign a site checklist, then request fill so matrix / vendor open the form against the latest revision —
                 they can upload docs and new drawings / revisions from the fill screen.
               </p>
