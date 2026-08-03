@@ -265,23 +265,67 @@ export default function CostPage() {
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        {[
-          ["Budgeted", summary.totals.budgeted],
-          ["Work order", summary.totals.workOrder],
-          ["Certified", summary.totals.certified],
-          ["MB qty total", summary.totals.mbQty],
-          ["BBS weight kg", summary.totals.bbsWeightKg],
-          ["Bills pending", billsData?.totals?.pending ?? 0],
-        ].map(([label, val]) => (
-          <Card key={label as string} className="!p-4">
-            <div className="text-[10px] uppercase tracking-wider text-steel-muted">{label}</div>
-            <div className="text-lg font-display mt-1">
-              {typeof label === "string" && /qty|weight|kg/i.test(label)
+        {(
+          [
+            ["Budgeted", summary.totals.budgeted, "var(--color-kpi-1)", "BOQ baseline"],
+            ["Work order", summary.totals.workOrder, "var(--color-kpi-2)", "Issued WO"],
+            ["Certified", summary.totals.certified, "var(--color-kpi-3)", "Certified value"],
+            ["MB qty total", summary.totals.mbQty, "var(--color-kpi-4)", "Measurement book"],
+            ["BBS weight kg", summary.totals.bbsWeightKg, "var(--color-kpi-5)", "Bar bending"],
+            ["Bills pending", billsData?.totals?.pending ?? 0, "var(--color-kpi-6)", "COP / bills"],
+          ] as const
+        ).map(([label, val, color, hint]) => (
+          <div key={label} className="kpi-tile">
+            <div className="kpi-tile__bar" style={{ background: color }} />
+            <div className="kpi-tile__label" style={{ color }}>
+              {label}
+            </div>
+            <div className="kpi-tile__value">
+              {/qty|weight|kg/i.test(label)
                 ? Number(val).toLocaleString("en-IN", { maximumFractionDigits: 1 })
                 : formatINR(val as number)}
             </div>
-          </Card>
+            <div className="kpi-tile__hint">{hint}</div>
+          </div>
         ))}
+      </div>
+
+      {/* BOQ / cashflow mini dashboard */}
+      <div className="grid md:grid-cols-3 gap-3">
+        <div className="kpi-tile !p-4">
+          <div className="kpi-tile__label">BOQ health</div>
+          <div className="mt-2 flex items-end gap-2">
+            <div className="font-display text-2xl text-ink">
+              {(summary.packages || []).length}
+            </div>
+            <div className="text-xs text-steel-muted pb-1">packages</div>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-sand overflow-hidden">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.min(100, Math.round(((summary.totals.certified || 0) / Math.max(summary.totals.budgeted || 1, 1)) * 100))}%`,
+                background: "linear-gradient(90deg, var(--color-kpi-1), var(--color-kpi-5))",
+              }}
+            />
+          </div>
+          <div className="kpi-tile__hint mt-2">
+            Certified vs budget{" "}
+            {Math.round(((summary.totals.certified || 0) / Math.max(summary.totals.budgeted || 1, 1)) * 100)}%
+          </div>
+        </div>
+        <div className="kpi-tile !p-4">
+          <div className="kpi-tile__label">Monitoring rows</div>
+          <div className="font-display text-2xl text-ink mt-2">{(summary.monitoring || []).length}</div>
+          <div className="kpi-tile__hint">Active BOQ / monitoring lines</div>
+        </div>
+        <div className="kpi-tile !p-4">
+          <div className="kpi-tile__label">Cashflow periods</div>
+          <div className="font-display text-2xl text-ink mt-2">
+            {(summary.cashflow || summary.cashflowChart || []).length}
+          </div>
+          <div className="kpi-tile__hint">Planned vs actual periods loaded</div>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
@@ -291,7 +335,9 @@ export default function CostPage() {
             type="button"
             onClick={() => setTab(k)}
             className={`rounded-sm px-3 sm:px-4 py-2 text-sm font-medium border transition ${
-              tab === k ? "bg-brand text-white border-brand" : "bg-white border-line text-ink hover:border-brand/40"
+              tab === k
+                ? "bg-brand text-white border-brand"
+                : "bg-paper border-line text-ink hover:border-brand/40"
             }`}
           >
             {label}
@@ -309,7 +355,7 @@ export default function CostPage() {
               type="button"
               onClick={() => setPkg("All")}
               className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-                pkgFilter === "All" ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line"
+                pkgFilter === "All" ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink"
               }`}
             >
               All packages
@@ -320,7 +366,7 @@ export default function CostPage() {
                 type="button"
                 onClick={() => setPkg(p)}
                 className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border max-w-[220px] truncate ${
-                  pkgFilter === p ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line hover:border-brand/40"
+                  pkgFilter === p ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink hover:border-brand/40"
                 }`}
                 title={p}
               >
@@ -343,7 +389,7 @@ export default function CostPage() {
                     type="button"
                     onClick={() => setPkg(p)}
                     className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-                      pkgFilter === p ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line"
+                      pkgFilter === p ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink"
                     }`}
                   >
                     {p}
@@ -493,7 +539,7 @@ export default function CostPage() {
                 type="button"
                 onClick={() => setCfView(k)}
                 className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-                  cfView === k ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line"
+                  cfView === k ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink"
                 }`}
               >
                 {label}

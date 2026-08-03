@@ -115,13 +115,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     key: "office",
     title: "Sharnam Office",
     shortLabel: "Office",
-    headline: "Full office spine — same as Master tools.",
-    subtitle: "Upload drawings, assign checklists, cost, and project control.",
+    headline: "Full control desk for Sharnam Office.",
+    subtitle: "Master setup, access roles, CRM, HRMS, drawings, cost, and every project module — one SAP-style workspace.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["office", "admin"],
-    points: ["Master setup", "All modules", "Cost & BOQ", "Publishing"],
+    points: ["Access & roles control", "CRM bids + HRMS", "All project modules", "Cost · BOQ · Finance"],
     cta: "Enter Sharnam Office",
-    tone: "#1D4ED8",
+    tone: "#0B6A78",
     icon: "OF",
     landingPath: "/dashboard",
     workspaceKey: null,
@@ -262,7 +262,11 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
           autoComplete="current-password"
         />
       </label>
-      {error && <p className="text-sm text-danger bg-red-50 border border-red-100 px-3 py-2 rounded-lg">{error}</p>}
+      {error && (
+        <p className="text-sm text-danger bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)] px-3 py-2 rounded-lg">
+          {error}
+        </p>
+      )}
       <Button disabled={busy} className="w-full !py-3 !text-[15px] !rounded-xl">
         {busy ? "Signing in…" : "Sign in"}
       </Button>
@@ -277,36 +281,46 @@ function ConstructionHeroPanel({
   title,
   subtitle,
   points,
+  badge = `${BRAND_HI} · Construction PMC`,
 }: {
   title: string;
   subtitle: string;
   points?: string[];
+  badge?: string;
 }) {
   return (
     <aside className="relative hidden lg:flex h-full min-h-0 flex-col justify-end overflow-hidden text-white">
       <img
         src="/hero-login.jpg"
-        alt="Modern construction project"
-        className="absolute inset-0 h-full w-full object-cover"
+        alt="Modern construction project site"
+        className="absolute inset-0 h-full w-full object-cover scale-[1.02]"
       />
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(165deg, rgba(15,118,110,0.55) 0%, rgba(18,110,130,0.5) 50%, rgba(26,29,38,0.78) 100%)",
+            "linear-gradient(165deg, rgba(11,106,120,0.52) 0%, rgba(28,34,43,0.45) 42%, rgba(10,12,15,0.88) 100%)",
         }}
       />
-      <div className="relative z-10 p-6 xl:p-8 max-w-md">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-200 font-semibold">
-          {BRAND_HI} · Construction PMC
-        </p>
-        <h1 className="font-display text-2xl xl:text-[1.75rem] tracking-tight mt-2.5 leading-[1.2]">{title}</h1>
-        <p className="mt-2.5 text-[13px] text-white/88 leading-relaxed">{subtitle}</p>
+      <div className="absolute top-0 left-0 right-0 p-6 xl:p-8 flex items-start justify-between gap-4">
+        <span className="inline-flex rounded-lg bg-white/95 p-2 shadow-lg">
+          <img src="/logo.png" alt={BRAND_EN} className="h-9 w-auto object-contain" />
+        </span>
+        <span className="rounded-full border border-white/25 bg-black/25 backdrop-blur px-3 py-1 text-[10px] uppercase tracking-[0.16em] font-semibold text-amber-200">
+          Procore-grade PMC
+        </span>
+      </div>
+      <div className="relative z-10 p-6 xl:p-10 max-w-lg">
+        <p className="text-[11px] uppercase tracking-[0.22em] text-teal-200 font-semibold">{badge}</p>
+        <h1 className="font-display text-3xl xl:text-[2.15rem] tracking-tight mt-3 leading-[1.15] text-white">
+          {title}
+        </h1>
+        <p className="mt-3 text-[15px] text-white/90 leading-relaxed">{subtitle}</p>
         {points && points.length > 0 && (
-          <ul className="mt-4 space-y-1.5 border-t border-white/20 pt-3">
+          <ul className="mt-6 space-y-2 border-t border-white/20 pt-4">
             {points.map((p) => (
-              <li key={p} className="text-[12px] text-white/90 flex gap-2">
-                <span className="text-amber-300 shrink-0">▸</span>
+              <li key={p} className="text-[13px] text-white/92 flex gap-2.5">
+                <span className="text-[var(--color-mark,#C45C26)] shrink-0 font-bold">▸</span>
                 <span>{p}</span>
               </li>
             ))}
@@ -364,23 +378,34 @@ export function LoginHubPage() {
 
   return (
     <div className="login-shell flex flex-col lg:grid lg:grid-cols-[minmax(0,0.85fr)_minmax(400px,1.15fr)]">
-      <div className="lg:hidden relative h-[18vw] min-h-[76px] max-h-[100px] overflow-hidden shrink-0">
+      <div className="lg:hidden relative h-[28vw] min-h-[120px] max-h-[180px] overflow-hidden shrink-0">
         <img src="/hero-login.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0f766e]/90 to-[#126e82]/45" />
-        <div className="relative z-10 h-full flex flex-col justify-end px-4 pb-2.5 text-white">
-          <p className="text-[9px] uppercase tracking-[0.2em] text-amber-200 font-semibold">{BRAND_HI} · PMC</p>
-          <p className="font-display text-base leading-tight">Construction delivery portal</p>
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "linear-gradient(180deg, rgba(11,106,120,0.35) 0%, rgba(10,12,15,0.85) 100%)",
+          }}
+        />
+        <div className="relative z-10 h-full flex flex-col justify-between px-4 py-3 text-white">
+          <span className="inline-flex self-start rounded-md bg-white/95 p-1.5">
+            <img src="/logo.png" alt="" className="h-7 w-auto" />
+          </span>
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.2em] text-teal-200 font-semibold">{BRAND_HI} · PMC</p>
+            <p className="font-display text-lg leading-tight">Construction delivery portal</p>
+          </div>
         </div>
       </div>
 
       <ConstructionHeroPanel
         title="Built for construction delivery"
-        subtitle="Drawings, quality, field, and communications — aligned across teams."
+        subtitle="Drawings, quality, field, cost, and communications — aligned for Office, Site, Contractor, and Client."
         points={[
-          "Dashboard for RFIs, Comms, and logs",
-          "One module at a time",
-          "Office · Site · Contractor · Client",
+          "Office admin: Master, CRM, HRMS, Access & Audit",
+          "Procore-style modules with SAP clarity",
+          "Light & dark modes — readable everywhere",
         ]}
+        badge={`${BRAND_HI} · शरणम् PMC Portal`}
       />
 
       <section id="signin" className="login-panel flex flex-col h-full min-h-0 lg:border-l border-line">

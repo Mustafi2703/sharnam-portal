@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useEffect, useMemo, useState } from "react";
-import { BrandMark, BRAND_EN } from "./Brand";
+import { BrandMark, BRAND_EN, BRAND_HI } from "./Brand";
 import {
   ModuleIcon,
   IconClose,
@@ -42,7 +42,15 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
     icon: "modules",
     roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
   },
-  { to: "/master", label: "Master", icon: "master", roles: ["admin", "office"] },
+  { to: "/master", label: "Master setup", icon: "master", roles: ["admin", "office"] },
+];
+
+/** Office admin — full control surface */
+const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
+  { to: "/crm", label: "CRM · Bids", icon: "modules" },
+  { to: "/hrm", label: "HRMS", icon: "modules" },
+  { to: "/roles", label: "Access · Roles", icon: "master" },
+  { to: "/audit", label: "Audit trail", icon: "reports" },
 ];
 
 type Proj = { id: string; code: string; name: string };
@@ -82,6 +90,7 @@ function SideNavBody({
   const navigate = useNavigate();
   const location = useLocation();
   const navItems = appNav.filter((n) => !user || n.roles.includes(user.role));
+  const isOffice = user?.role === "admin" || user?.role === "office";
   const modules = useMemo(
     () => WORKSPACES.filter((w) => !user || w.roles.includes(user.role)),
     [user]
@@ -89,15 +98,18 @@ function SideNavBody({
   const projectMatch = location.pathname.match(/^\/projects\/([^/]+)/);
   const activeProjectId = projectMatch?.[1] || projectId;
   const dark = colorMode === "dark";
+  const activeProject = projects.find((p) => p.id === projectId);
 
   return (
     <div className="side-nav__inner">
       <div className="side-nav__head">
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
-          <BrandMark size="sm" tagTone={dark ? "dark" : "light"} compact showTag={false} />
+          <span className="inline-flex rounded-md bg-white/95 p-1.5 shadow-sm shrink-0">
+            <BrandMark size="sm" tagTone="light" compact showTag={false} />
+          </span>
           <div className="side-nav__brand-text min-w-0">
-            <div className="font-display text-[15px] text-ink tracking-tight truncate">{BRAND_EN}</div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-brand font-semibold">PMC portal</div>
+            <div className="side-nav__brand-name truncate">{BRAND_EN}</div>
+            <div className="side-nav__brand-sub">{BRAND_HI} · PMC</div>
           </div>
         </Link>
       </div>
@@ -119,8 +131,27 @@ function SideNavBody({
           ))}
         </nav>
 
+        {isOffice && (
+          <>
+            <p className="side-nav__label">Office admin</p>
+            <nav className="side-nav__group" aria-label="Office admin">
+              {officeAdminNav.map((n) => (
+                <NavLink
+                  key={n.to}
+                  to={n.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+                >
+                  <ModuleIcon name={n.icon} size={18} />
+                  <span>{n.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+          </>
+        )}
+
         <div className="side-nav__project">
-          <label className="side-nav__label !mb-1.5 block">Project</label>
+          <label className="side-nav__label !mb-1.5 !mt-2 block">Active project</label>
           <select
             className="side-nav__select"
             value={projectId}
@@ -134,11 +165,16 @@ function SideNavBody({
               </option>
             ))}
           </select>
+          {activeProject && (
+            <p className="text-[10px] text-[var(--side-muted)] mt-1.5 px-0.5 truncate">
+              Controlling: <span className="text-white/90 font-semibold">{activeProject.code}</span>
+            </p>
+          )}
         </div>
 
         {projectId && (
           <>
-            <p className="side-nav__label">Modules</p>
+            <p className="side-nav__label">Project modules</p>
             <nav className="side-nav__group" aria-label="Project modules">
               <NavLink
                 to={`/projects/${activeProjectId || projectId}`}
@@ -167,7 +203,7 @@ function SideNavBody({
                     }}
                     className={`side-nav__item ${on ? "is-active" : ""}`}
                   >
-                    <span className="side-nav__icon-wrap" style={{ color: m.accent }}>
+                    <span className="side-nav__icon-wrap" style={{ color: on ? "#fff" : m.accent }}>
                       <ModuleIcon name={m.key as ModuleIconKey} size={18} />
                     </span>
                     <span>{m.title}</span>
@@ -184,7 +220,10 @@ function SideNavBody({
           {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
           <span>{dark ? "Light mode" : "Dark mode"}</span>
         </button>
-        <div className="text-xs text-steel-muted truncate px-2">{user?.fullName}</div>
+        <div className="side-nav__user" title={user?.fullName}>
+          {user?.fullName}
+          {isOffice && <span className="opacity-70"> · Office</span>}
+        </div>
         <button
           type="button"
           className="side-nav__signout"
@@ -200,9 +239,9 @@ function SideNavBody({
   );
 }
 
-/** Left sidebar shell — hideable, scrollable, light/dark */
+/** Left sidebar + top chrome — Procore / SAP desk for Office admin */
 export function AppShell({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const inProject = /^\/projects\/[^/]+/.test(location.pathname);
@@ -262,6 +301,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const dark = colorMode === "dark";
+  const isOffice = user?.role === "admin" || user?.role === "office";
+  const activeProject = projects.find((p) => p.id === projectId);
 
   return (
     <div className={`app-frame ${hidden ? "is-hidden" : ""}`}>
@@ -279,10 +320,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="app-frame__main">
         <header className="app-topbar sticky top-0 z-40">
-          <div className="flex items-center gap-2 px-3 sm:px-4 h-12">
+          <div className="flex items-center gap-2.5 px-3 sm:px-4 h-[52px]">
             <button
               type="button"
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-paper text-ink"
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-paper text-ink"
               aria-label="Open menu"
               onClick={() => setDrawerOpen(true)}
             >
@@ -297,14 +338,30 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {hidden ? <IconPanelRight size={16} /> : <IconPanel size={16} />}
             </button>
-            <div className="min-w-0 flex-1">
-              <div className="text-[11px] uppercase tracking-wider text-brand font-semibold">
-                {inProject ? "Project workspace" : "Sharnam PMC"}
+
+            <div className="app-topbar__meta">
+              <div className="app-topbar__eyebrow">
+                {isOffice ? "Sharnam Office · Full control" : inProject ? "Project workspace" : "Sharnam PMC"}
               </div>
-              <div className="text-sm font-semibold text-ink truncate">
-                {projects.find((p) => p.id === projectId)?.name || "Select a project"}
+              <div className="app-topbar__title truncate">
+                {activeProject ? `${activeProject.code} — ${activeProject.name}` : "Select a project in the sidebar"}
               </div>
             </div>
+
+            {isOffice && (
+              <div className="hidden lg:flex items-center gap-1.5">
+                <Link to="/roles" className="app-topbar__chip hover:border-brand">
+                  <strong>Access</strong>
+                </Link>
+                <Link to="/crm" className="app-topbar__chip hover:border-brand">
+                  CRM
+                </Link>
+                <Link to="/hrm" className="app-topbar__chip hover:border-brand">
+                  HRMS
+                </Link>
+              </div>
+            )}
+
             <button
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft"
@@ -313,7 +370,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
             </button>
-            <BrandMark size="sm" tagTone={dark ? "dark" : "light"} compact showTag={false} />
+            <span className="hidden sm:inline-flex rounded-md bg-paper border border-line p-1">
+              <BrandMark size="sm" tagTone="light" compact showTag={false} />
+            </span>
           </div>
         </header>
 
@@ -330,7 +389,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <aside className="side-nav side-nav--drawer absolute left-0 top-0 bottom-0 w-[min(88vw,300px)] flex shadow-2xl">
             <button
               type="button"
-              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg bg-paper border border-line grid place-items-center text-ink"
+              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg bg-white/10 border border-white/20 grid place-items-center text-white"
               onClick={() => setDrawerOpen(false)}
               aria-label="Close menu"
             >
