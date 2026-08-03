@@ -1,6 +1,6 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { Button, Input, Select } from "./ui";
+import { Button, Input, Select, TextArea } from "./ui";
 
 export type MonLine = {
   id: string;
@@ -28,6 +28,8 @@ type Props = {
   onChanged: () => void;
 };
 
+type Draft = ReturnType<typeof emptyDraft>;
+
 const emptyDraft = (pkg: string) => ({
   packageName: pkg || "Civil",
   section: "",
@@ -40,6 +42,14 @@ const emptyDraft = (pkg: string) => ({
   gfcQty: 0,
   achievedQty: 0,
 });
+
+/** Keep BOQ numbers readable — trim long float tails. */
+export function formatQty(n: number | null | undefined, digits = 3): string {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "0";
+  const fixed = Number(v.toFixed(digits));
+  return String(fixed);
+}
 
 function CellInput({
   value,
@@ -58,16 +68,235 @@ function CellInput({
     <input
       type={type}
       disabled={disabled}
-      defaultValue={String(value ?? "")}
+      defaultValue={type === "number" ? formatQty(Number(value) || 0) : String(value ?? "")}
       className={`boq-cell-input ${className}`}
+      step={type === "number" ? "any" : undefined}
       onBlur={(e) => {
         const next = e.target.value;
-        if (next !== String(value ?? "")) onCommit(next);
+        const prev = type === "number" ? formatQty(Number(value) || 0) : String(value ?? "");
+        if (next !== prev) onCommit(next);
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
     />
+  );
+}
+
+function lineToDraft(line: MonLine): Draft {
+  return {
+    packageName: line.packageName || "Civil",
+    section: line.section || "",
+    itemNo: line.itemNo || "",
+    description: line.description || "",
+    uom: line.uom || "",
+    rate: Number(line.rate) || 0,
+    boqQty: Number(line.boqQty) || 0,
+    extraQty: Number(line.extraQty) || 0,
+    gfcQty: Number(line.gfcQty) || 0,
+    achievedQty: Number(line.achievedQty) || 0,
+  };
+}
+
+function EditLineModal({
+  open,
+  title,
+  draft,
+  packages,
+  canFullEdit,
+  busy,
+  error,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  title: string;
+  draft: Draft;
+  packages: string[];
+  canFullEdit: boolean;
+  busy?: boolean;
+  error?: string;
+  onChange: (d: Draft) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (open) panelRef.current?.querySelector<HTMLElement>("input,textarea,select,button")?.focus();
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] bg-ink/45 flex items-end sm:items-center justify-center p-3"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={panelRef}
+        className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-xl border border-line bg-paper shadow-2xl"
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-line bg-paper">
+          <div>
+            <h2 id={titleId} className="font-display text-xl text-ink">
+              {title}
+            </h2>
+            <p className="text-xs text-steel-muted mt-1">Edit description, rates, and quantities</p>
+          </div>
+          <Button type="button" variant="ghost" className="!px-2 !py-1 !text-xs" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {canFullEdit && (
+            <>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                Package
+                <Select
+                  className="mt-1"
+                  value={draft.packageName || ""}
+                  onChange={(e) => onChange({ ...draft, packageName: e.target.value })}
+                >
+                  {(packages.length ? packages : ["Civil"]).map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                Section
+                <Input
+                  className="mt-1"
+                  value={draft.section || ""}
+                  onChange={(e) => onChange({ ...draft, section: e.target.value })}
+                  placeholder="SECTION A — EARTH WORK"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                  Item no
+                  <Input
+                    className="mt-1"
+                    value={draft.itemNo || ""}
+                    onChange={(e) => onChange({ ...draft, itemNo: e.target.value })}
+                  />
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                  UOM
+                  <Input
+                    className="mt-1"
+                    value={draft.uom || ""}
+                    onChange={(e) => onChange({ ...draft, uom: e.target.value })}
+                  />
+                </label>
+              </div>
+            </>
+          )}
+
+          <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+            Description
+            {canFullEdit ? (
+              <TextArea
+                className="mt-1 !min-h-[7rem]"
+                rows={5}
+                value={draft.description || ""}
+                onChange={(e) => onChange({ ...draft, description: e.target.value })}
+                placeholder="Full BOQ description…"
+              />
+            ) : (
+              <p className="mt-1 text-sm text-ink font-medium normal-case tracking-normal leading-relaxed whitespace-pre-wrap">
+                {draft.description || "—"}
+              </p>
+            )}
+          </label>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {canFullEdit && (
+              <>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                  Rate
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={String(draft.rate ?? "")}
+                    onChange={(e) => onChange({ ...draft, rate: Number(e.target.value) })}
+                  />
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                  BOQ qty
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={String(draft.boqQty ?? "")}
+                    onChange={(e) => onChange({ ...draft, boqQty: Number(e.target.value) })}
+                  />
+                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                  Extra qty
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    step="any"
+                    value={String(draft.extraQty ?? "")}
+                    onChange={(e) => onChange({ ...draft, extraQty: Number(e.target.value) })}
+                  />
+                </label>
+              </>
+            )}
+            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              GFC qty
+              <Input
+                className="mt-1"
+                type="number"
+                step="any"
+                value={String(draft.gfcQty ?? "")}
+                onChange={(e) => onChange({ ...draft, gfcQty: Number(e.target.value) })}
+              />
+            </label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              Achieved qty
+              <Input
+                className="mt-1"
+                type="number"
+                step="any"
+                value={String(draft.achievedQty ?? "")}
+                onChange={(e) => onChange({ ...draft, achievedQty: Number(e.target.value) })}
+              />
+            </label>
+          </div>
+
+          {error && <p className="text-sm text-danger">{error}</p>}
+
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button type="button" disabled={busy} onClick={onSave}>
+              {busy ? "Saving…" : "Save line"}
+            </Button>
+            <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -84,6 +313,10 @@ export function BoqMonitoringEditor({
   const [msg, setMsg] = useState("");
   const [draft, setDraft] = useState(() => emptyDraft(packages[0] || "Civil"));
   const [adding, setAdding] = useState(false);
+  const [editLine, setEditLine] = useState<MonLine | null>(null);
+  const [editDraft, setEditDraft] = useState<Draft>(() => emptyDraft(packages[0] || "Civil"));
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
   const canTouch = canFullEdit || canSiteEdit;
 
   const grouped = useMemo(() => {
@@ -176,7 +409,53 @@ export function BoqMonitoringEditor({
     }
   }
 
-  const colSpan = canFullEdit ? 12 : 11;
+  function openEdit(line: MonLine) {
+    setEditLine(line);
+    setEditDraft(lineToDraft(line));
+    setEditError("");
+  }
+
+  async function saveEdit() {
+    if (!editLine) return;
+    if (canFullEdit && !editDraft.description?.trim()) {
+      setEditError("Description is required");
+      return;
+    }
+    setEditBusy(true);
+    setEditError("");
+    try {
+      const patch: Record<string, unknown> = {
+        gfcQty: Number(editDraft.gfcQty || 0),
+        achievedQty: Number(editDraft.achievedQty || 0),
+      };
+      if (canFullEdit) {
+        Object.assign(patch, {
+          packageName: editDraft.packageName || "Civil",
+          section: editDraft.section || null,
+          itemNo: editDraft.itemNo || null,
+          description: editDraft.description,
+          uom: editDraft.uom || null,
+          rate: Number(editDraft.rate || 0),
+          boqQty: Number(editDraft.boqQty || 0),
+          extraQty: Number(editDraft.extraQty || 0),
+        });
+      }
+      await api(`/api/cost/monitoring/${editLine.id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(patch),
+      });
+      setEditLine(null);
+      onChanged();
+      setMsg("Line updated");
+    } catch (e: any) {
+      setEditError(e?.message || "Save failed");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  const colSpan = canTouch ? 12 : 11;
 
   return (
     <div className="space-y-4">
@@ -212,32 +491,37 @@ export function BoqMonitoringEditor({
               value={draft.uom || ""}
               onChange={(e) => setDraft({ ...draft, uom: e.target.value })}
             />
-            <Input
-              className="sm:col-span-2"
+            <TextArea
+              className="sm:col-span-2 lg:col-span-4 !min-h-[4.5rem]"
+              rows={3}
               placeholder="Description"
               value={draft.description || ""}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
             <Input
               type="number"
+              step="any"
               placeholder="Rate"
               value={String(draft.rate ?? "")}
               onChange={(e) => setDraft({ ...draft, rate: Number(e.target.value) })}
             />
             <Input
               type="number"
+              step="any"
               placeholder="BOQ qty"
               value={String(draft.boqQty ?? "")}
               onChange={(e) => setDraft({ ...draft, boqQty: Number(e.target.value) })}
             />
             <Input
               type="number"
+              step="any"
               placeholder="Extra qty"
               value={String(draft.extraQty ?? "")}
               onChange={(e) => setDraft({ ...draft, extraQty: Number(e.target.value) })}
             />
             <Input
               type="number"
+              step="any"
               placeholder="GFC qty"
               value={String(draft.gfcQty ?? "")}
               onChange={(e) => setDraft({ ...draft, gfcQty: Number(e.target.value) })}
@@ -256,7 +540,7 @@ export function BoqMonitoringEditor({
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
             {rows.length} lines · {grouped.length} sections
-            {canTouch ? " · blur a cell to save" : ""}
+            {canTouch ? " · use Edit for full description" : ""}
           </span>
         </div>
         <div className="sheet-register__scroll">
@@ -265,16 +549,16 @@ export function BoqMonitoringEditor({
               <tr>
                 <th className="sticky-col">Package</th>
                 <th>Item</th>
-                <th className="wrap">Description</th>
+                <th className="boq-desc-col">Description</th>
                 <th>UOM</th>
-                <th>Rate</th>
-                <th>BOQ</th>
-                <th>Extra</th>
-                <th>GFC</th>
-                <th>Achieved</th>
-                <th>Excess</th>
-                <th>Saving</th>
-                {canFullEdit && <th />}
+                <th className="num">Rate</th>
+                <th className="num">BOQ</th>
+                <th className="num">Extra</th>
+                <th className="num">GFC</th>
+                <th className="num">Achieved</th>
+                <th className="num">Excess</th>
+                <th className="num">Saving</th>
+                {canTouch && <th className="boq-actions-col">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -298,123 +582,43 @@ export function BoqMonitoringEditor({
                     const busy = savingId === b.id;
                     return (
                       <tr key={b.id} className={busy ? "opacity-60" : undefined}>
-                        <td className="sticky-col">
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-pkg-${b.packageName}`}
-                              value={b.packageName}
-                              onCommit={(v) => void patchLine(b.id, { packageName: v })}
-                            />
-                          ) : (
-                            b.packageName
-                          )}
+                        <td className="sticky-col">{b.packageName}</td>
+                        <td className="whitespace-nowrap">{b.itemNo ?? "—"}</td>
+                        <td className="boq-desc-col">
+                          <div className="boq-desc" title={b.description}>
+                            {b.description || "—"}
+                          </div>
                         </td>
-                        <td>
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-item-${b.itemNo}`}
-                              value={b.itemNo}
-                              onCommit={(v) => void patchLine(b.id, { itemNo: v || null })}
-                            />
-                          ) : (
-                            b.itemNo ?? "—"
-                          )}
-                        </td>
-                        <td className="wrap">
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-desc-${b.description}`}
-                              value={b.description}
-                              className="min-w-[180px]"
-                              onCommit={(v) => void patchLine(b.id, { description: v })}
-                            />
-                          ) : (
-                            b.description
-                          )}
-                        </td>
-                        <td>
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-uom-${b.uom}`}
-                              value={b.uom}
-                              onCommit={(v) => void patchLine(b.id, { uom: v || null })}
-                            />
-                          ) : (
-                            b.uom ?? "—"
-                          )}
-                        </td>
-                        <td>
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-rate-${b.rate}`}
-                              type="number"
-                              value={b.rate}
-                              onCommit={(v) => void patchLine(b.id, { rate: Number(v) || 0 })}
-                            />
-                          ) : (
-                            b.rate
-                          )}
-                        </td>
-                        <td>
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-boq-${b.boqQty}`}
-                              type="number"
-                              value={b.boqQty}
-                              onCommit={(v) => void patchLine(b.id, { boqQty: Number(v) || 0 })}
-                            />
-                          ) : (
-                            b.boqQty
-                          )}
-                        </td>
-                        <td>
-                          {canFullEdit ? (
-                            <CellInput
-                              key={`${b.id}-extra-${b.extraQty}`}
-                              type="number"
-                              value={b.extraQty}
-                              onCommit={(v) => void patchLine(b.id, { extraQty: Number(v) || 0 })}
-                            />
-                          ) : (
-                            b.extraQty
-                          )}
-                        </td>
-                        <td>
-                          {canTouch ? (
-                            <CellInput
-                              key={`${b.id}-gfc-${b.gfcQty}`}
-                              type="number"
-                              value={b.gfcQty}
-                              onCommit={(v) => void patchLine(b.id, { gfcQty: Number(v) || 0 })}
-                            />
-                          ) : (
-                            b.gfcQty
-                          )}
-                        </td>
-                        <td>
-                          {canTouch ? (
-                            <CellInput
-                              key={`${b.id}-ach-${b.achievedQty}`}
-                              type="number"
-                              value={b.achievedQty}
-                              onCommit={(v) => void patchLine(b.id, { achievedQty: Number(v) || 0 })}
-                            />
-                          ) : (
-                            b.achievedQty
-                          )}
-                        </td>
-                        <td>{b.excessQty}</td>
-                        <td>{b.savingQty}</td>
-                        {canFullEdit && (
-                          <td>
-                            <button
-                              type="button"
-                              className="text-xs font-semibold text-red-600 hover:underline"
-                              disabled={busy}
-                              onClick={() => void removeLine(b.id)}
-                            >
-                              Del
-                            </button>
+                        <td>{b.uom ?? "—"}</td>
+                        <td className="num">{formatQty(b.rate)}</td>
+                        <td className="num">{formatQty(b.boqQty)}</td>
+                        <td className="num">{formatQty(b.extraQty)}</td>
+                        <td className="num">{formatQty(b.gfcQty)}</td>
+                        <td className="num">{formatQty(b.achievedQty)}</td>
+                        <td className="num">{formatQty(b.excessQty)}</td>
+                        <td className="num">{formatQty(b.savingQty)}</td>
+                        {canTouch && (
+                          <td className="boq-actions-col">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="boq-edit-btn"
+                                disabled={busy}
+                                onClick={() => openEdit(b)}
+                              >
+                                Edit
+                              </button>
+                              {canFullEdit && (
+                                <button
+                                  type="button"
+                                  className="text-xs font-semibold text-red-600 hover:underline"
+                                  disabled={busy}
+                                  onClick={() => void removeLine(b.id)}
+                                >
+                                  Del
+                                </button>
+                              )}
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -433,6 +637,19 @@ export function BoqMonitoringEditor({
           </table>
         </div>
       </div>
+
+      <EditLineModal
+        open={!!editLine}
+        title={editLine ? `Edit line ${editLine.itemNo || ""}`.trim() : "Edit line"}
+        draft={editDraft}
+        packages={packages}
+        canFullEdit={canFullEdit}
+        busy={editBusy}
+        error={editError}
+        onChange={setEditDraft}
+        onClose={() => setEditLine(null)}
+        onSave={() => void saveEdit()}
+      />
     </div>
   );
 }

@@ -126,27 +126,22 @@ export default function ProjectToolsLayout() {
 
   const moduleLabel = TOP_MODULES.find((m) => m.key === activeMod)?.label || "Tools";
   const modMeta = activeMod !== "home" ? MODULE_META[activeMod as WorkspaceKey] : null;
-  const accent = modMeta?.accent || "#3D4450";
-  const soft = modMeta?.soft || "#F0F1F2";
+  /** Brand teal/green is the base theme; modules override with their accent. */
+  const accent = modMeta?.accent || "#0B6A78";
+  const soft = modMeta?.soft || "#E6F4F6";
   const toolLabel =
     stripItems.find((t) => isToolActive(t, location.pathname, location.search, id))?.label ||
     (activeTool === "hub" ? `${moduleLabel} hub` : moduleLabel);
 
   useEffect(() => {
-    const brand = modMeta?.accent || "#0B6A78";
-    const softBg = modMeta?.soft || "#E6F4F6";
-    applyModuleAccent(brand, softBg);
-  }, [accent, soft, modMeta]);
+    applyModuleAccent(accent, soft);
+  }, [accent, soft]);
 
   useEffect(() => {
-    const reapply = () => {
-      const brand = modMeta?.accent || "#0B6A78";
-      const softBg = modMeta?.soft || "#E6F4F6";
-      applyModuleAccent(brand, softBg);
-    };
+    const reapply = () => applyModuleAccent(accent, soft);
     window.addEventListener(MODULE_THEME_EVENT, reapply);
     return () => window.removeEventListener(MODULE_THEME_EVENT, reapply);
-  }, [modMeta]);
+  }, [accent, soft]);
 
   useEffect(() => {
     return () => clearModuleAccent();

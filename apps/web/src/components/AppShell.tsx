@@ -16,6 +16,8 @@ import {
 import {
   WORKSPACE_PROJECT_KEY,
   WORKSPACES,
+  MODULE_META,
+  getActiveWorkspace,
   resolveStoredProjectId,
   setActiveWorkspace,
   type WorkspaceKey,
@@ -23,12 +25,27 @@ import {
 import { api } from "../api";
 import {
   applyModuleAccent,
+  clearModuleAccent,
   getColorMode,
   notifyModuleTheme,
   SIDEBAR_HIDDEN_KEY,
   toggleColorMode,
   type ColorMode,
 } from "../themes";
+
+const BASE_ACCENT = "#0B6A78";
+const BASE_SOFT = "#E6F4F6";
+
+function moduleKeyFromPath(pathname: string): WorkspaceKey | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== "projects" || !parts[1]) return null;
+  const tool = parts[2] || "";
+  if (tool === "hub" && parts[3] && MODULE_META[parts[3] as WorkspaceKey]) return parts[3] as WorkspaceKey;
+  const stored = getActiveWorkspace();
+  if (stored && MODULE_META[stored]) return stored;
+  if (tool && MODULE_META[tool as WorkspaceKey]) return tool as WorkspaceKey;
+  return null;
+}
 
 const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[]; end?: boolean }[] = [
   {
@@ -293,6 +310,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setDrawerOpen(false);
   }, [location.pathname]);
+
+  /** Keep left nav + top bar accent in sync with the open module (green base). */
+  useEffect(() => {
+    if (!inProject) {
+      clearModuleAccent();
+      return;
+    }
+    const key = moduleKeyFromPath(location.pathname);
+    if (key && MODULE_META[key]) {
+      applyModuleAccent(MODULE_META[key].accent, MODULE_META[key].soft);
+    } else {
+      applyModuleAccent(BASE_ACCENT, BASE_SOFT);
+    }
+  }, [location.pathname, inProject]);
 
   useEffect(() => {
     try {
