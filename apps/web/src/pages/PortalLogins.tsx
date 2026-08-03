@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -29,14 +29,16 @@ export type PortalConfig = {
 };
 
 const H = {
-  plan: { src: "/heroes/site-01.jpg", w: 2400, h: 1600, focus: "48% 40%", label: "Planning desk" },
-  eng: { src: "/heroes/site-05.jpg", w: 2400, h: 1600, focus: "50% 35%", label: "Engineering review" },
-  site: { src: "/heroes/site-03.jpg", w: 2400, h: 1600, focus: "50% 42%", label: "Site execution" },
-  field: { src: "/heroes/site-04.jpg", w: 2400, h: 1590, focus: "52% 40%", label: "Field work" },
-  struct: { src: "/heroes/site-07.jpg", w: 2400, h: 1600, focus: "50% 42%", label: "Structure rising" },
-  /** Blueprint / CAD-style planning (not coding) */
-  cad: { src: "/heroes/site-02.jpg", w: 2400, h: 1350, focus: "50% 42%", label: "Drawings & CAD" },
+  crane: { src: "/heroes/viz-crane.jpg", w: 1920, h: 1280, focus: "55% 40%", label: "Tower crane" },
+  frame: { src: "/heroes/viz-frame.jpg", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
+  cad: { src: "/heroes/viz-cad.jpg", w: 1920, h: 1280, focus: "50% 45%", label: "BIM overlay" },
+  lift: { src: "/heroes/viz-lift.jpg", w: 1920, h: 1280, focus: "52% 40%", label: "Facade lift" },
 } as const;
+
+const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.cad, H.lift];
+const VIZ_SITE: HeroSlide[] = [H.frame, H.lift, H.crane, H.cad];
+const VIZ_PLAN: HeroSlide[] = [H.cad, H.crane, H.frame, H.lift];
+const VIZ_FIELD: HeroSlide[] = [H.lift, H.frame, H.crane, H.cad];
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   master: {
@@ -54,7 +56,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/master",
     workspaceKey: null,
     group: "master",
-    heroes: [H.plan, H.eng, H.cad],
+    heroes: VIZ_PLAN,
     policies: [
       "Enable only the modules each project needs",
       "Directory parties before first RFI or meeting",
@@ -79,7 +81,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/dashboard",
     workspaceKey: null,
     group: "role",
-    heroes: [H.plan, H.eng, H.cad, H.site],
+    heroes: VIZ_SET,
     policies: [
       "One project spine for office, site, and contractors",
       "Publish GFC before QI and site checklist fills",
@@ -106,7 +108,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "field",
     group: "role",
-    heroes: [H.site, H.field, H.struct, H.eng],
+    heroes: VIZ_SITE,
     policies: [
       "Log manpower and weather before leave time",
       "Attach photos to checklist items as required",
@@ -131,7 +133,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     icon: "EM",
     landingPath: "/dashboard",
     group: "role",
-    heroes: [H.eng, H.plan, H.cad],
+    heroes: VIZ_PLAN,
     policies: [
       "Work only on projects you are assigned to",
       "Revision control before marking drawings published",
@@ -156,7 +158,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "drawings",
     group: "role",
-    heroes: [H.field, H.site, H.struct, H.eng],
+    heroes: VIZ_FIELD,
     policies: [
       "Respond to inspection requests with checklist + photos",
       "Use only published GFC for execution",
@@ -181,7 +183,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/dashboard",
     workspaceKey: "progress",
     group: "role",
-    heroes: [H.plan, H.site, H.eng, H.cad],
+    heroes: VIZ_SET,
     policies: [
       "View published drawings — upload stays with PMC / design",
       "Civil packs: schedule, procurement, S-curve when shared",
@@ -207,7 +209,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "drawings",
     group: "module",
-    heroes: [H.cad, H.eng, H.plan],
+    heroes: VIZ_PLAN,
     policies: [
       "Drawing Check Master unlocks before upload",
       "Revisions R0–R5 with audit who / when",
@@ -232,7 +234,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "quality",
     group: "module",
-    heroes: [H.eng, H.site, H.plan],
+    heroes: VIZ_SITE,
     policies: [
       "NCR / CAR is its own tool — not buried in QI",
       "Cube register tracks cast / strength / result",
@@ -257,7 +259,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "comms",
     group: "module",
-    heroes: [H.cad, H.plan, H.eng],
+    heroes: VIZ_PLAN,
     policies: [
       "Matrix parties before first meeting or RFI",
       "Agenda generated before MoM starts",
@@ -282,7 +284,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/workspace",
     workspaceKey: "field",
     group: "module",
-    heroes: [H.site, H.field, H.struct],
+    heroes: VIZ_FIELD,
     policies: [
       "Day log ≠ HRMS personal diary",
       "Manpower / equipment lines feed DPR",
@@ -305,11 +307,18 @@ export function consumeLoginLanding() {
 }
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
-const MODULE_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["drawings", "quality", "comms", "field"];
 
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
   return shortLabel;
+}
+
+function chipOnStyle(tone: string): CSSProperties {
+  return {
+    borderColor: tone,
+    background: `${tone}18`,
+    color: tone,
+  };
 }
 
 function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
@@ -325,7 +334,7 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
     setError("");
   }, [cfg.key, cfg.demoEmail]);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
@@ -390,9 +399,9 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
 function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies: string[]; trade: string }) {
   const [slide, setSlide] = useState(0);
   const [policy, setPolicy] = useState(0);
-  const slideKey = heroes.map((s) => s.src).join("|") || H.plan.src;
+  const slideKey = heroes.map((s) => s.src).join("|") || H.crane.src;
   const policyKey = policies.join("|");
-  const slides = heroes.length ? heroes : [H.plan];
+  const slides = heroes.length ? heroes : [H.crane];
   const lines = policies.length ? policies : ["Plan · execute · verify on one spine"];
 
   useEffect(() => {
@@ -472,11 +481,9 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
 function PortalPicker({
   active,
   onPick,
-  showModules,
 }: {
   active: keyof typeof PORTAL_LOGINS;
   onPick?: (key: keyof typeof PORTAL_LOGINS) => void;
-  showModules?: boolean;
 }) {
   return (
     <div className="auth-portals">
@@ -491,7 +498,7 @@ function PortalPicker({
                 key={key}
                 type="button"
                 className={`auth-portals__chip ${on ? "is-on" : ""}`}
-                style={on ? { borderColor: p.tone, background: `${p.tone}22`, color: "#e8f7f5" } : undefined}
+                style={on ? chipOnStyle(p.tone) : undefined}
                 onClick={() => onPick(key)}
               >
                 {portalDisplayName(key, p.shortLabel)}
@@ -501,30 +508,15 @@ function PortalPicker({
           return (
             <Link
               key={key}
-              to={`/login/${key === "vendor" ? "vendor" : key}`}
+              to={`/login/${key}`}
               className={`auth-portals__chip ${on ? "is-on" : ""}`}
-              style={on ? { borderColor: p.tone, background: `${p.tone}22`, color: "#e8f7f5" } : undefined}
+              style={on ? chipOnStyle(p.tone) : undefined}
             >
               {portalDisplayName(key, p.shortLabel)}
             </Link>
           );
         })}
       </div>
-      {showModules && (
-        <>
-          <p className="auth-portals__label auth-portals__label--sub">Or open a module desk</p>
-          <div className="auth-portals__row">
-            {MODULE_PORTALS.map((key) => {
-              const p = PORTAL_LOGINS[key];
-              return (
-                <Link key={key} to={`/login/${key}`} className="auth-portals__chip auth-portals__chip--mod">
-                  {p.shortLabel}
-                </Link>
-              );
-            })}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -533,16 +525,14 @@ function AuthCard({
   active,
   onChange,
   backLink,
-  showModules,
 }: {
   active: keyof typeof PORTAL_LOGINS;
   onChange?: (key: keyof typeof PORTAL_LOGINS) => void;
   backLink?: boolean;
-  showModules?: boolean;
 }) {
   const cfg = PORTAL_LOGINS[active];
   return (
-    <div className="auth-card">
+    <div className="auth-card" key={cfg.key}>
       <img src="/logo.png" alt="शरणम्" className="auth-card__logo" width={420} height={205} />
       <p className="auth-card__firm">Project Management Consultants</p>
 
@@ -555,7 +545,7 @@ function AuthCard({
         </Link>
       )}
 
-      <PortalPicker active={active} onPick={onChange} showModules={showModules} />
+      <PortalPicker active={active} onPick={onChange} />
 
       <PortalSignInForm cfg={cfg} />
     </div>
@@ -572,13 +562,13 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     <div className="auth-shell">
       <HeroStage heroes={cfg.heroes} policies={cfg.policies} trade={cfg.headline} />
       <section className="auth-side">
-        <AuthCard active={portalKey} backLink showModules={cfg.group === "role" || cfg.group === "master"} />
+        <AuthCard active={portalKey} backLink />
       </section>
     </div>
   );
 }
 
-/** Hub login — pick role / module, then sign in; each portal has its own landing route */
+/** Hub login — pick user type, then sign in */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   const [active, setActive] = useState<keyof typeof PORTAL_LOGINS>("office");
@@ -588,9 +578,9 @@ export function LoginHubPage() {
 
   return (
     <div className="auth-shell">
-      <HeroStage heroes={cfg.heroes} policies={cfg.policies} trade={cfg.headline} />
+      <HeroStage key={cfg.key} heroes={cfg.heroes} policies={cfg.policies} trade={cfg.headline} />
       <section className="auth-side">
-        <AuthCard active={active} onChange={setActive} showModules />
+        <AuthCard active={active} onChange={setActive} />
       </section>
     </div>
   );
