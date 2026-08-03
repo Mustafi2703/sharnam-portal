@@ -16,6 +16,7 @@ import {
 import {
   WORKSPACE_PROJECT_KEY,
   WORKSPACES,
+  resolveStoredProjectId,
   setActiveWorkspace,
   type WorkspaceKey,
 } from "../workspaces";
@@ -280,14 +281,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     api<Proj[]>("/api/projects", { token })
       .then((list) => {
         setProjects(list);
-        const stored = localStorage.getItem(WORKSPACE_PROJECT_KEY);
-        if (stored && list.some((p) => p.id === stored)) setProjectId(stored);
-        else if (list[0] && !stored) {
-          setProjectId(list[0].id);
-          localStorage.setItem(WORKSPACE_PROJECT_KEY, list[0].id);
-        }
+        setProjectId(resolveStoredProjectId(list));
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setProjects([]);
+      });
   }, [token]);
 
   function selectProject(id: string) {

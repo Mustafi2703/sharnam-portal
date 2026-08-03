@@ -6,7 +6,7 @@ import { Badge, Button, Card, PageHero } from "../components/ui";
 import { PieChart } from "../components/PieChart";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { ModuleIcon, type ModuleIconKey } from "../components/icons";
-import { WORKSPACE_PROJECT_KEY } from "../workspaces";
+import { WORKSPACE_PROJECT_KEY, resolveStoredProjectId } from "../workspaces";
 
 type Project = { id: string; code: string; name: string; status: string };
 type Tab = "rfis" | "comms" | "logs" | "safety" | "analytics";
@@ -44,14 +44,13 @@ export default function DashboardPage() {
     api<Project[]>("/api/projects", { token })
       .then((list) => {
         setProjects(list);
-        const stored = localStorage.getItem(WORKSPACE_PROJECT_KEY);
-        if (stored && list.some((p) => p.id === stored)) setProjectId(stored);
-        else if (list[0]) {
-          setProjectId(list[0].id);
-          localStorage.setItem(WORKSPACE_PROJECT_KEY, list[0].id);
-        }
+        setProjectId(resolveStoredProjectId(list));
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setProjects([]);
+        setBusy(false);
+      });
   }, [token]);
 
   useEffect(() => {

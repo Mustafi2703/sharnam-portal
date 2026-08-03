@@ -5,9 +5,9 @@ import { useAuth } from "../auth";
 import { Button, Card, PageHero } from "../components/ui";
 import { ModuleIcon, type ModuleIconKey } from "../components/icons";
 import {
-  MODULE_META,
   WORKSPACES,
   WORKSPACE_PROJECT_KEY,
+  resolveStoredProjectId,
   setActiveWorkspace,
   type WorkspaceKey,
 } from "../workspaces";
@@ -22,15 +22,12 @@ export default function WorkspacePage() {
   const [projectId, setProjectId] = useState("");
 
   useEffect(() => {
-    api<Project[]>("/api/projects", { token }).then((list) => {
-      setProjects(list);
-      const stored = localStorage.getItem(WORKSPACE_PROJECT_KEY);
-      if (stored && list.some((p) => p.id === stored)) setProjectId(stored);
-      else if (list[0]) {
-        setProjectId(list[0].id);
-        localStorage.setItem(WORKSPACE_PROJECT_KEY, list[0].id);
-      }
-    });
+    api<Project[]>("/api/projects", { token })
+      .then((list) => {
+        setProjects(list);
+        setProjectId(resolveStoredProjectId(list));
+      })
+      .catch(() => setProjects([]));
   }, [token]);
 
   const selected = projects.find((p) => p.id === projectId);
@@ -78,40 +75,31 @@ export default function WorkspacePage() {
         </select>
       </Card>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {visibleWorkspaces.map((w) => {
-          const soft = MODULE_META[w.key]?.soft || "var(--color-brand-soft)";
-          const glow = MODULE_META[w.key]?.glow || "rgba(11,106,120,0.25)";
-          return (
-            <button
-              key={w.key}
-              type="button"
-              disabled={!selected}
-              onClick={() => enterWorkspace(w.key, w.path)}
-              className="module-card group"
-              style={{
-                borderLeftColor: w.accent,
-                background: `linear-gradient(135deg, ${soft} 0%, var(--color-paper) 58%)`,
-              }}
-            >
-              <div className="flex items-start gap-3">
-                <span
-                  className="h-11 w-11 rounded-xl grid place-items-center text-white shrink-0"
-                  style={{ background: w.accent, boxShadow: `0 10px 22px ${glow}` }}
-                >
-                  <ModuleIcon name={w.key as ModuleIconKey} size={20} className="text-white" />
-                </span>
-                <div className="min-w-0">
-                  <div className="font-display text-lg text-ink group-hover:text-brand">{w.title}</div>
-                  <p className="text-sm text-steel-muted mt-1.5 line-clamp-2 leading-relaxed">{w.desc}</p>
-                </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {visibleWorkspaces.map((w) => (
+          <button
+            key={w.key}
+            type="button"
+            disabled={!selected}
+            onClick={() => enterWorkspace(w.key, w.path)}
+            className="module-card group"
+            style={{ borderLeftColor: w.accent }}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="h-10 w-10 rounded-lg grid place-items-center text-white shrink-0"
+                style={{ background: w.accent }}
+              >
+                <ModuleIcon name={w.key as ModuleIconKey} size={18} className="text-white" />
+              </span>
+              <div className="min-w-0">
+                <div className="font-display text-base text-ink">{w.title}</div>
+                <p className="text-sm text-steel-muted mt-1 line-clamp-2 leading-relaxed">{w.desc}</p>
               </div>
-              <div className="mt-4 text-sm font-semibold" style={{ color: w.accent }}>
-                Enter module →
-              </div>
-            </button>
-          );
-        })}
+            </div>
+            <div className="mt-3 text-sm font-semibold text-brand">Enter module →</div>
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -354,19 +354,19 @@ body {
 }
 
 .module-card {
-  background: white;
+  background: var(--color-paper);
   border: 1px solid var(--color-line);
-  border-radius: 1rem;
-  padding: 1.25rem;
+  border-radius: var(--ui-radius);
+  padding: 1rem 1.1rem;
   text-align: left;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-  box-shadow: 0 2px 8px rgb(15 118 110 / 0.05);
-  border-left: 4px solid #126e82;
+  transition: border-color 0.15s ease;
+  box-shadow: none;
+  border-left: 3px solid #126e82;
 }
 .module-card:hover {
-  border-color: rgb(15 118 110 / 0.5);
-  box-shadow: 0 10px 28px rgb(15 118 110 / 0.12);
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-line));
+  box-shadow: none;
+  transform: none;
 }
 .module-card:disabled {
   opacity: 0.45;
@@ -855,22 +855,16 @@ body {
   padding: 0.15rem 0;
 }
 
-/* ——— Module hub themed hero ——— */
+/* ——— Module hub ——— */
 .module-hub__hero {
   position: relative;
   background: var(--color-paper);
 }
 .module-hub__hero-wash {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 0% 0%, var(--mod-glow, rgba(11, 106, 120, 0.28)), transparent 55%),
-    linear-gradient(135deg, var(--mod-soft, #ccfbf1) 0%, transparent 48%);
-  pointer-events: none;
+  display: none;
 }
 .module-tool-card:hover {
-  border-color: color-mix(in srgb, var(--tool-accent, var(--color-brand)) 45%, var(--color-line));
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--tool-accent, var(--color-brand)) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand) 40%, var(--color-line));
 }
 
 /* ——— Premium auth (login) ——— */
@@ -879,7 +873,7 @@ body {
   max-height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 400px);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
   overflow: hidden;
   background: #0a0d10;
   font-family: "Manrope", var(--font-sans);
@@ -901,16 +895,14 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center center;
+  object-position: center 40%;
   image-rendering: auto;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0);
   opacity: 0;
-  transition: opacity 1s ease;
+  transition: opacity 1.1s ease;
   pointer-events: none;
-  /* Prefer native decode quality over CSS scale blur */
-  will-change: opacity;
 }
 .auth-hero__img.is-active {
   opacity: 1;
@@ -919,48 +911,52 @@ body {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(6, 10, 14, 0.62) 0%, rgba(6, 10, 14, 0.18) 40%, rgba(6, 10, 14, 0.45) 100%),
-    linear-gradient(90deg, rgba(6, 10, 14, 0.08) 0%, rgba(6, 10, 14, 0.5) 92%);
+    linear-gradient(180deg, rgba(4, 8, 12, 0.72) 0%, rgba(4, 8, 12, 0.22) 38%, rgba(4, 8, 12, 0.55) 100%),
+    linear-gradient(90deg, rgba(4, 8, 12, 0.15) 0%, rgba(4, 8, 12, 0.62) 100%);
   pointer-events: none;
 }
 .auth-hero__brand {
   position: absolute;
   z-index: 3;
-  top: clamp(1.25rem, 4vh, 2.5rem);
+  top: clamp(1.25rem, 4vh, 2.75rem);
   left: clamp(1.25rem, 3.5vw, 2.75rem);
   right: clamp(1.25rem, 3.5vw, 2.75rem);
-  max-width: 36rem;
+  max-width: 28rem;
   pointer-events: none;
+}
+.auth-hero__logo {
+  display: block;
+  height: clamp(3.25rem, 8vw, 5.25rem);
+  width: auto;
+  max-width: min(100%, 280px);
+  object-fit: contain;
+  object-position: left center;
+  /* logo.png is teal on black — black drops out on dark hero */
+  mix-blend-mode: screen;
+  filter: contrast(1.05) brightness(1.08);
+  margin: 0 0 0.85rem;
 }
 .auth-hero__name {
   margin: 0;
   font-family: "Sora", var(--font-display);
-  font-size: clamp(2.75rem, 7.5vw, 5.5rem);
+  font-size: clamp(2.35rem, 5.8vw, 4.25rem);
   font-weight: 700;
   line-height: 0.95;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.04em;
   color: #fff;
-  text-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
 }
 .auth-hero__trade {
-  margin: 0.45rem 0 0;
+  margin: 0.4rem 0 0;
   font-family: "Sora", var(--font-display);
-  font-size: clamp(1rem, 2.1vw, 1.45rem);
+  font-size: clamp(0.95rem, 1.8vw, 1.25rem);
   font-weight: 600;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.26em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.9);
 }
 .auth-hero__hi {
-  margin: 0.7rem 0 0;
-  font-family: "Noto Sans Devanagari", "Sora", sans-serif;
-  font-size: clamp(1.05rem, 2vw, 1.35rem);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-  color: rgba(153, 246, 228, 0.95);
-  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  display: none;
 }
 .auth-hero__dots {
   position: absolute;
@@ -968,19 +964,19 @@ body {
   left: 1.25rem;
   bottom: 1.25rem;
   display: flex;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 .auth-hero__dot {
-  width: 1.4rem;
+  width: 1.5rem;
   height: 3px;
   border: 0;
   border-radius: 99px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.3);
   cursor: pointer;
 }
 .auth-hero__dot.is-on {
-  width: 2rem;
+  width: 2.15rem;
   background: #fff;
 }
 
@@ -992,36 +988,44 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0 1.15rem;
-  background: linear-gradient(180deg, #10151b 0%, #0a0d10 100%);
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 1.5rem;
+  background: #0e1318;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
-/* Safe vertical centering — content never clips when it overflows */
 .auth-side::before,
 .auth-side::after {
   content: "";
-  flex: 1 0 1.25rem;
+  flex: 1 0 1.5rem;
   width: 100%;
   pointer-events: none;
 }
 
 .auth-card {
   width: 100%;
-  max-width: 300px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   flex-shrink: 0;
 }
-
+.auth-card__logo {
+  display: block;
+  height: 2.75rem;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+  object-position: left center;
+  mix-blend-mode: screen;
+  margin: 0 0 1.1rem;
+}
 .auth-card__welcome {
   margin: 0;
   font-family: "Sora", var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 650;
   letter-spacing: -0.03em;
   color: #fff;
@@ -1152,26 +1156,33 @@ body {
 @media (max-width: 900px) {
   .auth-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(200px, 36vh) minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 38vh) minmax(0, 1fr);
     height: 100%;
     max-height: 100%;
     overflow: hidden;
   }
   .auth-hero__veil {
     background:
-      linear-gradient(180deg, rgba(10, 13, 16, 0.35) 0%, rgba(10, 13, 16, 0.2) 45%, rgba(10, 13, 16, 0.78) 100%);
+      linear-gradient(180deg, rgba(10, 13, 16, 0.45) 0%, rgba(10, 13, 16, 0.2) 40%, rgba(10, 13, 16, 0.82) 100%);
+  }
+  .auth-hero__logo {
+    height: clamp(2.75rem, 10vw, 3.75rem);
   }
   .auth-hero__name {
-    font-size: clamp(2.35rem, 12vw, 3.4rem);
+    font-size: clamp(2rem, 10vw, 3rem);
   }
   .auth-hero__trade {
-    letter-spacing: 0.22em;
+    letter-spacing: 0.2em;
   }
   .auth-side {
     border-left: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     height: auto;
     max-height: 100%;
+    padding: 0 1.25rem;
+  }
+  .auth-card {
+    max-width: 400px;
   }
 }
 

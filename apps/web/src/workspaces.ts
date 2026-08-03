@@ -326,6 +326,30 @@ export function setActiveWorkspace(key: WorkspaceKey | null) {
   }
 }
 
+/** Keep stored project id in sync with what the API still returns. */
+export function resolveStoredProjectId(list: { id: string }[]): string {
+  try {
+    const stored = localStorage.getItem(WORKSPACE_PROJECT_KEY);
+    if (stored && list.some((p) => p.id === stored)) return stored;
+    if (list[0]) {
+      localStorage.setItem(WORKSPACE_PROJECT_KEY, list[0].id);
+      return list[0].id;
+    }
+    localStorage.removeItem(WORKSPACE_PROJECT_KEY);
+  } catch {
+    /* ignore */
+  }
+  return list[0]?.id || "";
+}
+
+export function clearStoredProjectId() {
+  try {
+    localStorage.removeItem(WORKSPACE_PROJECT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function toolsForWorkspace(key: WorkspaceKey | null): string[] | null {
   if (!key) return null;
   return WORKSPACES.find((w) => w.key === key)?.tools ?? null;

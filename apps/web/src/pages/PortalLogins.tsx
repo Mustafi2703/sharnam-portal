@@ -3,7 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
-import { setActiveWorkspace, type WorkspaceKey } from "../workspaces";
+import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
@@ -241,6 +241,7 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
       });
       try {
         localStorage.setItem(LOGIN_LANDING_KEY, cfg.landingPath || "/dashboard");
+        clearStoredProjectId();
         if (cfg.workspaceKey) setActiveWorkspace(cfg.workspaceKey);
         else setActiveWorkspace(null);
       } catch {
@@ -314,11 +315,17 @@ function HeroStage() {
       </div>
 
       <div className="auth-hero__brand">
+        <img
+          src="/logo.png"
+          alt="शरणम्"
+          className="auth-hero__logo"
+          width={320}
+          height={120}
+          decoding="sync"
+          fetchPriority="high"
+        />
         <p className="auth-hero__name">Sharnam</p>
         <p className="auth-hero__trade">Construction</p>
-        <p className="auth-hero__hi" lang="hi">
-          शरणम्
-        </p>
       </div>
 
       <div className="auth-hero__dots" role="tablist" aria-label="Project photos">
@@ -348,6 +355,7 @@ function AuthCard({
   const cfg = PORTAL_LOGINS[active];
   return (
     <div className="auth-card">
+      <img src="/logo.png" alt="शरणम्" className="auth-card__logo" width={200} height={72} />
       <p className="auth-card__welcome">Sign in</p>
 
       {backLink && (

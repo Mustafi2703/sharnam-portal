@@ -1,5 +1,14 @@
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export async function api<T = unknown>(
   path: string,
   opts: RequestInit & { token?: string | null } = {}
@@ -12,7 +21,9 @@ export async function api<T = unknown>(
 
   const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText || "Request failed");
+  if (!res.ok) {
+    throw new ApiError(data.error || res.statusText || "Request failed", res.status);
+  }
   return data as T;
 }
 
