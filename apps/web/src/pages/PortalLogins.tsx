@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -198,13 +198,13 @@ export function consumeLoginLanding() {
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
 
-/** High-res project / building slides */
+/** High-res project / building slides — focus points keep subjects centered */
 const HERO_SLIDES = [
-  { src: "/heroes/site-02.jpg", w: 2400, h: 1600 },
-  { src: "/heroes/site-03.jpg", w: 2400, h: 1590 },
-  { src: "/heroes/site-04.jpg", w: 2400, h: 1600 },
-  { src: "/heroes/site-01.jpg", w: 2400, h: 1350 },
-  { src: "/hero-login.jpg", w: 1920, h: 1080 },
+  { src: "/heroes/site-02.jpg", w: 2400, h: 1600, focus: "52% 42%", label: "Site works" },
+  { src: "/heroes/site-03.jpg", w: 2400, h: 1590, focus: "48% 38%", label: "Structure" },
+  { src: "/heroes/site-04.jpg", w: 2400, h: 1600, focus: "50% 45%", label: "Facade" },
+  { src: "/heroes/site-01.jpg", w: 2400, h: 1350, focus: "50% 40%", label: "Campus" },
+  { src: "/hero-login.jpg", w: 1920, h: 1080, focus: "45% 35%", label: "Skyline" },
 ];
 
 const HERO_POLICIES = [
@@ -215,6 +215,8 @@ const HERO_POLICIES = [
   "Client clarity on concerns, RFIs and progress",
   "Cost, cashflow and measurement on one spine",
 ];
+
+const HERO_MS = 7000;
 
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
@@ -299,37 +301,103 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
 function HeroStage() {
   const [slide, setSlide] = useState(0);
   const [policy, setPolicy] = useState(0);
+  const [dir, setDir] = useState<"next" | "prev">("next");
+  const [paused, setPaused] = useState(false);
+  const [progressKey, setProgressKey] = useState(0);
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  const touchX = useRef<number | null>(null);
+
+  const goTo = (index: number, direction: "next" | "prev" = "next") => {
+    setDir(direction);
+    setSlide((index + HERO_SLIDES.length) % HERO_SLIDES.length);
+    setProgressKey((k) => k + 1);
+  };
 
   useEffect(() => {
-    const t = window.setInterval(() => setSlide((s) => (s + 1) % HERO_SLIDES.length), 6500);
+    if (paused) return;
+    const t = window.setInterval(() => {
+      setDir("next");
+      setSlide((s) => (s + 1) % HERO_SLIDES.length);
+      setProgressKey((k) => k + 1);
+    }, HERO_MS);
     return () => window.clearInterval(t);
-  }, []);
+  }, [paused, progressKey]);
 
   useEffect(() => {
     const t = window.setInterval(() => setPolicy((p) => (p + 1) % HERO_POLICIES.length), 3800);
     return () => window.clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "ArrowRight") goTo(slide + 1, "next");
+      if (e.key === "ArrowLeft") goTo(slide - 1, "prev");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [slide]);
+
+  function onMove(e: React.MouseEvent<HTMLElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width - 0.5) * 14;
+    const y = ((e.clientY - r.top) / r.height - 0.5) * 10;
+    setParallax({ x, y });
+  }
+
   return (
-    <aside className="auth-hero">
-      <div className="auth-hero__stage">
-        {HERO_SLIDES.map((s, i) => (
-          <img
-            key={s.src}
-            src={s.src}
-            alt=""
-            width={s.w}
-            height={s.h}
-            sizes="(max-width: 900px) 100vw, 58vw"
-            className={`auth-hero__img ${i === slide ? "is-active" : ""}`}
-            decoding={i === 0 ? "sync" : "async"}
-            fetchPriority={i === 0 ? "high" : "low"}
-            loading={i === 0 ? "eager" : "lazy"}
-          />
-        ))}
-        <div className="auth-hero__veil" aria-hidden />
-        <div className="auth-hero__grain" aria-hidden />
+    <aside
+      className={`auth-hero ${paused ? "is-paused" : ""}`}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => {
+        setPaused(false);
+        setParallax({ x: 0, y: 0 });
+      }}
+      onMouseMove={onMove}
+      onTouchStart={(e) => {
+        touchX.current = e.changedTouches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(e) => {
+        const start = touchX.current;
+        const end = e.changedTouches[0]?.clientX;
+        touchX.current = null;
+        if (start == null || end == null) return;
+        const d = end - start;
+        if (Math.abs(d) < 48) return;
+        if (d < 0) goTo(slide + 1, "next");
+        else goTo(slide - 1, "prev");
+      }}
+    >
+      <div
+        className="auth-hero__stage"
+        style={{ transform: `translate3d(${parallax.x}px, ${parallax.y}px, 0) scale(1.04)` }}
+      >
+        {HERO_SLIDES.map((s, i) => {
+          const active = i === slide;
+          return (
+            <div
+              key={s.src}
+              className={`auth-hero__frame ${active ? "is-active" : ""} ${active ? `is-${dir}` : ""}`}
+            >
+              <img
+                key={active ? `live-${progressKey}` : s.src}
+                src={s.src}
+                alt={s.label}
+                width={s.w}
+                height={s.h}
+                sizes="(max-width: 900px) 100vw, 58vw"
+                className={`auth-hero__img ${active ? "is-ken" : ""}`}
+                style={{ objectPosition: s.focus }}
+                decoding={i === 0 ? "sync" : "async"}
+                fetchPriority={i === 0 ? "high" : "low"}
+                loading={i === 0 ? "eager" : "lazy"}
+              />
+            </div>
+          );
+        })}
       </div>
+      <div className="auth-hero__veil" aria-hidden />
+      <div className="auth-hero__grain" aria-hidden />
+      <div className="auth-hero__shine" aria-hidden />
 
       <div className="auth-hero__center">
         <img
@@ -354,16 +422,45 @@ function HeroStage() {
         </div>
       </div>
 
-      <div className="auth-hero__dots" role="tablist" aria-label="Project photos">
-        {HERO_SLIDES.map((s, i) => (
-          <button
-            key={s.src}
-            type="button"
-            aria-label={`Photo ${i + 1}`}
-            className={`auth-hero__dot ${i === slide ? "is-on" : ""}`}
-            onClick={() => setSlide(i)}
-          />
-        ))}
+      <button
+        type="button"
+        className="auth-hero__nav auth-hero__nav--prev"
+        aria-label="Previous photo"
+        onClick={() => goTo(slide - 1, "prev")}
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        className="auth-hero__nav auth-hero__nav--next"
+        aria-label="Next photo"
+        onClick={() => goTo(slide + 1, "next")}
+      >
+        ›
+      </button>
+
+      <div className="auth-hero__footer">
+        <p className="auth-hero__caption">
+          <span className="auth-hero__caption-idx">
+            {String(slide + 1).padStart(2, "0")} / {String(HERO_SLIDES.length).padStart(2, "0")}
+          </span>
+          {HERO_SLIDES[slide].label}
+        </p>
+        <div className="auth-hero__dots" role="tablist" aria-label="Project photos">
+          {HERO_SLIDES.map((s, i) => (
+            <button
+              key={s.src}
+              type="button"
+              aria-label={s.label}
+              aria-selected={i === slide}
+              className={`auth-hero__dot ${i === slide ? "is-on" : ""}`}
+              onClick={() => goTo(i, i > slide ? "next" : "prev")}
+            />
+          ))}
+        </div>
+        <div className="auth-hero__progress" aria-hidden>
+          <span key={progressKey} className={`auth-hero__progress-bar ${paused ? "is-paused" : ""}`} />
+        </div>
       </div>
     </aside>
   );
