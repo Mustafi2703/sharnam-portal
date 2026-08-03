@@ -29,10 +29,10 @@ export type PortalConfig = {
 };
 
 const H = {
-  crane: { src: "/heroes/viz-crane.jpg", w: 1920, h: 1280, focus: "55% 40%", label: "Tower crane" },
-  frame: { src: "/heroes/viz-frame.jpg", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
-  cad: { src: "/heroes/viz-cad.jpg", w: 1920, h: 1280, focus: "50% 58%", label: "BIM overlay" },
-  lift: { src: "/heroes/viz-lift.jpg", w: 1920, h: 1280, focus: "48% 38%", label: "Facade lift" },
+  crane: { src: "/heroes/viz-crane.jpg?v=3", w: 1920, h: 1280, focus: "55% 40%", label: "Tower crane" },
+  frame: { src: "/heroes/viz-frame.jpg?v=3", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
+  cad: { src: "/heroes/viz-cad-warm.jpg?v=3", w: 1920, h: 1280, focus: "50% 58%", label: "BIM overlay" },
+  lift: { src: "/heroes/viz-lift-warm.jpg?v=3", w: 1920, h: 1280, focus: "48% 38%", label: "Facade lift" },
 } as const;
 
 const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.lift, H.cad];
