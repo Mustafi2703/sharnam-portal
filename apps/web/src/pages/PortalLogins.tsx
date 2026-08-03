@@ -31,13 +31,13 @@ export type PortalConfig = {
 const H = {
   crane: { src: "/heroes/viz-crane.jpg", w: 1920, h: 1280, focus: "55% 40%", label: "Tower crane" },
   frame: { src: "/heroes/viz-frame.jpg", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
-  cad: { src: "/heroes/viz-cad.jpg", w: 1920, h: 1280, focus: "50% 45%", label: "BIM overlay" },
-  lift: { src: "/heroes/viz-lift.jpg", w: 1920, h: 1280, focus: "52% 40%", label: "Facade lift" },
+  cad: { src: "/heroes/viz-cad.jpg", w: 1920, h: 1280, focus: "50% 58%", label: "BIM overlay" },
+  lift: { src: "/heroes/viz-lift.jpg", w: 1920, h: 1280, focus: "48% 38%", label: "Facade lift" },
 } as const;
 
-const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.cad, H.lift];
+const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.lift, H.cad];
 const VIZ_SITE: HeroSlide[] = [H.frame, H.lift, H.crane, H.cad];
-const VIZ_PLAN: HeroSlide[] = [H.cad, H.crane, H.frame, H.lift];
+const VIZ_PLAN: HeroSlide[] = [H.crane, H.cad, H.frame, H.lift];
 const VIZ_FIELD: HeroSlide[] = [H.lift, H.frame, H.crane, H.cad];
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
@@ -64,6 +64,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "CRM convert → project with packages intact",
       "Access matrix decides who sees Cost vs Field",
       "Seed sheet packs once — then work in the portal",
+      "Toggle Drawings / Quality / Field per project charter",
+      "HRM assign before vendors get package logins",
+      "Module desk landings follow enabled tools only",
+      "Archive closed projects — keep audit readable",
     ],
   },
   office: {
@@ -91,6 +95,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Audit trail on uploads, fills, and approvals",
       "Client sees published packs only",
       "Close open RFIs before weekly pack freeze",
+      "Measurement books lock before payment advice",
+      "Safety NCR and QI NCR never share one register",
+      "Teams meetings only — Matrix parties first",
+      "Email outbox uses project Outlook settings",
     ],
   },
   site: {
@@ -117,6 +125,11 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Hindrance logged the same day it occurs",
       "Safety observations same shift — no next-day backlog",
       "NCR / CAR with location and package",
+      "Day log closes before shift handover",
+      "Equipment idle hours feed the DPR line",
+      "Tag photos to date, zone, and package",
+      "Request for Inspection needs checklist attached",
+      "No fill on superseded revision numbers",
     ],
   },
   employee: {
@@ -141,6 +154,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Coordination issues escalate to Ask when stuck",
       "Keep MoM actions owned and dated",
       "Self-service leave / diary stays in HRMS — not Field day log",
+      "Do not edit client-published packs",
+      "Upload evidence against the named package",
+      "Confirm Drawing Check Master before first upload",
+      "Respond to ball-in-court within the SLA window",
     ],
   },
   vendor: {
@@ -166,6 +183,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Upload evidence against the package named in the ask",
       "Safety NCR corrective action before rework starts",
       "No cross-project data — stay in assigned jobs",
+      "Cube / QI fills require published drawing gate",
+      "Trade manpower lines match the day log",
+      "Do not mark drawings published — PMC owns publish",
+      "Package handover checklist before demobilise",
     ],
   },
   client: {
@@ -192,6 +213,9 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Cost and Finance numbers are view-only unless granted",
       "Meeting MoM and agenda appear after PMC publish",
       "Quality / Safety summaries without changing registers",
+      "Progress % comes from approved measurement — not edits",
+      "Ask for clarification via portal Concern, not side email",
+      "Published GFC revision is the only site truth",
     ],
   },
   drawings: {
@@ -217,6 +241,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Ask is Request for Information — not inspection",
       "Coordination issues escalate cleanly to Ask",
       "DMS folders mirror package structure",
+      "Supersede old revision when R+1 goes live",
+      "TL / discipline tags stay consistent on register",
+      "Client portal shows published packs only",
+      "File name + drawing number must match the sheet",
     ],
   },
   quality: {
@@ -242,6 +270,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Request for Inspection attaches the checklist",
       "≥3 photos where the template requires them",
       "Published drawing gate before QI create",
+      "Close CAR with evidence before re-inspect",
+      "Separate Safety NCR from Quality NCR",
+      "Hold points cannot skip without office release",
+      "Link QI fill RFI when inspection fails",
     ],
   },
   comms: {
@@ -267,6 +299,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Meetings are Microsoft Teams only",
       "Ask is Request for Information",
       "Generated MoM reaches client civil when published",
+      "Ball-in-court must name one responsible party",
+      "Outlook outbox uses project email settings",
+      "Do not start MoM without an agenda pack",
+      "Close follow-ups before next weekly meeting",
     ],
   },
   field: {
@@ -292,6 +328,10 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Field RFIs stay operational — not drawing Ask",
       "Close the log before shift end",
       "Site evidence supports hindrance and safety",
+      "Weather and visitor lines stay on the same day card",
+      "Hindrance reason codes match DPR categories",
+      "No backdated photos without office note",
+      "Safety observation same shift as the event",
     ],
   },
 };
@@ -415,7 +455,7 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
   }, [slideKey, slides.length]);
 
   useEffect(() => {
-    const t = window.setInterval(() => setPolicy((p) => (p + 1) % lines.length), 3800);
+    const t = window.setInterval(() => setPolicy((p) => (p + 1) % lines.length), 3200);
     return () => window.clearInterval(t);
   }, [policyKey, lines.length]);
 
@@ -441,17 +481,19 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
       </div>
 
       <div className="auth-hero__center">
-        <img
-          src="/logo.png"
-          alt="शरणम्"
-          className="auth-hero__logo"
-          width={820}
-          height={400}
-          decoding="sync"
-          fetchPriority="high"
-        />
-        <p className="auth-hero__name">Sharnam</p>
-        <p className="auth-hero__trade">{trade}</p>
+        <div className="auth-hero__brand">
+          <img
+            src="/logo.png"
+            alt="शरणम्"
+            className="auth-hero__logo"
+            width={820}
+            height={400}
+            decoding="sync"
+            fetchPriority="high"
+          />
+          <p className="auth-hero__name">Sharnam</p>
+          <p className="auth-hero__trade">{trade}</p>
+        </div>
 
         <div className="auth-hero__policies" aria-live="polite">
           {lines.map((text, i) => (
