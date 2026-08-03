@@ -329,17 +329,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <button
               type="button"
-              className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft hover:text-brand"
+              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-[#f4f5f6] hover:border-[#c45c26]/40"
               aria-label={hidden ? "Show left navigation" : "Hide left navigation"}
               title={hidden ? "Show left navigation" : "Hide left navigation"}
               onClick={() => setHidden((h) => !h)}
             >
-              {hidden ? <IconPanelRight size={16} /> : <IconPanel size={16} />}
+              {hidden ? <IconPanelRight size={15} /> : <IconPanel size={15} />}
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em]">
+                {hidden ? "Show nav" : "Hide nav"}
+              </span>
             </button>
 
             <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
               <span className="app-topbar__brand-name">{BRAND_EN}</span>
-              <span className="app-topbar__brand-tag">Construction</span>
+              <span className="app-topbar__brand-tag">PMC</span>
             </Link>
 
             <div className="app-topbar__meta">

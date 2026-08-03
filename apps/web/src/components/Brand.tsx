@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 const BRAND_EN = "Sharnam";
 const BRAND_HI = "शरणम्";
-const BRAND_TAG = "Construction";
+const BRAND_TAG = "Project Management Consultants";
 
 /** Text wordmark — no logo image / white plate */
 export function BrandMark({

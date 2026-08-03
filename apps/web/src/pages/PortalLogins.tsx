@@ -198,12 +198,22 @@ export function consumeLoginLanding() {
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
 
-/** High-res landscape project slides (intrinsic size for crisp layout) */
+/** High-res project / building slides */
 const HERO_SLIDES = [
   { src: "/heroes/site-02.jpg", w: 2400, h: 1600 },
   { src: "/heroes/site-03.jpg", w: 2400, h: 1590 },
   { src: "/heroes/site-04.jpg", w: 2400, h: 1600 },
   { src: "/heroes/site-01.jpg", w: 2400, h: 1350 },
+  { src: "/hero-login.jpg", w: 1920, h: 1080 },
+];
+
+const HERO_POLICIES = [
+  "Published GFC drawings before site execution",
+  "Revision control with full audit trail",
+  "Quality & safety checklists on every package",
+  "Project-scoped access for office, site & contractors",
+  "Client clarity on concerns, RFIs and progress",
+  "Cost, cashflow and measurement on one spine",
 ];
 
 function portalDisplayName(key: string, shortLabel: string) {
@@ -288,9 +298,15 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
 
 function HeroStage() {
   const [slide, setSlide] = useState(0);
+  const [policy, setPolicy] = useState(0);
 
   useEffect(() => {
-    const t = window.setInterval(() => setSlide((s) => (s + 1) % HERO_SLIDES.length), 6000);
+    const t = window.setInterval(() => setSlide((s) => (s + 1) % HERO_SLIDES.length), 6500);
+    return () => window.clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const t = window.setInterval(() => setPolicy((p) => (p + 1) % HERO_POLICIES.length), 3800);
     return () => window.clearInterval(t);
   }, []);
 
@@ -304,7 +320,7 @@ function HeroStage() {
             alt=""
             width={s.w}
             height={s.h}
-            sizes="(max-width: 900px) 100vw, 62vw"
+            sizes="(max-width: 900px) 100vw, 58vw"
             className={`auth-hero__img ${i === slide ? "is-active" : ""}`}
             decoding={i === 0 ? "sync" : "async"}
             fetchPriority={i === 0 ? "high" : "low"}
@@ -312,20 +328,30 @@ function HeroStage() {
           />
         ))}
         <div className="auth-hero__veil" aria-hidden />
+        <div className="auth-hero__grain" aria-hidden />
       </div>
 
-      <div className="auth-hero__brand">
+      <div className="auth-hero__center">
         <img
           src="/logo.png"
           alt="शरणम्"
           className="auth-hero__logo"
-          width={320}
-          height={120}
+          width={640}
+          height={312}
           decoding="sync"
           fetchPriority="high"
         />
         <p className="auth-hero__name">Sharnam</p>
-        <p className="auth-hero__trade">Construction</p>
+        <p className="auth-hero__trade">Project Management Consultants</p>
+
+        <div className="auth-hero__policies" aria-live="polite">
+          {HERO_POLICIES.map((text, i) => (
+            <p key={text} className={`auth-hero__policy ${i === policy ? "is-on" : ""}`}>
+              <span className="auth-hero__bullet" aria-hidden />
+              {text}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div className="auth-hero__dots" role="tablist" aria-label="Project photos">
@@ -355,7 +381,8 @@ function AuthCard({
   const cfg = PORTAL_LOGINS[active];
   return (
     <div className="auth-card">
-      <img src="/logo.png" alt="शरणम्" className="auth-card__logo" width={200} height={72} />
+      <img src="/logo.png" alt="शरणम्" className="auth-card__logo" width={360} height={176} />
+      <p className="auth-card__firm">Sharnam Project Management Consultants</p>
       <p className="auth-card__welcome">Sign in</p>
 
       {backLink && (

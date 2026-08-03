@@ -4,36 +4,35 @@ export function PageHero({
   title,
   subtitle,
   actions,
-  accent = "navy",
+  accent = "graphite",
   icon,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
-  accent?: "navy" | "emerald" | "indigo";
+  accent?: "graphite" | "navy" | "ember";
   icon?: ReactNode;
 }) {
   const gradients = {
-    navy: "from-[#0f766e] via-[#126e82] to-[#1a1d26]",
-    emerald: "from-teal-800 via-teal-700 to-cyan-800",
-    indigo: "from-slate-900 via-teal-900 to-teal-700",
+    graphite: "from-[#1c222b] via-[#252b36] to-[#12151a]",
+    navy: "from-[#1a2332] via-[#243044] to-[#121820]",
+    ember: "from-[#2a241f] via-[#3a2e26] to-[#1a1612]",
   };
   return (
     <div
-      className={`rounded-2xl bg-gradient-to-br ${gradients[accent]} p-6 sm:p-7 shadow-lg border border-white/10 relative overflow-hidden mb-6`}
+      className={`rounded-xl bg-gradient-to-br ${gradients[accent]} p-5 sm:p-6 border border-white/8 relative overflow-hidden mb-5`}
     >
-      <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-amber-400/20 blur-2xl" />
-      <div className="absolute -left-6 bottom-0 w-28 h-28 rounded-full bg-teal-300/15 blur-2xl" />
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-[var(--color-mark,#C45C26)]" />
       <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
           {icon ? (
-            <span className="mt-0.5 h-11 w-11 shrink-0 rounded-xl grid place-items-center bg-white/15 text-white border border-white/20">
+            <span className="mt-0.5 h-10 w-10 shrink-0 rounded-lg grid place-items-center bg-white/10 text-white border border-white/15">
               {icon}
             </span>
           ) : null}
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-display font-bold text-white tracking-tight">{title}</h1>
-            {subtitle && <p className="text-sm text-white/85 mt-1.5 max-w-2xl leading-relaxed">{subtitle}</p>}
+            <h1 className="text-xl sm:text-2xl font-display font-semibold text-white tracking-tight">{title}</h1>
+            {subtitle && <p className="text-sm text-white/75 mt-1.5 max-w-2xl leading-relaxed">{subtitle}</p>}
           </div>
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}

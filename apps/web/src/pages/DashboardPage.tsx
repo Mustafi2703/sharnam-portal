@@ -79,25 +79,26 @@ export default function DashboardPage() {
   }, [pid, token]);
 
   const stats = [
-    { label: "Open RFIs", value: kpis?.openRfis ?? openRfis.length, color: "bg-rose-500", tab: "rfis" as Tab, icon: "comms" as ModuleIconKey },
-    { label: "Meetings", value: kpis?.meetings ?? meetings.length, color: "bg-[#126e82]", tab: "comms" as Tab, icon: "comms" as ModuleIconKey },
-    { label: "Checklist fills", value: kpis?.checklistFills ?? logs.length, color: "bg-brand", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
-    { label: "Safety open", value: kpis?.openSafety ?? safetyOpen, color: "bg-rose-600", tab: "safety" as Tab, icon: "safety" as ModuleIconKey },
-    { label: "Published GFC", value: kpis?.publishedDrawings ?? 0, color: "bg-slate-700", tab: "analytics" as Tab, icon: "drawings" as ModuleIconKey },
-    { label: "Delayed MS", value: kpis?.delayedMilestones ?? 0, color: "bg-amber-700", tab: "analytics" as Tab, icon: "progress" as ModuleIconKey },
+    { label: "Open RFIs", value: kpis?.openRfis ?? openRfis.length, color: "bg-[#C45C26]", tab: "rfis" as Tab, icon: "comms" as ModuleIconKey },
+    { label: "Meetings", value: kpis?.meetings ?? meetings.length, color: "bg-[#3D4450]", tab: "comms" as Tab, icon: "comms" as ModuleIconKey },
+    { label: "Checklist fills", value: kpis?.checklistFills ?? logs.length, color: "bg-[#1c222b]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
+    { label: "Safety open", value: kpis?.openSafety ?? safetyOpen, color: "bg-[#9A3412]", tab: "safety" as Tab, icon: "safety" as ModuleIconKey },
+    { label: "Published GFC", value: kpis?.publishedDrawings ?? 0, color: "bg-[#252b36]", tab: "analytics" as Tab, icon: "drawings" as ModuleIconKey },
+    { label: "Delayed MS", value: kpis?.delayedMilestones ?? 0, color: "bg-[#B45309]", tab: "analytics" as Tab, icon: "progress" as ModuleIconKey },
   ];
 
   return (
     <div className="space-y-5">
       <PageHero
+        accent="graphite"
         title={`Analytics · ${firstName}`}
-        subtitle="Workday-style project KPIs with live referenced data. Download branded Excel or PDF packs for clients."
-        icon={<ModuleIcon name="dashboard" size={22} className="text-white" />}
+        subtitle="Project KPIs with live referenced data. Download branded Excel or PDF packs for clients."
+        icon={<ModuleIcon name="dashboard" size={20} className="text-white" />}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <ReportExportButtons projectId={pid} kind="analytics" label="Full pack" />
             <Link to="/workspace">
-              <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30">
+              <Button type="button" variant="secondary" className="!bg-white/12 !text-white !border-white/25">
                 Modules →
               </Button>
             </Link>
