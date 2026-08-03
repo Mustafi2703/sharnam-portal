@@ -105,9 +105,10 @@ function SideNavBody({
     <div className="side-nav__inner">
       <div className="side-nav__head">
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
+          <img src="/logo.png" alt="" className="side-nav__logo" width={120} height={58} />
           <div className="side-nav__brand-text min-w-0">
             <div className="side-nav__brand-name truncate">{BRAND_EN}</div>
-            <div className="side-nav__brand-sub">Construction · {BRAND_HI}</div>
+            <div className="side-nav__brand-sub">PMC · {BRAND_HI}</div>
           </div>
         </Link>
       </div>
@@ -329,7 +330,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <button
               type="button"
-              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-[#f4f5f6] hover:border-[#c45c26]/40"
+              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
               aria-label={hidden ? "Show left navigation" : "Hide left navigation"}
               title={hidden ? "Show left navigation" : "Hide left navigation"}
               onClick={() => setHidden((h) => !h)}
@@ -340,7 +341,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </button>
 
-            <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
+            <Link to="/dashboard" className="app-topbar__brand hidden sm:flex min-w-0 shrink-0 items-center gap-2" aria-label={`${BRAND_EN} home`}>
+              <img src="/logo.png" alt="" className="app-topbar__logo" width={88} height={42} />
               <span className="app-topbar__brand-name">{BRAND_EN}</span>
               <span className="app-topbar__brand-tag">PMC</span>
             </Link>

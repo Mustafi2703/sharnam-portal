@@ -36,9 +36,6 @@ import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import ModuleHubPage from "./pages/project/ModuleHubPage";
 import QapPage from "./pages/project/QapPage";
 import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
-import { applyThemeOption } from "./themes";
-
-applyThemeOption("ui-2");
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

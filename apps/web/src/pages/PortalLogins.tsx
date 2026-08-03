@@ -478,36 +478,45 @@ function AuthCard({
   const cfg = PORTAL_LOGINS[active];
   return (
     <div className="auth-card">
-      <img src="/logo.png" alt="शरणम्" className="auth-card__logo" width={360} height={176} />
-      <p className="auth-card__firm">Sharnam Project Management Consultants</p>
-      <p className="auth-card__welcome">Sign in</p>
+      <div className="auth-card__brand">
+        <img src="/logo.png" alt="शरणम्" className="auth-card__logo" width={280} height={136} />
+        <div className="auth-card__brand-copy">
+          <p className="auth-card__brand-name">Sharnam</p>
+          <p className="auth-card__firm">Project Management Consultants</p>
+        </div>
+      </div>
 
-      {backLink && (
-        <Link to="/login" className="auth-card__back">
-          ← All portals
-        </Link>
-      )}
+      <div className="auth-card__body">
+        <p className="auth-card__welcome">Sign in</p>
+        <p className="auth-card__hint">Use your portal credentials to enter the desk.</p>
 
-      {onChange ? (
-        <label className="auth-card__field">
-          <span>Portal</span>
-          <select
-            className="auth-card__select"
-            value={active}
-            onChange={(e) => onChange(e.target.value as keyof typeof PORTAL_LOGINS)}
-          >
-            {HUB_ROLES.map((key) => (
-              <option key={key} value={key}>
-                {portalDisplayName(key, PORTAL_LOGINS[key].shortLabel)}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        <p className="auth-card__portal">{cfg.title}</p>
-      )}
+        {backLink && (
+          <Link to="/login" className="auth-card__back">
+            ← All portals
+          </Link>
+        )}
 
-      <PortalSignInForm cfg={cfg} />
+        {onChange ? (
+          <label className="auth-card__field">
+            <span>Portal</span>
+            <select
+              className="auth-card__select"
+              value={active}
+              onChange={(e) => onChange(e.target.value as keyof typeof PORTAL_LOGINS)}
+            >
+              {HUB_ROLES.map((key) => (
+                <option key={key} value={key}>
+                  {portalDisplayName(key, PORTAL_LOGINS[key].shortLabel)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="auth-card__portal">{cfg.title}</p>
+        )}
+
+        <PortalSignInForm cfg={cfg} />
+      </div>
     </div>
   );
 }
