@@ -46,8 +46,8 @@ const LIGHT: Record<string, string> = {
   "--ui-nav-h": "52px",
   "--ui-chrome-h": "52px",
   "--ui-gap": "1.25rem",
-  "--font-display": '"Space Grotesk", "Source Sans 3", system-ui, sans-serif',
-  "--font-sans": '"IBM Plex Sans", "Source Sans 3", system-ui, sans-serif',
+  "--font-display": '"Sora", "Space Grotesk", "Source Sans 3", system-ui, sans-serif',
+  "--font-sans": '"Manrope", "IBM Plex Sans", "Source Sans 3", system-ui, sans-serif',
 };
 
 const DARK: Record<string, string> = {
@@ -91,8 +91,8 @@ const DARK: Record<string, string> = {
   "--ui-nav-h": "52px",
   "--ui-chrome-h": "52px",
   "--ui-gap": "1.25rem",
-  "--font-display": '"Space Grotesk", "Source Sans 3", system-ui, sans-serif',
-  "--font-sans": '"IBM Plex Sans", "Source Sans 3", system-ui, sans-serif',
+  "--font-display": '"Sora", "Space Grotesk", "Source Sans 3", system-ui, sans-serif',
+  "--font-sans": '"Manrope", "IBM Plex Sans", "Source Sans 3", system-ui, sans-serif',
 };
 
 export function getColorMode(): ColorMode {
