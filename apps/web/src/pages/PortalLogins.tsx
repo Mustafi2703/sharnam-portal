@@ -29,17 +29,17 @@ export type PortalConfig = {
 };
 
 const H = {
-  crane: { src: "/heroes/viz-cool-crane.jpg?v=5", w: 1920, h: 1280, focus: "52% 40%", label: "Tower crane" },
-  frame: { src: "/heroes/viz-cool-frame.jpg?v=5", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
-  cad: { src: "/heroes/viz-cool-bim.jpg?v=5", w: 1920, h: 1280, focus: "50% 48%", label: "BIM overlay" },
-  lift: { src: "/heroes/viz-cool-lift.jpg?v=5", w: 1920, h: 1280, focus: "55% 42%", label: "Facade lift" },
+  crane: { src: "/heroes/viz-cool-crane.jpg?v=6", w: 1920, h: 1280, focus: "52% 40%", label: "Tower crane" },
+  frame: { src: "/heroes/viz-cool-frame.jpg?v=6", w: 1920, h: 1280, focus: "48% 42%", label: "Structure rising" },
+  site: { src: "/heroes/viz-cool-site.jpg?v=6", w: 1920, h: 1280, focus: "50% 45%", label: "Site facade" },
+  cad: { src: "/heroes/viz-cool-bim.jpg?v=6", w: 1920, h: 1280, focus: "50% 48%", label: "BIM overlay" },
 } as const;
 
-/** Soft daylight construction set — no orange sun / white wash */
-const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.lift, H.cad];
-const VIZ_SITE: HeroSlide[] = [H.frame, H.lift, H.crane, H.cad];
-const VIZ_PLAN: HeroSlide[] = [H.cad, H.crane, H.frame, H.lift];
-const VIZ_FIELD: HeroSlide[] = [H.lift, H.frame, H.crane, H.cad];
+/** Soft cool daylight — no orange sun / dark glass wash */
+const VIZ_SET: HeroSlide[] = [H.crane, H.frame, H.site, H.cad];
+const VIZ_SITE: HeroSlide[] = [H.site, H.frame, H.crane, H.cad];
+const VIZ_PLAN: HeroSlide[] = [H.crane, H.cad, H.frame, H.site];
+const VIZ_FIELD: HeroSlide[] = [H.site, H.frame, H.crane, H.cad];
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   master: {
