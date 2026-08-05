@@ -349,14 +349,17 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   },
 };
 
-export function consumeLoginLanding() {
+export function consumeLoginLanding(fallback = "/dashboard") {
   try {
-    const path = localStorage.getItem(LOGIN_LANDING_KEY) || "/dashboard";
-    localStorage.removeItem(LOGIN_LANDING_KEY);
-    return path;
+    const path = localStorage.getItem(LOGIN_LANDING_KEY);
+    if (path) {
+      localStorage.removeItem(LOGIN_LANDING_KEY);
+      return path;
+    }
   } catch {
-    return "/workspace";
+    /* ignore */
   }
+  return fallback;
 }
 
 const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
@@ -377,17 +380,15 @@ function chipOnStyle(tone: string): CSSProperties {
 
 function BrandMark({ size = "hero" }: { size?: "hero" | "card" | "tile" }) {
   return (
-    <div className={`auth-brand auth-brand--${size}`}>
-      <img
-        src="/logo.png"
-        alt="शरणम्"
-        className="auth-brand__logo"
-        width={820}
-        height={400}
-        decoding="sync"
-        fetchPriority="high"
-      />
-    </div>
+    <img
+      src="/logo.png"
+      alt="शरणम्"
+      className={`auth-brand__logo auth-brand__logo--${size}`}
+      width={820}
+      height={400}
+      decoding="sync"
+      fetchPriority="high"
+    />
   );
 }
 
@@ -419,8 +420,9 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
           portal: cfg.key,
         }),
       });
+      const dest = cfg.landingPath || "/dashboard";
       try {
-        localStorage.setItem(LOGIN_LANDING_KEY, cfg.landingPath || "/dashboard");
+        localStorage.setItem(LOGIN_LANDING_KEY, dest);
         clearStoredProjectId();
         if (cfg.workspaceKey) setActiveWorkspace(cfg.workspaceKey);
         else setActiveWorkspace(null);
@@ -459,10 +461,15 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
         />
       </label>
       {error && <p className="auth-form__error">{error}</p>}
-      <button type="submit" className="auth-form__submit" disabled={busy} style={{ background: `linear-gradient(135deg, ${cfg.tone} 0%, #14919b 100%)` }}>
+      <button
+        type="submit"
+        className="auth-form__submit"
+        disabled={busy}
+        style={{ background: `linear-gradient(135deg, ${cfg.tone} 0%, #14919b 100%)` }}
+      >
         {busy ? "Signing in…" : cfg.cta}
       </button>
-      <p className="auth-form__hint">Demo password: Demo@1234</p>
+      <p className="auth-form__hint">Demo · Demo@1234</p>
     </form>
   );
 }
@@ -500,7 +507,7 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
             alt=""
             width={s.w}
             height={s.h}
-            sizes="(max-width: 900px) 100vw, 62vw"
+            sizes="(max-width: 900px) 100vw, 100vw"
             className={`auth-hero__img ${i === slide ? "is-active" : ""}`}
             style={{ objectPosition: s.focus }}
             decoding={i === 0 ? "sync" : "async"}
@@ -543,16 +550,10 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
   );
 }
 
-function PortalPicker({
-  active,
-  linksOnly,
-}: {
-  active: keyof typeof PORTAL_LOGINS;
-  linksOnly?: boolean;
-}) {
+function PortalLinks({ active }: { active: keyof typeof PORTAL_LOGINS }) {
   return (
-    <div className="auth-portals">
-      <p className="auth-portals__label">Other portals</p>
+    <nav className="auth-portals" aria-label="Portal logins">
+      <p className="auth-portals__label">Portals</p>
       <div className="auth-portals__row">
         {HUB_ROLES.map((key) => {
           const p = PORTAL_LOGINS[key];
@@ -570,29 +571,25 @@ function PortalPicker({
           );
         })}
       </div>
-      {linksOnly ? null : (
-        <>
-          <p className="auth-portals__label auth-portals__label--sub">Module desks</p>
-          <div className="auth-portals__row">
-            {MODULE_LOGINS.map((key) => {
-              const p = PORTAL_LOGINS[key];
-              const on = active === key;
-              return (
-                <Link
-                  key={key}
-                  to={`/login/${key}`}
-                  className={`auth-portals__chip auth-portals__chip--mod ${on ? "is-on" : ""}`}
-                  style={on ? chipOnStyle(p.tone) : undefined}
-                  aria-current={on ? "page" : undefined}
-                >
-                  {p.shortLabel}
-                </Link>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
+      <p className="auth-portals__label auth-portals__label--sub">Modules</p>
+      <div className="auth-portals__row">
+        {MODULE_LOGINS.map((key) => {
+          const p = PORTAL_LOGINS[key];
+          const on = active === key;
+          return (
+            <Link
+              key={key}
+              to={`/login/${key}`}
+              className={`auth-portals__chip auth-portals__chip--mod ${on ? "is-on" : ""}`}
+              style={on ? chipOnStyle(p.tone) : undefined}
+              aria-current={on ? "page" : undefined}
+            >
+              {p.shortLabel}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
@@ -600,18 +597,15 @@ function AuthCard({ active }: { active: keyof typeof PORTAL_LOGINS }) {
   const cfg = PORTAL_LOGINS[active];
   return (
     <div className="auth-card" key={cfg.key}>
-      <BrandMark size="card" />
       <p className="auth-card__firm">Project Management Consultants</p>
-
-      <p className="auth-card__welcome">{cfg.title} login</p>
+      <p className="auth-card__welcome">{cfg.title}</p>
       <p className="auth-card__sub">{cfg.subtitle}</p>
 
       <Link to="/login" className="auth-card__back">
         ← All portals
       </Link>
 
-      <PortalPicker active={active} />
-
+      <PortalLinks active={active} />
       <PortalSignInForm cfg={cfg} />
     </div>
   );
@@ -621,10 +615,10 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   const cfg = PORTAL_LOGINS[portalKey];
   const { user, loading } = useAuth();
   if (!cfg) return <Navigate to="/login" replace />;
-  if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
+  if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
   return (
-    <div className="auth-shell">
+    <div className="auth-shell" data-portal={portalKey}>
       <HeroStage heroes={cfg.heroes} policies={cfg.policies} trade={cfg.headline} />
       <section className="auth-side">
         <AuthCard active={portalKey} />
@@ -633,7 +627,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   );
 }
 
-/** Hub landing — pick a user type, then open its dedicated login page */
+/** Hub landing — pick a user type, then open its dedicated login URL */
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
@@ -643,19 +637,18 @@ export function LoginHubPage() {
       <HeroStage
         heroes={VIZ_MASTER}
         policies={[
-          "Choose your portal — each role has its own sign-in desk",
-          "Sharnam logo on every landing — clear sky behind the mark",
+          "Each role has its own login link",
           "Office · Site · Contractor · Client · Employee · Master",
-          "Module desks for Drawings, Quality, Comms, and Field",
+          "Sign in lands you on the right desk",
+          "Module desks: Drawings · Quality · Comms · Field",
         ]}
         trade="Project Management Consultants"
       />
       <section className="auth-side auth-side--landing">
         <div className="auth-landing">
-          <BrandMark size="card" />
           <p className="auth-card__firm">Project Management Consultants</p>
-          <h1 className="auth-landing__title">Sign in to your portal</h1>
-          <p className="auth-landing__sub">Separate desks for every user type. Pick yours to continue.</p>
+          <h1 className="auth-landing__title">Choose your portal</h1>
+          <p className="auth-landing__sub">Separate links for every user type — you land on the right desk after sign-in.</p>
 
           <p className="auth-portals__label">User portals</p>
           <div className="auth-landing__grid">
@@ -663,12 +656,12 @@ export function LoginHubPage() {
               const p = PORTAL_LOGINS[key];
               return (
                 <Link key={key} to={`/login/${key}`} className="auth-tile" style={{ ["--tile-tone" as string]: p.tone }}>
-                  <BrandMark size="tile" />
                   <span className="auth-tile__icon" aria-hidden>
                     {p.icon}
                   </span>
                   <span className="auth-tile__title">{portalDisplayName(key, p.shortLabel)}</span>
-                  <span className="auth-tile__sub">{p.points[0]}</span>
+                  <span className="auth-tile__sub">{p.points.slice(0, 2).join(" · ")}</span>
+                  <span className="auth-tile__href">/login/{key}</span>
                 </Link>
               );
             })}
