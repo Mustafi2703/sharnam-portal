@@ -17,6 +17,7 @@ import { costRouter } from "./routes/cost.js";
 import { reportsRouter, auditRouter, crmRouter, hrmRouter } from "./routes/reports.js";
 import { vendorsRouter, rfiRouter, inspectionsRouter, directoryRouter, safetyRouter } from "./routes/procore.js";
 import { progressRouter } from "./routes/progress.js";
+import { graphRouter } from "./routes/graph.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -44,6 +45,11 @@ app.get("/api/health", (_req, res) => {
     ok: true,
     service: "sharnam-api",
     mockOneDrive: process.env.MOCK_ONEDRIVE !== "false",
+    graphConfigured: Boolean(
+      (process.env.AZURE_TENANT_ID || process.env.GRAPH_TENANT_ID) &&
+        (process.env.AZURE_CLIENT_ID || process.env.GRAPH_CLIENT_ID) &&
+        (process.env.AZURE_CLIENT_SECRET || process.env.GRAPH_CLIENT_SECRET)
+    ),
     time: new Date().toISOString(),
     commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local",
     webDist,
@@ -71,6 +77,7 @@ app.use("/api/inspections", inspectionsRouter);
 app.use("/api/directory", directoryRouter);
 app.use("/api/safety", safetyRouter);
 app.use("/api/progress", progressRouter);
+app.use("/api/graph", graphRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {
