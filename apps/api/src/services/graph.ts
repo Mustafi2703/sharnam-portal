@@ -80,6 +80,12 @@ async function getAccessToken(): Promise<string> {
 }
 
 export async function graphFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method || "GET").toUpperCase();
+  // Hard ban: never delete anything in the customer's drive via Graph
+  if (method === "DELETE") {
+    throw new Error("SharePoint DELETE is disabled — portal never deletes customer drive items");
+  }
+
   const token = await getAccessToken();
   const url = path.startsWith("http") ? path : `https://graph.microsoft.com/v1.0${path}`;
   const res = await fetch(url, {
@@ -260,24 +266,54 @@ function encodeDrivePath(relPath: string) {
     .join("/");
 }
 
-/** Ensure a single folder under drive root (or nested path). Idempotent. */
+/** All portal writes stay inside this sandbox — never touch other site folders/files. */
+export const SHAREPOINT_SANDBOX_ROOT = "Sharnam Portal";
+
+function sanitizeProjectCode(projectCode: string) {
+  const clean = projectCode.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+  if (!clean || clean === "." || clean === "..") throw new Error("Invalid projectCode");
+  return clean;
+}
+
+/** Refuse any path outside Sharnam Portal/ or with path traversal. */
+export function assertPortalSafePath(relPath: string) {
+  const normalized = relPath.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+/g, "/");
+  if (!normalized.startsWith(`${SHAREPOINT_SANDBOX_ROOT}/`) && normalized !== SHAREPOINT_SANDBOX_ROOT) {
+    throw new Error(`SharePoint write blocked outside sandbox (${SHAREPOINT_SANDBOX_ROOT}/): ${relPath}`);
+  }
+  if (normalized.split("/").some((p) => p === ".." || p === "")) {
+    throw new Error(`SharePoint path traversal blocked: ${relPath}`);
+  }
+  return normalized;
+}
+
+/**
+ * Ensure folder under sandbox only.
+ * Idempotent: if folder exists, leave it untouched (no rename/delete).
+ */
 export async function ensureDriveFolder(driveId: string, folderPath: string): Promise<{ id: string; name: string; webUrl?: string }> {
-  const parts = folderPath.split("/").filter(Boolean);
+  const safePath = assertPortalSafePath(folderPath);
+  const parts = safePath.split("/").filter(Boolean);
   if (!parts.length) throw new Error("folderPath required");
 
   let parentPath = "";
   let last: { id: string; name: string; webUrl?: string } | null = null;
 
   for (const name of parts) {
+    if (name === ".." || name.includes("/") || name.includes("\\")) {
+      throw new Error(`Invalid folder segment: ${name}`);
+    }
     const currentPath = parentPath ? `${parentPath}/${name}` : name;
+    assertPortalSafePath(currentPath);
     const encoded = encodeDrivePath(currentPath);
     try {
       const existing = await graphFetch<{ id: string; name: string; webUrl?: string; folder?: unknown }>(
         `/drives/${driveId}/root:/${encoded}`
       );
+      // Exists — never alter
       last = { id: existing.id, name: existing.name, webUrl: existing.webUrl };
     } catch {
-      // create under parent
+      // Create only if missing. fail = do not rename/overwrite siblings.
       const createUrl = parentPath
         ? `/drives/${driveId}/root:/${encodeDrivePath(parentPath)}:/children`
         : `/drives/${driveId}/root/children`;
@@ -288,15 +324,11 @@ export async function ensureDriveFolder(driveId: string, folderPath: string): Pr
           body: JSON.stringify({
             name,
             folder: {},
-            "@microsoft.graph.conflictBehavior": "rename",
+            "@microsoft.graph.conflictBehavior": "fail",
           }),
         });
-        // if renamed due to conflict, prefer exact name via re-get
-        const exact = await graphFetch<{ id: string; name: string; webUrl?: string }>(
-          `/drives/${driveId}/root:/${encoded}`
-        ).catch(() => null);
-        if (exact) last = { id: exact.id, name: exact.name, webUrl: exact.webUrl };
       } catch (createErr) {
+        // Race / already exists — re-read, never delete or rename
         const existing = await graphFetch<{ id: string; name: string; webUrl?: string }>(
           `/drives/${driveId}/root:/${encoded}`
         ).catch(() => null);
@@ -312,8 +344,10 @@ export async function ensureDriveFolder(driveId: string, folderPath: string): Pr
 }
 
 export async function ensureProjectSharePointTree(projectCode: string) {
+  const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
-  const rootFolder = `Sharnam Portal/${projectCode}`;
+  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
+  assertPortalSafePath(rootFolder);
   const created: string[] = [];
 
   await ensureDriveFolder(drive.driveId, rootFolder);
@@ -328,7 +362,11 @@ export async function ensureProjectSharePointTree(projectCode: string) {
   return { drive, rootFolder, folders: created };
 }
 
-/** Upload file into project library path (relative under project root). */
+/**
+ * Upload into sandbox only.
+ * Never overwrites an existing file — if name exists, writes a unique sibling name.
+ * Never deletes.
+ */
 export async function uploadToProjectLibrary(
   projectCode: string,
   relFolder: string,
@@ -336,21 +374,40 @@ export async function uploadToProjectLibrary(
   buffer: Buffer,
   contentType = "application/octet-stream"
 ) {
+  const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
-  const rootFolder = `Sharnam Portal/${projectCode}`;
-  const folder = relFolder ? `${rootFolder}/${relFolder}` : rootFolder;
+  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
+  const folder = relFolder ? `${rootFolder}/${relFolder.replace(/^\/+|\/+$/g, "")}` : rootFolder;
+  assertPortalSafePath(folder);
   await ensureDriveFolder(drive.driveId, folder);
 
-  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const target = `${folder}/${safe}`;
-  const encoded = encodeDrivePath(target);
+  let safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  if (!safe || safe === "." || safe === "..") safe = `upload-${Date.now()}.bin`;
 
+  let target = `${folder}/${safe}`;
+  assertPortalSafePath(target);
+
+  // If file already exists, do NOT overwrite — pick a new name
+  const existing = await graphFetch<{ id: string }>(`/drives/${drive.driveId}/root:/${encodeDrivePath(target)}`).catch(
+    () => null
+  );
+  if (existing) {
+    const dot = safe.lastIndexOf(".");
+    const base = dot > 0 ? safe.slice(0, dot) : safe;
+    const ext = dot > 0 ? safe.slice(dot) : "";
+    safe = `${base}-${Date.now()}${ext}`;
+    target = `${folder}/${safe}`;
+    assertPortalSafePath(target);
+  }
+
+  const encoded = encodeDrivePath(target);
+  // conflictBehavior=fail: refuse overwrite if something appeared mid-flight
   const uploaded = await graphFetch<{
     id: string;
     name: string;
     webUrl?: string;
     size?: number;
-  }>(`/drives/${drive.driveId}/root:/${encoded}:/content`, {
+  }>(`/drives/${drive.driveId}/root:/${encoded}:/content?@microsoft.graph.conflictBehavior=fail`, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: new Uint8Array(buffer),
@@ -367,9 +424,11 @@ export async function uploadToProjectLibrary(
 }
 
 export async function listProjectLibrary(projectCode: string, relFolder = "") {
+  const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
-  const rootFolder = `Sharnam Portal/${projectCode}`;
-  const path = relFolder ? `${rootFolder}/${relFolder}` : rootFolder;
+  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
+  const path = relFolder ? `${rootFolder}/${relFolder.replace(/^\/+|\/+$/g, "")}` : rootFolder;
+  assertPortalSafePath(path);
   try {
     return await listDriveChildren(drive.driveId, path);
   } catch {
