@@ -172,7 +172,14 @@ dmsRouter.use(requireAuth);
 dmsRouter.post("/:projectId/sync", async (req: AuthedRequest, res) => {
   const result = await mockOneDrive.sync(req.params.projectId);
   await audit("dms.sync", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId });
-  res.json({ ok: true, ...result, message: "Mock OneDrive sync complete (Azure Graph ready to swap later)" });
+  res.json({
+    ok: true,
+    ...result,
+    message:
+      result.provider === "sharepoint"
+        ? "SharePoint project library synced"
+        : "Mock OneDrive sync complete (set MOCK_ONEDRIVE=false for live SharePoint)",
+  });
 });
 
 dmsRouter.get("/:projectId/browse", async (req, res) => {
@@ -190,7 +197,7 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
     syncedAt = new Date().toISOString();
   }
   const folders = await prisma.documentFolder.findMany({ where: { projectId: project.id } });
-  const children = mockOneDrive.listChildren(project.code, folderPath);
+  const children = await mockOneDrive.listChildrenLive(project.code, folderPath);
   res.json({
     projectCode: project.code,
     path: folderPath,
@@ -198,10 +205,15 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
     children,
     folders,
     syncedAt,
-    provider: "mock-onedrive",
-    note: "Browsable now; Microsoft Graph swap uses same browse+sync-on-open contract.",
+    provider: resultProvider(children),
+    note: "Browsable now; SharePoint live when MOCK_ONEDRIVE=false + Graph credentials set.",
   });
 });
+
+function resultProvider(children: { url?: string }[]) {
+  const live = children.some((c) => c.url?.includes("sharepoint.com"));
+  return live || process.env.MOCK_ONEDRIVE === "false" ? "sharepoint" : "mock-onedrive";
+}
 
 dmsRouter.post(
   "/:projectId/upload",

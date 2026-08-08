@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
+import { graphConfig, ensureProjectSharePointTree, uploadToProjectLibrary, listProjectLibrary } from "./graph.js";
 
 export type DriveNode = {
   name: string;
@@ -13,6 +14,11 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads")
 
 function ensureDir(p: string) {
   fs.mkdirSync(p, { recursive: true });
+}
+
+function liveSharePoint() {
+  const cfg = graphConfig();
+  return cfg.configured && !cfg.mock;
 }
 
 export class MockOneDriveService {
@@ -76,7 +82,22 @@ export class MockOneDriveService {
       });
     }
 
-    return { root: project.code, folders };
+    let sharePoint: { rootFolder: string; folders: string[] } | null = null;
+    if (liveSharePoint()) {
+      try {
+        const sp = await ensureProjectSharePointTree(project.code);
+        sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
+      } catch (err) {
+        console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);
+      }
+    }
+
+    return {
+      root: project.code,
+      folders,
+      provider: liveSharePoint() && sharePoint ? ("sharepoint" as const) : ("mock-onedrive" as const),
+      sharePoint,
+    };
   }
 
   listChildren(projectCode: string, relPath = ""): DriveNode[] {
@@ -95,22 +116,59 @@ export class MockOneDriveService {
     });
   }
 
+  async listChildrenLive(projectCode: string, relPath = ""): Promise<DriveNode[]> {
+    if (!liveSharePoint()) return this.listChildren(projectCode, relPath);
+    try {
+      const listed = await listProjectLibrary(projectCode, relPath);
+      const items = (listed.value || []) as {
+        name: string;
+        folder?: unknown;
+        webUrl?: string;
+      }[];
+      return items.map((i) => ({
+        name: i.name,
+        path: relPath ? `${relPath}/${i.name}` : i.name,
+        type: i.folder ? ("folder" as const) : ("file" as const),
+        url: i.folder ? undefined : i.webUrl,
+      }));
+    } catch {
+      return this.listChildren(projectCode, relPath);
+    }
+  }
+
   async upload(
     projectCode: string,
     relFolder: string,
     fileName: string,
     buffer: Buffer
-  ): Promise<{ path: string; url: string }> {
+  ): Promise<{ path: string; url: string; provider?: string; sharePointPath?: string | null }> {
     const dir = path.join(this.projectRoot(projectCode), relFolder);
     ensureDir(dir);
     const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
     const dest = path.join(dir, safe);
     fs.writeFileSync(dest, buffer);
     const rel = path.join(relFolder, safe).replace(/\\/g, "/");
-    return {
+    const local = {
       path: rel,
       url: `/uploads/onedrive/${projectCode}/${rel}`,
+      provider: "mock-onedrive" as const,
+      sharePointPath: null as string | null,
     };
+
+    if (liveSharePoint()) {
+      try {
+        const sp = await uploadToProjectLibrary(projectCode, relFolder, fileName, buffer);
+        return {
+          path: sp.path || rel,
+          url: sp.url || local.url,
+          provider: "sharepoint",
+          sharePointPath: sp.sharePointPath,
+        };
+      } catch (err) {
+        console.warn("[SharePoint] upload failed, kept local mock:", err instanceof Error ? err.message : err);
+      }
+    }
+    return local;
   }
 
   getDownloadUrl(projectCode: string, relPath: string) {
@@ -121,7 +179,6 @@ export class MockOneDriveService {
     return this.ensureProjectTree(projectId);
   }
 
-  /** Mark folder synced when user opens it (Graph delta hook later) */
   async touchFolder(projectId: string, relPath: string) {
     if (!relPath) return;
     const name = relPath.split("/").pop()!;

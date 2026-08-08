@@ -194,9 +194,187 @@ export async function probeSharePoint(): Promise<GraphHealth> {
 }
 
 export async function listDriveChildren(driveId: string, itemPath = "root") {
-  const path =
-    itemPath === "root" || !itemPath
-      ? `/drives/${driveId}/root/children?$top=50&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`
-      : `/drives/${driveId}/root:/${encodeURI(itemPath).replace(/%2F/g, "/")}:/children?$top=50&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`;
-  return graphFetch<{ value: unknown[] }>(path);
+  if (itemPath === "root" || !itemPath) {
+    return graphFetch<{ value: unknown[] }>(
+      `/drives/${driveId}/root/children?$top=50&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`
+    );
+  }
+  const encoded = itemPath
+    .split("/")
+    .filter(Boolean)
+    .map((s) => encodeURIComponent(s))
+    .join("/");
+  return graphFetch<{ value: unknown[] }>(
+    `/drives/${driveId}/root:/${encoded}:/children?$top=50&$select=id,name,size,folder,file,webUrl,lastModifiedDateTime`
+  );
 }
+
+/** Project library folders (mirrors mockOneDrive ensureProjectTree) */
+export const PROJECT_LIBRARY_FOLDERS = [
+  "Drawings",
+  "Drawings/Architecture",
+  "Drawings/Structural",
+  "Drawings/MEP",
+  "Drawings/Civil",
+  "Documents",
+  "Documents/Contracts",
+  "Documents/Reports",
+  "Documents/DPR",
+  "Documents/WPR",
+  "Documents/QAP",
+  "Documents/Communication-Matrix",
+  "Documents/Design-Coordination",
+  "Photos",
+  "Checklists",
+  "Inspections",
+  "Inspections/Architecture",
+  "Inspections/Structural",
+  "Inspections/MEP",
+  "Inspections/Civil",
+  "RFIs",
+  "Submittals",
+  "Safety",
+  "Cost-Bills",
+] as const;
+
+export type DriveRef = { siteId: string; driveId: string; driveName: string; siteName: string | null };
+
+export async function resolveDefaultDrive(): Promise<DriveRef> {
+  const health = await probeSharePoint();
+  if (!health.tokenOk || !health.siteOk || !health.driveId || !health.siteId) {
+    throw new Error(health.error || "SharePoint drive not available");
+  }
+  return {
+    siteId: health.siteId,
+    driveId: health.driveId,
+    driveName: health.driveName || "Documents",
+    siteName: health.siteName,
+  };
+}
+
+function encodeDrivePath(relPath: string) {
+  return relPath
+    .split("/")
+    .filter(Boolean)
+    .map((s) => encodeURIComponent(s))
+    .join("/");
+}
+
+/** Ensure a single folder under drive root (or nested path). Idempotent. */
+export async function ensureDriveFolder(driveId: string, folderPath: string): Promise<{ id: string; name: string; webUrl?: string }> {
+  const parts = folderPath.split("/").filter(Boolean);
+  if (!parts.length) throw new Error("folderPath required");
+
+  let parentPath = "";
+  let last: { id: string; name: string; webUrl?: string } | null = null;
+
+  for (const name of parts) {
+    const currentPath = parentPath ? `${parentPath}/${name}` : name;
+    const encoded = encodeDrivePath(currentPath);
+    try {
+      const existing = await graphFetch<{ id: string; name: string; webUrl?: string; folder?: unknown }>(
+        `/drives/${driveId}/root:/${encoded}`
+      );
+      last = { id: existing.id, name: existing.name, webUrl: existing.webUrl };
+    } catch {
+      // create under parent
+      const createUrl = parentPath
+        ? `/drives/${driveId}/root:/${encodeDrivePath(parentPath)}:/children`
+        : `/drives/${driveId}/root/children`;
+      try {
+        last = await graphFetch<{ id: string; name: string; webUrl?: string }>(createUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            folder: {},
+            "@microsoft.graph.conflictBehavior": "rename",
+          }),
+        });
+        // if renamed due to conflict, prefer exact name via re-get
+        const exact = await graphFetch<{ id: string; name: string; webUrl?: string }>(
+          `/drives/${driveId}/root:/${encoded}`
+        ).catch(() => null);
+        if (exact) last = { id: exact.id, name: exact.name, webUrl: exact.webUrl };
+      } catch (createErr) {
+        const existing = await graphFetch<{ id: string; name: string; webUrl?: string }>(
+          `/drives/${driveId}/root:/${encoded}`
+        ).catch(() => null);
+        if (!existing) throw createErr;
+        last = { id: existing.id, name: existing.name, webUrl: existing.webUrl };
+      }
+    }
+    parentPath = currentPath;
+  }
+
+  if (!last) throw new Error(`Failed to ensure folder ${folderPath}`);
+  return last;
+}
+
+export async function ensureProjectSharePointTree(projectCode: string) {
+  const drive = await resolveDefaultDrive();
+  const rootFolder = `Sharnam Portal/${projectCode}`;
+  const created: string[] = [];
+
+  await ensureDriveFolder(drive.driveId, rootFolder);
+  created.push(rootFolder);
+
+  for (const rel of PROJECT_LIBRARY_FOLDERS) {
+    const full = `${rootFolder}/${rel}`;
+    await ensureDriveFolder(drive.driveId, full);
+    created.push(full);
+  }
+
+  return { drive, rootFolder, folders: created };
+}
+
+/** Upload file into project library path (relative under project root). */
+export async function uploadToProjectLibrary(
+  projectCode: string,
+  relFolder: string,
+  fileName: string,
+  buffer: Buffer,
+  contentType = "application/octet-stream"
+) {
+  const drive = await resolveDefaultDrive();
+  const rootFolder = `Sharnam Portal/${projectCode}`;
+  const folder = relFolder ? `${rootFolder}/${relFolder}` : rootFolder;
+  await ensureDriveFolder(drive.driveId, folder);
+
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const target = `${folder}/${safe}`;
+  const encoded = encodeDrivePath(target);
+
+  const uploaded = await graphFetch<{
+    id: string;
+    name: string;
+    webUrl?: string;
+    size?: number;
+  }>(`/drives/${drive.driveId}/root:/${encoded}:/content`, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: new Uint8Array(buffer),
+  });
+
+  return {
+    path: `${relFolder}/${safe}`.replace(/^\//, ""),
+    url: uploaded.webUrl || null,
+    sharePointPath: target,
+    itemId: uploaded.id,
+    driveId: drive.driveId,
+    provider: "sharepoint" as const,
+  };
+}
+
+export async function listProjectLibrary(projectCode: string, relFolder = "") {
+  const drive = await resolveDefaultDrive();
+  const rootFolder = `Sharnam Portal/${projectCode}`;
+  const path = relFolder ? `${rootFolder}/${relFolder}` : rootFolder;
+  try {
+    return await listDriveChildren(drive.driveId, path);
+  } catch {
+    // tree may not exist yet
+    return { value: [] };
+  }
+}
+

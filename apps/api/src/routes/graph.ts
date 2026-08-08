@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
-import { graphConfig, probeSharePoint, listDriveChildren, graphFetch } from "../services/graph.js";
+import { graphConfig, probeSharePoint, listDriveChildren, graphFetch, ensureProjectSharePointTree, uploadToProjectLibrary, listProjectLibrary } from "../services/graph.js";
 
 export const graphRouter = Router();
 
@@ -101,3 +101,48 @@ graphRouter.get("/config", requireAuth, requireRoles("admin", "office"), (_req, 
     projectOnline: false,
   });
 });
+
+/** Admin/office — create Sharnam Portal/{projectCode} library tree on SharePoint */
+graphRouter.post(
+  "/ensure-project-tree",
+  requireAuth,
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectCode = String(req.body?.projectCode || "SPDC-DEMO-01").trim();
+    if (!projectCode) return res.status(400).json({ error: "projectCode required" });
+    try {
+      const result = await ensureProjectSharePointTree(projectCode);
+      await audit("graph.ensure.project.tree", {
+        userId: req.user!.id,
+        meta: { projectCode, rootFolder: result.rootFolder, count: result.folders.length },
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
+
+/** Admin/office — upload a test doc into RFIs / Documents/DPR / Documents/WPR */
+graphRouter.post(
+  "/test-upload",
+  requireAuth,
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectCode = String(req.body?.projectCode || "SPDC-DEMO-01").trim();
+    const folder = String(req.body?.folder || "RFIs").trim();
+    const fileName = String(req.body?.fileName || `test-${Date.now()}.txt`).trim();
+    const content = String(req.body?.content || `Sharnam portal SharePoint test · ${new Date().toISOString()}\n`);
+    try {
+      const saved = await uploadToProjectLibrary(projectCode, folder, fileName, Buffer.from(content, "utf8"), "text/plain");
+      const listed = await listProjectLibrary(projectCode, folder);
+      await audit("graph.test.upload", {
+        userId: req.user!.id,
+        meta: { projectCode, folder, fileName: saved.path },
+      });
+      res.json({ ok: true, saved, folderItems: listed.value?.slice(0, 20) || [] });
+    } catch (err) {
+      res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
