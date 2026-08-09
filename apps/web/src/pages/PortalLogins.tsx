@@ -5,6 +5,18 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
 
+/**
+ * Sharnam login surface — matches the inside "desk" language.
+ *
+ * Hub (LoginHubPage):           bento of every portal on one screen, no scroll.
+ * Portal login (PortalLoginPage): calm single-photo hero + white surface card
+ *                                 with a portal-tone accent bar, chip picker at
+ *                                 the top so switching to another portal is
+ *                                 one click.
+ * Shared strips:                 top brand rail with ISO badges + policy ticker
+ *                                and a slim trust/version footer.
+ */
+
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
 type HeroSlide = { src: string; w: number; h: number; focus: string; label: string };
@@ -28,48 +40,39 @@ export type PortalConfig = {
   policies: string[];
 };
 
-/** Clear-sky heroes — open blue sky kept for logo plate (object-position favors lower site) */
 const H = {
-  crane: { src: "/heroes/sky-01-crane.jpg?v=1", w: 1920, h: 1080, focus: "50% 72%", label: "Tower crane" },
-  frame: { src: "/heroes/sky-02-frame.jpg?v=1", w: 1920, h: 1080, focus: "48% 78%", label: "Structure rising" },
-  site: { src: "/heroes/sky-03-site.jpg?v=1", w: 1920, h: 1080, focus: "50% 70%", label: "Site facade" },
-  bim: { src: "/heroes/sky-04-bim.jpg?v=1", w: 1920, h: 1080, focus: "50% 68%", label: "Design desk" },
-  office: { src: "/heroes/sky-05-office.jpg?v=1", w: 1920, h: 1080, focus: "50% 75%", label: "Site overview" },
-  field: { src: "/heroes/sky-06-field.jpg?v=1", w: 1920, h: 1080, focus: "50% 78%", label: "Field work" },
+  crane:   { src: "/heroes/sky-01-crane.jpg?v=1",   w: 1920, h: 1080, focus: "50% 72%", label: "Tower crane" },
+  frame:   { src: "/heroes/sky-02-frame.jpg?v=1",   w: 1920, h: 1080, focus: "48% 78%", label: "Structure rising" },
+  site:    { src: "/heroes/sky-03-site.jpg?v=1",    w: 1920, h: 1080, focus: "50% 70%", label: "Site facade" },
+  bim:     { src: "/heroes/sky-04-bim.jpg?v=1",     w: 1920, h: 1080, focus: "50% 68%", label: "Design desk" },
+  office:  { src: "/heroes/sky-05-office.jpg?v=1",  w: 1920, h: 1080, focus: "50% 75%", label: "Site overview" },
+  field:   { src: "/heroes/sky-06-field.jpg?v=1",   w: 1920, h: 1080, focus: "50% 78%", label: "Field work" },
   quality: { src: "/heroes/sky-07-quality.jpg?v=1", w: 1920, h: 1080, focus: "50% 72%", label: "Quality check" },
-  client: { src: "/heroes/sky-08-client.jpg?v=1", w: 1920, h: 1080, focus: "50% 70%", label: "Client view" },
+  client:  { src: "/heroes/sky-08-client.jpg?v=1",  w: 1920, h: 1080, focus: "50% 70%", label: "Client view" },
   contractor: { src: "/heroes/sky-09-contractor.jpg?v=1", w: 1920, h: 1080, focus: "50% 76%", label: "Trade package" },
   drawings: { src: "/heroes/sky-10-drawings.jpg?v=1", w: 1920, h: 1080, focus: "50% 74%", label: "GFC drawings" },
 } as const;
 
-const VIZ_OFFICE: HeroSlide[] = [H.office, H.crane, H.bim, H.drawings];
-const VIZ_SITE: HeroSlide[] = [H.site, H.field, H.crane, H.frame];
-const VIZ_PLAN: HeroSlide[] = [H.drawings, H.bim, H.crane, H.frame];
-const VIZ_FIELD: HeroSlide[] = [H.field, H.site, H.contractor, H.crane];
-const VIZ_CLIENT: HeroSlide[] = [H.client, H.office, H.drawings, H.quality];
-const VIZ_VENDOR: HeroSlide[] = [H.contractor, H.field, H.frame, H.site];
-const VIZ_QUALITY: HeroSlide[] = [H.quality, H.site, H.frame, H.field];
-const VIZ_COMMS: HeroSlide[] = [H.bim, H.office, H.client, H.drawings];
-const VIZ_MASTER: HeroSlide[] = [H.crane, H.office, H.bim, H.drawings];
-const VIZ_EMPLOYEE: HeroSlide[] = [H.bim, H.drawings, H.office, H.crane];
+const VIZ_OFFICE   : HeroSlide[] = [H.office,     H.crane,   H.bim,     H.drawings];
+const VIZ_SITE     : HeroSlide[] = [H.site,       H.field,   H.crane,   H.frame];
+const VIZ_PLAN     : HeroSlide[] = [H.drawings,   H.bim,     H.crane,   H.frame];
+const VIZ_FIELD    : HeroSlide[] = [H.field,      H.site,    H.contractor, H.crane];
+const VIZ_CLIENT   : HeroSlide[] = [H.client,     H.office,  H.drawings, H.quality];
+const VIZ_VENDOR   : HeroSlide[] = [H.contractor, H.field,   H.frame,   H.site];
+const VIZ_QUALITY  : HeroSlide[] = [H.quality,    H.site,    H.frame,   H.field];
+const VIZ_COMMS    : HeroSlide[] = [H.bim,        H.office,  H.client,  H.drawings];
+const VIZ_MASTER   : HeroSlide[] = [H.crane,      H.office,  H.bim,     H.drawings];
+const VIZ_EMPLOYEE : HeroSlide[] = [H.bim,        H.drawings, H.office, H.crane];
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   master: {
-    key: "master",
-    title: "Master",
-    shortLabel: "Master",
+    key: "master", title: "Master", shortLabel: "Master",
     headline: "Set up every project from one desk.",
     subtitle: "Create projects, enable modules, HRM assign, CRM, and master documents.",
-    demoEmail: "office@sharnam.demo",
-    allowedRoles: ["admin", "office"],
-    points: ["Create projects", "Module toggles", "Directory"],
-    cta: "Enter Master",
-    tone: "#1E3A8A",
-    icon: "MS",
-    landingPath: "/master",
-    workspaceKey: null,
-    group: "master",
-    heroes: VIZ_MASTER,
+    demoEmail: "office@sharnam.demo", allowedRoles: ["admin", "office"],
+    points: ["Projects · modules", "Directory · access", "Master documents"],
+    cta: "Enter Master", tone: "#1E3A8A", icon: "MS",
+    landingPath: "/master", workspaceKey: null, group: "master", heroes: VIZ_MASTER,
     policies: [
       "Enable only the modules each project needs",
       "Directory parties before first RFI or meeting",
@@ -84,21 +87,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   office: {
-    key: "office",
-    title: "Office",
-    shortLabel: "Office",
+    key: "office", title: "Office", shortLabel: "Office",
     headline: "Full control desk.",
     subtitle: "Master, CRM, HRMS, cost, and every project module.",
-    demoEmail: "office@sharnam.demo",
-    allowedRoles: ["office", "admin"],
-    points: ["Access & roles", "All modules", "Reports"],
-    cta: "Enter Office",
-    tone: "#0B6A78",
-    icon: "OF",
-    landingPath: "/dashboard",
-    workspaceKey: null,
-    group: "role",
-    heroes: VIZ_OFFICE,
+    demoEmail: "office@sharnam.demo", allowedRoles: ["office", "admin"],
+    points: ["Access & roles", "All modules", "Reports · Audit"],
+    cta: "Enter Office", tone: "#0B6A78", icon: "OF",
+    landingPath: "/dashboard", workspaceKey: null, group: "role", heroes: VIZ_OFFICE,
     policies: [
       "One project spine for office, site, and contractors",
       "Publish GFC before QI and site checklist fills",
@@ -115,21 +110,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   site: {
-    key: "site",
-    title: "Site",
-    shortLabel: "Site",
+    key: "site", title: "Site", shortLabel: "Site",
     headline: "Field tools for site teams.",
     subtitle: "Day logs, checklist fills, photos, and site RFIs.",
-    demoEmail: "site@sharnam.demo",
-    allowedRoles: ["site_employee"],
-    points: ["Day log", "Checklist fills", "Photos"],
-    cta: "Enter Site",
-    tone: "#15803D",
-    icon: "ST",
-    landingPath: "/workspace",
-    workspaceKey: "field",
-    group: "role",
-    heroes: VIZ_SITE,
+    demoEmail: "site@sharnam.demo", allowedRoles: ["site_employee"],
+    points: ["Day log", "Checklist fills", "Photos · Site RFI"],
+    cta: "Enter Site", tone: "#15803D", icon: "ST",
+    landingPath: "/workspace", workspaceKey: "field", group: "role", heroes: VIZ_SITE,
     policies: [
       "Log manpower and weather before leave time",
       "Attach photos to checklist items as required",
@@ -146,20 +133,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   employee: {
-    key: "employee",
-    title: "Employee",
-    shortLabel: "Employee",
+    key: "employee", title: "Employee", shortLabel: "Employee",
     headline: "Your workday desk.",
     subtitle: "Assigned projects, drawings, and self-service.",
-    demoEmail: "employee@sharnam.demo",
-    allowedRoles: ["employee", "office"],
+    demoEmail: "employee@sharnam.demo", allowedRoles: ["employee", "office"],
     points: ["Projects", "Drawings", "Self-service"],
-    cta: "Enter Employee",
-    tone: "#64748B",
-    icon: "EM",
-    landingPath: "/dashboard",
-    group: "role",
-    heroes: VIZ_EMPLOYEE,
+    cta: "Enter Employee", tone: "#64748B", icon: "EM",
+    landingPath: "/dashboard", group: "role", heroes: VIZ_EMPLOYEE,
     policies: [
       "Work only on projects you are assigned to",
       "Revision control before marking drawings published",
@@ -174,21 +154,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   vendor: {
-    key: "vendor",
-    title: "Contractor",
-    shortLabel: "Contractor",
+    key: "vendor", title: "Contractor", shortLabel: "Contractor",
     headline: "Trade partner portal.",
     subtitle: "Assigned packages, RFI fills, and site evidence.",
-    demoEmail: "vendor@sharnam.demo",
-    allowedRoles: ["vendor"],
+    demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
     points: ["Assigned projects", "Fill RFIs", "Checklists"],
-    cta: "Enter Contractor",
-    tone: "#C45C26",
-    icon: "VN",
-    landingPath: "/workspace",
-    workspaceKey: "drawings",
-    group: "role",
-    heroes: VIZ_VENDOR,
+    cta: "Enter Contractor", tone: "#C45C26", icon: "VN",
+    landingPath: "/workspace", workspaceKey: "drawings", group: "role", heroes: VIZ_VENDOR,
     policies: [
       "Respond to inspection requests with checklist + photos",
       "Use only published GFC for execution",
@@ -203,21 +175,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   client: {
-    key: "client",
-    title: "Client",
-    shortLabel: "Client",
+    key: "client", title: "Client", shortLabel: "Client",
     headline: "Owner clarity on every sheet.",
     subtitle: "Published GFC, progress, reports, and concerns.",
-    demoEmail: "client@sharnam.demo",
-    allowedRoles: ["client"],
+    demoEmail: "client@sharnam.demo", allowedRoles: ["client"],
     points: ["Published drawings", "Progress", "Concerns"],
-    cta: "Enter Client",
-    tone: "#1E40AF",
-    icon: "CL",
-    landingPath: "/dashboard",
-    workspaceKey: "progress",
-    group: "role",
-    heroes: VIZ_CLIENT,
+    cta: "Enter Client", tone: "#1E40AF", icon: "CL",
+    landingPath: "/dashboard", workspaceKey: "progress", group: "role", heroes: VIZ_CLIENT,
     policies: [
       "View published drawings — upload stays with PMC / design",
       "Civil packs: schedule, procurement, S-curve when shared",
@@ -232,21 +196,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   drawings: {
-    key: "drawings",
-    title: "Drawings",
-    shortLabel: "Drawings",
+    key: "drawings", title: "Drawings", shortLabel: "Drawings",
     headline: "GFC register and project Documents.",
     subtitle: "Upload sheets, DMS, Drawing Check Master, Ask.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
     points: ["GFC register", "Checklist manager", "Ask"],
-    cta: "Enter Drawings",
-    tone: "#1D4ED8",
-    icon: "DW",
-    landingPath: "/workspace",
-    workspaceKey: "drawings",
-    group: "module",
-    heroes: VIZ_PLAN,
+    cta: "Enter Drawings", tone: "#1D4ED8", icon: "DW",
+    landingPath: "/workspace", workspaceKey: "drawings", group: "module", heroes: VIZ_PLAN,
     policies: [
       "Drawing Check Master unlocks before upload",
       "Revisions R0–R5 with audit who / when",
@@ -261,21 +218,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   quality: {
-    key: "quality",
-    title: "Quality",
-    shortLabel: "Quality",
+    key: "quality", title: "Quality", shortLabel: "Quality",
     headline: "QI, NCR, Cube, and QAP.",
     subtitle: "Separate tools per sheet — inspections and registers.",
     demoEmail: "site@sharnam.demo",
     allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
-    points: ["QI dashboard", "NCR / CAR", "Cube"],
-    cta: "Enter Quality",
-    tone: "#15803D",
-    icon: "QA",
-    landingPath: "/workspace",
-    workspaceKey: "quality",
-    group: "module",
-    heroes: VIZ_QUALITY,
+    points: ["QI dashboard", "NCR / CAR", "Cube · QAP"],
+    cta: "Enter Quality", tone: "#15803D", icon: "QA",
+    landingPath: "/workspace", workspaceKey: "quality", group: "module", heroes: VIZ_QUALITY,
     policies: [
       "NCR / CAR is its own tool — not buried in QI",
       "Cube register tracks cast / strength / result",
@@ -290,21 +240,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   comms: {
-    key: "comms",
-    title: "Communications",
-    shortLabel: "Comms",
+    key: "comms", title: "Communications", shortLabel: "Comms",
     headline: "Matrix → Agenda → MoM → Follow-up.",
     subtitle: "Meetings, Ask RFI, and Outlook outbox.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office", "employee", "site_employee"],
-    points: ["Matrix", "MoM", "Ask"],
-    cta: "Enter Comms",
-    tone: "#2563EB",
-    icon: "CM",
-    landingPath: "/workspace",
-    workspaceKey: "comms",
-    group: "module",
-    heroes: VIZ_COMMS,
+    points: ["Matrix", "MoM", "Ask · Outlook"],
+    cta: "Enter Comms", tone: "#2563EB", icon: "CM",
+    landingPath: "/workspace", workspaceKey: "comms", group: "module", heroes: VIZ_COMMS,
     policies: [
       "Matrix parties before first meeting or RFI",
       "Agenda generated before MoM starts",
@@ -319,21 +262,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     ],
   },
   field: {
-    key: "field",
-    title: "Field",
-    shortLabel: "Field",
+    key: "field", title: "Field", shortLabel: "Field",
     headline: "Day log, photos, site RFIs.",
     subtitle: "Field evidence on the project spine.",
     demoEmail: "site@sharnam.demo",
     allowedRoles: ["admin", "office", "site_employee", "employee", "vendor"],
     points: ["Day log", "Photos", "Field RFIs"],
-    cta: "Enter Field",
-    tone: "#DC2626",
-    icon: "FD",
-    landingPath: "/workspace",
-    workspaceKey: "field",
-    group: "module",
-    heroes: VIZ_FIELD,
+    cta: "Enter Field", tone: "#DC2626", icon: "FD",
+    landingPath: "/workspace", workspaceKey: "field", group: "module", heroes: VIZ_FIELD,
     policies: [
       "Day log ≠ HRMS personal diary",
       "Manpower / equipment lines feed DPR",
@@ -362,37 +298,170 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client", "employee", "master"];
+const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[]    = ["office", "site", "vendor", "client", "employee", "master"];
 const MODULE_LOGINS: (keyof typeof PORTAL_LOGINS)[] = ["drawings", "quality", "comms", "field"];
+
+const ISO_BADGES = [
+  { code: "ISO 9001",  label: "Quality Management" },
+  { code: "ISO 45001", label: "Occupational Health & Safety" },
+  { code: "ISO 14001", label: "Environmental Management" },
+  { code: "ISO 19650", label: "BIM & Information Management" },
+  { code: "ISO 21502", label: "Project Management" },
+];
 
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
   return shortLabel;
 }
 
-function chipOnStyle(tone: string): CSSProperties {
-  return {
-    borderColor: tone,
-    background: `${tone}18`,
-    color: tone,
-  };
-}
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Shared surface primitives
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
-function BrandMark({ size = "hero" }: { size?: "hero" | "card" | "tile" }) {
+function BrandLockup({ size = "hero" }: { size?: "hero" | "compact" | "chrome" }) {
   return (
-    <img
-      src="/logo.png"
-      alt="शरणम्"
-      className={`auth-brand__logo auth-brand__logo--${size}`}
-      width={820}
-      height={400}
-      decoding="sync"
-      fetchPriority="high"
-    />
+    <div className={`brand-lockup brand-lockup--${size}`}>
+      <img
+        src="/logo.png"
+        alt="शरणम्"
+        className="brand-lockup__mark"
+        width={820}
+        height={400}
+        decoding="sync"
+        fetchPriority="high"
+      />
+      {size !== "chrome" && (
+        <div className="brand-lockup__type" lang="hi">
+          <span className="brand-lockup__hi">शरणम्</span>
+          <span className="brand-lockup__latin">Sharnam</span>
+        </div>
+      )}
+    </div>
   );
 }
 
-function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
+function TopStrip() {
+  return (
+    <header className="auth-strip">
+      <div className="auth-strip__inner">
+        <Link to="/login" className="auth-strip__brand" aria-label="Sharnam home">
+          <img src="/logo.png" alt="Sharnam" width={140} height={68} className="auth-strip__logo" />
+          <div className="auth-strip__brand-text">
+            <span className="auth-strip__brand-en">Sharnam</span>
+            <span className="auth-strip__brand-sub">Project Management Consultants</span>
+          </div>
+        </Link>
+        <div className="auth-strip__iso" aria-label="Standards">
+          {ISO_BADGES.map((b) => (
+            <span key={b.code} className="auth-strip__iso-chip" title={b.label}>
+              {b.code}
+            </span>
+          ))}
+        </div>
+        <div className="auth-strip__rev">
+          <span className="auth-strip__rev-tag">PMC ISO Rev 02</span>
+          <span className="auth-strip__rev-sep" aria-hidden>·</span>
+          <span className="auth-strip__rev-ver">v0.5 · Aug 2026</span>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function PolicyTicker({ policies }: { policies: string[] }) {
+  // Duplicate the array so the marquee wraps seamlessly.
+  const doubled = [...policies, ...policies];
+  return (
+    <div className="auth-ticker" aria-label="Portal standards">
+      <span className="auth-ticker__label">Standards</span>
+      <div className="auth-ticker__track">
+        <ul className="auth-ticker__list">
+          {doubled.map((text, i) => (
+            <li key={`${text}-${i}`} className="auth-ticker__item">
+              <span className="auth-ticker__dot" aria-hidden />
+              {text}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function TrustFooter({ policies }: { policies: string[] }) {
+  return (
+    <footer className="auth-trust">
+      <PolicyTicker policies={policies} />
+    </footer>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Portal picker chip row — used on per-portal login pages
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+function PortalPicker({ active }: { active: string }) {
+  return (
+    <nav className="portal-picker" aria-label="Portal logins">
+      <div className="portal-picker__group">
+        <span className="portal-picker__label">User portals</span>
+        <div className="portal-picker__row">
+          {HUB_ROLES.map((key) => {
+            const p = PORTAL_LOGINS[key];
+            const on = active === key;
+            return (
+              <Link
+                key={key}
+                to={`/login/${key}`}
+                className={`portal-picker__chip ${on ? "is-on" : ""}`}
+                style={
+                  on
+                    ? ({ ["--chip-tone" as string]: p.tone } as CSSProperties)
+                    : undefined
+                }
+                aria-current={on ? "page" : undefined}
+              >
+                <span className="portal-picker__chip-icon">{p.icon}</span>
+                {portalDisplayName(key, p.shortLabel)}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+      <div className="portal-picker__group">
+        <span className="portal-picker__label">Module desks</span>
+        <div className="portal-picker__row">
+          {MODULE_LOGINS.map((key) => {
+            const p = PORTAL_LOGINS[key];
+            const on = active === key;
+            return (
+              <Link
+                key={key}
+                to={`/login/${key}`}
+                className={`portal-picker__chip portal-picker__chip--mod ${on ? "is-on" : ""}`}
+                style={
+                  on
+                    ? ({ ["--chip-tone" as string]: p.tone } as CSSProperties)
+                    : undefined
+                }
+                aria-current={on ? "page" : undefined}
+              >
+                <span className="portal-picker__chip-icon">{p.icon}</span>
+                {p.shortLabel}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Sign-in card
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
   const [email, setEmail] = useState(cfg.demoEmail);
   const [password, setPassword] = useState("Demo@1234");
@@ -437,69 +506,79 @@ function PortalSignInForm({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <form className="auth-form" onSubmit={onSubmit}>
-      <label className="auth-form__label">
-        Email
-        <input
-          className="auth-form__input"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="username"
-          required
-        />
-      </label>
-      <label className="auth-form__label">
-        Password
-        <input
-          className="auth-form__input"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-      </label>
-      {error && <p className="auth-form__error">{error}</p>}
-      <button
-        type="submit"
-        className="auth-form__submit"
-        disabled={busy}
-        style={{ background: `linear-gradient(135deg, ${cfg.tone} 0%, #14919b 100%)` }}
-      >
-        {busy ? "Signing in…" : cfg.cta}
-      </button>
-      <p className="auth-form__hint">Demo · Demo@1234</p>
-    </form>
+    <div className="signin-card" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
+      <div className="signin-card__accent" aria-hidden />
+      <div className="signin-card__body">
+        <div className="signin-card__head">
+          <span className="signin-card__eyebrow">{portalDisplayName(cfg.key, cfg.shortLabel)} login</span>
+          <span className="signin-card__href">/login/{cfg.key}</span>
+        </div>
+        <h1 className="signin-card__title">{cfg.headline}</h1>
+        <p className="signin-card__sub">{cfg.subtitle}</p>
+
+        <ul className="signin-card__points">
+          {cfg.points.map((p) => (
+            <li key={p}>
+              <span className="signin-card__points-dot" aria-hidden />
+              {p}
+            </li>
+          ))}
+        </ul>
+
+        <form className="signin-form" onSubmit={onSubmit}>
+          <label className="signin-form__label">
+            <span>Email</span>
+            <input
+              className="signin-form__input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
+          <label className="signin-form__label">
+            <span>Password</span>
+            <input
+              className="signin-form__input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          {error && <p className="signin-form__error">{error}</p>}
+          <button
+            type="submit"
+            className="signin-form__submit"
+            disabled={busy}
+          >
+            {busy ? "Signing in…" : cfg.cta}
+          </button>
+          <p className="signin-form__hint">Demo · Demo@1234</p>
+        </form>
+      </div>
+    </div>
   );
 }
 
-function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies: string[]; trade: string }) {
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Hero panel — subdued single image with gentle Ken Burns
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+function HeroPanel({ heroes }: { heroes: HeroSlide[] }) {
   const [slide, setSlide] = useState(0);
-  const [policy, setPolicy] = useState(0);
-  const slideKey = heroes.map((s) => s.src).join("|") || H.crane.src;
-  const policyKey = policies.join("|");
   const slides = heroes.length ? heroes : [H.crane];
-  const lines = policies.length ? policies : ["Plan · execute · verify on one spine"];
 
   useEffect(() => {
-    setSlide(0);
-    setPolicy(0);
-  }, [slideKey, policyKey]);
-
-  useEffect(() => {
-    const t = window.setInterval(() => setSlide((s) => (s + 1) % slides.length), 6000);
+    const t = window.setInterval(() => setSlide((s) => (s + 1) % slides.length), 7500);
     return () => window.clearInterval(t);
-  }, [slideKey, slides.length]);
-
-  useEffect(() => {
-    const t = window.setInterval(() => setPolicy((p) => (p + 1) % lines.length), 3200);
-    return () => window.clearInterval(t);
-  }, [policyKey, lines.length]);
+  }, [slides.length]);
 
   return (
-    <aside className="auth-hero">
-      <div className="auth-hero__stage">
+    <aside className="hero-panel" aria-hidden>
+      <div className="hero-panel__stage">
         {slides.map((s, i) => (
           <img
             key={s.src}
@@ -507,44 +586,26 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
             alt=""
             width={s.w}
             height={s.h}
-            sizes="(max-width: 900px) 100vw, 100vw"
-            className={`auth-hero__img ${i === slide ? "is-active" : ""}`}
+            sizes="(max-width: 900px) 100vw, 60vw"
+            className={`hero-panel__img ${i === slide ? "is-active" : ""}`}
             style={{ objectPosition: s.focus }}
             decoding={i === 0 ? "sync" : "async"}
             fetchPriority={i === 0 ? "high" : "low"}
             loading={i === 0 ? "eager" : "lazy"}
           />
         ))}
-        <div className="auth-hero__veil" aria-hidden />
+        <div className="hero-panel__veil" aria-hidden />
       </div>
-
-      <div className="auth-hero__center">
-        <div className="auth-hero__brand">
-          <BrandMark size="hero" />
-          <p className="auth-hero__name" lang="hi">
-            <span className="auth-hero__name-hi">शरणम्</span>
-            <span className="auth-hero__name-latin">Sharnam</span>
-          </p>
-          <p className="auth-hero__trade">{trade}</p>
-        </div>
-
-        <div className="auth-hero__policies" aria-live="polite">
-          {lines.map((text, i) => (
-            <p key={text} className={`auth-hero__policy ${i === policy ? "is-on" : ""}`}>
-              <span className="auth-hero__bullet" aria-hidden />
-              {text}
-            </p>
-          ))}
-        </div>
+      <div className="hero-panel__brand">
+        <BrandLockup size="hero" />
       </div>
-
-      <div className="auth-hero__dots" role="tablist" aria-label="Portal photos">
+      <div className="hero-panel__dots" role="tablist" aria-label="Photos">
         {slides.map((s, i) => (
           <button
             key={s.src}
             type="button"
             aria-label={s.label}
-            className={`auth-hero__dot ${i === slide ? "is-on" : ""}`}
+            className={`hero-panel__dot ${i === slide ? "is-on" : ""}`}
             onClick={() => setSlide(i)}
           />
         ))}
@@ -553,67 +614,9 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
   );
 }
 
-function PortalLinks({ active }: { active: keyof typeof PORTAL_LOGINS }) {
-  return (
-    <nav className="auth-portals" aria-label="Portal logins">
-      <p className="auth-portals__label">Portals</p>
-      <div className="auth-portals__row">
-        {HUB_ROLES.map((key) => {
-          const p = PORTAL_LOGINS[key];
-          const on = active === key;
-          return (
-            <Link
-              key={key}
-              to={`/login/${key}`}
-              className={`auth-portals__chip ${on ? "is-on" : ""}`}
-              style={on ? chipOnStyle(p.tone) : undefined}
-              aria-current={on ? "page" : undefined}
-            >
-              {portalDisplayName(key, p.shortLabel)}
-            </Link>
-          );
-        })}
-      </div>
-      <p className="auth-portals__label auth-portals__label--sub">Modules</p>
-      <div className="auth-portals__row">
-        {MODULE_LOGINS.map((key) => {
-          const p = PORTAL_LOGINS[key];
-          const on = active === key;
-          return (
-            <Link
-              key={key}
-              to={`/login/${key}`}
-              className={`auth-portals__chip auth-portals__chip--mod ${on ? "is-on" : ""}`}
-              style={on ? chipOnStyle(p.tone) : undefined}
-              aria-current={on ? "page" : undefined}
-            >
-              {p.shortLabel}
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
-function AuthCard({ active }: { active: keyof typeof PORTAL_LOGINS }) {
-  const cfg = PORTAL_LOGINS[active];
-  return (
-    <div className="auth-card" key={cfg.key}>
-      <div className="auth-card__crumbs">
-        <Link to="/login" className="auth-card__back">← All portals</Link>
-        <span className="auth-card__portal-tag" style={{ background: `${cfg.tone}18`, color: cfg.tone, borderColor: `${cfg.tone}44` }}>
-          {portalDisplayName(active, cfg.shortLabel)} login
-        </span>
-      </div>
-      <p className="auth-card__firm">Project Management Consultants</p>
-      <p className="auth-card__welcome">{cfg.title}</p>
-      <p className="auth-card__sub">{cfg.subtitle}</p>
-      <PortalSignInForm cfg={cfg} />
-      <p className="auth-card__note">Each user type has its own login link. To open a different portal, use <Link to="/login">All portals</Link>.</p>
-    </div>
-  );
-}
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Per-portal login page
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
 export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_LOGINS }) {
   const cfg = PORTAL_LOGINS[portalKey];
@@ -622,71 +625,127 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
   return (
-    <div className="auth-shell" data-portal={portalKey}>
-      <HeroStage heroes={cfg.heroes} policies={cfg.policies} trade={cfg.headline} />
-      <section className="auth-side">
-        <AuthCard active={portalKey} />
-      </section>
+    <div className="auth-page" data-portal={portalKey}>
+      <TopStrip />
+      <main className="auth-page__body">
+        <HeroPanel heroes={cfg.heroes} />
+        <section className="auth-page__panel">
+          <div className="auth-page__panel-inner">
+            <div className="auth-page__crumb">
+              <Link to="/login" className="auth-page__back">← All portals</Link>
+            </div>
+            <PortalPicker active={portalKey} />
+            <SignInCard cfg={cfg} />
+          </div>
+        </section>
+      </main>
+      <TrustFooter policies={cfg.policies} />
     </div>
   );
 }
 
-/** Hub landing — pick a user type, then open its dedicated login URL */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Landing hub — one screen, no scroll
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
+  return (
+    <Link
+      to={`/login/${cfg.key}`}
+      className="bento-tile"
+      style={{ ["--tile-tone" as string]: cfg.tone } as CSSProperties}
+    >
+      <div className="bento-tile__accent" aria-hidden />
+      <div className="bento-tile__head">
+        <span className="bento-tile__icon">{cfg.icon}</span>
+        <span className="bento-tile__href">/login/{cfg.key}</span>
+      </div>
+      <div className="bento-tile__title">{portalDisplayName(cfg.key, cfg.shortLabel)}</div>
+      <p className="bento-tile__headline">{cfg.headline}</p>
+      <ul className="bento-tile__points">
+        {cfg.points.map((p) => (
+          <li key={p}>
+            <span className="bento-tile__points-dot" aria-hidden />
+            {p}
+          </li>
+        ))}
+      </ul>
+      <div className="bento-tile__cta">
+        <span>{cfg.cta}</span>
+        <span aria-hidden>→</span>
+      </div>
+    </Link>
+  );
+}
+
+function ModuleChip({ cfg }: { cfg: PortalConfig }) {
+  return (
+    <Link
+      to={`/login/${cfg.key}`}
+      className="module-chip"
+      style={{ ["--chip-tone" as string]: cfg.tone } as CSSProperties}
+    >
+      <span className="module-chip__icon">{cfg.icon}</span>
+      <div className="module-chip__body">
+        <div className="module-chip__title">{cfg.shortLabel}</div>
+        <div className="module-chip__sub">{cfg.headline}</div>
+      </div>
+    </Link>
+  );
+}
+
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
+  // Compose a rich policy stream for the ticker so the client sees active standards.
+  const policies = [
+    "Every project is set up from Master · then modules open per charter.",
+    "GFC publish gate before checklist fills and QI create.",
+    "Safety NCR and QI NCR live in their own registers — never merged.",
+    "Client sees published packs · never live drafts.",
+    "Every mutation is written to the audit trail with who / when.",
+    "DMS folders mirror PMC ISO Rev 02 · 100 folders · 127 subjects.",
+    "Field RFI · Ask RFI · Inspection RFI are three distinct tools.",
+    "Cashflow Chart · Forecast · Tracking stay separate to preserve intent.",
+  ];
+
   return (
-    <div className="auth-shell auth-shell--landing">
-      <HeroStage
-        heroes={VIZ_MASTER}
-        policies={[
-          "Each role has its own login link",
-          "Office · Site · Contractor · Client · Employee · Master",
-          "Sign in lands you on the right desk",
-          "Module desks: Drawings · Quality · Comms · Field",
-        ]}
-        trade="Project Management Consultants"
-      />
-      <section className="auth-side auth-side--landing">
-        <div className="auth-landing">
-          <p className="auth-card__firm">Project Management Consultants</p>
-          <h1 className="auth-landing__title">Choose your portal</h1>
-          <p className="auth-landing__sub">Separate links for every user type — you land on the right desk after sign-in.</p>
+    <div className="auth-page auth-page--hub">
+      <TopStrip />
+      <main className="auth-hub">
+        <section className="auth-hub__masthead">
+          <BrandLockup size="hero" />
+          <p className="auth-hub__tag">
+            Project Management Consultants · ISO-aligned · DMS · PMC portal
+          </p>
+        </section>
 
-          <p className="auth-portals__label">User portals</p>
-          <div className="auth-landing__grid">
-            {HUB_ROLES.map((key) => {
-              const p = PORTAL_LOGINS[key];
-              return (
-                <Link key={key} to={`/login/${key}`} className="auth-tile" style={{ ["--tile-tone" as string]: p.tone }}>
-                  <span className="auth-tile__icon" aria-hidden>
-                    {p.icon}
-                  </span>
-                  <span className="auth-tile__title">{portalDisplayName(key, p.shortLabel)}</span>
-                  <span className="auth-tile__sub">{p.points.slice(0, 2).join(" · ")}</span>
-                  <span className="auth-tile__href">/login/{key}</span>
-                </Link>
-              );
-            })}
+        <section className="auth-hub__bento" aria-label="Choose your portal">
+          <header className="auth-hub__section-head">
+            <h2 className="auth-hub__section-title">User portals</h2>
+            <span className="auth-hub__section-hint">Each user type has its own login link</span>
+          </header>
+          <div className="auth-hub__grid">
+            {HUB_ROLES.map((k) => (
+              <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />
+            ))}
           </div>
+        </section>
 
-          <p className="auth-portals__label auth-portals__label--sub">Module desks</p>
-          <div className="auth-landing__row">
-            {MODULE_LOGINS.map((key) => {
-              const p = PORTAL_LOGINS[key];
-              return (
-                <Link key={key} to={`/login/${key}`} className="auth-tile auth-tile--mod" style={{ ["--tile-tone" as string]: p.tone }}>
-                  <span className="auth-tile__icon" aria-hidden>
-                    {p.icon}
-                  </span>
-                  <span className="auth-tile__title">{p.shortLabel}</span>
-                </Link>
-              );
-            })}
+        <section className="auth-hub__modules" aria-label="Module desks">
+          <header className="auth-hub__section-head">
+            <h2 className="auth-hub__section-title">Module desks</h2>
+            <span className="auth-hub__section-hint">Open a single tool — for demos and reviews</span>
+          </header>
+          <div className="auth-hub__mods">
+            {MODULE_LOGINS.map((k) => (
+              <ModuleChip key={k} cfg={PORTAL_LOGINS[k]} />
+            ))}
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
+      <TrustFooter policies={policies} />
     </div>
   );
 }
