@@ -67,7 +67,9 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
 /** Office admin — full control surface */
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/crm", label: "CRM · Bids", icon: "modules" },
+  { to: "/quotations/new", label: "Quotation maker", icon: "reports" },
   { to: "/hrm", label: "HRMS", icon: "modules" },
+  { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
   { to: "/roles", label: "Access · Users", icon: "master" },
   { to: "/audit", label: "Audit trail", icon: "reports" },
 ];

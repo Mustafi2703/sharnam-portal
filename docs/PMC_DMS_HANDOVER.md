@@ -1,6 +1,6 @@
 # Sharnam Portal · PMC / ISO Document Management — Client Handover
 
-**Doc:** SPDC-PMC-PORTAL-HANDOVER · **Prepared for:** SPDC PMC · **Rev:** 03 · **Date:** 2026-08-10
+**Doc:** SPDC-PMC-PORTAL-HANDOVER · **Prepared for:** SPDC PMC · **Rev:** 04 · **Date:** 2026-08-10
 
 ---
 
@@ -167,8 +167,55 @@ Once granted, `POST /api/graph/test-mail` with `{ "to": "you@spdc.in" }` will se
 
 ---
 
-## 9. What is *not* done yet (deferred by client)
+## 9. Finance module — now live
 
-* **Finance module detail** — Invoice/PO/RA/COP flow is scaffolded; awaiting your definitions.
-* **Payroll engine** — HRMS attendance + leave is in; salary compute not started.
-* **Mail sending** — code is ready, waiting on §7 permissions.
+Full commercial ledger. Sits alongside the Cost module (which keeps BOQ / BBS / MB / cashflow) — Finance is the money side.
+
+| Tab | What it does |
+|--|--|
+| **Overview** | KPI cards for CAPEX budgeted · PO original / billed / certified / paid · RA gross / net / retention / advance adjusted · COP certified / payable. Also shows the last 8 RA bills and 8 COPs. |
+| **Project CAPEX** | Line-level project capex — description · package · stakeholder · budgeted · work-order value. Rolls up into Payment Summary. |
+| **Purchase Orders** | PO number · date · vendor · trade · package · original value · amended value · retention % · advance % · PAN · GST · payable-to. PDF/scan attaches to `09.01_Interim_Bill_Verification_Certification`. |
+| **RA Bill Tracker** | Every column from the Payment Summary sheet: against-bill-raised · price variation · totals w/w-out GST · advance adjusted · retention · other recoveries · net payable · **cumulative** auto-computed per PO. |
+| **COP (Certificate of Payment)** | Exact fields from the Viatrix CoP sheet — certificate no · type (Against-RA / Advance) · date · contractor · work/trade · budget code · PO no & date · original / amended WO value · amendment no · invoice no & date · linked RA · amount certified / payable · GST · retention · PAN · GST · payable-to · remarks. Attachment lands in `09.05_Variation_Extra_Item_Evaluation`. |
+| **Payment Summary** | Per-PO ledger — original · amended · billed w/w-out GST · net payable · retention · advance adjusted · balance · RA count. Grand-total row. |
+| **Audit sheets → drive** | One-click regenerates `Capex-Log`, `PurchaseOrder-Log`, `RA-Bill-Log`, `COP-Log`, `Payment-Summary` into 09.01 + 09.08 + `_Registers/`. Never overwrites — timestamps on conflict. |
+
+API: `/api/finance/:projectId/{summary,capex,po,ra,cop,audit-dump}`.
+Prisma models: `ProjectCapex`, `PurchaseOrder`, `RaBill`, `CertificateOfPayment`.
+
+## 10. HRMS additions — now live
+
+* **Directory + role assignments** already existed; enriched with attendance & leave.
+* **Attendance** now captures GPS (lat/lng/accuracy) plus site-name and geo-fence flag. Every check-in/out records where you were.
+* **Check-in with GPS** button in HRM header — pick a project, browser prompts for location, portal stamps the row.
+* **Leave types (masters)** — create CL, SL, PL, CO, LWP, etc. with days-per-year, paid/unpaid, carry-forward.
+* **Leave balances** — auto-decrement when a request is approved.
+* **Holidays** — upload the year's list, region-tagged.
+* **Leave request (pre-approval)** — pick type, half-day, from-to, reason. Approver clicks Approve / Reject.
+* Employee profile now stores personal + bank + PF/ESIC + nominee + emergency contact + CTC/basic/HRA (used by payroll later).
+
+API: `/api/hrm/{leave-types,leave-balances,holidays,leave,attendance,documents}`.
+
+## 11. CRM · Quotation Maker
+
+* `/quotations/new` — editable proposal maker that renders the SPDC PMC format (Devanagari शरणम् masthead + Latin Sharnam under it), section-based with live totals.
+* Sections + rows are fully editable. Print / PDF button uses the browser print UI (proper A4 layout).
+* **Award button** on a saved quotation creates the project (or links to an existing one) and bootstraps the SharePoint ISO tree.
+
+API: `/api/crm/quotations` + `/api/crm/quotations/:id/award`.
+Prisma: `Quotation` model with `sectionsJson`, `awardedProjectId`.
+
+## 12. Custom Sheet Maker
+
+* Upload any `.xlsx / .xls / .csv` — the portal parses it into an editable table.
+* Edit in-place, save, then export back to `.xlsx`.
+* If uploaded against a project, the raw file lands in `12.08_Audit_Trails_and_Certifications` for the audit trail.
+* Route: `/custom-sheets` (list) → `/custom-sheets/:id` (editor).
+
+## 13. What is *not* done yet (still deferred)
+
+* **Payroll engine (payslip / pay hike / TDS)** — schema is ready, compute engine next.
+* **Recruitment / onboarding pipeline** — schemas next; UI after your review of the samples.
+* **Bid management (comparative statement full flow)** — vendor uploads + BOQ compare across vendors is the next major module.
+* **Mail sending** — awaits `Mail.Send` admin consent (§7).

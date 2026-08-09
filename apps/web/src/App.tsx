@@ -37,6 +37,8 @@ import ModuleHubPage from "./pages/project/ModuleHubPage";
 import QapPage from "./pages/project/QapPage";
 import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
 import SitePilotPage from "./pages/SitePilotPage";
+import QuotationMakerPage from "./pages/QuotationMakerPage";
+import CustomSheetsPage, { CustomSheetEditorPage } from "./pages/CustomSheetsPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -145,6 +147,10 @@ export default function App() {
                 <Route path="/roles" element={<RolesPage />} />
                 <Route path="/crm" element={<CrmPage />} />
                 <Route path="/hrm" element={<HrmPage />} />
+                <Route path="/quotations/new" element={<QuotationMakerPage />} />
+                <Route path="/quotations/:id" element={<QuotationMakerPage />} />
+                <Route path="/custom-sheets" element={<CustomSheetsPage />} />
+                <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
               </Routes>
             </AppShell>
           </Protected>

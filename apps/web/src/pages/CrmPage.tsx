@@ -132,15 +132,20 @@ export default function CrmPage() {
         title="Leads & projects"
         subtitle="Create projects with full client card (contact, GST, consultant, contractor). Assign staff in CRM; manage the live directory in HR / project Directory."
         actions={
-          canManage ? (
-            <div className="flex gap-2">
-              {(["leads", "wizard", "projects"] as const).map((t) => (
-                <Button key={t} variant={tab === t ? "primary" : "secondary"} onClick={() => setTab(t)}>
-                  {t === "wizard" ? "New project" : t === "leads" ? "Leads board" : "Projects"}
-                </Button>
-              ))}
-            </div>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            <Link to="/quotations/new">
+              <Button variant="secondary">+ Quotation maker</Button>
+            </Link>
+            {canManage && (
+              <>
+                {(["leads", "wizard", "projects"] as const).map((t) => (
+                  <Button key={t} variant={tab === t ? "primary" : "secondary"} onClick={() => setTab(t)}>
+                    {t === "wizard" ? "New project" : t === "leads" ? "Leads board" : "Projects"}
+                  </Button>
+                ))}
+              </>
+            )}
+          </div>
         }
       />
 
