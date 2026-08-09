@@ -39,6 +39,9 @@ import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
 import SitePilotPage from "./pages/SitePilotPage";
 import QuotationMakerPage from "./pages/QuotationMakerPage";
 import CustomSheetsPage, { CustomSheetEditorPage } from "./pages/CustomSheetsPage";
+import RecruitmentPage from "./pages/RecruitmentPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import PayrollPage from "./pages/PayrollPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -151,6 +154,10 @@ export default function App() {
                 <Route path="/quotations/:id" element={<QuotationMakerPage />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
+                <Route path="/hrms/recruitment" element={<RecruitmentPage />} />
+                <Route path="/hrms/onboarding" element={<OnboardingPage />} />
+                <Route path="/hrms/onboarding/:offerId" element={<OnboardingPage />} />
+                <Route path="/hrms/payroll" element={<PayrollPage />} />
               </Routes>
             </AppShell>
           </Protected>

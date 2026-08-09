@@ -802,6 +802,278 @@ model EmployeeDocument {
   createdAt   DateTime  @default(now())
 }
 
+/**
+ * Manpower Requisition — a dept opens it; HR approves before we post the job.
+ */
+model ManpowerRequisition {
+  id               String    @id @default(cuid())
+  requisitionNo    String    @unique
+  department       String
+  designation      String
+  count            Int       @default(1)
+  employmentType   String    @default("Permanent")
+  reportingManager String?
+  justification    String?
+  urgency          String?   @default("Normal")
+  ctcRangeMin      Float?
+  ctcRangeMax      Float?
+  location         String?
+  requestedById    String
+  approvedById     String?
+  approvedAt       DateTime?
+  /// Draft | Submitted | Approved | Rejected | Closed
+  status           String    @default("Submitted")
+  rejectionReason  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+
+  postings JobPosting[]
+}
+
+/**
+ * Job Posting — sourcing channels (LinkedIn / Naukri / Website / Referral).
+ */
+model JobPosting {
+  id             String    @id @default(cuid())
+  requisitionId  String?
+  title          String
+  department     String?
+  location       String?
+  employmentType String?   @default("Permanent")
+  description    String?
+  requirements   String?
+  channelsJson   String?   @default("[]")
+  postedAt       DateTime?
+  closedAt       DateTime?
+  /// Open | Closed | On-Hold
+  status         String    @default("Open")
+  postedById     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  requisition ManpowerRequisition? @relation(fields: [requisitionId], references: [id])
+  candidates  Candidate[]
+}
+
+/**
+ * Candidate — resume database. Moves through stages until Offered/Joined.
+ */
+model Candidate {
+  id               String   @id @default(cuid())
+  postingId        String?
+  fullName         String
+  email            String?
+  phone            String?
+  sourceChannel    String?
+  resumeUrl        String?
+  currentCompany   String?
+  currentDesign    String?
+  currentCtc       Float?
+  expectedCtc      Float?
+  noticePeriodDays Int?
+  experienceYears  Float?
+  skills           String?
+  location         String?
+  /// New | Screened | Shortlisted | Interview | Selected | Offered | Joined | Rejected | Withdrawn
+  status           String   @default("New")
+  screenedById     String?
+  rejectionReason  String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  posting    JobPosting?      @relation(fields: [postingId], references: [id])
+  interviews InterviewRound[]
+  offers     Offer[]
+}
+
+/**
+ * Interview Round — technical / HR / management.
+ * Meeting link (Teams / Zoom / in-person) + panel + scorecard.
+ */
+model InterviewRound {
+  id                 String    @id @default(cuid())
+  candidateId        String
+  roundNumber        Int       @default(1)
+  roundType          String
+  panelJson          String?   @default("[]")
+  scheduledAt        DateTime?
+  durationMins       Int?      @default(60)
+  mode               String    @default("Teams")
+  meetingLink        String?
+  meetingId          String?
+  feedbackTechnical  String?
+  feedbackHr         String?
+  feedbackMgmt       String?
+  scoreTechnical     Float?
+  scoreCommunication Float?
+  scoreCulture       Float?
+  scoreOverall       Float?
+  /// Scheduled | Completed | No-Show | Cancelled
+  status             String    @default("Scheduled")
+  /// Advance | Reject | Hold
+  decision           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Offer letter — CTC breakdown, joining date, approval workflow.
+ */
+model Offer {
+  id                String    @id @default(cuid())
+  candidateId       String
+  offerNo           String    @unique
+  designation       String
+  department        String?
+  ctcAnnual         Float
+  basicMonthly      Float?
+  hraMonthly        Float?
+  otherAllowMonthly Float?
+  variablePayPct    Float?
+  joiningDate       DateTime?
+  probationMonths   Int?      @default(6)
+  location          String?
+  reportingManager  String?
+  offerLetterUrl    String?
+  approvedById      String?
+  approvedAt        DateTime?
+  sentAt            DateTime?
+  acceptedAt        DateTime?
+  declinedAt        DateTime?
+  joinedAt          DateTime?
+  /// Draft | Approved | Sent | Accepted | Declined | Withdrawn | Joined
+  status            String    @default("Draft")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+
+  candidate Candidate            @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  preJoin   PreJoiningChecklist?
+  onboard   OnboardingChecklist?
+}
+
+/**
+ * Pre-Joining Checklist — document collection, BGV, medical, IT asset, ID card, welcome kit.
+ */
+model PreJoiningChecklist {
+  id                   String    @id @default(cuid())
+  offerId              String    @unique
+  empCodeGenerated     String?
+  appointmentLetterUrl String?
+  docCollectionDone    Boolean   @default(false)
+  docCollectionAt      DateTime?
+  bgvStatus            String    @default("Pending")
+  bgvAt                DateTime?
+  medicalStatus        String    @default("Pending")
+  medicalAt            DateTime?
+  itAssetRequested     Boolean   @default(false)
+  itAssetIssuedAt      DateTime?
+  itAssetDetails       String?
+  emailCreated         Boolean   @default(false)
+  emailCreatedAt       DateTime?
+  emailAddress         String?
+  idCardRequested      Boolean   @default(false)
+  idCardIssuedAt       DateTime?
+  welcomeKitPrepared   Boolean   @default(false)
+  welcomeKitAt         DateTime?
+  notes                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Onboarding Checklist — joining formalities, personal info, doc verification, HR policy ack.
+ * Stateful list of every item + who / when it was ticked.
+ */
+model OnboardingChecklist {
+  id                       String   @id @default(cuid())
+  offerId                  String   @unique
+  userId                   String?
+  joiningFormalitiesDone   Boolean  @default(false)
+  personalInfoDone         Boolean  @default(false)
+  bankDetailsDone          Boolean  @default(false)
+  panAadhaarDone           Boolean  @default(false)
+  pfEsicDone               Boolean  @default(false)
+  nomineeDone              Boolean  @default(false)
+  docVerificationDone      Boolean  @default(false)
+  departmentAllocated      Boolean  @default(false)
+  reportingManagerAssigned Boolean  @default(false)
+  orientationDone          Boolean  @default(false)
+  hrPolicyAcknowledged     Boolean  @default(false)
+  itemsCompletedAtJson     String   @default("{}")
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @default(now()) @updatedAt
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Pay Hike — salary revision with old/new snapshot, reason, approval.
+ */
+model PayHike {
+  id                String    @id @default(cuid())
+  userId            String
+  effectiveDate     DateTime
+  oldCtcAnnual      Float
+  newCtcAnnual      Float
+  hikePercent       Float
+  oldBasicMonthly   Float?
+  newBasicMonthly   Float?
+  oldHraMonthly     Float?
+  newHraMonthly     Float?
+  reason            String?
+  performanceRating String?
+  approvedById      String?
+  approvedAt        DateTime?
+  /// Draft | Submitted | Approved | Rejected | Applied
+  status            String    @default("Submitted")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+}
+
+/**
+ * Payslip — one row per user per month. Auto-generated from EmployeeProfile + adjustments.
+ */
+model Payslip {
+  id              String   @id @default(cuid())
+  userId          String
+  year            Int
+  month           Int
+  workingDays     Float    @default(0)
+  paidDays        Float    @default(0)
+  lopDays         Float    @default(0)
+  basic           Float    @default(0)
+  hra             Float    @default(0)
+  conveyance      Float    @default(0)
+  medicalAllow    Float    @default(0)
+  specialAllow    Float    @default(0)
+  otherEarnings   Float    @default(0)
+  grossEarnings   Float    @default(0)
+  pfEmployee      Float    @default(0)
+  esicEmployee    Float    @default(0)
+  professionalTax Float    @default(0)
+  incomeTax       Float    @default(0)
+  otherDeduction  Float    @default(0)
+  totalDeductions Float    @default(0)
+  netPay          Float    @default(0)
+  status          String   @default("Generated")
+  generatedAt     DateTime @default(now())
+  generatedById   String?
+  fileUrl         String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@unique([userId, year, month])
+}
+
 model CustomSheet {
   id          String   @id @default(cuid())
   projectId   String?

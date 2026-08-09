@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@sharnam/shared": "*",
+    "pdfjs-dist": "^4.6.82",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.4.0"

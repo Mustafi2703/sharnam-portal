@@ -21,6 +21,7 @@ import { graphRouter } from "./routes/graph.js";
 import { siteTestRouter } from "./routes/siteTest.js";
 import { financeRouter } from "./routes/finance.js";
 import { customSheetsRouter } from "./routes/customSheets.js";
+import { hrmRecruitmentRouter } from "./routes/hrmRecruitment.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -84,6 +85,7 @@ app.use("/api/graph", graphRouter);
 app.use("/api/site-test", siteTestRouter);
 app.use("/api/finance", financeRouter);
 app.use("/api/custom-sheets", customSheetsRouter);
+app.use("/api/hrm", hrmRecruitmentRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {

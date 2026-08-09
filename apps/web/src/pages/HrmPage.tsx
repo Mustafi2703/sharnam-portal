@@ -133,6 +133,24 @@ export default function HrmPage() {
         }
       />
 
+      <div className="grid md:grid-cols-3 gap-3">
+        <a href="/hrms/recruitment" className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
+          <div className="text-xs uppercase tracking-widest text-brand font-semibold">1 · Recruitment</div>
+          <div className="mt-1 font-semibold">Requisition → Job posting → Candidates → Interviews → Offer</div>
+          <div className="text-xs text-steel-muted mt-1">Manpower requisition, HR approval, LinkedIn / Naukri postings, interview scorecards, offer letters. Teams meeting links auto-generated.</div>
+        </a>
+        <a href="/hrms/onboarding" className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
+          <div className="text-xs uppercase tracking-widest text-brand font-semibold">2 · Pre-joining · Onboarding</div>
+          <div className="mt-1 font-semibold">Document collection, BGV, IT asset, ID card, welcome kit → Day 1 formalities</div>
+          <div className="text-xs text-steel-muted mt-1">Per-employee checklists with a live audit trail from AuditEvent.</div>
+        </a>
+        <a href="/hrms/payroll" className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
+          <div className="text-xs uppercase tracking-widest text-brand font-semibold">3 · Payroll & Pay hike</div>
+          <div className="mt-1 font-semibold">Monthly payslips + salary revision workflow</div>
+          <div className="text-xs text-steel-muted mt-1">Deterministic compute from CTC breakdown + paid-days. Editable overrides. Approvals audited.</div>
+        </a>
+      </div>
+
       {msg && <p className="text-sm text-ok">{msg}</p>}
       {geoStatus && <p className="text-xs text-steel-muted">GPS: {geoStatus}</p>}
 

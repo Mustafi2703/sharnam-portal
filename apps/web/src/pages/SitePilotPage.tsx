@@ -11,6 +11,8 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
 import { SignaturePad } from "../components/SignaturePad";
 import { PhotoCapture } from "../components/PhotoCapture";
+import ImageMarkup from "../components/ImageMarkup";
+import PdfMarkup from "../components/PdfMarkup";
 
 type SavedItem = { kind: "photo" | "signature" | "note"; path?: string; url?: string; provider?: string };
 
@@ -25,6 +27,8 @@ export default function SitePilotPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [items, setItems] = useState<SavedItem[]>([]);
+  const [markupIdx, setMarkupIdx] = useState<number | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -103,6 +107,43 @@ export default function SitePilotPage() {
           multiple
           hint="Tap Camera on phone to open the rear camera. Gallery lets you pick existing images."
         />
+        {photos.length > 0 && (
+          <div className="mt-3">
+            <div className="text-xs text-steel-muted mb-2">
+              Tap a photo below to mark it up (arrow, circle, notes) before submitting.
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {photos.map((p, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setMarkupIdx(i)}
+                  className="relative border border-line rounded-lg overflow-hidden group"
+                >
+                  <img src={URL.createObjectURL(p)} alt={p.name} className="h-24 w-24 object-cover" />
+                  <span className="absolute inset-0 bg-black/50 text-white text-[10px] uppercase font-semibold opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                    Mark up
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {markupIdx !== null && photos[markupIdx] && (
+          <div className="mt-4 border border-line rounded-xl p-3 bg-sand/40">
+            <ImageMarkup
+              src={photos[markupIdx]}
+              saveLabel="Save markup"
+              filename={`site-photo-${markupIdx + 1}`}
+              onSave={(file) => {
+                setPhotos((prev) => prev.map((p, i) => (i === markupIdx ? file : p)));
+                setMarkupIdx(null);
+                setMsg("Markup saved on photo " + (markupIdx + 1));
+              }}
+              onCancel={() => setMarkupIdx(null)}
+            />
+          </div>
+        )}
       </Card>
 
       <Card>
@@ -139,6 +180,36 @@ export default function SitePilotPage() {
             />
           </label>
         </div>
+      </Card>
+
+      <Card>
+        <h3 className="font-semibold text-sm mb-2">4 · PDF markup (drawings, checklists)</h3>
+        <p className="text-xs text-steel-muted mb-2">
+          Load a PDF from your phone, mark it page-by-page and the annotated pages are added to your photo submission.
+        </p>
+        <label className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest bg-white border border-line rounded-lg px-3 py-2 cursor-pointer">
+          <span>Choose PDF</span>
+          <input
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+          />
+        </label>
+        {pdfFile && (
+          <div className="mt-3 border border-line rounded-xl p-3 bg-sand/40">
+            <PdfMarkup
+              src={pdfFile}
+              onCancel={() => setPdfFile(null)}
+              saveLabel="Add annotated pages to submission"
+              onSave={(files) => {
+                setPhotos((prev) => [...prev, ...files]);
+                setPdfFile(null);
+                setMsg(`Added ${files.length} annotated page(s) to submission.`);
+              }}
+            />
+          </div>
+        )}
       </Card>
 
       <div className="flex items-center gap-3 sticky bottom-3 justify-end">

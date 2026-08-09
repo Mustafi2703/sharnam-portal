@@ -1,6 +1,8 @@
 # Sharnam Portal · PMC / ISO Document Management — Client Handover
 
-**Doc:** SPDC-PMC-PORTAL-HANDOVER · **Prepared for:** SPDC PMC · **Rev:** 04 · **Date:** 2026-08-10
+**Doc:** SPDC-PMC-PORTAL-HANDOVER · **Prepared for:** SPDC PMC · **Rev:** 05 · **Date:** 2026-08-10
+
+> Rev 05 additions — Recruitment & Interview Management, Pre-joining checklist, Employee Onboarding checklist, Pay Hike + Payslip workflows, per-employee audit timeline, Teams meeting-link auto-generate for interviews, and photo + PDF markup tools wired into Site Pilot for on-site testing.
 
 ---
 
@@ -210,12 +212,55 @@ Prisma: `Quotation` model with `sectionsJson`, `awardedProjectId`.
 
 * Upload any `.xlsx / .xls / .csv` — the portal parses it into an editable table.
 * Edit in-place, save, then export back to `.xlsx`.
-* If uploaded against a project, the raw file lands in `12.08_Audit_Trails_and_Certifications` for the audit trail.
+* If uploaded against a project, the raw file lands in `10.18_Management_Review_and_Audit_Programme` for the audit trail.
 * Route: `/custom-sheets` (list) → `/custom-sheets/:id` (editor).
 
-## 13. What is *not* done yet (still deferred)
+## 13. HRMS · Recruitment · Onboarding · Payroll — now live
 
-* **Payroll engine (payslip / pay hike / TDS)** — schema is ready, compute engine next.
-* **Recruitment / onboarding pipeline** — schemas next; UI after your review of the samples.
-* **Bid management (comparative statement full flow)** — vendor uploads + BOQ compare across vendors is the next major module.
-* **Mail sending** — awaits `Mail.Send` admin consent (§7).
+**Recruitment (`/hrms/recruitment`)**
+
+1. **Manpower Requisition** — dept raises → HR approves / rejects. Head-count, employment type, urgency, CTC band, location, business justification.
+2. **Job Posting** — LinkedIn / Naukri / Website / Referral / Instahyre channels. Link to an approved requisition.
+3. **Candidates / Resume DB** — upload resume PDF/DOC (stored in `03.01_Competence_and_Training`), filter by stage, source, or free-text search. Statuses: New → Screened → Shortlisted → Interview → Selected → Offered → Joined → Rejected → Withdrawn.
+4. **Interviews & scorecard** — schedule technical / HR / management / client / assessment rounds; auto-generates a Teams meeting link when mode=Teams. Panel, duration, feedback fields, and 4-axis scorecard (technical / communication / culture / overall). Decision (Advance / Hold / Reject) auto-transitions the candidate.
+5. **Offers** — CTC breakdown (basic / HRA / other allowances / variable pay %), joining date, probation months, reporting manager, upload the offer letter PDF (stored in `06.03_Labour_and_Statutory_Compliance`). Draft → Approved → Sent → Accepted → Declined → Joined.
+
+**Pre-joining + Onboarding (`/hrms/onboarding`)**
+
+* Every accepted offer gets a **Pre-joining checklist** (document collection, BGV, medical fitness, employee-code, appointment letter URL, IT asset, email ID, ID card, welcome kit) with per-item state and timestamps.
+* When the offer moves to `Joined`, an **Onboarding checklist** appears — joining formalities, personal info, bank, PAN/Aadhaar, PF/ESIC, nominee, doc verification, department allocation, reporting manager, orientation, HR policy acknowledgement — with a completion timestamp per item.
+* **Live progress bars** and a **per-candidate audit timeline** rendered from `AuditEvent` (every HRMS action is recorded).
+
+**Payroll (`/hrms/payroll`)**
+
+* **Pay Hike** — submit old/new CTC, monthly basic, monthly HRA, reason, performance rating. Hike % auto-computed. States: Submitted → Approved → Rejected → Applied. When set to Applied the employee's profile CTC updates automatically (feeds future payslips).
+* **Payslip** — pick year + month + employee. Compute is deterministic from CTC breakdown and paid-days:
+  * Basic = `profile.basicMonthly` (or CTC × 50% ÷ 12) × factor
+  * HRA = `profile.hraMonthly` (or Basic × 50%) × factor
+  * Conveyance = ₹1600 × factor · Medical = ₹1250 × factor · Special = residual
+  * PF (employee) = min(Basic, ₹15000) × 12% · ESIC = 0.75% if gross ≤ ₹21000 · PT = ₹200
+  * TDS (Income tax) input by admin
+* Editable overrides on every value. Status: Generated → Approved → Released → Paid.
+
+**Audit log per employee**
+
+* API: `GET /api/hrm/employees/:userId/timeline` returns the merged AuditEvent stream (own actions + entity=User events + related HRMS entities).
+* Surfaced inside the Onboarding page as a scrollable timeline.
+
+## 14. Teams meeting integration (HRMS interviews)
+
+* Interview scheduling with `mode = Teams` auto-generates a Teams meetup URL of the shape `https://teams.microsoft.com/l/meetup-join/…`. Panel and candidate can click the link from the interview card.
+* Real Graph-native calendar events + calendar invites remain gated on `Calendars.ReadWrite` + `Mail.Send` admin consent (see §7). Once granted, the URL is upgraded to a live Teams event with attendees.
+
+## 15. Photo & PDF markup — Site Pilot
+
+* **ImageMarkup component** — pen (8 colours × 4 widths), text annotation, eraser, undo, clear. Exports a flattened PNG File that flows straight into the existing upload pipeline.
+* Wired into **Site Pilot** for every photo — tap the thumbnail to mark up before submitting. The marked-up PNG replaces the raw photo in the submission.
+* **PdfMarkup component** — renders any uploaded PDF page-by-page (pdfjs-dist), letting the user annotate each page. "Save annotated pages" appends each page as its own PNG to the submission.
+* Both landed under `07.02_Daily_Site_Records/SitePilot/` in SharePoint, so a site engineer can hand back drawings and checklists with red-lines on them.
+
+## 16. What is *not* done yet (still deferred)
+
+* **Bid management (comparative statement full flow)** — vendor uploads + BOQ compare across vendors is the next major module (Comparative Statement R2 template).
+* **DPR / WPR PDF export** with rich-text narrative editor — cost + progress calc feeds are already in place, need the print layout.
+* **Mail sending & real Teams calendar events** — awaits `Mail.Send` + `Calendars.ReadWrite` admin consent (§7).
