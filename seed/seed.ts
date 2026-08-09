@@ -1367,16 +1367,31 @@ async function main() {
   await seedRoles();
   const users = await seedUsers();
   await seedChecklistsFromExcel();
-  const { project } = await seedProjectAndCost(users);
+
+  // The project/cost seed is a soft-fail: it slurps reference Excel packs
+  // that aren't shipped with the repo. If any of them are missing or
+  // malformed we log & keep going so the API can still boot.
+  try {
+    const { project } = await seedProjectAndCost(users);
+    console.log("Demo project:", project.code, project.name);
+  } catch (e) {
+    console.warn(
+      "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",
+      e instanceof Error ? e.message : e
+    );
+  }
+
   console.log("Done.");
-  console.log("Demo project:", project.code, project.name);
   console.log("Password for all demo users:", SEED_PASSWORD);
   console.log("Logins: admin / office / site / client / employee / vendor @sharnam.demo");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    console.error("Seed hard-failed at top level:", e);
+    // Do NOT exit(1): we don't want to block the API from starting because
+    // a client-provided reference sheet is missing. All required admin/role
+    // rows are created inside seedRoles + seedUsers before this point.
+    console.warn("Continuing to server start anyway.");
   })
   .finally(() => prisma.$disconnect());
