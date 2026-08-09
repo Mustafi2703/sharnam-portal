@@ -16,9 +16,24 @@ import {
 const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
 
-const EXCEL_ROOT = path.resolve(
-  process.env.SHARNAM_EXCEL_ROOT || process.cwd()
-);
+/**
+ * Where the seed looks for client-shared Excel workbooks.
+ *
+ * Resolution order (first hit wins):
+ *   1. $SHARNAM_EXCEL_ROOT — explicit override.
+ *   2. `seed/data/`         — reference sheets shipped with the repo.
+ *                             This is the path used on Render, so a fresh
+ *                             deploy always has a real demo project.
+ *   3. process.cwd()        — legacy: allows keeping the sheets at repo root
+ *                             for local iteration.
+ */
+function resolveExcelRoot(): string {
+  if (process.env.SHARNAM_EXCEL_ROOT) return path.resolve(process.env.SHARNAM_EXCEL_ROOT);
+  const bundled = path.resolve(process.cwd(), "seed/data");
+  if (fs.existsSync(bundled)) return bundled;
+  return process.cwd();
+}
+const EXCEL_ROOT = resolveExcelRoot();
 
 function readSheet(file: string, sheetIndex = 0) {
   if (!fs.existsSync(file)) {
