@@ -557,6 +557,7 @@ export default function InspectionsPage() {
                               type="file"
                               multiple
                               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                              capture="environment"
                               className="block mt-1 text-xs w-full"
                               onChange={async (e) => {
                                 const files = e.target.files;

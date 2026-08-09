@@ -457,7 +457,7 @@ export function PhotosPage() {
             <Input placeholder="Location / grid" value={location} onChange={(e) => setLocation(e.target.value)} />
             <Input placeholder="Trade" value={trade} onChange={(e) => setTrade(e.target.value)} />
             <Input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-            <input className="sm:col-span-2 text-sm" type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <input className="sm:col-span-2 text-sm" type="file" accept="image/*,.pdf" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             <Button type="submit" className="sm:col-span-2" disabled={!file && !description}>
               Upload to album
             </Button>

@@ -18,6 +18,7 @@ import { reportsRouter, auditRouter, crmRouter, hrmRouter } from "./routes/repor
 import { vendorsRouter, rfiRouter, inspectionsRouter, directoryRouter, safetyRouter } from "./routes/procore.js";
 import { progressRouter } from "./routes/progress.js";
 import { graphRouter } from "./routes/graph.js";
+import { siteTestRouter } from "./routes/siteTest.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -78,6 +79,7 @@ app.use("/api/directory", directoryRouter);
 app.use("/api/safety", safetyRouter);
 app.use("/api/progress", progressRouter);
 app.use("/api/graph", graphRouter);
+app.use("/api/site-test", siteTestRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {

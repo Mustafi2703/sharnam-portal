@@ -36,6 +36,7 @@ import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import ModuleHubPage from "./pages/project/ModuleHubPage";
 import QapPage from "./pages/project/QapPage";
 import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
+import SitePilotPage from "./pages/SitePilotPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -138,6 +139,7 @@ export default function App() {
                   <Route path="cost" element={<CostPage />} />
                   <Route path="finance" element={<FinancePage />} />
                   <Route path="reports" element={<ReportsPage />} />
+                  <Route path="site-pilot" element={<SitePilotPage />} />
                 </Route>
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />

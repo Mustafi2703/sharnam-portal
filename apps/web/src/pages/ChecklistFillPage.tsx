@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
+import { SignaturePad } from "../components/SignaturePad";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string };
 type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[] };
@@ -20,6 +21,7 @@ export default function ChecklistFillPage() {
   const [responses, setResponses] = useState<Record<string, LineResponse>>({});
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<FileList | null>(null);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -108,6 +110,9 @@ export default function ChecklistFillPage() {
       fd.append("status", "Submitted");
       if (photos) {
         Array.from(photos).forEach((f) => fd.append("photos", f));
+      }
+      if (signatureFile) {
+        fd.append("photos", signatureFile, signatureFile.name);
       }
       let lineFiles = 0;
       Object.entries(responses).forEach(([lineId, r]) => {
@@ -461,6 +466,7 @@ export default function ChecklistFillPage() {
                                   <input
                                     type="file"
                                     accept="image/*"
+                                    capture="environment"
                                     multiple
                                     className="block mt-1 text-xs w-full"
                                     onChange={(e) =>
@@ -502,28 +508,38 @@ export default function ChecklistFillPage() {
                   ))}
                 </div>
 
-                <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-line">
-                  <label className="text-sm text-steel-muted">
-                    Overall photos / docs
-                    {minPhotos > 0 && (
-                      <span className="ml-2 text-xs font-semibold text-brand">
-                        {photoTotal}/{minPhotos} photos (min)
-                      </span>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*,.pdf,.doc,.docx"
-                      multiple
-                      className="block mt-1 text-xs"
-                      onChange={(e) => setPhotos(e.target.files)}
+                <div className="pt-4 border-t border-line space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <label className="text-sm text-steel-muted">
+                      Overall photos / docs
+                      {minPhotos > 0 && (
+                        <span className="ml-2 text-xs font-semibold text-brand">
+                          {photoTotal}/{minPhotos} photos (min)
+                        </span>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*,.pdf,.doc,.docx"
+                        capture="environment"
+                        multiple
+                        className="block mt-1 text-xs"
+                        onChange={(e) => setPhotos(e.target.files)}
+                      />
+                    </label>
+                    <SignaturePad
+                      onCapture={setSignatureFile}
+                      personName={user?.fullName || user?.email || undefined}
+                      label="Signed by (inspector / site engineer)"
                     />
-                  </label>
-                  {canFill && (
-                    <Button type="submit" disabled={minPhotos > 0 && photoTotal < minPhotos}>
-                      Submit checklist form
-                    </Button>
-                  )}
-                  {msg && <span className="text-sm text-steel-muted">{msg}</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {canFill && (
+                      <Button type="submit" disabled={minPhotos > 0 && photoTotal < minPhotos}>
+                        Submit checklist form
+                      </Button>
+                    )}
+                    {msg && <span className="text-sm text-steel-muted">{msg}</span>}
+                  </div>
                 </div>
               </form>
             </div>
