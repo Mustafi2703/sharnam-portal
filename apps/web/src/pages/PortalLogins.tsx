@@ -521,7 +521,10 @@ function HeroStage({ heroes, policies, trade }: { heroes: HeroSlide[]; policies:
       <div className="auth-hero__center">
         <div className="auth-hero__brand">
           <BrandMark size="hero" />
-          <p className="auth-hero__name">Sharnam</p>
+          <p className="auth-hero__name" lang="hi">
+            <span className="auth-hero__name-hi">शरणम्</span>
+            <span className="auth-hero__name-latin">Sharnam</span>
+          </p>
           <p className="auth-hero__trade">{trade}</p>
         </div>
 
@@ -597,16 +600,17 @@ function AuthCard({ active }: { active: keyof typeof PORTAL_LOGINS }) {
   const cfg = PORTAL_LOGINS[active];
   return (
     <div className="auth-card" key={cfg.key}>
+      <div className="auth-card__crumbs">
+        <Link to="/login" className="auth-card__back">← All portals</Link>
+        <span className="auth-card__portal-tag" style={{ background: `${cfg.tone}18`, color: cfg.tone, borderColor: `${cfg.tone}44` }}>
+          {portalDisplayName(active, cfg.shortLabel)} login
+        </span>
+      </div>
       <p className="auth-card__firm">Project Management Consultants</p>
       <p className="auth-card__welcome">{cfg.title}</p>
       <p className="auth-card__sub">{cfg.subtitle}</p>
-
-      <Link to="/login" className="auth-card__back">
-        ← All portals
-      </Link>
-
-      <PortalLinks active={active} />
       <PortalSignInForm cfg={cfg} />
+      <p className="auth-card__note">Each user type has its own login link. To open a different portal, use <Link to="/login">All portals</Link>.</p>
     </div>
   );
 }

@@ -215,6 +215,29 @@ function resultProvider(children: { url?: string }[]) {
   return live || process.env.MOCK_ONEDRIVE === "false" ? "sharepoint" : "mock-onedrive";
 }
 
+/** Refresh all registers → CSVs → drive. Admin / office / site */
+dmsRouter.post(
+  "/:projectId/dump-logs",
+  requireRoles("admin", "office", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Not found" });
+    try {
+      const { dumpAllProjectLogs } = await import("../services/logDump.js");
+      const result = await dumpAllProjectLogs(project.id);
+      await audit("dms.dump.logs", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: project.id,
+        meta: { registers: result.registers.map((r) => r.name), refreshedAt: result.refreshedAt },
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
+
 dmsRouter.post(
   "/:projectId/upload",
   requireRoles("admin", "office"),

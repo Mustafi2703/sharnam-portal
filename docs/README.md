@@ -2,6 +2,7 @@
 
 | Document | Purpose |
 |----------|---------|
+| **[PMC_DMS_HANDOVER.md](./PMC_DMS_HANDOVER.md)** | **Latest handover** — ISO folder tree on SharePoint, RFI split, log-dump-to-drive, login URLs |
 | **[CLIENT_REQUIREMENTS.md](./CLIENT_REQUIREMENTS.md)** | **Shareable SRS v1.1** — users, modules, HRMS, CRM, Audit/KPI, Sheet Maker, M365 |
 | **[modules/](./modules/)** | **All module docs + field specs** (Master, Drawings, Quality, Safety, Progress, Field, Comms, Cost, Finance, Reports, Client, HRMS, CRM, Audit/KPI, Sheet Maker) |
 | **[system-design/](./system-design/)** | HLD & LLD pack — architecture, APIs, flows, data model |

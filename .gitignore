@@ -14,3 +14,11 @@ coverage
 apps/web/dist
 apps/api/dist
 .py_pkgs
+
+# Client-provided reference sheets & unzipped drops (not source of truth for the app)
+Sharnam_modules_docs/
+DPR FIles - With Dash Bord (Unzipped Files)/
+files (2)/
+docs/New folder/
+docs/incoming-sheets/
+docs/reference-sheets/

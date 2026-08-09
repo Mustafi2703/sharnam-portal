@@ -84,6 +84,22 @@ export default function DmsPage() {
         >
           Full drive sync
         </Button>
+        <Button
+          type="button"
+          onClick={async () => {
+            setMsg("Refreshing registers → drive…");
+            try {
+              const r = await api<any>(`/api/dms/${id}/dump-logs`, { method: "POST", token });
+              const names = (r?.registers || []).map((x: any) => x.name).join(", ");
+              setMsg(`Refreshed ${r?.registers?.length || 0} registers → ${names}`);
+              await load(path);
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : "Register refresh failed");
+            }
+          }}
+        >
+          Refresh registers to drive
+        </Button>
         {path && (
           <Button type="button" variant="ghost" onClick={() => setPath(path.split("/").slice(0, -1).join("/"))}>
             Up one level
@@ -98,20 +114,32 @@ export default function DmsPage() {
           <ul className="p-2 space-y-0.5 text-sm">
             {[
               ["", "Root"],
-              ["Drawings", "Drawings"],
-              ["Documents", "Documents"],
-              ["Documents/DPR", "DPR"],
-              ["Documents/WPR", "WPR"],
-              ["Documents/QAP", "QAP"],
-              ["Documents/Communication-Matrix", "Comm matrix"],
-              ["Documents/Design-Coordination", "Design coordination"],
-              ["Checklists", "Checklists"],
-              ["Inspections", "Inspections"],
-              ["RFIs", "RFIs"],
-              ["Submittals", "Submittals"],
-              ["Safety", "Safety"],
-              ["Cost-Bills", "Cost / bills"],
-              ["Photos", "Photos"],
+              ["_Registers", "_Registers (CSV dump)"],
+              ["01_CONTEXT_AND_GOVERNANCE", "01 · Context & Governance"],
+              ["02_PLANNING", "02 · Planning"],
+              ["02_PLANNING/02.07_Cash_Flow_Forecast_Monitoring", "  · Cashflow"],
+              ["03_SUPPORT_AND_RESOURCES", "03 · Support & Resources"],
+              ["03_SUPPORT_AND_RESOURCES/03.06_Correspondence_Control", "  · RFI (Information)"],
+              ["03_SUPPORT_AND_RESOURCES/03.08_Meetings_Minutes_Action_Tracking", "  · Meetings"],
+              ["04_DESIGN_AND_INFORMATION_MANAGEMENT", "04 · Design & Info Mgmt"],
+              ["04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications", "  · Drawings"],
+              ["04_DESIGN_AND_INFORMATION_MANAGEMENT/04.04_Clash_Detection_Design_Coordination", "  · Design coordination"],
+              ["04_DESIGN_AND_INFORMATION_MANAGEMENT/04.08_Shop_Drawings_and_Material_Submittals", "  · Submittals"],
+              ["05_PROCUREMENT_AND_CONTRACTS", "05 · Procurement (Office)"],
+              ["06_STATUTORY_AND_LAND", "06 · Statutory & Land"],
+              ["07_EXECUTION_AND_DELIVERY", "07 · Execution & Delivery"],
+              ["07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records", "  · DPR"],
+              ["07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve", "  · WPR / S-curve"],
+              ["07_EXECUTION_AND_DELIVERY/07.09_Delay_Analysis", "  · Hindrance"],
+              ["08_QUALITY_HSE_AND_ENVIRONMENT", "08 · Quality · HSE · Env"],
+              ["08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards", "  · Checklists (Quality RFI)"],
+              ["08_QUALITY_HSE_AND_ENVIRONMENT/08.03_Testing_Test_Report_Control", "  · Cube tests"],
+              ["08_QUALITY_HSE_AND_ENVIRONMENT/08.06_Control_of_Nonconforming_Output", "  · NCR"],
+              ["08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment", "  · HIRA (Safety RFI)"],
+              ["09_COMMERCIAL_AND_CHANGE", "09 · Commercial & Change (Office)"],
+              ["10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT", "10 · Performance & Handover"],
+              ["10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS", "  · MIS reports"],
+              ["10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.06_Handover_Dossier_Practical_Completion", "  · Handover"],
             ].map(([p, label]) => (
               <li key={p || "root"}>
                 <button

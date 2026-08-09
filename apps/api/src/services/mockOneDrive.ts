@@ -1,7 +1,13 @@
 import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
-import { graphConfig, ensureProjectSharePointTree, uploadToProjectLibrary, listProjectLibrary } from "./graph.js";
+import {
+  graphConfig,
+  ensureProjectSharePointTree,
+  uploadToProjectLibrary,
+  listProjectLibrary,
+  PROJECT_LIBRARY_FOLDERS,
+} from "./graph.js";
 
 export type DriveNode = {
   name: string;
@@ -36,32 +42,7 @@ export class MockOneDriveService {
   async ensureProjectTree(projectId: string) {
     const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
     const root = this.projectRoot(project.code);
-    const folders = [
-      "Drawings",
-      "Drawings/Architecture",
-      "Drawings/Structural",
-      "Drawings/MEP",
-      "Drawings/Civil",
-      "Documents",
-      "Documents/Contracts",
-      "Documents/Reports",
-      "Documents/DPR",
-      "Documents/WPR",
-      "Documents/QAP",
-      "Documents/Communication-Matrix",
-      "Documents/Design-Coordination",
-      "Photos",
-      "Checklists",
-      "Inspections",
-      "Inspections/Architecture",
-      "Inspections/Structural",
-      "Inspections/MEP",
-      "Inspections/Civil",
-      "RFIs",
-      "Submittals",
-      "Safety",
-      "Cost-Bills",
-    ];
+    const folders = [...PROJECT_LIBRARY_FOLDERS];
 
     for (const rel of folders) {
       const abs = path.join(root, rel);
