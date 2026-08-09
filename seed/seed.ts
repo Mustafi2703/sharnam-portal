@@ -761,7 +761,11 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   );
   const hindFile = path.join(EXCEL_ROOT, "HInderance Register Dashboard (1).xlsx");
 
-  {
+  if (!fs.existsSync(mileFile) && !fs.existsSync(overviewFile)) {
+    console.warn("Missing excel:", mileFile);
+    console.warn("Missing excel:", overviewFile);
+  }
+  if (fs.existsSync(mileFile) || fs.existsSync(overviewFile)) {
     const file = fs.existsSync(mileFile) ? mileFile : overviewFile;
     const wb = XLSX.readFile(file);
     const sheet =
