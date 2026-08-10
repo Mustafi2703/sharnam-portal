@@ -597,3 +597,60 @@ wprMakerRouter.post("/:projectId/photo", upload.single("photo"), async (req: Aut
     url: saved.url,
   });
 });
+
+/**
+ * PDF / doc attachment for a WPR — e.g. signed weekly report, MoM PDF,
+ * safety pack. Lands under wpr/attachments/ so the pack export can list it.
+ * Multipart field: `file`. Extra fields: `weekEnding`, `caption`.
+ */
+wprMakerRouter.post("/:projectId/attachment", upload.single("file"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const file = (req as any).file as { originalname: string; buffer: Buffer } | undefined;
+  if (!file) return res.status(400).json({ error: "file missing (field name: file)" });
+
+  const weekEnd = parseEnd(req.body.weekEnding);
+  const dateStr = weekEnd.toISOString().slice(0, 10);
+  const caption = String(req.body.caption || file.originalname).slice(0, 200);
+  const safeName = file.originalname.replace(/[^A-Za-z0-9._-]+/g, "_");
+  const stamped = `${dateStr}-${Date.now()}-${safeName}`;
+  const folder = `${MODULE_TO_ISO_FOLDER.wpr}/attachments`;
+  const saved = await mockOneDrive.upload(project.code, folder, stamped, file.buffer);
+
+  await audit("wpr.attachment.uploaded", {
+    userId: req.user!.id,
+    entity: "WprSnapshot",
+    entityId: `${projectId}:${dateStr}`,
+    meta: { path: saved.path, provider: saved.provider, caption, size: file.buffer.length },
+  });
+  res.json({ ok: true, path: saved.path, caption, provider: saved.provider, url: saved.url });
+});
+
+/**
+ * Signature PNG for a WPR — one signature blob per party (e.g. PMC, client,
+ * contractor). Saved under wpr/signatures/ for the weekly sign-off block.
+ * Multipart field: `signature`. Extra fields: `weekEnding`, `role`.
+ */
+wprMakerRouter.post("/:projectId/signature", upload.single("signature"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const file = (req as any).file as { originalname: string; buffer: Buffer } | undefined;
+  if (!file) return res.status(400).json({ error: "signature blob missing (field name: signature)" });
+
+  const weekEnd = parseEnd(req.body.weekEnding);
+  const dateStr = weekEnd.toISOString().slice(0, 10);
+  const role = String(req.body.role || "signer").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 30);
+  const filename = `${dateStr}-${role}-${Date.now()}.png`;
+  const folder = `${MODULE_TO_ISO_FOLDER.wpr}/signatures`;
+  const saved = await mockOneDrive.upload(project.code, folder, filename, file.buffer);
+
+  await audit("wpr.signature.uploaded", {
+    userId: req.user!.id,
+    entity: "WprSnapshot",
+    entityId: `${projectId}:${dateStr}`,
+    meta: { path: saved.path, provider: saved.provider, role, size: file.buffer.length },
+  });
+  res.json({ ok: true, path: saved.path, role, provider: saved.provider, url: saved.url });
+});

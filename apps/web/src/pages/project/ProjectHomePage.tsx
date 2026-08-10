@@ -34,20 +34,22 @@ export default function ProjectHomePage() {
         ["safety", "Safety", "Observations shared with client", "SAF", "#1C4A5A"],
       ]
     : [
+        // Report makers pulled up first — this is where daily / weekly work
+        // gets recorded and pushed to the SharePoint MIS.
+        ["dpr-maker", "DPR maker", "Fill INPUT → publish SPDC template XLSX", "DPR", "#E4632A"],
+        ["wpr-maker", "WPR maker", "24-section weekly pack with photos", "WPR", "#C45C26"],
         ["drawings", "Drawings", "Upload, revise, publish sheets", "DWG", "#E4632A"],
         ["dms", "Documents", "OneDrive-style project docs", "DOC", "#3D4450"],
         ["checklist", "Final Index", "Assign types · fill vs drawing", "FI", "#0B6A78"],
         ["quality-inspections", "Quality Inspections", "QI forms vs published sheets", "QI", "#2F6F4E"],
         ["inspections", "Quality Action Plan", "Track open QI actions", "QAP", "#3D4450"],
         ["comms", "Matrix · Agenda · MoM", "Agenda before MoM · follow-up", "MTG", "#C24D1A"],
-        ["reports", "DPR / WPR", "Dashboard + downloadable packs", "DPR", "#E4632A"],
+        ["reports", "DPR / WPR log", "Published packs · registers · downloads", "RPT", "#3D4450"],
         ["diary", "Day log", "Manpower & field notes", "FLD", "#0B6A78"],
         ["rfis", "RFIs + checklist", "Anyone raises · matrix responds", "RFI", "#0B6A78"],
         ["submittals", "Submittals", "Draft → review → approve", "SUB", "#C24D1A"],
         ["photos", "Photos", "Albums · upload field images", "PIC", "#1C4A5A"],
         ["site-pilot", "Site pilot (test)", "Photo · signature · GPS → SharePoint", "SP", "#0B6A78"],
-        ["dpr-maker", "DPR maker", "BOQ · KPIs · SPDC-format XLSX", "DPR", "#3D4450"],
-        ["wpr-maker", "WPR maker", "24-section pack · seeded live", "WPR", "#C45C26"],
         ["safety", "Safety", "Observations & incidents", "SAF", "#1C4A5A"],
         ["cost", "Cost / COP / bills", "Measurement + vendor bill tracker", "₹", "#2F6F4E"],
         ["directory", "Directory", "Assign people to project", "DIR", "#3D4450"],
@@ -70,19 +72,20 @@ export default function ProjectHomePage() {
         </div>
         {canUpload && (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings`)}>
-              Open Drawings
+            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/dpr-maker`)}>
+              Open DPR maker
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="!text-xs"
-              onClick={() => navigate(`/projects/${id}/inspections`)}
-            >
-              Open Quality
+            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/wpr-maker`)}>
+              Open WPR maker
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings`)}>
+              Drawings
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/inspections`)}>
+              Quality
             </Button>
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/comms`)}>
-              Open Comms
+              Comms
             </Button>
           </div>
         )}

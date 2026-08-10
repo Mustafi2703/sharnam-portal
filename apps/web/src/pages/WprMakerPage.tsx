@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
+import { SignaturePad } from "../components/SignaturePad";
 
 /**
  * WPR Maker — editable weekly progress report per project × weekEnding.
@@ -95,6 +96,8 @@ export default function WprMakerPage() {
   const [msg, setMsg] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["brief"]));
   const [recent, setRecent] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<{ path: string; caption?: string }[]>([]);
+  const [signatures, setSignatures] = useState<{ path: string; role: string }[]>([]);
 
   const load = useCallback(async () => {
     if (!projectId) return;
@@ -183,6 +186,49 @@ export default function WprMakerPage() {
     const sec = pack.sections[key];
     if (!sec?.photos) return;
     updateSection(key, { photos: sec.photos.filter((_, i) => i !== idx) });
+  }
+
+  async function uploadPackAttachment(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caption", file.name);
+      fd.append("weekEnding", weekEnd);
+      const out = await api<{ path: string; caption?: string }>(`/api/wpr-maker/${projectId}/attachment`, {
+        method: "POST", token, body: fd,
+      });
+      setAttachments((a) => [...a, { path: out.path, caption: out.caption || file.name }]);
+      setMsg(`Attachment uploaded → ${out.path}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Attachment upload failed");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  }
+
+  async function uploadPackSignature(file: File, role: string) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("signature", file);
+      fd.append("weekEnding", weekEnd);
+      fd.append("role", role);
+      const out = await api<{ path: string; role: string }>(`/api/wpr-maker/${projectId}/signature`, {
+        method: "POST", token, body: fd,
+      });
+      setSignatures((s) => [...s, { path: out.path, role: out.role || role }]);
+      setMsg(`Signature saved · ${role} → ${out.path}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Signature save failed");
+    } finally {
+      setBusy(false);
+    }
   }
   function addSectionColumn(key: string) {
     if (!pack) return;
@@ -431,6 +477,65 @@ export default function WprMakerPage() {
           );
         })}
       </div>
+
+      {/* Sign-off & attachments — mirrors the SPDC WPR sign-off slide */}
+      <Card className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">Sign-off & attachments</h3>
+          <p className="text-xs text-steel-muted mt-0.5">
+            Uploads land in the WPR MIS folder: <span className="font-mono">10.01_Progress_Reporting_MIS/attachments</span> &nbsp;·&nbsp; <span className="font-mono">/signatures</span>
+          </p>
+        </div>
+
+        <section className="rounded-lg border border-line p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">PDF attachments ({attachments.length})</h4>
+            <span className="text-[11px] text-steel-muted">Weekly report PDF · signed MoM · risk log export</span>
+          </div>
+          <label className="text-xs text-steel-muted">
+            Upload PDF (or any file)
+            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={uploadPackAttachment} className="block mt-1 text-xs" />
+          </label>
+          {attachments.length > 0 && (
+            <ul className="mt-1 text-xs divide-y">
+              {attachments.map((p, i) => (
+                <li key={i} className="py-2 flex justify-between gap-2 items-center">
+                  <div className="min-w-0">
+                    <div className="font-mono truncate">{p.path}</div>
+                    {p.caption && <div className="text-steel-muted">{p.caption}</div>}
+                  </div>
+                  <button className="text-danger text-sm" onClick={() => setAttachments((a) => a.filter((_, k) => k !== i))} title="Remove">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-line p-3 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Sign-off ({signatures.length})</h4>
+            <span className="text-[11px] text-steel-muted">Signatures for this week</span>
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            <SignaturePad label="PMC sign"        personName="PMC"        height={140} onCapture={(f) => f && uploadPackSignature(f, "pmc")} />
+            <SignaturePad label="Client sign"     personName="Client"     height={140} onCapture={(f) => f && uploadPackSignature(f, "client")} />
+            <SignaturePad label="Contractor sign" personName="Contractor" height={140} onCapture={(f) => f && uploadPackSignature(f, "contractor")} />
+          </div>
+          {signatures.length > 0 && (
+            <ul className="mt-1 text-xs divide-y">
+              {signatures.map((p, i) => (
+                <li key={i} className="py-2 flex justify-between gap-2 items-center">
+                  <div className="min-w-0">
+                    <div className="font-mono truncate">{p.path}</div>
+                    <div className="text-steel-muted">{p.role}</div>
+                  </div>
+                  <button className="text-danger text-sm" onClick={() => setSignatures((s) => s.filter((_, k) => k !== i))} title="Remove">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </Card>
 
       {recent.length > 0 && (
         <Card>

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { SignaturePad } from "../components/SignaturePad";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -19,18 +20,31 @@ async function downloadWithAuth(url: string, token: string | null | undefined, f
 }
 
 /**
- * DPR Maker — SPDC 8-block format:
+ * DPR Maker — writes into the official SPDC discipline template.
+ *
  *   1. Project header
  *   2. Quantity progress (BOQ items)
  *   3. Manpower deployed today
  *   4. Equipment deployed today
  *   5. Material at site
- *   6. Safety snapshot
- *   7. Delay / idle time log today
- *   8. Site photos (uploaded from phone camera / gallery)
+ *   6. Quality control & tests today
+ *   7. HSE / safety statistics
+ *   8. Delay / idle time log today
+ *   9. Drawings / RFI / material approvals pending
+ *  10. Issues & risks (open items)
+ *  11. Today's highlights
+ *  12. Next day plan
+ *  13. Decisions required
+ *  ─── Evidence & sign-off ───
+ *  14. Site photos (phone camera / gallery)
+ *  15. PDF attachments (RA bills, checklists, MoM)
+ *  16. Signatures (site engineer / PMC / contractor)
  *
- * Publishes an XLSX (INPUT + DASHBOARD) into the SharePoint DPR folder for
- * the picked discipline.
+ * On publish the maker loads the SPDC discipline template XLSX
+ * (apps/api/dpr-templates/SPDC_DPR_<DISCIPLINE>_DASHBOARD.xlsx),
+ * pokes user data into its INPUT cells so the DASHBOARD sheet
+ * recomputes with the real SPDC formulas, and uploads to
+ * SharePoint under 07.02_Daily_Site_Records/<DISCIPLINE>/.
  */
 
 const DISCIPLINES = [
@@ -80,6 +94,8 @@ type Line = {
 type Manpower = { trade: string; planned?: number; actual?: number; hoursWorked?: number };
 type Equipment = { name: string; qty?: number; workedHrs?: number; idleHrs?: number };
 type Material = { name: string; unit?: string; opening?: number; received?: number; consumed?: number };
+type QualityTest = { parameter: string; figure?: string };
+type SafetyRow = { parameter: string; figure?: string };
 type Safety = {
   safeManHoursToday?: number;
   safeManDaysToday?: number;
@@ -90,8 +106,10 @@ type Safety = {
   ltis?: number;
   incidents?: number;
 };
-type Delay = { cause: string; from?: string; to?: string; hoursLost?: number; eot?: "Yes" | "No" };
-type Photo = { path: string; caption?: string; takenAt?: string | null };
+type Delay = { cause: string; category?: string; from?: string; to?: string; hoursLost?: number; eot?: "Yes" | "No" | "Review" };
+type Approval = { refNo: string; description?: string; raisedOn?: string | null; pendingWith?: string };
+type Issue = { description: string; severity?: "Critical" | "High" | "Medium" | "Low"; owner?: string };
+type Photo = { path: string; caption?: string; takenAt?: string | null; kind?: "photo" | "signature" | "pdf" };
 
 type Snap = {
   projectId: string;
@@ -103,9 +121,18 @@ type Snap = {
   manpower: Manpower[];
   equipment: Equipment[];
   materials: Material[];
+  qualityTests: QualityTest[];
+  safetyRows: SafetyRow[];
   safety: Safety;
   delays: Delay[];
+  approvals: Approval[];
+  issues: Issue[];
+  highlights: string[];
+  nextDayPlan: string[];
+  decisions: string[];
   photos: Photo[];
+  attachments: Photo[];
+  signatures: Photo[];
   status: string;
   publishedPath?: string | null;
   publishedAt?: string | null;
@@ -132,6 +159,30 @@ function planPct(dataDate: string | null | undefined, start: string | null | und
   const total = f.getTime() - s.getTime();
   if (total <= 0) return 1;
   return Math.max(0, Math.min(1, (d.getTime() - s.getTime()) / total));
+}
+
+function buildSavePayload(snap: Snap, logDate: string, discipline: string) {
+  return {
+    logDate,
+    discipline,
+    header: snap.header,
+    lines: snap.lines,
+    manpower: snap.manpower,
+    equipment: snap.equipment,
+    materials: snap.materials,
+    qualityTests: snap.qualityTests,
+    safetyRows: snap.safetyRows,
+    safety: snap.safety,
+    delays: snap.delays,
+    approvals: snap.approvals,
+    issues: snap.issues,
+    highlights: snap.highlights,
+    nextDayPlan: snap.nextDayPlan,
+    decisions: snap.decisions,
+    photos: snap.photos,
+    attachments: snap.attachments,
+    signatures: snap.signatures,
+  };
 }
 
 export default function DprMakerPage() {
@@ -273,11 +324,6 @@ export default function DprMakerPage() {
     setSnap({ ...snap, materials: snap.materials.filter((_, k) => k !== i) });
   }
 
-  function updateSafety<K extends keyof Safety>(k: K, v: number) {
-    if (!snap) return;
-    setSnap({ ...snap, safety: { ...snap.safety, [k]: v } });
-  }
-
   function updateDelay(i: number, patch: Partial<Delay>) {
     if (!snap) return;
     const arr = snap.delays.slice();
@@ -296,6 +342,14 @@ export default function DprMakerPage() {
   function removePhoto(i: number) {
     if (!snap) return;
     setSnap({ ...snap, photos: snap.photos.filter((_, k) => k !== i) });
+  }
+  function removeAttachment(i: number) {
+    if (!snap) return;
+    setSnap({ ...snap, attachments: snap.attachments.filter((_, k) => k !== i) });
+  }
+  function removeSignature(i: number) {
+    if (!snap) return;
+    setSnap({ ...snap, signatures: snap.signatures.filter((_, k) => k !== i) });
   }
 
   async function uploadPhoto(e: ChangeEvent<HTMLInputElement>) {
@@ -325,6 +379,114 @@ export default function DprMakerPage() {
     }
   }
 
+  async function uploadAttachment(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !snap) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caption", file.name);
+      fd.append("logDate", logDate);
+      fd.append("discipline", discipline);
+      const out = await api<{ attachment: Photo }>(`/api/dpr-maker/${projectId}/attachment`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setSnap((prev) => (prev ? { ...prev, attachments: [...prev.attachments, out.attachment] } : prev));
+      setMsg(`Attachment uploaded → ${out.attachment.path}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Attachment upload failed");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  }
+
+  async function uploadSignatureFile(file: File, role: string) {
+    if (!snap) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("signature", file);
+      fd.append("logDate", logDate);
+      fd.append("discipline", discipline);
+      fd.append("role", role);
+      const out = await api<{ signature: Photo }>(`/api/dpr-maker/${projectId}/signature`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setSnap((prev) => (prev ? { ...prev, signatures: [...prev.signatures, out.signature] } : prev));
+      setMsg(`Signature saved · ${role} → ${out.signature.path}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Signature save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateQualityTest(i: number, patch: Partial<QualityTest>) {
+    if (!snap) return;
+    const arr = snap.qualityTests.slice();
+    arr[i] = { ...arr[i], ...patch };
+    setSnap({ ...snap, qualityTests: arr });
+  }
+  function updateSafetyRow(i: number, patch: Partial<SafetyRow>) {
+    if (!snap) return;
+    const arr = snap.safetyRows.slice();
+    arr[i] = { ...arr[i], ...patch };
+    setSnap({ ...snap, safetyRows: arr });
+  }
+  function updateApproval(i: number, patch: Partial<Approval>) {
+    if (!snap) return;
+    const arr = snap.approvals.slice();
+    arr[i] = { ...arr[i], ...patch };
+    setSnap({ ...snap, approvals: arr });
+  }
+  function addApproval() {
+    if (!snap) return;
+    setSnap({ ...snap, approvals: [...snap.approvals, { refNo: "", description: "", pendingWith: "" }] });
+  }
+  function removeApproval(i: number) {
+    if (!snap) return;
+    setSnap({ ...snap, approvals: snap.approvals.filter((_, k) => k !== i) });
+  }
+  function updateIssue(i: number, patch: Partial<Issue>) {
+    if (!snap) return;
+    const arr = snap.issues.slice();
+    arr[i] = { ...arr[i], ...patch };
+    setSnap({ ...snap, issues: arr });
+  }
+  function addIssue() {
+    if (!snap) return;
+    setSnap({ ...snap, issues: [...snap.issues, { description: "", severity: "Medium", owner: "" }] });
+  }
+  function removeIssue(i: number) {
+    if (!snap) return;
+    setSnap({ ...snap, issues: snap.issues.filter((_, k) => k !== i) });
+  }
+
+  function updateNarrativeList(k: "highlights" | "nextDayPlan" | "decisions", i: number, val: string) {
+    if (!snap) return;
+    const arr = (snap[k] as string[]).slice();
+    arr[i] = val;
+    setSnap({ ...snap, [k]: arr } as Snap);
+  }
+  function addNarrativeItem(k: "highlights" | "nextDayPlan" | "decisions") {
+    if (!snap) return;
+    const arr = [...(snap[k] as string[]), ""];
+    setSnap({ ...snap, [k]: arr } as Snap);
+  }
+  function removeNarrativeItem(k: "highlights" | "nextDayPlan" | "decisions", i: number) {
+    if (!snap) return;
+    const arr = (snap[k] as string[]).filter((_, kk) => kk !== i);
+    setSnap({ ...snap, [k]: arr } as Snap);
+  }
+
   async function save() {
     if (!snap) return;
     setBusy(true);
@@ -333,13 +495,7 @@ export default function DprMakerPage() {
       await api(`/api/dpr-maker/${projectId}/save`, {
         method: "POST",
         token,
-        body: JSON.stringify({
-          logDate, discipline,
-          header: snap.header, lines: snap.lines,
-          manpower: snap.manpower, equipment: snap.equipment,
-          materials: snap.materials, safety: snap.safety,
-          delays: snap.delays, photos: snap.photos,
-        }),
+        body: JSON.stringify(buildSavePayload(snap, logDate, discipline)),
       });
       setMsg("Saved draft.");
       await load();
@@ -358,13 +514,7 @@ export default function DprMakerPage() {
       await api(`/api/dpr-maker/${projectId}/save`, {
         method: "POST",
         token,
-        body: JSON.stringify({
-          logDate, discipline,
-          header: snap.header, lines: snap.lines,
-          manpower: snap.manpower, equipment: snap.equipment,
-          materials: snap.materials, safety: snap.safety,
-          delays: snap.delays, photos: snap.photos,
-        }),
+        body: JSON.stringify(buildSavePayload(snap, logDate, discipline)),
       });
       const out = await api<any>(`/api/dpr-maker/${projectId}/publish`, {
         method: "POST",
@@ -403,13 +553,12 @@ export default function DprMakerPage() {
   }
 
   const h = snap.header;
-  const s = snap.safety;
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="DPR Maker · SPDC 8-block format"
+        eyebrow="DPR Maker · SPDC template output"
         title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
-        subtitle="Header · BOQ items · manpower · equipment · material · safety · delay/idle · photos. Publishes an XLSX (INPUT + DASHBOARD) to the SharePoint DPR folder for this discipline."
+        subtitle="Header · quantity progress · manpower · equipment · material · quality · HSE · delay · approvals · issues · highlights · next-day · decisions · photos · PDFs · sign-off. Publishes the SPDC template XLSX to SharePoint."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
@@ -664,25 +813,64 @@ export default function DprMakerPage() {
         </div>
       </Card>
 
-      {/* 6. Safety */}
-      <Card>
-        <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted mb-2">6. Safety snapshot today</h3>
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-2">
-          <SafetyField label="Safe man-hours today" value={s.safeManHoursToday || 0} onChange={(v) => updateSafety("safeManHoursToday", v)} />
-          <SafetyField label="Safe man-days today" value={s.safeManDaysToday || 0} onChange={(v) => updateSafety("safeManDaysToday", v)} />
-          <SafetyField label="Toolbox talks" value={s.toolboxTalks || 0} onChange={(v) => updateSafety("toolboxTalks", v)} />
-          <SafetyField label="PPE compliance %" value={s.ppeCompliancePct || 0} onChange={(v) => updateSafety("ppeCompliancePct", v)} />
-          <SafetyField label="Near-miss" value={s.nearMiss || 0} onChange={(v) => updateSafety("nearMiss", v)} />
-          <SafetyField label="First-aid" value={s.firstAid || 0} onChange={(v) => updateSafety("firstAid", v)} />
-          <SafetyField label="LTIs" value={s.ltis || 0} onChange={(v) => updateSafety("ltis", v)} />
-          <SafetyField label="Other incidents" value={s.incidents || 0} onChange={(v) => updateSafety("incidents", v)} />
+      {/* 6. Quality control & tests today */}
+      <Card padding={false}>
+        <div className="p-3 border-b border-line bg-sand/40">
+          <h3 className="text-sm font-semibold uppercase tracking-widest">6. Quality control & tests today</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
+              <tr>
+                <th className="p-2 w-8">Sr</th>
+                <th className="p-2 text-left">Quality / test parameter</th>
+                <th className="p-2 text-left">Today&#39;s figure</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snap.qualityTests.map((q, i) => (
+                <tr key={i} className="border-t border-line">
+                  <td className="p-1.5 text-xs">{i + 1}</td>
+                  <td className="p-1"><Input value={q.parameter} onChange={(e) => updateQualityTest(i, { parameter: e.target.value })} /></td>
+                  <td className="p-1"><Input value={q.figure || ""} onChange={(e) => updateQualityTest(i, { figure: e.target.value })} placeholder="e.g. 4 / 8 · 24.8 N/mm² · 5 of 6" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
-      {/* 7. Delay */}
+      {/* 7. Safety — SPDC 6-row parameter/figure layout */}
+      <Card padding={false}>
+        <div className="p-3 border-b border-line bg-sand/40">
+          <h3 className="text-sm font-semibold uppercase tracking-widest">7. HSE / safety statistics</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
+              <tr>
+                <th className="p-2 w-8">Sr</th>
+                <th className="p-2 text-left">HSE parameter</th>
+                <th className="p-2 text-left">Today&#39;s figure</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snap.safetyRows.map((row, i) => (
+                <tr key={i} className="border-t border-line">
+                  <td className="p-1.5 text-xs">{i + 1}</td>
+                  <td className="p-1"><Input value={row.parameter} onChange={(e) => updateSafetyRow(i, { parameter: e.target.value })} /></td>
+                  <td className="p-1"><Input value={row.figure || ""} onChange={(e) => updateSafetyRow(i, { figure: e.target.value })} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* 8. Delay / idle time log */}
       <Card padding={false}>
         <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
-          <h3 className="text-sm font-semibold uppercase tracking-widest">7. Delay / idle time log today</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-widest">8. Delay / idle time log today</h3>
           <Button variant="secondary" onClick={addDelay}>+ Delay</Button>
         </div>
         <div className="overflow-x-auto">
@@ -690,7 +878,8 @@ export default function DprMakerPage() {
             <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
               <tr>
                 <th className="p-2 w-8">Sr</th>
-                <th className="p-2 text-left">Cause / category</th>
+                <th className="p-2 text-left">Cause</th>
+                <th className="p-2 text-left">Category</th>
                 <th className="p-2">From</th>
                 <th className="p-2">To</th>
                 <th className="p-2">Hrs lost</th>
@@ -703,13 +892,25 @@ export default function DprMakerPage() {
                 <tr key={i} className="border-t border-line">
                   <td className="p-1.5 text-xs">{i + 1}</td>
                   <td className="p-1"><Input value={d.cause} onChange={(e) => updateDelay(i, { cause: e.target.value })} /></td>
+                  <td className="p-1">
+                    <Select value={d.category || "Weather"} onChange={(e) => updateDelay(i, { category: e.target.value })} className="max-w-[140px]">
+                      <option>Weather</option>
+                      <option>Contractor</option>
+                      <option>Client</option>
+                      <option>Vendor</option>
+                      <option>Client / Vendor</option>
+                      <option>PMC</option>
+                      <option>Other</option>
+                    </Select>
+                  </td>
                   <td className="p-1"><Input type="time" value={d.from || ""} onChange={(e) => updateDelay(i, { from: e.target.value })} className="max-w-[110px]" /></td>
                   <td className="p-1"><Input type="time" value={d.to || ""} onChange={(e) => updateDelay(i, { to: e.target.value })} className="max-w-[110px]" /></td>
                   <td className="p-1"><Input type="number" step="0.25" value={d.hoursLost ?? 0} onChange={(e) => updateDelay(i, { hoursLost: Number(e.target.value) })} className="max-w-[100px]" /></td>
                   <td className="p-1">
-                    <Select value={d.eot || "No"} onChange={(e) => updateDelay(i, { eot: (e.target.value as "Yes" | "No") })} className="max-w-[80px]">
+                    <Select value={d.eot || "No"} onChange={(e) => updateDelay(i, { eot: (e.target.value as "Yes" | "No" | "Review") })} className="max-w-[95px]">
                       <option value="No">No</option>
                       <option value="Yes">Yes</option>
+                      <option value="Review">Review</option>
                     </Select>
                   </td>
                   <td className="p-1.5 text-danger cursor-pointer text-xs" onClick={() => removeDelay(i)}>✕</td>
@@ -717,7 +918,7 @@ export default function DprMakerPage() {
               ))}
               {!snap.delays.length && (
                 <tr>
-                  <td colSpan={7} className="p-4 text-center text-xs text-steel-muted">
+                  <td colSpan={8} className="p-4 text-center text-xs text-steel-muted">
                     No delays logged today. Click <b>+ Delay</b> when there is idle time to record.
                   </td>
                 </tr>
@@ -727,40 +928,225 @@ export default function DprMakerPage() {
         </div>
       </Card>
 
-      {/* 8. Photos */}
-      <Card className="space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">8. Site photos</h3>
-          <span className="text-xs text-steel-muted">Saved to SharePoint → <span className="font-mono">07.02_Daily_Site_Records/{discipline}/photos/</span></span>
+      {/* 9. Approvals pending */}
+      <Card padding={false}>
+        <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
+          <h3 className="text-sm font-semibold uppercase tracking-widest">9. Drawings / RFI / material approvals pending</h3>
+          <Button variant="secondary" onClick={addApproval}>+ Approval</Button>
         </div>
-        <div className="grid sm:grid-cols-3 gap-2">
-          <Input placeholder="Caption (optional)" value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} className="sm:col-span-2" />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
+              <tr>
+                <th className="p-2 w-8">Sr</th>
+                <th className="p-2 text-left">Ref. no</th>
+                <th className="p-2 text-left">Description</th>
+                <th className="p-2">Raised on</th>
+                <th className="p-2 text-left">Pending with</th>
+                <th className="p-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {snap.approvals.map((a, i) => (
+                <tr key={i} className="border-t border-line">
+                  <td className="p-1.5 text-xs">{i + 1}</td>
+                  <td className="p-1"><Input value={a.refNo} onChange={(e) => updateApproval(i, { refNo: e.target.value })} className="max-w-[130px]" /></td>
+                  <td className="p-1"><Input value={a.description || ""} onChange={(e) => updateApproval(i, { description: e.target.value })} /></td>
+                  <td className="p-1"><Input type="date" value={toDateInput(a.raisedOn)} onChange={(e) => updateApproval(i, { raisedOn: e.target.value })} /></td>
+                  <td className="p-1"><Input value={a.pendingWith || ""} onChange={(e) => updateApproval(i, { pendingWith: e.target.value })} className="max-w-[160px]" /></td>
+                  <td className="p-1.5 text-danger cursor-pointer text-xs" onClick={() => removeApproval(i)}>✕</td>
+                </tr>
+              ))}
+              {!snap.approvals.length && (
+                <tr><td colSpan={6} className="p-4 text-center text-xs text-steel-muted">Nothing pending. Click <b>+ Approval</b> to add a drawing / RFI / material approval waiting on someone.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* 10. Issues & risks */}
+      <Card padding={false}>
+        <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
+          <h3 className="text-sm font-semibold uppercase tracking-widest">10. Issues & risks (open items)</h3>
+          <Button variant="secondary" onClick={addIssue}>+ Issue</Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
+              <tr>
+                <th className="p-2 w-8">Sr</th>
+                <th className="p-2 text-left">Description</th>
+                <th className="p-2">Severity</th>
+                <th className="p-2 text-left">Owner</th>
+                <th className="p-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {snap.issues.map((iss, i) => (
+                <tr key={i} className="border-t border-line">
+                  <td className="p-1.5 text-xs">{i + 1}</td>
+                  <td className="p-1"><Input value={iss.description} onChange={(e) => updateIssue(i, { description: e.target.value })} /></td>
+                  <td className="p-1">
+                    <Select value={iss.severity || "Medium"} onChange={(e) => updateIssue(i, { severity: e.target.value as Issue["severity"] })} className="max-w-[110px]">
+                      <option>Critical</option>
+                      <option>High</option>
+                      <option>Medium</option>
+                      <option>Low</option>
+                    </Select>
+                  </td>
+                  <td className="p-1"><Input value={iss.owner || ""} onChange={(e) => updateIssue(i, { owner: e.target.value })} className="max-w-[160px]" /></td>
+                  <td className="p-1.5 text-danger cursor-pointer text-xs" onClick={() => removeIssue(i)}>✕</td>
+                </tr>
+              ))}
+              {!snap.issues.length && (
+                <tr><td colSpan={5} className="p-4 text-center text-xs text-steel-muted">No open issues today. Click <b>+ Issue</b> to log one.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* 11-13. Narrative */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <NarrativeCard
+          title="11. Today's highlights"
+          items={snap.highlights}
+          onChange={(i, v) => updateNarrativeList("highlights", i, v)}
+          onAdd={() => addNarrativeItem("highlights")}
+          onRemove={(i) => removeNarrativeItem("highlights", i)}
+          hint="Concreting complete up to GL-4 · 42 nos."
+        />
+        <NarrativeCard
+          title="12. Next day plan"
+          items={snap.nextDayPlan}
+          onChange={(i, v) => updateNarrativeList("nextDayPlan", i, v)}
+          onAdd={() => addNarrativeItem("nextDayPlan")}
+          onRemove={(i) => removeNarrativeItem("nextDayPlan", i)}
+          hint="Footing reinforcement GL-5 to GL-6 · 8 nos."
+        />
+        <NarrativeCard
+          title="13. Decisions required"
+          items={snap.decisions}
+          onChange={(i, v) => updateNarrativeList("decisions", i, v)}
+          onAdd={() => addNarrativeItem("decisions")}
+          onRemove={(i) => removeNarrativeItem("decisions", i)}
+          hint="Approve floor hardener brand (MAR-044)"
+        />
+      </div>
+
+      {/* Evidence & sign-off */}
+      <Card className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">Evidence & sign-off</h3>
+          <p className="text-xs text-steel-muted mt-0.5">
+            All uploads land in the project's SharePoint DPR folder for this discipline:
+            <span className="font-mono block mt-1">07.02_Daily_Site_Records/{discipline}/…</span>
+          </p>
+        </div>
+
+        {/* Photos */}
+        <section className="rounded-lg border border-line p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Site photos ({snap.photos.length})</h4>
+            <span className="text-[11px] text-steel-muted">→ <span className="font-mono">/photos</span></span>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-2">
+            <Input placeholder="Caption (optional)" value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} className="sm:col-span-2" />
+            <label className="text-xs text-steel-muted">
+              {uploadingPhoto ? "Uploading…" : "Take / choose photo"}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={uploadPhoto}
+                className="block mt-1 text-xs"
+                disabled={uploadingPhoto}
+              />
+            </label>
+          </div>
+          {snap.photos.length > 0 && (
+            <ul className="mt-1 text-xs divide-y">
+              {snap.photos.map((p, i) => (
+                <li key={i} className="py-2 flex justify-between gap-2 items-center">
+                  <div className="min-w-0">
+                    <div className="font-mono truncate">{p.path}</div>
+                    {p.caption && <div className="text-steel-muted">{p.caption}</div>}
+                    {p.takenAt && <div className="text-steel-muted text-[10px]">{new Date(p.takenAt).toLocaleString("en-IN")}</div>}
+                  </div>
+                  <button className="text-danger text-sm" onClick={() => removePhoto(i)} title="Remove">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* PDF attachments */}
+        <section className="rounded-lg border border-line p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">PDF attachments ({snap.attachments.length})</h4>
+            <span className="text-[11px] text-steel-muted">RA bills · signed checklists · MoM · pour cards → <span className="font-mono">/attachments</span></span>
+          </div>
           <label className="text-xs text-steel-muted">
-            {uploadingPhoto ? "Uploading…" : "Take / choose photo"}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={uploadPhoto}
-              className="block mt-1 text-xs"
-              disabled={uploadingPhoto}
-            />
+            Upload PDF (or any file)
+            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={uploadAttachment} className="block mt-1 text-xs" />
           </label>
-        </div>
-        {snap.photos.length > 0 && (
-          <ul className="mt-2 text-xs divide-y">
-            {snap.photos.map((p, i) => (
-              <li key={i} className="py-2 flex justify-between gap-2 items-center">
-                <div className="min-w-0">
-                  <div className="font-mono truncate">{p.path}</div>
-                  {p.caption && <div className="text-steel-muted">{p.caption}</div>}
-                  {p.takenAt && <div className="text-steel-muted text-[10px]">{new Date(p.takenAt).toLocaleString("en-IN")}</div>}
-                </div>
-                <button className="text-danger text-sm" onClick={() => removePhoto(i)} title="Remove">✕</button>
-              </li>
-            ))}
-          </ul>
-        )}
+          {snap.attachments.length > 0 && (
+            <ul className="mt-1 text-xs divide-y">
+              {snap.attachments.map((p, i) => (
+                <li key={i} className="py-2 flex justify-between gap-2 items-center">
+                  <div className="min-w-0">
+                    <div className="font-mono truncate">{p.path}</div>
+                    {p.caption && <div className="text-steel-muted">{p.caption}</div>}
+                    {p.takenAt && <div className="text-steel-muted text-[10px]">{new Date(p.takenAt).toLocaleString("en-IN")}</div>}
+                  </div>
+                  <button className="text-danger text-sm" onClick={() => removeAttachment(i)} title="Remove">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Signatures */}
+        <section className="rounded-lg border border-line p-3 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Sign-off ({snap.signatures.length})</h4>
+            <span className="text-[11px] text-steel-muted">→ <span className="font-mono">/signatures</span></span>
+          </div>
+          <div className="grid md:grid-cols-3 gap-3">
+            <SignaturePad
+              label="Site engineer sign"
+              personName="Site engineer"
+              height={140}
+              onCapture={(f) => f && uploadSignatureFile(f, "site_engineer")}
+            />
+            <SignaturePad
+              label="PMC sign"
+              personName="PMC"
+              height={140}
+              onCapture={(f) => f && uploadSignatureFile(f, "pmc")}
+            />
+            <SignaturePad
+              label="Contractor sign"
+              personName="Contractor"
+              height={140}
+              onCapture={(f) => f && uploadSignatureFile(f, "contractor")}
+            />
+          </div>
+          {snap.signatures.length > 0 && (
+            <ul className="mt-1 text-xs divide-y">
+              {snap.signatures.map((p, i) => (
+                <li key={i} className="py-2 flex justify-between gap-2 items-center">
+                  <div className="min-w-0">
+                    <div className="font-mono truncate">{p.path}</div>
+                    <div className="text-steel-muted">{p.caption || "signer"}{p.takenAt ? ` · ${new Date(p.takenAt).toLocaleString("en-IN")}` : ""}</div>
+                  </div>
+                  <button className="text-danger text-sm" onClick={() => removeSignature(i)} title="Remove">✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </Card>
 
       {recent.length > 0 && (
@@ -796,11 +1182,50 @@ function KPI({ label, value, tone }: { label: string; value: string; tone?: "ok"
   );
 }
 
-function SafetyField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function NarrativeCard({
+  title, items, onChange, onAdd, onRemove, hint,
+}: {
+  title: string;
+  items: string[];
+  onChange: (i: number, v: string) => void;
+  onAdd: () => void;
+  onRemove: (i: number) => void;
+  hint?: string;
+}) {
   return (
-    <label className="text-xs text-steel-muted block">
-      {label}
-      <Input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
-    </label>
+    <Card padding={false}>
+      <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
+        <h3 className="text-xs font-semibold uppercase tracking-widest">{title}</h3>
+        <Button variant="secondary" onClick={onAdd} className="!text-xs">+ Add</Button>
+      </div>
+      <div className="p-2 space-y-1.5">
+        {items.length === 0 && (
+          <p className="text-[11px] text-steel-muted italic px-1">
+            {hint || "Nothing recorded yet — click + Add"}
+          </p>
+        )}
+        {items.map((item, i) => (
+          <div key={i} className="flex gap-2 items-start">
+            <span className="text-[10px] text-steel-muted mt-2 tabular-nums w-4">{i + 1}.</span>
+            <textarea
+              className="w-full rounded border border-line bg-white px-2 py-1 text-xs focus:border-brand focus:outline-none"
+              rows={2}
+              value={item}
+              placeholder={hint}
+              onChange={(e) => onChange(i, e.target.value)}
+            />
+            <button
+              type="button"
+              className="text-danger text-xs mt-2"
+              onClick={() => onRemove(i)}
+              title="Remove"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
+
