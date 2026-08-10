@@ -2,7 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Input, PageHeader, Select } from "../components/ui";
+import { FilePickButton } from "../components/FilePickButton";
 
 /**
  * Custom Sheet Maker — upload any Excel/CSV, we parse it and let you edit it in-portal.
@@ -73,69 +74,71 @@ export default function CustomSheetsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="maker-shell space-y-6">
       <PageHeader
-        eyebrow="Custom Sheet Maker"
+        eyebrow="Sheet Maker"
         title="Upload · edit · export any Excel or CSV"
-        subtitle="Bring any format (Payment Summary, Comparative Statement, ISO checklist, monthly progress…) into the portal. Edit in-place. Export back to Excel. Audit-trailed."
+        subtitle="Payment summaries, comparative statements, ISO checklists, progress sheets — edit in-portal, export back to Excel, audit-trailed."
       />
-      {msg && <p className="text-sm text-brand-dark">{msg}</p>}
+      {msg && <p className="maker-flash maker-flash--ok">{msg}</p>}
 
       {canWrite && (
-        <Card className="space-y-3">
-          <div className="grid md:grid-cols-3 gap-2">
-            <Input placeholder="Sheet name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
-            <Input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
-            <Select value={pickedProject} onChange={(e) => setPickedProject(e.target.value)}>
-              <option value="">Global (no project)</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="grid md:grid-cols-2 gap-3">
-            <form onSubmit={upload} className="rounded-lg border border-line p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-widest text-steel-muted">From an existing Excel / CSV</h4>
-              <label className="text-xs text-steel-muted block">
-                File (.xlsx / .xls / .csv)
-                <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
-              </label>
-              <Button type="submit" disabled={!file}>Upload & parse</Button>
+        <div className="maker-upload-grid">
+          <div className="maker-section">
+            <div className="maker-section__head">Upload Excel / CSV</div>
+            <form onSubmit={upload} className="maker-section__body space-y-3">
+              <Input placeholder="Sheet name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
+              <Select value={pickedProject} onChange={(e) => setPickedProject(e.target.value)}>
+                <option value="">Global (no project)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                ))}
+              </Select>
+              <FilePickButton
+                accept=".xlsx,.xls,.csv"
+                onPick={(files) => setFile(files[0] || null)}
+              >
+                {file ? file.name : "Choose file (.xlsx / .csv)"}
+              </FilePickButton>
+              <Button type="submit" disabled={!file} className="w-full sm:w-auto">Upload & parse</Button>
             </form>
-            <div className="rounded-lg border border-line p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-widest text-steel-muted">Blank sheet — start empty</h4>
-              <p className="text-xs text-steel-muted">3 starter columns · add / rename / remove columns and rows in the editor.</p>
+          </div>
+          <div className="maker-section">
+            <div className="maker-section__head">Blank sheet</div>
+            <div className="maker-section__body space-y-3">
+              <p className="text-sm text-steel-muted leading-relaxed">
+                Start with 3 columns — add, rename, or remove columns and rows in the editor.
+              </p>
+              <Input placeholder="Sheet name" value={name} onChange={(e) => setName(e.target.value)} />
               <Button type="button" variant="secondary" onClick={createBlank}>Create blank sheet</Button>
             </div>
           </div>
-        </Card>
+        </div>
       )}
 
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex justify-between">
-          <span className="font-semibold text-sm">Sheets{pickedProject ? " · project scope" : " · global"}</span>
-          <span className="text-[11px] text-steel-muted">{sheets.length} sheet(s)</span>
+      <div className="maker-section maker-section--flush">
+        <div className="maker-section__head maker-section__head--row">
+          <span>Your sheets{pickedProject ? " · project scope" : ""}</span>
+          <span className="maker-section__meta">{sheets.length} sheet(s)</span>
         </div>
-        <ul className="divide-y">
+        <ul className="maker-list">
           {sheets.map((s) => (
-            <li key={s.id} className="px-4 py-3 flex items-center justify-between">
-              <div>
-                <div className="font-medium text-sm">{s.name}</div>
-                <div className="text-xs text-steel-muted">
-                  {s.category || "General"} · {s.headers?.length || 0} columns · {new Date(s.updatedAt).toLocaleString("en-IN")}
-                  {s.sourceFile && <> · <span className="font-mono">{s.sourceFile}</span></>}
+            <li key={s.id} className="maker-list__row">
+              <div className="min-w-0">
+                <div className="maker-list__title">{s.name}</div>
+                <div className="maker-list__sub">
+                  {s.category || "General"} · {s.headers?.length || 0} cols · {new Date(s.updatedAt).toLocaleString("en-IN")}
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Link to={`/custom-sheets/${s.id}`}>
-                  <Button type="button" variant="secondary">Open</Button>
-                </Link>
-              </div>
+              <Link to={`/custom-sheets/${s.id}`}>
+                <Button type="button">Open editor</Button>
+              </Link>
             </li>
           ))}
-          {!sheets.length && <li className="px-4 py-6 text-center text-sm text-steel-muted">No custom sheets yet.</li>}
+          {!sheets.length && <li className="maker-list__empty">No custom sheets yet — upload or create one above.</li>}
         </ul>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -235,13 +238,13 @@ export function CustomSheetEditorPage() {
   const hasRows = sheet?.rows?.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="maker-shell space-y-4 pb-24">
       <PageHeader
-        eyebrow="Custom sheet"
+        eyebrow="Sheet editor"
         title={sheet?.name || "Loading…"}
         subtitle={
           sheet
-            ? `${sheet.headers.length} columns · ${sheet.rows.length} rows · category ${sheet.category || "General"}`
+            ? `${sheet.headers.length} columns · ${sheet.rows.length} rows · ${sheet.category || "General"}`
             : ""
         }
         actions={
@@ -249,18 +252,17 @@ export function CustomSheetEditorPage() {
             <Link to="/custom-sheets"><Button type="button" variant="secondary">Back</Button></Link>
             {canWrite && sheet && <Button type="button" variant="secondary" onClick={addRow}>+ Row</Button>}
             {canWrite && sheet && <Button type="button" variant="secondary" onClick={addColumn}>+ Column</Button>}
-            {canWrite && <Button type="button" onClick={() => void save()}>Save</Button>}
-            <Button type="button" variant="secondary" onClick={() => void download()}>Export .xlsx</Button>
           </div>
         }
       />
-      {msg && <p className="text-sm text-ok">{msg}</p>}
+      {msg && <p className="maker-flash maker-flash--ok">{msg}</p>}
       {!sheet ? (
-        <Card>Loading…</Card>
+        <div className="maker-section"><div className="maker-section__body">Loading…</div></div>
       ) : (
-        <Card padding={false}>
-          <div className="overflow-x-auto">
-            <table className="text-xs w-full">
+        <div className="maker-section maker-section--flush">
+          <div className="maker-section__head">Spreadsheet</div>
+          <div className="maker-table-wrap">
+            <table className="maker-table">
               <thead>
                 <tr className="bg-sand/50 text-left align-top">
                   <th className="px-2 py-1 w-6">#</th>
@@ -269,13 +271,13 @@ export function CustomSheetEditorPage() {
                       {canWrite ? (
                         <div className="flex flex-col gap-1">
                           <input
-                            className="w-full min-w-[7rem] rounded border border-line bg-white px-1.5 py-0.5 text-[11px] font-semibold uppercase"
+                            className="maker-table__head-input"
                             value={h}
                             onChange={(e) => renameColumn(i, e.target.value)}
                           />
                           <button
                             type="button"
-                            className="text-[10px] text-danger self-start"
+                            className="maker-table__remove-col"
                             onClick={() => delColumn(i)}
                           >
                             Remove
@@ -296,7 +298,7 @@ export function CustomSheetEditorPage() {
                     {sheet.headers.map((_h: string, ci: number) => (
                       <td key={ci} className="px-1 py-0.5">
                         <input
-                          className="w-full bg-transparent focus:bg-white focus:ring-1 focus:ring-brand/40 rounded px-1"
+                          className="maker-table__cell"
                           value={row[ci] ?? ""}
                           onChange={(e) => setCell(ri, ci, e.target.value)}
                           disabled={!canWrite}
@@ -320,7 +322,13 @@ export function CustomSheetEditorPage() {
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
+      )}
+      {sheet && (
+        <div className="maker-sticky-bar">
+          {canWrite && <Button type="button" onClick={() => void save()} disabled={!sheet}>Save</Button>}
+          <Button type="button" variant="secondary" onClick={() => void download()}>Export .xlsx</Button>
+        </div>
       )}
     </div>
   );

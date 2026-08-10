@@ -33,6 +33,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   drawings: [
     { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish.", sheet: "Drawing & GFC Drawing Log" },
     {
+      to: "drawings/library",
+      label: "Drawing files",
+      blurb: "PDF/DWG in SharePoint design folders — not the general document manager.",
+      sheet: "Drawing & GFC Drawing Log",
+    },
+    {
       to: "checklist-master",
       label: "Checklist manager",
       query: "family=DrawingCheck",
@@ -46,7 +52,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       query: "family=DrawingCheck",
       blurb: "Who filled what — branded download with Sharnam logo.",
     },
-    { to: "dms", label: "Documents (DMS)", blurb: "Drawing folders." },
+    { to: "dms", label: "Documents (DMS)", blurb: "Procore-style project document manager — ISO folders, upload, preview." },
     {
       to: "coordination",
       label: "Coordination",
@@ -80,7 +86,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "site_employee", "employee", "vendor"],
       blurb: "Vendor assignments.",
     },
-    { to: "dms", label: "Documents (DMS)", blurb: "Project folders and files." },
+    { to: "dms", label: "Documents (DMS)", blurb: "Procore-style folder browse — all project files except the GFC register workflow." },
   ],
   quality: [
     {
@@ -238,6 +244,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   field: [
     { to: "site-pilot", label: "Site check-in", blurb: "Photo · GPS · PDF markup · signature → SharePoint.", sheet: "SitePilot" },
+    { to: "/upload-lab", label: "Photo & PDF test", blurb: "Mobile camera + PDF markup sandbox → SharePoint UploadLab." },
+    { to: "/attendance", label: "Attendance punch", blurb: "Selfie + GPS check-in/out (also in sidebar).", sheet: "Attendance" },
     { to: "diary", label: "Day log", blurb: "Manpower and site notes." },
     { to: "photos", label: "Photos", blurb: "Site photo albums." },
     { to: "rfis", label: "Field RFIs", blurb: "Field questions and fills." },

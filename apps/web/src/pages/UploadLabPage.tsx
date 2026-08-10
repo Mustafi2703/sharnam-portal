@@ -2,11 +2,12 @@
  * Upload Lab — admin test desk for photo · PDF markup · drawing · signature uploads.
  * Proves the UI ↔ SharePoint pipeline before Hostinger production cutover.
  */
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
 import { EvidencePanel, type EvidenceItem } from "../components/EvidencePanel";
+import { FilePickButton } from "../components/FilePickButton";
 
 type DriveItem = { name: string; path: string; type: "folder" | "file"; url?: string };
 type GraphHealth = {
@@ -35,7 +36,8 @@ function isImage(name: string) {
 
 export default function UploadLabPage() {
   const { token, user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "office";
+  const canManage =
+    user?.role === "admin" || user?.role === "office" || user?.role === "site_employee";
 
   const [projects, setProjects] = useState<any[]>([]);
   const [projectId, setProjectId] = useState("");
@@ -190,9 +192,8 @@ export default function UploadLabPage() {
     }
   }
 
-  async function onUploadDrawing(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
+  async function onUploadDrawingFiles(files: File[]) {
+    const file = files[0];
     if (!file) return;
     setBusy(true);
     try {
@@ -216,8 +217,8 @@ export default function UploadLabPage() {
 
   if (!canManage) {
     return (
-      <div className="p-8 text-center text-steel-muted">
-        Upload Lab is for admin / office users only.
+      <div className="p-8 text-center text-steel-muted max-w-md mx-auto">
+        Upload Lab is for admin, office, and site users testing photo / PDF flows on mobile.
       </div>
     );
   }
@@ -230,7 +231,7 @@ export default function UploadLabPage() {
       <PageHeader
         eyebrow="Integration test"
         title="Upload Lab"
-        subtitle="Test photo capture, PDF markup, drawing upload, and signatures — saved to SharePoint under Daily Site Records → UploadLab."
+        subtitle="Open on your phone: tap Camera, mark up a PDF, upload a drawing — all saved to SharePoint UploadLab."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone={liveMode && spOk ? "ok" : liveMode ? "warn" : "neutral"}>
@@ -315,10 +316,9 @@ export default function UploadLabPage() {
       <Card className="space-y-3">
         <h3 className="font-semibold text-sm">Drawing upload (PDF / DWG)</h3>
         <p className="text-xs text-steel-muted">GFC-style sheets land in UploadLab/Drawings on SharePoint.</p>
-        <label className="inline-flex">
-          <span className="cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-line bg-white">Choose drawing file</span>
-          <input type="file" accept=".pdf,.dwg,application/pdf" className="hidden" disabled={busy} onChange={(e) => void onUploadDrawing(e)} />
-        </label>
+        <FilePickButton accept=".pdf,.dwg,application/pdf" disabled={busy} onPick={(files) => void onUploadDrawingFiles(files)}>
+          Choose drawing file
+        </FilePickButton>
         {drawings.length > 0 && (
           <ul className="text-xs divide-y">
             {drawings.map((d, i) => (

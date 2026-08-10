@@ -1,13 +1,8 @@
 /**
- * PhotoCapture — mobile-first photo capture button.
- * On phones/tablets, tapping "Camera" opens the native camera (capture="environment").
- * On desktop, the same button falls back to file picker.
- * "Gallery" always opens the file picker.
- *
- * Files are lifted via onChange so the parent can post them along with its form.
+ * PhotoCapture — mobile-first photo capture.
+ * Camera opens native lens on phone; Gallery opens picker. Large tap targets (44px+).
  */
 import { useRef, useState } from "react";
-import { Button } from "./ui";
 
 type Props = {
   onChange: (files: File[]) => void;
@@ -15,15 +10,25 @@ type Props = {
   accept?: string;
   hint?: string;
   buttonSize?: "sm" | "md";
+  /** Rear camera on site (default). Use "user" for selfie / attendance. */
+  captureFacing?: "user" | "environment";
 };
 
-export function PhotoCapture({ onChange, multiple = true, accept = "image/*", hint, buttonSize = "sm" }: Props) {
+export function PhotoCapture({
+  onChange,
+  multiple = true,
+  accept = "image/*",
+  hint,
+  buttonSize = "sm",
+  captureFacing = "environment",
+}: Props) {
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const galleryRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<File[]>([]);
 
-  const push = (list: FileList | null) => {
+  const push = (list: FileList | null, input: HTMLInputElement | null) => {
     const incoming = list ? Array.from(list) : [];
+    if (input) input.value = "";
     if (!incoming.length) return;
     const next = multiple ? [...files, ...incoming] : incoming.slice(0, 1);
     setFiles(next);
@@ -36,69 +41,70 @@ export function PhotoCapture({ onChange, multiple = true, accept = "image/*", hi
     onChange(next);
   };
 
-  const btnCls = buttonSize === "sm" ? "!text-xs !py-1.5 !px-3" : "";
+  const sizeCls = buttonSize === "md" ? "photo-capture__btn--md" : "photo-capture__btn--sm";
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
+    <div className="photo-capture">
+      <div className="photo-capture__actions">
+        <button
           type="button"
-          variant="secondary"
-          className={btnCls}
+          className={`photo-capture__btn photo-capture__btn--camera ${sizeCls}`}
           onClick={() => cameraRef.current?.click()}
         >
-          📷 Camera
-        </Button>
-        <Button
+          <span className="photo-capture__icon" aria-hidden>📷</span>
+          <span>Camera</span>
+        </button>
+        <button
           type="button"
-          variant="ghost"
-          className={btnCls}
+          className={`photo-capture__btn photo-capture__btn--gallery ${sizeCls}`}
           onClick={() => galleryRef.current?.click()}
         >
-          🖼 Gallery
-        </Button>
-        {hint && <span className="text-[11px] text-steel-muted">{hint}</span>}
+          <span className="photo-capture__icon" aria-hidden>🖼</span>
+          <span>Gallery</span>
+        </button>
+        {files.length > 0 && (
+          <span className="photo-capture__count">{files.length} selected</span>
+        )}
       </div>
+      {hint && <p className="photo-capture__hint">{hint}</p>}
       <input
         ref={cameraRef}
         type="file"
         accept={accept}
-        capture="environment"
+        capture={captureFacing}
         multiple={multiple}
-        className="hidden"
-        onChange={(e) => push(e.target.files)}
+        className="photo-capture__input"
+        onChange={(e) => push(e.target.files, e.currentTarget)}
       />
       <input
         ref={galleryRef}
         type="file"
         accept={accept}
         multiple={multiple}
-        className="hidden"
-        onChange={(e) => push(e.target.files)}
+        className="photo-capture__input"
+        onChange={(e) => push(e.target.files, e.currentTarget)}
       />
       {files.length > 0 && (
-        <ul className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+        <ul className="photo-capture__grid">
           {files.map((f, i) => {
             const url = URL.createObjectURL(f);
             return (
-              <li key={`${f.name}-${i}`} className="relative group">
+              <li key={`${f.name}-${f.size}-${i}`} className="photo-capture__thumb-wrap">
                 <img
                   src={url}
                   alt={f.name}
-                  className="w-full h-20 object-cover rounded-md border border-line"
+                  className="photo-capture__thumb"
                   onLoad={() => URL.revokeObjectURL(url)}
                 />
                 <button
                   type="button"
-                  aria-label="Remove"
+                  aria-label={`Remove ${f.name}`}
                   onClick={() => removeAt(i)}
-                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-white border border-line text-xs font-bold shadow"
+                  className="photo-capture__remove"
                 >
                   ×
                 </button>
-                <span className="absolute inset-x-0 bottom-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">
-                  {f.name}
-                </span>
+                <span className="photo-capture__name">{f.name}</span>
               </li>
             );
           })}

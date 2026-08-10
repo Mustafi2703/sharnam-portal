@@ -179,21 +179,21 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
   }
 
   return (
-    <div className={`space-y-3 ${className}`}>
-      <div className="flex flex-wrap gap-2 items-center">
+    <div className={`space-y-3 markup-root ${className}`}>
+      <div className="markup-toolbar">
         <div className="flex gap-1">
           {(["pen", "text", "erase"] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setTool(t)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded border ${tool === t ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted"}`}
+              className={`markup-toolbar__btn ${tool === t ? "markup-toolbar__btn--active" : ""}`}
             >
               {t}
             </button>
           ))}
         </div>
-        <div className="flex gap-1 items-center border border-line rounded px-2 py-1">
+        <div className="markup-toolbar__group">
           {COLORS.map((c) => (
             <button
               key={c}
@@ -205,7 +205,7 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
             />
           ))}
         </div>
-        <div className="flex gap-1 items-center border border-line rounded px-2 py-1">
+        <div className="markup-toolbar__group">
           {WIDTHS.map((w) => (
             <button
               key={w}
@@ -217,16 +217,16 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
             />
           ))}
         </div>
-        <button type="button" onClick={undo} className="px-3 py-1.5 text-xs font-semibold rounded border bg-white border-line">Undo</button>
-        <button type="button" onClick={clearAll} className="px-3 py-1.5 text-xs font-semibold rounded border bg-white border-line">Clear</button>
-        <div className="ml-auto flex gap-2">
+        <button type="button" onClick={undo} className="markup-toolbar__btn">Undo</button>
+        <button type="button" onClick={clearAll} className="markup-toolbar__btn">Clear</button>
+        <div className="markup-toolbar__actions">
           {onCancel && (
-            <button type="button" onClick={onCancel} className="px-3 py-1.5 text-xs font-semibold rounded border bg-white border-line">Cancel</button>
+            <button type="button" onClick={onCancel} className="markup-toolbar__btn">Cancel</button>
           )}
           <button
             type="button"
             onClick={() => void save()}
-            className="px-3 py-1.5 text-xs font-semibold rounded bg-ink text-white"
+            className="markup-toolbar__btn markup-toolbar__btn--primary"
           >
             {saveLabel}
           </button>
@@ -236,11 +236,11 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
       {!imageDataUrl && <div className="text-xs text-steel-muted">Loading image…</div>}
 
       {imageDataUrl && (
-        <div className="relative inline-block max-w-full">
-          <canvas ref={canvasRef} className="block max-w-full h-auto rounded-lg" style={{ background: "#f4f4f5" }} />
+        <div className="markup-canvas-wrap relative inline-block max-w-full">
+          <canvas ref={canvasRef} className="markup-canvas block max-w-full h-auto rounded-lg" style={{ background: "#f4f4f5" }} />
           <canvas
             ref={overlayRef}
-            className="absolute inset-0 max-w-full h-auto rounded-lg touch-none"
+            className="markup-overlay absolute inset-0 max-w-full h-auto rounded-lg touch-none"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}

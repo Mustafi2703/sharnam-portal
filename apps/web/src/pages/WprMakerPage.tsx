@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
+import { Badge, Button, Input, PageHeader } from "../components/ui";
+import { FilePickButton } from "../components/FilePickButton";
 import { SignaturePad } from "../components/SignaturePad";
 
 /**
@@ -156,9 +157,8 @@ export default function WprMakerPage() {
     updateSection(key, { rows });
   }
 
-  async function uploadSectionPhoto(key: string, e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !pack) return;
+  async function uploadSectionPhoto(key: string, file: File) {
+    if (!pack) return;
     setBusy(true);
     setMsg("");
     try {
@@ -178,7 +178,6 @@ export default function WprMakerPage() {
       setMsg(err instanceof Error ? err.message : "Photo upload failed");
     } finally {
       setBusy(false);
-      e.target.value = "";
     }
   }
   function removeSectionPhoto(key: string, idx: number) {
@@ -188,9 +187,7 @@ export default function WprMakerPage() {
     updateSection(key, { photos: sec.photos.filter((_, i) => i !== idx) });
   }
 
-  async function uploadPackAttachment(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadPackAttachment(file: File) {
     setBusy(true);
     setMsg("");
     try {
@@ -207,7 +204,6 @@ export default function WprMakerPage() {
       setMsg(err instanceof Error ? err.message : "Attachment upload failed");
     } finally {
       setBusy(false);
-      e.target.value = "";
     }
   }
 
@@ -323,18 +319,18 @@ export default function WprMakerPage() {
 
   if (!pack) {
     return (
-      <div className="space-y-4">
+      <div className="maker-shell space-y-4">
         <PageHeader eyebrow="WPR Maker" title="Weekly Progress Report" subtitle="Loading…" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="maker-shell space-y-5 pb-24">
       <PageHeader
         eyebrow="WPR Maker · SPDC pack"
         title={`Weekly Progress Report — Week ending ${new Date(weekEnd).toDateString().slice(4)}`}
-        subtitle="24-section editable pack pre-seeded from live modules (Communication Matrix, RFIs, Milestones, Drawings, Cashflow, QAP, Safety, Cubes…). Edit any section, then publish an XLSX pack to the SharePoint WPR folder."
+        subtitle="24-section editable pack. Edit any section, then publish an XLSX pack to SharePoint."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>
@@ -343,95 +339,95 @@ export default function WprMakerPage() {
         }
       />
 
-      <Card className="space-y-3">
-        <div className="grid md:grid-cols-4 gap-2">
-          <label className="text-xs text-steel-muted">
-            Week ending
+      <div className="maker-section">
+        <div className="maker-toolbar">
+          <div className="maker-toolbar__field">
+            <label>Week ending</label>
             <Input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
-          </label>
-          <label className="text-xs text-steel-muted">
-            Report number
+          </div>
+          <div className="maker-toolbar__field">
+            <label>Report number</label>
             <Input type="number" placeholder="50" value={reportNumber} onChange={(e) => setReportNumber(e.target.value)} />
-          </label>
-          <div className="md:col-span-2 flex items-end justify-end gap-2">
+          </div>
+          <div className="maker-toolbar__actions">
             <Button onClick={save} disabled={busy}>Save draft</Button>
             <Button onClick={publish} disabled={busy} variant="secondary">Publish to SharePoint</Button>
           </div>
         </div>
-        {msg && <p className="text-xs text-ok">{msg}</p>}
-      </Card>
+        {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
+      </div>
 
-      <div className="space-y-3">
+      <div className="maker-accordion">
         {SECTION_ORDER.map((key) => {
           const sec = pack.sections[key] || { title: key };
           const open = expanded.has(key);
           const rowCount = sec.rows?.length || 0;
           const colCount = sec.headers?.length || sec.rows?.[0]?.length || 0;
           return (
-            <Card key={key} padding={false}>
+            <div key={key} className="maker-accordion__item">
               <button
                 type="button"
                 onClick={() => toggle(key)}
-                className="w-full flex items-center justify-between p-3 bg-sand/40 hover:bg-sand/70 transition"
+                className="maker-accordion__trigger"
               >
-                <span className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-steel-muted">{SECTION_ORDER.indexOf(key) + 1}.</span>
-                  <span className="font-semibold text-left">{sec.title}</span>
+                <span className="maker-accordion__title">
+                  <span className="text-steel-muted font-mono text-xs mr-2">{SECTION_ORDER.indexOf(key) + 1}.</span>
+                  {sec.title}
                 </span>
-                <span className="text-xs text-steel-muted">
+                <span className="maker-accordion__meta">
                   {rowCount} row{rowCount === 1 ? "" : "s"} · {open ? "Hide" : "Edit"}
                 </span>
               </button>
               {open && (
-                <div className="p-3 space-y-3">
+                <div className="maker-accordion__body space-y-3">
                   <label className="text-xs text-steel-muted block">
                     Notes / commentary
                     <textarea
-                      className="mt-1 w-full min-h-[70px] rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                      className="maker-notes mt-1"
                       value={sec.notes || ""}
                       onChange={(e) => updateSection(key, { notes: e.target.value })}
                     />
                   </label>
 
                   {(sec.headers?.length || sec.rows?.length) ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-sand/40 uppercase tracking-widest text-[9px]">
+                    <div className="maker-table-wrap">
+                      <table className="maker-table">
+                        <thead>
                           <tr>
                             {(sec.headers || []).map((h, i) => (
-                              <th key={i} className="p-1.5 text-left align-top">
-                                <div className="flex flex-col gap-1">
-                                  <input
-                                    className="w-full px-1.5 py-1 rounded border border-line bg-white text-[10px] font-semibold uppercase"
-                                    value={h}
-                                    onChange={(e) => renameSectionColumn(key, i, e.target.value)}
-                                  />
-                                  <button
-                                    className="text-[10px] text-danger self-start"
-                                    type="button"
-                                    onClick={() => removeSectionColumn(key, i)}
-                                  >
-                                    Remove column
-                                  </button>
-                                </div>
+                              <th key={i}>
+                                <input
+                                  className="maker-table__head-input"
+                                  value={h}
+                                  onChange={(e) => renameSectionColumn(key, i, e.target.value)}
+                                />
+                                <button
+                                  className="maker-table__remove-col"
+                                  type="button"
+                                  onClick={() => removeSectionColumn(key, i)}
+                                >
+                                  Remove column
+                                </button>
                               </th>
                             ))}
-                            <th className="p-1.5 w-8"></th>
+                            <th className="w-8" />
                           </tr>
                         </thead>
                         <tbody>
                           {(sec.rows || []).map((row, ri) => (
-                            <tr key={ri} className="border-t border-line">
+                            <tr key={ri}>
                               {Array.from({ length: colCount }, (_, ci) => (
-                                <td key={ci} className="p-1">
+                                <td key={ci}>
                                   <input
-                                    className="w-full px-2 py-1 rounded border border-line text-xs"
+                                    className="maker-table__cell"
                                     value={row[ci] == null ? "" : String(row[ci])}
                                     onChange={(e) => updateCell(key, ri, ci, e.target.value)}
                                   />
                                 </td>
                               ))}
-                              <td className="p-1.5 text-danger cursor-pointer" onClick={() => removeRow(key, ri)}>✕</td>
+                              <td>
+                                <button type="button" className="maker-table__remove-row" onClick={() => removeRow(key, ri)} aria-label="Remove row">✕</button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -440,30 +436,30 @@ export default function WprMakerPage() {
                   ) : null}
 
                   <div>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                       <label className="text-xs text-steel-muted">Photos ({(sec.photos || []).length})</label>
-                      <label className="text-xs text-brand font-semibold cursor-pointer">
+                      <FilePickButton
+                        accept="image/*"
+                        capture="environment"
+                        onPick={(files) => {
+                          const file = files[0];
+                          if (file) void uploadSectionPhoto(key, file);
+                        }}
+                      >
                         + Take / choose photo
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={(e) => uploadSectionPhoto(key, e)}
-                        />
-                      </label>
+                      </FilePickButton>
                     </div>
                     {(sec.photos || []).length > 0 ? (
-                      <ul className="text-[11px] font-mono divide-y">
+                      <ul className="text-[11px] font-mono divide-y border border-line rounded-lg overflow-hidden">
                         {(sec.photos || []).map((p, i) => (
-                          <li key={i} className="py-1 flex justify-between gap-2">
+                          <li key={i} className="py-1.5 px-2 flex justify-between gap-2 bg-white">
                             <span className="truncate">{p}</span>
                             <button type="button" className="text-danger" onClick={() => removeSectionPhoto(key, i)}>✕</button>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-[11px] text-steel-muted">No photos yet. Uploads go to <span className="font-mono">10.01_Progress_Reporting_MIS/photos/{key}/</span></p>
+                      <p className="text-[11px] text-steel-muted">No photos yet.</p>
                     )}
                   </div>
 
@@ -473,90 +469,85 @@ export default function WprMakerPage() {
                   </div>
                 </div>
               )}
-            </Card>
+            </div>
           );
         })}
       </div>
 
-      {/* Sign-off & attachments — mirrors the SPDC WPR sign-off slide */}
-      <Card className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">Sign-off & attachments</h3>
-          <p className="text-xs text-steel-muted mt-0.5">
-            Uploads land in the WPR MIS folder: <span className="font-mono">10.01_Progress_Reporting_MIS/attachments</span> &nbsp;·&nbsp; <span className="font-mono">/signatures</span>
-          </p>
-        </div>
+      <div className="maker-section">
+        <div className="maker-section__head">Sign-off & attachments</div>
+        <div className="maker-section__body space-y-4">
+          <section className="rounded-lg border border-line p-3 space-y-2 bg-sand/30">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">PDF attachments ({attachments.length})</h4>
+            </div>
+            <FilePickButton accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onPick={(files) => {
+              const file = files[0];
+              if (file) void uploadPackAttachment(file);
+            }}>
+              Upload PDF or file
+            </FilePickButton>
+            {attachments.length > 0 && (
+              <ul className="mt-1 text-xs divide-y border border-line rounded-lg overflow-hidden bg-white">
+                {attachments.map((p, i) => (
+                  <li key={i} className="py-2 px-2 flex justify-between gap-2 items-center">
+                    <div className="min-w-0">
+                      <div className="font-mono truncate text-[11px]">{p.path}</div>
+                      {p.caption && <div className="text-steel-muted">{p.caption}</div>}
+                    </div>
+                    <button className="text-danger text-sm" onClick={() => setAttachments((a) => a.filter((_, k) => k !== i))} title="Remove">✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-        <section className="rounded-lg border border-line p-3 space-y-2">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">PDF attachments ({attachments.length})</h4>
-            <span className="text-[11px] text-steel-muted">Weekly report PDF · signed MoM · risk log export</span>
-          </div>
-          <label className="text-xs text-steel-muted">
-            Upload PDF (or any file)
-            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={uploadPackAttachment} className="block mt-1 text-xs" />
-          </label>
-          {attachments.length > 0 && (
-            <ul className="mt-1 text-xs divide-y">
-              {attachments.map((p, i) => (
-                <li key={i} className="py-2 flex justify-between gap-2 items-center">
-                  <div className="min-w-0">
-                    <div className="font-mono truncate">{p.path}</div>
-                    {p.caption && <div className="text-steel-muted">{p.caption}</div>}
-                  </div>
-                  <button className="text-danger text-sm" onClick={() => setAttachments((a) => a.filter((_, k) => k !== i))} title="Remove">✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="rounded-lg border border-line p-3 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+          <section className="rounded-lg border border-line p-3 space-y-3 bg-sand/30">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Sign-off ({signatures.length})</h4>
-            <span className="text-[11px] text-steel-muted">Signatures for this week</span>
-          </div>
-          <div className="grid md:grid-cols-3 gap-3">
-            <SignaturePad label="PMC sign"        personName="PMC"        height={140} onCapture={(f) => f && uploadPackSignature(f, "pmc")} />
-            <SignaturePad label="Client sign"     personName="Client"     height={140} onCapture={(f) => f && uploadPackSignature(f, "client")} />
-            <SignaturePad label="Contractor sign" personName="Contractor" height={140} onCapture={(f) => f && uploadPackSignature(f, "contractor")} />
-          </div>
-          {signatures.length > 0 && (
-            <ul className="mt-1 text-xs divide-y">
-              {signatures.map((p, i) => (
-                <li key={i} className="py-2 flex justify-between gap-2 items-center">
-                  <div className="min-w-0">
-                    <div className="font-mono truncate">{p.path}</div>
-                    <div className="text-steel-muted">{p.role}</div>
-                  </div>
-                  <button className="text-danger text-sm" onClick={() => setSignatures((s) => s.filter((_, k) => k !== i))} title="Remove">✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </Card>
+            <div className="grid md:grid-cols-3 gap-3">
+              <SignaturePad label="PMC sign" personName="PMC" height={140} onCapture={(f) => f && uploadPackSignature(f, "pmc")} />
+              <SignaturePad label="Client sign" personName="Client" height={140} onCapture={(f) => f && uploadPackSignature(f, "client")} />
+              <SignaturePad label="Contractor sign" personName="Contractor" height={140} onCapture={(f) => f && uploadPackSignature(f, "contractor")} />
+            </div>
+            {signatures.length > 0 && (
+              <ul className="text-xs divide-y border border-line rounded-lg overflow-hidden bg-white">
+                {signatures.map((p, i) => (
+                  <li key={i} className="py-2 px-2 flex justify-between gap-2 items-center">
+                    <div className="min-w-0">
+                      <div className="font-mono truncate text-[11px]">{p.path}</div>
+                      <div className="text-steel-muted">{p.role}</div>
+                    </div>
+                    <button className="text-danger text-sm" onClick={() => setSignatures((s) => s.filter((_, k) => k !== i))} title="Remove">✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      </div>
 
       {recent.length > 0 && (
-        <Card>
-          <h3 className="font-semibold mb-2">Recent WPR packs</h3>
-          <ul className="text-sm divide-y">
+        <div className="maker-section maker-section--flush">
+          <div className="maker-section__head">Recent WPR packs</div>
+          <ul className="maker-list">
             {recent.map((r) => (
-              <li key={r.id} className="py-1.5 flex justify-between items-center">
-                <span className="font-mono text-xs">Week ending {new Date(r.weekEnding).toISOString().slice(0, 10)} · No {r.reportNumber || "—"}</span>
-                <span>
-                  <Badge tone={r.status === "Published" ? "ok" : "warn"}>{r.status}</Badge>
-                  {r.publishedPath && (
-                    <span className="text-xs text-steel-muted ml-2 truncate max-w-[280px] inline-block align-middle">
-                      {r.publishedPath}
-                    </span>
-                  )}
-                </span>
+              <li key={r.id} className="maker-list__row">
+                <div className="min-w-0">
+                  <div className="maker-list__title">Week ending {new Date(r.weekEnding).toISOString().slice(0, 10)} · No {r.reportNumber || "—"}</div>
+                  {r.publishedPath && <div className="maker-list__sub truncate">{r.publishedPath}</div>}
+                </div>
+                <Badge tone={r.status === "Published" ? "ok" : "warn"}>{r.status}</Badge>
               </li>
             ))}
           </ul>
-        </Card>
+        </div>
       )}
+
+      <div className="maker-sticky-bar">
+        <Button onClick={save} disabled={busy}>Save draft</Button>
+        <Button onClick={publish} disabled={busy} variant="secondary">Publish</Button>
+        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export XLSX</Button>
+      </div>
     </div>
   );
 }

@@ -193,7 +193,7 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
   const folderPath = String(req.query.path || "");
-  const syncOnOpen = String(req.query.sync || "1") !== "0";
+  const syncOnOpen = String(req.query.sync || "0") === "1";
   let syncedAt: string | null = null;
   if (syncOnOpen) {
     // Touch only the opened folder — full tree sync is POST /sync

@@ -548,11 +548,11 @@ export default function DprMakerPage() {
 
   const h = snap.header;
   return (
-    <div className="space-y-5 maker-page pb-24">
+    <div className="maker-shell space-y-5 pb-24">
       <PageHeader
         eyebrow="DPR Maker · SPDC template output"
         title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
-        subtitle="Header · quantity progress · manpower · equipment · material · quality · HSE · delay · approvals · issues · highlights · next-day · decisions · photos · PDFs · sign-off. Publishes the SPDC template XLSX to SharePoint."
+        subtitle="Header · quantity · manpower · equipment · material · quality · HSE · delay · photos · sign-off. Publishes SPDC XLSX to SharePoint."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
@@ -561,33 +561,33 @@ export default function DprMakerPage() {
         }
       />
 
-      <Card className="space-y-3">
-        <div className="grid md:grid-cols-4 gap-2">
-          <label className="text-xs text-steel-muted">
-            Log date
+      <div className="maker-section">
+        <div className="maker-toolbar">
+          <div className="maker-toolbar__field">
+            <label>Log date</label>
             <Input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
-          </label>
-          <label className="text-xs text-steel-muted">
-            Discipline
+          </div>
+          <div className="maker-toolbar__field">
+            <label>Discipline</label>
             <Select value={discipline} onChange={(e) => setDiscipline(e.target.value)}>
               {DISCIPLINES.map((d) => (
                 <option key={d.key} value={d.key}>{d.label}</option>
               ))}
             </Select>
-          </label>
-          <div className="md:col-span-2 flex items-end justify-end gap-2">
+          </div>
+          <div className="maker-toolbar__actions">
             <Button onClick={save} disabled={busy}>Save draft</Button>
             <Button onClick={publish} disabled={busy} variant="secondary">Publish to SharePoint</Button>
           </div>
         </div>
-        {msg && <p className="text-xs text-ok">{msg}</p>}
-      </Card>
+        {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
+      </div>
 
       {/* 1. Header */}
       <div className="grid md:grid-cols-2 gap-4">
-        <Card className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">1. Project header</h3>
-          <div className="grid sm:grid-cols-2 gap-2">
+        <div className="maker-section">
+          <div className="maker-section__head">1. Project header</div>
+          <div className="maker-section__body grid sm:grid-cols-2 gap-2">
             <Input placeholder="Project name" value={h.projectName || ""} onChange={(e) => updateHeader("projectName", e.target.value)} />
             <Input placeholder="Project manager" value={h.projectManager || ""} onChange={(e) => updateHeader("projectManager", e.target.value)} />
             <Input placeholder="Contractor / vendor" value={h.contractor || ""} onChange={(e) => updateHeader("contractor", e.target.value)} />
@@ -602,10 +602,10 @@ export default function DprMakerPage() {
             <Input placeholder="Weather" value={h.weather || ""} onChange={(e) => updateHeader("weather", e.target.value)} />
             <Input placeholder="Report number" value={h.reportNumber || ""} onChange={(e) => updateHeader("reportNumber", e.target.value)} />
           </div>
-        </Card>
-        <Card className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">Report cut-off + safety history</h3>
-          <div className="grid sm:grid-cols-2 gap-2">
+        </div>
+        <div className="maker-section">
+          <div className="maker-section__head">Report cut-off + safety history</div>
+          <div className="maker-section__body grid sm:grid-cols-2 gap-2">
             <label className="text-xs text-steel-muted">Report date
               <Input type="date" value={toDateInput(h.reportDate)} onChange={(e) => updateHeader("reportDate", e.target.value)} />
             </label>
@@ -620,13 +620,14 @@ export default function DprMakerPage() {
             </label>
             <Input placeholder="Prepared by" value={h.preparedBy || ""} onChange={(e) => updateHeader("preparedBy", e.target.value)} className="sm:col-span-2" />
           </div>
-        </Card>
+        </div>
       </div>
 
       {/* KPI band */}
       {computed && (
-        <Card>
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted mb-2">Live KPIs</h3>
+        <div className="maker-section">
+          <div className="maker-section__head">Live KPIs</div>
+          <div className="maker-section__body">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-sm">
             <KPI label="Planned %" value={(computed.plannedPct * 100).toFixed(1) + "%"} />
             <KPI label="Actual %" value={(computed.actualPct * 100).toFixed(1) + "%"} />
@@ -637,32 +638,33 @@ export default function DprMakerPage() {
             <KPI label="Hrs lost today" value={computed.hoursLostToday.toFixed(1)} tone={computed.hoursLostToday > 0 ? "warn" : "ok"} />
           </div>
           <p className="text-xs text-steel-muted mt-2">Contract value ~ ₹ {computed.contractValueLakh.toFixed(2)} Lakh · Overall {computed.actualPct >= computed.plannedPct ? "ON PROGRAMME" : "BEHIND PROGRAMME"}.</p>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* 2. Quantity */}
-      <Card padding={false}>
-        <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
-          <h3 className="text-sm font-semibold uppercase tracking-widest">2. Quantity progress · BOQ item-wise</h3>
+      <div className="maker-section maker-section--flush">
+        <div className="maker-section__head maker-section__head--row">
+          <span>2. Quantity progress · BOQ item-wise</span>
           <Button variant="secondary" onClick={addLine}>+ Add item</Button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
+        <div className="maker-table-wrap">
+          <table className="maker-table">
+            <thead>
               <tr>
-                <th className="p-2 w-8">Sr</th>
-                <th className="p-2">Group</th>
-                <th className="p-2">Description</th>
-                <th className="p-2">Unit</th>
-                <th className="p-2">Scope</th>
-                <th className="p-2">Rate</th>
-                <th className="p-2">Start</th>
-                <th className="p-2">Finish</th>
-                <th className="p-2">Cum prev</th>
-                <th className="p-2">Qty today</th>
-                <th className="p-2">Cum</th>
-                <th className="p-2">%</th>
-                <th className="p-2 w-8"></th>
+                <th>Sr</th>
+                <th>Group</th>
+                <th>Description</th>
+                <th>Unit</th>
+                <th>Scope</th>
+                <th>Rate</th>
+                <th>Start</th>
+                <th>Finish</th>
+                <th>Cum prev</th>
+                <th>Qty today</th>
+                <th>Cum</th>
+                <th>%</th>
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody>
@@ -682,7 +684,7 @@ export default function DprMakerPage() {
                     <td className="p-1"><Input type="number" value={l.qtyToday ?? 0} onChange={(e) => updateLine(i, { qtyToday: Number(e.target.value) })} className="max-w-[100px]" /></td>
                     <td className="p-1.5 text-xs tabular-nums">{(c?.cum ?? 0).toFixed(2)}</td>
                     <td className="p-1.5 text-xs tabular-nums">{c ? (c.pctComplete * 100).toFixed(1) + "%" : "—"}</td>
-                    <td className="p-1.5 text-danger cursor-pointer text-xs" onClick={() => removeLine(i)}>✕</td>
+                    <td><button type="button" className="maker-table__remove-row" onClick={() => removeLine(i)} aria-label="Remove">✕</button></td>
                   </tr>
                 );
               })}
@@ -696,24 +698,24 @@ export default function DprMakerPage() {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
       {/* 3. Manpower */}
-      <Card padding={false}>
-        <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
-          <h3 className="text-sm font-semibold uppercase tracking-widest">3. Manpower deployed today</h3>
+      <div className="maker-section maker-section--flush">
+        <div className="maker-section__head maker-section__head--row">
+          <span>3. Manpower deployed today</span>
           <Button variant="secondary" onClick={addManpower}>+ Trade</Button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
+        <div className="maker-table-wrap">
+          <table className="maker-table">
+            <thead>
               <tr>
-                <th className="p-2 w-8">Sr</th>
-                <th className="p-2 text-left">Trade / category</th>
-                <th className="p-2">Planned nos</th>
-                <th className="p-2">Actual nos</th>
-                <th className="p-2">Hours</th>
-                <th className="p-2 w-8"></th>
+                <th>Sr</th>
+                <th>Trade / category</th>
+                <th>Planned nos</th>
+                <th>Actual nos</th>
+                <th>Hours</th>
+                <th className="w-8" />
               </tr>
             </thead>
             <tbody>
@@ -724,13 +726,13 @@ export default function DprMakerPage() {
                   <td className="p-1"><Input type="number" value={m.planned ?? 0} onChange={(e) => updateManpower(i, { planned: Number(e.target.value) })} className="max-w-[110px]" /></td>
                   <td className="p-1"><Input type="number" value={m.actual ?? 0} onChange={(e) => updateManpower(i, { actual: Number(e.target.value) })} className="max-w-[110px]" /></td>
                   <td className="p-1"><Input type="number" step="0.25" value={m.hoursWorked ?? 8} onChange={(e) => updateManpower(i, { hoursWorked: Number(e.target.value) })} className="max-w-[90px]" /></td>
-                  <td className="p-1.5 text-danger cursor-pointer text-xs" onClick={() => removeManpower(i)}>✕</td>
+                  <td><button type="button" className="maker-table__remove-row" onClick={() => removeManpower(i)} aria-label="Remove">✕</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
       {/* 4. Equipment */}
       <Card padding={false}>

@@ -306,9 +306,14 @@ export default function DrawingsPage() {
             <Button type="button" variant="secondary" onClick={() => void exportCsv()}>
               Export GFC CSV
             </Button>
-            <Link to={`/projects/${id}/checklist-master?family=DrawingCheck`}>
+            <Link to={`/projects/${id}/drawings/library`}>
               <Button type="button" variant="secondary">
-                Checklist manager
+                Drawing files (SharePoint)
+              </Button>
+            </Link>
+            <Link to={`/projects/${id}/dms`}>
+              <Button type="button" variant="ghost">
+                Documents (DMS)
               </Button>
             </Link>
             {canUpload && (

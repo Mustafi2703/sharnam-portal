@@ -64,6 +64,21 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
   { to: "/master", label: "Master setup", icon: "master", roles: ["admin", "office"] },
 ];
 
+/** Site / field desk — attendance + mobile upload testing */
+const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
+  { to: "/attendance", label: "Attendance punch", icon: "field" },
+  { to: "/upload-lab", label: "Upload lab · test", icon: "reports" },
+];
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Office",
+  office: "Office",
+  site_employee: "Site",
+  employee: "Employee",
+  vendor: "Contractor",
+  client: "Client",
+};
+
 /** Office admin — full control surface */
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/crm", label: "CRM · Bids", icon: "modules" },
@@ -113,6 +128,8 @@ function SideNavBody({
   const location = useLocation();
   const navItems = appNav.filter((n) => !user || n.roles.includes(user.role));
   const isOffice = user?.role === "admin" || user?.role === "office";
+  const isSiteDesk = user?.role === "site_employee" || user?.role === "vendor";
+  const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const modules = useMemo(
     () => WORKSPACES.filter((w) => !user || w.roles.includes(user.role)),
     [user]
@@ -128,6 +145,11 @@ function SideNavBody({
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
           <img src="/logo.png" alt={BRAND_EN} className="side-nav__logo" width={240} height={116} />
         </Link>
+        {roleLabel ? (
+          <span className="side-nav__role-badge" aria-label={`Signed in as ${roleLabel}`}>
+            {roleLabel} portal
+          </span>
+        ) : null}
       </div>
 
       <div className="side-nav__scroll">
@@ -151,6 +173,28 @@ function SideNavBody({
             ))}
           </nav>
         </section>
+
+        {isSiteDesk && (
+          <section className="side-nav__section side-nav__section--site" aria-label="Site desk">
+            <div className="side-nav__section-head">
+              <p className="side-nav__label">Site desk</p>
+              <span className="side-nav__section-hint">Field</span>
+            </div>
+            <nav className="side-nav__group" aria-label="Site tools">
+              {siteDeskNav.map((n) => (
+                <NavLink
+                  key={n.to}
+                  to={n.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+                >
+                  <ModuleIcon name={n.icon} size={18} />
+                  <span>{n.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+          </section>
+        )}
 
         {isOffice && (
           <section className="side-nav__section side-nav__section--office" aria-label="Office admin">
@@ -266,7 +310,7 @@ function SideNavBody({
         </button>
         <div className="side-nav__user" title={user?.fullName}>
           {user?.fullName}
-          {isOffice && <span className="opacity-70"> · Office</span>}
+          {roleLabel ? <span className="side-nav__user-role"> · {roleLabel}</span> : null}
         </div>
         <button
           type="button"
@@ -358,6 +402,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const dark = colorMode === "dark";
   const isOffice = user?.role === "admin" || user?.role === "office";
+  const isSiteDesk = user?.role === "site_employee" || user?.role === "vendor";
+  const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const activeProject = projects.find((p) => p.id === projectId);
 
   return (
@@ -403,6 +449,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
 
             <div className={`app-topbar__meta ${inProject ? "app-topbar__meta--slim" : ""}`}>
+              {roleLabel ? (
+                <span className="app-topbar__role-badge">{roleLabel}</span>
+              ) : null}
               <div className="app-topbar__title truncate">
                 {inProject
                   ? activeProject
@@ -415,6 +464,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                       : "Select a project in the sidebar"}
               </div>
             </div>
+
+            {isSiteDesk && (
+              <div className="hidden sm:flex items-center gap-1.5">
+                <Link to="/attendance" className="app-topbar__chip hover:border-brand">
+                  Attendance
+                </Link>
+                <Link to="/upload-lab" className="app-topbar__chip hover:border-brand">
+                  Upload lab
+                </Link>
+              </div>
+            )}
 
             {!inProject && isOffice && (
               <div className="hidden lg:flex items-center gap-1.5">

@@ -64,15 +64,15 @@ export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save ann
   if (!pages.length) return <div className="text-sm text-steel-muted">Provide a PDF to annotate.</div>;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs">
-        <button type="button" onClick={() => setPageIdx((i) => Math.max(0, i - 1))} disabled={pageIdx === 0} className="px-2 py-1 border border-line rounded bg-white disabled:opacity-30">‹ Prev</button>
-        <span>Page {pageIdx + 1} / {pages.length}</span>
-        <button type="button" onClick={() => setPageIdx((i) => Math.min(pages.length - 1, i + 1))} disabled={pageIdx >= pages.length - 1} className="px-2 py-1 border border-line rounded bg-white disabled:opacity-30">Next ›</button>
-        <span className="text-steel-muted ml-2">Marked: {Object.keys(markedUp).length}</span>
-        <div className="ml-auto flex gap-2">
-          {onCancel && <button type="button" onClick={onCancel} className="px-3 py-1.5 rounded border border-line bg-white">Cancel</button>}
-          <button type="button" onClick={saveAll} className="px-3 py-1.5 rounded bg-ink text-white font-semibold">{saveLabel}</button>
+    <div className="markup-pdf space-y-3">
+      <div className="markup-toolbar markup-toolbar--pdf">
+        <button type="button" onClick={() => setPageIdx((i) => Math.max(0, i - 1))} disabled={pageIdx === 0} className="markup-toolbar__btn">‹ Prev</button>
+        <span className="markup-toolbar__meta">Page {pageIdx + 1} / {pages.length}</span>
+        <button type="button" onClick={() => setPageIdx((i) => Math.min(pages.length - 1, i + 1))} disabled={pageIdx >= pages.length - 1} className="markup-toolbar__btn">Next ›</button>
+        <span className="markup-toolbar__meta">Marked: {Object.keys(markedUp).length}</span>
+        <div className="markup-toolbar__actions">
+          {onCancel && <button type="button" onClick={onCancel} className="markup-toolbar__btn">Cancel</button>}
+          <button type="button" onClick={saveAll} className="markup-toolbar__btn markup-toolbar__btn--primary">{saveLabel}</button>
         </div>
       </div>
 

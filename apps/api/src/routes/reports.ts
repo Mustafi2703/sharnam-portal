@@ -1,6 +1,9 @@
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
+import { audit } from "../services/audit.js";
+import { mockOneDrive } from "../services/mockOneDrive.js";
 import { buildDprPack, buildWprPack, renderDprHtml, renderWprHtml } from "../services/reportPacks.js";
 import {
   analyticsToHtml,
@@ -397,6 +400,7 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
 });
 
 export const hrmRouter = Router();
+const hrmUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 hrmRouter.use(requireAuth);
 
 hrmRouter.get("/dashboard", async (_req, res) => {
@@ -500,10 +504,141 @@ hrmRouter.get("/attendance", async (req, res) => {
   date.setHours(0, 0, 0, 0);
   const rows = await prisma.attendance.findMany({
     where: { date },
-    include: { user: { select: { fullName: true, role: true } } },
+    include: { user: { select: { fullName: true, role: true, email: true } } },
+    orderBy: { updatedAt: "desc" },
   });
-  res.json(rows);
+  const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
+  const projects =
+    projectIds.length > 0
+      ? await prisma.project.findMany({
+          where: { id: { in: projectIds } },
+          select: { id: true, code: true, name: true, location: true },
+        })
+      : [];
+  const projectById = Object.fromEntries(projects.map((p) => [p.id, p]));
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      project: r.projectId ? projectById[r.projectId] ?? null : null,
+    }))
+  );
 });
+
+/** Selfie + GPS punch — multipart: selfie (required), kind, lat, lng, accuracy, projectId */
+hrmRouter.post(
+  "/attendance/punch",
+  requireRoles("admin", "office", "site_employee", "employee"),
+  hrmUpload.single("selfie"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "selfie photo required" });
+
+    const kind: "in" | "out" = req.body.kind === "out" ? "out" : "in";
+    const lat = parseFloat(String(req.body.lat ?? ""));
+    const lng = parseFloat(String(req.body.lng ?? ""));
+    const acc = parseFloat(String(req.body.accuracy ?? ""));
+    const projectId = typeof req.body.projectId === "string" ? req.body.projectId.trim() : "";
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: "GPS location required — allow location access on your device" });
+    }
+
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    const timeStr = new Date().toTimeString().slice(0, 5);
+
+    let geofenceOk = false;
+    let matchedSite: string | undefined;
+    let projectCode = "OFFICE";
+    if (projectId) {
+      const proj = await prisma.project.findUnique({ where: { id: projectId } });
+      if (proj) {
+        projectCode = proj.code;
+        matchedSite = proj.location || proj.code;
+        geofenceOk = true;
+      }
+    }
+
+    const person = (req.user!.fullName || req.user!.email || "user").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const folder = "03_SUPPORT_AND_RESOURCES/03.02_Resources_and_Productivity/Attendance";
+    const fname = `${kind}-${person}-${stamp}.jpg`;
+    const saved = await mockOneDrive.upload(projectCode, folder, fname, req.file.buffer);
+    const photoUrl = saved.url;
+
+    const punchedAt = new Date().toISOString();
+
+    const row = await prisma.attendance.upsert({
+      where: { userId_date: { userId: req.user!.id, date } },
+      create: {
+        userId: req.user!.id,
+        date,
+        status: "Present",
+        checkIn: kind === "in" ? timeStr : undefined,
+        checkOut: kind === "out" ? timeStr : undefined,
+        inLat: kind === "in" ? lat : null,
+        inLng: kind === "in" ? lng : null,
+        inAccuracy: kind === "in" && Number.isFinite(acc) ? acc : null,
+        outLat: kind === "out" ? lat : null,
+        outLng: kind === "out" ? lng : null,
+        outAccuracy: kind === "out" && Number.isFinite(acc) ? acc : null,
+        inSiteName: kind === "in" ? matchedSite ?? null : null,
+        outSiteName: kind === "out" ? matchedSite ?? null : null,
+        inGeofenceOk: kind === "in" ? geofenceOk : false,
+        outGeofenceOk: kind === "out" ? geofenceOk : false,
+        inPhotoUrl: kind === "in" ? photoUrl : null,
+        outPhotoUrl: kind === "out" ? photoUrl : null,
+        projectId: projectId || null,
+      },
+      update:
+        kind === "in"
+          ? {
+              status: "Present",
+              checkIn: timeStr,
+              inLat: lat,
+              inLng: lng,
+              inAccuracy: Number.isFinite(acc) ? acc : undefined,
+              inSiteName: matchedSite ?? undefined,
+              inGeofenceOk: geofenceOk,
+              inPhotoUrl: photoUrl,
+              projectId: projectId || undefined,
+            }
+          : {
+              checkOut: timeStr,
+              outLat: lat,
+              outLng: lng,
+              outAccuracy: Number.isFinite(acc) ? acc : undefined,
+              outSiteName: matchedSite ?? undefined,
+              outGeofenceOk: geofenceOk,
+              outPhotoUrl: photoUrl,
+            },
+    });
+
+    await audit("hrm.attendance.punch", {
+      userId: req.user!.id,
+      entity: "Attendance",
+      entityId: row.id,
+      meta: {
+        kind,
+        punchedAt,
+        localTime: timeStr,
+        projectCode,
+        projectId: projectId || null,
+        siteName: matchedSite ?? null,
+        lat,
+        lng,
+        accuracyM: Number.isFinite(acc) ? Math.round(acc) : null,
+        mapsUrl: `https://www.google.com/maps?q=${lat},${lng}`,
+        geofenceOk,
+        provider: saved.provider,
+        photoPath: saved.path,
+        checkIn: row.checkIn,
+        checkOut: row.checkOut,
+      },
+    });
+
+    res.json({ ...row, provider: saved.provider, photoPath: saved.path });
+  }
+);
 
 hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
   const date = new Date(req.body.date || Date.now());

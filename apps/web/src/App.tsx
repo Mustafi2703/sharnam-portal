@@ -14,6 +14,7 @@ import CommsPage from "./pages/CommsPage";
 import CostPage from "./pages/CostPage";
 import FinancePage from "./pages/FinancePage";
 import DmsPage from "./pages/DmsPage";
+import DrawingsLibraryPage from "./pages/DrawingsLibraryPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
@@ -49,6 +50,7 @@ import HrmsAttendancePage from "./pages/HrmsAttendancePage";
 import HrmsLeavePage from "./pages/HrmsLeavePage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
 import UploadLabPage from "./pages/UploadLabPage";
+import SiteAttendancePage from "./pages/SiteAttendancePage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -137,7 +139,8 @@ export default function App() {
                   <Route path="drawings" element={<DrawingsPage />} />
                   <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />
                   <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
-                  <Route path="dms" element={<DmsPage />} />
+                  <Route path="drawings/library" element={<DrawingsLibraryPage />} />
+                  <Route path="dms" element={<DmsPage mode="documents" />} />
                   <Route path="checklist" element={<ChecklistPage family="SiteExecution" />} />
                   <Route path="checklist/assign" element={<ChecklistAssignPage />} />
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
@@ -187,6 +190,7 @@ export default function App() {
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
                 <Route path="/upload-lab" element={<UploadLabPage />} />
+                <Route path="/attendance" element={<SiteAttendancePage />} />
               </Routes>
             </AppShell>
           </Protected>

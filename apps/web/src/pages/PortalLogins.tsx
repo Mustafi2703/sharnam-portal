@@ -6,24 +6,34 @@ import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
 
 /**
- * Sharnam login surface — matches the inside "desk" language.
- *
- * Hub (LoginHubPage):           bento of every portal on one screen, no scroll.
- * Portal login (PortalLoginPage): DeskStage on the left (a live mock of the
- *                                 inside desk in that portal's tone — no photo
- *                                 dependency, works in dark mode) + a paper
- *                                 sign-in card on the right (a real inside
- *                                 surface card with tone accent bar).
- * Shared strips:                 top brand rail with ISO badges + policy ticker
- *                                and a slim trust/version footer.
- *
- * There is no portal switcher chip row on the per-portal page — each portal
- * has its own permanent link. To switch, use "← All portals" back to the hub.
+ * Sharnam login — one construction hero on top, big logo centred, portal tiles below.
+ * Hub: /login · Per-portal: /login/:key
  */
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
-type HeroSlide = { src: string; w: number; h: number; focus: string; label: string };
+/** Hub default hero */
+export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=2";
+
+/** Per-portal hero banner — image on top, logo centred over all */
+export const PORTAL_HERO_SRC: Record<string, string> = {
+  master: "/auth/hero-construction-wide.jpg?v=2",
+  office: "/auth/hero-office.jpg?v=2",
+  hr: "/auth/hero-office.jpg?v=2",
+  employee: "/auth/hero-office.jpg?v=2",
+  comms: "/auth/hero-office.jpg?v=2",
+  site: "/auth/hero-site.jpg?v=2",
+  field: "/auth/hero-site.jpg?v=2",
+  vendor: "/auth/hero-site.jpg?v=2",
+  quality: "/auth/hero-site.jpg?v=2",
+  client: "/auth/hero-client.jpg?v=2",
+  drawings: "/auth/hero-drawings.jpg?v=2",
+};
+
+function portalHeroSrc(portalKey?: string) {
+  if (portalKey && PORTAL_HERO_SRC[portalKey]) return PORTAL_HERO_SRC[portalKey];
+  return LOGIN_HERO_SRC;
+}
 
 export type PortalConfig = {
   key: string;
@@ -40,33 +50,8 @@ export type PortalConfig = {
   landingPath?: string;
   workspaceKey?: WorkspaceKey | null;
   group: "master" | "module" | "role";
-  heroes: HeroSlide[];
   policies: string[];
 };
-
-const H = {
-  crane:   { src: "/heroes/sky-01-crane.jpg?v=1",   w: 1920, h: 1080, focus: "50% 72%", label: "Tower crane" },
-  frame:   { src: "/heroes/sky-02-frame.jpg?v=1",   w: 1920, h: 1080, focus: "48% 78%", label: "Structure rising" },
-  site:    { src: "/heroes/sky-03-site.jpg?v=1",    w: 1920, h: 1080, focus: "50% 70%", label: "Site facade" },
-  bim:     { src: "/heroes/sky-04-bim.jpg?v=1",     w: 1920, h: 1080, focus: "50% 68%", label: "Design desk" },
-  office:  { src: "/heroes/sky-05-office.jpg?v=1",  w: 1920, h: 1080, focus: "50% 75%", label: "Site overview" },
-  field:   { src: "/heroes/sky-06-field.jpg?v=1",   w: 1920, h: 1080, focus: "50% 78%", label: "Field work" },
-  quality: { src: "/heroes/sky-07-quality.jpg?v=1", w: 1920, h: 1080, focus: "50% 72%", label: "Quality check" },
-  client:  { src: "/heroes/sky-08-client.jpg?v=1",  w: 1920, h: 1080, focus: "50% 70%", label: "Client view" },
-  contractor: { src: "/heroes/sky-09-contractor.jpg?v=1", w: 1920, h: 1080, focus: "50% 76%", label: "Trade package" },
-  drawings: { src: "/heroes/sky-10-drawings.jpg?v=1", w: 1920, h: 1080, focus: "50% 74%", label: "GFC drawings" },
-} as const;
-
-const VIZ_OFFICE   : HeroSlide[] = [H.office,     H.crane,   H.bim,     H.drawings];
-const VIZ_SITE     : HeroSlide[] = [H.site,       H.field,   H.crane,   H.frame];
-const VIZ_PLAN     : HeroSlide[] = [H.drawings,   H.bim,     H.crane,   H.frame];
-const VIZ_FIELD    : HeroSlide[] = [H.field,      H.site,    H.contractor, H.crane];
-const VIZ_CLIENT   : HeroSlide[] = [H.client,     H.office,  H.drawings, H.quality];
-const VIZ_VENDOR   : HeroSlide[] = [H.contractor, H.field,   H.frame,   H.site];
-const VIZ_QUALITY  : HeroSlide[] = [H.quality,    H.site,    H.frame,   H.field];
-const VIZ_COMMS    : HeroSlide[] = [H.bim,        H.office,  H.client,  H.drawings];
-const VIZ_MASTER   : HeroSlide[] = [H.crane,      H.office,  H.bim,     H.drawings];
-const VIZ_EMPLOYEE : HeroSlide[] = [H.bim,        H.drawings, H.office, H.crane];
 
 export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   master: {
@@ -76,7 +61,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "office@sharnam.demo", allowedRoles: ["admin", "office"],
     points: ["Projects · modules", "Directory · access", "Master documents"],
     cta: "Enter Master", tone: "#1E3A8A", icon: "MS",
-    landingPath: "/master", workspaceKey: null, group: "master", heroes: VIZ_MASTER,
+    landingPath: "/master", workspaceKey: null, group: "master",
     policies: [
       "Enable only the modules each project needs",
       "Directory parties before first RFI or meeting",
@@ -97,7 +82,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "office@sharnam.demo", allowedRoles: ["office", "admin"],
     points: ["Access & roles", "All modules", "Reports · Audit"],
     cta: "Enter Office", tone: "#0B6A78", icon: "OF",
-    landingPath: "/dashboard", workspaceKey: null, group: "role", heroes: VIZ_OFFICE,
+    landingPath: "/dashboard", workspaceKey: null, group: "role",
     policies: [
       "One project spine for office, site, and contractors",
       "Publish GFC before QI and site checklist fills",
@@ -120,7 +105,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "site@sharnam.demo", allowedRoles: ["site_employee"],
     points: ["Day log", "Checklist fills", "Photos · Site RFI"],
     cta: "Enter Site", tone: "#15803D", icon: "ST",
-    landingPath: "/workspace", workspaceKey: "field", group: "role", heroes: VIZ_SITE,
+    landingPath: "/attendance", workspaceKey: "field", group: "role",
     policies: [
       "Log manpower and weather before leave time",
       "Attach photos to checklist items as required",
@@ -143,7 +128,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "employee@sharnam.demo", allowedRoles: ["employee", "office"],
     points: ["Projects", "Drawings", "Self-service"],
     cta: "Enter Employee", tone: "#64748B", icon: "EM",
-    landingPath: "/dashboard", group: "role", heroes: VIZ_EMPLOYEE,
+    landingPath: "/dashboard", group: "role",
     policies: [
       "Work only on projects you are assigned to",
       "Revision control before marking drawings published",
@@ -164,7 +149,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
     points: ["Assigned projects", "Fill RFIs", "Checklists"],
     cta: "Enter Contractor", tone: "#C45C26", icon: "VN",
-    landingPath: "/workspace", workspaceKey: "drawings", group: "role", heroes: VIZ_VENDOR,
+    landingPath: "/workspace", workspaceKey: "drawings", group: "role",
     policies: [
       "Respond to inspection requests with checklist + photos",
       "Use only published GFC for execution",
@@ -185,7 +170,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "client@sharnam.demo", allowedRoles: ["client"],
     points: ["Published drawings", "Progress", "Concerns"],
     cta: "Enter Client", tone: "#1E40AF", icon: "CL",
-    landingPath: "/dashboard", workspaceKey: "progress", group: "role", heroes: VIZ_CLIENT,
+    landingPath: "/dashboard", workspaceKey: "progress", group: "role",
     policies: [
       "View published drawings — upload stays with PMC / design",
       "Civil packs: schedule, procurement, S-curve when shared",
@@ -207,7 +192,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
     points: ["GFC register", "Checklist manager", "Ask"],
     cta: "Enter Drawings", tone: "#1D4ED8", icon: "DW",
-    landingPath: "/workspace", workspaceKey: "drawings", group: "module", heroes: VIZ_PLAN,
+    landingPath: "/workspace", workspaceKey: "drawings", group: "module",
     policies: [
       "Drawing Check Master unlocks before upload",
       "Revisions R0–R5 with audit who / when",
@@ -229,7 +214,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
     points: ["QI dashboard", "NCR / CAR", "Cube · QAP"],
     cta: "Enter Quality", tone: "#15803D", icon: "QA",
-    landingPath: "/workspace", workspaceKey: "quality", group: "module", heroes: VIZ_QUALITY,
+    landingPath: "/workspace", workspaceKey: "quality", group: "module",
     policies: [
       "NCR / CAR is its own tool — not buried in QI",
       "Cube register tracks cast / strength / result",
@@ -251,7 +236,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     allowedRoles: ["admin", "office", "employee", "site_employee"],
     points: ["Matrix", "MoM", "Ask · Outlook"],
     cta: "Enter Comms", tone: "#2563EB", icon: "CM",
-    landingPath: "/workspace", workspaceKey: "comms", group: "module", heroes: VIZ_COMMS,
+    landingPath: "/workspace", workspaceKey: "comms", group: "module",
     policies: [
       "Matrix parties before first meeting or RFI",
       "Agenda generated before MoM starts",
@@ -273,7 +258,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     allowedRoles: ["admin", "office"],
     points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Audit"],
     cta: "Enter HR admin", tone: "#6D28D9", icon: "HR",
-    landingPath: "/hrm", workspaceKey: null, group: "role", heroes: VIZ_OFFICE,
+    landingPath: "/hrm", workspaceKey: null, group: "role",
     policies: [
       "Recruitment log audits every state change",
       "Pre-joining · Onboarding stateful checklists",
@@ -295,7 +280,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     allowedRoles: ["admin", "office", "site_employee", "employee", "vendor"],
     points: ["Day log", "Photos", "Field RFIs"],
     cta: "Enter Field", tone: "#DC2626", icon: "FD",
-    landingPath: "/workspace", workspaceKey: "field", group: "module", heroes: VIZ_FIELD,
+    landingPath: "/workspace", workspaceKey: "field", group: "module",
     policies: [
       "Day log ≠ HRMS personal diary",
       "Manpower / equipment lines feed DPR",
@@ -344,12 +329,22 @@ function portalDisplayName(key: string, shortLabel: string) {
    Shared surface primitives
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function BrandLockup({ size = "hero" }: { size?: "hero" | "compact" | "chrome" }) {
+function BrandLockup({
+  size = "hero",
+  onHero = false,
+}: {
+  size?: "hero" | "compact" | "chrome";
+  onHero?: boolean;
+}) {
   return (
-    <div className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only`}>
+    <div
+      className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${
+        onHero ? " brand-lockup--on-hero" : ""
+      }`}
+    >
       <img
         src="/logo.png"
-        alt="Portal"
+        alt="शरणम्"
         className="brand-lockup__mark"
         width={820}
         height={400}
@@ -360,13 +355,24 @@ function BrandLockup({ size = "hero" }: { size?: "hero" | "compact" | "chrome" }
   );
 }
 
-function TopStrip() {
+function HeroBrandOverlay({ tagline }: { tagline?: string }) {
   return (
-    <header className="auth-strip auth-strip--minimal">
+    <div className="auth-hero-brand">
+      <BrandLockup size="hero" onHero />
+      {tagline ? <p className="auth-hero-brand__tag">{tagline}</p> : null}
+    </div>
+  );
+}
+
+function TopStrip({ showLogo = true }: { showLogo?: boolean }) {
+  return (
+    <header className={`auth-strip auth-strip--minimal${showLogo ? "" : " auth-strip--iso-only"}`}>
       <div className="auth-strip__inner auth-strip__inner--center">
-        <Link to="/login" className="auth-strip__brand auth-strip__brand--logo-only" aria-label="Home">
-          <img src="/logo.png" alt="" width={160} height={78} className="auth-strip__logo" />
-        </Link>
+        {showLogo ? (
+          <Link to="/login" className="auth-strip__brand auth-strip__brand--logo-only" aria-label="Home">
+            <img src="/logo.png" alt="" width={160} height={78} className="auth-strip__logo" />
+          </Link>
+        ) : null}
         <div className="auth-strip__iso" aria-label="Standards">
           {ISO_BADGES.map((b) => (
             <span key={b.code} className="auth-strip__iso-chip" title={b.label}>
@@ -462,12 +468,11 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
     <div className="signin-card" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
       <div className="signin-card__accent" aria-hidden />
       <div className="signin-card__body">
-        <div className="signin-card__logo-wrap">
-          <img src="/logo.png" alt="" className="signin-card__logo" width={120} height={58} />
-        </div>
         <div className="signin-card__head">
           <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
         </div>
+        <h2 className="signin-card__title">{cfg.headline}</h2>
+        <p className="signin-card__sub">{cfg.subtitle}</p>
 
         <form className="signin-form" onSubmit={onSubmit}>
           <label className="signin-form__label">
@@ -507,380 +512,34 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Desk stage — pure CSS/SVG mock of the inside desk in the portal's tone.
-   No photo dependency — reads well in light OR dark mode. Shows the client
-   exactly what shape the portal takes once they sign in.
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-type DeskSample = {
-  code: string;
-  name: string;
-  eyebrow: string;
-  stats: { label: string; value: string }[];
-  tools: { icon: string; label: string }[];
-  activity: string[];
-};
-
-/**
- * Curated single image per portal — used as the small "site image" card
- * inside the desk mock. Mirrors the "Insert Site Image Here" slide from
- * the SPDC WPR pack. A tone-tinted overlay makes it read the same in
- * dark mode without swapping the asset.
- */
-const PORTAL_IMAGE: Record<string, { src: string; caption: string; focus: string }> = {
-  office:   { src: "/heroes/sky-05-office.jpg?v=1",     caption: "Site overview · this week",       focus: "50% 74%" },
-  site:     { src: "/heroes/sky-03-site.jpg?v=1",       caption: "Wing B · slab pour cleared",      focus: "50% 70%" },
-  vendor:   { src: "/heroes/sky-09-contractor.jpg?v=1", caption: "Package · trade partner",          focus: "50% 72%" },
-  client:   { src: "/heroes/sky-08-client.jpg?v=1",     caption: "Project handover view",            focus: "50% 68%" },
-  employee: { src: "/heroes/sky-04-bim.jpg?v=1",        caption: "My desk · design coordination",    focus: "50% 68%" },
-  master:   { src: "/heroes/sky-01-crane.jpg?v=1",      caption: "Portfolio · construction in flight", focus: "50% 68%" },
-  hr:       { src: "/heroes/sky-05-office.jpg?v=1",     caption: "People · Sharnam office",          focus: "50% 68%" },
-  drawings: { src: "/heroes/sky-10-drawings.jpg?v=1",   caption: "GFC · A-04 R2 published",          focus: "50% 68%" },
-  quality:  { src: "/heroes/sky-07-quality.jpg?v=1",    caption: "QAP · cube crushing register",     focus: "50% 68%" },
-  comms:    { src: "/heroes/sky-04-bim.jpg?v=1",        caption: "Coordination · weekly meeting",    focus: "50% 68%" },
-  field:    { src: "/heroes/sky-06-field.jpg?v=1",      caption: "Field · manpower closed",          focus: "50% 68%" },
-};
-
-const DESK_SAMPLES: Record<string, DeskSample> = {
-  office: {
-    code: "SPDC-DEMO-01",
-    name: "Arvind Worker Dormitory · Santej",
-    eyebrow: "Office · Full control",
-    stats: [
-      { label: "Open RFIs", value: "12" },
-      { label: "Drawings published", value: "48" },
-      { label: "SPI", value: "0.96" },
-    ],
-    tools: [
-      { icon: "DR", label: "Drawings" },
-      { icon: "QI", label: "Quality" },
-      { icon: "CO", label: "Comms" },
-      { icon: "FN", label: "Finance" },
-      { icon: "PR", label: "Progress" },
-      { icon: "AU", label: "Audit" },
-    ],
-    activity: [
-      "GFC · A-04 R2 published",
-      "DPR / CIVIL – 27 uploaded",
-      "COP-19 approved · Viatrix",
-      "Toolbox talk logged · 32 attended",
-    ],
-  },
-  site: {
-    code: "SPDC-DEMO-01",
-    name: "Site logbook · Wing B slab pour",
-    eyebrow: "Site · Field tools",
-    stats: [
-      { label: "Manpower", value: "184" },
-      { label: "Equipment", value: "11" },
-      { label: "Site RFIs", value: "3" },
-    ],
-    tools: [
-      { icon: "DL", label: "Day log" },
-      { icon: "CL", label: "Checklists" },
-      { icon: "PH", label: "Photos" },
-      { icon: "SR", label: "Site RFI" },
-      { icon: "HP", label: "Hindrance" },
-      { icon: "SF", label: "Safety" },
-    ],
-    activity: [
-      "Manpower closed at shift end",
-      "Wing B slab · pour cleared",
-      "Photo album tagged · 22 photos",
-      "Hindrance · water · resolved",
-    ],
-  },
-  vendor: {
-    code: "SPDC-DEMO-01",
-    name: "Trade partner · Bhavna Infra",
-    eyebrow: "Contractor · Package view",
-    stats: [
-      { label: "My RFIs", value: "5" },
-      { label: "Open bills", value: "2" },
-      { label: "Ball-in-court", value: "3" },
-    ],
-    tools: [
-      { icon: "PK", label: "Packages" },
-      { icon: "RF", label: "Fill RFI" },
-      { icon: "CH", label: "Checklists" },
-      { icon: "MB", label: "MB" },
-      { icon: "RA", label: "RA bill" },
-      { icon: "PH", label: "Photos" },
-    ],
-    activity: [
-      "RA-04 submitted · under review",
-      "Cube crushing register updated",
-      "Checklist · masonry L4 filled",
-    ],
-  },
-  client: {
-    code: "SPDC-DEMO-01",
-    name: "Client dashboard · Arvind Ltd.",
-    eyebrow: "Client · Read-only pack",
-    stats: [
-      { label: "Progress", value: "62%" },
-      { label: "Milestones", value: "18/24" },
-      { label: "Concerns", value: "2" },
-    ],
-    tools: [
-      { icon: "DR", label: "GFC drawings" },
-      { icon: "PG", label: "Progress" },
-      { icon: "CN", label: "Concerns" },
-      { icon: "WP", label: "WPR pack" },
-      { icon: "DP", label: "DPR pack" },
-      { icon: "SF", label: "Safety" },
-    ],
-    activity: [
-      "WPR-50 pack published",
-      "Milestone · Slab F4 · complete",
-      "Concern raised · P4 opening dim",
-    ],
-  },
-  employee: {
-    code: "MY DESK",
-    name: "Employee workday",
-    eyebrow: "Employee · Self-service",
-    stats: [
-      { label: "Assigned RFIs", value: "4" },
-      { label: "Fills due", value: "6" },
-      { label: "Leave bal", value: "8" },
-    ],
-    tools: [
-      { icon: "PJ", label: "Projects" },
-      { icon: "DR", label: "Drawings" },
-      { icon: "LV", label: "Leave" },
-      { icon: "AT", label: "Attendance" },
-      { icon: "PS", label: "Payslip" },
-      { icon: "DO", label: "Docs" },
-    ],
-    activity: [
-      "QI checklist · slab F3 filled",
-      "Payslip · Aug · generated",
-      "Leave · Fri · pre-approved",
-    ],
-  },
-  master: {
-    code: "MASTER",
-    name: "Master · Portfolio setup",
-    eyebrow: "Master · Setup desk",
-    stats: [
-      { label: "Projects", value: "6" },
-      { label: "Users", value: "128" },
-      { label: "Templates", value: "42" },
-    ],
-    tools: [
-      { icon: "PR", label: "Projects" },
-      { icon: "MD", label: "Modules" },
-      { icon: "US", label: "Access" },
-      { icon: "TP", label: "Templates" },
-      { icon: "CR", label: "CRM" },
-      { icon: "AD", label: "Audit" },
-    ],
-    activity: [
-      "Project · SPDC-DEMO-02 · created",
-      "Roles matrix · updated",
-      "Communication matrix · seeded",
-    ],
-  },
-  hr: {
-    code: "HR ADMIN",
-    name: "HRMS · Sharnam people desk",
-    eyebrow: "HR admin · scoped desk",
-    stats: [
-      { label: "Head-count", value: "146" },
-      { label: "Open req", value: "7" },
-      { label: "Payslips", value: "146" },
-    ],
-    tools: [
-      { icon: "RC", label: "Recruit" },
-      { icon: "OB", label: "Onboard" },
-      { icon: "AT", label: "Attend" },
-      { icon: "LV", label: "Leave" },
-      { icon: "PR", label: "Payroll" },
-      { icon: "AU", label: "Audit" },
-    ],
-    activity: [
-      "Offer · Sr QC · sent",
-      "Attendance · 96% today",
-      "Pay hike · 4 approved",
-    ],
-  },
-  drawings: {
-    code: "DRAWINGS",
-    name: "GFC register · Drawing Check",
-    eyebrow: "Drawings · GFC & DMS",
-    stats: [
-      { label: "Sheets", value: "212" },
-      { label: "Rev cycles", value: "68" },
-      { label: "Ask RFIs", value: "9" },
-    ],
-    tools: [
-      { icon: "RG", label: "Register" },
-      { icon: "PC", label: "Pre-check" },
-      { icon: "UP", label: "Upload" },
-      { icon: "CO", label: "Coord" },
-      { icon: "DM", label: "DMS" },
-      { icon: "AK", label: "Ask" },
-    ],
-    activity: [
-      "R2 · A-04 · published to client",
-      "Pre-check checklist filled",
-      "Coordination · MEP vs slab",
-    ],
-  },
-  quality: {
-    code: "QUALITY",
-    name: "QI · NCR · Cube · QAP",
-    eyebrow: "Quality · Registers",
-    stats: [
-      { label: "QI open", value: "14" },
-      { label: "NCR open", value: "3" },
-      { label: "Cubes", value: "88" },
-    ],
-    tools: [
-      { icon: "QI", label: "QI board" },
-      { icon: "NC", label: "NCR / CAR" },
-      { icon: "CU", label: "Cube" },
-      { icon: "QP", label: "QAP" },
-      { icon: "RF", label: "QI RFI" },
-      { icon: "CH", label: "Checklists" },
-    ],
-    activity: [
-      "QI · L4 slab · passed",
-      "Cube · CI-32 · 24.6 MPa",
-      "QAP · Week 50 · updated",
-    ],
-  },
-  comms: {
-    code: "COMMS",
-    name: "Matrix · Agenda · MoM",
-    eyebrow: "Communications",
-    stats: [
-      { label: "Matrix rows", value: "26" },
-      { label: "Open MoMs", value: "4" },
-      { label: "Ask RFIs", value: "7" },
-    ],
-    tools: [
-      { icon: "MA", label: "Matrix" },
-      { icon: "AG", label: "Agenda" },
-      { icon: "MM", label: "MoM" },
-      { icon: "AK", label: "Ask" },
-      { icon: "OL", label: "Outlook" },
-      { icon: "FU", label: "Follow-up" },
-    ],
-    activity: [
-      "Weekly meeting · agenda ready",
-      "MoM · W49 · signed off",
-      "Ask · GFC clarification opened",
-    ],
-  },
-  field: {
-    code: "FIELD",
-    name: "Day log · Photos · Site RFI",
-    eyebrow: "Field · Site evidence",
-    stats: [
-      { label: "Manpower", value: "184" },
-      { label: "Photos today", value: "26" },
-      { label: "Site RFIs", value: "5" },
-    ],
-    tools: [
-      { icon: "DL", label: "Day log" },
-      { icon: "MP", label: "Manpower" },
-      { icon: "EQ", label: "Equipment" },
-      { icon: "PH", label: "Photos" },
-      { icon: "SR", label: "Site RFI" },
-      { icon: "HP", label: "Hindrance" },
-    ],
-    activity: [
-      "Day log · closed 18:20",
-      "Photos · Wing B · 12 tagged",
-      "Hindrance · water · closed",
-    ],
-  },
-};
-
-function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string; icon: string }) {
-  const sample = DESK_SAMPLES[portalKey] || DESK_SAMPLES.office;
-  const img = PORTAL_IMAGE[portalKey] || PORTAL_IMAGE.office;
+function AuthHeroBanner({ portalKey }: { portalKey?: string }) {
+  const src = portalHeroSrc(portalKey);
   return (
-    <aside
-      className="desk-stage"
-      aria-hidden
-      style={{ ["--stage-tone" as string]: tone } as CSSProperties}
-    >
-      <div className="desk-stage__grid" />
-      <div className="desk-stage__wash" />
-
-      <div className="desk-stage__chrome">
-        <span className="desk-stage__dot desk-stage__dot--r" />
-        <span className="desk-stage__dot desk-stage__dot--y" />
-        <span className="desk-stage__dot desk-stage__dot--g" />
-        <span className="desk-stage__chrome-url">sharnam-portal · {portalKey}</span>
-      </div>
-
-      <div className="desk-stage__desk">
-        <header className="desk-stage__page-head">
-          <div className="desk-stage__head-left">
-            <span className="desk-stage__eyebrow">{sample.eyebrow}</span>
-            <h3 className="desk-stage__title">{sample.name}</h3>
-            <span className="desk-stage__code">{sample.code}</span>
-          </div>
-          <div className="desk-stage__icon" aria-hidden>{icon}</div>
-        </header>
-
-        <div className="desk-stage__stats">
-          {sample.stats.map((s) => (
-            <div key={s.label} className="desk-stage__stat">
-              <div className="desk-stage__stat-val">{s.value}</div>
-              <div className="desk-stage__stat-lbl">{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/*
-         * "Site image" card — mirrors the WPR slide 6 pattern
-         * ("Insert Site Image Here"). One curated photo per portal,
-         * placed inside the desk mock. A tone-tinted overlay + a soft
-         * gradient at the bottom carry the image cleanly into dark mode.
-         */}
-        <figure
-          className="desk-stage__photo"
-          style={{
-            backgroundImage: `url(${img.src})`,
-            backgroundPosition: img.focus,
-          }}
-        >
-          <div className="desk-stage__photo-scrim" />
-          <figcaption className="desk-stage__photo-caption">
-            <span className="desk-stage__photo-eyebrow">Site image · this week</span>
-            <span className="desk-stage__photo-text">{img.caption}</span>
-          </figcaption>
-        </figure>
-
-        <div className="desk-stage__tools">
-          {sample.tools.map((t) => (
-            <div key={t.label} className="desk-stage__tool">
-              <span className="desk-stage__tool-icon">{t.icon}</span>
-              <span className="desk-stage__tool-label">{t.label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="desk-stage__activity" aria-label="Recent activity">
-          <div className="desk-stage__activity-head">Recent activity</div>
-          <ul className="desk-stage__activity-list">
-            {sample.activity.map((a) => (
-              <li key={a} className="desk-stage__activity-row">
-                <span className="desk-stage__activity-dot" />
-                {a}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </aside>
+    <section className="auth-hero auth-hero--top auth-hero--with-logo" aria-label="Sharnam PMC">
+      <img
+        className="auth-hero__img auth-hero__img--top"
+        src={src}
+        alt=""
+        loading="eager"
+        fetchPriority="high"
+        width={1920}
+        height={1080}
+      />
+      <div className="auth-hero__scrim auth-hero__scrim--hub" />
+      <HeroBrandOverlay tagline="Project Management Consultants" />
+    </section>
   );
+}
+
+function useAuthPageScroll() {
+  useEffect(() => {
+    document.documentElement.classList.add("is-auth-route");
+    document.body.classList.add("is-auth-route");
+    return () => {
+      document.documentElement.classList.remove("is-auth-route");
+      document.body.classList.remove("is-auth-route");
+    };
+  }, []);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -890,30 +549,21 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
 export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_LOGINS }) {
   const cfg = PORTAL_LOGINS[portalKey];
   const { user, loading } = useAuth();
+  useAuthPageScroll();
   if (!cfg) return <Navigate to="/login" replace />;
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
-  const hero = PORTAL_IMAGE[String(portalKey)] || PORTAL_IMAGE.office;
-
   return (
-    <div className="auth-page" data-portal={portalKey}>
-      <TopStrip />
-      <main className="auth-page__body">
-        <section
-          className="auth-hero auth-hero--visual-only"
-          style={{ ["--hero-tone" as string]: cfg.tone } as CSSProperties}
-        >
-          <img className="auth-hero__img" src={hero.src} alt="" loading="eager" />
-          <div className="auth-hero__scrim" />
-        </section>
-        <section className="auth-page__panel">
-          <div className="auth-page__panel-inner">
-            <div className="auth-page__crumb">
-              <Link to="/login" className="auth-page__back">← All portals</Link>
-            </div>
-            <SignInCard cfg={cfg} />
+    <div className="auth-page auth-page--stacked" data-portal={portalKey}>
+      <AuthHeroBanner portalKey={portalKey} />
+      <TopStrip showLogo={false} />
+      <main className="auth-page__panel auth-page__panel--solo">
+        <div className="auth-page__panel-inner">
+          <div className="auth-page__crumb">
+            <Link to="/login" className="auth-page__back">← All portals</Link>
           </div>
-        </section>
+          <SignInCard cfg={cfg} />
+        </div>
       </main>
       <TrustFooter policies={cfg.policies} />
     </div>
@@ -963,6 +613,7 @@ function ModuleChip({ cfg }: { cfg: PortalConfig }) {
 
 export function LoginHubPage() {
   const { user, loading } = useAuth();
+  useAuthPageScroll();
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   // Compose a rich policy stream for the ticker so the client sees active standards.
@@ -978,16 +629,10 @@ export function LoginHubPage() {
   ];
 
   return (
-    <div className="auth-page auth-page--hub">
-      <TopStrip />
-      <section className="auth-hub__hero" aria-hidden>
-        <img className="auth-hub__hero-img" src="/heroes/sky-01-crane.jpg?v=2" alt="" />
-        <div className="auth-hub__hero-scrim" />
-      </section>
+    <div className="auth-page auth-page--hub auth-page--stacked">
+      <AuthHeroBanner />
+      <TopStrip showLogo={false} />
       <main className="auth-hub">
-        <section className="auth-hub__masthead auth-hub__masthead--overlay auth-hub__masthead--centered">
-          <BrandLockup size="hero" />
-        </section>
 
         <section className="auth-hub__bento" aria-label="Choose your portal">
           <header className="auth-hub__section-head">

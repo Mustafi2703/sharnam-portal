@@ -34,9 +34,11 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {tools.map((t, i) => {
-          const href = t.to
-            ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}`
-            : `/projects/${id}`;
+          const href = !t.to
+            ? `/projects/${id}`
+            : t.to.startsWith("/")
+              ? t.to
+              : `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}`;
           const ready = t.status === "ready";
           return (
             <Link key={`${t.to}-${t.query || ""}-${t.label}`} to={href} className="block group">

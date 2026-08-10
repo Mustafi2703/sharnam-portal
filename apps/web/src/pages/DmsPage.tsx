@@ -59,28 +59,39 @@ function folderLabel(path: string) {
 }
 
 /** Build collapsible tree nodes from flat folder paths */
-function buildFolderTree(folders: string[]) {
+function buildFolderTree(folders: string[], rootPrefix = "") {
   const roots: { path: string; label: string; depth: number }[] = [];
   const seen = new Set<string>();
+  const baseDepth = rootPrefix ? rootPrefix.split("/").filter(Boolean).length : 0;
   for (const f of folders) {
     if (seen.has(f)) continue;
     seen.add(f);
-    const depth = f.split("/").length - 1;
+    const depth = Math.max(0, f.split("/").filter(Boolean).length - baseDepth - 1);
     roots.push({ path: f, label: folderLabel(f), depth });
   }
   return roots.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/** ISO root for GFC / design files — separate from general Documents module */
+export const DRAWINGS_LIBRARY_ROOT = "02_DESIGN_AND_ENGINEERING";
+
+export type DmsPageMode = "documents" | "drawings";
+
 /**
  * Procore-style document manager — browse ISO folder tree, preview files,
  * upload into current folder. Live SharePoint when configured.
+ *
+ * mode=documents — full project DMS (Procore Documents parity)
+ * mode=drawings  — design/engineering folders only (paired with GFC register)
  */
-export default function DmsPage() {
+export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) {
   const { id } = useParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
+  const isDrawings = mode === "drawings";
+  const rootPrefix = isDrawings ? DRAWINGS_LIBRARY_ROOT : "";
 
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState(isDrawings ? DRAWINGS_LIBRARY_ROOT : "");
   const [data, setData] = useState<BrowseData | null>(null);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
@@ -99,7 +110,7 @@ export default function DmsPage() {
       setSyncing(true);
       try {
         const res = await api<BrowseData>(
-          `/api/dms/${id}/browse?path=${encodeURIComponent(folderPath)}&sync=1`,
+          `/api/dms/${id}/browse?path=${encodeURIComponent(folderPath)}&sync=0`,
           { token }
         );
         setData(res);
@@ -124,18 +135,29 @@ export default function DmsPage() {
   }, [load, path]);
 
   const breadcrumbs = useMemo(() => {
-    if (!path) return [{ label: "Root", path: "" }];
-    const parts = path.split("/").filter(Boolean);
+    const rel = rootPrefix && path.startsWith(rootPrefix)
+      ? path.slice(rootPrefix.length).replace(/^\//, "")
+      : path;
+    if (!rel) {
+      return [{ label: isDrawings ? "Design & Engineering" : "Root", path: rootPrefix || "" }];
+    }
+    const parts = rel.split("/").filter(Boolean);
+    const base = rootPrefix || "";
     return [
-      { label: "Root", path: "" },
+      { label: isDrawings ? "Design & Engineering" : "Root", path: base },
       ...parts.map((_, i) => ({
         label: parts[i].replace(/_/g, " "),
-        path: parts.slice(0, i + 1).join("/"),
+        path: base ? `${base}/${parts.slice(0, i + 1).join("/")}` : parts.slice(0, i + 1).join("/"),
       })),
     ];
-  }, [path]);
+  }, [path, rootPrefix, isDrawings]);
 
-  const folderTree = useMemo(() => buildFolderTree(folderPaths), [folderPaths]);
+  const folderTree = useMemo(() => {
+    const scoped = rootPrefix
+      ? folderPaths.filter((f) => f === rootPrefix || f.startsWith(`${rootPrefix}/`))
+      : folderPaths;
+    return buildFolderTree(scoped, rootPrefix);
+  }, [folderPaths, rootPrefix]);
   const filteredTree = useMemo(() => {
     const q = treeQuery.trim().toLowerCase();
     if (!q) return folderTree;
@@ -195,14 +217,30 @@ export default function DmsPage() {
 
   return (
     <div className="space-y-4 min-w-0">
-      <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
-        ← Project
+      <Link
+        to={isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}`}
+        className="text-sm text-brand font-medium"
+      >
+        ← {isDrawings ? "Drawings module" : "Project"}
       </Link>
 
+      {isDrawings && (
+        <p className="text-xs text-steel-muted">
+          Sheet PDFs and DWG files live here. For revision register, publish gate, and R0–R5 workflow use{" "}
+          <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
+            GFC register →
+          </Link>
+        </p>
+      )}
+
       <PageHeader
-        eyebrow="Documents"
-        title="Document manager"
-        subtitle="Browse the ISO-aligned folder tree, open files, and upload project documents — synced with SharePoint."
+        eyebrow={isDrawings ? "Drawings · files" : "Documents"}
+        title={isDrawings ? "Drawing file library" : "Document manager"}
+        subtitle={
+          isDrawings
+            ? "Browse design & engineering folders — PDF/DWG sheets synced with SharePoint. Separate from the project document manager."
+            : "Procore-style browse of the ISO folder tree — contracts, HSE, daily records, and all non-drawing project files."
+        }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={isSharePoint ? "ok" : "warn"}>{isSharePoint ? "SharePoint" : "Local mock"}</Badge>
@@ -235,7 +273,7 @@ export default function DmsPage() {
         {/* Folder tree */}
         <Card padding={false} className="flex flex-col overflow-hidden max-h-[70vh]">
           <div className="px-3 py-2.5 border-b border-line bg-procore-navy text-white text-xs font-semibold">
-            Folders · ISO Rev 02
+            {isDrawings ? "Drawing folders" : "Folders · ISO Rev 02"}
           </div>
           <div className="p-2 border-b border-line">
             <Input
@@ -249,10 +287,10 @@ export default function DmsPage() {
             <li>
               <button
                 type="button"
-                className={`dms-tree__link w-full text-left ${path === "" ? "dms-tree__link--active" : ""}`}
-                onClick={() => setPath("")}
+                className={`dms-tree__link w-full text-left ${path === (rootPrefix || "") ? "dms-tree__link--active" : ""}`}
+                onClick={() => setPath(rootPrefix || "")}
               >
-                📂 Project root
+                📂 {isDrawings ? "Design & Engineering" : "Project root"}
               </button>
             </li>
             {filteredTree.map((node) => (
@@ -355,7 +393,7 @@ export default function DmsPage() {
         context={path ? `Folder: ${path}` : "Project root / _Registers"}
         file={uploadFile}
         onFile={setUploadFile}
-        accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.doc,.docx,.xls,.xlsx"
+        accept={isDrawings ? ".pdf,.dwg,application/pdf" : ".pdf,.png,.jpg,.jpeg,.webp,.dwg,.doc,.docx,.xls,.xlsx"}
         fields={[]}
         primaryLabel="Upload to SharePoint"
         busy={uploadBusy}

@@ -1,10 +1,11 @@
 /**
  * EvidencePanel — mobile-first photo · PDF · signature block.
- * Used in DPR maker, WPR maker, and site check-in flows.
+ * Used in DPR maker, WPR maker, Upload Lab, and site check-in flows.
  */
-import { type ChangeEvent, useState } from "react";
+import { useState } from "react";
 import { Button, Input } from "./ui";
 import { PhotoCapture } from "./PhotoCapture";
+import { FilePickButton } from "./FilePickButton";
 import { SignaturePad } from "./SignaturePad";
 import PdfMarkup from "./PdfMarkup";
 
@@ -61,16 +62,14 @@ export function EvidencePanel({
     }
   }
 
-  async function onPickAttachment(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function onPickAttachment(files: File[]) {
+    const file = files[0];
     if (!file) return;
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       setPdfDraft(file);
-      e.target.value = "";
       return;
     }
     await onUploadAttachment(file);
-    e.target.value = "";
   }
 
   return (
@@ -92,8 +91,9 @@ export function EvidencePanel({
         <PhotoCapture
           onChange={setPendingPhotos}
           multiple
-          hint="Camera opens rear lens on phone. Mark up before upload if needed."
           buttonSize="md"
+          captureFacing="environment"
+          hint="Tap Camera on your phone — rear lens opens. Add a caption, then upload."
         />
         {pendingPhotos.length > 0 && (
           <div className="mt-3 space-y-2">
@@ -106,7 +106,7 @@ export function EvidencePanel({
               type="button"
               disabled={busy || uploadingPhotos}
               onClick={() => void commitPhotos()}
-              className="w-full sm:w-auto"
+              className="w-full sm:w-auto photo-capture__upload-btn"
             >
               {uploadingPhotos ? "Uploading…" : `Upload ${pendingPhotos.length} photo(s)`}
             </Button>
@@ -120,7 +120,7 @@ export function EvidencePanel({
                   <div className="font-mono truncate">{p.path}</div>
                   {p.caption && <div className="text-steel-muted">{p.caption}</div>}
                 </div>
-                <button type="button" className="text-danger shrink-0" onClick={() => onRemovePhoto(i)}>
+                <button type="button" className="text-danger shrink-0 min-h-[44px] min-w-[44px]" onClick={() => onRemovePhoto(i)}>
                   ✕
                 </button>
               </li>
@@ -135,48 +135,45 @@ export function EvidencePanel({
           PDF / documents ({attachments.length})
         </h4>
         <div className="flex flex-wrap gap-2">
-          <label className="inline-flex">
-            <span className="btn-secondary-like cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-line bg-white">
-              Upload file
-            </span>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
-              className="hidden"
-              disabled={busy}
-              onChange={(e) => void onPickAttachment(e)}
-            />
-          </label>
-          <label className="inline-flex">
-            <span className="btn-secondary-like cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-line bg-white">
-              PDF + markup
-            </span>
-            <input
-              type="file"
-              accept=".pdf,application/pdf"
-              className="hidden"
-              disabled={busy}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setPdfDraft(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
+          <FilePickButton
+            accept=".pdf,.doc,.docx,.xls,.xlsx,image/*"
+            disabled={busy}
+            onPick={(files) => void onPickAttachment(files)}
+          >
+            Upload file
+          </FilePickButton>
+          <FilePickButton
+            accept=".pdf,application/pdf"
+            disabled={busy}
+            onPick={(files) => files[0] && setPdfDraft(files[0])}
+          >
+            PDF + markup
+          </FilePickButton>
         </div>
         {pdfDraft && (
-          <div className="mt-3 rounded-lg border border-line overflow-hidden">
-            <PdfMarkup
-              src={pdfDraft}
-              saveLabel="Save marked PDF & upload"
-              onCancel={() => setPdfDraft(null)}
-              onSave={async (files) => {
-                for (const file of files) {
-                  await onUploadAttachment(file);
-                }
-                setPdfDraft(null);
-              }}
-            />
+          <div className="markup-modal" role="dialog" aria-modal="true" aria-label="PDF markup">
+            <div className="markup-modal__backdrop" onClick={() => setPdfDraft(null)} />
+            <div className="markup-modal__panel">
+              <div className="markup-modal__head">
+                <span className="font-semibold text-sm truncate">{pdfDraft.name}</span>
+                <button type="button" className="markup-modal__close" onClick={() => setPdfDraft(null)}>
+                  Close
+                </button>
+              </div>
+              <div className="markup-modal__body">
+                <PdfMarkup
+                  src={pdfDraft}
+                  saveLabel="Save marked pages & upload"
+                  onCancel={() => setPdfDraft(null)}
+                  onSave={async (files) => {
+                    for (const file of files) {
+                      await onUploadAttachment(file);
+                    }
+                    setPdfDraft(null);
+                  }}
+                />
+              </div>
+            </div>
           </div>
         )}
         {attachments.length > 0 && (
@@ -184,7 +181,7 @@ export function EvidencePanel({
             {attachments.map((p, i) => (
               <li key={i} className="py-2 flex justify-between gap-2">
                 <span className="font-mono truncate">{p.path}</span>
-                <button type="button" className="text-danger shrink-0" onClick={() => onRemoveAttachment(i)}>
+                <button type="button" className="text-danger shrink-0 min-h-[44px] min-w-[44px]" onClick={() => onRemoveAttachment(i)}>
                   ✕
                 </button>
               </li>
@@ -208,7 +205,7 @@ export function EvidencePanel({
             {signatures.map((p, i) => (
               <li key={i} className="py-2 flex justify-between gap-2">
                 <span className="font-mono truncate">{p.path}</span>
-                <button type="button" className="text-danger shrink-0" onClick={() => onRemoveSignature(i)}>
+                <button type="button" className="text-danger shrink-0 min-h-[44px] min-w-[44px]" onClick={() => onRemoveSignature(i)}>
                   ✕
                 </button>
               </li>
