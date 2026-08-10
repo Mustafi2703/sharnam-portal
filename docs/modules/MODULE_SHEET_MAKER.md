@@ -58,9 +58,18 @@ When new custom meeting sheets arrive, add a **Ready** hub card under Comms or M
 
 ### Column / field types
 
-`text`, `textarea`, `number`, `date`, `select`, `user`, `party`, `checkbox`, `file`, `signature`
+`text`, `textarea`, `number`, `date`, `select`, `user`, `party`, `checkbox`, `file`, `signature`, **`formula`** (Excel-style)
 
-### Example table columns (meeting actions)
+### Formula support (Custom Sheet Maker — live)
+
+| Capability | Behaviour |
+|------------|-----------|
+| Enter formula | Type `=A2+B2`, `=SUM(C2:C20)`, `=AVERAGE(D2:D10)`, `=MIN(E2:E5)`, `=MAX(F2:F5)` |
+| Column refs | Headers show Excel letters **A · B · C**; row 1 = headers, data from row 2 |
+| In-portal preview | Calculated result shown under formula cells |
+| Import Excel | Formulas preserved from uploaded `.xlsx` |
+| Export Excel | Formulas written to `.xlsx` (`f` field) — Excel recalculates on open |
+
 
 | key | label | type |
 |-----|-------|------|
@@ -103,7 +112,8 @@ When new custom meeting sheets arrive, add a **Ready** hub card under Comms or M
 |--------|-----------|
 | Import Excel | Infer columns from header row → draft template |
 | Export blank | Download empty template XLSX |
-| Export filled | Instance → XLSX / PDF |
+| Export filled | Instance → XLSX / PDF **with formulas preserved** |
+| Formula cells | `=SUM()`, `=AVERAGE()`, arithmetic, cell refs A2, B3, … |
 
 ---
 

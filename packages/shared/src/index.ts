@@ -240,3 +240,19 @@ export function formatIstPunchTime(time: string | null | undefined): string {
   if (!Number.isNaN(parsed.getTime())) return `${formatIstTimeHHMM(parsed)} IST`;
   return time;
 }
+
+export {
+  type SheetCell,
+  colLetter,
+  colIndex,
+  parseCellRef,
+  isFormula,
+  normalizeCell,
+  migrateRows,
+  cellEditValue,
+  cellPreview,
+  evaluateFormula,
+  evaluateAllRows,
+  sheetCellsToAoa,
+  applyFormulasToWorksheet,
+} from "./sheetFormulas.js";

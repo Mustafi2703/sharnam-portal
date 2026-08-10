@@ -1,10 +1,17 @@
 /**
- * Custom Sheet Maker — upload an Excel/CSV, we parse into a table you can then edit.
- * Cells are stored as JSON, sheet name/category is metadata, source file is kept for audit.
+ * Custom Sheet Maker — upload Excel/CSV, edit with formulas, export back to .xlsx.
  */
 import { Router } from "express";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import {
+  type SheetCell,
+  migrateRows,
+  evaluateAllRows,
+  sheetCellsToAoa,
+  applyFormulasToWorksheet,
+  isFormula,
+} from "@sharnam/shared";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
@@ -14,11 +21,56 @@ export const customSheetsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 customSheetsRouter.use(requireAuth);
 
-function normaliseRows(sheet: XLSX.WorkSheet): { headers: string[]; rows: unknown[][] } {
-  const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }) as unknown[][];
-  if (!rows.length) return { headers: [], rows: [] };
-  const headers = (rows[0] as unknown[]).map((h, i) => (h != null && String(h).trim() ? String(h) : `Column ${i + 1}`));
-  return { headers, rows: rows.slice(1) };
+function parseSheetWithFormulas(sheet: XLSX.WorkSheet): { headers: string[]; rows: SheetCell[][] } {
+  const ref = sheet["!ref"];
+  if (!ref) return { headers: [], rows: [] };
+  const range = XLSX.utils.decode_range(ref);
+  const headers: string[] = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
+    const cell = sheet[addr] as XLSX.CellObject | undefined;
+    headers.push(cell?.v != null && String(cell.v).trim() ? String(cell.v) : `Column ${c - range.s.c + 1}`);
+  }
+
+  const rows: SheetCell[][] = [];
+  for (let r = range.s.r + 1; r <= range.e.r; r++) {
+    const row: SheetCell[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[addr] as XLSX.CellObject | undefined;
+      if (cell?.f) {
+        const formula = cell.f.startsWith("=") ? cell.f : `=${cell.f}`;
+        const cv = cell.v;
+        const computed =
+          typeof cv === "number" || typeof cv === "string" ? cv : cv != null ? String(cv) : null;
+        row.push({ raw: formula, computed });
+      } else if (cell?.v != null) {
+        row.push({ raw: String(cell.v) });
+      } else {
+        row.push({ raw: "" });
+      }
+    }
+    rows.push(row);
+  }
+  return { headers, rows: evaluateAllRows(rows) };
+}
+
+function parseRowsJson(json: string): SheetCell[][] {
+  try {
+    const parsed = JSON.parse(json || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return evaluateAllRows(migrateRows(parsed));
+  } catch {
+    return [];
+  }
+}
+
+function buildWorksheet(headers: string[], rows: SheetCell[][]): XLSX.WorkSheet {
+  const evaluated = evaluateAllRows(rows);
+  const { data, formulas } = sheetCellsToAoa(headers, evaluated);
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  applyFormulasToWorksheet(ws as Record<string, unknown>, formulas);
+  return ws;
 }
 
 customSheetsRouter.get("/", async (req, res) => {
@@ -28,19 +80,15 @@ customSheetsRouter.get("/", async (req, res) => {
     orderBy: { updatedAt: "desc" },
     select: { id: true, name: true, category: true, projectId: true, sourceFile: true, createdAt: true, updatedAt: true, headersJson: true },
   });
-  res.json(
-    rows.map((r) => ({ ...r, headers: JSON.parse(r.headersJson || "[]") }))
-  );
+  res.json(rows.map((r) => ({ ...r, headers: JSON.parse(r.headersJson || "[]") })));
 });
 
 customSheetsRouter.get("/:id", async (req, res) => {
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
-  res.json({
-    ...row,
-    headers: JSON.parse(row.headersJson || "[]"),
-    rows: JSON.parse(row.rowsJson || "[]"),
-  });
+  const headers = JSON.parse(row.headersJson || "[]");
+  const rows = parseRowsJson(row.rowsJson);
+  res.json({ ...row, headers, rows });
 });
 
 customSheetsRouter.post("/upload", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
@@ -53,7 +101,7 @@ customSheetsRouter.post("/upload", requireRoles("admin", "office"), upload.singl
   const wb = XLSX.read(req.file.buffer, { type: "buffer" });
   const targetSheetName = sheetName && wb.Sheets[sheetName] ? sheetName : wb.SheetNames[0];
   const target = wb.Sheets[targetSheetName];
-  const { headers, rows } = normaliseRows(target);
+  const { headers, rows } = parseSheetWithFormulas(target);
 
   let storagePath: string | undefined;
   if (projectId) {
@@ -81,21 +129,24 @@ customSheetsRouter.post("/upload", requireRoles("admin", "office"), upload.singl
       createdById: req.user!.id,
     },
   });
-  await audit("customsheet.upload", { userId: req.user!.id, entity: "CustomSheet", entityId: row.id, meta: { rows: rows.length, headers: headers.length } });
-  res.status(201).json({ id: row.id, name: row.name, headers, rowCount: rows.length, storagePath });
+  const formulaCount = rows.flat().filter((c) => isFormula(c.raw)).length;
+  await audit("customsheet.upload", {
+    userId: req.user!.id,
+    entity: "CustomSheet",
+    entityId: row.id,
+    meta: { rows: rows.length, headers: headers.length, formulas: formulaCount },
+  });
+  res.status(201).json({ id: row.id, name: row.name, headers, rowCount: rows.length, formulaCount, storagePath });
 });
 
-/**
- * Create a blank custom sheet from scratch — no file upload.
- * Body: { name, category?, projectId?, headers?[] } — defaults to a 3-column starter.
- */
 customSheetsRouter.post("/blank", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const name = String(req.body.name || "").trim() || `Untitled sheet — ${new Date().toISOString().slice(0, 10)}`;
   const category = String(req.body.category || "General");
   const projectId = req.body.projectId ? String(req.body.projectId) : null;
-  const rawHeaders = Array.isArray(req.body.headers) && req.body.headers.length
-    ? (req.body.headers as unknown[]).map((h, i) => String(h ?? "").trim() || `Column ${i + 1}`)
-    : ["Column 1", "Column 2", "Column 3"];
+  const rawHeaders =
+    Array.isArray(req.body.headers) && req.body.headers.length
+      ? (req.body.headers as unknown[]).map((h, i) => String(h ?? "").trim() || `Column ${i + 1}`)
+      : ["Column 1", "Column 2", "Column 3"];
 
   const row = await prisma.customSheet.create({
     data: {
@@ -119,13 +170,14 @@ customSheetsRouter.post("/blank", requireRoles("admin", "office"), async (req: A
 });
 
 customSheetsRouter.put("/:id", requireRoles("admin", "office"), async (req, res) => {
+  const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;
   const row = await prisma.customSheet.update({
     where: { id: req.params.id },
     data: {
       name: req.body.name || undefined,
       category: req.body.category || undefined,
       headersJson: req.body.headers ? JSON.stringify(req.body.headers) : undefined,
-      rowsJson: req.body.rows ? JSON.stringify(req.body.rows) : undefined,
+      rowsJson: rows ? JSON.stringify(rows) : undefined,
     },
   });
   res.json(row);
@@ -135,8 +187,8 @@ customSheetsRouter.post("/:id/export", requireRoles("admin", "office"), async (r
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
   const headers = JSON.parse(row.headersJson || "[]");
-  const rows = JSON.parse(row.rowsJson || "[]");
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const rows = parseRowsJson(row.rowsJson);
+  const ws = buildWorksheet(headers, rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, row.name.slice(0, 30));
   const buf = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });

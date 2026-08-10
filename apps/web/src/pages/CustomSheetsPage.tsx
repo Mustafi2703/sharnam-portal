@@ -1,5 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams, useNavigate } from "react-router-dom";
+import {
+  type SheetCell,
+  colLetter,
+  isFormula,
+  cellEditValue,
+  cellPreview,
+  evaluateAllRows,
+  normalizeCell,
+} from "@sharnam/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Input, PageHeader, Select } from "../components/ui";
@@ -78,7 +87,7 @@ export default function CustomSheetsPage() {
       <PageHeader
         eyebrow="Sheet Maker"
         title="Upload · edit · export any Excel or CSV"
-        subtitle="Payment summaries, comparative statements, ISO checklists, progress sheets — edit in-portal, export back to Excel, audit-trailed."
+        subtitle="Payment summaries, comparative statements, ISO checklists, progress sheets — edit in-portal with Excel formulas, export back to .xlsx."
       />
       {msg && <p className="maker-flash maker-flash--ok">{msg}</p>}
 
@@ -108,7 +117,7 @@ export default function CustomSheetsPage() {
             <div className="maker-section__head">Blank sheet</div>
             <div className="maker-section__body space-y-3">
               <p className="text-sm text-steel-muted leading-relaxed">
-                Start with 3 columns — add, rename, or remove columns and rows in the editor.
+                Start with 3 columns — add rows, type values or formulas (e.g. <code className="maker-code">=A2+B2</code>, <code className="maker-code">=SUM(C2:C10)</code>).
               </p>
               <Input placeholder="Sheet name" value={name} onChange={(e) => setName(e.target.value)} />
               <Button type="button" variant="secondary" onClick={createBlank}>Create blank sheet</Button>
@@ -149,48 +158,53 @@ export function CustomSheetEditorPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const canWrite = ["admin", "office"].includes(user?.role || "");
-  const [sheet, setSheet] = useState<any | null>(null);
+  const [sheet, setSheet] = useState<{ name: string; headers: string[]; rows: SheetCell[][]; category?: string } | null>(null);
   const [msg, setMsg] = useState("");
 
   const load = async () => {
     if (!id) return;
     const s = await api<any>(`/api/custom-sheets/${id}`, { token });
-    setSheet(s);
+    const rows = evaluateAllRows(
+      (s.rows || []).map((row: unknown[]) => row.map((cell) => normalizeCell(cell)))
+    );
+    setSheet({ name: s.name, headers: s.headers, rows, category: s.category });
   };
   useEffect(() => {
     void load();
   }, [id, token]);
 
   function setCell(rowIdx: number, colIdx: number, value: string) {
-    setSheet((prev: any) => {
+    setSheet((prev) => {
       if (!prev) return prev;
-      const rows = prev.rows.map((r: any[]) => [...r]);
-      rows[rowIdx][colIdx] = value;
-      return { ...prev, rows };
+      const rows = prev.rows.map((r) => r.map((c) => ({ ...c })));
+      rows[rowIdx][colIdx] = { raw: value };
+      return { ...prev, rows: evaluateAllRows(rows) };
     });
   }
   function addRow() {
-    setSheet((prev: any) => (prev ? { ...prev, rows: [...prev.rows, prev.headers.map(() => "")] } : prev));
+    setSheet((prev) =>
+      prev ? { ...prev, rows: [...prev.rows, prev.headers.map(() => ({ raw: "" }))] } : prev
+    );
   }
   function delRow(idx: number) {
-    setSheet((prev: any) => {
+    setSheet((prev) => {
       if (!prev) return prev;
       const rows = prev.rows.slice();
       rows.splice(idx, 1);
-      return { ...prev, rows };
+      return { ...prev, rows: evaluateAllRows(rows) };
     });
   }
   function addColumn() {
-    setSheet((prev: any) => {
+    setSheet((prev) => {
       if (!prev) return prev;
       const nextHeaderName = `Column ${prev.headers.length + 1}`;
       const headers = [...prev.headers, nextHeaderName];
-      const rows = prev.rows.map((r: any[]) => [...r, ""]);
-      return { ...prev, headers, rows };
+      const rows = prev.rows.map((r) => [...r, { raw: "" }]);
+      return { ...prev, headers, rows: evaluateAllRows(rows) };
     });
   }
   function renameColumn(idx: number, name: string) {
-    setSheet((prev: any) => {
+    setSheet((prev) => {
       if (!prev) return prev;
       const headers = prev.headers.slice();
       headers[idx] = name;
@@ -198,25 +212,32 @@ export function CustomSheetEditorPage() {
     });
   }
   function delColumn(idx: number) {
-    setSheet((prev: any) => {
+    setSheet((prev) => {
       if (!prev) return prev;
-      const headers = prev.headers.filter((_h: string, i: number) => i !== idx);
-      const rows = prev.rows.map((r: any[]) => r.filter((_: any, i: number) => i !== idx));
-      return { ...prev, headers, rows };
+      const headers = prev.headers.filter((_h, i) => i !== idx);
+      const rows = prev.rows.map((r) => r.filter((_c, i) => i !== idx));
+      return { ...prev, headers, rows: evaluateAllRows(rows) };
     });
   }
 
+  const formulaCount = useMemo(
+    () => sheet?.rows.flat().filter((c) => isFormula(c.raw)).length ?? 0,
+    [sheet]
+  );
+
   async function save() {
     if (!id || !sheet) return;
+    const rows = evaluateAllRows(sheet.rows);
     await api(`/api/custom-sheets/${id}`, {
       method: "PUT",
       token,
-      body: JSON.stringify({ headers: sheet.headers, rows: sheet.rows, name: sheet.name }),
+      body: JSON.stringify({ headers: sheet.headers, rows, name: sheet.name }),
     });
-    setMsg("Saved.");
+    setSheet((prev) => (prev ? { ...prev, rows } : prev));
+    setMsg(`Saved${formulaCount ? ` · ${formulaCount} formula(s)` : ""}.`);
   }
   async function download() {
-    if (!id) return;
+    if (!id || !sheet) return;
     const res = await fetch(`/api/custom-sheets/${id}/export`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -235,7 +256,7 @@ export function CustomSheetEditorPage() {
     document.body.removeChild(a);
   }
 
-  const hasRows = sheet?.rows?.length > 0;
+  const hasRows = (sheet?.rows.length ?? 0) > 0;
 
   return (
     <div className="maker-shell space-y-4 pb-24">
@@ -244,7 +265,7 @@ export function CustomSheetEditorPage() {
         title={sheet?.name || "Loading…"}
         subtitle={
           sheet
-            ? `${sheet.headers.length} columns · ${sheet.rows.length} rows · ${sheet.category || "General"}`
+            ? `${sheet.headers.length} columns · ${sheet.rows.length} rows · ${formulaCount} formula(s) · ${sheet.category || "General"}`
             : ""
         }
         actions={
@@ -256,6 +277,16 @@ export function CustomSheetEditorPage() {
         }
       />
       {msg && <p className="maker-flash maker-flash--ok">{msg}</p>}
+      {sheet && (
+        <div className="maker-formula-help">
+          <strong>Formulas</strong>
+          <span>
+            Type Excel-style formulas starting with <code>=</code> — e.g.{" "}
+            <code>=A2+B2</code>, <code>=C2*D2</code>, <code>=SUM(E2:E20)</code>,{" "}
+            <code>=AVERAGE(B2:B10)</code>. Row 1 is headers; first data row is row 2. Export writes live formulas to .xlsx.
+          </span>
+        </div>
+      )}
       {!sheet ? (
         <div className="maker-section"><div className="maker-section__body">Loading…</div></div>
       ) : (
@@ -268,6 +299,7 @@ export function CustomSheetEditorPage() {
                   <th className="px-2 py-1 w-6">#</th>
                   {sheet.headers.map((h: string, i: number) => (
                     <th key={i} className="px-2 py-1 font-semibold whitespace-nowrap">
+                      <div className="maker-table__col-ref">{colLetter(i)}</div>
                       {canWrite ? (
                         <div className="flex flex-col gap-1">
                           <input
@@ -292,19 +324,30 @@ export function CustomSheetEditorPage() {
                 </tr>
               </thead>
               <tbody>
-                {sheet.rows.map((row: any[], ri: number) => (
+                {sheet.rows.map((row: SheetCell[], ri: number) => (
                   <tr key={ri} className="border-t border-line">
-                    <td className="px-2 py-0.5 text-steel-muted">{ri + 1}</td>
-                    {sheet.headers.map((_h: string, ci: number) => (
-                      <td key={ci} className="px-1 py-0.5">
-                        <input
-                          className="maker-table__cell"
-                          value={row[ci] ?? ""}
-                          onChange={(e) => setCell(ri, ci, e.target.value)}
-                          disabled={!canWrite}
-                        />
-                      </td>
-                    ))}
+                    <td className="px-2 py-0.5 text-steel-muted">{ri + 2}</td>
+                    {sheet.headers.map((_h: string, ci: number) => {
+                      const cell = row[ci] ?? { raw: "" };
+                      const formula = isFormula(cell.raw);
+                      return (
+                        <td key={ci} className="px-1 py-0.5 align-top">
+                          <input
+                            className={`maker-table__cell${formula ? " maker-table__cell--formula" : ""}`}
+                            value={cellEditValue(cell)}
+                            onChange={(e) => setCell(ri, ci, e.target.value)}
+                            disabled={!canWrite}
+                            spellCheck={false}
+                            title={formula ? `Result: ${cellPreview(cell)}` : undefined}
+                          />
+                          {formula && (
+                            <div className="maker-table__cell-result" title="Calculated preview">
+                              = {cellPreview(cell)}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
                     {canWrite && (
                       <td className="px-1 py-0.5">
                         <button type="button" className="text-danger text-[10px]" onClick={() => delRow(ri)}>×</button>
