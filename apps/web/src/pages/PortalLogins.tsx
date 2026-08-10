@@ -376,51 +376,32 @@ function AuthBackdrop({ portalKey }: { portalKey?: string }) {
   );
 }
 
-function TopStrip({ showLogo = true }: { showLogo?: boolean }) {
+function PolicyList({ policies }: { policies: string[] }) {
   return (
-    <header className={`auth-strip auth-strip--minimal${showLogo ? "" : " auth-strip--iso-only"}`}>
-      <div className="auth-strip__inner auth-strip__inner--center">
-        {showLogo ? (
-          <Link to="/login" className="auth-strip__brand auth-strip__brand--logo-only" aria-label="Home">
-            <img src="/logo.png" alt="" width={160} height={78} className="auth-strip__logo" />
-          </Link>
-        ) : null}
-        <div className="auth-strip__iso" aria-label="Standards">
+    <ul className="auth-policies" aria-label="Portal standards">
+      {policies.map((text) => (
+        <li key={text} className="auth-policies__item">
+          <span className="auth-policies__dot" aria-hidden />
+          {text}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function IsoFooter() {
+  return (
+    <footer className="auth-footer">
+      <div className="auth-footer__inner">
+        <span className="auth-footer__label">Certified standards</span>
+        <div className="auth-footer__iso" aria-label="ISO standards">
           {ISO_BADGES.map((b) => (
-            <span key={b.code} className="auth-strip__iso-chip" title={b.label}>
+            <span key={b.code} className="auth-footer__iso-chip" title={b.label}>
               {b.code}
             </span>
           ))}
         </div>
       </div>
-    </header>
-  );
-}
-
-function PolicyTicker({ policies }: { policies: string[] }) {
-  // Duplicate the array so the marquee wraps seamlessly.
-  const doubled = [...policies, ...policies];
-  return (
-    <div className="auth-ticker" aria-label="Portal standards">
-      <span className="auth-ticker__label">Standards</span>
-      <div className="auth-ticker__track">
-        <ul className="auth-ticker__list">
-          {doubled.map((text, i) => (
-            <li key={`${text}-${i}`} className="auth-ticker__item">
-              <span className="auth-ticker__dot" aria-hidden />
-              {text}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function TrustFooter({ policies }: { policies: string[] }) {
-  return (
-    <footer className="auth-trust">
-      <PolicyTicker policies={policies} />
     </footer>
   );
 }
@@ -567,8 +548,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   return (
     <div className="auth-page auth-page--immersive auth-page--light auth-page--portal" data-portal={portalKey}>
       <AuthBackdrop portalKey={portalKey} />
-      <TopStrip showLogo={false} />
-      <header className="auth-login__header">
+      <header className="auth-login__header auth-login__header--portal">
         <BrandLockup size="hero" onHero glass />
         <Link to="/login" className="auth-login__back">← All portals</Link>
         <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
@@ -581,7 +561,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
           <SignInCard cfg={cfg} />
         </div>
       </main>
-      <TrustFooter policies={cfg.policies} />
+      <IsoFooter />
     </div>
   );
 }
@@ -631,10 +611,14 @@ export function LoginHubPage() {
   return (
     <div className="auth-page auth-page--immersive auth-page--light auth-page--hub">
       <AuthBackdrop />
-      <TopStrip showLogo={false} />
       <header className="auth-login__header auth-login__header--hub">
-        <BrandLockup size="hero" onHero glass />
-        <p className="auth-hero-brand__tag">Project Management Consultants</p>
+        <div className="auth-hub__top">
+          <div className="auth-hub__brand">
+            <BrandLockup size="hero" onHero glass />
+            <p className="auth-hero-brand__tag">Project Management Consultants</p>
+          </div>
+          <PolicyList policies={policies} />
+        </div>
       </header>
       <main className="auth-hub auth-hub--light">
         <section className="auth-hub__bento" aria-label="Choose your portal">
@@ -649,7 +633,7 @@ export function LoginHubPage() {
           </div>
         </section>
       </main>
-      <TrustFooter policies={policies} />
+      <IsoFooter />
     </div>
   );
 }

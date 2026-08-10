@@ -1331,27 +1331,82 @@ body {
   object-fit: cover;
   object-position: center 42%;
   transform: none;
-  filter: brightness(1.12) saturate(0.92);
+  filter: brightness(1.02) saturate(1.02);
 }
 .auth-backdrop__scrim {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.72) 38%, rgba(238, 244, 248, 0.88) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.38) 42%, rgba(238, 244, 248, 0.62) 100%);
 }
 
-/* Light login layout — centred logo, clean panels */
+/* Light login layout */
 .auth-page--light .auth-login__header {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.5rem;
-  padding: clamp(1.25rem, 4vh, 2.25rem) 1rem 0.75rem;
-  max-width: 720px;
+  gap: 0.35rem;
+  padding: clamp(0.65rem, 2vh, 1.1rem) 1rem 0.5rem;
+  max-width: 960px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+}
+.auth-login__header--hub {
+  align-items: stretch;
+  text-align: left;
+  max-width: 960px;
+}
+.auth-hub__top {
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  align-items: start;
+  width: 100%;
+}
+.auth-hub__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+.auth-hub__brand .brand-lockup--on-hero-glass,
+.auth-hub__brand .brand-lockup--on-hero {
+  justify-content: flex-start;
+}
+.auth-hub__brand .brand-lockup__mark {
+  height: clamp(3.25rem, 12vw, 5rem) !important;
+  max-width: min(300px, 68vw);
+}
+.auth-policies {
+  margin: 0;
+  padding: 0.35rem 0 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+.auth-policies__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  font-weight: 550;
+  color: var(--color-steel-2);
+}
+.auth-policies__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  flex-shrink: 0;
+  margin-top: 0.35em;
+}
+.auth-login__header--portal .brand-lockup__mark {
+  height: clamp(5.75rem, 30vw, 10.5rem) !important;
+  max-width: min(560px, 94vw);
 }
 .auth-login__back {
   font-size: 0.78rem;
@@ -1376,7 +1431,7 @@ body {
   grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
   gap: 1rem;
   align-items: start;
-  padding: 0 1rem clamp(1.25rem, 3vh, 2rem);
+  padding: 0 1rem clamp(0.75rem, 2vh, 1.25rem);
   max-width: 960px;
   width: 100%;
   margin: 0 auto;
@@ -3177,26 +3232,15 @@ body {
 
 /* Light login — overrides dark immersive shell when both classes present */
 .auth-page--immersive.auth-page--light .auth-strip {
-  background: rgba(255, 255, 255, 0.75);
-  border-bottom: 1px solid rgba(11, 106, 120, 0.12);
-  border-top: 2px solid rgba(11, 106, 120, 0.35);
-  backdrop-filter: blur(8px);
+  display: none;
 }
-.auth-page--immersive.auth-page--light .auth-strip__iso-chip {
+.auth-page--immersive.auth-page--light .auth-footer {
+  background: rgba(255, 255, 255, 0.82);
+  border-top: 1px solid rgba(11, 106, 120, 0.12);
+}
+.auth-page--immersive.auth-page--light .auth-footer__iso-chip {
   background: rgba(11, 106, 120, 0.08);
   border-color: rgba(11, 106, 120, 0.15);
-  color: var(--color-brand-dark);
-}
-.auth-page--immersive.auth-page--light .auth-trust {
-  background: rgba(255, 255, 255, 0.85);
-  border-top: 1px solid rgba(11, 106, 120, 0.1);
-  backdrop-filter: blur(8px);
-}
-.auth-page--immersive.auth-page--light .auth-ticker__item {
-  color: var(--color-steel-2);
-}
-.auth-page--immersive.auth-page--light .auth-ticker__label {
-  background: var(--color-brand-soft);
   color: var(--color-brand-dark);
 }
 .auth-page--immersive.auth-page--light .bento-tile {
@@ -3220,14 +3264,6 @@ body {
 .auth-page--immersive.auth-page--light .bento-tile__href {
   color: var(--color-steel-muted);
 }
-.auth-hub--light {
-  flex: 1;
-  padding: 0 1rem clamp(1.25rem, 3vh, 2rem);
-  max-width: 920px;
-  width: 100%;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
 .auth-page--immersive.auth-page--light .auth-login__header {
   position: relative;
   z-index: 2;
@@ -3238,7 +3274,59 @@ body {
   z-index: 2;
 }
 
-/* -------------------------------------------------------------- trust footer / ticker */
+/* Auth footer — ISO badges, no ticker */
+.auth-footer {
+  border-top: 1px solid rgba(11, 106, 120, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  position: relative;
+  z-index: 2;
+}
+.auth-footer__inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0.65rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+}
+.auth-footer__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-steel-muted);
+}
+.auth-footer__iso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.auth-footer__iso-chip {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 106, 120, 0.15);
+  background: rgba(11, 106, 120, 0.07);
+  color: var(--color-brand-dark);
+  white-space: nowrap;
+}
+.auth-hub--light {
+  flex: 1;
+  padding: 0 1rem clamp(0.65rem, 2vh, 1rem);
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* -------------------------------------------------------------- trust footer / ticker (legacy) */
 
 .auth-trust {
   border-top: 1px solid var(--color-line);
@@ -3580,9 +3668,26 @@ body {
   .auth-panel--info {
     order: 1;
   }
+  .auth-hub__top {
+    grid-template-columns: 1fr;
+  }
+  .auth-hub__brand {
+    align-items: center;
+    text-align: center;
+  }
+  .auth-hub__brand .brand-lockup--on-hero-glass,
+  .auth-hub__brand .brand-lockup--on-hero {
+    justify-content: center;
+  }
+  .auth-policies {
+    padding-top: 0;
+  }
   .brand-lockup--on-hero-glass .brand-lockup__mark,
   .brand-lockup--on-hero .brand-lockup__mark {
     height: clamp(4rem, 28vw, 6rem) !important;
+  }
+  .auth-login__header--portal .brand-lockup__mark {
+    height: clamp(5rem, 32vw, 8rem) !important;
   }
 }
 .auth-strip--minimal .auth-strip__inner--center { justify-content: center; gap: 1.5rem; }
