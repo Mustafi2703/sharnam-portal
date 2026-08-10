@@ -1411,9 +1411,9 @@ body {
   margin-inline: auto;
   object-fit: contain;
   filter:
-    drop-shadow(0 0 32px rgba(255, 255, 255, 0.96))
-    drop-shadow(0 0 10px rgba(255, 255, 255, 0.85))
-    drop-shadow(0 12px 40px rgba(11, 106, 120, 0.3));
+    drop-shadow(0 0 40px rgba(255, 255, 255, 0.98))
+    drop-shadow(0 0 14px rgba(255, 255, 255, 0.92))
+    drop-shadow(0 14px 44px rgba(11, 106, 120, 0.35));
 }
 .brand-lockup--auth-portal .brand-lockup__mark {
   width: min(96vw, 600px) !important;
