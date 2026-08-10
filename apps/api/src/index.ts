@@ -47,20 +47,39 @@ app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
 app.get("/api/health", (_req, res) => {
+  const graphConfigured = Boolean(
+    (process.env.AZURE_TENANT_ID || process.env.GRAPH_TENANT_ID) &&
+      (process.env.AZURE_CLIENT_ID || process.env.GRAPH_CLIENT_ID) &&
+      (process.env.AZURE_CLIENT_SECRET || process.env.GRAPH_CLIENT_SECRET)
+  );
   res.json({
     ok: true,
     service: "sharnam-api",
     mockOneDrive: process.env.MOCK_ONEDRIVE !== "false",
-    graphConfigured: Boolean(
-      (process.env.AZURE_TENANT_ID || process.env.GRAPH_TENANT_ID) &&
-        (process.env.AZURE_CLIENT_ID || process.env.GRAPH_CLIENT_ID) &&
-        (process.env.AZURE_CLIENT_SECRET || process.env.GRAPH_CLIENT_SECRET)
+    graphConfigured,
+    sharePointSiteUrlSet: Boolean(
+      (process.env.SHAREPOINT_SITE_URL || process.env.GRAPH_SHAREPOINT_SITE_URL || "").trim()
     ),
+    mailFromSet: Boolean((process.env.GRAPH_MAIL_FROM || process.env.GRAPH_SHARED_MAILBOX || "").trim()),
+    timezone: "Asia/Kolkata",
     time: new Date().toISOString(),
     commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local",
     webDist,
     ui: "ui-2 Graphite Procore",
   });
+});
+
+app.get("/api/health/sharepoint", async (_req, res) => {
+  try {
+    const { probeSharePoint } = await import("./services/graph.js");
+    const health = await probeSharePoint();
+    res.json(health);
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 app.use("/api/auth", authRouter);

@@ -1,14 +1,30 @@
 # Sharnam Portal — Client Requirements (shareable)
 
 **Product:** Sharnam PMC Portal (शरणम्)  
-**Version:** 1.1 · 2026-08-03  
+**Version:** 2.0 · 10 Aug 2026  
 **Live demo:** https://sharnam-portal.onrender.com  
 **Audience:** Sharnam office, site, client, contractor, employees  
-**UI:** Modern SAP / Workday (navy + amber) · Parikh-style module switch · not classic ERP  
+**Plain-language updates:** [CLIENT_LATEST_UPDATES.md](./CLIENT_LATEST_UPDATES.md)  
+**SharePoint / IT env vars:** [SHAREPOINT_RENDER_ENV.md](./SHAREPOINT_RENDER_ENV.md)
 
-This document is the **requirements baseline** for module finalization and build.  
-**Design detail (HLD/LLD):** [system-design/](./system-design/)  
-**Module field specs:** [modules/](./modules/)
+This document is the **requirements baseline** for module finalization and sign-off.  
+**Design detail (HLD/LLD):** [system-design/](./system-design/) · **Module field specs:** [modules/](./modules/)
+
+---
+
+## 0. Executive summary (non-technical)
+
+The portal is the **single place** for one construction project: drawings, quality, safety, site logs, meetings, cost/cashflow, reports, and people (HRMS). Excel sheets you already use become **live dashboards** — the portal is the system of record, not a download-only tool.
+
+| Principle | What it means for SPDC |
+|-----------|------------------------|
+| **One project spine** | Office, site, contractor, and client see the same project data — each role sees only what they need |
+| **Four login doors** | Office · Site · Contractor · Client — separate URLs, same brand |
+| **Drawings ≠ Documents** | GFC revision control is separate from general document storage (DMS) |
+| **Information ≠ Inspection** | “Ask” on drawings is not the same as “Request for Inspection” on quality/safety |
+| **Cost ≠ Finance** | Engineering BOQ/cashflow/MB is not commercial invoice/PO/RA tracking |
+| **Site attendance** | Selfie + GPS + **IST time** → SharePoint evidence folder |
+| **SharePoint live** | Files upload to `SharnamProjects` when Render env is set (`MOCK_ONEDRIVE=false`) |
 
 ---
 
@@ -29,10 +45,16 @@ HRMS employees feed the PMC roster and Office/Site directory assignments.
 
 ## 2. Login experience (required)
 
-1. Sign in (module or role login).  
-2. **Ops dashboard** — open requests, open issues / alerts, recent diary signals; quick links to Quality / Safety **Request for Inspection** and Drawings **Request for Information**.  
-3. **Module selection** — enter only enabled modules for that project (Office also opens CRM / HRMS).  
-4. Inside a module: **Hub → sub-tools → page Actions** (no left tools rail).
+| Step | Requirement | Status |
+|------|-------------|--------|
+| Hub | `/login` — centred **शरणम्** logo + four portal tiles | Live |
+| Per portal | `/login/office` · `/login/site` · `/login/vendor` · `/login/client` | Live |
+| Portal page layout | Large logo left; minimal sign-in card right; hero photo visible | Live Aug 2026 |
+| After sign-in | Ops dashboard → enabled modules for project | Live |
+| Navigation | Module hub → sub-tools → page actions (no deep left rail) | Live |
+
+Demo accounts: `office@sharnam.demo` · `site@sharnam.demo` · `vendor@sharnam.demo` · `client@sharnam.demo` — password `Demo@1234`.  
+Site login lands on **Attendance** (`/attendance`).
 
 ---
 
@@ -179,7 +201,25 @@ Day log, Photos, Field requests.
 
 ### 4.9 Cost (engineering — not commercial finance)
 
-Monitoring, MB, BBS, Budget WBS, Cashflow, Rate difference, BOQ structure upload. **Separate from Finance.**
+Monitoring, MB, BBS, Budget WBS, **Cashflow (three tools)**, rate difference, BOQ structure upload. **Separate from Finance.**
+
+#### Cashflow — client Excel → three portal tools
+
+Your shared **Cashflow Dashboard** workbook must not collapse into one screen. The portal mirrors three distinct views:
+
+| Portal tool | Route | Purpose | Source sheet pattern |
+|-------------|-------|---------|----------------------|
+| **Cash Flow Chart** | Cost → Cashflow → Chart | Visual month-wise planned vs actual | Dashboard · Chart |
+| **Cash Flow Forecast** | Cost → Cashflow → Forecast | Forward projection by period | Dashboard · Forecast |
+| **Cashflow Tracking** | Cost → Cashflow → Tracking | Line-level follow-up vs packages | Dashboard · Tracking |
+
+| Rule | Detail |
+|------|--------|
+| Package filter | Multiple BOQs per project → filter chips on all cost registers |
+| GFC qty | Monitoring lines use published drawing quantities where applicable |
+| Finance boundary | Invoices, PO, RA, COP live under **Finance** module — not Cost |
+
+See [modules/MODULE_COST.md](./modules/MODULE_COST.md).
 
 ### 4.10 Finance (commercial tracking)
 
@@ -233,7 +273,7 @@ DPR / WPR from live registers. Generated PDFs viewable on **client civil** side.
 | Pre-joining | Documents, BGV, medical (if any), emp code, appointment letter, IT asset, email ID, ID card, welcome kit |
 | Onboarding | PII, bank, PAN/Aadhaar, PF/ESIC, nominee, doc verify, dept, reporting manager, orientation, policy ack |
 | Employee directory | DOJ, profile, assign to project Directory |
-| Attendance | **Geofence + geotag + selfie** for assigned site; HR override audited |
+| Attendance | **Geofence + geotag + selfie** for assigned site; **times in IST**; photos to SharePoint `…/Attendance/`; HR override audited |
 | Leave | Requests + approvals; **Leave Type master** (HR add/edit); **Holiday master** |
 | Personal diary | Daily employee diary stored in HRMS (≠ Field day log) |
 | Compensation & payslips | Compensation master + **payslip PDF** upload/view (**v1:** no full PF/ESIC calc engine) |
@@ -261,19 +301,24 @@ Office creates reusable sheet templates (sections, columns, party blocks), publi
 
 ---
 
-## 5. Microsoft 365
+## 5. Microsoft 365 & SharePoint
 
-| Item | Requirement |
-|------|-------------|
-| App registration | Client registers **Sharnam Portal** in Microsoft Entra (admin consent) |
-| Hosting | **No Azure app hosting required** — M365 SharePoint + Outlook is enough |
-| SharePoint / OneDrive | Live drawings & DMS when Graph configured |
-| Outlook | Real send for requests, publish, MoM, quotations, offers |
-| Teams | **Only** meeting provider (Comms + HR interviews) |
-| MS Project | S-curve / progress when licensed (or file import until then) |
-| Until live | Mock files + email outbox acceptable for demo |
+| Item | Requirement | Status |
+|------|-------------|--------|
+| App registration | Sharnam Portal app in Microsoft Entra (admin consent) | Required |
+| SharePoint site | `https://spdcsmb.sharepoint.com/sites/SharnamProjects` | **Live on Render** |
+| Render env | `AZURE_*` + `SHAREPOINT_SITE_URL` + `MOCK_ONEDRIVE=false` | See [SHAREPOINT_RENDER_ENV.md](./SHAREPOINT_RENDER_ENV.md) |
+| Upload proof | Attendance / DMS / drawings return `provider: sharepoint` | Verify after punch |
+| Outlook | Real send for RFI, publish, MoM | Needs `Mail.Send` consent |
+| Teams | **Only** meeting provider (Comms + HR interviews) | When Graph live |
+| MS Project | S-curve / progress when licensed (else Excel import) | Optional |
 
 Setup: [M365_SETUP.md](./M365_SETUP.md) · Design: [system-design/07-LLD-Microsoft-Graph.md](./system-design/07-LLD-Microsoft-Graph.md)
+
+**Health checks (no login):**
+
+- `GET /api/health` — `mockOneDrive: false`, `graphConfigured: true`
+- `GET /api/health/sharepoint` — `tokenOk`, `siteOk`, `driveId` (after deploy)
 
 ---
 
@@ -330,6 +375,8 @@ A module is “final” when:
 | Doc | Use |
 |-----|-----|
 | This file | Client-shareable requirements |
+| [CLIENT_LATEST_UPDATES.md](./CLIENT_LATEST_UPDATES.md) | Plain-language stakeholder update (Aug 2026) |
+| [SHAREPOINT_RENDER_ENV.md](./SHAREPOINT_RENDER_ENV.md) | IT — Render env vars & SharePoint upload |
 | [modules/](./modules/) | **All module definitions + field specs** (refine before build) |
 | [system-design/](./system-design/) | HLD / LLD / flows / data model |
 | [PRODUCT_IA.md](../PRODUCT_IA.md) | Locked module → tools IA |

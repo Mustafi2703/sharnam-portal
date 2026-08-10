@@ -1,6 +1,6 @@
 # Sharnam · Brand & UI Document
 
-Rev **04** · Aug 2026
+Rev **05** · Aug 2026
 
 This doc is the single source of truth for how Sharnam looks. It covers the
 mark, the type ladder, the colour system, motion, and the surface language we
@@ -13,7 +13,8 @@ one product.** If a login page looks like something else, it is wrong.
 
 We ship one brand mark. Two lockups.
 
-- `/public/logo.png` — the wordmark for Sharnam. Only place we render the mark.
+- `/public/logo-transparent.png` — login hero wordmark (teal on transparent background).
+- `/public/logo.png` — inside-app chrome (top bar, print headers).
 - Devanagari display: **शरणम्** — set in the display font, tight letter-spacing.
 - Latin caps: **SHARNAM** — set in mono/monospace, widely tracked (`0.35em`).
 
@@ -27,9 +28,9 @@ Lockup rules
 Where the mark is used
 | Surface | Component | Notes |
 |---|---|---|
-| Hub landing | `BrandLockup size="hero"` | Big, centered on masthead |
-| Per-portal | `TopStrip` + `DeskStage__mark` | Chrome + subtle watermark |
-| Inside app | `AppShell` chrome | Compact |
+| Hub landing | `BrandLockup onHero` | Large, centred above four portal tiles |
+| Per-portal login | `auth-portal__brand` | **Large logo left** — minimal sign-in card right |
+| Inside app | `AppShell` chrome | Compact `logo.png` |
 
 ---
 
@@ -126,49 +127,27 @@ Buttons
 
 ---
 
-## 5. Login page — the rule that matters
+## 5. Login page — current (Aug 2026)
 
-**The login page must look like the inside of the product.** Not a marketing
-splash. Not a hero photo carousel. A calm, tone-coloured "desk" that shows
-the client what they'll see once they sign in.
+**Hub (`/login`):** construction hero photo (light scrim) · centred transparent logo · four portal tiles.
 
-This is why we deliberately do **not** ship photo heroes on the login page:
+**Per-portal (`/login/office` etc.):** same hero · **large logo left** · compact sign-in card right only — no policy wall, no duplicate portal copy.
 
-- Photos rarely look right in dark mode — they were shot in daylight,
-  their light temperature fights the OS chrome.
-- Photos are brittle — a missing asset in `/public/heroes/` produces a
-  blank rectangle in production; a token-driven mockup can't fail like that.
-- Photos are not our product — they misrepresent what the user is about
-  to open.
+Rules:
+- Use `logo-transparent.png` on hero — never the black-background `logo.png`.
+- No ISO ticker on login (removed for clarity).
+- Minimal white — only a light card on the sign-in side.
+- Logo minimum on portal login desktop: **~12–22rem** height (`clamp` in CSS).
 
-Instead, the login left panel is a `DeskStage` component (see
-`apps/web/src/pages/PortalLogins.tsx`). It renders:
-
-1. Fake browser chrome — three OSX-style dots + a URL pill.
-2. A real inside surface card with the portal tone as its accent bar.
-3. A `PageHeader`-style row — eyebrow + title + project code + tone icon.
-4. Three KPI stat cards with tone-coloured left borders.
-5. A six-tile bento of the tools this portal owns.
-6. A dashed-top activity ledger.
-7. A very faint Sharnam watermark bottom-left.
-
-Behind everything: a portal-tone radial wash + a faint blueprint grid,
-masked out at the edges. Both work in light and dark modes.
-
-No portal switcher chip row lives on the sign-in card. Each portal has
-its own permanent link (`/login/<key>`). The only nav element on the
-per-portal page is "← All portals" back to the hub.
+Legacy note: earlier DeskStage mockup login (no photo) is **retired** — do not revert to photo-less mockups without client sign-off.
 
 ---
 
-## 6. Chrome (top strip + footer)
+## 6. Chrome (login)
 
-- **TopStrip** — brand lockup on the left, ISO badges centred, revision
-  tag on the right. Always visible on the login surface.
-- **TrustFooter** — a policy ticker that rotates the ten most important
-  standards this portal enforces. On mobile, the "Standards" label hides
-  and the ticker keeps rolling.
-- The masthead on the hub landing shows the full brand lockup + tagline.
+- **Hub** — centred logo + PMC tagline + portal tiles only.
+- **Per-portal** — logo left, `← All portals` link, sign-in card right.
+- No top ISO strip, no scrolling policy ticker (Aug 2026).
 
 ---
 

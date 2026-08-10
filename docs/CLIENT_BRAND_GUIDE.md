@@ -9,7 +9,8 @@
 | Element | Usage |
 |---------|--------|
 | **Mark** | शरणम् wordmark — use the official logo file only |
-| **Logo file** | Provided as `logo.png` — do not recreate in Word/PPT |
+| Logo file (hero) | `logo-transparent.png` — teal wordmark, no background plate |
+| Logo file (chrome) | `logo.png` — for inside app top bar |
 | **Tagline** | *Project Management Consultants* (below logo on login) |
 | **Legal name** | Sharnam Project Development Consultants (SPDC) |
 
@@ -72,10 +73,11 @@ Week ending 10 Aug 2026
 
 The live portal login uses:
 
-- Construction hero photography (site context)
-- **Logo centred on hero** — transparent glass plate, no redundant text
-- ISO certification strip (9001, 45001, 14001, 19650, 21502)
-- Separate URL per user type (`/login/office`, `/login/site`, etc.)
+- Construction hero photography (site context) — light overlay so photo stays visible
+- **Logo** — official `logo-transparent.png` (शरणम् teal on transparent background)
+- **Hub** — large centred logo + four portal tiles
+- **Per-portal login** — large logo left, compact sign-in right (no policy wall)
+- Separate URL per user type (`/login/office`, `/login/site`, `/login/vendor`, `/login/client`)
 
 This matches the **inside** product — same cards, same teal, same tone accents.
 

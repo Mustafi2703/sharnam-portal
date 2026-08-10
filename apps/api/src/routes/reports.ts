@@ -641,7 +641,16 @@ hrmRouter.post(
       },
     });
 
-    res.json({ ...row, provider: saved.provider, photoPath: saved.path });
+    res.json({
+      ...row,
+      provider: saved.provider,
+      photoPath: saved.path,
+      sharePointPath: saved.sharePointPath ?? null,
+      sharePointWarning:
+        process.env.MOCK_ONEDRIVE === "false" && saved.provider !== "sharepoint"
+          ? "Photo saved on server only — SharePoint upload failed. Ask IT to verify Render env vars and Graph permissions."
+          : undefined,
+    });
   }
 );
 

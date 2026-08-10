@@ -1,6 +1,6 @@
 # Sharnam Portal — Client delivery update
 
-**Prepared for:** SPDC / Sharnam PMC · **Rev:** 06 · **Date:** 10 Aug 2026  
+**Prepared for:** SPDC / Sharnam PMC · **Rev:** 07 · **Date:** 10 Aug 2026  
 **Live demo:** https://sharnam-portal.onrender.com  
 **Demo password:** `Demo@1234`
 
@@ -28,14 +28,13 @@ The **शरणम् (Sharnam) PMC portal** is a construction management worksp
 
 | Portal | URL | Demo login | Lands on |
 |--------|-----|------------|----------|
-| Hub (all portals) | `/login` | — | Portal picker |
+| Hub (all portals) | `/login` | — | Centred logo + four tiles |
 | Office / PMC | `/login/office` | `office@sharnam.demo` | Dashboard |
 | Site / field | `/login/site` | `site@sharnam.demo` | **Attendance punch** |
 | Contractor | `/login/vendor` | `vendor@sharnam.demo` | Workspace |
 | Client | `/login/client` | `client@sharnam.demo` | Dashboard (read-only) |
-| Employee | `/login/employee` | `employee@sharnam.demo` | Workspace |
-| Master setup | `/login/master` | `office@sharnam.demo` | Master |
-| HRMS | `/login/hr` | `office@sharnam.demo` | HRMS desk |
+
+*(Master, Employee, HR admin logins remain available but are not on the public hub.)*
 
 Password for all demo accounts: **`Demo@1234`**
 
@@ -124,7 +123,7 @@ Every site punch records:
 | Field | Stored where |
 |-------|----------------|
 | Selfie photo | SharePoint `…/Attendance/` + DB |
-| **Check-in / check-out time** | HRMS attendance row (HH:MM local) |
+| **Check-in / check-out time** | HRMS attendance row — **IST** (e.g. `15:42 IST`) |
 | **GPS lat, lng, accuracy (±m)** | DB + audit trail |
 | Site / project name | Matched to selected project |
 | ISO timestamp | Audit trail (`punchedAt`) |
@@ -149,8 +148,9 @@ Photos and coordinates are evidence for manpower and site presence registers.
 
 ## 7. Standards & branding
 
-- Logo: शरणम् wordmark (`/logo.png`) — centred on login hero, not repeated as text everywhere
-- ISO badges on login: 9001 · 45001 · 14001 · 19650 · 21502
+- Logo: शरणम् wordmark — `logo-transparent.png` on login hero; large on left for portal sign-in
+- Plain-language client pack: **[CLIENT_LATEST_UPDATES.md](./CLIENT_LATEST_UPDATES.md)**
+- SharePoint env troubleshooting: **[SHAREPOINT_RENDER_ENV.md](./SHAREPOINT_RENDER_ENV.md)**
 - Client-facing brand guide: **[CLIENT_BRAND_GUIDE.md](./CLIENT_BRAND_GUIDE.md)**
 - Internal engineering brand spec: **[BRAND.md](./BRAND.md)**
 
@@ -160,6 +160,8 @@ Photos and coordinates are evidence for manpower and site presence registers.
 
 | Document | Audience |
 |----------|----------|
+| [CLIENT_LATEST_UPDATES.md](./CLIENT_LATEST_UPDATES.md) | Client — plain-language Aug 2026 update |
+| [SHAREPOINT_RENDER_ENV.md](./SHAREPOINT_RENDER_ENV.md) | IT — Render env vars & upload check |
 | [CLIENT_BRAND_GUIDE.md](./CLIENT_BRAND_GUIDE.md) | Client — logo, colours, portal tones |
 | [PMC_DMS_HANDOVER.md](./PMC_DMS_HANDOVER.md) | Client + IT — SharePoint folder map |
 | [M365_SETUP.md](./M365_SETUP.md) | IT admin — Entra app + Graph permissions |
@@ -179,4 +181,4 @@ Photos and coordinates are evidence for manpower and site presence registers.
 
 ---
 
-*Doc ref: SPDC-PORTAL-DELIVERY-REV06*
+*Doc ref: SPDC-PORTAL-DELIVERY-REV07*

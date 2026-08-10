@@ -174,7 +174,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         `${kind === "in" ? "Checked in" : "Checked out"} at ${formatIstPunchTime(punchTime)}` +
           ` · ${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}` +
           (row.inGeofenceOk || row.outGeofenceOk ? " · site verified" : "") +
-          (row.provider === "sharepoint" ? " · SharePoint" : "")
+          (row.provider === "sharepoint" ? " · SharePoint" : row.sharePointWarning ? ` · ${row.sharePointWarning}` : "")
       );
       setSelfie([]);
       setCaptureKey((k) => k + 1);

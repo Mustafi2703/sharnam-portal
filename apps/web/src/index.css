@@ -1409,18 +1409,21 @@ body {
   width: 100%;
 }
 .auth-portal__brand .brand-lockup__mark {
-  height: clamp(6rem, 22vw, 12rem) !important;
-  max-width: min(640px, 92vw);
+  height: clamp(9rem, 40vw, 18rem) !important;
+  max-width: min(920px, 98vw);
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 24px rgba(11, 106, 120, 0.28));
 }
 .auth-portal__signin {
   width: 100%;
   max-width: 420px;
   margin: 0 auto;
   border-radius: 16px;
-  border: 1px solid rgba(11, 106, 120, 0.14);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 28px rgba(11, 106, 120, 0.1);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(11, 106, 120, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 20px rgba(11, 106, 120, 0.06);
+  backdrop-filter: blur(4px);
   padding: clamp(1rem, 2.5vw, 1.35rem);
 }
 .auth-portal__signin .signin-card {
@@ -1451,8 +1454,8 @@ body {
     justify-content: flex-start;
   }
   .auth-portal__brand .brand-lockup__mark {
-    height: clamp(7.5rem, 18vh, 14rem) !important;
-    max-width: min(560px, 100%);
+    height: clamp(11rem, 34vh, 22rem) !important;
+    max-width: min(820px, 100%);
   }
   .auth-portal__signin {
     margin: 0;
