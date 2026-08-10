@@ -13,21 +13,21 @@ import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
 /** Hub default hero */
-export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=2";
+export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=3";
 
 /** Per-portal hero banner — image on top, logo centred over all */
 export const PORTAL_HERO_SRC: Record<string, string> = {
-  master: "/auth/hero-construction-wide.jpg?v=2",
-  office: "/auth/hero-office.jpg?v=2",
-  hr: "/auth/hero-office.jpg?v=2",
-  employee: "/auth/hero-office.jpg?v=2",
-  comms: "/auth/hero-office.jpg?v=2",
-  site: "/auth/hero-site.jpg?v=2",
-  field: "/auth/hero-site.jpg?v=2",
-  vendor: "/auth/hero-site.jpg?v=2",
-  quality: "/auth/hero-site.jpg?v=2",
-  client: "/auth/hero-client.jpg?v=2",
-  drawings: "/auth/hero-drawings.jpg?v=2",
+  master: "/auth/hero-construction-wide.jpg?v=3",
+  office: "/auth/hero-office.jpg?v=3",
+  hr: "/auth/hero-office.jpg?v=3",
+  employee: "/auth/hero-office.jpg?v=3",
+  comms: "/auth/hero-office.jpg?v=3",
+  site: "/auth/hero-site.jpg?v=3",
+  field: "/auth/hero-site.jpg?v=3",
+  vendor: "/auth/hero-site.jpg?v=3",
+  quality: "/auth/hero-site.jpg?v=3",
+  client: "/auth/hero-client.jpg?v=3",
+  drawings: "/auth/hero-drawings.jpg?v=3",
 };
 
 function portalHeroSrc(portalKey?: string) {
@@ -332,14 +332,16 @@ function portalDisplayName(key: string, shortLabel: string) {
 function BrandLockup({
   size = "hero",
   onHero = false,
+  glass = false,
 }: {
   size?: "hero" | "compact" | "chrome";
   onHero?: boolean;
+  glass?: boolean;
 }) {
   return (
     <div
       className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${
-        onHero ? " brand-lockup--on-hero" : ""
+        onHero ? (glass ? " brand-lockup--on-hero-glass" : " brand-lockup--on-hero") : ""
       }`}
     >
       <img
@@ -355,11 +357,24 @@ function BrandLockup({
   );
 }
 
-function HeroBrandOverlay({ tagline }: { tagline?: string }) {
+function HeroBrandOverlay({ tagline, glass = true }: { tagline?: string; glass?: boolean }) {
   return (
     <div className="auth-hero-brand">
-      <BrandLockup size="hero" onHero />
+      <BrandLockup size="hero" onHero glass={glass} />
       {tagline ? <p className="auth-hero-brand__tag">{tagline}</p> : null}
+    </div>
+  );
+}
+
+function AuthBackdrop({ portalKey }: { portalKey?: string }) {
+  const src = portalHeroSrc(portalKey);
+  const tone = portalKey ? PORTAL_LOGINS[portalKey]?.tone || "#0B6A78" : "#0B6A78";
+  return (
+    <div className="auth-backdrop" aria-hidden>
+      <img className="auth-backdrop__img" src={src} alt="" loading="eager" fetchPriority="high" />
+      <div className="auth-backdrop__scrim" />
+      <div className="auth-backdrop__grid" />
+      <div className="auth-backdrop__glow" style={{ ["--portal-tone" as string]: tone } as CSSProperties} />
     </div>
   );
 }
@@ -465,8 +480,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="signin-card" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
-      <div className="signin-card__accent" aria-hidden />
+    <div className="signin-card signin-card--glass" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
+      <div className="signin-card__accent signin-card__accent--glow" aria-hidden />
       <div className="signin-card__body">
         <div className="signin-card__head">
           <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
@@ -513,21 +528,36 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 }
 
 function AuthHeroBanner({ portalKey }: { portalKey?: string }) {
-  const src = portalHeroSrc(portalKey);
   return (
     <section className="auth-hero auth-hero--top auth-hero--with-logo" aria-label="Sharnam PMC">
-      <img
-        className="auth-hero__img auth-hero__img--top"
-        src={src}
-        alt=""
-        loading="eager"
-        fetchPriority="high"
-        width={1920}
-        height={1080}
-      />
-      <div className="auth-hero__scrim auth-hero__scrim--hub" />
-      <HeroBrandOverlay tagline="Project Management Consultants" />
+      <AuthBackdrop portalKey={portalKey} />
+      <HeroBrandOverlay tagline="Project Management Consultants" glass />
     </section>
+  );
+}
+
+function PortalShowcase({ cfg }: { cfg: PortalConfig }) {
+  return (
+    <aside className="auth-glass auth-glass--showcase">
+      <Link to="/login" className="auth-page__back auth-page__back--glass">← All portals</Link>
+      <BrandLockup size="hero" onHero glass />
+      <span className="auth-glass__eyebrow" style={{ color: cfg.tone }}>{cfg.shortLabel} portal</span>
+      <h1 className="auth-glass__title">{cfg.headline}</h1>
+      <p className="auth-glass__sub">{cfg.subtitle}</p>
+      <ul className="auth-glass__points">
+        {cfg.points.map((p) => (
+          <li key={p}>
+            <span className="auth-glass__dot" style={{ background: cfg.tone }} aria-hidden />
+            {p}
+          </li>
+        ))}
+      </ul>
+      <div className="auth-glass__iso">
+        {ISO_BADGES.slice(0, 3).map((b) => (
+          <span key={b.code}>{b.code}</span>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -554,14 +584,12 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
   return (
-    <div className="auth-page auth-page--stacked" data-portal={portalKey}>
-      <AuthHeroBanner portalKey={portalKey} />
+    <div className="auth-page auth-page--immersive auth-page--portal" data-portal={portalKey}>
+      <AuthBackdrop portalKey={portalKey} />
       <TopStrip showLogo={false} />
-      <main className="auth-page__panel auth-page__panel--solo">
-        <div className="auth-page__panel-inner">
-          <div className="auth-page__crumb">
-            <Link to="/login" className="auth-page__back">← All portals</Link>
-          </div>
+      <main className="auth-immersive__stage">
+        <PortalShowcase cfg={cfg} />
+        <div className="auth-glass auth-glass--signin">
           <SignInCard cfg={cfg} />
         </div>
       </main>
@@ -629,10 +657,13 @@ export function LoginHubPage() {
   ];
 
   return (
-    <div className="auth-page auth-page--hub auth-page--stacked">
-      <AuthHeroBanner />
+    <div className="auth-page auth-page--immersive auth-page--hub">
+      <AuthBackdrop />
       <TopStrip showLogo={false} />
-      <main className="auth-hub">
+      <header className="auth-hub__mast">
+        <HeroBrandOverlay tagline="Project Management Consultants" glass />
+      </header>
+      <main className="auth-hub auth-hub--glass">
 
         <section className="auth-hub__bento" aria-label="Choose your portal">
           <header className="auth-hub__section-head">

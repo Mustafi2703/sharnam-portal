@@ -1305,10 +1305,202 @@ body {
   height: auto;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #f7f9fb 0%, var(--color-sand) 60%, #eceff2 100%);
-  color: var(--color-ink);
+  position: relative;
+  background: #050a12;
+  color: #e8eef4;
   font-family: var(--font-sans);
   overflow: visible;
+}
+
+/* ── Immersive futuristic login shell ── */
+.auth-page--immersive {
+  isolation: isolate;
+}
+.auth-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.auth-backdrop__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+  transform: scale(1.04);
+  filter: saturate(1.08) contrast(1.05);
+}
+.auth-backdrop__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 20%, rgba(11, 106, 120, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 100% 80% at 80% 100%, rgba(20, 184, 166, 0.12) 0%, transparent 50%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.35) 0%, rgba(5, 10, 18, 0.82) 55%, rgba(5, 10, 18, 0.94) 100%);
+}
+.auth-backdrop__grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(20, 184, 166, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 184, 166, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 40%, black 20%, transparent 75%);
+}
+.auth-backdrop__glow {
+  position: absolute;
+  width: min(640px, 90vw);
+  height: min(640px, 90vw);
+  left: 50%;
+  top: 28%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--portal-tone, #0b6a78) 35%, transparent) 0%, transparent 68%);
+  filter: blur(40px);
+  opacity: 0.85;
+}
+.auth-page--immersive > :not(.auth-backdrop) {
+  position: relative;
+  z-index: 1;
+}
+
+/* Portal split — glass left / glass right */
+.auth-immersive__stage {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: stretch;
+  padding: clamp(1rem, 3vw, 2.5rem);
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.auth-glass {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 16, 28, 0.42);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 24px 64px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(11, 106, 120, 0.08);
+}
+.auth-glass--showcase {
+  padding: clamp(1.25rem, 3vw, 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  justify-content: center;
+}
+.auth-glass--signin {
+  padding: clamp(0.85rem, 2vw, 1.15rem);
+  display: flex;
+  align-items: center;
+}
+.auth-glass--signin .signin-card {
+  width: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.auth-glass__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-top: 0.5rem;
+}
+.auth-glass__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
+}
+.auth-glass__sub {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 42ch;
+}
+.auth-glass__points {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.auth-glass__points li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+.auth-glass__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px currentColor;
+}
+.auth-glass__iso {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+.auth-glass__iso span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+}
+.auth-page__back--glass {
+  color: rgba(255, 255, 255, 0.85);
+  align-self: flex-start;
+  margin-bottom: 0.25rem;
+}
+.auth-page__back--glass:hover {
+  color: #5eead4;
+}
+
+/* Hub masthead over backdrop */
+.auth-hub__mast {
+  padding: clamp(1.5rem, 5vh, 3rem) 1rem 0.5rem;
+  text-align: center;
+}
+.auth-hub--glass {
+  flex: 1;
+  padding: 0 clamp(0.85rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.5rem);
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.auth-hub--glass .auth-hub__section-title {
+  color: #fff;
+}
+.auth-hub--glass .auth-hub__section-hint {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .auth-page--hub,
@@ -1806,10 +1998,28 @@ body {
 /* -------------------------------------------------------------- top strip */
 
 .auth-strip {
-  background: var(--color-paper);
-  border-bottom: 1px solid var(--color-line);
-  border-top: 3px solid var(--color-brand);
+  background: rgba(5, 10, 18, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 2px solid rgba(20, 184, 166, 0.55);
   z-index: 5;
+  backdrop-filter: blur(12px);
+}
+.auth-page--immersive .auth-strip__iso-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+}
+.auth-page--immersive .auth-trust {
+  background: rgba(5, 10, 18, 0.72);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+.auth-page--immersive .auth-ticker__item {
+  color: rgba(255, 255, 255, 0.72);
+}
+.auth-page--immersive .auth-ticker__label {
+  background: rgba(11, 106, 120, 0.35);
+  color: #99f6e4;
 }
 .auth-strip__inner {
   max-width: 1400px;
@@ -2391,6 +2601,46 @@ body {
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(18, 20, 23, 0.04), 0 12px 32px rgba(18, 20, 23, 0.06);
 }
+
+/* Glass sign-in card */
+.signin-card--glass {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.signin-card--glass .signin-card__title {
+  color: #fff;
+}
+.signin-card--glass .signin-card__sub {
+  color: rgba(255, 255, 255, 0.72);
+}
+.signin-card--glass .signin-form__label {
+  color: rgba(255, 255, 255, 0.55);
+}
+.signin-card--glass .signin-form__input {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.signin-card--glass .signin-form__input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+.signin-card--glass .signin-form__input:focus {
+  border-color: color-mix(in srgb, var(--card-tone) 70%, white);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--card-tone) 25%, transparent), 0 0 20px color-mix(in srgb, var(--card-tone) 20%, transparent);
+}
+.signin-card--glass .signin-form__hint {
+  color: rgba(255, 255, 255, 0.45);
+}
+.signin-card--glass .signin-form__submit {
+  background: linear-gradient(135deg, var(--card-tone) 0%, color-mix(in srgb, var(--card-tone) 70%, #14b8a6) 100%);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--card-tone) 40%, transparent);
+}
+.signin-card__accent--glow {
+  height: 2px;
+  box-shadow: 0 0 16px var(--card-tone), 0 0 32px color-mix(in srgb, var(--card-tone) 50%, transparent);
+}
 .signin-card__accent {
   height: 3px;
   background: var(--card-tone);
@@ -2767,6 +3017,39 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Immersive hub — glass portal tiles on dark backdrop */
+.auth-page--immersive .bento-tile {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 16, 28, 0.48);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+.auth-page--immersive .bento-tile:hover {
+  border-color: color-mix(in srgb, var(--tile-tone) 55%, white);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), 0 0 24px color-mix(in srgb, var(--tile-tone) 25%, transparent);
+}
+.auth-page--immersive .bento-tile__title,
+.auth-page--immersive .bento-tile__cta {
+  color: #fff;
+}
+.auth-page--immersive .bento-tile__href {
+  color: rgba(255, 255, 255, 0.4);
+}
+.auth-page--immersive .module-chip {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(8, 16, 28, 0.45);
+  backdrop-filter: blur(14px);
+  color: #fff;
+}
+.auth-page--immersive .module-chip__title {
+  color: #fff;
+}
+.auth-page--immersive .module-chip__sub {
+  color: rgba(255, 255, 255, 0.55);
+}
+
 /* -------------------------------------------------------------- trust footer / ticker */
 
 .auth-trust {
@@ -3059,34 +3342,59 @@ body {
   }
 }
 
-/* Login — big blue logo centred on hero */
+/* Login — logo on hero: transparent glass glow (no white plate) */
 .brand-lockup--logo-only .brand-lockup__type { display: none; }
-.brand-lockup--on-hero {
-  padding: clamp(1rem, 3vw, 1.85rem) clamp(1.35rem, 5vw, 2.75rem);
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.12),
-    0 20px 60px rgba(0, 0, 0, 0.32);
+.brand-lockup--on-hero,
+.brand-lockup--on-hero-glass {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   border: none;
 }
-.brand-lockup--on-hero .brand-lockup__mark {
+.brand-lockup--on-hero-glass .brand-lockup__mark {
   mix-blend-mode: normal;
-  filter: none;
-  height: clamp(5.5rem, 26vw, 12rem) !important;
-  max-width: min(520px, 90vw);
+  height: clamp(4.5rem, 22vw, 10rem) !important;
+  max-width: min(480px, 88vw);
   width: auto;
   opacity: 1;
   display: block;
+  filter:
+    drop-shadow(0 0 28px rgba(20, 184, 166, 0.55))
+    drop-shadow(0 0 8px rgba(11, 106, 120, 0.8))
+    drop-shadow(0 12px 40px rgba(0, 0, 0, 0.65));
+}
+.brand-lockup--on-hero .brand-lockup__mark {
+  mix-blend-mode: normal;
+  filter:
+    drop-shadow(0 0 28px rgba(20, 184, 166, 0.55))
+    drop-shadow(0 12px 40px rgba(0, 0, 0, 0.65));
+  height: clamp(5rem, 24vw, 11rem) !important;
+  max-width: min(520px, 90vw);
+}
+.auth-hero-brand__tag {
+  font-size: clamp(0.62rem, 1.4vw, 0.78rem);
+  letter-spacing: 0.32em;
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 0 20px rgba(20, 184, 166, 0.5);
 }
 .auth-hero-brand {
-  padding-bottom: 8%;
+  padding-bottom: 0;
 }
-.auth-hero--with-logo .auth-hero__scrim--hub {
-  background:
-    radial-gradient(ellipse 55% 45% at 50% 44%, rgba(255, 255, 255, 0.08) 0%, transparent 58%),
-    radial-gradient(ellipse 85% 65% at 50% 50%, rgba(8, 16, 28, 0.2) 0%, rgba(8, 16, 28, 0.58) 100%),
-    linear-gradient(180deg, rgba(8, 16, 28, 0.08) 0%, rgba(8, 16, 28, 0.68) 100%);
+
+@media (max-width: 900px) {
+  .auth-immersive__stage {
+    grid-template-columns: 1fr;
+  }
+  .auth-glass--showcase {
+    order: 1;
+  }
+  .auth-glass--signin {
+    order: 2;
+  }
+  .auth-glass--showcase .brand-lockup {
+    display: none;
+  }
 }
 .auth-strip--minimal .auth-strip__inner--center { justify-content: center; gap: 1.5rem; }
 .auth-strip__brand--logo-only { display: flex; align-items: center; }
