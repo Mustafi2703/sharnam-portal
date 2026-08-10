@@ -237,6 +237,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   field: [
+    { to: "site-pilot", label: "Site check-in", blurb: "Photo · GPS · PDF markup · signature → SharePoint.", sheet: "SitePilot" },
     { to: "diary", label: "Day log", blurb: "Manpower and site notes." },
     { to: "photos", label: "Photos", blurb: "Site photo albums." },
     { to: "rfis", label: "Field RFIs", blurb: "Field questions and fills." },
@@ -338,8 +339,10 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "finance", label: "COP tracking", query: "tab=cop", blurb: "Certificate of payment." },
   ],
   reports: [
-    { to: "reports", label: "DPR pack", query: "kind=dpr", blurb: "Daily progress report pack.", sheet: "DPR-Sharnam PMC" },
-    { to: "reports", label: "WPR pack", query: "kind=wpr", blurb: "Weekly progress report pack.", sheet: "WPR File" },
+    { to: "dpr-maker", label: "DPR maker", blurb: "Fill SPDC INPUT → publish template XLSX per discipline.", sheet: "SPDC_DPR_*_DASHBOARD" },
+    { to: "wpr-maker", label: "WPR maker", blurb: "24-section weekly pack · photos · sign-off.", sheet: "WPR File" },
+    { to: "reports", label: "DPR dashboard", query: "kind=dpr", blurb: "Live KPIs + downloadable client pack.", sheet: "DPR-Sharnam PMC" },
+    { to: "reports", label: "WPR dashboard", query: "kind=wpr", blurb: "Weekly register + downloadable pack.", sheet: "WPR File" },
   ],
 };
 

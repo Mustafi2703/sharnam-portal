@@ -82,6 +82,32 @@ export default function ReportsPage() {
       {msg && <p className="text-sm text-brand bg-brand-soft/50 px-3 py-2 rounded-lg">{msg}</p>}
 
       {project && (
+        <Card className="border-brand/30 bg-brand-soft/20">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-sm">Report makers — fill & publish SPDC formats</h3>
+              <p className="text-xs text-steel-muted mt-1 max-w-xl">
+                Use <strong>DPR maker</strong> to fill the official SPDC dashboard INPUT sheet (all 7 disciplines).
+                Use <strong>WPR maker</strong> for the weekly pack with photos and sign-off.
+                This dashboard below shows live KPIs from field data.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Link to={`/projects/${id}/dpr-maker`}>
+                <Button type="button">Open DPR maker</Button>
+              </Link>
+              <Link to={`/projects/${id}/wpr-maker`}>
+                <Button type="button" variant="secondary">Open WPR maker</Button>
+              </Link>
+              <Link to={`/projects/${id}/site-pilot`}>
+                <Button type="button" variant="secondary">Site check-in</Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {project && (
         <Card className="!bg-procore-navy !text-white !border-0">
           <div className="flex flex-wrap justify-between gap-3">
             <div>

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
-import { SignaturePad } from "../components/SignaturePad";
+import { EvidencePanel } from "../components/EvidencePanel";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -194,9 +194,6 @@ export default function DprMakerPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
   const [recent, setRecent] = useState<any[]>([]);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [photoCaption, setPhotoCaption] = useState("");
-
   const load = useCallback(async () => {
     if (!projectId) return;
     setBusy(true);
@@ -352,36 +349,34 @@ export default function DprMakerPage() {
     setSnap({ ...snap, signatures: snap.signatures.filter((_, k) => k !== i) });
   }
 
-  async function uploadPhoto(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !snap) return;
-    setUploadingPhoto(true);
+  async function uploadPhotosBatch(files: File[], cap: string) {
+    if (!snap) return;
+    setBusy(true);
     setMsg("");
     try {
-      const fd = new FormData();
-      fd.append("photo", file);
-      fd.append("caption", photoCaption);
-      fd.append("logDate", logDate);
-      fd.append("discipline", discipline);
-      const out = await api<{ photo: Photo }>(`/api/dpr-maker/${projectId}/photo`, {
-        method: "POST",
-        token,
-        body: fd,
-      });
-      setSnap((prev) => (prev ? { ...prev, photos: [...prev.photos, out.photo] } : prev));
-      setPhotoCaption("");
-      setMsg(`Photo uploaded → ${out.photo.path}`);
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("photo", file);
+        fd.append("caption", cap);
+        fd.append("logDate", logDate);
+        fd.append("discipline", discipline);
+        const out = await api<{ photo: Photo }>(`/api/dpr-maker/${projectId}/photo`, {
+          method: "POST",
+          token,
+          body: fd,
+        });
+        setSnap((prev) => (prev ? { ...prev, photos: [...prev.photos, out.photo] } : prev));
+      }
+      setMsg(`Uploaded ${files.length} photo(s) to SharePoint`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Photo upload failed");
     } finally {
-      setUploadingPhoto(false);
-      e.target.value = "";
+      setBusy(false);
     }
   }
 
-  async function uploadAttachment(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !snap) return;
+  async function uploadAttachmentFile(file: File) {
+    if (!snap) return;
     setBusy(true);
     setMsg("");
     try {
@@ -401,7 +396,6 @@ export default function DprMakerPage() {
       setMsg(err instanceof Error ? err.message : "Attachment upload failed");
     } finally {
       setBusy(false);
-      e.target.value = "";
     }
   }
 
@@ -554,7 +548,7 @@ export default function DprMakerPage() {
 
   const h = snap.header;
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 maker-page pb-24">
       <PageHeader
         eyebrow="DPR Maker · SPDC template output"
         title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
@@ -1035,119 +1029,28 @@ export default function DprMakerPage() {
         />
       </div>
 
-      {/* Evidence & sign-off */}
-      <Card className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-steel-muted">Evidence & sign-off</h3>
-          <p className="text-xs text-steel-muted mt-0.5">
-            All uploads land in the project's SharePoint DPR folder for this discipline:
-            <span className="font-mono block mt-1">07.02_Daily_Site_Records/{discipline}/…</span>
-          </p>
-        </div>
-
-        {/* Photos */}
-        <section className="rounded-lg border border-line p-3 space-y-2">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Site photos ({snap.photos.length})</h4>
-            <span className="text-[11px] text-steel-muted">→ <span className="font-mono">/photos</span></span>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-2">
-            <Input placeholder="Caption (optional)" value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} className="sm:col-span-2" />
-            <label className="text-xs text-steel-muted">
-              {uploadingPhoto ? "Uploading…" : "Take / choose photo"}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={uploadPhoto}
-                className="block mt-1 text-xs"
-                disabled={uploadingPhoto}
-              />
-            </label>
-          </div>
-          {snap.photos.length > 0 && (
-            <ul className="mt-1 text-xs divide-y">
-              {snap.photos.map((p, i) => (
-                <li key={i} className="py-2 flex justify-between gap-2 items-center">
-                  <div className="min-w-0">
-                    <div className="font-mono truncate">{p.path}</div>
-                    {p.caption && <div className="text-steel-muted">{p.caption}</div>}
-                    {p.takenAt && <div className="text-steel-muted text-[10px]">{new Date(p.takenAt).toLocaleString("en-IN")}</div>}
-                  </div>
-                  <button className="text-danger text-sm" onClick={() => removePhoto(i)} title="Remove">✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* PDF attachments */}
-        <section className="rounded-lg border border-line p-3 space-y-2">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">PDF attachments ({snap.attachments.length})</h4>
-            <span className="text-[11px] text-steel-muted">RA bills · signed checklists · MoM · pour cards → <span className="font-mono">/attachments</span></span>
-          </div>
-          <label className="text-xs text-steel-muted">
-            Upload PDF (or any file)
-            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={uploadAttachment} className="block mt-1 text-xs" />
-          </label>
-          {snap.attachments.length > 0 && (
-            <ul className="mt-1 text-xs divide-y">
-              {snap.attachments.map((p, i) => (
-                <li key={i} className="py-2 flex justify-between gap-2 items-center">
-                  <div className="min-w-0">
-                    <div className="font-mono truncate">{p.path}</div>
-                    {p.caption && <div className="text-steel-muted">{p.caption}</div>}
-                    {p.takenAt && <div className="text-steel-muted text-[10px]">{new Date(p.takenAt).toLocaleString("en-IN")}</div>}
-                  </div>
-                  <button className="text-danger text-sm" onClick={() => removeAttachment(i)} title="Remove">✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Signatures */}
-        <section className="rounded-lg border border-line p-3 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Sign-off ({snap.signatures.length})</h4>
-            <span className="text-[11px] text-steel-muted">→ <span className="font-mono">/signatures</span></span>
-          </div>
-          <div className="grid md:grid-cols-3 gap-3">
-            <SignaturePad
-              label="Site engineer sign"
-              personName="Site engineer"
-              height={140}
-              onCapture={(f) => f && uploadSignatureFile(f, "site_engineer")}
-            />
-            <SignaturePad
-              label="PMC sign"
-              personName="PMC"
-              height={140}
-              onCapture={(f) => f && uploadSignatureFile(f, "pmc")}
-            />
-            <SignaturePad
-              label="Contractor sign"
-              personName="Contractor"
-              height={140}
-              onCapture={(f) => f && uploadSignatureFile(f, "contractor")}
-            />
-          </div>
-          {snap.signatures.length > 0 && (
-            <ul className="mt-1 text-xs divide-y">
-              {snap.signatures.map((p, i) => (
-                <li key={i} className="py-2 flex justify-between gap-2 items-center">
-                  <div className="min-w-0">
-                    <div className="font-mono truncate">{p.path}</div>
-                    <div className="text-steel-muted">{p.caption || "signer"}{p.takenAt ? ` · ${new Date(p.takenAt).toLocaleString("en-IN")}` : ""}</div>
-                  </div>
-                  <button className="text-danger text-sm" onClick={() => removeSignature(i)} title="Remove">✕</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      <Card>
+        <EvidencePanel
+          folderHint={`07.02_Daily_Site_Records/${discipline}/photos · attachments · signatures`}
+          photos={snap.photos}
+          attachments={snap.attachments}
+          signatures={snap.signatures}
+          busy={busy}
+          onUploadPhotos={uploadPhotosBatch}
+          onUploadAttachment={uploadAttachmentFile}
+          onUploadSignature={uploadSignatureFile}
+          onRemovePhoto={removePhoto}
+          onRemoveAttachment={removeAttachment}
+          onRemoveSignature={removeSignature}
+        />
       </Card>
+
+      <div className="maker-sticky-bar">
+        <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
+        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>XLSX</Button>
+        <Button type="button" onClick={save} disabled={busy}>Save</Button>
+        <Button type="button" variant="secondary" onClick={publish} disabled={busy}>Publish</Button>
+      </div>
 
       {recent.length > 0 && (
         <Card>

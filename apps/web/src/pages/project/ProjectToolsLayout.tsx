@@ -54,7 +54,8 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
   if (["checklist", "quality-inspections", "inspections"].includes(tool)) return "quality";
   if (tool === "safety") return "safety";
   if (tool === "progress") return "progress";
-  if (["diary", "photos"].includes(tool)) return "field";
+  if (["diary", "photos", "site-pilot"].includes(tool)) return "field";
+  if (["dpr-maker", "wpr-maker"].includes(tool)) return "reports";
   if (["comms", "email"].includes(tool)) return "comms";
   if (tool === "cost") return "cost";
   if (tool === "finance") return "finance";

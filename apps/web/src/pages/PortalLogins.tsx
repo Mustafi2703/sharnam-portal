@@ -922,11 +922,25 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!cfg) return <Navigate to="/login" replace />;
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
+  const hero = PORTAL_IMAGE[String(portalKey)] || PORTAL_IMAGE.office;
+
   return (
     <div className="auth-page" data-portal={portalKey}>
       <TopStrip />
       <main className="auth-page__body">
-        <DeskStage portalKey={String(portalKey)} tone={cfg.tone} icon={cfg.icon} />
+        <section
+          className="auth-hero"
+          style={{ ["--hero-tone" as string]: cfg.tone } as CSSProperties}
+        >
+          <img className="auth-hero__img" src={hero.src} alt="" loading="eager" />
+          <div className="auth-hero__scrim" />
+          <div className="auth-hero__content">
+            <span className="auth-hero__hi" lang="hi">शरणम्</span>
+            <p className="auth-hero__eyebrow">{portalDisplayName(cfg.key, cfg.shortLabel)}</p>
+            <p className="auth-hero__caption">{hero.caption}</p>
+            <p className="auth-hero__tag">{cfg.headline}</p>
+          </div>
+        </section>
         <section className="auth-page__panel">
           <div className="auth-page__panel-inner">
             <div className="auth-page__crumb">
@@ -1010,8 +1024,12 @@ export function LoginHubPage() {
   return (
     <div className="auth-page auth-page--hub">
       <TopStrip />
+      <section className="auth-hub__hero" aria-hidden>
+        <img className="auth-hub__hero-img" src="/heroes/sky-01-crane.jpg?v=2" alt="" />
+        <div className="auth-hub__hero-scrim" />
+      </section>
       <main className="auth-hub">
-        <section className="auth-hub__masthead">
+        <section className="auth-hub__masthead auth-hub__masthead--overlay">
           <BrandLockup size="hero" />
           <p className="auth-hub__tag">
             Project Management Consultants · ISO-aligned · DMS · PMC portal
