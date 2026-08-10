@@ -1,186 +1,262 @@
 /**
- * CRM Comparative Statement — R2 pattern (multi-vendor BOQ rate compare).
- * Office confidential; vendors upload BOQs into CRM bid slots only.
+ * CRM Comparative Statement — SPDC R2 workbook pattern.
+ * summary + master BOQ compare + per-discipline vendor BOQ uploads.
  */
 import * as XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 import {
   type SheetCell,
-  colLetter,
   evaluateAllRows,
   sheetCellsToAoa,
   applyFormulasToWorksheet,
 } from "@sharnam/shared";
 
+/** Discipline BOQ sheets in Comparative Statement R2 (vendor uploads one file per discipline). */
+export const COMPARATIVE_DISCIPLINES = [
+  { key: "CCV", label: "Civil & Structural (CCV)", sheetName: "BOQ-CCV" },
+  { key: "ELE_LAB", label: "Electrical Lab", sheetName: "BOQ ELE. LAB" },
+  { key: "ADMIN", label: "Admin Building", sheetName: "BOQ-ADMIN" },
+  { key: "SECURITY", label: "Security", sheetName: "BOQ -SECURITY" },
+  { key: "COOLING_TOWER", label: "Cooling Tower", sheetName: "BOQ -COOLING TOWER" },
+  { key: "WEIGH_BRIDGE", label: "Weigh Bridge", sheetName: "BOQ -WEIGH BRIDGE" },
+  { key: "UG_TANK", label: "U.G Tank + Pump Room", sheetName: "BOQ -U.G TANK WITH PUMP ROOM" },
+  { key: "ENTRANCE_GATE", label: "Entrance Gate", sheetName: "BOQ -ENTRANCE GATE" },
+] as const;
+
+export type ComparativeDisciplineKey = (typeof COMPARATIVE_DISCIPLINES)[number]["key"];
+
 export type ComparativeSummary = {
   vendorLabels: string[];
-  sectionTotals: { section: string; totals: Record<string, number> }[];
+  sectionTotals: { section: string; title: string; totals: Record<string, number> }[];
   grandTotals: Record<string, number>;
   lowestVendor?: string;
+  l1VsOthers?: Record<string, number>;
 };
 
-export function buildComparativeHeaders(vendorLabels: string[]): string[] {
-  const headers = ["Sr", "Section", "Item Code", "Description", "Qty", "Unit"];
-  for (const v of vendorLabels) {
-    headers.push(`${v} Rate`, `${v} Amount`);
-  }
-  headers.push("Sharnam Estimate", "Lowest Vendor", "Remarks");
-  return headers;
-}
-
-type SampleItem = {
-  section: string;
-  code: string;
-  description: string;
-  qty: number;
-  unit: string;
-  sharnamEstimate?: number;
+export type ImportedSheet = {
+  headers: string[];
+  rows: SheetCell[][];
+  sheetName: string;
 };
 
-const SAMPLE_ITEMS: SampleItem[] = [
-  { section: "SECTION A — EARTH WORK", code: "A-01", description: "Excavation in ordinary soil", qty: 1200, unit: "CUM" },
-  { section: "SECTION A — EARTH WORK", code: "A-02", description: "Filling with soling material", qty: 800, unit: "CUM" },
-  { section: "SECTION A — EARTH WORK", code: "A-03", description: "Compaction of soling", qty: 800, unit: "CUM" },
-  { section: "SECTION B — RCC WORK", code: "B-01", description: "RCC M25 in foundation", qty: 450, unit: "CUM" },
-  { section: "SECTION B — RCC WORK", code: "B-02", description: "RCC M30 in columns & beams", qty: 320, unit: "CUM" },
-  { section: "SECTION C — MASONRY", code: "C-01", description: "Brick masonry in CM 1:6", qty: 2400, unit: "SQ.M" },
-  { section: "SECTION C — MASONRY", code: "C-02", description: "AAC block masonry", qty: 1800, unit: "SQ.M" },
-];
-
-export function buildComparativeRows(vendorLabels: string[]): SheetCell[][] {
-  const rows: SheetCell[][] = [];
-  let sr = 1;
-  let excelRow = 2; // header is row 1
-
-  const rateColStart = 6; // 0-based: after Qty, Unit
-  const amountCols: number[] = [];
-  for (let v = 0; v < vendorLabels.length; v++) {
-    amountCols.push(rateColStart + v * 2 + 1);
-  }
-  const sharnamCol = rateColStart + vendorLabels.length * 2;
-
-  for (const item of SAMPLE_ITEMS) {
-    const row: SheetCell[] = [
-      { raw: String(sr++) },
-      { raw: item.section },
-      { raw: item.code },
-      { raw: item.description },
-      { raw: String(item.qty) },
-      { raw: item.unit },
-    ];
-    for (let v = 0; v < vendorLabels.length; v++) {
-      const rateCol = rateColStart + v * 2;
-      const amtCol = rateCol + 1;
-      row.push({ raw: "" }); // vendor rate — filled by vendor BOQ or office
-      row.push({
-        raw: `=${colLetter(4)}${excelRow}*${colLetter(rateCol)}${excelRow}`,
-      });
-    }
-    row.push({ raw: item.sharnamEstimate != null ? String(item.sharnamEstimate) : "" });
-    row.push({ raw: "" });
-    row.push({ raw: "" });
-    rows.push(row);
-    excelRow++;
-  }
-
-  // Section summary placeholder rows
-  const summaryRow: SheetCell[] = [
-    { raw: "" },
-    { raw: "GRAND TOTAL" },
-    { raw: "" },
-    { raw: "Comparative total (all sections)" },
-    { raw: "" },
-    { raw: "" },
+export function resolveR2TemplatePath(): string {
+  const candidates = [
+    path.join(process.cwd(), "Sharnam_modules_docs", "Comparative Statement - R2.xlsx"),
+    path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"),
   ];
-  for (let v = 0; v < vendorLabels.length; v++) {
-    const amtCol = amountCols[v];
-    const col = colLetter(amtCol);
-    const firstData = 2;
-    const lastData = excelRow - 1;
-    summaryRow.push({ raw: "" });
-    summaryRow.push({
-      raw: `=SUM(${col}${firstData}:${col}${lastData})`,
-    });
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
   }
-  summaryRow.push({ raw: "" });
-  summaryRow.push({ raw: "" });
-  summaryRow.push({ raw: "" });
-  rows.push(summaryRow);
-
-  return evaluateAllRows(rows);
+  throw new Error("Comparative Statement R2 template not found");
 }
 
-export function buildComparativeSheetData(vendorLabels: string[]) {
-  const headers = buildComparativeHeaders(vendorLabels);
-  const rows = buildComparativeRows(vendorLabels);
-  return { headers, rows };
+function parseWorksheet(ws: XLSX.WorkSheet, sheetName: string): ImportedSheet {
+  const ref = ws["!ref"];
+  if (!ref) return { headers: [], rows: [], sheetName };
+
+  const range = XLSX.utils.decode_range(ref);
+  const headers: string[] = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
+    const cell = ws[addr] as XLSX.CellObject | undefined;
+    headers.push(cell?.v != null && String(cell.v).trim() ? String(cell.v) : `Column ${c - range.s.c + 1}`);
+  }
+
+  const rows: SheetCell[][] = [];
+  for (let r = range.s.r + 1; r <= range.e.r; r++) {
+    const row: SheetCell[] = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr] as XLSX.CellObject | undefined;
+      if (cell?.f) {
+        const formula = cell.f.startsWith("=") ? cell.f : `=${cell.f}`;
+        const cv = cell.v;
+        const computed =
+          typeof cv === "number" || typeof cv === "string" ? cv : cv != null ? String(cv) : null;
+        row.push({ raw: formula, computed });
+      } else if (cell?.v != null) {
+        row.push({ raw: String(cell.v) });
+      } else {
+        row.push({ raw: "" });
+      }
+    }
+    rows.push(row);
+  }
+  return { headers, rows: evaluateAllRows(rows), sheetName };
 }
 
-export function comparativeToWorkbook(headers: string[], rows: SheetCell[][]): XLSX.WorkBook {
-  const evaluated = evaluateAllRows(rows);
-  const { data, formulas } = sheetCellsToAoa(headers, evaluated);
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  applyFormulasToWorksheet(ws as Record<string, unknown>, formulas);
-  ws["!cols"] = headers.map((h) => ({ wch: Math.min(42, Math.max(10, h.length + 2)) }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Comparative R2");
-  return wb;
+/** Master BOQ sheet uses two header rows (vendor + RATE/GRAND TOTAL). */
+function parseMasterBoqSheet(ws: XLSX.WorkSheet): ImportedSheet {
+  const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
+  let headerIdx = aoa.findIndex((r) => {
+    const line = r.map((c) => String(c).toLowerCase()).join(" ");
+    return line.includes("sr") && line.includes("description");
+  });
+  if (headerIdx < 0) headerIdx = 0;
+
+  const rowA = aoa[headerIdx] || [];
+  const rowB = aoa[headerIdx + 1] || [];
+  const maxCols = Math.max(rowA.length, rowB.length, ...aoa.slice(headerIdx + 2, headerIdx + 12).map((r) => r.length));
+  const headers: string[] = [];
+  for (let i = 0; i < maxCols; i++) {
+    const a = String(rowA[i] ?? "").trim();
+    const b = String(rowB[i] ?? "").trim();
+    if (a && b && b !== a) headers.push(`${a} — ${b}`);
+    else headers.push(a || b || `Column ${i + 1}`);
+  }
+
+  const rows: SheetCell[][] = [];
+  for (let ri = headerIdx + 2; ri < aoa.length; ri++) {
+    const src = aoa[ri] || [];
+    if (!src.some((c) => String(c).trim())) continue;
+    const row: SheetCell[] = headers.map((_, ci) => ({ raw: src[ci] != null ? String(src[ci]) : "" }));
+    rows.push(row);
+  }
+  return { headers, rows: evaluateAllRows(rows), sheetName: "BOQ" };
 }
 
-export function writeComparativeTemplateFile(
-  outPath: string,
-  vendorLabels = ["M/s Bhavna Infra", "TCC Projects PVT. LTD.", "Pearl Electricals"]
-) {
-  const { headers, rows } = buildComparativeSheetData(vendorLabels);
-  const wb = comparativeToWorkbook(headers, rows);
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  XLSX.writeFile(wb, outPath);
+function normalizeSheetKey(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function parseComparativeSummary(headers: string[], rows: SheetCell[][]): ComparativeSummary {
+function findWorksheet(wb: XLSX.WorkBook, target: string): XLSX.WorkSheet | null {
+  const key = normalizeSheetKey(target);
+  const hit = wb.SheetNames.find((n) => normalizeSheetKey(n) === key || normalizeSheetKey(n).includes(key));
+  return hit ? wb.Sheets[hit] : null;
+}
+
+export function importR2WorkbookFromBuffer(buffer: Buffer, vendorLabels?: string[]) {
+  const wb = XLSX.read(buffer, { type: "buffer", cellFormula: true });
+  const summaryWs = findWorksheet(wb, "summary") || wb.Sheets[wb.SheetNames[0]];
+  const masterWs = findWorksheet(wb, "BOQ") || wb.Sheets[wb.SheetNames[1]];
+
+  const summary = parseWorksheet(summaryWs, "summary");
+  const masterBoq = parseMasterBoqSheet(masterWs);
+
+  if (vendorLabels?.length) {
+    applyVendorLabelsToMasterBoq(masterBoq, vendorLabels);
+    applyVendorLabelsToSummary(summary, vendorLabels);
+  }
+
+  const disciplineTemplates: Record<string, ImportedSheet> = {};
+  for (const d of COMPARATIVE_DISCIPLINES) {
+    const ws = findWorksheet(wb, d.sheetName);
+    if (ws) disciplineTemplates[d.key] = parseWorksheet(ws, d.sheetName);
+  }
+
+  return { summary, masterBoq, disciplineTemplates, sheetNames: wb.SheetNames };
+}
+
+export function importR2WorkbookFromFile(filePath?: string, vendorLabels?: string[]) {
+  const p = filePath || resolveR2TemplatePath();
+  const buffer = fs.readFileSync(p);
+  return importR2WorkbookFromBuffer(buffer, vendorLabels);
+}
+
+function applyVendorLabelsToMasterBoq(sheet: ImportedSheet, vendorLabels: string[]) {
+  for (let i = 0; i < vendorLabels.length; i++) {
+    const rateIdx = 4 + i * 2;
+    const amtIdx = rateIdx + 1;
+    if (rateIdx < sheet.headers.length) {
+      sheet.headers[rateIdx] = `${vendorLabels[i]} — RATE`;
+      if (amtIdx < sheet.headers.length) sheet.headers[amtIdx] = `${vendorLabels[i]} — GRAND TOTAL`;
+    }
+  }
+}
+
+function applyVendorLabelsToSummary(sheet: ImportedSheet, vendorLabels: string[]) {
+  for (const row of sheet.rows) {
+    for (let i = 0; i < vendorLabels.length; i++) {
+      const col = 3 + i;
+      if (col < row.length && String(row[0]?.raw ?? "").trim() === "3") {
+        /* header row handled separately */
+      }
+    }
+  }
+  const headerRow = sheet.rows.find((r) =>
+    String(r[0]?.raw ?? "")
+      .toUpperCase()
+      .includes("SR")
+  );
+  if (headerRow) {
+    for (let i = 0; i < vendorLabels.length; i++) {
+      const col = 3 + i;
+      if (col < headerRow.length) headerRow[col] = { raw: vendorLabels[i] };
+    }
+  }
+}
+
+export function pickDisciplineWorksheet(wb: XLSX.WorkBook, disciplineKey: string): XLSX.WorkSheet | null {
+  const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === disciplineKey);
+  if (!disc) return wb.Sheets[wb.SheetNames[0]] ?? null;
+  return findWorksheet(wb, disc.sheetName) || wb.Sheets[wb.SheetNames[0]] || null;
+}
+
+export function parseDisciplineBoqSheet(ws: XLSX.WorkSheet, disciplineKey: string): ImportedSheet {
+  const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === disciplineKey);
+  const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
+  let headerIdx = aoa.findIndex((r) => {
+    const line = r.map((c) => String(c).toLowerCase()).join(" ");
+    return line.includes("sr") && line.includes("description");
+  });
+  if (headerIdx < 0) headerIdx = 4;
+
+  const headers = (aoa[headerIdx] || []).map((c, i) => (String(c).trim() ? String(c) : `Column ${i + 1}`));
+  const rows: SheetCell[][] = [];
+  for (let ri = headerIdx + 1; ri < aoa.length; ri++) {
+    const src = aoa[ri] || [];
+    if (!src.some((c) => String(c).trim())) continue;
+    rows.push(headers.map((_, ci) => ({ raw: src[ci] != null ? String(src[ci]) : "" })));
+  }
+  return {
+    headers,
+    rows: evaluateAllRows(rows),
+    sheetName: disc?.sheetName || disciplineKey,
+  };
+}
+
+/** Parse R2 summary tab — section totals + grand total per vendor column. */
+export function parseR2SummarySheet(headers: string[], rows: SheetCell[][]): ComparativeSummary {
   const vendorLabels: string[] = [];
-  for (let i = 6; i < headers.length; i += 2) {
-    const h = headers[i] || "";
-    if (h.endsWith(" Rate")) vendorLabels.push(h.replace(/ Rate$/, ""));
-    else break;
+  const headerRow = rows.find((r) => {
+    const c0 = String(r[0]?.raw ?? "").toUpperCase();
+    return c0.includes("SR") && String(r[1]?.raw ?? "").toUpperCase().includes("SECTION");
+  });
+  if (headerRow) {
+    for (let c = 3; c < headerRow.length; c++) {
+      const v = String(headerRow[c]?.raw ?? "").trim();
+      if (v && !v.toUpperCase().includes("GRAND TOTAL")) vendorLabels.push(v);
+    }
   }
 
   const sectionTotals: ComparativeSummary["sectionTotals"] = [];
   const grandTotals: Record<string, number> = {};
   for (const v of vendorLabels) grandTotals[v] = 0;
 
-  let currentSection = "";
-  const sectionAcc: Record<string, number> = {};
-
   for (const row of rows) {
-    const section = String(row[1]?.computed ?? row[1]?.raw ?? "").trim();
-    const desc = String(row[3]?.computed ?? row[3]?.raw ?? "").trim().toUpperCase();
-    if (desc.includes("GRAND TOTAL")) {
-      for (let v = 0; v < vendorLabels.length; v++) {
-        const amtIdx = 6 + v * 2 + 1;
-        const val = Number(row[amtIdx]?.computed ?? row[amtIdx]?.raw ?? 0);
-        if (Number.isFinite(val)) grandTotals[vendorLabels[v]] = val;
+    const sr = String(row[0]?.raw ?? "").trim();
+    const section = String(row[1]?.raw ?? "").trim();
+    const title = String(row[2]?.raw ?? "").trim();
+    const descLine = `${section} ${title}`.toUpperCase();
+
+    if (descLine.includes("TOTAL AMOUNT OF TENDER")) {
+      for (let i = 0; i < vendorLabels.length; i++) {
+        const val = Number(row[3 + i]?.computed ?? row[3 + i]?.raw ?? 0);
+        if (Number.isFinite(val)) grandTotals[vendorLabels[i]] = val;
       }
-      break;
+      continue;
     }
-    if (section && section !== currentSection && !section.startsWith("GRAND")) {
-      if (currentSection && Object.keys(sectionAcc).length) {
-        sectionTotals.push({ section: currentSection, totals: { ...sectionAcc } });
-      }
-      currentSection = section;
-      for (const v of vendorLabels) sectionAcc[v] = 0;
+
+    if (!section || !sr || Number.isNaN(Number(sr))) continue;
+    if (!section.toUpperCase().includes("SECTION")) continue;
+
+    const totals: Record<string, number> = {};
+    for (let i = 0; i < vendorLabels.length; i++) {
+      const val = Number(row[3 + i]?.computed ?? row[3 + i]?.raw ?? 0);
+      totals[vendorLabels[i]] = Number.isFinite(val) ? val : 0;
     }
-    const code = String(row[2]?.raw ?? "").trim();
-    if (!code || code.startsWith("=")) continue;
-    for (let v = 0; v < vendorLabels.length; v++) {
-      const amtIdx = 6 + v * 2 + 1;
-      const val = Number(row[amtIdx]?.computed ?? row[amtIdx]?.raw ?? 0);
-      if (Number.isFinite(val)) {
-        sectionAcc[vendorLabels[v]] = (sectionAcc[vendorLabels[v]] || 0) + val;
-        grandTotals[vendorLabels[v]] = (grandTotals[vendorLabels[v]] || 0) + val;
-      }
-    }
+    sectionTotals.push({ section, title, totals });
   }
 
   let lowestVendor: string | undefined;
@@ -192,5 +268,43 @@ export function parseComparativeSummary(headers: string[], rows: SheetCell[][]):
     }
   }
 
-  return { vendorLabels, sectionTotals, grandTotals, lowestVendor };
+  const l1VsOthers: Record<string, number> = {};
+  if (lowestVendor && lowest > 0) {
+    for (const [v, t] of Object.entries(grandTotals)) {
+      if (v !== lowestVendor && t > 0) l1VsOthers[v] = (t - lowest) / lowest;
+    }
+  }
+
+  return { vendorLabels, sectionTotals, grandTotals, lowestVendor, l1VsOthers };
+}
+
+export function writeComparativeTemplateFile(outPath: string) {
+  const src = resolveR2TemplatePath();
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.copyFileSync(src, outPath);
+}
+
+export function comparativeToWorkbook(headers: string[], rows: SheetCell[][], sheetName = "Sheet1"): XLSX.WorkBook {
+  const evaluated = evaluateAllRows(rows);
+  const { data, formulas } = sheetCellsToAoa(headers, evaluated);
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  applyFormulasToWorksheet(ws as Record<string, unknown>, formulas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+  return wb;
+}
+
+/** @deprecated use parseR2SummarySheet */
+export function parseComparativeSummary(headers: string[], rows: SheetCell[][]): ComparativeSummary {
+  return parseR2SummarySheet(headers, rows);
+}
+
+export function buildVendorDisciplineSlots(vendorNames: string[]) {
+  const slots: { vendorLabel: string; discipline: string }[] = [];
+  for (const vendorLabel of vendorNames) {
+    for (const d of COMPARATIVE_DISCIPLINES) {
+      slots.push({ vendorLabel, discipline: d.key });
+    }
+  }
+  return slots;
 }

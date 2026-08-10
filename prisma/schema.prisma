@@ -1202,6 +1202,7 @@ model CrmBidPackage {
   dueDate            DateTime?
   notes              String?
   comparativeSheetId String?
+  summarySheetId     String?
   awardedVendorId    String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -1210,12 +1211,13 @@ model CrmBidPackage {
   vendorBoqs CrmVendorBoq[]
 }
 
-/** Vendor BOQ upload slot within a CRM bid package. */
+/** Vendor BOQ upload — one slot per vendor × discipline (R2 pattern). */
 model CrmVendorBoq {
   id           String   @id @default(cuid())
   bidPackageId String
   vendorId     String?
   vendorLabel  String
+  discipline   String
   fileName     String?
   storagePath  String?
   sheetId      String?
@@ -1225,7 +1227,7 @@ model CrmVendorBoq {
   bidPackage CrmBidPackage @relation(fields: [bidPackageId], references: [id], onDelete: Cascade)
   vendor     Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 
-  @@unique([bidPackageId, vendorLabel])
+  @@unique([bidPackageId, vendorLabel, discipline])
 }
 
 model ProjectVendor {

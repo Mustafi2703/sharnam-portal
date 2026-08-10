@@ -1,29 +1,36 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
 
+type Discipline = { key: string; label: string; sheetName: string };
+
+type VendorBoqSlot = {
+  id: string;
+  vendorLabel: string;
+  discipline: string;
+  fileName?: string | null;
+  uploadedAt?: string | null;
+  sheetId?: string | null;
+};
+
 type BidPackage = {
   id: string;
   title: string;
   status: string;
   revisionLabel: string;
-  vendorNames?: string[];
-  vendorNamesJson?: string;
   comparativeSheetId?: string | null;
-  lead?: { id: string; title: string; stage?: string } | null;
-  vendorBoqs?: {
-    id: string;
-    vendorLabel: string;
-    fileName?: string | null;
-    uploadedAt?: string | null;
-    sheetId?: string | null;
-    vendor?: { id: string; name: string; email?: string | null } | null;
-  }[];
+  summarySheetId?: string | null;
+  vendorNames?: string[];
+  disciplines?: Discipline[];
+  vendorBoqs?: VendorBoqSlot[];
+  uploadProgress?: { done: number; total: number };
+  lead?: { id: string; title: string } | null;
   summary?: {
     vendorLabels: string[];
+    sectionTotals: { section: string; title: string; totals: Record<string, number> }[];
     grandTotals: Record<string, number>;
     lowestVendor?: string;
   } | null;
@@ -33,18 +40,23 @@ function formatINR(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 }
 
+function disciplineLabel(disciplines: Discipline[], key: string) {
+  return disciplines.find((d) => d.key === key)?.label || key;
+}
+
 export default function CrmBidComparePage() {
   const { token, user } = useAuth();
   const canManage = user?.role === "admin" || user?.role === "office";
 
   const [packages, setPackages] = useState<BidPackage[]>([]);
+  const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BidPackage | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [uploadSlot, setUploadSlot] = useState<string | null>(null);
+  const [uploadSlot, setUploadSlot] = useState<VendorBoqSlot | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   const [form, setForm] = useState({
@@ -56,12 +68,14 @@ export default function CrmBidComparePage() {
 
   const load = useCallback(async () => {
     if (!canManage) return;
-    const [pkgs, l, v] = await Promise.all([
+    const [pkgs, disc, l, v] = await Promise.all([
       api<BidPackage[]>("/api/crm/bid-packages", { token }).catch(() => []),
+      api<Discipline[]>("/api/crm/disciplines", { token }).catch(() => []),
       api<any[]>("/api/crm/leads", { token }).catch(() => []),
       api<any[]>("/api/vendors", { token }).catch(() => []),
     ]);
     setPackages(pkgs);
+    setDisciplines(disc);
     setLeads(l);
     setVendors(v.filter((x) => x.partyType === "Contractor" || x.partyType === "Vendor"));
   }, [token, canManage]);
@@ -70,6 +84,7 @@ export default function CrmBidComparePage() {
     async (id: string) => {
       const row = await api<BidPackage>(`/api/crm/bid-packages/${id}`, { token });
       setDetail(row);
+      if (row.disciplines?.length) setDisciplines(row.disciplines);
     },
     [token]
   );
@@ -82,6 +97,18 @@ export default function CrmBidComparePage() {
     if (selectedId) void loadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, loadDetail]);
+
+  const vendorMatrix = useMemo(() => {
+    if (!detail?.vendorBoqs?.length) return [];
+    const vendorNames = [...new Set(detail.vendorBoqs.map((b) => b.vendorLabel))];
+    return vendorNames.map((vendorLabel) => ({
+      vendorLabel,
+      slots: (detail.disciplines || disciplines).map((d) => {
+        const slot = detail.vendorBoqs!.find((b) => b.vendorLabel === vendorLabel && b.discipline === d.key);
+        return { discipline: d, slot };
+      }),
+    }));
+  }, [detail, disciplines]);
 
   async function createPackage(e: FormEvent) {
     e.preventDefault();
@@ -105,7 +132,7 @@ export default function CrmBidComparePage() {
           vendorNames,
         }),
       });
-      setMsg(`Bid package created — comparative sheet ready.`);
+      setMsg(`Bid package created — ${row.uploadProgress?.total || disciplines.length * vendorNames.length} discipline upload slots ready.`);
       setForm({ title: "", leadId: "", revisionLabel: "R2", vendorIds: [] });
       await load();
       setSelectedId(row.id);
@@ -124,12 +151,12 @@ export default function CrmBidComparePage() {
     try {
       const fd = new FormData();
       fd.append("file", uploadFile);
-      await api(`/api/crm/bid-packages/${selectedId}/vendor-boq/${uploadSlot}`, {
+      await api(`/api/crm/bid-packages/${selectedId}/vendor-boq/${uploadSlot.id}`, {
         method: "POST",
         token,
         body: fd,
       });
-      setMsg("Vendor BOQ uploaded.");
+      setMsg(`BOQ uploaded — ${uploadSlot.vendorLabel} / ${disciplineLabel(disciplines, uploadSlot.discipline)}`);
       setUploadFile(null);
       setUploadSlot(null);
       await loadDetail(selectedId);
@@ -144,7 +171,7 @@ export default function CrmBidComparePage() {
   if (!canManage) {
     return (
       <div className="space-y-4">
-        <PageHeader eyebrow="CRM" title="Comparative analysis" subtitle="Office confidential — bid comparison and vendor BOQs." />
+        <PageHeader eyebrow="CRM" title="Comparative analysis" subtitle="Office confidential." />
         <Card>
           <p className="text-sm text-steel-muted">Comparative bid analysis is available to Office / Admin only.</p>
           <Link to="/crm" className="text-sm text-brand font-semibold mt-2 inline-block">
@@ -159,15 +186,15 @@ export default function CrmBidComparePage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="CRM · Confidential"
-        title="Comparative analysis"
-        subtitle="Vendors upload BOQs here; Sharnam team builds the Comparative Statement R2 — section totals and grand total per vendor."
+        title="Comparative analysis (R2)"
+        subtitle="Matches Comparative Statement R2 — summary + master BOQ compare. Each vendor uploads discipline-wise BOQs (CCV, Admin, Security, etc.)."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/crm">
               <Button variant="secondary">← CRM</Button>
             </Link>
             <a href={`${apiBase()}/api/crm/template.xlsx?token=${encodeURIComponent(token || "")}`} download>
-              <Button variant="secondary">Download R2 template</Button>
+              <Button variant="secondary">Download R2 workbook</Button>
             </a>
           </div>
         }
@@ -175,14 +202,14 @@ export default function CrmBidComparePage() {
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-4">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
         <div className="space-y-4">
           <Card>
             <h3 className="font-semibold text-sm mb-3">New bid package</h3>
             <form className="space-y-3" onSubmit={createPackage}>
               <Input
                 required
-                placeholder="Package title (e.g. Civil works — Phase 1)"
+                placeholder="Package title (e.g. Civil & structural works)"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
@@ -217,13 +244,15 @@ export default function CrmBidComparePage() {
                         }}
                       />
                       {v.name}
-                      <span className="text-[10px] text-steel-muted">({v.trade || v.partyType})</span>
                     </label>
                   ))}
                 </div>
               </div>
+              <p className="text-[11px] text-steel-muted">
+                Creates {disciplines.length || 8} discipline slots per vendor ({disciplines.map((d) => d.key).join(", ") || "CCV, ADMIN, …"}).
+              </p>
               <Button type="submit" disabled={busy}>
-                {busy ? "Creating…" : "Create + comparative sheet"}
+                {busy ? "Creating…" : "Create from R2 template"}
               </Button>
             </form>
           </Card>
@@ -241,10 +270,9 @@ export default function CrmBidComparePage() {
                     <div className="font-medium text-sm">{p.title}</div>
                     <div className="text-xs text-steel-muted mt-0.5">
                       {p.revisionLabel} · {p.status}
-                      {p.lead ? ` · ${p.lead.title}` : ""}
                     </div>
                     <div className="text-[10px] text-steel-muted mt-1">
-                      {(p.vendorBoqs || []).filter((b) => b.fileName).length} / {(p.vendorBoqs || []).length} BOQs uploaded
+                      BOQs {p.uploadProgress?.done ?? 0} / {p.uploadProgress?.total ?? 0}
                     </div>
                   </button>
                 </li>
@@ -262,19 +290,31 @@ export default function CrmBidComparePage() {
                   <div>
                     <h3 className="font-semibold">{detail.title}</h3>
                     <p className="text-xs text-steel-muted mt-0.5">
-                      Comparative Statement {detail.revisionLabel} · <Badge>{detail.status}</Badge>
+                      {detail.revisionLabel} · <Badge>{detail.status}</Badge>
+                      {detail.uploadProgress && (
+                        <span className="ml-2">
+                          {detail.uploadProgress.done}/{detail.uploadProgress.total} discipline BOQs uploaded
+                        </span>
+                      )}
                     </p>
                   </div>
-                  {detail.comparativeSheetId && (
-                    <Link to={`/custom-sheets/${detail.comparativeSheetId}`}>
-                      <Button>Open comparative sheet →</Button>
-                    </Link>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {detail.summarySheetId && (
+                      <Link to={`/custom-sheets/${detail.summarySheetId}`}>
+                        <Button variant="secondary">Summary sheet</Button>
+                      </Link>
+                    )}
+                    {detail.comparativeSheetId && (
+                      <Link to={`/custom-sheets/${detail.comparativeSheetId}`}>
+                        <Button>Master BOQ compare</Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
 
-                {detail.summary && (
+                {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
                   <div className="rounded-xl border border-line bg-sand/30 p-3 mb-4">
-                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Grand total comparison</p>
+                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Grand total (from summary tab)</p>
                     <div className="grid sm:grid-cols-3 gap-2">
                       {detail.summary.vendorLabels.map((v) => (
                         <div key={v} className="rounded-lg bg-paper border border-line px-3 py-2">
@@ -283,7 +323,7 @@ export default function CrmBidComparePage() {
                             {formatINR(detail.summary!.grandTotals[v] || 0)}
                           </div>
                           {detail.summary!.lowestVendor === v && (
-                            <span className="text-[10px] text-ok font-semibold">Lowest L1</span>
+                            <span className="text-[10px] text-ok font-semibold">L1</span>
                           )}
                         </div>
                       ))}
@@ -291,41 +331,59 @@ export default function CrmBidComparePage() {
                   </div>
                 )}
 
-                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor BOQ uploads</h4>
-                <ul className="space-y-3">
-                  {(detail.vendorBoqs || []).map((slot) => (
-                    <li key={slot.id} className="flex flex-wrap items-center justify-between gap-2 border border-line rounded-xl px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm">{slot.vendorLabel}</div>
-                        {slot.fileName ? (
-                          <div className="text-xs text-steel-muted">
-                            {slot.fileName}
-                            {slot.uploadedAt ? ` · ${new Date(slot.uploadedAt).toLocaleString("en-IN")}` : ""}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-warn">BOQ not uploaded yet</div>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        {slot.sheetId && (
-                          <Link to={`/custom-sheets/${slot.sheetId}`}>
-                            <Button variant="secondary" className="!text-xs !py-1">
-                              View BOQ
-                            </Button>
-                          </Link>
-                        )}
-                        <Button variant="secondary" className="!text-xs !py-1" onClick={() => setUploadSlot(slot.id)}>
-                          {slot.fileName ? "Replace BOQ" : "Upload BOQ"}
-                        </Button>
-                      </div>
-                    </li>
+                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor × discipline BOQ uploads</h4>
+                <div className="space-y-4">
+                  {vendorMatrix.map(({ vendorLabel, slots }) => (
+                    <div key={vendorLabel} className="border border-line rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-sand/50 font-semibold text-sm">{vendorLabel}</div>
+                      <ul className="divide-y">
+                        {slots.map(({ discipline, slot }) => (
+                          <li key={discipline.key} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <div className="min-w-0">
+                              <div className="font-medium">{discipline.label}</div>
+                              <div className="text-[10px] text-steel-muted font-mono">{discipline.sheetName}</div>
+                              {slot?.fileName ? (
+                                <div className="text-xs text-steel-muted truncate">{slot.fileName}</div>
+                              ) : (
+                                <div className="text-xs text-warn">Not uploaded</div>
+                              )}
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              {slot?.sheetId && (
+                                <Link to={`/custom-sheets/${slot.sheetId}`}>
+                                  <Button variant="secondary" className="!text-xs !py-1">
+                                    View
+                                  </Button>
+                                </Link>
+                              )}
+                              {slot && (
+                                <Button
+                                  variant="secondary"
+                                  className="!text-xs !py-1"
+                                  onClick={() => {
+                                    setUploadSlot(slot);
+                                    setUploadFile(null);
+                                  }}
+                                >
+                                  {slot.fileName ? "Replace" : "Upload"}
+                                </Button>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </Card>
 
               {uploadSlot && (
                 <Card>
-                  <h4 className="font-semibold text-sm mb-2">Upload vendor BOQ (Excel)</h4>
+                  <h4 className="font-semibold text-sm mb-1">Upload discipline BOQ</h4>
+                  <p className="text-xs text-steel-muted mb-3">
+                    {uploadSlot.vendorLabel} · {disciplineLabel(disciplines, uploadSlot.discipline)} — use the matching sheet
+                    from the R2 workbook or a discipline-only export.
+                  </p>
                   <form className="space-y-3" onSubmit={uploadBoq}>
                     <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
                       {uploadFile ? uploadFile.name : "Choose Excel BOQ"}
@@ -334,7 +392,14 @@ export default function CrmBidComparePage() {
                       <Button type="submit" disabled={!uploadFile || busy}>
                         Upload
                       </Button>
-                      <Button type="button" variant="secondary" onClick={() => { setUploadSlot(null); setUploadFile(null); }}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setUploadSlot(null);
+                          setUploadFile(null);
+                        }}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -344,7 +409,10 @@ export default function CrmBidComparePage() {
             </>
           ) : (
             <Card>
-              <p className="text-sm text-steel-muted">Select a bid package to upload vendor BOQs and open the comparative sheet.</p>
+              <p className="text-sm text-steel-muted">
+                Select a bid package. Each vendor uploads one Excel per discipline (CCV, Electrical Lab, Admin, Security, etc.) —
+                same structure as Comparative Statement R2.
+              </p>
             </Card>
           )}
         </div>
