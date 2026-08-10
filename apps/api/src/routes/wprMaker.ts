@@ -15,6 +15,7 @@
  * The editor may then override any section text or rows.
  */
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
@@ -30,6 +31,8 @@ import {
 
 export const wprMakerRouter = Router();
 wprMakerRouter.use(requireAuth);
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 function parseEnd(v: unknown): Date {
   const s = typeof v === "string" ? v : "";
@@ -551,4 +554,46 @@ wprMakerRouter.get("/:projectId/recent", async (req, res) => {
     },
   });
   res.json(rows);
+});
+
+/**
+ * Photo upload — a section-scoped photo lands in the WPR MIS photos folder
+ * and its SharePoint path is returned so the maker page can push it into
+ * the corresponding section's `photos[]` array.
+ *
+ * Multipart field: `photo`. Extra fields: `weekEnding`, `sectionKey`, `caption`.
+ */
+wprMakerRouter.post("/:projectId/photo", upload.single("photo"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const file = (req as any).file as { originalname: string; buffer: Buffer; mimetype: string } | undefined;
+  if (!file) return res.status(400).json({ error: "photo file missing (field name: photo)" });
+
+  const weekEnd = parseEnd(req.body.weekEnding);
+  const sectionKey = String(req.body.sectionKey || "misc").replace(/[^A-Za-z0-9_]+/g, "_").slice(0, 40);
+  const caption = String(req.body.caption || "").slice(0, 200);
+  const dateStr = weekEnd.toISOString().slice(0, 10);
+  const safeName = file.originalname.replace(/[^A-Za-z0-9._-]+/g, "_");
+  const ext = /\.[a-zA-Z0-9]{1,6}$/.test(safeName) ? "" : ".jpg";
+  const stamped = `${dateStr}-${sectionKey}-${Date.now()}-${safeName}${ext}`;
+  const folder = `${MODULE_TO_ISO_FOLDER.wpr}/photos/${sectionKey}`;
+
+  const saved = await mockOneDrive.upload(project.code, folder, stamped, file.buffer);
+
+  await audit("wpr.photo.uploaded", {
+    userId: req.user!.id,
+    entity: "WprSnapshot",
+    entityId: `${projectId}:${dateStr}`,
+    meta: { path: saved.path, provider: saved.provider, section: sectionKey, caption, size: file.buffer.length },
+  });
+
+  res.json({
+    ok: true,
+    path: saved.path,
+    caption,
+    section: sectionKey,
+    provider: saved.provider,
+    url: saved.url,
+  });
 });

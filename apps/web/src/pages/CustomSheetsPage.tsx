@@ -52,6 +52,26 @@ export default function CustomSheetsPage() {
     }
   }
 
+  async function createBlank() {
+    try {
+      const r = await api<{ id: string; name: string }>("/api/custom-sheets/blank", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          name: name || `Untitled sheet — ${new Date().toISOString().slice(0, 10)}`,
+          category,
+          projectId: pickedProject || undefined,
+        }),
+      });
+      setMsg(`Blank sheet created — ${r.name}`);
+      setName("");
+      await load();
+      nav(`/custom-sheets/${r.id}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Create failed");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -62,10 +82,9 @@ export default function CustomSheetsPage() {
       {msg && <p className="text-sm text-brand-dark">{msg}</p>}
 
       {canWrite && (
-        <Card>
-          <h3 className="font-semibold text-sm mb-2">Upload a sheet</h3>
-          <form onSubmit={upload} className="grid md:grid-cols-4 gap-2">
-            <Input placeholder="Sheet name" value={name} onChange={(e) => setName(e.target.value)} />
+        <Card className="space-y-3">
+          <div className="grid md:grid-cols-3 gap-2">
+            <Input placeholder="Sheet name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
             <Select value={pickedProject} onChange={(e) => setPickedProject(e.target.value)}>
               <option value="">Global (no project)</option>
@@ -73,12 +92,22 @@ export default function CustomSheetsPage() {
                 <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
               ))}
             </Select>
-            <label className="text-xs text-steel-muted">
-              File (.xlsx / .xls / .csv)
-              <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
-            </label>
-            <Button type="submit" className="md:col-span-4" disabled={!file}>Upload & parse</Button>
-          </form>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <form onSubmit={upload} className="rounded-lg border border-line p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-steel-muted">From an existing Excel / CSV</h4>
+              <label className="text-xs text-steel-muted block">
+                File (.xlsx / .xls / .csv)
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
+              </label>
+              <Button type="submit" disabled={!file}>Upload & parse</Button>
+            </form>
+            <div className="rounded-lg border border-line p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-steel-muted">Blank sheet — start empty</h4>
+              <p className="text-xs text-steel-muted">3 starter columns · add / rename / remove columns and rows in the editor.</p>
+              <Button type="button" variant="secondary" onClick={createBlank}>Create blank sheet</Button>
+            </div>
+          </div>
         </Card>
       )}
 
@@ -148,6 +177,31 @@ export function CustomSheetEditorPage() {
       return { ...prev, rows };
     });
   }
+  function addColumn() {
+    setSheet((prev: any) => {
+      if (!prev) return prev;
+      const nextHeaderName = `Column ${prev.headers.length + 1}`;
+      const headers = [...prev.headers, nextHeaderName];
+      const rows = prev.rows.map((r: any[]) => [...r, ""]);
+      return { ...prev, headers, rows };
+    });
+  }
+  function renameColumn(idx: number, name: string) {
+    setSheet((prev: any) => {
+      if (!prev) return prev;
+      const headers = prev.headers.slice();
+      headers[idx] = name;
+      return { ...prev, headers };
+    });
+  }
+  function delColumn(idx: number) {
+    setSheet((prev: any) => {
+      if (!prev) return prev;
+      const headers = prev.headers.filter((_h: string, i: number) => i !== idx);
+      const rows = prev.rows.map((r: any[]) => r.filter((_: any, i: number) => i !== idx));
+      return { ...prev, headers, rows };
+    });
+  }
 
   async function save() {
     if (!id || !sheet) return;
@@ -194,6 +248,7 @@ export function CustomSheetEditorPage() {
           <div className="flex flex-wrap gap-2">
             <Link to="/custom-sheets"><Button type="button" variant="secondary">Back</Button></Link>
             {canWrite && sheet && <Button type="button" variant="secondary" onClick={addRow}>+ Row</Button>}
+            {canWrite && sheet && <Button type="button" variant="secondary" onClick={addColumn}>+ Column</Button>}
             {canWrite && <Button type="button" onClick={() => void save()}>Save</Button>}
             <Button type="button" variant="secondary" onClick={() => void download()}>Export .xlsx</Button>
           </div>
@@ -207,10 +262,29 @@ export function CustomSheetEditorPage() {
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead>
-                <tr className="bg-sand/50 text-left">
+                <tr className="bg-sand/50 text-left align-top">
                   <th className="px-2 py-1 w-6">#</th>
                   {sheet.headers.map((h: string, i: number) => (
-                    <th key={i} className="px-2 py-1 font-semibold whitespace-nowrap">{h}</th>
+                    <th key={i} className="px-2 py-1 font-semibold whitespace-nowrap">
+                      {canWrite ? (
+                        <div className="flex flex-col gap-1">
+                          <input
+                            className="w-full min-w-[7rem] rounded border border-line bg-white px-1.5 py-0.5 text-[11px] font-semibold uppercase"
+                            value={h}
+                            onChange={(e) => renameColumn(i, e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="text-[10px] text-danger self-start"
+                            onClick={() => delColumn(i)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <span>{h}</span>
+                      )}
+                    </th>
                   ))}
                   {canWrite && <th></th>}
                 </tr>

@@ -1646,6 +1646,65 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* Site image card — one curated photo per portal, tone-tinted */
+.desk-stage__photo {
+  position: relative;
+  margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--stage-line);
+  background-color: var(--stage-tone);
+  background-size: cover;
+  background-repeat: no-repeat;
+  height: clamp(140px, 22vh, 210px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 30px -12px rgba(0, 0, 0, 0.18);
+}
+.desk-stage__photo-scrim {
+  position: absolute; inset: 0;
+  background:
+    /* tone-tinted overlay so the image reads the same in dark and light */
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--stage-tone) 12%, transparent) 0%,
+      color-mix(in srgb, var(--stage-tone) 45%, transparent) 60%,
+      color-mix(in srgb, var(--stage-tone) 78%, transparent) 100%),
+    /* readability wash at the bottom for the caption */
+    linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,0.55) 100%);
+}
+.desk-stage__photo-caption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 0.6rem 0.8rem 0.75rem;
+  display: flex; flex-direction: column; gap: 0.15rem;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.desk-stage__photo-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.desk-stage__photo-text {
+  font-size: 0.85rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+@media (prefers-color-scheme: dark) {
+  .desk-stage__photo {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 16px 32px -14px rgba(0, 0, 0, 0.6);
+  }
+  /* deeper wash + slight desaturation so day-light photos don't glare */
+  .desk-stage__photo-scrim {
+    background:
+      linear-gradient(180deg,
+        color-mix(in srgb, var(--stage-tone) 26%, rgba(0,0,0,0.12)) 0%,
+        color-mix(in srgb, var(--stage-tone) 60%, rgba(0,0,0,0.30)) 60%,
+        color-mix(in srgb, var(--stage-tone) 88%, rgba(0,0,0,0.55)) 100%);
+  }
+}
+
 /* Activity ledger */
 .desk-stage__activity {
   border-top: 1px dashed var(--stage-line);

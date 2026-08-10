@@ -546,6 +546,26 @@ type DeskSample = {
   activity: string[];
 };
 
+/**
+ * Curated single image per portal — used as the small "site image" card
+ * inside the desk mock. Mirrors the "Insert Site Image Here" slide from
+ * the SPDC WPR pack. A tone-tinted overlay makes it read the same in
+ * dark mode without swapping the asset.
+ */
+const PORTAL_IMAGE: Record<string, { src: string; caption: string; focus: string }> = {
+  office:   { src: "/heroes/sky-05-office.jpg?v=1",     caption: "Site overview · this week",       focus: "50% 74%" },
+  site:     { src: "/heroes/sky-03-site.jpg?v=1",       caption: "Wing B · slab pour cleared",      focus: "50% 70%" },
+  vendor:   { src: "/heroes/sky-09-contractor.jpg?v=1", caption: "Package · trade partner",          focus: "50% 72%" },
+  client:   { src: "/heroes/sky-08-client.jpg?v=1",     caption: "Project handover view",            focus: "50% 68%" },
+  employee: { src: "/heroes/sky-04-bim.jpg?v=1",        caption: "My desk · design coordination",    focus: "50% 68%" },
+  master:   { src: "/heroes/sky-01-crane.jpg?v=1",      caption: "Portfolio · construction in flight", focus: "50% 68%" },
+  hr:       { src: "/heroes/sky-05-office.jpg?v=1",     caption: "People · Sharnam office",          focus: "50% 68%" },
+  drawings: { src: "/heroes/sky-10-drawings.jpg?v=1",   caption: "GFC · A-04 R2 published",          focus: "50% 68%" },
+  quality:  { src: "/heroes/sky-07-quality.jpg?v=1",    caption: "QAP · cube crushing register",     focus: "50% 68%" },
+  comms:    { src: "/heroes/sky-04-bim.jpg?v=1",        caption: "Coordination · weekly meeting",    focus: "50% 68%" },
+  field:    { src: "/heroes/sky-06-field.jpg?v=1",      caption: "Field · manpower closed",          focus: "50% 68%" },
+};
+
 const DESK_SAMPLES: Record<string, DeskSample> = {
   office: {
     code: "SPDC-DEMO-01",
@@ -806,17 +826,16 @@ const DESK_SAMPLES: Record<string, DeskSample> = {
 
 function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string; icon: string }) {
   const sample = DESK_SAMPLES[portalKey] || DESK_SAMPLES.office;
+  const img = PORTAL_IMAGE[portalKey] || PORTAL_IMAGE.office;
   return (
     <aside
       className="desk-stage"
       aria-hidden
       style={{ ["--stage-tone" as string]: tone } as CSSProperties}
     >
-      {/* Blueprint grid + tone wash */}
       <div className="desk-stage__grid" />
       <div className="desk-stage__wash" />
 
-      {/* Fake browser chrome so the mockup reads as "the actual app" */}
       <div className="desk-stage__chrome">
         <span className="desk-stage__dot desk-stage__dot--r" />
         <span className="desk-stage__dot desk-stage__dot--y" />
@@ -824,7 +843,6 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
         <span className="desk-stage__chrome-url">sharnam-portal · {portalKey}</span>
       </div>
 
-      {/* Live mock of the inside PageHeader */}
       <div className="desk-stage__desk">
         <header className="desk-stage__page-head">
           <div className="desk-stage__head-left">
@@ -835,7 +853,6 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
           <div className="desk-stage__icon" aria-hidden>{icon}</div>
         </header>
 
-        {/* KPI strip — mirrors the inside stat cards */}
         <div className="desk-stage__stats">
           {sample.stats.map((s) => (
             <div key={s.label} className="desk-stage__stat">
@@ -845,7 +862,26 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
           ))}
         </div>
 
-        {/* Tool bento — mirrors the project home tile grid */}
+        {/*
+         * "Site image" card — mirrors the WPR slide 6 pattern
+         * ("Insert Site Image Here"). One curated photo per portal,
+         * placed inside the desk mock. A tone-tinted overlay + a soft
+         * gradient at the bottom carry the image cleanly into dark mode.
+         */}
+        <figure
+          className="desk-stage__photo"
+          style={{
+            backgroundImage: `url(${img.src})`,
+            backgroundPosition: img.focus,
+          }}
+        >
+          <div className="desk-stage__photo-scrim" />
+          <figcaption className="desk-stage__photo-caption">
+            <span className="desk-stage__photo-eyebrow">Site image · this week</span>
+            <span className="desk-stage__photo-text">{img.caption}</span>
+          </figcaption>
+        </figure>
+
         <div className="desk-stage__tools">
           {sample.tools.map((t) => (
             <div key={t.label} className="desk-stage__tool">
@@ -855,7 +891,6 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
           ))}
         </div>
 
-        {/* Activity feed */}
         <div className="desk-stage__activity" aria-label="Recent activity">
           <div className="desk-stage__activity-head">Recent activity</div>
           <ul className="desk-stage__activity-list">
@@ -869,7 +904,6 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
         </div>
       </div>
 
-      {/* Sharnam watermark bottom-left */}
       <div className="desk-stage__mark">
         <span className="desk-stage__mark-hi" lang="hi">शरणम्</span>
         <span className="desk-stage__mark-en">Sharnam · PMC</span>

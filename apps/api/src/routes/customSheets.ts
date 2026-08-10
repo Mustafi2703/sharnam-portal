@@ -85,6 +85,39 @@ customSheetsRouter.post("/upload", requireRoles("admin", "office"), upload.singl
   res.status(201).json({ id: row.id, name: row.name, headers, rowCount: rows.length, storagePath });
 });
 
+/**
+ * Create a blank custom sheet from scratch — no file upload.
+ * Body: { name, category?, projectId?, headers?[] } — defaults to a 3-column starter.
+ */
+customSheetsRouter.post("/blank", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const name = String(req.body.name || "").trim() || `Untitled sheet — ${new Date().toISOString().slice(0, 10)}`;
+  const category = String(req.body.category || "General");
+  const projectId = req.body.projectId ? String(req.body.projectId) : null;
+  const rawHeaders = Array.isArray(req.body.headers) && req.body.headers.length
+    ? (req.body.headers as unknown[]).map((h, i) => String(h ?? "").trim() || `Column ${i + 1}`)
+    : ["Column 1", "Column 2", "Column 3"];
+
+  const row = await prisma.customSheet.create({
+    data: {
+      projectId,
+      name,
+      category,
+      headersJson: JSON.stringify(rawHeaders),
+      rowsJson: JSON.stringify([]),
+      sourceFile: null,
+      storagePath: null,
+      createdById: req.user!.id,
+    },
+  });
+  await audit("customsheet.create", {
+    userId: req.user!.id,
+    entity: "CustomSheet",
+    entityId: row.id,
+    meta: { headers: rawHeaders.length, source: "blank" },
+  });
+  res.status(201).json({ id: row.id, name: row.name, headers: rawHeaders, rowCount: 0 });
+});
+
 customSheetsRouter.put("/:id", requireRoles("admin", "office"), async (req, res) => {
   const row = await prisma.customSheet.update({
     where: { id: req.params.id },

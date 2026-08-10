@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { useParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
@@ -153,6 +153,61 @@ export default function WprMakerPage() {
     updateSection(key, { rows });
   }
 
+  async function uploadSectionPhoto(key: string, e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !pack) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("photo", file);
+      fd.append("weekEnding", weekEnd);
+      fd.append("sectionKey", key);
+      const out = await api<{ path: string }>(`/api/wpr-maker/${projectId}/photo`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      const sec = pack.sections[key] || { title: key };
+      updateSection(key, { photos: [...(sec.photos || []), out.path] });
+      setMsg(`Photo uploaded to ${out.path}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Photo upload failed");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  }
+  function removeSectionPhoto(key: string, idx: number) {
+    if (!pack) return;
+    const sec = pack.sections[key];
+    if (!sec?.photos) return;
+    updateSection(key, { photos: sec.photos.filter((_, i) => i !== idx) });
+  }
+  function addSectionColumn(key: string) {
+    if (!pack) return;
+    const sec = pack.sections[key] || { title: key };
+    const headers = [...(sec.headers || []), `Column ${((sec.headers || []).length + 1)}`];
+    const rows = (sec.rows || []).map((r) => [...r, ""]);
+    updateSection(key, { headers, rows });
+  }
+  function renameSectionColumn(key: string, colIdx: number, name: string) {
+    if (!pack) return;
+    const sec = pack.sections[key];
+    if (!sec?.headers) return;
+    const headers = sec.headers.slice();
+    headers[colIdx] = name;
+    updateSection(key, { headers });
+  }
+  function removeSectionColumn(key: string, colIdx: number) {
+    if (!pack) return;
+    const sec = pack.sections[key];
+    if (!sec?.headers) return;
+    const headers = sec.headers.filter((_, i) => i !== colIdx);
+    const rows = (sec.rows || []).map((r) => r.filter((_, i) => i !== colIdx));
+    updateSection(key, { headers, rows });
+  }
+
   async function save() {
     if (!pack) return;
     setBusy(true);
@@ -292,13 +347,28 @@ export default function WprMakerPage() {
                     />
                   </label>
 
-                  {sec.headers && sec.headers.length > 0 && (
+                  {(sec.headers?.length || sec.rows?.length) ? (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead className="bg-sand/40 uppercase tracking-widest text-[9px]">
                           <tr>
-                            {sec.headers.map((h, i) => (
-                              <th key={i} className="p-1.5 text-left">{h}</th>
+                            {(sec.headers || []).map((h, i) => (
+                              <th key={i} className="p-1.5 text-left align-top">
+                                <div className="flex flex-col gap-1">
+                                  <input
+                                    className="w-full px-1.5 py-1 rounded border border-line bg-white text-[10px] font-semibold uppercase"
+                                    value={h}
+                                    onChange={(e) => renameSectionColumn(key, i, e.target.value)}
+                                  />
+                                  <button
+                                    className="text-[10px] text-danger self-start"
+                                    type="button"
+                                    onClick={() => removeSectionColumn(key, i)}
+                                  >
+                                    Remove column
+                                  </button>
+                                </div>
+                              </th>
                             ))}
                             <th className="p-1.5 w-8"></th>
                           </tr>
@@ -321,21 +391,39 @@ export default function WprMakerPage() {
                         </tbody>
                       </table>
                     </div>
-                  )}
+                  ) : null}
 
-                  {sec.photos && (
-                    <div>
-                      <label className="text-xs text-steel-muted block mb-1">SharePoint image paths (one per line)</label>
-                      <textarea
-                        className="w-full min-h-[70px] rounded-lg border border-line bg-white px-3 py-2 text-xs font-mono"
-                        value={(sec.photos || []).join("\n")}
-                        onChange={(e) => updateSection(key, { photos: e.target.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean) })}
-                      />
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-steel-muted">Photos ({(sec.photos || []).length})</label>
+                      <label className="text-xs text-brand font-semibold cursor-pointer">
+                        + Take / choose photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={(e) => uploadSectionPhoto(key, e)}
+                        />
+                      </label>
                     </div>
-                  )}
+                    {(sec.photos || []).length > 0 ? (
+                      <ul className="text-[11px] font-mono divide-y">
+                        {(sec.photos || []).map((p, i) => (
+                          <li key={i} className="py-1 flex justify-between gap-2">
+                            <span className="truncate">{p}</span>
+                            <button type="button" className="text-danger" onClick={() => removeSectionPhoto(key, i)}>✕</button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px] text-steel-muted">No photos yet. Uploads go to <span className="font-mono">10.01_Progress_Reporting_MIS/photos/{key}/</span></p>
+                    )}
+                  </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button variant="secondary" onClick={() => addRow(key)}>+ Add row</Button>
+                    <Button variant="secondary" onClick={() => addSectionColumn(key)}>+ Add column</Button>
                   </div>
                 </div>
               )}
