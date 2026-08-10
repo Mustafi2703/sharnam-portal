@@ -16,22 +16,22 @@ import personaClient from "../assets/auth/personas/persona-client.png";
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
-/** Hub default hero — bump ?v= when replacing files in public/auth/ */
-export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=4";
+/** Hub default hero — illustrated cartoon backdrop (bump ?v= when replacing) */
+export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=5";
 
 /** Per-portal hero banner */
 export const PORTAL_HERO_SRC: Record<string, string> = {
-  master: "/auth/hero-construction-wide.jpg?v=4",
-  office: "/auth/hero-office.jpg?v=4",
-  hr: "/auth/hero-office.jpg?v=4",
-  employee: "/auth/hero-office.jpg?v=4",
-  comms: "/auth/hero-office.jpg?v=4",
-  site: "/auth/hero-site.jpg?v=4",
-  field: "/auth/hero-site.jpg?v=4",
-  vendor: "/auth/hero-site.jpg?v=4",
-  quality: "/auth/hero-site.jpg?v=4",
-  client: "/auth/hero-client.jpg?v=4",
-  drawings: "/auth/hero-drawings.jpg?v=4",
+  master: "/auth/hero-construction-wide.jpg?v=5",
+  office: "/auth/hero-office.jpg?v=5",
+  hr: "/auth/hero-office.jpg?v=5",
+  employee: "/auth/hero-office.jpg?v=5",
+  comms: "/auth/hero-office.jpg?v=5",
+  site: "/auth/hero-site.jpg?v=5",
+  field: "/auth/hero-site.jpg?v=5",
+  vendor: "/auth/hero-site.jpg?v=5",
+  quality: "/auth/hero-site.jpg?v=5",
+  client: "/auth/hero-client.jpg?v=5",
+  drawings: "/auth/hero-drawings.jpg?v=5",
 };
 
 function portalHeroSrc(portalKey?: string) {
