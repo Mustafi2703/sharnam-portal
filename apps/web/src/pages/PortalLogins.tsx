@@ -4,6 +4,10 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
+import personaOffice from "../assets/auth/personas/persona-office.png";
+import personaSite from "../assets/auth/personas/persona-site.png";
+import personaContractor from "../assets/auth/personas/persona-contractor.png";
+import personaClient from "../assets/auth/personas/persona-client.png";
 
 /**
  * Sharnam login — one construction hero on top, big logo centred, portal tiles below.
@@ -12,22 +16,22 @@ import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
-/** Hub default hero */
-export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=3";
+/** Hub default hero — bump ?v= when replacing files in public/auth/ */
+export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=4";
 
-/** Per-portal hero banner — image on top, logo centred over all */
+/** Per-portal hero banner */
 export const PORTAL_HERO_SRC: Record<string, string> = {
-  master: "/auth/hero-construction-wide.jpg?v=3",
-  office: "/auth/hero-office.jpg?v=3",
-  hr: "/auth/hero-office.jpg?v=3",
-  employee: "/auth/hero-office.jpg?v=3",
-  comms: "/auth/hero-office.jpg?v=3",
-  site: "/auth/hero-site.jpg?v=3",
-  field: "/auth/hero-site.jpg?v=3",
-  vendor: "/auth/hero-site.jpg?v=3",
-  quality: "/auth/hero-site.jpg?v=3",
-  client: "/auth/hero-client.jpg?v=3",
-  drawings: "/auth/hero-drawings.jpg?v=3",
+  master: "/auth/hero-construction-wide.jpg?v=4",
+  office: "/auth/hero-office.jpg?v=4",
+  hr: "/auth/hero-office.jpg?v=4",
+  employee: "/auth/hero-office.jpg?v=4",
+  comms: "/auth/hero-office.jpg?v=4",
+  site: "/auth/hero-site.jpg?v=4",
+  field: "/auth/hero-site.jpg?v=4",
+  vendor: "/auth/hero-site.jpg?v=4",
+  quality: "/auth/hero-site.jpg?v=4",
+  client: "/auth/hero-client.jpg?v=4",
+  drawings: "/auth/hero-drawings.jpg?v=4",
 };
 
 function portalHeroSrc(portalKey?: string) {
@@ -311,19 +315,19 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Cartoon persona illustrations — subtle accent on hub + portal login */
+/** Vite-bundled persona illustrations (optimized ~110KB each) */
 export const PORTAL_PERSONA_SRC: Record<string, string> = {
-  office: "/auth/personas/persona-office.png?v=1",
-  site: "/auth/personas/persona-site.png?v=1",
-  vendor: "/auth/personas/persona-contractor.png?v=1",
-  client: "/auth/personas/persona-client.png?v=1",
-  master: "/auth/personas/persona-office.png?v=1",
-  hr: "/auth/personas/persona-office.png?v=1",
-  employee: "/auth/personas/persona-office.png?v=1",
-  field: "/auth/personas/persona-site.png?v=1",
-  quality: "/auth/personas/persona-site.png?v=1",
-  drawings: "/auth/personas/persona-office.png?v=1",
-  comms: "/auth/personas/persona-office.png?v=1",
+  office: personaOffice,
+  site: personaSite,
+  vendor: personaContractor,
+  client: personaClient,
+  master: personaOffice,
+  hr: personaOffice,
+  employee: personaOffice,
+  field: personaSite,
+  quality: personaSite,
+  drawings: personaOffice,
+  comms: personaOffice,
 };
 
 function portalPersonaSrc(portalKey: string) {
@@ -351,7 +355,7 @@ function BrandLockup({
   /** hub = landing picker · portal = individual sign-in */
   context?: "hub" | "portal";
 }) {
-  const heroSrc = onHero ? "/logo-transparent.png?v=3" : "/logo.png";
+  const heroSrc = onHero ? "/logo-transparent.png?v=4" : "/logo.png?v=4";
   const contextClass = context ? ` brand-lockup--auth-${context}` : "";
   return (
     <div
@@ -540,7 +544,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
             <BrandLockup size="hero" onHero glass context="portal" />
             <div className="auth-portal__story">
               <div className="auth-portal__persona-wrap" aria-hidden>
-                <img className="auth-portal__persona" src={persona} alt="" loading="eager" />
+                <img className="auth-portal__persona" src={persona} alt="" width={260} height={320} loading="eager" decoding="async" />
               </div>
               <p className="auth-portal__tagline">{cfg.headline}</p>
               <p className="auth-portal__hint">{cfg.subtitle}</p>
@@ -573,7 +577,7 @@ function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
     >
       <div className="bento-tile__accent" aria-hidden />
       <div className="bento-tile__visual" aria-hidden>
-        <img className="bento-tile__persona" src={persona} alt="" loading="lazy" />
+        <img className="bento-tile__persona" src={persona} alt="" width={112} height={140} loading="eager" decoding="async" />
         <div className="bento-tile__visual-glow" />
       </div>
       <div className="bento-tile__body">
@@ -614,7 +618,10 @@ export function LoginHubPage() {
                   className="auth-hub__persona-chip"
                   src={portalPersonaSrc(k)}
                   alt=""
-                  loading="lazy"
+                  width={72}
+                  height={72}
+                  loading="eager"
+                  decoding="async"
                 />
               ))}
             </div>

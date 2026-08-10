@@ -1337,9 +1337,9 @@ body {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 18% 42%, rgba(255, 255, 255, 0.72) 0%, transparent 62%),
-    radial-gradient(ellipse 70% 55% at 88% 58%, rgba(11, 106, 120, 0.12) 0%, transparent 58%),
-    linear-gradient(115deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.55) 42%, rgba(238, 246, 248, 0.78) 100%);
+    radial-gradient(ellipse 75% 55% at 20% 40%, rgba(255, 255, 255, 0.45) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 50% at 85% 60%, rgba(11, 106, 120, 0.08) 0%, transparent 55%),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.28) 45%, rgba(238, 246, 248, 0.42) 100%);
 }
 
 /* Unified login shell — consistent desktop alignment */
@@ -1432,10 +1432,11 @@ body {
 .auth-hub__persona-chip {
   width: clamp(2.75rem, 8vw, 3.75rem);
   height: clamp(2.75rem, 8vw, 3.75rem);
-  object-fit: cover;
-  object-position: top center;
+  object-fit: contain;
+  object-position: bottom center;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.85);
   box-shadow: 0 4px 14px rgba(18, 20, 23, 0.12);
   transform: translateY(0);
   transition: transform 0.2s ease;
@@ -1845,7 +1846,9 @@ body {
 }
 .auth-page--hub .bento-tile__visual {
   position: relative;
-  flex: 0 0 clamp(88px, 22%, 112px);
+  flex: 0 0 clamp(96px, 24%, 120px);
+  align-self: stretch;
+  min-height: 100%;
   overflow: hidden;
   background: linear-gradient(
     160deg,
@@ -1855,16 +1858,18 @@ body {
 }
 .auth-page--hub .bento-tile__persona {
   position: absolute;
-  bottom: -4px;
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 115%;
+  width: 100%;
   max-width: none;
   height: auto;
+  min-height: 88%;
   object-fit: contain;
   object-position: bottom center;
   filter: drop-shadow(0 6px 14px rgba(18, 20, 23, 0.12));
   transition: transform 0.22s ease;
+  z-index: 1;
 }
 .auth-page--hub .bento-tile__visual-glow {
   position: absolute;
@@ -4237,7 +4242,12 @@ body {
     width: min(96vw, 520px) !important;
   }
   .auth-portal__persona-wrap {
-    display: none;
+    display: block;
+    width: min(160px, 42vw);
+    margin: 0.15rem auto 0;
+  }
+  .auth-portal__persona {
+    max-height: min(180px, 26vh);
   }
   .auth-portal__tagline {
     font-size: 1.05rem;
