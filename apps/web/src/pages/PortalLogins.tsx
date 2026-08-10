@@ -527,15 +527,6 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-function AuthHeroBanner({ portalKey }: { portalKey?: string }) {
-  return (
-    <section className="auth-hero auth-hero--top auth-hero--with-logo" aria-label="Sharnam PMC">
-      <AuthBackdrop portalKey={portalKey} />
-      <HeroBrandOverlay tagline="Project Management Consultants" glass />
-    </section>
-  );
-}
-
 function PortalShowcase({ cfg }: { cfg: PortalConfig }) {
   return (
     <aside className="auth-glass auth-glass--showcase">
