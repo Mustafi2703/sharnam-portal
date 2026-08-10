@@ -311,14 +311,6 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-const ISO_BADGES = [
-  { code: "ISO 9001",  label: "Quality Management" },
-  { code: "ISO 45001", label: "Occupational Health & Safety" },
-  { code: "ISO 14001", label: "Environmental Management" },
-  { code: "ISO 19650", label: "BIM & Information Management" },
-  { code: "ISO 21502", label: "Project Management" },
-];
-
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
   return shortLabel;
@@ -389,23 +381,6 @@ function PolicyList({ policies }: { policies: string[] }) {
   );
 }
 
-function IsoFooter() {
-  return (
-    <footer className="auth-footer">
-      <div className="auth-footer__inner">
-        <span className="auth-footer__label">Certified standards</span>
-        <div className="auth-footer__iso" aria-label="ISO standards">
-          {ISO_BADGES.map((b) => (
-            <span key={b.code} className="auth-footer__iso-chip" title={b.label}>
-              {b.code}
-            </span>
-          ))}
-        </div>
-      </div>
-    </footer>
-  );
-}
-
 /* Portal picker retired — each portal has its own permanent link. To switch
    portals from the per-portal page, use "← All portals" back to the hub. */
 
@@ -413,7 +388,7 @@ function IsoFooter() {
    Sign-in card
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function SignInCard({ cfg }: { cfg: PortalConfig }) {
+function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: boolean }) {
   const { loginWithToken } = useAuth();
   const [email, setEmail] = useState(cfg.demoEmail);
   const [password, setPassword] = useState("Demo@1234");
@@ -464,8 +439,14 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
         <div className="signin-card__head">
           <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
         </div>
-        <h2 className="signin-card__title">{cfg.headline}</h2>
-        <p className="signin-card__sub">{cfg.subtitle}</p>
+        {formOnly ? (
+          <h2 className="signin-card__title">Sign in</h2>
+        ) : (
+          <>
+            <h2 className="signin-card__title">{cfg.headline}</h2>
+            <p className="signin-card__sub">{cfg.subtitle}</p>
+          </>
+        )}
 
         <form className="signin-form" onSubmit={onSubmit}>
           <label className="signin-form__label">
@@ -548,21 +529,22 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   return (
     <div className="auth-page auth-page--immersive auth-page--light auth-page--portal" data-portal={portalKey}>
       <AuthBackdrop portalKey={portalKey} />
-      <main className="auth-login__main auth-login__main--portal">
-        <aside className="auth-portal__left">
-          <BrandLockup size="hero" onHero glass />
-          <Link to="/login" className="auth-login__back">← All portals</Link>
-          <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
-            {portalDisplayName(cfg.key, cfg.shortLabel)} portal
-          </p>
-          <PortalInfo cfg={cfg} />
-          <PolicyList policies={cfg.policies} />
-        </aside>
-        <div className="auth-panel auth-panel--form auth-panel--signin">
-          <SignInCard cfg={cfg} />
+      <div className="auth-shell auth-shell--portal">
+        <div className="auth-portal__grid">
+          <aside className="auth-portal__panel auth-portal__panel--info">
+            <BrandLockup size="hero" onHero glass />
+            <Link to="/login" className="auth-login__back">← All portals</Link>
+            <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
+              {portalDisplayName(cfg.key, cfg.shortLabel)} portal
+            </p>
+            <PortalInfo cfg={cfg} />
+            <PolicyList policies={cfg.policies} />
+          </aside>
+          <div className="auth-portal__panel auth-portal__panel--signin">
+            <SignInCard cfg={cfg} formOnly />
+          </div>
         </div>
-      </main>
-      <IsoFooter />
+      </div>
     </div>
   );
 }
@@ -600,11 +582,11 @@ export function LoginHubPage() {
   return (
     <div className="auth-page auth-page--immersive auth-page--light auth-page--hub">
       <AuthBackdrop />
-      <header className="auth-login__header auth-login__header--hub auth-login__header--center">
-        <BrandLockup size="hero" onHero glass />
-        <p className="auth-hero-brand__tag">Project Management Consultants</p>
-      </header>
-      <main className="auth-hub auth-hub--light">
+      <div className="auth-shell auth-shell--hub">
+        <header className="auth-hub__hero">
+          <BrandLockup size="hero" onHero glass />
+          <p className="auth-hero-brand__tag">Project Management Consultants</p>
+        </header>
         <section className="auth-hub__bento" aria-label="Choose your portal">
           <div className="auth-hub__grid auth-hub__grid--four auth-hub__grid--large">
             {HUB_PORTALS.map((k) => (
@@ -612,8 +594,7 @@ export function LoginHubPage() {
             ))}
           </div>
         </section>
-      </main>
-      <IsoFooter />
+      </div>
     </div>
   );
 }

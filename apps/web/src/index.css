@@ -1340,7 +1340,125 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.12) 48%, rgba(238, 244, 248, 0.28) 100%);
 }
 
-/* Light login layout */
+/* Unified login shell — consistent desktop alignment */
+.auth-shell {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: clamp(1rem, 3vh, 2.5rem) clamp(1rem, 3vw, 1.5rem);
+  box-sizing: border-box;
+}
+.auth-shell--hub {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.25rem, 3vh, 2rem);
+}
+.auth-hub__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+.auth-hub__hero .brand-lockup--on-hero-glass,
+.auth-hub__hero .brand-lockup--on-hero {
+  justify-content: center;
+}
+.auth-hub__hero .brand-lockup__mark {
+  height: clamp(6rem, 24vw, 13rem) !important;
+  max-width: min(760px, 96vw);
+}
+.auth-hub__bento {
+  width: 100%;
+}
+.auth-shell--portal {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+}
+.auth-portal__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  width: 100%;
+  align-items: stretch;
+}
+.auth-portal__panel {
+  border-radius: 16px;
+  border: 1px solid rgba(11, 106, 120, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 32px rgba(11, 106, 120, 0.08);
+  backdrop-filter: blur(6px);
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.auth-portal__panel--signin {
+  justify-content: center;
+}
+.auth-portal__panel--signin .signin-card {
+  width: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  animation: none;
+}
+.auth-portal__panel--info .brand-lockup--on-hero-glass,
+.auth-portal__panel--info .brand-lockup--on-hero {
+  justify-content: flex-start;
+  width: 100%;
+}
+.auth-portal__panel--info .brand-lockup__mark {
+  height: clamp(5rem, 18vw, 9.5rem) !important;
+  max-width: 100%;
+}
+.auth-portal__panel .auth-policies {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-height: none;
+  overflow: visible;
+}
+.auth-portal__panel .auth-portal__info {
+  width: 100%;
+}
+
+@media (min-width: 901px) {
+  .auth-shell--hub .auth-hub__hero .brand-lockup__mark {
+    height: clamp(8rem, 20vh, 14rem) !important;
+    max-width: min(820px, 92vw);
+  }
+  .auth-portal__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+    gap: 1.5rem;
+    align-items: stretch;
+  }
+  .auth-portal__panel--info .brand-lockup__mark {
+    height: clamp(6.5rem, 14vh, 11rem) !important;
+  }
+  .auth-portal__panel .auth-policies {
+    max-height: min(32vh, 260px);
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+  .auth-hub__grid--four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+/* Light login layout (legacy helpers) */
 .auth-page--light .auth-login__header {
   display: flex;
   flex-direction: column;
@@ -3707,37 +3825,37 @@ body {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-@media (max-width: 720px) {
-  .auth-login__main,
-  .auth-login__main--portal {
-    grid-template-columns: 1fr;
+@media (max-width: 900px) {
+  .auth-shell--hub {
+    justify-content: flex-start;
+    padding-top: clamp(1.25rem, 4vh, 2rem);
   }
-  .auth-panel--form,
-  .auth-panel--signin {
-    order: 2;
-    position: static;
+  .auth-shell--portal {
+    align-items: flex-start;
+    padding-top: clamp(1rem, 3vh, 1.75rem);
   }
-  .auth-portal__left {
-    order: 1;
+  .auth-portal__panel--info {
     align-items: center;
     text-align: center;
   }
-  .auth-portal__left .brand-lockup--on-hero-glass,
-  .auth-portal__left .brand-lockup--on-hero {
+  .auth-portal__panel--info .brand-lockup--on-hero-glass,
+  .auth-portal__panel--info .brand-lockup--on-hero {
     justify-content: center;
   }
-  .auth-portal__left .auth-policies {
+  .auth-portal__panel .auth-policies {
     text-align: left;
   }
-  .auth-login__header--hub .brand-lockup__mark {
-    height: clamp(4.5rem, 32vw, 8rem) !important;
+  .auth-hub__grid--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .auth-portal__left .brand-lockup__mark {
-    height: clamp(4.5rem, 30vw, 7.5rem) !important;
+}
+
+@media (max-width: 720px) {
+  .auth-portal__panel--signin {
+    order: 2;
   }
-  .brand-lockup--on-hero-glass .brand-lockup__mark,
-  .brand-lockup--on-hero .brand-lockup__mark {
-    height: clamp(4rem, 28vw, 6rem) !important;
+  .auth-portal__panel--info {
+    order: 1;
   }
 }
 .auth-strip--minimal .auth-strip__inner--center { justify-content: center; gap: 1.5rem; }
