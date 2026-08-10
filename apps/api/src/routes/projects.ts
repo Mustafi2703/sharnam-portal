@@ -193,11 +193,10 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
   const folderPath = String(req.query.path || "");
-  // Sync-on-open: refresh tree (and later Graph delta) when a folder is opened
   const syncOnOpen = String(req.query.sync || "1") !== "0";
   let syncedAt: string | null = null;
   if (syncOnOpen) {
-    await mockOneDrive.ensureProjectTree(project.id);
+    // Touch only the opened folder — full tree sync is POST /sync
     if (folderPath) {
       await mockOneDrive.touchFolder(project.id, folderPath);
     }
@@ -213,7 +212,7 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
     folders,
     syncedAt,
     provider: resultProvider(children),
-    note: "Browsable now; SharePoint live when MOCK_ONEDRIVE=false + Graph credentials set.",
+    note: "Browse lists SharePoint live when configured. Run Sync library to create the full ISO folder tree.",
   });
 });
 
