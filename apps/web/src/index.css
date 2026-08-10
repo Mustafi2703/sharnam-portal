@@ -1576,6 +1576,53 @@ body {
   text-wrap: balance;
 }
 
+/* Individual portal pages — let hero show on the left; glass text panels */
+.auth-page--portal .auth-backdrop__scrim {
+  background:
+    radial-gradient(ellipse 68% 75% at 78% 52%, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.18) 48%, transparent 72%),
+    radial-gradient(ellipse 55% 65% at 22% 46%, rgba(255, 255, 255, 0.1) 0%, transparent 62%),
+    linear-gradient(105deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.04) 42%, rgba(248, 252, 253, 0.28) 100%);
+}
+.auth-page--portal .auth-portal__story {
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow: 0 10px 36px rgba(11, 106, 120, 0.08);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+}
+.auth-page--portal .auth-portal__persona-wrap {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: 0 6px 24px rgba(11, 106, 120, 0.06);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.auth-page--portal .auth-portal__tagline {
+  color: var(--color-ink);
+  text-shadow:
+    0 1px 14px rgba(255, 255, 255, 0.96),
+    0 0 2px rgba(255, 255, 255, 0.85);
+}
+.auth-page--portal .auth-portal__hint {
+  color: var(--color-steel-2);
+  text-shadow:
+    0 1px 12px rgba(255, 255, 255, 0.94),
+    0 0 1px rgba(255, 255, 255, 0.75);
+}
+.auth-page--portal .auth-login__back {
+  background: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 18px rgba(11, 106, 120, 0.08);
+}
+.auth-page--portal .auth-portal__signin {
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.78) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(1.05);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
+}
+
 @media (min-width: 901px) {
   .auth-shell--hub-modern {
     max-width: 960px;

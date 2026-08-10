@@ -131,7 +131,13 @@ export class MockOneDriveService {
     relFolder: string,
     fileName: string,
     buffer: Buffer
-  ): Promise<{ path: string; url: string; provider?: string; sharePointPath?: string | null }> {
+  ): Promise<{
+    path: string;
+    url: string;
+    provider?: string;
+    sharePointPath?: string | null;
+    sharePointUrl?: string | null;
+  }> {
     const dir = path.join(this.projectRoot(projectCode), relFolder);
     ensureDir(dir);
     const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -150,9 +156,10 @@ export class MockOneDriveService {
         const sp = await uploadToProjectLibrary(projectCode, relFolder, fileName, buffer);
         return {
           path: sp.path || rel,
-          url: sp.url || local.url,
+          url: local.url,
           provider: "sharepoint",
           sharePointPath: sp.sharePointPath,
+          sharePointUrl: sp.url || null,
         };
       } catch (err) {
         console.warn("[SharePoint] upload failed, kept local mock:", err instanceof Error ? err.message : err);

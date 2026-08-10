@@ -7,11 +7,14 @@ import { PhotoCapture } from "./PhotoCapture";
 
 type GeoFix = { lat: number; lng: number; accuracy: number };
 
-function photoSrc(url?: string | null) {
+function photoSrc(url?: string | null, token?: string | null) {
   if (!url) return null;
-  if (url.startsWith("http")) return url;
-  if (url.startsWith("/")) return `${apiBase()}${url}`;
-  return url;
+  if (url.startsWith("http")) return null;
+  const full = url.startsWith("/") ? `${apiBase()}${url}` : url;
+  if (url.includes("/attendance/") && url.includes("/photo/") && token) {
+    return `${full}?token=${encodeURIComponent(token)}`;
+  }
+  return full;
 }
 
 function mapsUrl(lat: number, lng: number) {
@@ -244,13 +247,13 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
             {myToday.inPhotoUrl && (
               <div>
                 <p className="text-[10px] uppercase text-steel-muted mb-1">Check-in photo</p>
-                <img src={photoSrc(myToday.inPhotoUrl) || ""} alt="Check-in" className="h-24 w-24 object-cover rounded-lg border border-line" />
+                <img src={photoSrc(myToday.inPhotoUrl, token) || ""} alt="Check-in" className="h-24 w-24 object-cover rounded-lg border border-line" />
               </div>
             )}
             {myToday.outPhotoUrl && (
               <div>
                 <p className="text-[10px] uppercase text-steel-muted mb-1">Check-out photo</p>
-                <img src={photoSrc(myToday.outPhotoUrl) || ""} alt="Check-out" className="h-24 w-24 object-cover rounded-lg border border-line" />
+                <img src={photoSrc(myToday.outPhotoUrl, token) || ""} alt="Check-out" className="h-24 w-24 object-cover rounded-lg border border-line" />
               </div>
             )}
             <dl className="text-xs space-y-2 w-full">
@@ -270,7 +273,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
                 <div className="flex gap-2 min-w-0">
                   {(a.inPhotoUrl || a.outPhotoUrl) && (
                     <img
-                      src={photoSrc(a.inPhotoUrl || a.outPhotoUrl) || ""}
+                      src={photoSrc(a.inPhotoUrl || a.outPhotoUrl, token) || ""}
                       alt=""
                       className="h-10 w-10 rounded object-cover border border-line shrink-0"
                     />

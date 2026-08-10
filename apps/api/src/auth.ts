@@ -11,14 +11,19 @@ export function signToken(user: AuthUser): string {
   return jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+function tokenFromRequest(req: Request): string | null {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (header?.startsWith("Bearer ")) return header.slice(7);
+  const q = req.query.token;
+  if (typeof q === "string" && q.trim()) return q.trim();
+  return null;
+}
+
+export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  const raw = tokenFromRequest(req);
+  if (!raw) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const payload = jwt.verify(header.slice(7), JWT_SECRET) as AuthUser;
-    req.user = payload;
+    req.user = jwt.verify(raw, JWT_SECRET) as AuthUser;
     next();
   } catch {
     return res.status(401).json({ error: "Invalid token" });

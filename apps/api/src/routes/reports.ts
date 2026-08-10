@@ -1,5 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
+import fs from "fs";
+import path from "path";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
@@ -407,6 +409,94 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
 
 export const hrmRouter = Router();
 const hrmUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
+
+const ATTENDANCE_PHOTO_FOLDER =
+  "03_SUPPORT_AND_RESOURCES/03.02_Resources_and_Productivity/Attendance";
+
+function attendancePhotoLocalPath(projectCode: string, fileName: string) {
+  return path.join(
+    mockOneDrive.projectRoot(projectCode),
+    ATTENDANCE_PHOTO_FOLDER,
+    fileName.replace(/[^a-zA-Z0-9._-]/g, "_")
+  );
+}
+
+function fileNameFromPhotoUrl(photoUrl: string | null | undefined): string | null {
+  if (!photoUrl) return null;
+  try {
+    const u = photoUrl.startsWith("http") ? new URL(photoUrl) : new URL(photoUrl, "http://local");
+    const base = u.pathname.split("/").pop();
+    return base ? decodeURIComponent(base) : null;
+  } catch {
+    const base = photoUrl.split("/").pop();
+    return base || null;
+  }
+}
+
+function publicPhotoUrl(attendanceId: string, kind: "in" | "out") {
+  return `/api/hrm/attendance/${attendanceId}/photo/${kind}`;
+}
+
+function resolveAttendancePhotoPath(storedUrl: string, projectCode: string): string | null {
+  if (storedUrl.startsWith("/uploads/")) {
+    const rel = storedUrl.replace(/^\/uploads\//, "");
+    const localPath = path.join(mockOneDrive.root(), rel);
+    if (fs.existsSync(localPath)) return localPath;
+  }
+  const fname = fileNameFromPhotoUrl(storedUrl);
+  if (fname) {
+    const local = attendancePhotoLocalPath(projectCode, fname);
+    if (fs.existsSync(local)) return local;
+  }
+  return null;
+}
+
+/** Stream punch selfie — local copy or SharePoint via Graph (browser cannot load SP URLs). */
+hrmRouter.get("/attendance/:id/photo/:kind", requireAuth, async (req, res) => {
+  const kind: "in" | "out" = req.params.kind === "out" ? "out" : "in";
+  const row = await prisma.attendance.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+
+  const storedUrl = kind === "in" ? row.inPhotoUrl : row.outPhotoUrl;
+  if (!storedUrl) return res.status(404).json({ error: "no photo" });
+
+  let projectCode = "OFFICE";
+  if (row.projectId) {
+    const proj = await prisma.project.findUnique({ where: { id: row.projectId } });
+    if (proj) projectCode = proj.code;
+  }
+
+  const localPath = resolveAttendancePhotoPath(storedUrl, projectCode);
+  if (localPath) {
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    return res.sendFile(path.resolve(localPath));
+  }
+
+  if (storedUrl.includes("sharepoint.com")) {
+    try {
+      const { downloadDriveFile, sharePointPathFromWebUrl, graphConfig } = await import("../services/graph.js");
+      if (graphConfig().configured && !graphConfig().mock) {
+        const spPath = sharePointPathFromWebUrl(storedUrl);
+        if (spPath) {
+          const buf = await downloadDriveFile(spPath);
+          res.setHeader("Content-Type", "image/jpeg");
+          res.setHeader("Cache-Control", "private, max-age=3600");
+          return res.send(buf);
+        }
+      }
+    } catch (err) {
+      console.warn("[attendance photo] SharePoint fetch failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  return res.status(404).json({
+    error: "photo not on server",
+    hint: "Selfie may be in SharePoint only — ask IT or re-punch after deploy",
+    sharePointUrl: storedUrl.includes("sharepoint.com") ? storedUrl : undefined,
+  });
+});
+
 hrmRouter.use(requireAuth);
 
 hrmRouter.get("/dashboard", async (_req, res) => {
@@ -526,6 +616,8 @@ hrmRouter.get("/attendance", async (req, res) => {
     rows.map((r) => ({
       ...r,
       project: r.projectId ? projectById[r.projectId] ?? null : null,
+      inPhotoUrl: r.inPhotoUrl ? publicPhotoUrl(r.id, "in") : r.inPhotoUrl,
+      outPhotoUrl: r.outPhotoUrl ? publicPhotoUrl(r.id, "out") : r.outPhotoUrl,
     }))
   );
 });
@@ -636,6 +728,9 @@ hrmRouter.post(
         geofenceOk,
         provider: saved.provider,
         photoPath: saved.path,
+        photoUrl: photoUrl,
+        sharePointPath: saved.sharePointPath ?? null,
+        sharePointUrl: saved.sharePointUrl ?? null,
         checkIn: row.checkIn,
         checkOut: row.checkOut,
       },
@@ -643,9 +738,12 @@ hrmRouter.post(
 
     res.json({
       ...row,
+      inPhotoUrl: kind === "in" ? publicPhotoUrl(row.id, "in") : row.inPhotoUrl,
+      outPhotoUrl: kind === "out" ? publicPhotoUrl(row.id, "out") : row.outPhotoUrl,
       provider: saved.provider,
       photoPath: saved.path,
       sharePointPath: saved.sharePointPath ?? null,
+      sharePointUrl: saved.sharePointUrl ?? null,
       sharePointWarning:
         process.env.MOCK_ONEDRIVE === "false" && saved.provider !== "sharepoint"
           ? "Photo saved on server only — SharePoint upload failed. Ask IT to verify Render env vars and Graph permissions."

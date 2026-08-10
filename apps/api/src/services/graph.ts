@@ -567,6 +567,35 @@ export async function uploadToProjectLibrary(
   };
 }
 
+/** Download file bytes from the project document library by drive-relative path. */
+export async function downloadDriveFile(itemPath: string): Promise<Buffer> {
+  const drive = await resolveDefaultDrive();
+  assertPortalSafePath(itemPath);
+  const encoded = encodeDrivePath(itemPath);
+  const token = await getAccessToken();
+  const url = `https://graph.microsoft.com/v1.0/drives/${drive.driveId}/root:/${encoded}:/content`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Graph download failed (${res.status}): ${text.slice(0, 240)}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+export function sharePointPathFromWebUrl(webUrl: string): string | null {
+  try {
+    const decoded = decodeURIComponent(webUrl);
+    const idx = decoded.indexOf(`${SHAREPOINT_SANDBOX_ROOT}/`);
+    if (idx >= 0) return decoded.slice(idx).split("?")[0] || null;
+    const shared = decoded.match(/Shared Documents\/(.+)$/i);
+    return shared?.[1] ? decodeURIComponent(shared[1]).split("?")[0] || null : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listProjectLibrary(projectCode: string, relFolder = "") {
   const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
