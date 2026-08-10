@@ -16,7 +16,7 @@ export function openBrandedChecklistPrint(submission: any) {
     .map((it) => {
       const ans = responses[it.id] || responses[it.itemCode] || {};
       const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "—";
-      const remark = typeof ans === "object" ? ans.remark || ans.notes || "" : "";
+      const remark = typeof ans === "object" ? ans.remarks || ans.remark || ans.notes || "" : "";
       return `<tr>
         <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;width:48px;color:#64748b;font-size:12px;">${it.itemCode || ""}</td>
         <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;">

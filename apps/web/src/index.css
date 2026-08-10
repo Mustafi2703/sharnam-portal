@@ -1413,8 +1413,6 @@ body {
   }
 }
 
-/* End of auth surface */
-
 .auth-page__body {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr);
@@ -2587,3 +2585,96 @@ body {
 }
 
 /* End of auth surface */
+
+/* HRMS integrated desk */
+.hrms-tool-rail {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--color-line);
+}
+.hrms-tool-rail__link {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: none;
+  color: var(--color-steel-muted);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.hrms-tool-rail__link:hover {
+  color: var(--color-ink);
+  background: var(--color-sand);
+}
+.hrms-tool-rail__link--active {
+  color: #115E59;
+  background: #CCFBF1;
+  border-color: #0D9488;
+}
+.hrms-quick-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.hrms-quick-card:hover {
+  border-color: #0D9488;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.1);
+}
+.hrms-quick-card__tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #0D9488;
+}
+.hrms-quick-card__title {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--color-ink);
+}
+
+/* Login hero subtle motion */
+.auth-hero__img,
+.auth-hub__hero-img {
+  animation: auth-hero-kenburns 18s ease-in-out infinite alternate;
+}
+@keyframes auth-hero-kenburns {
+  from { transform: scale(1); }
+  to { transform: scale(1.04); }
+}
+.auth-hub__masthead--overlay {
+  animation: auth-fade-up 0.6s ease-out both;
+}
+.auth-hero__content {
+  animation: auth-fade-up 0.55s ease-out 0.1s both;
+}
+.signin-card {
+  animation: auth-fade-up 0.5s ease-out 0.15s both;
+}
+@keyframes auth-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-hero__img,
+  .auth-hub__hero-img,
+  .auth-hub__masthead--overlay,
+  .auth-hero__content,
+  .signin-card {
+    animation: none;
+  }
+}

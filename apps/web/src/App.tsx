@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
 import MasterModulePage from "./pages/MasterModulePage";
@@ -19,6 +19,7 @@ import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
 import CrmPage from "./pages/CrmPage";
 import HrmPage from "./pages/HrmPage";
+import HrmsLayout from "./pages/hrms/HrmsLayout";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
 import ProjectHomePage from "./pages/project/ProjectHomePage";
 import VendorsPage from "./pages/project/VendorsPage";
@@ -63,6 +64,11 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function HomeRedirect() {
   return <Navigate to="/dashboard" replace />;
+}
+
+function RedirectHrmsOnboarding() {
+  const { offerId } = useParams();
+  return <Navigate to={`/hrm/onboarding/${offerId || ""}`} replace />;
 }
 
 export default function App() {
@@ -157,18 +163,28 @@ export default function App() {
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />
                 <Route path="/crm" element={<CrmPage />} />
-                <Route path="/hrm" element={<HrmPage />} />
+                <Route path="/hrm" element={<HrmsLayout />}>
+                  <Route index element={<HrmPage />} />
+                  <Route path="recruitment" element={<RecruitmentPage />} />
+                  <Route path="onboarding" element={<OnboardingPage />} />
+                  <Route path="onboarding/:offerId" element={<OnboardingPage />} />
+                  <Route path="payroll" element={<PayrollPage />} />
+                  <Route path="attendance" element={<HrmsAttendancePage />} />
+                  <Route path="leave" element={<HrmsLeavePage />} />
+                  <Route path="masters" element={<HrmsMastersPage />} />
+                </Route>
+                {/* Legacy HRMS URLs → unified /hrm/* */}
+                <Route path="/hrms/recruitment" element={<Navigate to="/hrm/recruitment" replace />} />
+                <Route path="/hrms/onboarding" element={<Navigate to="/hrm/onboarding" replace />} />
+                <Route path="/hrms/onboarding/:offerId" element={<RedirectHrmsOnboarding />} />
+                <Route path="/hrms/payroll" element={<Navigate to="/hrm/payroll" replace />} />
+                <Route path="/hrms/attendance" element={<Navigate to="/hrm/attendance" replace />} />
+                <Route path="/hrms/leave" element={<Navigate to="/hrm/leave" replace />} />
+                <Route path="/hrms/masters" element={<Navigate to="/hrm/masters" replace />} />
                 <Route path="/quotations/new" element={<QuotationMakerPage />} />
                 <Route path="/quotations/:id" element={<QuotationMakerPage />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
-                <Route path="/hrms/recruitment" element={<RecruitmentPage />} />
-                <Route path="/hrms/onboarding" element={<OnboardingPage />} />
-                <Route path="/hrms/onboarding/:offerId" element={<OnboardingPage />} />
-                <Route path="/hrms/payroll" element={<PayrollPage />} />
-                <Route path="/hrms/attendance" element={<HrmsAttendancePage />} />
-                <Route path="/hrms/leave" element={<HrmsLeavePage />} />
-                <Route path="/hrms/masters" element={<HrmsMastersPage />} />
               </Routes>
             </AppShell>
           </Protected>

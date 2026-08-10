@@ -2,32 +2,13 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Button, Card, Input, Select, Stat } from "../components/ui";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../lib/csvTemplates";
 
 /**
- * HRMS hub — one tile per tool. Each tool has its own dedicated page like
- * every other module in the portal.
- *
- *  · Recruitment              → /hrms/recruitment
- *  · Pre-joining + Onboarding → /hrms/onboarding
- *  · Payroll + Pay hike       → /hrms/payroll
- *  · Attendance (geo)         → /hrms/attendance
- *  · Leave (pre-approval)     → /hrms/leave
- *  · Leave types + Holidays   → /hrms/masters
- *
- * Adding an employee login and assigning them to projects / vendors is a
- * small enough form to keep on the hub for admin / office users.
+ * HRMS dashboard — KPIs, employee directory, project/vendor assignment.
+ * Sub-tools (Recruitment, Onboarding, etc.) open from the tool rail in HrmsLayout.
  */
-
-const TILES = [
-  { href: "/hrms/recruitment", tag: "1", eyebrow: "Recruitment", title: "Requisition → Job posting → Candidates → Interviews → Offer", sub: "Manpower requisition, HR approval, LinkedIn/Naukri postings, interview scorecards, offer letters. Teams meeting link auto-generated." },
-  { href: "/hrms/onboarding", tag: "2", eyebrow: "Pre-joining · Onboarding", title: "Document collection, BGV, IT asset, ID card, welcome kit → Day 1 formalities", sub: "Stateful checklists — per-employee audit trail." },
-  { href: "/hrms/payroll", tag: "3", eyebrow: "Payroll · Pay hike", title: "Monthly payslip compute + salary revision workflow", sub: "Deterministic compute from CTC + paid-days. Editable overrides. Approvals audited." },
-  { href: "/hrms/attendance", tag: "4", eyebrow: "Attendance", title: "Geo-fenced site check-in / check-out", sub: "GPS capture with optional site verification. Photo attendance runs through Site Pilot on each project." },
-  { href: "/hrms/leave", tag: "5", eyebrow: "Leave management", title: "Request → Approve → Balance updates", sub: "Pre-approval flow. Balances tick down on approve. Payroll picks up paid vs LWP." },
-  { href: "/hrms/masters", tag: "6", eyebrow: "Masters", title: "Leave types & holidays uploads", sub: "Seed CL / SL / PL / CO / LWP. Upload the year's holidays." },
-];
 
 export default function HrmPage() {
   const { token, user } = useAuth();
@@ -35,6 +16,7 @@ export default function HrmPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [dashboard, setDashboard] = useState<any>(null);
   const [msg, setMsg] = useState("");
   const [empForm, setEmpForm] = useState({
     fullName: "",
@@ -50,14 +32,16 @@ export default function HrmPage() {
   const [vendorAssign, setVendorAssign] = useState({ vendorId: "", projectId: "", trade: "" });
 
   const load = useCallback(async () => {
-    const [e, p, v] = await Promise.all([
+    const [e, p, v, dash] = await Promise.all([
       api<any[]>("/api/hrm/employees", { token }).catch(() => []),
       canManage ? api<any[]>("/api/projects", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
+      api<any>("/api/hrm/dashboard", { token }).catch(() => null),
     ]);
     setEmployees(e);
     setProjects(p);
     setVendors(v);
+    setDashboard(dash);
   }, [token, canManage]);
   useEffect(() => {
     void load();
@@ -77,21 +61,43 @@ export default function HrmPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="HRMS · Sharnam"
-        title="Human Resources — dedicated desk"
-        subtitle="Each tool has its own page — Recruitment, Onboarding, Payroll, Attendance, Leave, Masters. HR admin has a separate login link (/login/hr) so this desk stays scoped to HR + office roles."
-      />
+    <div className="space-y-5">
+      {dashboard && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Stat label="Headcount" value={String(dashboard.headcount ?? employees.length)} />
+          <Stat label="Punches today" value={String(dashboard.punchesToday ?? 0)} />
+          <Stat label="Pending leave" value={String(dashboard.pendingLeave ?? 0)} />
+          <Stat label="Open offers" value={String(dashboard.openOffers ?? 0)} />
+          <Stat label="Open reqs" value={String(dashboard.openReqs ?? 0)} />
+          <Stat label="Active candidates" value={String(dashboard.activeCandidates ?? 0)} />
+        </div>
+      )}
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {TILES.map((t) => (
-          <Link key={t.href} to={t.href} className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
-            <div className="text-xs uppercase tracking-widest text-brand font-semibold">{t.tag} · {t.eyebrow}</div>
-            <div className="mt-1 font-semibold">{t.title}</div>
-            <div className="text-xs text-steel-muted mt-1">{t.sub}</div>
-          </Link>
-        ))}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <Link to="/hrm/recruitment" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Recruitment</span>
+          <span className="hrms-quick-card__title">Requisition → Interview → Offer</span>
+        </Link>
+        <Link to="/hrm/onboarding" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Onboarding</span>
+          <span className="hrms-quick-card__title">Pre-join checklist + Day 1</span>
+        </Link>
+        <Link to="/hrm/payroll" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Payroll</span>
+          <span className="hrms-quick-card__title">Payslips + pay hike</span>
+        </Link>
+        <Link to="/hrm/attendance" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Attendance</span>
+          <span className="hrms-quick-card__title">Geo check-in / out</span>
+        </Link>
+        <Link to="/hrm/leave" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Leave</span>
+          <span className="hrms-quick-card__title">Request → Approve</span>
+        </Link>
+        <Link to="/hrm/masters" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Masters</span>
+          <span className="hrms-quick-card__title">Leave types + holidays</span>
+        </Link>
       </div>
 
       {msg && <p className="text-sm text-ok">{msg}</p>}

@@ -1,8 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Input, Select } from "../components/ui";
 
 /**
  * Payroll — Pay Hike + Payslip generation.
@@ -57,19 +56,6 @@ export default function PayrollPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="HRMS · Payroll"
-        title="Pay Hikes & Payslips"
-        subtitle="Manage salary revisions with an approval workflow. Generate monthly payslips deterministically from CTC breakdown + paid-days."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link to="/hrm"><Button variant="secondary">HRM home</Button></Link>
-            <Link to="/hrms/recruitment"><Button variant="secondary">Recruitment</Button></Link>
-            <Link to="/hrms/onboarding"><Button variant="secondary">Onboarding</Button></Link>
-          </div>
-        }
-      />
-
       <div className="flex flex-wrap gap-2">
         {(["payslip", "hike"] as const).map((t) => (
           <button

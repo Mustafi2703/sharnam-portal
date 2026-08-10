@@ -360,6 +360,97 @@ checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
   res.send([header.join(","), ...rows].join("\n"));
 });
 
+/**
+ * Full filled-schedule export — every submission with line-level answers,
+ * remarks, and photo paths. Admin can download one XLSX with all data.
+ */
+checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admin", "office"), async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
+  const submissions = await prisma.checklistSubmission.findMany({
+    where: {
+      assignment: {
+        projectId: req.params.projectId,
+        ...(type ? { template: { checklistType: type } } : {}),
+      },
+    },
+    include: {
+      assignment: { include: { template: { include: { items: { orderBy: { sortOrder: "asc" } } } } } },
+      submittedBy: { select: { fullName: true, role: true, email: true } },
+      drawing: { select: { drawingNumber: true, title: true } },
+      revision: { select: { revisionNumber: true } },
+      photos: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const rows: Record<string, string | number>[] = [];
+  for (const s of submissions) {
+    const template = s.assignment.template;
+    let responses: Record<string, any> = {};
+    try {
+      responses = JSON.parse(s.responsesJson || "{}");
+    } catch {
+      responses = {};
+    }
+    const photoPaths = s.photos.map((p) => p.fileUrl).join(" | ");
+    for (const item of template.items) {
+      const key = item.id ?? item.itemCode ?? "";
+      const ans = (key && responses[key]) || (item.itemCode ? responses[item.itemCode] : undefined) || {};
+      const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "";
+      const remarks = typeof ans === "object" ? ans.remarks || ans.remark || "" : "";
+      rows.push({
+        "Submitted At": new Date(s.createdAt).toISOString(),
+        Family: template.checklistType || "",
+        Checklist: template.name || "",
+        "Item Code": item.itemCode || "",
+        Section: item.section || "",
+        Description: item.description || "",
+        Instruction: item.instruction || "",
+        Answer: String(answer),
+        "Line Remarks": String(remarks),
+        "Overall Remarks": s.remarks || "",
+        Status: s.status,
+        "Filled By": s.submittedBy.fullName,
+        Role: s.submittedBy.role || "",
+        Email: s.submittedBy.email || "",
+        Drawing: s.drawing?.drawingNumber || "",
+        Revision: s.revisionNumber || s.revision?.revisionNumber || "",
+        "Photo Paths": photoPaths,
+      });
+    }
+    if (!template.items.length) {
+      rows.push({
+        "Submitted At": new Date(s.createdAt).toISOString(),
+        Family: template.checklistType || "",
+        Checklist: template.name || "",
+        "Item Code": "",
+        Section: "",
+        Description: "(no line items)",
+        Instruction: "",
+        Answer: "",
+        "Line Remarks": "",
+        "Overall Remarks": s.remarks || "",
+        Status: s.status,
+        "Filled By": s.submittedBy.fullName,
+        Role: s.submittedBy.role || "",
+        Email: s.submittedBy.email || "",
+        Drawing: s.drawing?.drawingNumber || "",
+        Revision: s.revisionNumber || "",
+        "Photo Paths": photoPaths,
+      });
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Note: "No filled checklists yet" }]);
+  XLSX.utils.book_append_sheet(wb, ws, "Filled Schedules");
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const fname = `filled-checklists-${req.params.projectId}${type ? `-${type}` : ""}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
 const TEMPLATE_TYPES = ["DrawingCheck", "SiteExecution", "QualityInspection", "Safety"] as const;
 
 /** Master: create checklist template (office + client for QI/Safety) */

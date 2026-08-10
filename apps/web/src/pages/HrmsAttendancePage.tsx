@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Select } from "../components/ui";
 
 /**
  * HRMS · Attendance — geo-fenced site check-in / check-out for the
@@ -60,23 +60,16 @@ export default function HrmsAttendancePage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="HRMS · Attendance"
-        title="Geo-fenced site attendance"
-        subtitle="Site check-in captures live GPS and (when a project is picked) verifies against the project's geo-fence. Photo attendance runs through the Site Pilot tool on each project."
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <Select value={checkInProject} onChange={(e) => setCheckInProject(e.target.value)} className="max-w-xs">
-              <option value="">No project (office)</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.code}</option>
-              ))}
-            </Select>
-            <Button onClick={() => checkIn("in")}>Check-in (GPS)</Button>
-            <Button variant="secondary" onClick={() => checkIn("out")}>Check-out</Button>
-          </div>
-        }
-      />
+      <div className="flex flex-wrap gap-2 items-center">
+        <Select value={checkInProject} onChange={(e) => setCheckInProject(e.target.value)} className="max-w-xs">
+          <option value="">No project (office)</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.code}</option>
+          ))}
+        </Select>
+        <Button onClick={() => checkIn("in")}>Check-in (GPS)</Button>
+        <Button variant="secondary" onClick={() => checkIn("out")}>Check-out</Button>
+      </div>
       {msg && <p className="text-sm text-ok">{msg}</p>}
       {geo && <p className="text-xs text-steel-muted">GPS: {geo}</p>}
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
+import { Badge, Button, Card, Input, TextArea } from "../components/ui";
 
 /**
  * Onboarding hub — top level shows all offers past "Accepted" with a live pre-join +
@@ -27,17 +27,6 @@ function OnboardingList() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        eyebrow="HRMS · Pre-joining · Onboarding"
-        title="Joining pipeline"
-        subtitle="Every accepted offer lands here — track document collection, BGV, medical, IT asset, email, ID card, welcome kit, and then joining formalities day-one."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link to="/hrms/recruitment"><Button variant="secondary">Recruitment</Button></Link>
-            <Link to="/hrm"><Button variant="secondary">HRM home</Button></Link>
-          </div>
-        }
-      />
       <Card padding={false}>
         <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">
           Accepted / joined ({offers.length})
@@ -53,7 +42,7 @@ function OnboardingList() {
                   <Badge tone={o.status === "Joined" ? "ok" : "brand"}>{o.status}</Badge>
                 </div>
               </div>
-              <Link to={`/hrms/onboarding/${o.id}`}>
+              <Link to={`/hrm/onboarding/${o.id}`}>
                 <Button variant="secondary">Open checklist</Button>
               </Link>
             </li>
@@ -163,16 +152,18 @@ function OfferOnboardingPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Pre-joining · Onboarding"
-        title={offer ? `${offer.candidate?.fullName} · ${offer.designation}` : "Loading…"}
-        subtitle={offer ? `Offer ${offer.offerNo} · CTC ₹${Number(offer.ctcAnnual).toLocaleString("en-IN")} · joining ${offer.joiningDate ? new Date(offer.joiningDate).toLocaleDateString("en-IN") : "—"}` : ""}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link to="/hrms/onboarding"><Button variant="secondary">Back to list</Button></Link>
-          </div>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-lg">{offer ? `${offer.candidate?.fullName} · ${offer.designation}` : "Loading…"}</h2>
+          {offer && (
+            <p className="text-sm text-steel-muted mt-1">
+              Offer {offer.offerNo} · CTC ₹{Number(offer.ctcAnnual).toLocaleString("en-IN")} · joining{" "}
+              {offer.joiningDate ? new Date(offer.joiningDate).toLocaleDateString("en-IN") : "—"}
+            </p>
+          )}
+        </div>
+        <Link to="/hrm/onboarding"><Button variant="secondary">Back to list</Button></Link>
+      </div>
       {msg && <p className="text-sm text-brand-dark">{msg}</p>}
 
       <div className="grid lg:grid-cols-3 gap-4">

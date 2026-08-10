@@ -76,11 +76,32 @@ export default function ChecklistLogsPage() {
     }
   }
 
+  async function exportFilledXlsx() {
+    if (!id) return;
+    try {
+      const q = family ? `?type=${encodeURIComponent(family)}` : "";
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/checklist/project/${id}/export-filled.xlsx${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `filled-schedules-${family || "all"}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMsg("Full filled schedule XLSX downloaded.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "XLSX export failed");
+    }
+  }
+
   return (
     <div className="space-y-5">
       <PageHero
         title={title}
-        subtitle="Every Drawing, Quality, and Safety checklist fill is logged. Download a Sharnam-branded print (save as PDF) or export CSV."
+        subtitle="Every fill logged with line-level data. Download full schedule XLSX (all answers + photos) or branded PDF per row."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void load()}>
@@ -88,6 +109,9 @@ export default function ChecklistLogsPage() {
             </Button>
             <Button type="button" className="!bg-amber-500" onClick={exportCsv}>
               Export CSV
+            </Button>
+            <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void exportFilledXlsx()}>
+              Full schedule XLSX
             </Button>
           </div>
         }

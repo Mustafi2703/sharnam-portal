@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Input, Select } from "../components/ui";
 
 /** HRMS · Leave — pre-approval flow with balances + admin approve/reject. */
 export default function HrmsLeavePage() {
@@ -43,11 +43,6 @@ export default function HrmsLeavePage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="HRMS · Leave"
-        title="Leave request & balances"
-        subtitle="Pre-approval workflow. Balances tick down on approve. Payroll picks up paid vs LWP status when it computes the payslip."
-      />
       {msg && <p className="text-sm text-ok">{msg}</p>}
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="space-y-3">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Button, Card, Input, PageHeader } from "../components/ui";
+import { Button, Card, Input } from "../components/ui";
 
 /** HRMS · Masters — leave types + holidays uploads. Admin / office only. */
 export default function HrmsMastersPage() {
@@ -42,12 +42,6 @@ export default function HrmsMastersPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        eyebrow="HRMS · Masters"
-        title="Leave types & holidays"
-        subtitle="Seed suggested types: CL / SL / PL / CO / LWP. Upload the year's holidays so payroll and attendance skip them by default."
-      />
-
       {!canManage && (
         <p className="text-sm text-steel-muted">Read-only view — admin / office can edit these masters.</p>
       )}

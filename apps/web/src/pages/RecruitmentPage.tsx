@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
+import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -58,19 +58,6 @@ export default function RecruitmentPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="HRMS · Recruitment & Interview management"
-        title="Requisition → posting → screening → interview → offer"
-        subtitle="Every stage is auditable. Interview scorecards feed into the candidate status. Approved offers auto-generate a pre-joining checklist."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link to="/hrm"><Button variant="secondary">HRM home</Button></Link>
-            <Link to="/hrms/onboarding"><Button variant="secondary">Onboarding →</Button></Link>
-            <Link to="/hrms/payroll"><Button variant="secondary">Payroll →</Button></Link>
-          </div>
-        }
-      />
-
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button
@@ -358,7 +345,7 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
                     </Select>
                   </td>
                   <td>
-                    <Link to={`/hrms/recruitment?tab=interviews&candidateId=${c.id}`} className="text-brand text-[10px] font-semibold">Schedule ↗</Link>
+                    <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className="text-brand text-[10px] font-semibold">Schedule ↗</Link>
                   </td>
                 </tr>
               ))}
@@ -581,7 +568,7 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
                       </Select>
                     )}
                     {o.status === "Accepted" && (
-                      <Link to={`/hrms/onboarding/${o.id}`} className="text-brand text-[10px] font-semibold ml-2">Pre-join ↗</Link>
+                      <Link to={`/hrm/onboarding/${o.id}`} className="text-brand text-[10px] font-semibold ml-2">Pre-join ↗</Link>
                     )}
                   </td>
                 </tr>

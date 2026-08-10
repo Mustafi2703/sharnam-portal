@@ -399,6 +399,40 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
 export const hrmRouter = Router();
 hrmRouter.use(requireAuth);
 
+hrmRouter.get("/dashboard", async (_req, res) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const [
+    headcount,
+    openOffers,
+    pendingLeave,
+    punchesToday,
+    openReqs,
+    activeCandidates,
+  ] = await Promise.all([
+    prisma.user.count({ where: { role: { not: "admin" } } }),
+    prisma.offer.count({ where: { status: { in: ["Draft", "Approved", "Sent"] } } }),
+    prisma.leaveRequest.count({ where: { status: "Pending" } }),
+    prisma.attendance.count({
+      where: { date: { gte: today, lt: tomorrow }, checkIn: { not: null } },
+    }),
+    prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "PendingHR", "Approved"] } } }),
+    prisma.candidate.count({ where: { status: { in: ["New", "Screened", "Shortlisted", "Interview", "Selected"] } } }),
+  ]);
+
+  res.json({
+    headcount,
+    openOffers,
+    pendingLeave,
+    punchesToday,
+    openReqs,
+    activeCandidates,
+  });
+});
+
 hrmRouter.get("/employees", async (_req, res) => {
   const users = await prisma.user.findMany({
     where: { role: { in: ["office", "site_employee", "employee", "admin", "vendor", "client"] } },
