@@ -337,7 +337,7 @@ function BrandLockup({
   onHero?: boolean;
   glass?: boolean;
 }) {
-  const heroSrc = onHero ? "/logo-hero-light.png?v=1" : "/logo.png";
+  const heroSrc = onHero ? "/logo-transparent.png?v=2" : "/logo.png";
   return (
     <div
       className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${
@@ -368,13 +368,10 @@ function HeroBrandOverlay({ tagline, glass = true }: { tagline?: string; glass?:
 
 function AuthBackdrop({ portalKey }: { portalKey?: string }) {
   const src = portalHeroSrc(portalKey);
-  const tone = portalKey ? PORTAL_LOGINS[portalKey]?.tone || "#0B6A78" : "#0B6A78";
   return (
     <div className="auth-backdrop" aria-hidden>
       <img className="auth-backdrop__img" src={src} alt="" loading="eager" fetchPriority="high" />
       <div className="auth-backdrop__scrim" />
-      <div className="auth-backdrop__grid" />
-      <div className="auth-backdrop__glow" style={{ ["--portal-tone" as string]: tone } as CSSProperties} />
     </div>
   );
 }
@@ -480,7 +477,7 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="signin-card signin-card--glass" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
+    <div className="signin-card signin-card--panel" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
       <div className="signin-card__accent signin-card__accent--glow" aria-hidden />
       <div className="signin-card__body">
         <div className="signin-card__head">
@@ -529,25 +526,18 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 
 function PortalShowcase({ cfg }: { cfg: PortalConfig }) {
   return (
-    <aside className="auth-glass auth-glass--showcase">
-      <BrandLockup size="hero" onHero glass />
-      <Link to="/login" className="auth-page__back auth-page__back--glass">← All portals</Link>
-      <span className="auth-glass__eyebrow" style={{ color: cfg.tone }}>{cfg.shortLabel} portal</span>
-      <h1 className="auth-glass__title">{cfg.headline}</h1>
-      <p className="auth-glass__sub">{cfg.subtitle}</p>
-      <ul className="auth-glass__points">
+    <aside className="auth-panel auth-panel--info">
+      <span className="auth-panel__eyebrow" style={{ color: cfg.tone }}>{cfg.shortLabel} portal</span>
+      <h1 className="auth-panel__title">{cfg.headline}</h1>
+      <p className="auth-panel__sub">{cfg.subtitle}</p>
+      <ul className="auth-panel__points">
         {cfg.points.map((p) => (
           <li key={p}>
-            <span className="auth-glass__dot" style={{ background: cfg.tone }} aria-hidden />
+            <span className="auth-panel__dot" style={{ background: cfg.tone }} aria-hidden />
             {p}
           </li>
         ))}
       </ul>
-      <div className="auth-glass__iso">
-        {ISO_BADGES.slice(0, 3).map((b) => (
-          <span key={b.code}>{b.code}</span>
-        ))}
-      </div>
     </aside>
   );
 }
@@ -575,12 +565,19 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
   return (
-    <div className="auth-page auth-page--immersive auth-page--portal" data-portal={portalKey}>
+    <div className="auth-page auth-page--immersive auth-page--light auth-page--portal" data-portal={portalKey}>
       <AuthBackdrop portalKey={portalKey} />
       <TopStrip showLogo={false} />
-      <main className="auth-immersive__stage">
+      <header className="auth-login__header">
+        <BrandLockup size="hero" onHero glass />
+        <Link to="/login" className="auth-login__back">← All portals</Link>
+        <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
+          {portalDisplayName(cfg.key, cfg.shortLabel)} portal
+        </p>
+      </header>
+      <main className="auth-login__main">
         <PortalShowcase cfg={cfg} />
-        <div className="auth-glass auth-glass--signin">
+        <div className="auth-panel auth-panel--form">
           <SignInCard cfg={cfg} />
         </div>
       </main>
@@ -632,14 +629,14 @@ export function LoginHubPage() {
   ];
 
   return (
-    <div className="auth-page auth-page--immersive auth-page--hub">
+    <div className="auth-page auth-page--immersive auth-page--light auth-page--hub">
       <AuthBackdrop />
       <TopStrip showLogo={false} />
-      <header className="auth-hub__mast">
-        <HeroBrandOverlay tagline="Project Management Consultants" glass />
+      <header className="auth-login__header auth-login__header--hub">
+        <BrandLockup size="hero" onHero glass />
+        <p className="auth-hero-brand__tag">Project Management Consultants</p>
       </header>
-      <main className="auth-hub auth-hub--glass">
-
+      <main className="auth-hub auth-hub--light">
         <section className="auth-hub__bento" aria-label="Choose your portal">
           <header className="auth-hub__section-head">
             <h2 className="auth-hub__section-title">Sign in</h2>
