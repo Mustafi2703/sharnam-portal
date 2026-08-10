@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { formatIstPunchTime } from "@sharnam/shared";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Select } from "../components/ui";
@@ -49,7 +50,7 @@ function formatPunchLine(
 
   return {
     label,
-    time: time || "—",
+    time: formatIstPunchTime(time),
     place,
     lat,
     lng,
@@ -170,7 +171,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
       const row = await api<any>("/api/hrm/attendance/punch", { method: "POST", token, body: fd });
       const punchTime = kind === "in" ? row.checkIn : row.checkOut;
       setMsg(
-        `${kind === "in" ? "Checked in" : "Checked out"} at ${punchTime || "—"}` +
+        `${kind === "in" ? "Checked in" : "Checked out"} at ${formatIstPunchTime(punchTime)}` +
           ` · ${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}` +
           (row.inGeofenceOk || row.outGeofenceOk ? " · site verified" : "") +
           (row.provider === "sharepoint" ? " · SharePoint" : "")
@@ -302,7 +303,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
                   </div>
                 </div>
                 <Badge tone={a.inGeofenceOk ? "ok" : "warn"}>
-                  {a.status} {a.checkIn || ""}
+                  {a.status} {formatIstPunchTime(a.checkIn)}
                 </Badge>
               </li>
             ))}

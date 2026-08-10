@@ -368,26 +368,6 @@ function AuthBackdrop({ portalKey }: { portalKey?: string }) {
   );
 }
 
-function PolicyList({ policies }: { policies: string[] }) {
-  return (
-    <ul className="auth-policies" aria-label="Portal standards">
-      {policies.map((text) => (
-        <li key={text} className="auth-policies__item">
-          <span className="auth-policies__dot" aria-hidden />
-          {text}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/* Portal picker retired — each portal has its own permanent link. To switch
-   portals from the per-portal page, use "← All portals" back to the hub. */
-
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Sign-in card
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
 function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: boolean }) {
   const { loginWithToken } = useAuth();
   const [email, setEmail] = useState(cfg.demoEmail);
@@ -436,11 +416,13 @@ function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: b
     <div className="signin-card signin-card--panel" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
       <div className="signin-card__accent signin-card__accent--glow" aria-hidden />
       <div className="signin-card__body">
-        <div className="signin-card__head">
-          <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
-        </div>
+        {!formOnly && (
+          <div className="signin-card__head">
+            <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
+          </div>
+        )}
         {formOnly ? (
-          <h2 className="signin-card__title">Sign in</h2>
+          <h2 className="signin-card__title">{portalDisplayName(cfg.key, cfg.shortLabel)} · Sign in</h2>
         ) : (
           <>
             <h2 className="signin-card__title">{cfg.headline}</h2>
@@ -486,24 +468,6 @@ function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: b
   );
 }
 
-function PortalInfo({ cfg }: { cfg: PortalConfig }) {
-  return (
-    <div className="auth-portal__info">
-      <span className="auth-panel__eyebrow" style={{ color: cfg.tone }}>{cfg.shortLabel} portal</span>
-      <h1 className="auth-panel__title">{cfg.headline}</h1>
-      <p className="auth-panel__sub">{cfg.subtitle}</p>
-      <ul className="auth-panel__points">
-        {cfg.points.map((p) => (
-          <li key={p}>
-            <span className="auth-panel__dot" style={{ background: cfg.tone }} aria-hidden />
-            {p}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 function useAuthPageScroll() {
   useEffect(() => {
     document.documentElement.classList.add("is-auth-route");
@@ -530,17 +494,12 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     <div className="auth-page auth-page--immersive auth-page--light auth-page--portal" data-portal={portalKey}>
       <AuthBackdrop portalKey={portalKey} />
       <div className="auth-shell auth-shell--portal">
-        <div className="auth-portal__grid">
-          <aside className="auth-portal__panel auth-portal__panel--info">
+        <div className="auth-portal__grid auth-portal__grid--minimal">
+          <aside className="auth-portal__brand">
             <BrandLockup size="hero" onHero glass />
             <Link to="/login" className="auth-login__back">← All portals</Link>
-            <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
-              {portalDisplayName(cfg.key, cfg.shortLabel)} portal
-            </p>
-            <PortalInfo cfg={cfg} />
-            <PolicyList policies={cfg.policies} />
           </aside>
-          <div className="auth-portal__panel auth-portal__panel--signin">
+          <div className="auth-portal__signin">
             <SignInCard cfg={cfg} formOnly />
           </div>
         </div>

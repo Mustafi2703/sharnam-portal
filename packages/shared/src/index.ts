@@ -205,3 +205,38 @@ export type AuthUser = {
   role: RoleKey;
   portal: PortalKey;
 };
+
+/** Indian Standard Time — used for site attendance punches and display. */
+export const IST_TIMEZONE = "Asia/Kolkata";
+
+export function formatIstTimeHHMM(d = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: IST_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+}
+
+/** Calendar day at local midnight for attendance date keys (IST). */
+export function istStartOfDay(d = new Date()): Date {
+  const ymd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+  const [y, m, day] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, day, 0, 0, 0, 0);
+}
+
+export function formatIstPunchTime(time: string | null | undefined): string {
+  if (!time) return "—";
+  if (/^\d{1,2}:\d{2}$/.test(time)) return `${time} IST`;
+  const parsed = new Date(time);
+  if (!Number.isNaN(parsed.getTime())) return `${formatIstTimeHHMM(parsed)} IST`;
+  return time;
+}

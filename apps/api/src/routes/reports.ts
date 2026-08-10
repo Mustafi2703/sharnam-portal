@@ -4,7 +4,13 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
-import { buildDprPack, buildWprPack, renderDprHtml, renderWprHtml } from "../services/reportPacks.js";
+import {
+  buildDprPack,
+  buildWprPack,
+  renderDprHtml,
+  renderWprHtml,
+} from "../services/reportPacks.js";
+import { formatIstTimeHHMM, istStartOfDay } from "@sharnam/shared";
 import {
   analyticsToHtml,
   analyticsToSheets,
@@ -500,8 +506,8 @@ hrmRouter.post("/assign", requireRoles("admin", "office"), async (req, res) => {
 });
 
 hrmRouter.get("/attendance", async (req, res) => {
-  const date = req.query.date ? new Date(String(req.query.date)) : new Date();
-  date.setHours(0, 0, 0, 0);
+  const date = req.query.date ? new Date(String(req.query.date)) : istStartOfDay();
+  if (req.query.date) date.setHours(0, 0, 0, 0);
   const rows = await prisma.attendance.findMany({
     where: { date },
     include: { user: { select: { fullName: true, role: true, email: true } } },
@@ -542,9 +548,8 @@ hrmRouter.post(
       return res.status(400).json({ error: "GPS location required — allow location access on your device" });
     }
 
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    const timeStr = new Date().toTimeString().slice(0, 5);
+    const date = istStartOfDay();
+    const timeStr = formatIstTimeHHMM();
 
     let geofenceOk = false;
     let matchedSite: string | undefined;
