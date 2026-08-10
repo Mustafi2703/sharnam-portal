@@ -136,6 +136,9 @@ export default function CrmPage() {
             <Link to="/quotations/new">
               <Button variant="secondary">+ Quotation maker</Button>
             </Link>
+            <Link to="/crm/bid-compare">
+              <Button variant="secondary">Comparative analysis</Button>
+            </Link>
             {canManage && (
               <>
                 {(["leads", "wizard", "projects"] as const).map((t) => (

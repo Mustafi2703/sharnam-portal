@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
 import { seedChecklistFillsForReports, seedQualitySafetyFromSheets } from "./qualitySafetySheets.ts";
+import { seedCrmComparative } from "./crmComparativeSeed.ts";
 import { PrismaClient } from "@prisma/client";
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -1389,6 +1390,7 @@ async function main() {
   try {
     const { project } = await seedProjectAndCost(users);
     console.log("Demo project:", project.code, project.name);
+    await seedCrmComparative(prisma);
   } catch (e) {
     console.warn(
       "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",

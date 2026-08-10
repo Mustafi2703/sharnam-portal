@@ -652,6 +652,7 @@ model Lead {
   project    Project?    @relation(fields: [projectId], references: [id])
   owner      User?       @relation(fields: [ownerId], references: [id])
   quotations Quotation[]
+  bidPackages CrmBidPackage[]
 }
 
 model Deal {
@@ -1187,6 +1188,44 @@ model Vendor {
   bills          VendorBill[]
   purchaseOrders PurchaseOrder[]
   raBills        RaBill[]
+  crmVendorBoqs  CrmVendorBoq[]
+}
+
+/** CRM bid package — vendor BOQ collection + comparative analysis (office only). */
+model CrmBidPackage {
+  id                 String    @id @default(cuid())
+  leadId             String?
+  title              String
+  status             String    @default("Open")
+  revisionLabel      String    @default("R2")
+  vendorNamesJson    String    @default("[]")
+  dueDate            DateTime?
+  notes              String?
+  comparativeSheetId String?
+  awardedVendorId    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  lead       Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  vendorBoqs CrmVendorBoq[]
+}
+
+/** Vendor BOQ upload slot within a CRM bid package. */
+model CrmVendorBoq {
+  id           String   @id @default(cuid())
+  bidPackageId String
+  vendorId     String?
+  vendorLabel  String
+  fileName     String?
+  storagePath  String?
+  sheetId      String?
+  uploadedById String?
+  uploadedAt   DateTime?
+
+  bidPackage CrmBidPackage @relation(fields: [bidPackageId], references: [id], onDelete: Cascade)
+  vendor     Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@unique([bidPackageId, vendorLabel])
 }
 
 model ProjectVendor {
