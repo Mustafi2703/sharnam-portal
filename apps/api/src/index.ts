@@ -22,6 +22,8 @@ import { siteTestRouter } from "./routes/siteTest.js";
 import { financeRouter } from "./routes/finance.js";
 import { customSheetsRouter } from "./routes/customSheets.js";
 import { hrmRecruitmentRouter } from "./routes/hrmRecruitment.js";
+import { dprMakerRouter } from "./routes/dprMaker.js";
+import { wprMakerRouter } from "./routes/wprMaker.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -86,6 +88,8 @@ app.use("/api/site-test", siteTestRouter);
 app.use("/api/finance", financeRouter);
 app.use("/api/custom-sheets", customSheetsRouter);
 app.use("/api/hrm", hrmRecruitmentRouter);
+app.use("/api/dpr-maker", dprMakerRouter);
+app.use("/api/wpr-maker", wprMakerRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {

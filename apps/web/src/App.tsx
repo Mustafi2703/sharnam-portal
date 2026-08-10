@@ -42,6 +42,11 @@ import CustomSheetsPage, { CustomSheetEditorPage } from "./pages/CustomSheetsPag
 import RecruitmentPage from "./pages/RecruitmentPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import PayrollPage from "./pages/PayrollPage";
+import DprMakerPage from "./pages/DprMakerPage";
+import WprMakerPage from "./pages/WprMakerPage";
+import HrmsAttendancePage from "./pages/HrmsAttendancePage";
+import HrmsLeavePage from "./pages/HrmsLeavePage";
+import HrmsMastersPage from "./pages/HrmsMastersPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -78,6 +83,7 @@ export default function App() {
       <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
       <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
       <Route path="/login/office" element={<PortalLoginPage portalKey="office" />} />
+      <Route path="/login/hr" element={<PortalLoginPage portalKey="hr" />} />
       <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
 
       <Route
@@ -145,6 +151,8 @@ export default function App() {
                   <Route path="finance" element={<FinancePage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route path="site-pilot" element={<SitePilotPage />} />
+                  <Route path="dpr-maker" element={<DprMakerPage />} />
+                  <Route path="wpr-maker" element={<WprMakerPage />} />
                 </Route>
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />
@@ -158,6 +166,9 @@ export default function App() {
                 <Route path="/hrms/onboarding" element={<OnboardingPage />} />
                 <Route path="/hrms/onboarding/:offerId" element={<OnboardingPage />} />
                 <Route path="/hrms/payroll" element={<PayrollPage />} />
+                <Route path="/hrms/attendance" element={<HrmsAttendancePage />} />
+                <Route path="/hrms/leave" element={<HrmsLeavePage />} />
+                <Route path="/hrms/masters" element={<HrmsMastersPage />} />
               </Routes>
             </AppShell>
           </Protected>

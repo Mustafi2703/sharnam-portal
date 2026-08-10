@@ -39,8 +39,13 @@ const folders: [string, string, string][] = [
   ["05 · Procurement (office)", `${base}/05_PROCUREMENT_AND_CONTRACTS`, "Contractor-hidden"],
   ["06 · Statutory & Land", `${base}/06_STATUTORY_AND_LAND`, ""],
   ["07 · Execution & Delivery", `${base}/07_EXECUTION_AND_DELIVERY`, ""],
-  ["07.02 DPR / Daily Site Records", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records`, "was: Documents/DPR"],
-  ["07.08 WPR / S-curve", `${base}/07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve`, "was: Documents/WPR"],
+  ["07.02 DPR / Daily Site Records", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records`, "DPR Maker publishes per-discipline packs here"],
+  ["07.02/CIVIL", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/CIVIL`, "Civil DPR packs"],
+  ["07.02/ELECTRICAL", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/ELECTRICAL`, "Electrical DPR packs"],
+  ["07.02/FIRE", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/FIRE`, "Fire DPR packs"],
+  ["07.02/PLUMBING", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/PLUMBING`, "Plumbing DPR packs"],
+  ["07.02/SitePilot", `${base}/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/SitePilot`, "Site pilot photo + signature + notes"],
+  ["07.08 Progress / S-curve", `${base}/07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve`, "Progress overview + S-curve"],
   ["07.09 Hindrance / Delay", `${base}/07_EXECUTION_AND_DELIVERY/07.09_Delay_Analysis`, ""],
   ["08 · Quality · HSE · Env", `${base}/08_QUALITY_HSE_AND_ENVIRONMENT`, ""],
   ["08.02 Checklists / Quality RFI", `${base}/08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards`, "client-visible"],
@@ -49,8 +54,9 @@ const folders: [string, string, string][] = [
   ["08.07 HIRA / Safety RFI", `${base}/08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment`, "client-visible"],
   ["09 · Commercial & Change (office)", `${base}/09_COMMERCIAL_AND_CHANGE`, "COP · RA · Change control"],
   ["10 · Performance & Handover", `${base}/10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT`, ""],
-  ["10.01 MIS reports", `${base}/10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS`, ""],
+  ["10.01 MIS / WPR pack", `${base}/10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS`, "WPR Maker publishes 24-section packs here"],
   ["10.06 Handover dossier", `${base}/10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.06_Handover_Dossier_Practical_Completion`, ""],
+  ["10.18 HR audit programme", `${base}/10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.18_Management_Review_and_Audit_Programme`, "HR audit trail exports"],
 ];
 
 console.log(`Site: ${drive.siteName}`);

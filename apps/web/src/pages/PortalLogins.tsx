@@ -261,6 +261,28 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
       "Close follow-ups before next weekly meeting",
     ],
   },
+  hr: {
+    key: "hr", title: "HR admin", shortLabel: "HR",
+    headline: "Recruitment · Attendance · Payroll · Audit.",
+    subtitle: "Dedicated HRMS desk — separate login link for HR administrators.",
+    demoEmail: "office@sharnam.demo",
+    allowedRoles: ["admin", "office"],
+    points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Audit"],
+    cta: "Enter HR admin", tone: "#6D28D9", icon: "HR",
+    landingPath: "/hrm", workspaceKey: null, group: "role", heroes: VIZ_OFFICE,
+    policies: [
+      "Recruitment log audits every state change",
+      "Pre-joining · Onboarding stateful checklists",
+      "Attendance requires GPS + project (geo-fence)",
+      "Leave pre-approval before payroll cut-off",
+      "Payroll compute reads paid days + hikes",
+      "Employee documents stay in HR-only folder",
+      "Teams meetings link auto on interview panel",
+      "Salary discussion visible to HR + Office only",
+      "Compensation revisions require two-step approval",
+      "Audit timeline exportable per employee",
+    ],
+  },
   field: {
     key: "field", title: "Field", shortLabel: "Field",
     headline: "Day log, photos, site RFIs.",
@@ -298,7 +320,7 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[]    = ["office", "site", "vendor", "client", "employee", "master"];
+const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[]    = ["office", "site", "vendor", "client", "employee", "master", "hr"];
 const MODULE_LOGINS: (keyof typeof PORTAL_LOGINS)[] = ["drawings", "quality", "comms", "field"];
 
 const ISO_BADGES = [

@@ -1,26 +1,41 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../lib/csvTemplates";
 
 /**
- * HRM — company people + assign into project directory + attendance (with geo-fence),
- * leave types, holidays, and leave requests with balances.
+ * HRMS hub — one tile per tool. Each tool has its own dedicated page like
+ * every other module in the portal.
+ *
+ *  · Recruitment              → /hrms/recruitment
+ *  · Pre-joining + Onboarding → /hrms/onboarding
+ *  · Payroll + Pay hike       → /hrms/payroll
+ *  · Attendance (geo)         → /hrms/attendance
+ *  · Leave (pre-approval)     → /hrms/leave
+ *  · Leave types + Holidays   → /hrms/masters
+ *
+ * Adding an employee login and assigning them to projects / vendors is a
+ * small enough form to keep on the hub for admin / office users.
  */
+
+const TILES = [
+  { href: "/hrms/recruitment", tag: "1", eyebrow: "Recruitment", title: "Requisition → Job posting → Candidates → Interviews → Offer", sub: "Manpower requisition, HR approval, LinkedIn/Naukri postings, interview scorecards, offer letters. Teams meeting link auto-generated." },
+  { href: "/hrms/onboarding", tag: "2", eyebrow: "Pre-joining · Onboarding", title: "Document collection, BGV, IT asset, ID card, welcome kit → Day 1 formalities", sub: "Stateful checklists — per-employee audit trail." },
+  { href: "/hrms/payroll", tag: "3", eyebrow: "Payroll · Pay hike", title: "Monthly payslip compute + salary revision workflow", sub: "Deterministic compute from CTC + paid-days. Editable overrides. Approvals audited." },
+  { href: "/hrms/attendance", tag: "4", eyebrow: "Attendance", title: "Geo-fenced site check-in / check-out", sub: "GPS capture with optional site verification. Photo attendance runs through Site Pilot on each project." },
+  { href: "/hrms/leave", tag: "5", eyebrow: "Leave management", title: "Request → Approve → Balance updates", sub: "Pre-approval flow. Balances tick down on approve. Payroll picks up paid vs LWP." },
+  { href: "/hrms/masters", tag: "6", eyebrow: "Masters", title: "Leave types & holidays uploads", sub: "Seed CL / SL / PL / CO / LWP. Upload the year's holidays." },
+];
+
 export default function HrmPage() {
   const { token, user } = useAuth();
+  const canManage = user?.role === "admin" || user?.role === "office";
   const [employees, setEmployees] = useState<any[]>([]);
-  const [attendance, setAttendance] = useState<any[]>([]);
-  const [leave, setLeave] = useState<any[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
-  const [balances, setBalances] = useState<any[]>([]);
-  const [holidays, setHolidays] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
-
-  const [leaveForm, setLeaveForm] = useState({ fromDate: "", toDate: "", reason: "", leaveTypeId: "", halfDay: false });
+  const [msg, setMsg] = useState("");
   const [empForm, setEmpForm] = useState({
     fullName: "",
     email: "",
@@ -34,125 +49,52 @@ export default function HrmPage() {
   const [assign, setAssign] = useState({ userId: "", projectId: "", role: "site_employee" });
   const [vendorAssign, setVendorAssign] = useState({ vendorId: "", projectId: "", trade: "" });
 
-  const [leaveTypeForm, setLeaveTypeForm] = useState({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });
-  const [holidayForm, setHolidayForm] = useState({ date: "", name: "", region: "India" });
-  const [checkInProject, setCheckInProject] = useState("");
-  const [geoStatus, setGeoStatus] = useState("");
-  const [msg, setMsg] = useState("");
-
-  const canManage = user?.role === "admin" || user?.role === "office";
-
-  const load = async () => {
-    const year = new Date().getFullYear();
-    const [e, a, l, lt, hs, p, v, bl] = await Promise.all([
-      api<any[]>("/api/hrm/employees", { token }),
-      api<any[]>("/api/hrm/attendance", { token }),
-      api<any[]>("/api/hrm/leave", { token }),
-      api<any[]>("/api/hrm/leave-types", { token }),
-      api<any[]>(`/api/hrm/holidays?year=${year}`, { token }),
-      canManage ? api<any[]>("/api/projects", { token }) : Promise.resolve([]),
+  const load = useCallback(async () => {
+    const [e, p, v] = await Promise.all([
+      api<any[]>("/api/hrm/employees", { token }).catch(() => []),
+      canManage ? api<any[]>("/api/projects", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
-      api<any[]>(`/api/hrm/leave-balances?year=${year}`, { token }).catch(() => []),
     ]);
     setEmployees(e);
-    setAttendance(a);
-    setLeave(l);
-    setLeaveTypes(lt);
-    setHolidays(hs);
     setProjects(p);
     setVendors(v);
-    setBalances(bl);
-  };
-
+  }, [token, canManage]);
   useEffect(() => {
     void load();
-  }, [token, canManage]);
+  }, [load]);
 
   async function createEmployee(e: FormEvent) {
     e.preventDefault();
-    await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(empForm) });
-    setEmpForm({ fullName: "", email: "", role: "site_employee", phone: "", empCode: "", department: "Site", designation: "", password: "Demo@1234" });
-    setMsg("Employee login created.");
-    await load();
-  }
-
-  async function checkInWithGeo(kind: "in" | "out") {
-    setGeoStatus("Requesting GPS…");
-    if (!navigator.geolocation) {
-      setGeoStatus("Geolocation not supported on this device");
-      return;
+    setMsg("");
+    try {
+      await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(empForm) });
+      setEmpForm({ fullName: "", email: "", role: "site_employee", phone: "", empCode: "", department: "Site", designation: "", password: "Demo@1234" });
+      setMsg("Employee login created.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Create failed");
     }
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const geo = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
-        setGeoStatus(`GPS ok · ±${Math.round(geo.accuracy)}m`);
-        try {
-          await api("/api/hrm/attendance", {
-            method: "POST",
-            token,
-            body: JSON.stringify({
-              status: "Present",
-              kind,
-              [kind === "in" ? "checkIn" : "checkOut"]: new Date().toTimeString().slice(0, 5),
-              geo,
-              projectId: checkInProject || undefined,
-            }),
-          });
-          setMsg(`${kind === "in" ? "Checked in" : "Checked out"} — GPS captured${checkInProject ? " · site verified" : ""}.`);
-          await load();
-        } catch (err) {
-          setMsg(err instanceof Error ? err.message : "Check-in failed");
-        }
-      },
-      (err) => setGeoStatus(`GPS error — ${err.message}`),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
   }
-
-  const holidaysThisYear = useMemo(() => holidays.slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [holidays]);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="HRM · Directory · Attendance · Leave"
-        title="People, attendance & leave"
-        subtitle="Company roster + project assignments + geo-fenced site check-in + leave types, balances & holidays. Everything cross-linked into Communication Matrix and project directory."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Select value={checkInProject} onChange={(e) => setCheckInProject(e.target.value)} className="max-w-xs">
-              <option value="">No project (office)</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code}
-                </option>
-              ))}
-            </Select>
-            <Button type="button" onClick={() => void checkInWithGeo("in")}>Check-in (GPS)</Button>
-            <Button type="button" variant="secondary" onClick={() => void checkInWithGeo("out")}>Check-out</Button>
-          </div>
-        }
+        eyebrow="HRMS · Sharnam"
+        title="Human Resources — dedicated desk"
+        subtitle="Each tool has its own page — Recruitment, Onboarding, Payroll, Attendance, Leave, Masters. HR admin has a separate login link (/login/hr) so this desk stays scoped to HR + office roles."
       />
 
-      <div className="grid md:grid-cols-3 gap-3">
-        <a href="/hrms/recruitment" className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
-          <div className="text-xs uppercase tracking-widest text-brand font-semibold">1 · Recruitment</div>
-          <div className="mt-1 font-semibold">Requisition → Job posting → Candidates → Interviews → Offer</div>
-          <div className="text-xs text-steel-muted mt-1">Manpower requisition, HR approval, LinkedIn / Naukri postings, interview scorecards, offer letters. Teams meeting links auto-generated.</div>
-        </a>
-        <a href="/hrms/onboarding" className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
-          <div className="text-xs uppercase tracking-widest text-brand font-semibold">2 · Pre-joining · Onboarding</div>
-          <div className="mt-1 font-semibold">Document collection, BGV, IT asset, ID card, welcome kit → Day 1 formalities</div>
-          <div className="text-xs text-steel-muted mt-1">Per-employee checklists with a live audit trail from AuditEvent.</div>
-        </a>
-        <a href="/hrms/payroll" className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
-          <div className="text-xs uppercase tracking-widest text-brand font-semibold">3 · Payroll & Pay hike</div>
-          <div className="mt-1 font-semibold">Monthly payslips + salary revision workflow</div>
-          <div className="text-xs text-steel-muted mt-1">Deterministic compute from CTC breakdown + paid-days. Editable overrides. Approvals audited.</div>
-        </a>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {TILES.map((t) => (
+          <Link key={t.href} to={t.href} className="block rounded-2xl border border-line bg-white p-4 hover:border-ink transition">
+            <div className="text-xs uppercase tracking-widest text-brand font-semibold">{t.tag} · {t.eyebrow}</div>
+            <div className="mt-1 font-semibold">{t.title}</div>
+            <div className="text-xs text-steel-muted mt-1">{t.sub}</div>
+          </Link>
+        ))}
       </div>
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
-      {geoStatus && <p className="text-xs text-steel-muted">GPS: {geoStatus}</p>}
 
       {canManage && (
         <div className="grid lg:grid-cols-3 gap-4">
@@ -247,200 +189,28 @@ export default function HrmPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card padding={false} className="lg:col-span-1">
-          <div className="px-4 py-3 border-b bg-sand/40 font-semibold">Employees</div>
-          <ul className="divide-y max-h-[480px] overflow-y-auto">
-            {employees.map((e) => (
-              <li key={e.id} className="px-4 py-3 text-sm">
-                <div className="font-medium">{e.fullName}</div>
-                <div className="text-xs text-steel-muted capitalize">
-                  {e.role.replace("_", " ")} · {e.profile?.empCode || "—"} · {e.profile?.department || "—"}
+      <Card padding={false}>
+        <div className="px-4 py-3 border-b bg-sand/40 font-semibold">Employees ({employees.length})</div>
+        <ul className="divide-y max-h-[420px] overflow-y-auto">
+          {employees.map((e) => (
+            <li key={e.id} className="px-4 py-2 text-sm">
+              <div className="font-medium">{e.fullName}</div>
+              <div className="text-xs text-steel-muted capitalize">
+                {e.role?.replace("_", " ")} · {e.profile?.empCode || "—"} · {e.profile?.department || "—"}
+              </div>
+              {e.memberships?.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {e.memberships.slice(0, 3).map((m: any) => (
+                    <Link key={m.id} to={`/projects/${m.project.id}/directory`} className="text-[10px] font-mono text-brand bg-brand-soft px-1.5 py-0.5 rounded">
+                      {m.project.code}
+                    </Link>
+                  ))}
                 </div>
-                {e.memberships?.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {e.memberships.slice(0, 3).map((m: any) => (
-                      <Link key={m.id} to={`/projects/${m.project.id}/directory`} className="text-[10px] font-mono text-brand bg-brand-soft px-1.5 py-0.5 rounded">
-                        {m.project.code}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-
-        <Card>
-          <h2 className="font-semibold mb-3">Today attendance</h2>
-          <ul className="text-sm space-y-2">
-            {attendance.map((a) => (
-              <li key={a.id} className="flex justify-between gap-2 items-start">
-                <div>
-                  <div>{a.user?.fullName}</div>
-                  {(a.inLat || a.inLng) && (
-                    <div className="text-[10px] text-steel-muted">
-                      {a.inSiteName ? `Site: ${a.inSiteName}` : `${a.inLat?.toFixed(4)}, ${a.inLng?.toFixed(4)}`}
-                      {a.inGeofenceOk ? " · ✓ inside geofence" : ""}
-                    </div>
-                  )}
-                </div>
-                <Badge tone={a.inGeofenceOk ? "ok" : "warn"}>
-                  {a.status} {a.checkIn || ""}
-                </Badge>
-              </li>
-            ))}
-            {!attendance.length && <li className="text-steel-muted">No marks yet</li>}
-          </ul>
-        </Card>
-
-        <Card className="space-y-3">
-          <h2 className="font-semibold">Leave request</h2>
-          <form
-            className="space-y-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await api("/api/hrm/leave", { method: "POST", token, body: JSON.stringify(leaveForm) });
-              setLeaveForm({ fromDate: "", toDate: "", reason: "", leaveTypeId: "", halfDay: false });
-              setMsg("Leave request submitted — awaiting approval.");
-              await load();
-            }}
-          >
-            <Select value={leaveForm.leaveTypeId} onChange={(e) => setLeaveForm({ ...leaveForm, leaveTypeId: e.target.value })}>
-              <option value="">Leave type</option>
-              {leaveTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </Select>
-            <Input type="date" value={leaveForm.fromDate} onChange={(e) => setLeaveForm({ ...leaveForm, fromDate: e.target.value })} required />
-            <Input type="date" value={leaveForm.toDate} onChange={(e) => setLeaveForm({ ...leaveForm, toDate: e.target.value })} required />
-            <label className="text-xs text-steel-muted flex items-center gap-2">
-              <input type="checkbox" checked={leaveForm.halfDay} onChange={(e) => setLeaveForm({ ...leaveForm, halfDay: e.target.checked })} />
-              Half-day
-            </label>
-            <Input placeholder="Reason" value={leaveForm.reason} onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })} />
-            <Button type="submit" variant="secondary" className="w-full">Request leave (pre-approval)</Button>
-          </form>
-          {balances.length > 0 && (
-            <div className="text-xs border-t border-line pt-2">
-              <div className="font-semibold mb-1">Your balances · {new Date().getFullYear()}</div>
-              <ul className="space-y-0.5">
-                {balances.map((b) => (
-                  <li key={b.id} className="flex justify-between">
-                    <span>{b.leaveType?.name}</span>
-                    <span className="tabular-nums">{b.balance}/{b.entitled}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <ul className="text-sm space-y-1 border-t border-line pt-2">
-            {leave.map((l) => (
-              <li key={l.id} className="flex justify-between gap-2 items-center">
-                <span>
-                  {l.user?.fullName}
-                  {l.leaveType ? ` · ${l.leaveType.name}` : ""}: <Badge tone={l.status === "Approved" ? "ok" : l.status === "Rejected" ? "danger" : "warn"}>{l.status}</Badge>
-                </span>
-                {canManage && l.status === "Pending" && (
-                  <span className="flex gap-1">
-                    <button
-                      className="text-brand text-xs font-semibold"
-                      onClick={async () => {
-                        await api(`/api/hrm/leave/${l.id}`, { method: "PATCH", token, body: JSON.stringify({ status: "Approved" }) });
-                        await load();
-                      }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="text-danger text-xs font-semibold"
-                      onClick={async () => {
-                        await api(`/api/hrm/leave/${l.id}`, { method: "PATCH", token, body: JSON.stringify({ status: "Rejected" }) });
-                        await load();
-                      }}
-                    >
-                      Reject
-                    </button>
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
-
-      {canManage && (
-        <div className="grid lg:grid-cols-2 gap-4">
-          <Card>
-            <h3 className="font-semibold mb-3">Leave types (masters)</h3>
-            <form
-              className="grid sm:grid-cols-3 gap-2 mb-3"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await api("/api/hrm/leave-types", { method: "POST", token, body: JSON.stringify(leaveTypeForm) });
-                setLeaveTypeForm({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });
-                await load();
-              }}
-            >
-              <Input placeholder="Code (CL / SL / PL)" value={leaveTypeForm.code} onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, code: e.target.value })} required />
-              <Input placeholder="Name" value={leaveTypeForm.name} onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, name: e.target.value })} required />
-              <Input placeholder="Days / year" type="number" value={leaveTypeForm.daysPerYear} onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, daysPerYear: e.target.value })} />
-              <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={leaveTypeForm.isPaid} onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, isPaid: e.target.checked })} />Paid</label>
-              <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={leaveTypeForm.carryForward} onChange={(e) => setLeaveTypeForm({ ...leaveTypeForm, carryForward: e.target.checked })} />Carry-fwd</label>
-              <Button type="submit">Add leave type</Button>
-            </form>
-            <ul className="text-sm divide-y">
-              {leaveTypes.map((t) => (
-                <li key={t.id} className="py-1.5 flex justify-between">
-                  <span>
-                    <span className="font-medium">{t.name}</span>{" "}
-                    <span className="text-xs text-steel-muted">· {t.code} · {t.daysPerYear}/yr {t.isPaid ? "· paid" : "· unpaid"}</span>
-                  </span>
-                </li>
-              ))}
-              {!leaveTypes.length && <li className="text-steel-muted py-2 text-sm">No leave types yet. Suggested seed: CL / SL / PL / CO / LWP.</li>}
-            </ul>
-          </Card>
-
-          <Card>
-            <h3 className="font-semibold mb-3">Holidays · {new Date().getFullYear()}</h3>
-            <form
-              className="grid sm:grid-cols-4 gap-2 mb-3"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await api("/api/hrm/holidays", { method: "POST", token, body: JSON.stringify(holidayForm) });
-                setHolidayForm({ date: "", name: "", region: "India" });
-                await load();
-              }}
-            >
-              <Input type="date" value={holidayForm.date} onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })} required />
-              <Input placeholder="Name" value={holidayForm.name} onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })} required className="sm:col-span-2" />
-              <Input placeholder="Region" value={holidayForm.region} onChange={(e) => setHolidayForm({ ...holidayForm, region: e.target.value })} />
-              <Button type="submit" className="sm:col-span-4">Add holiday</Button>
-            </form>
-            <ul className="text-sm divide-y max-h-64 overflow-y-auto">
-              {holidaysThisYear.map((h) => (
-                <li key={h.id} className="py-1.5 flex justify-between items-center">
-                  <span>
-                    <span className="font-mono text-xs">{new Date(h.date).toISOString().slice(0, 10)}</span> · {h.name}
-                    {h.region && <span className="text-xs text-steel-muted"> ({h.region})</span>}
-                  </span>
-                  <button
-                    className="text-danger text-xs"
-                    onClick={async () => {
-                      await api(`/api/hrm/holidays/${h.id}`, { method: "DELETE", token });
-                      await load();
-                    }}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-              {!holidaysThisYear.length && <li className="text-steel-muted py-2">No holidays uploaded for this year.</li>}
-            </ul>
-          </Card>
-        </div>
-      )}
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
     </div>
   );
 }

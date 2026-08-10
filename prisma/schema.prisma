@@ -1088,6 +1088,71 @@ model CustomSheet {
   updatedAt   DateTime @updatedAt
 }
 
+/**
+ * DPR snapshot — one row per (project × logDate × discipline).
+ * Persists the DPR maker's header + BOQ line inputs so the same DPR
+ * can be re-opened, edited, and re-published without losing state.
+ *
+ * headerJson: {
+ *   projectManager, contractor, location, contractRef, contractCompletion,
+ *   calendarHours, shiftHours, weather, reportDate, dataDate, reportNumber,
+ *   acCertifiedToDate, cumManDaysPrev, cumSafeManHoursPrev, dateOfLastLti
+ * }
+ * linesJson: [
+ *   { group, description, unit, scopeQty, rate, start, finish,
+ *     cumQtyPrev, qtyToday, remarks }
+ * ]
+ * Discipline: CIVIL | ELECTRICAL | FIRE | MECHANICAL | PEB_ERECTION |
+ *             PEB_SUPPLY | PLUMBING
+ */
+model DprSnapshot {
+  id             String    @id @default(cuid())
+  projectId      String
+  logDate        DateTime
+  discipline     String    @default("CIVIL")
+  headerJson     String    @default("{}")
+  linesJson      String    @default("[]")
+  status         String    @default("Draft")
+  publishedAt    DateTime?
+  publishedPath  String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@unique([projectId, logDate, discipline])
+  @@index([projectId, logDate])
+}
+
+/**
+ * WPR snapshot — one row per (project × weekEnding).
+ * Persists the multi-section WPR maker's editable content so it can be
+ * re-opened and re-published.
+ *
+ * sectionsJson: {
+ *   brief, stakeholders, mobilisation, communicationMatrix,
+ *   projectDashboard, criticalAreas, capex, prTracker, hindrance, risk,
+ *   legal, drawingRegister, designStatus, procurement, milestones,
+ *   manpowerHistogram, weeklyExecuted, cashflow, quality, safety,
+ *   plannedVsActual, materialStock, progressPictures
+ * }  (each is { title, notes, tableRows[], imagePaths[] })
+ */
+model WprSnapshot {
+  id             String    @id @default(cuid())
+  projectId      String
+  weekEnding     DateTime
+  reportNumber   Int?
+  sectionsJson   String    @default("{}")
+  status         String    @default("Draft")
+  publishedAt    DateTime?
+  publishedPath  String?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  @@unique([projectId, weekEnding])
+  @@index([projectId, weekEnding])
+}
+
 // —— Procore-style directory, RFI, QA ——
 
 model Vendor {
