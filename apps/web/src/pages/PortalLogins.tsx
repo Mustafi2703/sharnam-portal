@@ -422,7 +422,12 @@ function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: b
           </div>
         )}
         {formOnly ? (
-          <h2 className="signin-card__title">{portalDisplayName(cfg.key, cfg.shortLabel)} · Sign in</h2>
+          <>
+            <p className="signin-card__portal-name" style={{ color: cfg.tone }}>
+              {portalDisplayName(cfg.key, cfg.shortLabel)}
+            </p>
+            <h2 className="signin-card__title signin-card__title--portal">Sign in</h2>
+          </>
         ) : (
           <>
             <h2 className="signin-card__title">{cfg.headline}</h2>
@@ -459,12 +464,20 @@ function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: b
             className="signin-form__submit"
             disabled={busy}
           >
-            {busy ? "Signing in…" : cfg.cta}
+            {busy ? "Signing in…" : formOnly ? "Sign in" : cfg.cta}
           </button>
-          <p className="signin-form__hint">Demo · Demo@1234</p>
         </form>
       </div>
     </div>
+  );
+}
+
+function PortalBackLink() {
+  return (
+    <Link to="/login" className="auth-login__back">
+      <span className="auth-login__back-icon" aria-hidden>←</span>
+      All portals
+    </Link>
   );
 }
 
@@ -497,9 +510,12 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
         <div className="auth-portal__grid auth-portal__grid--minimal">
           <aside className="auth-portal__brand">
             <BrandLockup size="hero" onHero glass />
-            <Link to="/login" className="auth-login__back">← All portals</Link>
+            <PortalBackLink />
           </aside>
-          <div className="auth-portal__signin">
+          <div
+            className="auth-portal__signin"
+            style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
+          >
             <SignInCard cfg={cfg} formOnly />
           </div>
         </div>
@@ -516,18 +532,18 @@ function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
   return (
     <Link
       to={`/login/${cfg.key}`}
-      className="bento-tile"
+      className="bento-tile bento-tile--portal"
       style={{ ["--tile-tone" as string]: cfg.tone } as CSSProperties}
     >
       <div className="bento-tile__accent" aria-hidden />
       <div className="bento-tile__head">
         <span className="bento-tile__icon">{cfg.icon}</span>
-        <span className="bento-tile__href">/login/{cfg.key}</span>
       </div>
       <div className="bento-tile__title">{portalDisplayName(cfg.key, cfg.shortLabel)}</div>
+      <p className="bento-tile__desc">{cfg.headline}</p>
       <div className="bento-tile__cta">
-        <span>{cfg.cta}</span>
-        <span aria-hidden>→</span>
+        <span>Sign in</span>
+        <span className="bento-tile__arrow" aria-hidden>→</span>
       </div>
     </Link>
   );
@@ -547,6 +563,7 @@ export function LoginHubPage() {
           <p className="auth-hero-brand__tag">Project Management Consultants</p>
         </header>
         <section className="auth-hub__bento" aria-label="Choose your portal">
+          <p className="auth-hub__lead">Select your workspace</p>
           <div className="auth-hub__grid auth-hub__grid--four auth-hub__grid--large">
             {HUB_PORTALS.map((k) => (
               <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />

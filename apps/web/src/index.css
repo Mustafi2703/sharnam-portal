@@ -1563,14 +1563,124 @@ body {
   margin-top: 0.35em;
 }
 .auth-login__back {
-  font-size: 0.78rem;
-  font-weight: 650;
-  color: var(--color-brand-dark);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--color-ink);
   text-decoration: none;
-  margin-top: 0.15rem;
+  background: #ffffff;
+  border: 1px solid rgba(11, 106, 120, 0.22);
+  box-shadow:
+    0 2px 8px rgba(18, 20, 23, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  position: relative;
+  z-index: 4;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 .auth-login__back:hover {
+  color: var(--color-brand-dark);
+  border-color: var(--color-brand);
+  box-shadow: 0 4px 16px rgba(11, 106, 120, 0.16);
+  transform: translateY(-1px);
+}
+.auth-login__back-icon {
+  font-size: 1rem;
+  line-height: 1;
   color: var(--color-brand);
+}
+.auth-portal__signin {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(11, 106, 120, 0.14);
+  border-radius: 20px;
+  box-shadow:
+    0 16px 48px rgba(18, 20, 23, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.85) inset;
+  padding: 0;
+}
+.auth-portal__signin::before {
+  content: "";
+  display: block;
+  height: 4px;
+  background: var(--portal-tone, var(--color-brand));
+}
+.auth-portal__signin .signin-card {
+  padding: clamp(1.15rem, 2.5vw, 1.5rem);
+}
+.auth-portal__signin .signin-card__accent--glow {
+  display: none;
+}
+.signin-card__portal-name {
+  margin: 0 0 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.signin-card__title--portal {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+}
+.auth-hub__lead {
+  margin: 0 0 0.85rem;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-steel-muted);
+}
+.auth-page--hub .bento-tile--portal {
+  min-height: 132px;
+  padding: 1.15rem 1.2rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 24px rgba(18, 20, 23, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  display: flex;
+  flex-direction: column;
+}
+.auth-page--hub .bento-tile--portal:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--tile-tone) 40%, white);
+  box-shadow: 0 12px 32px rgba(18, 20, 23, 0.12);
+}
+.auth-page--hub .bento-tile--portal .bento-tile__desc {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--color-steel-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.auth-page--hub .bento-tile--portal .bento-tile__cta {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--tile-tone);
+}
+.auth-page--hub .bento-tile__arrow {
+  opacity: 0.85;
+}
+.auth-hero-brand__tag {
+  color: var(--color-brand-dark);
+  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.85);
+}
+@media (max-width: 900px) {
+  .auth-login__back {
+    margin-top: 0.5rem;
+  }
 }
 .auth-login__portal-label {
   margin: 0;
