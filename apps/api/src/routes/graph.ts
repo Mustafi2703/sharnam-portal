@@ -1,9 +1,11 @@
 import { Router } from "express";
+import multer from "multer";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { graphConfig, probeSharePoint, listDriveChildren, graphFetch, ensureProjectSharePointTree, uploadToProjectLibrary, listProjectLibrary } from "../services/graph.js";
 
 export const graphRouter = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 graphRouter.get("/status", requireAuth, async (_req, res) => {
   const health = await probeSharePoint();
@@ -117,6 +119,31 @@ graphRouter.post(
         meta: { projectCode, rootFolder: result.rootFolder, count: result.folders.length },
       });
       res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
+
+/** Admin/office — multipart file upload straight to project SharePoint sandbox */
+graphRouter.post(
+  "/upload-file",
+  requireAuth,
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "file required" });
+    const projectCode = String(req.body?.projectCode || "SPDC-DEMO-01").trim();
+    const folder = String(req.body?.folder || "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/UploadLab").trim();
+    const fileName = String(req.body?.fileName || file.originalname || `upload-${Date.now()}`).trim();
+    try {
+      const saved = await uploadToProjectLibrary(projectCode, folder, fileName, file.buffer, file.mimetype || "application/octet-stream");
+      await audit("graph.upload.file", {
+        userId: req.user!.id,
+        meta: { projectCode, folder, fileName: saved.path, provider: "sharepoint" },
+      });
+      res.json({ ok: true, saved });
     } catch (err) {
       res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }

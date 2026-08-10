@@ -48,6 +48,7 @@ import WprMakerPage from "./pages/WprMakerPage";
 import HrmsAttendancePage from "./pages/HrmsAttendancePage";
 import HrmsLeavePage from "./pages/HrmsLeavePage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
+import UploadLabPage from "./pages/UploadLabPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -185,6 +186,7 @@ export default function App() {
                 <Route path="/quotations/:id" element={<QuotationMakerPage />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
+                <Route path="/upload-lab" element={<UploadLabPage />} />
               </Routes>
             </AppShell>
           </Protected>

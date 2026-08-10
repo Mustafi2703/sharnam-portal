@@ -70,6 +70,7 @@ const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/quotations/new", label: "Quotation maker", icon: "reports" },
   { to: "/hrm", label: "HRMS", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
+  { to: "/upload-lab", label: "Upload lab", icon: "reports" },
   { to: "/roles", label: "Access · Users", icon: "master" },
   { to: "/audit", label: "Audit trail", icon: "reports" },
 ];

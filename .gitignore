@@ -3,6 +3,7 @@ dist
 build
 .env
 .env.local
+.env.render.local
 *.db
 *.db-journal
 uploads/**
