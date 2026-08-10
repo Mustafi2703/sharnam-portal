@@ -1425,74 +1425,323 @@ body {
   text-shadow: none;
 }
 
-/* -------------------------------------------------------------- hero panel (per-portal) */
+/* -------------------------------------------------------------- desk stage (per-portal)
+   A live mock of the inside desk in the portal's tone. Pure CSS —
+   no photos, no failed image requests. Reads in light + dark modes.
+   ------------------------------------------------------------------------- */
 
-.hero-panel {
+.desk-stage {
+  --stage-tone: var(--color-brand);
+  --stage-paper: #f7f9fa;
+  --stage-line:  rgba(15, 23, 32, 0.08);
+  --stage-ink:   #1a1d22;
+  --stage-muted: #64707c;
+  --stage-surface: #ffffff;
   position: relative;
   min-height: 0;
   overflow: hidden;
-  background: #dce4ea;
-}
-.hero-panel__stage {
-  position: absolute;
-  inset: 0;
-}
-.hero-panel__img {
-  position: absolute;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 1.3s ease;
-  filter: brightness(1.03) contrast(1.03) saturate(1.02);
-  transform: scale(1.03);
-}
-.hero-panel__img.is-active {
-  opacity: 1;
-  animation: hero-panel-kb 14s ease-in-out forwards;
-}
-@keyframes hero-panel-kb {
-  from { transform: scale(1.03) translate3d(0, 0, 0); }
-  to   { transform: scale(1.09) translate3d(-1%, -0.6%, 0); }
-}
-.hero-panel__veil {
-  position: absolute;
-  inset: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(15, 23, 32, 0) 42%, rgba(15, 23, 32, 0.45) 100%),
-    linear-gradient(90deg, rgba(15, 23, 32, 0) 0%, rgba(15, 23, 32, 0.04) 55%, rgba(240, 242, 244, 0.85) 100%);
+    radial-gradient(1200px 700px at 12% 12%,
+      color-mix(in srgb, var(--stage-tone) 14%, transparent) 0%,
+      transparent 55%),
+    radial-gradient(900px 700px at 100% 100%,
+      color-mix(in srgb, var(--stage-tone) 10%, transparent) 0%,
+      transparent 60%),
+    linear-gradient(180deg, #eef2f5 0%, #e6ebee 100%);
+  padding: clamp(1.4rem, 3.2vw, 2.6rem);
+  display: flex;
+  flex-direction: column;
 }
-.hero-panel__brand {
+/* Faint blueprint grid behind everything */
+.desk-stage__grid {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    linear-gradient(rgba(15, 23, 32, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 32, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+  mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 78%);
+}
+.desk-stage__wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 0%, transparent 78%,
+      color-mix(in srgb, var(--stage-tone) 6%, transparent) 100%);
+}
+
+/* Browser-chrome so the mockup reads as "the actual app" */
+.desk-stage__chrome {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 2rem 2rem 4rem;
-  z-index: 2;
-}
-.hero-panel__dots {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 1.25rem;
-  transform: translateX(-50%);
-  display: flex;
   gap: 0.4rem;
+  padding: 0 0 0.6rem;
 }
-.hero-panel__dot {
-  width: 1.35rem;
+.desk-stage__dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(15, 23, 32, 0.18);
+  flex-shrink: 0;
+}
+.desk-stage__dot--r { background: #f66; }
+.desk-stage__dot--y { background: #f5b342; }
+.desk-stage__dot--g { background: #34c759; }
+.desk-stage__chrome-url {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(15, 23, 32, 0.5);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(15, 23, 32, 0.06);
+}
+
+/* The desk itself — a real inside surface card */
+.desk-stage__desk {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  border-radius: 14px;
+  background: var(--stage-surface);
+  border: 1px solid rgba(15, 23, 32, 0.08);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 32, 0.04),
+    0 26px 50px -20px rgba(15, 23, 32, 0.14),
+    0 8px 22px -10px rgba(15, 23, 32, 0.10);
+  padding: clamp(1rem, 2vw, 1.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow: hidden;
+}
+.desk-stage__desk::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
   height: 3px;
-  border: 0;
-  border-radius: 99px;
-  padding: 0;
-  background: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
+  background: var(--stage-tone);
 }
-.hero-panel__dot.is-on {
-  width: 2.1rem;
-  background: #fff;
+
+/* PageHeader-style top */
+.desk-stage__page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.35rem;
+}
+.desk-stage__head-left {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  min-width: 0;
+}
+.desk-stage__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--stage-tone);
+}
+.desk-stage__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--stage-ink);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.desk-stage__code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--stage-muted);
+  letter-spacing: 0.05em;
+}
+.desk-stage__icon {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--stage-tone) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--stage-tone) 25%, transparent);
+  color: color-mix(in srgb, var(--stage-tone) 90%, black);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+/* KPI stat strip */
+.desk-stage__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.desk-stage__stat {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: var(--stage-paper);
+  border: 1px solid var(--stage-line);
+  border-left: 3px solid var(--stage-tone);
+  min-width: 0;
+}
+.desk-stage__stat-val {
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  font-weight: 650;
+  color: var(--stage-ink);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.desk-stage__stat-lbl {
+  margin-top: 0.15rem;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--stage-muted);
+}
+
+/* Bento of tools */
+.desk-stage__tools {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.desk-stage__tool {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 0.35rem;
+  padding: 0.65rem 0.4rem;
+  border-radius: 10px;
+  background: var(--stage-paper);
+  border: 1px solid var(--stage-line);
+  min-width: 0;
+}
+.desk-stage__tool-icon {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--stage-tone) 12%, white);
+  color: color-mix(in srgb, var(--stage-tone) 90%, black);
+  border: 1px solid color-mix(in srgb, var(--stage-tone) 22%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.desk-stage__tool-label {
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--stage-ink);
+  letter-spacing: 0.02em;
+}
+
+/* Activity ledger */
+.desk-stage__activity {
+  border-top: 1px dashed var(--stage-line);
+  padding-top: 0.65rem;
+  margin-top: auto;
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+.desk-stage__activity-head {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--stage-muted);
+}
+.desk-stage__activity-list {
+  margin: 0; padding: 0;
+  list-style: none;
+  display: flex; flex-direction: column; gap: 0.25rem;
+}
+.desk-stage__activity-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--stage-ink);
+}
+.desk-stage__activity-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--stage-tone);
+  flex-shrink: 0;
+}
+
+/* Corner watermark */
+.desk-stage__mark {
+  position: absolute;
+  left: clamp(1.4rem, 3.2vw, 2.6rem);
+  bottom: clamp(1rem, 2.4vw, 1.6rem);
+  z-index: 2;
+  display: flex; flex-direction: column; gap: 0.05rem;
+  pointer-events: none;
+  color: rgba(15, 23, 32, 0.42);
+}
+.desk-stage__mark-hi {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  color: rgba(15, 23, 32, 0.5);
+}
+.desk-stage__mark-en {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Dark-mode friendly — if the OS asks for dark, the desk stays legible */
+@media (prefers-color-scheme: dark) {
+  .desk-stage {
+    background:
+      radial-gradient(1200px 700px at 12% 12%,
+        color-mix(in srgb, var(--stage-tone) 30%, transparent) 0%,
+        transparent 55%),
+      radial-gradient(900px 700px at 100% 100%,
+        color-mix(in srgb, var(--stage-tone) 22%, transparent) 0%,
+        transparent 60%),
+      linear-gradient(180deg, #0d1013 0%, #14181d 100%);
+    --stage-paper:   rgba(255, 255, 255, 0.03);
+    --stage-line:    rgba(255, 255, 255, 0.08);
+    --stage-ink:     rgba(255, 255, 255, 0.94);
+    --stage-muted:   rgba(255, 255, 255, 0.55);
+    --stage-surface: rgba(20, 24, 30, 0.72);
+  }
+  .desk-stage__grid { opacity: 0.35; }
+  .desk-stage__grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  }
+  .desk-stage__desk {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 26px 50px -20px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+  }
+  .desk-stage__chrome-url {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.6);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .desk-stage__icon,
+  .desk-stage__tool-icon {
+    background: color-mix(in srgb, var(--stage-tone) 30%, #0d1013);
+    color: color-mix(in srgb, var(--stage-tone) 60%, white);
+    border-color: color-mix(in srgb, var(--stage-tone) 40%, transparent);
+  }
+  .desk-stage__mark { color: rgba(255, 255, 255, 0.32); }
+  .desk-stage__mark-hi { color: rgba(255, 255, 255, 0.55); }
 }
 
 /* -------------------------------------------------------------- right panel (per-portal) */
@@ -1528,74 +1777,8 @@ body {
   color: var(--color-brand-dark);
 }
 
-/* -------------------------------------------------------------- portal picker */
-
-.portal-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-.portal-picker__group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-.portal-picker__label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-steel-muted);
-}
-.portal-picker__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-.portal-picker__chip {
-  --chip-tone: var(--color-brand);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.65rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-line);
-  background: var(--color-paper);
-  color: var(--color-steel-2);
-  font-size: 0.72rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  text-decoration: none;
-  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, transform 0.16s ease;
-}
-.portal-picker__chip:hover {
-  border-color: var(--chip-tone, var(--color-brand));
-  color: var(--chip-tone, var(--color-brand));
-  transform: translateY(-1px);
-}
-.portal-picker__chip.is-on {
-  border-color: var(--chip-tone);
-  color: color-mix(in srgb, var(--chip-tone) 88%, black);
-  background: color-mix(in srgb, var(--chip-tone) 12%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip-tone) 40%, transparent);
-}
-.portal-picker__chip--mod {
-  border-style: dashed;
-}
-.portal-picker__chip-icon {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.28rem;
-  border-radius: 4px;
-  background: var(--color-sand);
-  color: var(--color-steel-muted);
-}
-.portal-picker__chip.is-on .portal-picker__chip-icon {
-  background: color-mix(in srgb, var(--chip-tone) 18%, white);
-  color: color-mix(in srgb, var(--chip-tone) 90%, black);
-}
+/* Portal picker chips retired — each portal has its own permanent link.
+   Use the "← All portals" back link to return to the hub. */
 
 /* -------------------------------------------------------------- sign-in card */
 
@@ -2085,11 +2268,17 @@ body {
     grid-template-columns: none;
     grid-template-rows: none;
   }
-  .hero-panel {
+  .desk-stage {
     flex: 0 0 auto;
-    height: 32vh;
-    min-height: 220px;
-    max-height: 320px;
+    min-height: 320px;
+    padding: 1rem 1rem 1.25rem;
+  }
+  .desk-stage__mark {
+    left: 1rem;
+    bottom: 0.85rem;
+  }
+  .desk-stage__tools {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .auth-page__panel {
     flex: 1 1 auto;
@@ -2111,17 +2300,20 @@ body {
   .auth-strip__brand-en { font-size: 0.95rem; }
   .auth-strip__brand-sub { display: none; }
   .auth-strip__logo { height: 1.9rem; }
-  .hero-panel {
-    height: 22vh;
-    min-height: 160px;
-    max-height: 220px;
+  .desk-stage {
+    min-height: 260px;
+    padding: 0.75rem 0.75rem 0.9rem;
   }
+  .desk-stage__title { font-size: 0.95rem; }
+  .desk-stage__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+  .desk-stage__stat { padding: 0.5rem 0.55rem; }
+  .desk-stage__stat-val { font-size: 0.95rem; }
+  .desk-stage__tools { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+  .desk-stage__activity { display: none; }
+  .desk-stage__mark { left: 0.8rem; bottom: 0.6rem; }
   .auth-page__panel-inner {
     padding: 0.9rem 0.9rem 1.25rem;
     gap: 0.75rem;
-  }
-  .hero-panel__brand {
-    padding: 1rem 1rem 2rem;
   }
   .brand-lockup--hero .brand-lockup__mark {
     height: clamp(3.6rem, 18vw, 6rem);
@@ -2179,11 +2371,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-panel__img {
-    animation: none !important;
-    transform: none !important;
-    transition: opacity 0.2s ease;
-  }
   .auth-ticker__list {
     animation: none !important;
   }

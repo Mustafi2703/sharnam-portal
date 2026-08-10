@@ -9,12 +9,16 @@ import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../
  * Sharnam login surface — matches the inside "desk" language.
  *
  * Hub (LoginHubPage):           bento of every portal on one screen, no scroll.
- * Portal login (PortalLoginPage): calm single-photo hero + white surface card
- *                                 with a portal-tone accent bar, chip picker at
- *                                 the top so switching to another portal is
- *                                 one click.
+ * Portal login (PortalLoginPage): DeskStage on the left (a live mock of the
+ *                                 inside desk in that portal's tone — no photo
+ *                                 dependency, works in dark mode) + a paper
+ *                                 sign-in card on the right (a real inside
+ *                                 surface card with tone accent bar).
  * Shared strips:                 top brand rail with ISO badges + policy ticker
  *                                and a slim trust/version footer.
+ *
+ * There is no portal switcher chip row on the per-portal page — each portal
+ * has its own permanent link. To switch, use "← All portals" back to the hub.
  */
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
@@ -418,66 +422,8 @@ function TrustFooter({ policies }: { policies: string[] }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Portal picker chip row — used on per-portal login pages
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-function PortalPicker({ active }: { active: string }) {
-  return (
-    <nav className="portal-picker" aria-label="Portal logins">
-      <div className="portal-picker__group">
-        <span className="portal-picker__label">User portals</span>
-        <div className="portal-picker__row">
-          {HUB_ROLES.map((key) => {
-            const p = PORTAL_LOGINS[key];
-            const on = active === key;
-            return (
-              <Link
-                key={key}
-                to={`/login/${key}`}
-                className={`portal-picker__chip ${on ? "is-on" : ""}`}
-                style={
-                  on
-                    ? ({ ["--chip-tone" as string]: p.tone } as CSSProperties)
-                    : undefined
-                }
-                aria-current={on ? "page" : undefined}
-              >
-                <span className="portal-picker__chip-icon">{p.icon}</span>
-                {portalDisplayName(key, p.shortLabel)}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-      <div className="portal-picker__group">
-        <span className="portal-picker__label">Module desks</span>
-        <div className="portal-picker__row">
-          {MODULE_LOGINS.map((key) => {
-            const p = PORTAL_LOGINS[key];
-            const on = active === key;
-            return (
-              <Link
-                key={key}
-                to={`/login/${key}`}
-                className={`portal-picker__chip portal-picker__chip--mod ${on ? "is-on" : ""}`}
-                style={
-                  on
-                    ? ({ ["--chip-tone" as string]: p.tone } as CSSProperties)
-                    : undefined
-                }
-                aria-current={on ? "page" : undefined}
-              >
-                <span className="portal-picker__chip-icon">{p.icon}</span>
-                {p.shortLabel}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    </nav>
-  );
-}
+/* Portal picker retired — each portal has its own permanent link. To switch
+   portals from the per-portal page, use "← All portals" back to the hub. */
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    Sign-in card
@@ -586,51 +532,347 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   Hero panel — subdued single image with gentle Ken Burns
+   Desk stage — pure CSS/SVG mock of the inside desk in the portal's tone.
+   No photo dependency — reads well in light OR dark mode. Shows the client
+   exactly what shape the portal takes once they sign in.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-function HeroPanel({ heroes }: { heroes: HeroSlide[] }) {
-  const [slide, setSlide] = useState(0);
-  const slides = heroes.length ? heroes : [H.crane];
+type DeskSample = {
+  code: string;
+  name: string;
+  eyebrow: string;
+  stats: { label: string; value: string }[];
+  tools: { icon: string; label: string }[];
+  activity: string[];
+};
 
-  useEffect(() => {
-    const t = window.setInterval(() => setSlide((s) => (s + 1) % slides.length), 7500);
-    return () => window.clearInterval(t);
-  }, [slides.length]);
+const DESK_SAMPLES: Record<string, DeskSample> = {
+  office: {
+    code: "SPDC-DEMO-01",
+    name: "Arvind Worker Dormitory · Santej",
+    eyebrow: "Office · Full control",
+    stats: [
+      { label: "Open RFIs", value: "12" },
+      { label: "Drawings published", value: "48" },
+      { label: "SPI", value: "0.96" },
+    ],
+    tools: [
+      { icon: "DR", label: "Drawings" },
+      { icon: "QI", label: "Quality" },
+      { icon: "CO", label: "Comms" },
+      { icon: "FN", label: "Finance" },
+      { icon: "PR", label: "Progress" },
+      { icon: "AU", label: "Audit" },
+    ],
+    activity: [
+      "GFC · A-04 R2 published",
+      "DPR / CIVIL – 27 uploaded",
+      "COP-19 approved · Viatrix",
+      "Toolbox talk logged · 32 attended",
+    ],
+  },
+  site: {
+    code: "SPDC-DEMO-01",
+    name: "Site logbook · Wing B slab pour",
+    eyebrow: "Site · Field tools",
+    stats: [
+      { label: "Manpower", value: "184" },
+      { label: "Equipment", value: "11" },
+      { label: "Site RFIs", value: "3" },
+    ],
+    tools: [
+      { icon: "DL", label: "Day log" },
+      { icon: "CL", label: "Checklists" },
+      { icon: "PH", label: "Photos" },
+      { icon: "SR", label: "Site RFI" },
+      { icon: "HP", label: "Hindrance" },
+      { icon: "SF", label: "Safety" },
+    ],
+    activity: [
+      "Manpower closed at shift end",
+      "Wing B slab · pour cleared",
+      "Photo album tagged · 22 photos",
+      "Hindrance · water · resolved",
+    ],
+  },
+  vendor: {
+    code: "SPDC-DEMO-01",
+    name: "Trade partner · Bhavna Infra",
+    eyebrow: "Contractor · Package view",
+    stats: [
+      { label: "My RFIs", value: "5" },
+      { label: "Open bills", value: "2" },
+      { label: "Ball-in-court", value: "3" },
+    ],
+    tools: [
+      { icon: "PK", label: "Packages" },
+      { icon: "RF", label: "Fill RFI" },
+      { icon: "CH", label: "Checklists" },
+      { icon: "MB", label: "MB" },
+      { icon: "RA", label: "RA bill" },
+      { icon: "PH", label: "Photos" },
+    ],
+    activity: [
+      "RA-04 submitted · under review",
+      "Cube crushing register updated",
+      "Checklist · masonry L4 filled",
+    ],
+  },
+  client: {
+    code: "SPDC-DEMO-01",
+    name: "Client dashboard · Arvind Ltd.",
+    eyebrow: "Client · Read-only pack",
+    stats: [
+      { label: "Progress", value: "62%" },
+      { label: "Milestones", value: "18/24" },
+      { label: "Concerns", value: "2" },
+    ],
+    tools: [
+      { icon: "DR", label: "GFC drawings" },
+      { icon: "PG", label: "Progress" },
+      { icon: "CN", label: "Concerns" },
+      { icon: "WP", label: "WPR pack" },
+      { icon: "DP", label: "DPR pack" },
+      { icon: "SF", label: "Safety" },
+    ],
+    activity: [
+      "WPR-50 pack published",
+      "Milestone · Slab F4 · complete",
+      "Concern raised · P4 opening dim",
+    ],
+  },
+  employee: {
+    code: "MY DESK",
+    name: "Employee workday",
+    eyebrow: "Employee · Self-service",
+    stats: [
+      { label: "Assigned RFIs", value: "4" },
+      { label: "Fills due", value: "6" },
+      { label: "Leave bal", value: "8" },
+    ],
+    tools: [
+      { icon: "PJ", label: "Projects" },
+      { icon: "DR", label: "Drawings" },
+      { icon: "LV", label: "Leave" },
+      { icon: "AT", label: "Attendance" },
+      { icon: "PS", label: "Payslip" },
+      { icon: "DO", label: "Docs" },
+    ],
+    activity: [
+      "QI checklist · slab F3 filled",
+      "Payslip · Aug · generated",
+      "Leave · Fri · pre-approved",
+    ],
+  },
+  master: {
+    code: "MASTER",
+    name: "Master · Portfolio setup",
+    eyebrow: "Master · Setup desk",
+    stats: [
+      { label: "Projects", value: "6" },
+      { label: "Users", value: "128" },
+      { label: "Templates", value: "42" },
+    ],
+    tools: [
+      { icon: "PR", label: "Projects" },
+      { icon: "MD", label: "Modules" },
+      { icon: "US", label: "Access" },
+      { icon: "TP", label: "Templates" },
+      { icon: "CR", label: "CRM" },
+      { icon: "AD", label: "Audit" },
+    ],
+    activity: [
+      "Project · SPDC-DEMO-02 · created",
+      "Roles matrix · updated",
+      "Communication matrix · seeded",
+    ],
+  },
+  hr: {
+    code: "HR ADMIN",
+    name: "HRMS · Sharnam people desk",
+    eyebrow: "HR admin · scoped desk",
+    stats: [
+      { label: "Head-count", value: "146" },
+      { label: "Open req", value: "7" },
+      { label: "Payslips", value: "146" },
+    ],
+    tools: [
+      { icon: "RC", label: "Recruit" },
+      { icon: "OB", label: "Onboard" },
+      { icon: "AT", label: "Attend" },
+      { icon: "LV", label: "Leave" },
+      { icon: "PR", label: "Payroll" },
+      { icon: "AU", label: "Audit" },
+    ],
+    activity: [
+      "Offer · Sr QC · sent",
+      "Attendance · 96% today",
+      "Pay hike · 4 approved",
+    ],
+  },
+  drawings: {
+    code: "DRAWINGS",
+    name: "GFC register · Drawing Check",
+    eyebrow: "Drawings · GFC & DMS",
+    stats: [
+      { label: "Sheets", value: "212" },
+      { label: "Rev cycles", value: "68" },
+      { label: "Ask RFIs", value: "9" },
+    ],
+    tools: [
+      { icon: "RG", label: "Register" },
+      { icon: "PC", label: "Pre-check" },
+      { icon: "UP", label: "Upload" },
+      { icon: "CO", label: "Coord" },
+      { icon: "DM", label: "DMS" },
+      { icon: "AK", label: "Ask" },
+    ],
+    activity: [
+      "R2 · A-04 · published to client",
+      "Pre-check checklist filled",
+      "Coordination · MEP vs slab",
+    ],
+  },
+  quality: {
+    code: "QUALITY",
+    name: "QI · NCR · Cube · QAP",
+    eyebrow: "Quality · Registers",
+    stats: [
+      { label: "QI open", value: "14" },
+      { label: "NCR open", value: "3" },
+      { label: "Cubes", value: "88" },
+    ],
+    tools: [
+      { icon: "QI", label: "QI board" },
+      { icon: "NC", label: "NCR / CAR" },
+      { icon: "CU", label: "Cube" },
+      { icon: "QP", label: "QAP" },
+      { icon: "RF", label: "QI RFI" },
+      { icon: "CH", label: "Checklists" },
+    ],
+    activity: [
+      "QI · L4 slab · passed",
+      "Cube · CI-32 · 24.6 MPa",
+      "QAP · Week 50 · updated",
+    ],
+  },
+  comms: {
+    code: "COMMS",
+    name: "Matrix · Agenda · MoM",
+    eyebrow: "Communications",
+    stats: [
+      { label: "Matrix rows", value: "26" },
+      { label: "Open MoMs", value: "4" },
+      { label: "Ask RFIs", value: "7" },
+    ],
+    tools: [
+      { icon: "MA", label: "Matrix" },
+      { icon: "AG", label: "Agenda" },
+      { icon: "MM", label: "MoM" },
+      { icon: "AK", label: "Ask" },
+      { icon: "OL", label: "Outlook" },
+      { icon: "FU", label: "Follow-up" },
+    ],
+    activity: [
+      "Weekly meeting · agenda ready",
+      "MoM · W49 · signed off",
+      "Ask · GFC clarification opened",
+    ],
+  },
+  field: {
+    code: "FIELD",
+    name: "Day log · Photos · Site RFI",
+    eyebrow: "Field · Site evidence",
+    stats: [
+      { label: "Manpower", value: "184" },
+      { label: "Photos today", value: "26" },
+      { label: "Site RFIs", value: "5" },
+    ],
+    tools: [
+      { icon: "DL", label: "Day log" },
+      { icon: "MP", label: "Manpower" },
+      { icon: "EQ", label: "Equipment" },
+      { icon: "PH", label: "Photos" },
+      { icon: "SR", label: "Site RFI" },
+      { icon: "HP", label: "Hindrance" },
+    ],
+    activity: [
+      "Day log · closed 18:20",
+      "Photos · Wing B · 12 tagged",
+      "Hindrance · water · closed",
+    ],
+  },
+};
 
+function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string; icon: string }) {
+  const sample = DESK_SAMPLES[portalKey] || DESK_SAMPLES.office;
   return (
-    <aside className="hero-panel" aria-hidden>
-      <div className="hero-panel__stage">
-        {slides.map((s, i) => (
-          <img
-            key={s.src}
-            src={s.src}
-            alt=""
-            width={s.w}
-            height={s.h}
-            sizes="(max-width: 900px) 100vw, 60vw"
-            className={`hero-panel__img ${i === slide ? "is-active" : ""}`}
-            style={{ objectPosition: s.focus }}
-            decoding={i === 0 ? "sync" : "async"}
-            fetchPriority={i === 0 ? "high" : "low"}
-            loading={i === 0 ? "eager" : "lazy"}
-          />
-        ))}
-        <div className="hero-panel__veil" aria-hidden />
+    <aside
+      className="desk-stage"
+      aria-hidden
+      style={{ ["--stage-tone" as string]: tone } as CSSProperties}
+    >
+      {/* Blueprint grid + tone wash */}
+      <div className="desk-stage__grid" />
+      <div className="desk-stage__wash" />
+
+      {/* Fake browser chrome so the mockup reads as "the actual app" */}
+      <div className="desk-stage__chrome">
+        <span className="desk-stage__dot desk-stage__dot--r" />
+        <span className="desk-stage__dot desk-stage__dot--y" />
+        <span className="desk-stage__dot desk-stage__dot--g" />
+        <span className="desk-stage__chrome-url">sharnam-portal · {portalKey}</span>
       </div>
-      <div className="hero-panel__brand">
-        <BrandLockup size="hero" />
+
+      {/* Live mock of the inside PageHeader */}
+      <div className="desk-stage__desk">
+        <header className="desk-stage__page-head">
+          <div className="desk-stage__head-left">
+            <span className="desk-stage__eyebrow">{sample.eyebrow}</span>
+            <h3 className="desk-stage__title">{sample.name}</h3>
+            <span className="desk-stage__code">{sample.code}</span>
+          </div>
+          <div className="desk-stage__icon" aria-hidden>{icon}</div>
+        </header>
+
+        {/* KPI strip — mirrors the inside stat cards */}
+        <div className="desk-stage__stats">
+          {sample.stats.map((s) => (
+            <div key={s.label} className="desk-stage__stat">
+              <div className="desk-stage__stat-val">{s.value}</div>
+              <div className="desk-stage__stat-lbl">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tool bento — mirrors the project home tile grid */}
+        <div className="desk-stage__tools">
+          {sample.tools.map((t) => (
+            <div key={t.label} className="desk-stage__tool">
+              <span className="desk-stage__tool-icon">{t.icon}</span>
+              <span className="desk-stage__tool-label">{t.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Activity feed */}
+        <div className="desk-stage__activity" aria-label="Recent activity">
+          <div className="desk-stage__activity-head">Recent activity</div>
+          <ul className="desk-stage__activity-list">
+            {sample.activity.map((a) => (
+              <li key={a} className="desk-stage__activity-row">
+                <span className="desk-stage__activity-dot" />
+                {a}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <div className="hero-panel__dots" role="tablist" aria-label="Photos">
-        {slides.map((s, i) => (
-          <button
-            key={s.src}
-            type="button"
-            aria-label={s.label}
-            className={`hero-panel__dot ${i === slide ? "is-on" : ""}`}
-            onClick={() => setSlide(i)}
-          />
-        ))}
+
+      {/* Sharnam watermark bottom-left */}
+      <div className="desk-stage__mark">
+        <span className="desk-stage__mark-hi" lang="hi">शरणम्</span>
+        <span className="desk-stage__mark-en">Sharnam · PMC</span>
       </div>
     </aside>
   );
@@ -650,13 +892,12 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     <div className="auth-page" data-portal={portalKey}>
       <TopStrip />
       <main className="auth-page__body">
-        <HeroPanel heroes={cfg.heroes} />
+        <DeskStage portalKey={String(portalKey)} tone={cfg.tone} icon={cfg.icon} />
         <section className="auth-page__panel">
           <div className="auth-page__panel-inner">
             <div className="auth-page__crumb">
               <Link to="/login" className="auth-page__back">← All portals</Link>
             </div>
-            <PortalPicker active={portalKey} />
             <SignInCard cfg={cfg} />
           </div>
         </section>
