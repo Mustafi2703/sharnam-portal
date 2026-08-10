@@ -28,4 +28,4 @@ Technical requirements baseline: [../CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREME
 
 ---
 
-*SPDC-CLIENT-SHARE · Rev 01*
+*SPDC-CLIENT-SHARE · Rev 02 · aligns with CLIENT_REQUIREMENTS v2.1*

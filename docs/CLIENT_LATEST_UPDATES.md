@@ -54,7 +54,16 @@ If upload does not reach SharePoint, IT should verify Render env vars: [SHAREPOI
 
 ---
 
-## 4. Documents — two separate tools
+## 4. Documents — SharePoint store + in-app viewer
+
+| Principle | What it means |
+|-----------|---------------|
+| **SharePoint is the store** | Every upload through the portal saves to `SharnamProjects` first |
+| **Portal DMS is the window** | Browse, preview, and download from the same SharePoint folders |
+| **Communication Matrix** | Names who is on the project — they get access to document folders their role is granted |
+| **In-app preview** | PDFs and images open inside the portal — not download-only |
+
+### Two separate tools (do not mix)
 
 | Tool | What it is | Who uses it |
 |------|------------|-------------|
@@ -80,7 +89,7 @@ Do not mix general documents with GFC revision workflow — they are intentional
 | **Cost (engineering)** | BOQ monitoring, MB, BBS, budget, **cashflow** (see §6) | Live |
 | **Finance (commercial)** | Invoice, PO, RA bill, COP tracking | Shell — detail phased |
 | **Reports** | DPR / WPR from live registers; branded PDF print | Live |
-| **HRMS** | Recruitment, onboarding, attendance, leave, payslips | Live |
+| **HRMS** | Recruitment, onboarding, **geofence attendance**, leave, payslips | Live |
 | **CRM** | Leads, quotation, bid compare → new project | Live |
 | **Sheet Maker** | Custom meeting / register templates | Live |
 | **Site Audit & KPI** | Audit pack tools, master KPI dashboard | In scope |
@@ -138,4 +147,4 @@ IT setup guide: [M365_SETUP.md](./M365_SETUP.md)
 
 ---
 
-*SPDC-CLIENT-UPDATES-REV01 · Aug 2026*
+*SPDC-CLIENT-UPDATES-REV02 · Aug 2026 · CLIENT_REQUIREMENTS v2.1*

@@ -15,14 +15,15 @@ One online workspace for your construction project — drawings, quality, safety
 | Area | What you get |
 |------|----------------|
 | **Login** | Four portals — Office, Site, Contractor, Client — professional sign-in on construction imagery |
-| **Documents** | Full document manager (DMS) plus separate GFC drawing register |
-| **Site** | Attendance with selfie + GPS + **IST time** → SharePoint |
+| **Documents** | Full document manager (DMS) — **SharePoint is the store**, portal is the viewer |
+| **Site** | HRMS attendance with selfie + GPS + **IST time** → SharePoint |
 | **Quality & Safety** | Separate tools — QI, NCR, cube register, safety observations |
 | **Progress** | S-curve, summary schedule, procurement plan for client view |
 | **Cost** | BOQ monitoring, MB, BBS, and **three cashflow views** (Chart · Forecast · Tracking) |
 | **Reports** | DPR / WPR from live data; branded PDF print |
-| **HRMS** | Recruitment through attendance, leave, payslips |
-| **SharePoint** | Live file storage at `SharnamProjects` site |
+| **HRMS** | Recruitment through attendance (geofence + selfie), leave, payslips |
+| **SharePoint** | Live file storage at `SharnamProjects` — all uploads become the source store |
+| **Roles** | Each portal login shows a different landing page and module set |
 
 ---
 
