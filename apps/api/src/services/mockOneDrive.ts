@@ -14,6 +14,8 @@ export type DriveNode = {
   path: string;
   type: "folder" | "file";
   url?: string;
+  size?: number;
+  modifiedAt?: string;
 };
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
@@ -88,11 +90,14 @@ export class MockOneDriveService {
       const full = path.join(base, name);
       const rel = path.join(relPath, name).replace(/\\/g, "/");
       const isDir = fs.statSync(full).isDirectory();
+      const st = fs.statSync(full);
       return {
         name,
         path: rel,
         type: isDir ? "folder" : "file",
         url: isDir ? undefined : `/uploads/onedrive/${projectCode}/${rel}`,
+        size: isDir ? undefined : st.size,
+        modifiedAt: st.mtime.toISOString(),
       };
     });
   }
@@ -105,12 +110,16 @@ export class MockOneDriveService {
         name: string;
         folder?: unknown;
         webUrl?: string;
+        size?: number;
+        lastModifiedDateTime?: string;
       }[];
       return items.map((i) => ({
         name: i.name,
         path: relPath ? `${relPath}/${i.name}` : i.name,
         type: i.folder ? ("folder" as const) : ("file" as const),
         url: i.folder ? undefined : i.webUrl,
+        size: i.size,
+        modifiedAt: i.lastModifiedDateTime,
       }));
     } catch {
       return this.listChildren(projectCode, relPath);

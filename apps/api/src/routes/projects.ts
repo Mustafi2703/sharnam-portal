@@ -3,6 +3,7 @@ import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { PROJECT_LIBRARY_FOLDERS } from "../services/graph.js";
 import { consumeDrawingUnlockToken } from "../services/drawingUnlock.js";
 import { audit } from "../services/audit.js";
 
@@ -180,6 +181,12 @@ dmsRouter.post("/:projectId/sync", async (req: AuthedRequest, res) => {
         ? "SharePoint project library synced"
         : "Mock OneDrive sync complete (set MOCK_ONEDRIVE=false for live SharePoint)",
   });
+});
+
+dmsRouter.get("/:projectId/folders", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  res.json({ projectCode: project.code, folders: PROJECT_LIBRARY_FOLDERS });
 });
 
 dmsRouter.get("/:projectId/browse", async (req, res) => {

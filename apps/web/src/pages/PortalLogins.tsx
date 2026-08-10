@@ -346,36 +346,26 @@ function portalDisplayName(key: string, shortLabel: string) {
 
 function BrandLockup({ size = "hero" }: { size?: "hero" | "compact" | "chrome" }) {
   return (
-    <div className={`brand-lockup brand-lockup--${size}`}>
+    <div className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only`}>
       <img
         src="/logo.png"
-        alt="शरणम्"
+        alt="Portal"
         className="brand-lockup__mark"
         width={820}
         height={400}
         decoding="sync"
         fetchPriority="high"
       />
-      {size !== "chrome" && (
-        <div className="brand-lockup__type" lang="hi">
-          <span className="brand-lockup__hi">शरणम्</span>
-          <span className="brand-lockup__latin">Sharnam</span>
-        </div>
-      )}
     </div>
   );
 }
 
 function TopStrip() {
   return (
-    <header className="auth-strip">
-      <div className="auth-strip__inner">
-        <Link to="/login" className="auth-strip__brand" aria-label="Sharnam home">
-          <img src="/logo.png" alt="Sharnam" width={140} height={68} className="auth-strip__logo" />
-          <div className="auth-strip__brand-text">
-            <span className="auth-strip__brand-en">Sharnam</span>
-            <span className="auth-strip__brand-sub">Project Management Consultants</span>
-          </div>
+    <header className="auth-strip auth-strip--minimal">
+      <div className="auth-strip__inner auth-strip__inner--center">
+        <Link to="/login" className="auth-strip__brand auth-strip__brand--logo-only" aria-label="Home">
+          <img src="/logo.png" alt="" width={160} height={78} className="auth-strip__logo" />
         </Link>
         <div className="auth-strip__iso" aria-label="Standards">
           {ISO_BADGES.map((b) => (
@@ -383,11 +373,6 @@ function TopStrip() {
               {b.code}
             </span>
           ))}
-        </div>
-        <div className="auth-strip__rev">
-          <span className="auth-strip__rev-tag">PMC ISO Rev 02</span>
-          <span className="auth-strip__rev-sep" aria-hidden>·</span>
-          <span className="auth-strip__rev-ver">v0.5 · Aug 2026</span>
         </div>
       </div>
     </header>
@@ -477,21 +462,12 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
     <div className="signin-card" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
       <div className="signin-card__accent" aria-hidden />
       <div className="signin-card__body">
-        <div className="signin-card__head">
-          <span className="signin-card__eyebrow">{portalDisplayName(cfg.key, cfg.shortLabel)} login</span>
-          <span className="signin-card__href">/login/{cfg.key}</span>
+        <div className="signin-card__logo-wrap">
+          <img src="/logo.png" alt="" className="signin-card__logo" width={120} height={58} />
         </div>
-        <h1 className="signin-card__title">{cfg.headline}</h1>
-        <p className="signin-card__sub">{cfg.subtitle}</p>
-
-        <ul className="signin-card__points">
-          {cfg.points.map((p) => (
-            <li key={p}>
-              <span className="signin-card__points-dot" aria-hidden />
-              {p}
-            </li>
-          ))}
-        </ul>
+        <div className="signin-card__head">
+          <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
+        </div>
 
         <form className="signin-form" onSubmit={onSubmit}>
           <label className="signin-form__label">
@@ -903,11 +879,6 @@ function DeskStage({ portalKey, tone, icon }: { portalKey: string; tone: string;
           </ul>
         </div>
       </div>
-
-      <div className="desk-stage__mark">
-        <span className="desk-stage__mark-hi" lang="hi">शरणम्</span>
-        <span className="desk-stage__mark-en">Sharnam · PMC</span>
-      </div>
     </aside>
   );
 }
@@ -929,17 +900,11 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
       <TopStrip />
       <main className="auth-page__body">
         <section
-          className="auth-hero"
+          className="auth-hero auth-hero--visual-only"
           style={{ ["--hero-tone" as string]: cfg.tone } as CSSProperties}
         >
           <img className="auth-hero__img" src={hero.src} alt="" loading="eager" />
           <div className="auth-hero__scrim" />
-          <div className="auth-hero__content">
-            <span className="auth-hero__hi" lang="hi">शरणम्</span>
-            <p className="auth-hero__eyebrow">{portalDisplayName(cfg.key, cfg.shortLabel)}</p>
-            <p className="auth-hero__caption">{hero.caption}</p>
-            <p className="auth-hero__tag">{cfg.headline}</p>
-          </div>
         </section>
         <section className="auth-page__panel">
           <div className="auth-page__panel-inner">
@@ -972,15 +937,6 @@ function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
         <span className="bento-tile__href">/login/{cfg.key}</span>
       </div>
       <div className="bento-tile__title">{portalDisplayName(cfg.key, cfg.shortLabel)}</div>
-      <p className="bento-tile__headline">{cfg.headline}</p>
-      <ul className="bento-tile__points">
-        {cfg.points.map((p) => (
-          <li key={p}>
-            <span className="bento-tile__points-dot" aria-hidden />
-            {p}
-          </li>
-        ))}
-      </ul>
       <div className="bento-tile__cta">
         <span>{cfg.cta}</span>
         <span aria-hidden>→</span>
@@ -1011,14 +967,14 @@ export function LoginHubPage() {
 
   // Compose a rich policy stream for the ticker so the client sees active standards.
   const policies = [
-    "Every project is set up from Master · then modules open per charter.",
-    "GFC publish gate before checklist fills and QI create.",
-    "Safety NCR and QI NCR live in their own registers — never merged.",
-    "Client sees published packs · never live drafts.",
-    "Every mutation is written to the audit trail with who / when.",
-    "DMS folders mirror PMC ISO Rev 02 · 100 folders · 127 subjects.",
-    "Field RFI · Ask RFI · Inspection RFI are three distinct tools.",
-    "Cashflow Chart · Forecast · Tracking stay separate to preserve intent.",
+    "ISO 9001 · Quality management on every inspection register",
+    "ISO 45001 · Safety NCR and HIRA kept separate from QI",
+    "ISO 14001 · Environmental records in HSE folders",
+    "GFC publish gate before checklist fills and QI create",
+    "Drawing Check · Site Execution · QI · Safety — four checklist families",
+    "DMS folders mirror PMC ISO Rev 02 · 100 folders · 127 subjects",
+    "Field RFI · Ask RFI · Inspection RFI are three distinct tools",
+    "Every upload and fill writes to the audit trail",
   ];
 
   return (
@@ -1029,11 +985,8 @@ export function LoginHubPage() {
         <div className="auth-hub__hero-scrim" />
       </section>
       <main className="auth-hub">
-        <section className="auth-hub__masthead auth-hub__masthead--overlay">
+        <section className="auth-hub__masthead auth-hub__masthead--overlay auth-hub__masthead--centered">
           <BrandLockup size="hero" />
-          <p className="auth-hub__tag">
-            Project Management Consultants · ISO-aligned · DMS · PMC portal
-          </p>
         </section>
 
         <section className="auth-hub__bento" aria-label="Choose your portal">
