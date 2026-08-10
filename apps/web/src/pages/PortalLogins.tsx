@@ -505,9 +505,9 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-function PortalShowcase({ cfg }: { cfg: PortalConfig }) {
+function PortalInfo({ cfg }: { cfg: PortalConfig }) {
   return (
-    <aside className="auth-panel auth-panel--info">
+    <div className="auth-portal__info">
       <span className="auth-panel__eyebrow" style={{ color: cfg.tone }}>{cfg.shortLabel} portal</span>
       <h1 className="auth-panel__title">{cfg.headline}</h1>
       <p className="auth-panel__sub">{cfg.subtitle}</p>
@@ -519,7 +519,7 @@ function PortalShowcase({ cfg }: { cfg: PortalConfig }) {
           </li>
         ))}
       </ul>
-    </aside>
+    </div>
   );
 }
 
@@ -548,16 +548,17 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   return (
     <div className="auth-page auth-page--immersive auth-page--light auth-page--portal" data-portal={portalKey}>
       <AuthBackdrop portalKey={portalKey} />
-      <header className="auth-login__header auth-login__header--portal">
-        <BrandLockup size="hero" onHero glass />
-        <Link to="/login" className="auth-login__back">← All portals</Link>
-        <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
-          {portalDisplayName(cfg.key, cfg.shortLabel)} portal
-        </p>
-      </header>
-      <main className="auth-login__main">
-        <PortalShowcase cfg={cfg} />
-        <div className="auth-panel auth-panel--form">
+      <main className="auth-login__main auth-login__main--portal">
+        <aside className="auth-portal__left">
+          <BrandLockup size="hero" onHero glass />
+          <Link to="/login" className="auth-login__back">← All portals</Link>
+          <p className="auth-login__portal-label" style={{ color: cfg.tone }}>
+            {portalDisplayName(cfg.key, cfg.shortLabel)} portal
+          </p>
+          <PortalInfo cfg={cfg} />
+          <PolicyList policies={cfg.policies} />
+        </aside>
+        <div className="auth-panel auth-panel--form auth-panel--signin">
           <SignInCard cfg={cfg} />
         </div>
       </main>
@@ -596,37 +597,16 @@ export function LoginHubPage() {
   useAuthPageScroll();
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
-  // Compose a rich policy stream for the ticker so the client sees active standards.
-  const policies = [
-    "ISO 9001 · Quality management on every inspection register",
-    "ISO 45001 · Safety NCR and HIRA kept separate from QI",
-    "ISO 14001 · Environmental records in HSE folders",
-    "GFC publish gate before checklist fills and QI create",
-    "Drawing Check · Site Execution · QI · Safety — four checklist families",
-    "DMS folders mirror PMC ISO Rev 02 · 100 folders · 127 subjects",
-    "Field RFI · Ask RFI · Inspection RFI are three distinct tools",
-    "Every upload and fill writes to the audit trail",
-  ];
-
   return (
     <div className="auth-page auth-page--immersive auth-page--light auth-page--hub">
       <AuthBackdrop />
-      <header className="auth-login__header auth-login__header--hub">
-        <div className="auth-hub__top">
-          <div className="auth-hub__brand">
-            <BrandLockup size="hero" onHero glass />
-            <p className="auth-hero-brand__tag">Project Management Consultants</p>
-          </div>
-          <PolicyList policies={policies} />
-        </div>
+      <header className="auth-login__header auth-login__header--hub auth-login__header--center">
+        <BrandLockup size="hero" onHero glass />
+        <p className="auth-hero-brand__tag">Project Management Consultants</p>
       </header>
       <main className="auth-hub auth-hub--light">
         <section className="auth-hub__bento" aria-label="Choose your portal">
-          <header className="auth-hub__section-head">
-            <h2 className="auth-hub__section-title">Sign in</h2>
-            <span className="auth-hub__section-hint">Office · Site · Contractor · Client</span>
-          </header>
-          <div className="auth-hub__grid auth-hub__grid--four">
+          <div className="auth-hub__grid auth-hub__grid--four auth-hub__grid--large">
             {HUB_PORTALS.map((k) => (
               <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />
             ))}
