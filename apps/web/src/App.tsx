@@ -83,17 +83,11 @@ export default function App() {
       <Route path="/ui/:optionId" element={<Navigate to="/login" replace />} />
 
       <Route path="/login" element={<LoginHubPage />} />
-      <Route path="/login/master" element={<PortalLoginPage portalKey="master" />} />
-      <Route path="/login/drawings" element={<PortalLoginPage portalKey="drawings" />} />
-      <Route path="/login/quality" element={<PortalLoginPage portalKey="quality" />} />
-      <Route path="/login/comms" element={<PortalLoginPage portalKey="comms" />} />
-      <Route path="/login/field" element={<PortalLoginPage portalKey="field" />} />
-      <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
-      <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
-      <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
       <Route path="/login/office" element={<PortalLoginPage portalKey="office" />} />
-      <Route path="/login/hr" element={<PortalLoginPage portalKey="hr" />} />
+      <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
       <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
+      <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
+      <Route path="/login/:portalKey" element={<Navigate to="/login" replace />} />
 
       <Route
         path="/projects/:id/checklist/fill/:assignmentId"

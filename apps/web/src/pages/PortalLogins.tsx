@@ -309,8 +309,7 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-const HUB_ROLES: (keyof typeof PORTAL_LOGINS)[]    = ["office", "site", "vendor", "client", "employee", "master", "hr"];
-const MODULE_LOGINS: (keyof typeof PORTAL_LOGINS)[] = ["drawings", "quality", "comms", "field"];
+export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
 const ISO_BADGES = [
   { code: "ISO 9001",  label: "Quality Management" },
@@ -338,6 +337,7 @@ function BrandLockup({
   onHero?: boolean;
   glass?: boolean;
 }) {
+  const heroSrc = onHero ? "/logo-hero-light.png?v=1" : "/logo.png";
   return (
     <div
       className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${
@@ -345,7 +345,7 @@ function BrandLockup({
       }`}
     >
       <img
-        src="/logo.png"
+        src={heroSrc}
         alt="शरणम्"
         className="brand-lockup__mark"
         width={820}
@@ -530,8 +530,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 function PortalShowcase({ cfg }: { cfg: PortalConfig }) {
   return (
     <aside className="auth-glass auth-glass--showcase">
-      <Link to="/login" className="auth-page__back auth-page__back--glass">← All portals</Link>
       <BrandLockup size="hero" onHero glass />
+      <Link to="/login" className="auth-page__back auth-page__back--glass">← All portals</Link>
       <span className="auth-glass__eyebrow" style={{ color: cfg.tone }}>{cfg.shortLabel} portal</span>
       <h1 className="auth-glass__title">{cfg.headline}</h1>
       <p className="auth-glass__sub">{cfg.subtitle}</p>
@@ -614,22 +614,6 @@ function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-function ModuleChip({ cfg }: { cfg: PortalConfig }) {
-  return (
-    <Link
-      to={`/login/${cfg.key}`}
-      className="module-chip"
-      style={{ ["--chip-tone" as string]: cfg.tone } as CSSProperties}
-    >
-      <span className="module-chip__icon">{cfg.icon}</span>
-      <div className="module-chip__body">
-        <div className="module-chip__title">{cfg.shortLabel}</div>
-        <div className="module-chip__sub">{cfg.headline}</div>
-      </div>
-    </Link>
-  );
-}
-
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   useAuthPageScroll();
@@ -658,24 +642,12 @@ export function LoginHubPage() {
 
         <section className="auth-hub__bento" aria-label="Choose your portal">
           <header className="auth-hub__section-head">
-            <h2 className="auth-hub__section-title">User portals</h2>
-            <span className="auth-hub__section-hint">Each user type has its own login link</span>
+            <h2 className="auth-hub__section-title">Sign in</h2>
+            <span className="auth-hub__section-hint">Office · Site · Contractor · Client</span>
           </header>
-          <div className="auth-hub__grid">
-            {HUB_ROLES.map((k) => (
+          <div className="auth-hub__grid auth-hub__grid--four">
+            {HUB_PORTALS.map((k) => (
               <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />
-            ))}
-          </div>
-        </section>
-
-        <section className="auth-hub__modules" aria-label="Module desks">
-          <header className="auth-hub__section-head">
-            <h2 className="auth-hub__section-title">Module desks</h2>
-            <span className="auth-hub__section-hint">Open a single tool — for demos and reviews</span>
-          </header>
-          <div className="auth-hub__mods">
-            {MODULE_LOGINS.map((k) => (
-              <ModuleChip key={k} cfg={PORTAL_LOGINS[k]} />
             ))}
           </div>
         </section>
