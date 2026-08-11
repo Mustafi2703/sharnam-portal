@@ -4,40 +4,12 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
-import personaOffice from "../assets/auth/personas/persona-office.png";
-import personaSite from "../assets/auth/personas/persona-site.png";
-import personaContractor from "../assets/auth/personas/persona-contractor.png";
-import personaClient from "../assets/auth/personas/persona-client.png";
 
 /**
- * Sharnam login — one construction hero on top, big logo centred, portal tiles below.
- * Hub: /login · Per-portal: /login/:key
+ * Sharnam login — text + block layout. Hub: /login · Per-portal: /login/:key
  */
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
-
-/** Hub default hero — illustrated cartoon backdrop (bump ?v= when replacing) */
-export const LOGIN_HERO_SRC = "/auth/hero-construction-wide.jpg?v=5";
-
-/** Per-portal hero banner */
-export const PORTAL_HERO_SRC: Record<string, string> = {
-  master: "/auth/hero-construction-wide.jpg?v=5",
-  office: "/auth/hero-office.jpg?v=5",
-  hr: "/auth/hero-office.jpg?v=5",
-  employee: "/auth/hero-office.jpg?v=5",
-  comms: "/auth/hero-office.jpg?v=5",
-  site: "/auth/hero-site.jpg?v=5",
-  field: "/auth/hero-site.jpg?v=5",
-  vendor: "/auth/hero-site.jpg?v=5",
-  quality: "/auth/hero-site.jpg?v=5",
-  client: "/auth/hero-client.jpg?v=5",
-  drawings: "/auth/hero-drawings.jpg?v=5",
-};
-
-function portalHeroSrc(portalKey?: string) {
-  if (portalKey && PORTAL_HERO_SRC[portalKey]) return PORTAL_HERO_SRC[portalKey];
-  return LOGIN_HERO_SRC;
-}
 
 export type PortalConfig = {
   key: string;
@@ -315,25 +287,6 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
-/** Vite-bundled persona illustrations (optimized ~110KB each) */
-export const PORTAL_PERSONA_SRC: Record<string, string> = {
-  office: personaOffice,
-  site: personaSite,
-  vendor: personaContractor,
-  client: personaClient,
-  master: personaOffice,
-  hr: personaOffice,
-  employee: personaOffice,
-  field: personaSite,
-  quality: personaSite,
-  drawings: personaOffice,
-  comms: personaOffice,
-};
-
-function portalPersonaSrc(portalKey: string) {
-  return PORTAL_PERSONA_SRC[portalKey] ?? PORTAL_PERSONA_SRC.office;
-}
-
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
   return shortLabel;
@@ -345,26 +298,16 @@ function portalDisplayName(key: string, shortLabel: string) {
 
 function BrandLockup({
   size = "hero",
-  onHero = false,
-  glass = false,
   context,
 }: {
   size?: "hero" | "compact" | "chrome";
-  onHero?: boolean;
-  glass?: boolean;
-  /** hub = landing picker · portal = individual sign-in */
   context?: "hub" | "portal";
 }) {
-  const heroSrc = onHero ? "/logo-transparent.png?v=4" : "/logo.png?v=4";
   const contextClass = context ? ` brand-lockup--auth-${context}` : "";
   return (
-    <div
-      className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${contextClass}${
-        onHero ? (glass ? " brand-lockup--on-hero-glass" : " brand-lockup--on-hero") : ""
-      }`}
-    >
+    <div className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${contextClass}`}>
       <img
-        src={heroSrc}
+        src="/logo-transparent.png?v=4"
         alt="शरणम्"
         className="brand-lockup__mark"
         width={820}
@@ -372,25 +315,6 @@ function BrandLockup({
         decoding="sync"
         fetchPriority="high"
       />
-    </div>
-  );
-}
-
-function HeroBrandOverlay({ tagline, glass = true }: { tagline?: string; glass?: boolean }) {
-  return (
-    <div className="auth-hero-brand">
-      <BrandLockup size="hero" onHero glass={glass} />
-      {tagline ? <p className="auth-hero-brand__tag">{tagline}</p> : null}
-    </div>
-  );
-}
-
-function AuthBackdrop({ portalKey }: { portalKey?: string }) {
-  const src = portalHeroSrc(portalKey);
-  return (
-    <div className="auth-backdrop" aria-hidden>
-      <img className="auth-backdrop__img" src={src} alt="" loading="eager" fetchPriority="high" />
-      <div className="auth-backdrop__scrim" />
     </div>
   );
 }
@@ -508,6 +432,33 @@ function PortalBackLink() {
   );
 }
 
+function PortalTierBadge({ cfg, size = "md" }: { cfg: PortalConfig; size?: "sm" | "md" | "lg" }) {
+  return (
+    <div
+      className={`auth-tier-badge auth-tier-badge--${size}`}
+      style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
+    >
+      <span className="auth-tier-badge__icon" aria-hidden>
+        {cfg.icon}
+      </span>
+      <span className="auth-tier-badge__label">{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
+    </div>
+  );
+}
+
+function PortalPointsList({ points, className = "" }: { points: string[]; className?: string }) {
+  return (
+    <ul className={`auth-portal__points ${className}`.trim()}>
+      {points.map((p) => (
+        <li key={p}>
+          <span className="auth-portal__points-dot" aria-hidden />
+          {p}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function useAuthPageScroll() {
   useEffect(() => {
     document.documentElement.classList.add("is-auth-route");
@@ -530,24 +481,20 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!cfg) return <Navigate to="/login" replace />;
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
-  const persona = portalPersonaSrc(portalKey);
-
   return (
-    <div className="auth-page auth-page--immersive auth-page--light auth-page--portal" data-portal={portalKey}>
-      <AuthBackdrop portalKey={portalKey} />
+    <div className="auth-page auth-page--plain auth-page--portal" data-portal={portalKey}>
       <div className="auth-shell auth-shell--portal">
         <div
           className="auth-portal__grid auth-portal__grid--minimal"
           style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
         >
           <aside className="auth-portal__brand">
-            <BrandLockup size="hero" onHero glass context="portal" />
-            <div className="auth-portal__story">
-              <div className="auth-portal__persona-wrap" aria-hidden>
-                <img className="auth-portal__persona" src={persona} alt="" width={260} height={320} loading="eager" decoding="async" />
-              </div>
+            <div className="auth-block auth-portal__story">
+              <BrandLockup size="hero" context="portal" />
+              <PortalTierBadge cfg={cfg} size="lg" />
               <p className="auth-portal__tagline">{cfg.headline}</p>
               <p className="auth-portal__hint">{cfg.subtitle}</p>
+              <PortalPointsList points={cfg.points} />
             </div>
             <PortalBackLink />
           </aside>
@@ -568,29 +515,29 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
-  const persona = portalPersonaSrc(cfg.key);
   return (
     <Link
       to={`/login/${cfg.key}`}
-      className="bento-tile bento-tile--portal bento-tile--modern"
-      style={{ ["--tile-tone" as string]: cfg.tone } as CSSProperties}
+      className="auth-portal-block"
+      style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
     >
-      <div className="bento-tile__accent" aria-hidden />
-      <div className="bento-tile__visual" aria-hidden>
-        <img className="bento-tile__persona" src={persona} alt="" width={112} height={140} loading="eager" decoding="async" />
-        <div className="bento-tile__visual-glow" />
+      <div className="auth-portal-block__bar" aria-hidden />
+      <div className="auth-portal-block__icon" aria-hidden>
+        {cfg.icon}
       </div>
-      <div className="bento-tile__body">
-        <div className="bento-tile__head">
-          <span className="bento-tile__icon">{cfg.icon}</span>
-        </div>
-        <div className="bento-tile__title">{portalDisplayName(cfg.key, cfg.shortLabel)}</div>
-        <p className="bento-tile__desc">{cfg.headline}</p>
-        <div className="bento-tile__cta">
-          <span>Sign in</span>
-          <span className="bento-tile__arrow" aria-hidden>→</span>
-        </div>
+      <div className="auth-portal-block__body">
+        <div className="auth-portal-block__tier">{cfg.shortLabel}</div>
+        <div className="auth-portal-block__title">{portalDisplayName(cfg.key, cfg.shortLabel)}</div>
+        <p className="auth-portal-block__desc">{cfg.headline}</p>
+        <ul className="auth-portal-block__points">
+          {cfg.points.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
       </div>
+      <span className="auth-portal-block__cta" aria-hidden>
+        {cfg.cta} →
+      </span>
     </Link>
   );
 }
@@ -601,40 +548,24 @@ export function LoginHubPage() {
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
-    <div className="auth-page auth-page--immersive auth-page--light auth-page--hub">
-      <AuthBackdrop />
-      <div className="auth-shell auth-shell--hub auth-shell--hub-modern">
-        <div className="auth-hub__layout">
-          <aside className="auth-hub__story">
-            <BrandLockup size="hero" onHero glass context="hub" />
-            <p className="auth-hero-brand__tag">Project Management Consultants</p>
-            <p className="auth-hub__pitch">
-              Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
-            </p>
-            <div className="auth-hub__persona-strip" aria-hidden>
-              {HUB_PORTALS.map((k) => (
-                <img
-                  key={k}
-                  className="auth-hub__persona-chip"
-                  src={portalPersonaSrc(k)}
-                  alt=""
-                  width={72}
-                  height={72}
-                  loading="eager"
-                  decoding="async"
-                />
-              ))}
-            </div>
-          </aside>
-          <section className="auth-hub__portals" aria-label="Choose your portal">
-            <p className="auth-hub__lead">Select your workspace</p>
-            <div className="auth-hub__grid auth-hub__grid--four auth-hub__grid--modern">
-              {HUB_PORTALS.map((k) => (
-                <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />
-              ))}
-            </div>
-          </section>
-        </div>
+    <div className="auth-page auth-page--plain auth-page--hub">
+      <div className="auth-shell auth-shell--hub">
+        <header className="auth-hub__mast">
+          <BrandLockup size="hero" context="hub" />
+          <p className="auth-hub__kicker">Project Management Consultants</p>
+          <h1 className="auth-hub__title">Choose your portal</h1>
+          <p className="auth-hub__pitch">
+            Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
+          </p>
+        </header>
+
+        <section className="auth-hub__blocks" aria-label="Choose your portal">
+          <div className="auth-hub__blocks-grid">
+            {HUB_PORTALS.map((k) => (
+              <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

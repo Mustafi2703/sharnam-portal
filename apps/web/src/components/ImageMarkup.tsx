@@ -2,27 +2,23 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * ImageMarkup — draw over any image or PDF page.
- * Loads the source into a canvas, lets user draw with pen (colour + width),
- * add text annotations, erase, undo, and export as a PNG File.
- *
- * Works for phone camera photos AND for a single PDF page rendered via <embed>/<img>.
- * For multi-page PDFs, pass one page (image data URL) at a time.
+ * Tools: pen, shapes (rect, circle, arrow, line), text, erase.
  */
+
+type ShapeKind = "rect" | "ellipse" | "arrow" | "line";
 
 type Stroke =
   | { kind: "path"; color: string; width: number; points: { x: number; y: number }[] }
-  | { kind: "text"; color: string; text: string; x: number; y: number; size: number };
+  | { kind: "text"; color: string; text: string; x: number; y: number; size: number }
+  | { kind: "shape"; shape: ShapeKind; color: string; width: number; x1: number; y1: number; x2: number; y2: number };
+
+type Tool = "pen" | "text" | "erase" | ShapeKind;
 
 type Props = {
-  /** Source image URL, dataURL or File. */
   src: string | File | null;
-  /** Called with a new PNG File whenever the user hits Save. */
   onSave?: (file: File) => void;
-  /** Optional label for the save button. */
   saveLabel?: string;
-  /** Suggested output filename (without extension). */
   filename?: string;
-  /** Fired if the user hits Cancel. */
   onCancel?: () => void;
   className?: string;
 };
@@ -30,7 +26,87 @@ type Props = {
 const COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#111827", "#ffffff"];
 const WIDTHS = [2, 4, 8, 14];
 
-export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save markup", filename = "markup", className = "" }: Props) {
+const TOOLS: { id: Tool; label: string }[] = [
+  { id: "pen", label: "Pen" },
+  { id: "line", label: "Line" },
+  { id: "arrow", label: "Arrow" },
+  { id: "rect", label: "Box" },
+  { id: "ellipse", label: "Circle" },
+  { id: "text", label: "Text" },
+  { id: "erase", label: "Erase" },
+];
+
+function drawShape(ctx: CanvasRenderingContext2D, s: Extract<Stroke, { kind: "shape" }>) {
+  const x = Math.min(s.x1, s.x2);
+  const y = Math.min(s.y1, s.y2);
+  const w = Math.abs(s.x2 - s.x1);
+  const h = Math.abs(s.y2 - s.y1);
+  ctx.strokeStyle = s.color;
+  ctx.lineWidth = s.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (s.shape === "rect") {
+    ctx.strokeRect(x, y, w, h);
+    return;
+  }
+  if (s.shape === "ellipse") {
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, Math.max(w / 2, 1), Math.max(h / 2, 1), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
+  if (s.shape === "line" || s.shape === "arrow") {
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+    if (s.shape === "arrow") {
+      const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+      const head = Math.max(10, s.width * 3);
+      ctx.beginPath();
+      ctx.moveTo(s.x2, s.y2);
+      ctx.lineTo(s.x2 - head * Math.cos(angle - Math.PI / 6), s.y2 - head * Math.sin(angle - Math.PI / 6));
+      ctx.moveTo(s.x2, s.y2);
+      ctx.lineTo(s.x2 - head * Math.cos(angle + Math.PI / 6), s.y2 - head * Math.sin(angle + Math.PI / 6));
+      ctx.stroke();
+    }
+  }
+}
+
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function hitStroke(s: Stroke, p: { x: number; y: number }, radius: number): boolean {
+  if (s.kind === "path") {
+    return s.points.some((pt) => Math.hypot(pt.x - p.x, pt.y - p.y) < radius);
+  }
+  if (s.kind === "text") {
+    return Math.hypot(s.x - p.x, s.y - p.y) < radius;
+  }
+  const x = Math.min(s.x1, s.x2);
+  const y = Math.min(s.y1, s.y2);
+  const w = Math.abs(s.x2 - s.x1);
+  const h = Math.abs(s.y2 - s.y1);
+  if (s.shape === "rect" || s.shape === "ellipse") {
+    return p.x >= x - radius && p.x <= x + w + radius && p.y >= y - radius && p.y <= y + h + radius;
+  }
+  return distToSegment(p.x, p.y, s.x1, s.y1, s.x2, s.y2) < radius;
+}
+
+export default function ImageMarkup({
+  src,
+  onSave,
+  onCancel,
+  saveLabel = "Save markup",
+  filename = "markup",
+  className = "",
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
@@ -38,7 +114,7 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
   const [current, setCurrent] = useState<Stroke | null>(null);
   const [color, setColor] = useState("#ef4444");
   const [width, setWidth] = useState(4);
-  const [tool, setTool] = useState<"pen" | "text" | "erase">("pen");
+  const [tool, setTool] = useState<Tool>("pen");
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,6 +173,8 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
         ctx.fillStyle = s.color;
         ctx.font = `${s.size}px system-ui, sans-serif`;
         ctx.fillText(s.text, s.x, s.y);
+      } else if (s.kind === "shape") {
+        drawShape(ctx, s);
       }
     };
     strokes.forEach(drawStroke);
@@ -113,6 +191,10 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
     };
   }
 
+  function isShapeTool(t: Tool): t is ShapeKind {
+    return t === "rect" || t === "ellipse" || t === "arrow" || t === "line";
+  }
+
   function onDown(e: React.PointerEvent<HTMLCanvasElement>) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = eventToPoint(e);
@@ -124,29 +206,34 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
       return;
     }
     if (tool === "erase") {
-      // Remove the top-most stroke within a small radius
       const radius = width * 3;
       setStrokes((prev) => {
         for (let i = prev.length - 1; i >= 0; i--) {
-          const s = prev[i];
-          const hit =
-            s.kind === "path"
-              ? s.points.some((pt) => Math.hypot(pt.x - p.x, pt.y - p.y) < radius)
-              : Math.hypot(s.x - p.x, s.y - p.y) < radius;
-          if (hit) return [...prev.slice(0, i), ...prev.slice(i + 1)];
+          if (hitStroke(prev[i], p, radius)) return [...prev.slice(0, i), ...prev.slice(i + 1)];
         }
         return prev;
       });
       return;
     }
+    if (isShapeTool(tool)) {
+      setCurrent({ kind: "shape", shape: tool, color, width, x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+      return;
+    }
     setCurrent({ kind: "path", color, width, points: [p] });
   }
+
   function onMove(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!current) return;
-    if (current.kind !== "path") return;
     const p = eventToPoint(e);
-    setCurrent({ ...current, points: [...current.points, p] });
+    if (current.kind === "shape") {
+      setCurrent({ ...current, x2: p.x, y2: p.y });
+      return;
+    }
+    if (current.kind === "path") {
+      setCurrent({ ...current, points: [...current.points, p] });
+    }
   }
+
   function onUp() {
     if (current) {
       setStrokes((prev) => [...prev, current]);
@@ -181,15 +268,15 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
   return (
     <div className={`space-y-3 markup-root ${className}`}>
       <div className="markup-toolbar">
-        <div className="flex gap-1">
-          {(["pen", "text", "erase"] as const).map((t) => (
+        <div className="flex flex-wrap gap-1">
+          {TOOLS.map((t) => (
             <button
-              key={t}
+              key={t.id}
               type="button"
-              onClick={() => setTool(t)}
-              className={`markup-toolbar__btn ${tool === t ? "markup-toolbar__btn--active" : ""}`}
+              onClick={() => setTool(t.id)}
+              className={`markup-toolbar__btn ${tool === t.id ? "markup-toolbar__btn--active" : ""}`}
             >
-              {t}
+              {t.label}
             </button>
           ))}
         </div>
@@ -217,17 +304,19 @@ export default function ImageMarkup({ src, onSave, onCancel, saveLabel = "Save m
             />
           ))}
         </div>
-        <button type="button" onClick={undo} className="markup-toolbar__btn">Undo</button>
-        <button type="button" onClick={clearAll} className="markup-toolbar__btn">Clear</button>
+        <button type="button" onClick={undo} className="markup-toolbar__btn">
+          Undo
+        </button>
+        <button type="button" onClick={clearAll} className="markup-toolbar__btn">
+          Clear
+        </button>
         <div className="markup-toolbar__actions">
           {onCancel && (
-            <button type="button" onClick={onCancel} className="markup-toolbar__btn">Cancel</button>
+            <button type="button" onClick={onCancel} className="markup-toolbar__btn">
+              Cancel
+            </button>
           )}
-          <button
-            type="button"
-            onClick={() => void save()}
-            className="markup-toolbar__btn markup-toolbar__btn--primary"
-          >
+          <button type="button" onClick={() => void save()} className="markup-toolbar__btn markup-toolbar__btn--primary">
             {saveLabel}
           </button>
         </div>
