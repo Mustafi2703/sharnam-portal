@@ -4,6 +4,7 @@ build
 .env
 .env.local
 .env.render.local
+hostinger-env-paste.txt
 *.db
 *.db-journal
 uploads/**

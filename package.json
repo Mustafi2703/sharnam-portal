@@ -10,7 +10,7 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @sharnam/api\" \"npm run dev -w @sharnam/web\"",
     "build": "npm run build -w @sharnam/shared && npm run build -w @sharnam/api && npm run build -w @sharnam/web",
     "start": "node server.mjs",
-    "hostinger:build": "npm run build && npx prisma generate && npx prisma db push",
+    "hostinger:build": "npm run build:hostinger -w @sharnam/web && npx prisma generate && npx prisma db push",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx seed/seed.ts",
