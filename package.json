@@ -9,24 +9,29 @@
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @sharnam/api\" \"npm run dev -w @sharnam/web\"",
     "build": "npm run build -w @sharnam/shared && npm run build -w @sharnam/api && npm run build -w @sharnam/web",
+    "start": "node server.mjs",
+    "hostinger:build": "npm run build && npx prisma generate && npx prisma db push",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-  "db:seed": "tsx seed/seed.ts",
-  "db:verify-progress": "tsx seed/verify-progress.ts",
-  "db:setup": "npm run db:generate && npm run db:push && npm run db:seed",
+    "db:seed": "tsx seed/seed.ts",
+    "db:verify-progress": "tsx seed/verify-progress.ts",
+    "db:setup": "npm run db:generate && npm run db:push && npm run db:seed",
     "start:prod": "bash scripts/start-production.sh",
     "postinstall": "prisma generate"
   },
-  "devDependencies": {
-    "concurrently": "^9.1.2",
-    "prisma": "^6.5.0",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
     "bcryptjs": "^3.0.2",
     "dotenv": "^16.4.7",
+    "prisma": "^6.5.0",
+    "tsx": "^4.19.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.2"
   }
 }

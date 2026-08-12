@@ -38,6 +38,30 @@ Deploy the Sharnam portal on a **Hostinger VPS** (KVM), not shared web hosting. 
 
 ---
 
+## Deploy alongside `app.spdc.in` (do not disturb existing app)
+
+If **app.spdc.in** already runs on the same server (schedule / other SPDC app):
+
+| | Existing app | Sharnam portal |
+|--|----------------|----------------|
+| **URL** | `app.spdc.in` | **`portal.spdc.in`** (new subdomain) |
+| **Port** | its own (often 4000) | **`4001`** |
+| **Code** | its own folder | `/var/www/sharnam-portal` |
+| **PM2 name** | its own process | `sharnam-portal` only |
+| **Nginx** | its own site file | **new** `sharnam-portal` site only |
+
+**We never:**
+- Edit nginx config for `app.spdc.in`
+- Remove other `sites-enabled` entries
+- Reuse port 4000 if the existing app uses it
+- Touch the existing app’s files or PM2 processes
+
+**DNS:** Add a **new A record** `portal.spdc.in` → same VPS IP. Leave `app.spdc.in` DNS as-is.
+
+**After deploy:** Open `https://app.spdc.in` and confirm it still works, then test `https://portal.spdc.in/login`.
+
+---
+
 ## Step 1 — VPS bootstrap (once)
 
 SSH into the VPS as root:

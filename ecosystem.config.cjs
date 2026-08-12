@@ -1,4 +1,4 @@
-/** PM2 process manager — Hostinger VPS */
+/** PM2 — Sharnam portal only (separate from app.spdc.in) */
 module.exports = {
   apps: [
     {
@@ -8,7 +8,7 @@ module.exports = {
       args: "scripts/start-production.sh",
       env: {
         NODE_ENV: "production",
-        PORT: 4000,
+        PORT: 4001,
         SKIP_SEED: "1",
       },
       instances: 1,
