@@ -160,17 +160,29 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
+const PORTAL_HERO: Record<string, string> = {
+  hub: "/auth/hero-construction-wide.jpg",
+  office: "/auth/hero-office.jpg",
+  site: "/auth/hero-site.jpg",
+  client: "/auth/hero-client.jpg",
+  vendor: "/auth/hero-construction-wide.jpg",
+};
+
+function portalHero(key: string) {
+  return PORTAL_HERO[key] || "/auth/hero-construction-wide.jpg";
+}
+
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
   return shortLabel;
 }
 
-function AuthLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const widths = { sm: 200, md: 280, lg: 440 };
+function AuthLogo({ size = "md" }: { size?: "xs" | "sm" | "md" | "lg" }) {
+  const widths = { xs: 120, sm: 156, md: 220, lg: 300 };
   return (
     <div className={`auth-logo auth-logo--${size}`}>
       <img
-        src="/logo-transparent.png?v=7"
+        src="/logo-transparent.png?v=8"
         alt="शरणम्"
         className="auth-logo__img"
         width={widths[size]}
@@ -181,11 +193,25 @@ function AuthLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   );
 }
 
+function AuthScene({ image }: { image: string }) {
+  return (
+    <div className="auth-scene" aria-hidden>
+      <div className="auth-scene__band auth-scene__band--top">
+        <img src={image} alt="" decoding="async" />
+      </div>
+      <div className="auth-scene__band auth-scene__band--bottom">
+        <img src={image} alt="" decoding="async" />
+      </div>
+      <div className="auth-scene__wash" />
+    </div>
+  );
+}
+
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`auth-brand${compact ? " auth-brand--compact" : ""}`}>
       <img
-        src="/logo-transparent.png?v=7"
+        src="/logo-transparent.png?v=8"
         alt="शरणम् — Sharnam Project Management Consultants"
         className="auth-brand__logo"
         width={820}
@@ -246,9 +272,6 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 
   return (
     <div className="auth-signin" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
-      <div className="auth-signin__logo-row">
-        <AuthLogo size="sm" />
-      </div>
       <div className="auth-signin__badge">
         <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
         <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
@@ -300,7 +323,7 @@ function AuthMobileNav({ backTo }: { backTo?: string }) {
           ← All portals
         </Link>
       ) : null}
-      <AuthLogo size="sm" />
+      <AuthLogo size="xs" />
     </nav>
   );
 }
@@ -327,6 +350,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 
   return (
     <div className="auth-layout auth-layout--portal" data-portal={portalKey}>
+      <AuthScene image={portalHero(portalKey)} />
       <AuthMobileNav backTo="/login" />
       <aside
         className="auth-layout__brand"
@@ -379,6 +403,7 @@ export function LoginHubPage() {
 
   return (
     <div className="auth-layout auth-layout--hub" style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}>
+      <AuthScene image={portalHero("hub")} />
       <AuthMobileNav />
       <aside className="auth-layout__brand">
         <BrandMark />
