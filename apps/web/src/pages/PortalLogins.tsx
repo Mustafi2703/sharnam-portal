@@ -178,11 +178,11 @@ function portalDisplayName(key: string, shortLabel: string) {
 }
 
 function AuthLogo({ size = "md" }: { size?: "xs" | "sm" | "md" | "lg" }) {
-  const widths = { xs: 120, sm: 156, md: 220, lg: 300 };
+  const widths = { xs: 132, sm: 168, md: 240, lg: 360 };
   return (
     <div className={`auth-logo auth-logo--${size}`}>
       <img
-        src="/logo-transparent.png?v=8"
+        src="/logo-transparent.png?v=9"
         alt="शरणम्"
         className="auth-logo__img"
         width={widths[size]}
@@ -207,11 +207,11 @@ function AuthScene({ image }: { image: string }) {
   );
 }
 
-function BrandMark({ compact = false }: { compact?: boolean }) {
+function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   return (
-    <div className={`auth-brand${compact ? " auth-brand--compact" : ""}`}>
+    <div className="auth-brand">
       <img
-        src="/logo-transparent.png?v=8"
+        src="/logo-transparent.png?v=9"
         alt="शरणम् — Sharnam Project Management Consultants"
         className="auth-brand__logo"
         width={820}
@@ -219,9 +219,9 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
         decoding="async"
         fetchPriority="high"
       />
-      {!compact && (
+      {showTagline ? (
         <p className="auth-brand__tagline">Project Management Consultants</p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -323,7 +323,7 @@ function AuthMobileNav({ backTo }: { backTo?: string }) {
           ← All portals
         </Link>
       ) : null}
-      <AuthLogo size="xs" />
+      <AuthLogo size="sm" />
     </nav>
   );
 }
@@ -353,10 +353,10 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
       <AuthScene image={portalHero(portalKey)} />
       <AuthMobileNav backTo="/login" />
       <aside
-        className="auth-layout__brand"
+        className="auth-layout__brand auth-layout__brand--portal"
         style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
       >
-        <BrandMark compact />
+        <BrandMark showTagline={false} />
         <div className="auth-layout__portal-intro">
           <span className="auth-layout__portal-chip">{cfg.icon}</span>
           <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
@@ -371,7 +371,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
           ← All portals
         </Link>
       </aside>
-      <main className="auth-layout__main">
+      <main className="auth-layout__main auth-layout__main--portal">
         <SignInCard cfg={cfg} />
       </main>
     </div>
@@ -405,7 +405,7 @@ export function LoginHubPage() {
     <div className="auth-layout auth-layout--hub" style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}>
       <AuthScene image={portalHero("hub")} />
       <AuthMobileNav />
-      <aside className="auth-layout__brand">
+      <aside className="auth-layout__brand auth-layout__brand--hub">
         <BrandMark />
         <p className="auth-layout__hero-copy">
           Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
