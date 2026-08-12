@@ -119,8 +119,13 @@ export function getColorMode(): ColorMode {
 
 export function applyColorMode(mode: ColorMode) {
   const root = document.documentElement;
+  root.classList.add("theme-transition");
   const vars = mode === "dark" ? DARK : LIGHT;
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  // Reset module overlay tokens; route handlers re-apply accent when needed
+  root.style.setProperty("--wd-accent", vars["--color-brand"]);
+  root.style.removeProperty("--mod-accent");
+  root.style.removeProperty("--mod-soft");
   root.setAttribute("data-theme", mode);
   root.style.colorScheme = mode;
   try {
@@ -128,12 +133,19 @@ export function applyColorMode(mode: ColorMode) {
   } catch {
     /* ignore */
   }
+  window.setTimeout(() => root.classList.remove("theme-transition"), 280);
   return mode;
 }
 
 export function toggleColorMode(): ColorMode {
   const next = getColorMode() === "dark" ? "light" : "dark";
-  return applyColorMode(next);
+  applyColorMode(next);
+  const accent = document.documentElement.dataset.moduleAccent;
+  const soft = document.documentElement.dataset.moduleSoft;
+  if (accent && soft) {
+    applyModuleAccent(accent, soft);
+  }
+  return next;
 }
 
 export function loadSavedTheme() {
@@ -219,11 +231,13 @@ export function applyModuleAccent(accent: string, soft: string) {
   root.style.setProperty("--chart-5", kpi5);
   root.style.setProperty("--chart-6", kpi6);
   root.dataset.moduleAccent = accent;
+  root.dataset.moduleSoft = soft;
 }
 
 export function clearModuleAccent() {
   const root = document.documentElement;
   delete root.dataset.moduleAccent;
+  delete root.dataset.moduleSoft;
   applyColorMode(getColorMode());
 }
 

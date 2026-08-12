@@ -165,11 +165,27 @@ function portalDisplayName(key: string, shortLabel: string) {
   return shortLabel;
 }
 
+function AuthLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+  const widths = { sm: 200, md: 280, lg: 440 };
+  return (
+    <div className={`auth-logo auth-logo--${size}`}>
+      <img
+        src="/logo-transparent.png?v=7"
+        alt="शरणम्"
+        className="auth-logo__img"
+        width={widths[size]}
+        height={Math.round(widths[size] * 0.48)}
+        decoding="async"
+      />
+    </div>
+  );
+}
+
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`auth-brand${compact ? " auth-brand--compact" : ""}`}>
       <img
-        src="/logo-transparent.png?v=5"
+        src="/logo-transparent.png?v=7"
         alt="शरणम् — Sharnam Project Management Consultants"
         className="auth-brand__logo"
         width={820}
@@ -230,6 +246,9 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 
   return (
     <div className="auth-signin" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <div className="auth-signin__logo-row">
+        <AuthLogo size="sm" />
+      </div>
       <div className="auth-signin__badge">
         <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
         <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
@@ -273,13 +292,28 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
+function AuthMobileNav({ backTo }: { backTo?: string }) {
+  return (
+    <nav className={`auth-mobile-nav${backTo ? "" : " auth-mobile-nav--center"}`} aria-label="Login navigation">
+      {backTo ? (
+        <Link to={backTo} className="auth-mobile-nav__back">
+          ← All portals
+        </Link>
+      ) : null}
+      <AuthLogo size="sm" />
+    </nav>
+  );
+}
+
 function useAuthPageScroll() {
   useEffect(() => {
     document.documentElement.classList.add("is-auth-route");
     document.body.classList.add("is-auth-route");
+    document.documentElement.style.colorScheme = "light";
     return () => {
       document.documentElement.classList.remove("is-auth-route");
       document.body.classList.remove("is-auth-route");
+      document.documentElement.style.colorScheme = "";
     };
   }, []);
 }
@@ -293,6 +327,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 
   return (
     <div className="auth-layout auth-layout--portal" data-portal={portalKey}>
+      <AuthMobileNav backTo="/login" />
       <aside
         className="auth-layout__brand"
         style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
@@ -343,7 +378,8 @@ export function LoginHubPage() {
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
-    <div className="auth-layout auth-layout--hub">
+    <div className="auth-layout auth-layout--hub" style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}>
+      <AuthMobileNav />
       <aside className="auth-layout__brand">
         <BrandMark />
         <p className="auth-layout__hero-copy">

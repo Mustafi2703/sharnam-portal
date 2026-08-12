@@ -143,7 +143,7 @@ function SideNavBody({
     <div className="side-nav__inner">
       <div className="side-nav__head">
         <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
-          <img src="/logo.png" alt={BRAND_EN} className="side-nav__logo" width={240} height={116} />
+          <img src="/logo-transparent.png" alt={BRAND_EN} className="side-nav__logo" width={240} height={116} />
         </Link>
         {roleLabel ? (
           <span className="side-nav__role-badge" aria-label={`Signed in as ${roleLabel}`}>
@@ -354,6 +354,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     setDrawerOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.touchAction = prevTouchAction;
+    };
+  }, [drawerOpen]);
+
   /** Keep left nav + top bar accent in sync with the open module (green base). */
   useEffect(() => {
     if (!inProject) {
@@ -395,8 +407,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   function onToggleTheme() {
-    setColorMode(toggleColorMode());
-    // Module accent must sit on top of light/dark tokens
+    const next = toggleColorMode();
+    setColorMode(next);
+    if (inProject) {
+      const key = moduleKeyFromPath(location.pathname);
+      if (key && MODULE_META[key]) {
+        applyModuleAccent(MODULE_META[key].accent, MODULE_META[key].soft);
+      } else {
+        applyModuleAccent(BASE_ACCENT, BASE_SOFT);
+      }
+    }
     notifyModuleTheme();
   }
 
@@ -425,8 +445,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className={`flex items-center gap-2.5 px-3 sm:px-4 ${inProject ? "h-11" : "h-[52px]"}`}>
             <button
               type="button"
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-paper text-ink"
+              className="app-topbar__menu-btn md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-paper text-ink"
               aria-label="Open menu"
+              aria-expanded={drawerOpen}
               onClick={() => setDrawerOpen(true)}
             >
               <IconMenu size={18} />
@@ -445,7 +466,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
 
             <Link to="/dashboard" className="app-topbar__brand min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
-              <img src="/logo.png" alt={BRAND_EN} className="app-topbar__logo" width={160} height={76} />
+              <img src="/logo-transparent.png" alt={BRAND_EN} className="app-topbar__logo" width={160} height={76} />
             </Link>
 
             <div className={`app-topbar__meta ${inProject ? "app-topbar__meta--slim" : ""}`}>
@@ -522,12 +543,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button type="button" className="absolute inset-0 bg-ink/50" aria-label="Close" onClick={() => setDrawerOpen(false)} />
-          <aside className="side-nav side-nav--drawer absolute left-0 top-0 bottom-0 w-[min(88vw,300px)] flex shadow-2xl">
+        <div className="app-mobile-drawer md:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
+          <button
+            type="button"
+            className="app-mobile-drawer__backdrop"
+            aria-label="Close menu"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <aside className="side-nav side-nav--drawer app-mobile-drawer__panel">
             <button
               type="button"
-              className="absolute right-3 top-3 z-10 h-8 w-8 rounded-lg bg-white/10 border border-white/20 grid place-items-center text-white"
+              className="side-nav__close absolute right-3 top-3 z-10 h-9 w-9 rounded-lg grid place-items-center"
               onClick={() => setDrawerOpen(false)}
               aria-label="Close menu"
             >

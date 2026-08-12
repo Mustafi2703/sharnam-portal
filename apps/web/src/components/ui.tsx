@@ -97,7 +97,7 @@ export function Badge({
   tone?: "neutral" | "brand" | "ok" | "warn" | "danger";
 }) {
   const tones = {
-    neutral: "bg-black/[0.04] text-steel-muted border-line",
+    neutral: "bg-sand/80 text-steel-muted border-line",
     brand: "bg-brand-soft text-brand-dark border-brand/25",
     ok: "bg-brand-soft text-brand border-brand/25",
     warn: "bg-amber-50 text-warn border-amber-200",
@@ -124,8 +124,8 @@ export function Button({
   const variants = {
     primary:
       "bg-[var(--mod-accent,var(--color-brand))] hover:brightness-[0.94] text-white shadow-sm border border-transparent",
-    secondary: "bg-white border border-line text-ink hover:bg-[var(--mod-soft,var(--color-brand-soft))]",
-    ghost: "text-steel-muted hover:text-ink hover:bg-black/[0.04]",
+    secondary: "bg-paper border border-line text-ink hover:bg-[var(--mod-soft,var(--color-brand-soft))]",
+    ghost: "text-steel-muted hover:text-ink hover:bg-sand/70",
     dark: "bg-ink text-white hover:bg-steel-2",
   };
   return (
@@ -202,7 +202,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
 }
@@ -211,7 +211,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
 }
@@ -220,7 +220,7 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return (
     <textarea
       {...props}
-      className={`w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
 }

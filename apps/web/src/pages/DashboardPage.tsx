@@ -279,8 +279,8 @@ export default function DashboardPage() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-500">Open safety items</div>
-              <div className="text-3xl font-bold text-slate-800 mt-1 tabular-nums">{safetyOpen}</div>
+              <div className="text-sm font-semibold text-steel-muted">Open safety items</div>
+              <div className="text-3xl font-bold text-ink mt-1 tabular-nums">{safetyOpen}</div>
             </div>
             {pid && (
               <Link to={`/projects/${pid}/safety`}>
