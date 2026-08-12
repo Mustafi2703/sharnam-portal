@@ -133,6 +133,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: err.message || "Server error" });
 });
 
-app.listen(PORT, () => {
-  console.log(`शरणम् API listening on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
 });

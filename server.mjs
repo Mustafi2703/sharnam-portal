@@ -1,8 +1,8 @@
 /**
- * Hostinger Node.js Web App entry point.
- * Runs DB migrate then starts the Express + React API (tsx).
+ * Hostinger Node.js Web App entry point — start Express API only.
+ * DB migrate + seed run at BUILD time (hostinger:build), not here.
  */
-import { execSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,34 +14,34 @@ for (const dir of ["data", "uploads"]) {
   fs.mkdirSync(path.join(root, dir), { recursive: true });
 }
 
-function run(cmd, args) {
-  execSync([cmd, ...args].join(" "), { stdio: "inherit", env: process.env });
-}
-
-console.log("==> Sharnam portal starting on Hostinger");
-console.log("    PORT:", process.env.PORT || "4000");
+const port = process.env.PORT || "4000";
+console.log("==> Sharnam portal starting");
+console.log("    cwd:", root);
+console.log("    PORT:", port);
 console.log("    NODE:", process.version);
 
-try {
-  run("npx", ["prisma", "generate"]);
-  run("npx", ["prisma", "db", "push"]);
-  if (process.env.RUN_SEED === "1") {
-    console.log("==> Seeding demo data (RUN_SEED=1)");
-    run("npx", ["tsx", "seed/seed.ts"]);
-  } else if (process.env.SKIP_SEED !== "1") {
-    console.log("==> Tip: set RUN_SEED=1 on first deploy, then SKIP_SEED=1");
-  }
-} catch (err) {
-  console.error("Database setup failed:", err);
+const entry = path.join(root, "apps", "api", "src", "index.ts");
+if (!fs.existsSync(entry)) {
+  console.error("Missing API entry:", entry);
   process.exit(1);
 }
 
-const tsxBin = path.join(root, "node_modules", ".bin", "tsx");
-const entry = path.join(root, "apps", "api", "src", "index.ts");
-const child = spawn(tsxBin, [entry], {
+const webDist = path.join(root, "apps", "web", "dist", "index.html");
+if (!fs.existsSync(webDist)) {
+  console.warn("WARN: Web UI not built at apps/web/dist — run hostinger:build");
+}
+
+const child = spawn("npx", ["tsx", entry], {
   stdio: "inherit",
-  env: process.env,
+  env: { ...process.env, HOST: "0.0.0.0" },
   cwd: root,
+  shell: true,
 });
 
-child.on("exit", (code) => process.exit(code ?? 1));
+child.on("exit", (code) => {
+  console.error("API process exited with code", code);
+  process.exit(code ?? 1);
+});
+
+process.on("SIGTERM", () => child.kill("SIGTERM"));
+process.on("SIGINT", () => child.kill("SIGINT"));
