@@ -1,5 +1,5 @@
 /**
- * Hostinger entry — listen on PORT first, then connect MySQL.
+ * Hostinger entry — migrate MySQL + seed before serving traffic.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -25,13 +25,10 @@ const dbUrl = applyDatabaseUrl();
 
 console.log("==> Sharnam portal boot");
 console.log("    cwd:", rootDir);
-console.log("    PORT:", process.env.PORT || "(Hostinger injects this)");
+console.log("    PORT:", process.env.PORT || "4000 (default — set PORT in env if Hostinger requires)");
 console.log("    NODE:", process.version);
 console.log("    DATABASE:", dbUrl ? maskDatabaseUrl(dbUrl) : "NOT SET — add MYSQL_* env vars");
 if (process.env.MYSQL_USER) console.log("    MYSQL_USER:", process.env.MYSQL_USER);
-if (process.env.DATABASE_URL?.startsWith("file:")) {
-  console.warn("    WARN: Remove legacy DATABASE_URL=file:... from Hostinger env");
-}
 
 const webIndex = path.join(rootDir, "apps", "web", "dist", "index.html");
 const apiEntry = path.join(rootDir, "apps", "api", "dist", "index.js");
@@ -49,11 +46,14 @@ if (!process.env.JWT_SECRET?.trim()) {
   console.warn("WARN: JWT_SECRET is not set — auth will fail");
 }
 
+const dbReady = await runDbBoot(rootDir);
+if (!dbReady) {
+  console.warn("WARN: DB boot incomplete — login will fail until MySQL schema is created");
+}
+
 try {
   await import("./apps/api/dist/index.js");
 } catch (err) {
   console.error("FATAL: API failed to start:", err);
   process.exit(1);
 }
-
-void runDbBoot();
