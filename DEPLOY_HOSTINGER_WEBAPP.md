@@ -1,21 +1,46 @@
 # Deploy on Hostinger Web App (Cloud plan — no VPS)
 
 Use your **existing Cloud Startup** plan for `spdc.in` (IP **62.72.15.47**).  
-Deploy Sharnam on **`portal.spdc.in`** — **`app.spdc.in` stays untouched**.
+Deploy Sharnam on **`portal.spdc.in`** — completely **independent** of **`app.spdc.in`**.
 
 Hostinger supports **Express + Vite** Node.js web apps on Business/Cloud plans.
 
 ---
 
-## Do not disturb `app.spdc.in`
+## Independence guarantee (read first)
 
-| | Existing | Sharnam (new) |
-|--|----------|----------------|
-| URL | `app.spdc.in` | **`portal.spdc.in`** |
-| hPanel | its existing website | **Add new** Node.js web app |
-| Code | its repo/folder | GitHub `sharnam-portal` |
+Sharnam and `app.spdc.in` are **two separate websites** on the same Hostinger account. They do not share code, database, or config.
 
-Do **not** edit the existing `app.spdc.in` website or its files in `public_html`.
+| | **app.spdc.in** (existing — do not touch) | **portal.spdc.in** (Sharnam — new) |
+|--|-------------------------------------------|-------------------------------------|
+| **hPanel entry** | Its own website row | **Add website** → new Node.js web app |
+| **Domain** | `app.spdc.in` | **`portal.spdc.in` only** |
+| **Git repo** | Its repo (schedule app) | **`Mustafi2703/sharnam-portal`** |
+| **Server folder** | Its `public_html` / app path | Hostinger-managed **separate** app folder |
+| **Database** | Its DB | **`./data/prod.db`** (SQLite, Sharnam only) |
+| **Uploads** | Its files | **`./data/uploads`** (Sharnam only) |
+| **Process** | Its Node/PHP process | **`server.mjs`** → Sharnam only |
+| **Env vars** | Its hPanel env | **New env block** for portal web app only |
+
+### DO
+
+- Add a **new** website for **`portal.spdc.in`**
+- Connect GitHub repo **`sharnam-portal`** only to that new site
+- Add DNS record **`portal`** → `62.72.15.47` (new A record)
+- Set `WEB_ORIGIN=https://portal.spdc.in` (not app.spdc.in)
+- After deploy: test **`app.spdc.in` first** — it must behave exactly as before
+
+### DO NOT
+
+- Open or edit the **app.spdc.in** website in hPanel
+- Upload Sharnam files into **`app.spdc.in` public_html**
+- Change DNS for **`app`** subdomain
+- Redeploy / rebuild the **app.spdc.in** web app
+- Reuse `app.spdc.in` env vars or point Sharnam at app’s database
+- Set Sharnam domain to `app.spdc.in` or root `spdc.in`
+
+> Same server IP is fine — Hostinger routes by **domain name** to the correct app.  
+> `app.spdc.in` and `portal.spdc.in` are isolated like two tenants on one machine.
 
 ---
 
