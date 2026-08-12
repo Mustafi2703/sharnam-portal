@@ -20,22 +20,29 @@ authRouter.post("/login", async (req, res) => {
   };
   if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  if (!user || !user.isActive) return res.status(401).json({ error: "Invalid credentials" });
+  try {
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user || !user.isActive) return res.status(401).json({ error: "Invalid credentials" });
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-  if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return res.status(403).json({
-      error: `This account cannot sign in to the ${portal || "selected"} portal. Use the correct portal for your role.`,
+    if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+      return res.status(403).json({
+        error: `This account cannot sign in to the ${portal || "selected"} portal. Use the correct portal for your role.`,
+      });
+    }
+
+    const authUser = toAuthUser(user);
+    const token = signToken(authUser);
+    await audit("login", { userId: user.id, meta: { portal: portal || "general" } });
+    res.json({ token, user: authUser });
+  } catch (err) {
+    console.error("login error:", err);
+    res.status(503).json({
+      error: "Database unavailable. Set MYSQL_* env vars on Hostinger and redeploy with RUN_SEED=1.",
     });
   }
-
-  const authUser = toAuthUser(user);
-  const token = signToken(authUser);
-  await audit("login", { userId: user.id, meta: { portal: portal || "general" } });
-  res.json({ token, user: authUser });
 });
 
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {

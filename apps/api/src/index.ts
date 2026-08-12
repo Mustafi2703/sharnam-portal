@@ -25,6 +25,7 @@ import { crmComparativeRouter } from "./routes/crmComparative.js";
 import { hrmRecruitmentRouter } from "./routes/hrmRecruitment.js";
 import { dprMakerRouter } from "./routes/dprMaker.js";
 import { wprMakerRouter } from "./routes/wprMaker.js";
+import { prisma } from "./prisma.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -47,15 +48,28 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
   const graphConfigured = Boolean(
     (process.env.AZURE_TENANT_ID || process.env.GRAPH_TENANT_ID) &&
       (process.env.AZURE_CLIENT_ID || process.env.GRAPH_CLIENT_ID) &&
       (process.env.AZURE_CLIENT_SECRET || process.env.GRAPH_CLIENT_SECRET)
   );
+  let dbOk = false;
+  let dbError: string | null = null;
+  let userCount: number | null = null;
+  try {
+    userCount = await prisma.user.count();
+    dbOk = true;
+  } catch (err) {
+    dbError = err instanceof Error ? err.message : String(err);
+  }
   res.json({
     ok: true,
     service: "sharnam-api",
+    dbOk,
+    dbError,
+    userCount,
+    databaseUrlSet: Boolean(process.env.DATABASE_URL?.startsWith("mysql://")),
     mockOneDrive: process.env.MOCK_ONEDRIVE !== "false",
     graphConfigured,
     sharePointSiteUrlSet: Boolean(
