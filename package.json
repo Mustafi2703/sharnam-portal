@@ -11,7 +11,7 @@
     "build": "npm run build -w @sharnam/shared && npm run build -w @sharnam/api && npm run build -w @sharnam/web",
     "start": "node server.mjs",
     "prestart": "node scripts/verify-hostinger-build.mjs",
-    "hostinger:build": "npm run build -w @sharnam/shared && npm run build -w @sharnam/api && npm run build:hostinger -w @sharnam/web && node scripts/verify-hostinger-build.mjs && npx prisma generate && npx prisma db push && npx tsx seed/seed.ts",
+    "hostinger:build": "npm run build -w @sharnam/shared && npm run build -w @sharnam/api && npm run build:hostinger -w @sharnam/web && node scripts/verify-hostinger-build.mjs && npx prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx seed/seed.ts",
