@@ -62,6 +62,10 @@ app.get("/api/health", (_req, res) => {
       (process.env.SHAREPOINT_SITE_URL || process.env.GRAPH_SHAREPOINT_SITE_URL || "").trim()
     ),
     mailFromSet: Boolean((process.env.GRAPH_MAIL_FROM || process.env.GRAPH_SHARED_MAILBOX || "").trim()),
+    graphMailEnabled:
+      graphConfigured &&
+      Boolean((process.env.GRAPH_MAIL_FROM || process.env.GRAPH_SHARED_MAILBOX || "").trim()) &&
+      process.env.GRAPH_MAIL_ENABLED !== "false",
     timezone: "Asia/Kolkata",
     time: new Date().toISOString(),
     commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local",

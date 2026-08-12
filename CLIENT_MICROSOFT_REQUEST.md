@@ -4,6 +4,8 @@ They only need their existing **Microsoft 365 Business** admin. No IT team requi
 
 **Hand them the full click guide:** [docs/M365_SETUP.md](docs/M365_SETUP.md)
 
+**Share with IT (live test report + remaining permissions):** [docs/M365_GRAPH_STATUS_AND_PERMISSIONS.md](docs/M365_GRAPH_STATUS_AND_PERMISSIONS.md)
+
 ## What they must send back
 
 | # | Item | Used for |
