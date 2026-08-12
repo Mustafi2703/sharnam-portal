@@ -2,7 +2,16 @@
  * Build DATABASE_URL from Hostinger-friendly separate vars (avoids URL-encoding issues).
  * MYSQL_* vars take priority over legacy SQLite DATABASE_URL.
  */
+export function normalizeMysqlHost() {
+  const host = process.env.MYSQL_HOST?.trim() || process.env.DB_HOST?.trim();
+  if (!host || host === "localhost") {
+    process.env.MYSQL_HOST = "127.0.0.1";
+  }
+}
+
 export function resolveDatabaseUrl() {
+  normalizeMysqlHost();
+
   const user =
     process.env.MYSQL_USER?.trim() ||
     process.env.DB_USER?.trim() ||
@@ -17,7 +26,7 @@ export function resolveDatabaseUrl() {
   const host =
     process.env.MYSQL_HOST?.trim() ||
     process.env.DB_HOST?.trim() ||
-    "localhost";
+    "127.0.0.1";
   const port = process.env.MYSQL_PORT?.trim() || process.env.DB_PORT?.trim() || "3306";
 
   if (user && password && database) {
@@ -25,7 +34,12 @@ export function resolveDatabaseUrl() {
   }
 
   const direct = process.env.DATABASE_URL?.trim();
-  if (direct?.startsWith("mysql://")) return direct;
+  if (direct?.startsWith("mysql://")) {
+    if (direct.includes("@localhost:")) {
+      return direct.replace("@localhost:", "@127.0.0.1:");
+    }
+    return direct;
+  }
 
   if (direct?.startsWith("file:")) {
     return "";
