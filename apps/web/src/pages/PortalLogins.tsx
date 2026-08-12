@@ -5,9 +5,7 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
 
-/**
- * Sharnam login — text + block layout. Hub: /login · Per-portal: /login/:key
- */
+/** Sharnam login — hub /login · per-portal /login/:key */
 
 export const LOGIN_LANDING_KEY = "sharnam_login_landing";
 
@@ -38,18 +36,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Projects · modules", "Directory · access", "Master documents"],
     cta: "Enter Master", tone: "#1E3A8A", icon: "MS",
     landingPath: "/master", workspaceKey: null, group: "master",
-    policies: [
-      "Enable only the modules each project needs",
-      "Directory parties before first RFI or meeting",
-      "Master documents live in DMS — not email threads",
-      "CRM convert → project with packages intact",
-      "Access matrix decides who sees Cost vs Field",
-      "Seed sheet packs once — then work in the portal",
-      "Toggle Drawings / Quality / Field per project charter",
-      "HRM assign before vendors get package logins",
-      "Module desk landings follow enabled tools only",
-      "Archive closed projects — keep audit readable",
-    ],
+    policies: [],
   },
   office: {
     key: "office", title: "Office", shortLabel: "Office",
@@ -59,20 +46,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Access & roles", "All modules", "Reports · Audit"],
     cta: "Enter Office", tone: "#0B6A78", icon: "OF",
     landingPath: "/dashboard", workspaceKey: null, group: "role",
-    policies: [
-      "One project spine for office, site, and contractors",
-      "Publish GFC before QI and site checklist fills",
-      "Cashflow Chart · Forecast · Tracking stay separate tools",
-      "DPR / WPR pull live registers — never a second silo",
-      "Inspection ≠ Information — label RFIs correctly",
-      "Audit trail on uploads, fills, and approvals",
-      "Client sees published packs only",
-      "Close open RFIs before weekly pack freeze",
-      "Measurement books lock before payment advice",
-      "Safety NCR and QI NCR never share one register",
-      "Teams meetings only — Matrix parties first",
-      "Email outbox uses project Outlook settings",
-    ],
+    policies: [],
   },
   site: {
     key: "site", title: "Site", shortLabel: "Site",
@@ -82,20 +56,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Day log", "Checklist fills", "Photos · Site RFI"],
     cta: "Enter Site", tone: "#15803D", icon: "ST",
     landingPath: "/attendance", workspaceKey: "field", group: "role",
-    policies: [
-      "Log manpower and weather before leave time",
-      "Attach photos to checklist items as required",
-      "Use published drawings only for fills",
-      "Raise field RFIs with ball-in-court clear",
-      "Hindrance logged the same day it occurs",
-      "Safety observations same shift — no next-day backlog",
-      "NCR / CAR with location and package",
-      "Day log closes before shift handover",
-      "Equipment idle hours feed the DPR line",
-      "Tag photos to date, zone, and package",
-      "Request for Inspection needs checklist attached",
-      "No fill on superseded revision numbers",
-    ],
+    policies: [],
   },
   employee: {
     key: "employee", title: "Employee", shortLabel: "Employee",
@@ -105,18 +66,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Projects", "Drawings", "Self-service"],
     cta: "Enter Employee", tone: "#64748B", icon: "EM",
     landingPath: "/dashboard", group: "role",
-    policies: [
-      "Work only on projects you are assigned to",
-      "Revision control before marking drawings published",
-      "Fill requested checklists within the due window",
-      "Coordination issues escalate to Ask when stuck",
-      "Keep MoM actions owned and dated",
-      "Self-service leave / diary stays in HRMS — not Field day log",
-      "Do not edit client-published packs",
-      "Upload evidence against the named package",
-      "Confirm Drawing Check Master before first upload",
-      "Respond to ball-in-court within the SLA window",
-    ],
+    policies: [],
   },
   vendor: {
     key: "vendor", title: "Contractor", shortLabel: "Contractor",
@@ -126,18 +76,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Assigned projects", "Fill RFIs", "Checklists"],
     cta: "Enter Contractor", tone: "#C45C26", icon: "VN",
     landingPath: "/workspace", workspaceKey: "drawings", group: "role",
-    policies: [
-      "Respond to inspection requests with checklist + photos",
-      "Use only published GFC for execution",
-      "Close ball-in-court RFIs with clear answer",
-      "Upload evidence against the package named in the ask",
-      "Safety NCR corrective action before rework starts",
-      "No cross-project data — stay in assigned jobs",
-      "Cube / QI fills require published drawing gate",
-      "Trade manpower lines match the day log",
-      "Do not mark drawings published — PMC owns publish",
-      "Package handover checklist before demobilise",
-    ],
+    policies: [],
   },
   client: {
     key: "client", title: "Client", shortLabel: "Client",
@@ -147,18 +86,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Published drawings", "Progress", "Concerns"],
     cta: "Enter Client", tone: "#1E40AF", icon: "CL",
     landingPath: "/dashboard", workspaceKey: "progress", group: "role",
-    policies: [
-      "View published drawings — upload stays with PMC / design",
-      "Civil packs: schedule, procurement, S-curve when shared",
-      "Raise concerns as Information or Concern — not edits",
-      "DPR / WPR packs are read-only on the client desk",
-      "Cost and Finance numbers are view-only unless granted",
-      "Meeting MoM and agenda appear after PMC publish",
-      "Quality / Safety summaries without changing registers",
-      "Progress % comes from approved measurement — not edits",
-      "Ask for clarification via portal Concern, not side email",
-      "Published GFC revision is the only site truth",
-    ],
+    policies: [],
   },
   drawings: {
     key: "drawings", title: "Drawings", shortLabel: "Drawings",
@@ -169,18 +97,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["GFC register", "Checklist manager", "Ask"],
     cta: "Enter Drawings", tone: "#1D4ED8", icon: "DW",
     landingPath: "/workspace", workspaceKey: "drawings", group: "module",
-    policies: [
-      "Drawing Check Master unlocks before upload",
-      "Revisions R0–R5 with audit who / when",
-      "Publish only when checklist fill is complete",
-      "Ask is Request for Information — not inspection",
-      "Coordination issues escalate cleanly to Ask",
-      "DMS folders mirror package structure",
-      "Supersede old revision when R+1 goes live",
-      "TL / discipline tags stay consistent on register",
-      "Client portal shows published packs only",
-      "File name + drawing number must match the sheet",
-    ],
+    policies: [],
   },
   quality: {
     key: "quality", title: "Quality", shortLabel: "Quality",
@@ -191,18 +108,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["QI dashboard", "NCR / CAR", "Cube · QAP"],
     cta: "Enter Quality", tone: "#15803D", icon: "QA",
     landingPath: "/workspace", workspaceKey: "quality", group: "module",
-    policies: [
-      "NCR / CAR is its own tool — not buried in QI",
-      "Cube register tracks cast / strength / result",
-      "QAP Week-50 stays updateable every period",
-      "Request for Inspection attaches the checklist",
-      "≥3 photos where the template requires them",
-      "Published drawing gate before QI create",
-      "Close CAR with evidence before re-inspect",
-      "Separate Safety NCR from Quality NCR",
-      "Hold points cannot skip without office release",
-      "Link QI fill RFI when inspection fails",
-    ],
+    policies: [],
   },
   comms: {
     key: "comms", title: "Communications", shortLabel: "Comms",
@@ -213,40 +119,18 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Matrix", "MoM", "Ask · Outlook"],
     cta: "Enter Comms", tone: "#2563EB", icon: "CM",
     landingPath: "/workspace", workspaceKey: "comms", group: "module",
-    policies: [
-      "Matrix parties before first meeting or RFI",
-      "Agenda generated before MoM starts",
-      "Follow-up owns every open MoM action",
-      "Meetings are Microsoft Teams only",
-      "Ask is Request for Information",
-      "Generated MoM reaches client civil when published",
-      "Ball-in-court must name one responsible party",
-      "Outlook outbox uses project email settings",
-      "Do not start MoM without an agenda pack",
-      "Close follow-ups before next weekly meeting",
-    ],
+    policies: [],
   },
   hr: {
     key: "hr", title: "HR admin", shortLabel: "HR",
     headline: "Recruitment · Attendance · Payroll · Audit.",
-    subtitle: "Dedicated HRMS desk — separate login link for HR administrators.",
+    subtitle: "Dedicated HRMS desk for HR administrators.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office"],
     points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Audit"],
     cta: "Enter HR admin", tone: "#6D28D9", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",
-    policies: [
-      "Recruitment log audits every state change",
-      "Pre-joining · Onboarding stateful checklists",
-      "Attendance requires GPS + project (geo-fence)",
-      "Leave pre-approval before payroll cut-off",
-      "Payroll compute reads paid days + hikes",
-      "Employee documents stay in HR-only folder",
-      "Teams meetings link auto on interview panel",
-      "Salary discussion visible to HR + Office only",
-      "Compensation revisions require two-step approval",
-      "Audit timeline exportable per employee",
-    ],
+    policies: [],
   },
   field: {
     key: "field", title: "Field", shortLabel: "Field",
@@ -257,18 +141,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Day log", "Photos", "Field RFIs"],
     cta: "Enter Field", tone: "#DC2626", icon: "FD",
     landingPath: "/workspace", workspaceKey: "field", group: "module",
-    policies: [
-      "Day log ≠ HRMS personal diary",
-      "Manpower / equipment lines feed DPR",
-      "Photos tagged to date and package when possible",
-      "Field RFIs stay operational — not drawing Ask",
-      "Close the log before shift end",
-      "Site evidence supports hindrance and safety",
-      "Weather and visitor lines stay on the same day card",
-      "Hindrance reason codes match DPR categories",
-      "No backdated photos without office note",
-      "Safety observation same shift as the event",
-    ],
+    policies: [],
   },
 };
 
@@ -292,34 +165,26 @@ function portalDisplayName(key: string, shortLabel: string) {
   return shortLabel;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Shared surface primitives
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-function BrandLockup({
-  size = "hero",
-  context,
-}: {
-  size?: "hero" | "compact" | "chrome";
-  context?: "hub" | "portal";
-}) {
-  const contextClass = context ? ` brand-lockup--auth-${context}` : "";
+function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={`brand-lockup brand-lockup--${size} brand-lockup--logo-only${contextClass}`}>
+    <div className={`auth-brand${compact ? " auth-brand--compact" : ""}`}>
       <img
-        src="/logo-transparent.png?v=4"
-        alt="शरणम्"
-        className="brand-lockup__mark"
+        src="/logo-transparent.png?v=5"
+        alt="शरणम् — Sharnam Project Management Consultants"
+        className="auth-brand__logo"
         width={820}
         height={400}
-        decoding="sync"
+        decoding="async"
         fetchPriority="high"
       />
+      {!compact && (
+        <p className="auth-brand__tagline">Project Management Consultants</p>
+      )}
     </div>
   );
 }
 
-function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: boolean }) {
+function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
   const [email, setEmail] = useState(cfg.demoEmail);
   const [password, setPassword] = useState("Demo@1234");
@@ -364,98 +229,47 @@ function SignInCard({ cfg, formOnly = false }: { cfg: PortalConfig; formOnly?: b
   }
 
   return (
-    <div className="signin-card signin-card--panel" style={{ ["--card-tone" as string]: cfg.tone } as CSSProperties}>
-      <div className="signin-card__accent signin-card__accent--glow" aria-hidden />
-      <div className="signin-card__body">
-        {!formOnly && (
-          <div className="signin-card__head">
-            <span className="signin-card__eyebrow">{cfg.shortLabel} portal</span>
-          </div>
-        )}
-        {formOnly ? (
-          <>
-            <p className="signin-card__portal-name" style={{ color: cfg.tone }}>
-              {portalDisplayName(cfg.key, cfg.shortLabel)}
-            </p>
-            <h2 className="signin-card__title signin-card__title--portal">Sign in</h2>
-          </>
-        ) : (
-          <>
-            <h2 className="signin-card__title">{cfg.headline}</h2>
-            <p className="signin-card__sub">{cfg.subtitle}</p>
-          </>
-        )}
-
-        <form className="signin-form" onSubmit={onSubmit}>
-          <label className="signin-form__label">
-            <span>Email</span>
-            <input
-              className="signin-form__input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </label>
-          <label className="signin-form__label">
-            <span>Password</span>
-            <input
-              className="signin-form__input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-          {error && <p className="signin-form__error">{error}</p>}
-          <button
-            type="submit"
-            className="signin-form__submit"
-            disabled={busy}
-          >
-            {busy ? "Signing in…" : formOnly ? "Sign in" : cfg.cta}
-          </button>
-        </form>
+    <div className="auth-signin" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <div className="auth-signin__badge">
+        <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
+        <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
       </div>
+      <h2 className="auth-signin__title">Sign in</h2>
+      <p className="auth-signin__sub">{cfg.subtitle}</p>
+
+      <form className="auth-signin__form" onSubmit={onSubmit}>
+        <label className="auth-signin__field">
+          <span>Email</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            required
+            placeholder="you@company.com"
+          />
+        </label>
+        <label className="auth-signin__field">
+          <span>Password</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+            placeholder="••••••••"
+          />
+        </label>
+        {error && <p className="auth-signin__error" role="alert">{error}</p>}
+        <button type="submit" className="auth-signin__submit" disabled={busy}>
+          {busy ? "Signing in…" : cfg.cta}
+        </button>
+      </form>
+
+      <p className="auth-signin__demo">
+        Demo: <strong>{cfg.demoEmail}</strong> · password <strong>Demo@1234</strong>
+      </p>
     </div>
-  );
-}
-
-function PortalBackLink() {
-  return (
-    <Link to="/login" className="auth-login__back">
-      <span className="auth-login__back-icon" aria-hidden>←</span>
-      All portals
-    </Link>
-  );
-}
-
-function PortalTierBadge({ cfg, size = "md" }: { cfg: PortalConfig; size?: "sm" | "md" | "lg" }) {
-  return (
-    <div
-      className={`auth-tier-badge auth-tier-badge--${size}`}
-      style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
-    >
-      <span className="auth-tier-badge__icon" aria-hidden>
-        {cfg.icon}
-      </span>
-      <span className="auth-tier-badge__label">{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
-    </div>
-  );
-}
-
-function PortalPointsList({ points, className = "" }: { points: string[]; className?: string }) {
-  return (
-    <ul className={`auth-portal__points ${className}`.trim()}>
-      {points.map((p) => (
-        <li key={p}>
-          <span className="auth-portal__points-dot" aria-hidden />
-          {p}
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -470,10 +284,6 @@ function useAuthPageScroll() {
   }, []);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Per-portal login page
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
 export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_LOGINS }) {
   const cfg = PORTAL_LOGINS[portalKey];
   const { user, loading } = useAuth();
@@ -482,62 +292,47 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
   return (
-    <div className="auth-page auth-page--plain auth-page--portal" data-portal={portalKey}>
-      <div className="auth-shell auth-shell--portal">
-        <div
-          className="auth-portal__grid auth-portal__grid--minimal"
-          style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
-        >
-          <aside className="auth-portal__brand">
-            <div className="auth-block auth-portal__story">
-              <BrandLockup size="hero" context="portal" />
-              <PortalTierBadge cfg={cfg} size="lg" />
-              <p className="auth-portal__tagline">{cfg.headline}</p>
-              <p className="auth-portal__hint">{cfg.subtitle}</p>
-              <PortalPointsList points={cfg.points} />
-            </div>
-            <PortalBackLink />
-          </aside>
-          <div
-            className="auth-portal__signin"
-            style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
-          >
-            <SignInCard cfg={cfg} formOnly />
-          </div>
+    <div className="auth-layout auth-layout--portal" data-portal={portalKey}>
+      <aside
+        className="auth-layout__brand"
+        style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
+      >
+        <BrandMark compact />
+        <div className="auth-layout__portal-intro">
+          <span className="auth-layout__portal-chip">{cfg.icon}</span>
+          <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
+          <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
+          <ul className="auth-layout__portal-points">
+            {cfg.points.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
         </div>
-      </div>
+        <Link to="/login" className="auth-layout__back">
+          ← All portals
+        </Link>
+      </aside>
+      <main className="auth-layout__main">
+        <SignInCard cfg={cfg} />
+      </main>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   Landing hub — one screen, no scroll
-   ═══════════════════════════════════════════════════════════════════════════════ */
-
-function PortalBentoTile({ cfg }: { cfg: PortalConfig }) {
+function PortalHubCard({ cfg }: { cfg: PortalConfig }) {
   return (
     <Link
       to={`/login/${cfg.key}`}
-      className="auth-portal-block"
-      style={{ ["--portal-tone" as string]: cfg.tone } as CSSProperties}
+      className="auth-hub-card"
+      style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
     >
-      <div className="auth-portal-block__bar" aria-hidden />
-      <div className="auth-portal-block__icon" aria-hidden>
-        {cfg.icon}
+      <span className="auth-hub-card__icon" aria-hidden>{cfg.icon}</span>
+      <div className="auth-hub-card__body">
+        <span className="auth-hub-card__label">{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
+        <span className="auth-hub-card__headline">{cfg.headline}</span>
+        <span className="auth-hub-card__hint">{cfg.points[0]}</span>
       </div>
-      <div className="auth-portal-block__body">
-        <div className="auth-portal-block__tier">{cfg.shortLabel}</div>
-        <div className="auth-portal-block__title">{portalDisplayName(cfg.key, cfg.shortLabel)}</div>
-        <p className="auth-portal-block__desc">{cfg.headline}</p>
-        <ul className="auth-portal-block__points">
-          {cfg.points.map((p) => (
-            <li key={p}>{p}</li>
-          ))}
-        </ul>
-      </div>
-      <span className="auth-portal-block__cta" aria-hidden>
-        {cfg.cta} →
-      </span>
+      <span className="auth-hub-card__arrow" aria-hidden>→</span>
     </Link>
   );
 }
@@ -548,25 +343,24 @@ export function LoginHubPage() {
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
-    <div className="auth-page auth-page--plain auth-page--hub">
-      <div className="auth-shell auth-shell--hub">
-        <header className="auth-hub__mast">
-          <BrandLockup size="hero" context="hub" />
-          <p className="auth-hub__kicker">Project Management Consultants</p>
+    <div className="auth-layout auth-layout--hub">
+      <aside className="auth-layout__brand">
+        <BrandMark />
+        <p className="auth-layout__hero-copy">
+          Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
+        </p>
+      </aside>
+      <main className="auth-layout__main auth-layout__main--hub">
+        <header className="auth-hub__header">
           <h1 className="auth-hub__title">Choose your portal</h1>
-          <p className="auth-hub__pitch">
-            Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
-          </p>
+          <p className="auth-hub__sub">Select the desk that matches your role on the project.</p>
         </header>
-
-        <section className="auth-hub__blocks" aria-label="Choose your portal">
-          <div className="auth-hub__blocks-grid">
-            {HUB_PORTALS.map((k) => (
-              <PortalBentoTile key={k} cfg={PORTAL_LOGINS[k]} />
-            ))}
-          </div>
-        </section>
-      </div>
+        <div className="auth-hub__grid">
+          {HUB_PORTALS.map((k) => (
+            <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
+          ))}
+        </div>
+      </main>
     </div>
   );
 }

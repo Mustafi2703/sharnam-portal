@@ -1,10 +1,12 @@
 /**
- * Create tables + seed via direct node binaries (npx fails on Hostinger runtime).
+ * Create tables + seed at startup — use process.execPath (node not in PATH for execSync on Hostinger).
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { maskDatabaseUrl, resolveDatabaseUrl } from "./resolve-database-url.mjs";
+
+const nodeBin = process.execPath;
 
 function buildUrl(host) {
   const user = process.env.MYSQL_USER?.trim();
@@ -68,7 +70,7 @@ export async function runDbBoot(rootDir = process.cwd()) {
 
     const ok = runCmd(
       "prisma db push",
-      `node "${prismaCli}" db push --skip-generate`,
+      `"${nodeBin}" "${prismaCli}" db push --skip-generate`,
       rootDir,
       process.env,
     );
@@ -87,8 +89,8 @@ export async function runDbBoot(rootDir = process.cwd()) {
   if (process.env.RUN_SEED === "1") {
     console.log("==> RUN_SEED=1 — seeding demo data...");
     const seedCmd = fs.existsSync(tsxCli)
-      ? `node "${tsxCli}" seed/seed.ts`
-      : `node --import tsx seed/seed.ts`;
+      ? `"${nodeBin}" "${tsxCli}" seed/seed.ts`
+      : `"${nodeBin}" --import tsx seed/seed.ts`;
     const seeded = runCmd("seed", seedCmd, rootDir, process.env);
     if (seeded) {
       console.log("==> Seed complete. Remove RUN_SEED=1 before next redeploy.");
