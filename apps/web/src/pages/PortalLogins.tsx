@@ -177,7 +177,8 @@ const PORTAL_HERO: Record<string, string> = {
 };
 
 function portalHero(key: string) {
-  return PORTAL_HERO[key] ?? "/auth/hero-construction-wide.jpg";
+  const base = PORTAL_HERO[key] ?? "/auth/hero-construction-wide.jpg";
+  return `${base}?v=12`;
 }
 
 function portalDisplayName(key: string, shortLabel: string) {
@@ -185,12 +186,23 @@ function portalDisplayName(key: string, shortLabel: string) {
   return shortLabel;
 }
 
-function AuthLogo({ size = "md" }: { size?: "xs" | "sm" | "md" | "lg" }) {
+function AuthLogo({ size = "md", withMark = false }: { size?: "xs" | "sm" | "md" | "lg"; withMark?: boolean }) {
   const widths = { xs: 132, sm: 168, md: 240, lg: 360 };
   return (
-    <div className={`auth-logo auth-logo--${size}`}>
+    <div className={`auth-logo auth-logo--${size}${withMark ? " auth-logo--with-mark" : ""}`}>
+      {withMark ? (
+        <img
+          src="/favicon.png?v=1"
+          alt=""
+          className="auth-logo__mark"
+          width={36}
+          height={36}
+          decoding="async"
+          aria-hidden
+        />
+      ) : null}
       <img
-        src="/logo-transparent.png?v=9"
+        src="/logo-transparent.png?v=10"
         alt="शरणम्"
         className="auth-logo__img"
         width={widths[size]}
@@ -213,18 +225,33 @@ function AuthScene() {
 function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   return (
     <div className="auth-brand">
-      <img
-        src="/logo-transparent.png?v=9"
-        alt="शरणम् — Sharnam Project Management Consultants"
-        className="auth-brand__logo"
-        width={820}
-        height={400}
-        decoding="async"
-        fetchPriority="high"
-      />
+      <div className="auth-brand__crest" aria-hidden>
+        <img
+          src="/favicon.png?v=1"
+          alt=""
+          className="auth-brand__favicon"
+          width={52}
+          height={52}
+          decoding="async"
+        />
+      </div>
+      <div className="auth-brand__plate">
+        <span className="auth-brand__tick auth-brand__tick--cyan" aria-hidden />
+        <span className="auth-brand__tick auth-brand__tick--orange" aria-hidden />
+        <img
+          src="/logo-transparent.png?v=10"
+          alt="शरणम् — Sharnam Project Management Consultants"
+          className="auth-brand__logo"
+          width={820}
+          height={400}
+          decoding="async"
+          fetchPriority="high"
+        />
+      </div>
       {showTagline ? (
         <p className="auth-brand__tagline">Project Management Consultants</p>
       ) : null}
+      <div className="auth-brand__accent" aria-hidden />
     </div>
   );
 }
@@ -318,7 +345,15 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-function AuthMobileNav({ backTo, logoSize = "sm" }: { backTo?: string; logoSize?: "xs" | "sm" | "md" }) {
+function AuthMobileNav({
+  backTo,
+  logoSize = "sm",
+  withMark = false,
+}: {
+  backTo?: string;
+  logoSize?: "xs" | "sm" | "md";
+  withMark?: boolean;
+}) {
   return (
     <nav className={`auth-mobile-nav${backTo ? "" : " auth-mobile-nav--center"}`} aria-label="Login navigation">
       {backTo ? (
@@ -326,7 +361,7 @@ function AuthMobileNav({ backTo, logoSize = "sm" }: { backTo?: string; logoSize?
           ← All portals
         </Link>
       ) : null}
-      <AuthLogo size={logoSize} />
+      <AuthLogo size={logoSize} withMark={withMark} />
     </nav>
   );
 }
@@ -363,7 +398,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
       }
     >
       <AuthScene />
-      <AuthMobileNav backTo="/login" />
+      <AuthMobileNav backTo="/login" withMark />
       <aside
         className="auth-layout__brand auth-layout__brand--portal"
       >
@@ -428,7 +463,7 @@ export function LoginHubPage() {
       }
     >
       <AuthScene />
-      <AuthMobileNav logoSize="md" />
+      <AuthMobileNav logoSize="md" withMark />
       <aside className="auth-layout__brand auth-layout__brand--hub">
         <BrandMark />
         <p className="auth-layout__hero-copy">

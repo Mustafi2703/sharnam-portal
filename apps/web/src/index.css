@@ -5266,22 +5266,22 @@ body {
 
 /* Landing hub — brighter, more open construction skyline */
 .auth-layout--hub {
-  --auth-photo-brightness: 0.74;
-  --auth-photo-saturate: 0.9;
-  --auth-photo-contrast: 1.04;
-  --auth-shade-left: 0.42;
-  --auth-shade-mid: 0.22;
-  --auth-shade-right: 0.34;
+  --auth-photo-brightness: 0.78;
+  --auth-photo-saturate: 0.92;
+  --auth-photo-contrast: 1.06;
+  --auth-shade-left: 0.28;
+  --auth-shade-mid: 0.16;
+  --auth-shade-right: 0.28;
 }
 
-/* Per-portal sign-in — cinematic, darker grade */
+/* Per-portal sign-in — cinematic, darker grade on right; lighter on left */
 .auth-layout--portal {
-  --auth-photo-brightness: 0.5;
-  --auth-photo-saturate: 0.76;
-  --auth-photo-contrast: 1.14;
-  --auth-shade-left: 0.62;
-  --auth-shade-mid: 0.36;
-  --auth-shade-right: 0.5;
+  --auth-photo-brightness: 0.54;
+  --auth-photo-saturate: 0.8;
+  --auth-photo-contrast: 1.1;
+  --auth-shade-left: 0.38;
+  --auth-shade-mid: 0.28;
+  --auth-shade-right: 0.46;
 }
 
 .auth-mobile-nav,
@@ -5316,11 +5316,11 @@ body {
   text-align: center;
   gap: 1.1rem;
   padding: clamp(1.25rem, 3.5vw, 2.25rem);
-  background: rgba(240, 242, 244, 0.52);
-  backdrop-filter: blur(24px) saturate(1.12);
-  -webkit-backdrop-filter: blur(24px) saturate(1.12);
-  color: var(--auth-ink);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(8, 12, 16, 0.14);
+  backdrop-filter: blur(14px) saturate(1.28);
+  -webkit-backdrop-filter: blur(14px) saturate(1.28);
+  color: #f1f5f9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: inset 4px 0 0 var(--portal-accent, var(--color-brand));
   position: relative;
   overflow: hidden;
@@ -5329,12 +5329,12 @@ body {
 .auth-layout__brand::before {
   content: "";
   position: absolute;
-  inset: -24px;
+  inset: -20px;
   background-image: var(--auth-hero, url("/auth/hero-construction-wide.jpg"));
   background-size: cover;
-  background-position: center left;
-  filter: blur(32px) brightness(0.5) saturate(0.7);
-  transform: scale(1.06);
+  background-position: 22% center;
+  filter: blur(12px) brightness(0.94) saturate(1.08) contrast(1.1);
+  transform: scale(1.05);
   pointer-events: none;
   z-index: 0;
 }
@@ -5343,11 +5343,13 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(240, 242, 244, 0.82) 0%,
-    rgba(240, 242, 244, 0.68) 100%
-  );
+  background:
+    linear-gradient(
+      165deg,
+      rgba(11, 106, 120, 0.18) 0%,
+      rgba(8, 12, 16, 0.28) 48%,
+      rgba(228, 99, 42, 0.12) 100%
+    );
   pointer-events: none;
   z-index: 0;
 }
@@ -5362,10 +5364,65 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.65rem;
+  gap: 0.85rem;
   width: 100%;
   max-width: 440px;
   margin-inline: auto;
+}
+
+.auth-brand__crest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.35rem;
+  height: 3.35rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.auth-brand__favicon {
+  display: block;
+  width: 2.15rem;
+  height: 2.15rem;
+  object-fit: contain;
+}
+
+.auth-brand__plate {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 420px);
+  padding: clamp(0.85rem, 2vw, 1.15rem) clamp(1rem, 2.5vw, 1.35rem);
+  border-radius: 16px;
+  background: rgba(240, 242, 244, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.auth-brand__tick {
+  position: absolute;
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 2px;
+}
+
+.auth-brand__tick--cyan {
+  top: 0.55rem;
+  left: 0.55rem;
+  background: #0b6a78;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
+}
+
+.auth-brand__tick--orange {
+  right: 0.55rem;
+  bottom: 0.55rem;
+  background: #e4632a;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
 }
 
 .auth-brand__logo {
@@ -5382,8 +5439,16 @@ body {
   font-weight: 650;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--auth-brand-dark);
+  color: rgba(248, 250, 252, 0.88);
   text-align: center;
+}
+
+.auth-brand__accent {
+  width: min(100%, 220px);
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0b6a78 0%, #e4632a 100%);
+  opacity: 0.85;
 }
 
 .auth-layout__hero-copy {
@@ -5391,7 +5456,7 @@ body {
   max-width: 26rem;
   font-size: clamp(0.9rem, 1.5vw, 1.02rem);
   line-height: 1.55;
-  color: var(--auth-muted);
+  color: rgba(226, 232, 240, 0.82);
   text-align: center;
   margin-inline: auto;
 }
@@ -5433,11 +5498,19 @@ body {
   color: var(--auth-ink);
 }
 
+.auth-layout__brand .auth-layout__portal-headline {
+  color: #f8fafc;
+}
+
 .auth-layout__portal-sub {
   margin: 0;
   font-size: clamp(0.88rem, 1.5vw, 0.98rem);
   line-height: 1.5;
   color: var(--auth-muted);
+}
+
+.auth-layout__brand .auth-layout__portal-sub {
+  color: rgba(226, 232, 240, 0.76);
 }
 
 .auth-layout__portal-points {
@@ -5458,6 +5531,10 @@ body {
   position: relative;
   color: var(--auth-subtle);
   text-align: center;
+}
+
+.auth-layout__brand .auth-layout__portal-points li {
+  color: rgba(226, 232, 240, 0.68);
 }
 
 .auth-layout__portal-points li::before {
@@ -5485,6 +5562,23 @@ body {
 .auth-layout__back:hover {
   background: color-mix(in srgb, var(--auth-brand) 14%, var(--auth-bg));
   border-color: color-mix(in srgb, var(--auth-brand) 35%, var(--auth-line));
+}
+
+.auth-layout__brand .auth-layout__back {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.auth-layout__brand .auth-layout__back:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.auth-layout__brand .auth-layout__portal-chip {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: color-mix(in srgb, var(--portal-accent, var(--color-brand)) 55%, white);
 }
 
 .auth-layout__main {
@@ -5637,6 +5731,24 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
+}
+
+.auth-logo--with-mark {
+  flex-direction: row;
+  gap: 0.55rem;
+  width: auto;
+}
+
+.auth-logo__mark {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 0.18rem;
+  box-sizing: border-box;
 }
 
 .auth-logo__img {
