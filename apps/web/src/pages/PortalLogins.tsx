@@ -186,21 +186,10 @@ function portalDisplayName(key: string, shortLabel: string) {
   return shortLabel;
 }
 
-function AuthLogo({ size = "md", withMark = false }: { size?: "xs" | "sm" | "md" | "lg"; withMark?: boolean }) {
+function AuthLogo({ size = "md" }: { size?: "xs" | "sm" | "md" | "lg" }) {
   const widths = { xs: 132, sm: 168, md: 240, lg: 360 };
   return (
-    <div className={`auth-logo auth-logo--${size}${withMark ? " auth-logo--with-mark" : ""}`}>
-      {withMark ? (
-        <img
-          src="/favicon.png?v=1"
-          alt=""
-          className="auth-logo__mark"
-          width={36}
-          height={36}
-          decoding="async"
-          aria-hidden
-        />
-      ) : null}
+    <div className={`auth-logo auth-logo--${size}`}>
       <img
         src="/logo-transparent.png?v=10"
         alt="शरणम्"
@@ -225,29 +214,15 @@ function AuthScene() {
 function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   return (
     <div className="auth-brand">
-      <div className="auth-brand__crest" aria-hidden>
-        <img
-          src="/favicon.png?v=1"
-          alt=""
-          className="auth-brand__favicon"
-          width={52}
-          height={52}
-          decoding="async"
-        />
-      </div>
-      <div className="auth-brand__plate">
-        <span className="auth-brand__tick auth-brand__tick--cyan" aria-hidden />
-        <span className="auth-brand__tick auth-brand__tick--orange" aria-hidden />
-        <img
-          src="/logo-transparent.png?v=10"
-          alt="शरणम् — Sharnam Project Management Consultants"
-          className="auth-brand__logo"
-          width={820}
-          height={400}
-          decoding="async"
-          fetchPriority="high"
-        />
-      </div>
+      <img
+        src="/logo-transparent.png?v=10"
+        alt="शरणम् — Sharnam Project Management Consultants"
+        className="auth-brand__logo"
+        width={820}
+        height={400}
+        decoding="async"
+        fetchPriority="high"
+      />
       {showTagline ? (
         <p className="auth-brand__tagline">Project Management Consultants</p>
       ) : null}
@@ -348,11 +323,9 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 function AuthMobileNav({
   backTo,
   logoSize = "sm",
-  withMark = false,
 }: {
   backTo?: string;
   logoSize?: "xs" | "sm" | "md";
-  withMark?: boolean;
 }) {
   return (
     <nav className={`auth-mobile-nav${backTo ? "" : " auth-mobile-nav--center"}`} aria-label="Login navigation">
@@ -361,7 +334,7 @@ function AuthMobileNav({
           ← All portals
         </Link>
       ) : null}
-      <AuthLogo size={logoSize} withMark={withMark} />
+      <AuthLogo size={logoSize} />
     </nav>
   );
 }
@@ -398,7 +371,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
       }
     >
       <AuthScene />
-      <AuthMobileNav backTo="/login" withMark />
+      <AuthMobileNav backTo="/login" />
       <aside
         className="auth-layout__brand auth-layout__brand--portal"
       >
@@ -463,7 +436,7 @@ export function LoginHubPage() {
       }
     >
       <AuthScene />
-      <AuthMobileNav logoSize="md" withMark />
+      <AuthMobileNav logoSize="md" />
       <aside className="auth-layout__brand auth-layout__brand--hub">
         <BrandMark />
         <p className="auth-layout__hero-copy">
