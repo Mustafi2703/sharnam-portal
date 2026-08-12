@@ -1,10 +1,11 @@
 /**
- * Hostinger entry — this process must listen on PORT (no child process).
+ * Hostinger entry — listen on PORT first, then connect MySQL (avoids 503 while DB is misconfigured).
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveDatabaseUrl, maskDatabaseUrl } from "./scripts/resolve-database-url.mjs";
+import { runDbBoot } from "./scripts/hostinger-db-boot.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 process.chdir(rootDir);
@@ -33,7 +34,7 @@ console.log("    PORT:", process.env.PORT || "(Hostinger injects this — if emp
 console.log("    NODE:", process.version);
 console.log(
   "    DATABASE:",
-  dbUrl ? maskDatabaseUrl(dbUrl) : "NOT SET",
+  dbUrl ? maskDatabaseUrl(dbUrl) : "NOT SET — add MYSQL_* env vars",
 );
 if (process.env.MYSQL_USER) {
   console.log("    MYSQL_USER:", process.env.MYSQL_USER);
@@ -56,9 +57,10 @@ if (!process.env.JWT_SECRET?.trim()) {
 }
 
 try {
-  await import("./scripts/hostinger-db-boot.mjs");
   await import("./apps/api/dist/index.js");
 } catch (err) {
   console.error("FATAL: API failed to start:", err);
   process.exit(1);
 }
+
+void runDbBoot();
