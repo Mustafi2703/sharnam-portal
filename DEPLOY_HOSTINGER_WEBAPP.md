@@ -17,7 +17,7 @@ Sharnam and `app.spdc.in` are **two separate websites** on the same Hostinger ac
 | **Domain** | `app.spdc.in` | **`portal.spdc.in` only** |
 | **Git repo** | Its repo (schedule app) | **`Mustafi2703/sharnam-portal`** |
 | **Server folder** | Its `public_html` / app path | Hostinger-managed **separate** app folder |
-| **Database** | Its DB | **`./data/prod.db`** (SQLite, Sharnam only) |
+| **Database** | Its DB | **Hostinger MySQL** (connected in hPanel — Sharnam only) |
 | **Uploads** | Its files | **`./data/uploads`** (Sharnam only) |
 | **Process** | Its Node/PHP process | **`server.mjs`** → Sharnam only |
 | **Env vars** | Its hPanel env | **New env block** for portal web app only |
@@ -73,30 +73,42 @@ Leave `app` / `app.spdc.in` records unchanged.
 | **Framework preset** | Express.js |
 | **Node.js version** | **22.x** |
 | **Root directory** | `/` (repo root) |
-| **Build command** | `npm install && npm run build` |
+| **Build command** | `npm run hostinger:build` |
 | **Entry file** | **`server.mjs`** |
 | **Start command** | `npm start` (runs `node server.mjs`) |
 | **Output directory** | leave empty (Express serves `apps/web/dist`) |
 
 ---
 
-## Step 4 — Environment variables
+## Step 4 — MySQL database (required for production)
 
-Add in hPanel → Web App → **Environment variables**:
+SQLite is **not** used in production — many users need a real database.
+
+1. hPanel → **Databases** → **MySQL Databases** → **Create**
+   - Database name e.g. `u252873650_sharnam` (Hostinger prefixes your user id)
+   - Create a DB user + strong password
+2. Open **portal.spdc.in** web app dashboard → **Connect a database** → select the MySQL DB you created  
+   Hostinger injects **`DATABASE_URL`** automatically (starts with `mysql://`).
+3. If you add env vars manually instead, use the exact string from hPanel:
+
+```env
+DATABASE_URL=mysql://USER:PASSWORD@localhost:3306/DATABASE_NAME
+```
+
+> Do **not** connect this DB to **app.spdc.in** — keep databases separate.
+
+---
+
+## Step 5 — Environment variables
+
+Add in hPanel → Web App → **Environment variables** (skip `DATABASE_URL` if you used **Connect a database**):
 
 ```env
 NODE_ENV=production
-DATABASE_URL=file:./data/prod.db
 UPLOAD_DIR=./data/uploads
 JWT_SECRET=<generate-a-long-random-string>
 WEB_ORIGIN=https://portal.spdc.in
 SEED_PASSWORD=Demo@1234
-
-# First deploy only — remove or set to 0 after success:
-RUN_SEED=1
-
-# After first successful deploy, set instead:
-# SKIP_SEED=1
 
 MOCK_ONEDRIVE=false
 AZURE_TENANT_ID=<your-tenant-id>
@@ -108,11 +120,12 @@ GRAPH_MAIL_ENABLED=true
 SHARNAM_EXCEL_ROOT=./seed/data
 ```
 
-> **PORT** — do **not** set manually; Hostinger injects it automatically.
+> **PORT** — do **not** set manually; Hostinger injects it automatically.  
+> **Seed** runs during **build** (`hostinger:build` → `prisma db push` + seed). Remove old `RUN_SEED=1` if set.
 
 ---
 
-## Step 5 — Deploy
+## Step 6 — Deploy
 
 Click **Deploy**. Wait for build (~3–5 min).
 
@@ -126,10 +139,11 @@ Then verify:
 
 ---
 
-## Step 6 — After first successful deploy
+## Step 7 — After first successful deploy
 
-1. Change env: remove `RUN_SEED=1`, add **`SKIP_SEED=1`** (so redeploys don’t reset data)
-2. Redeploy once
+1. Remove **`DATABASE_URL=file:./data/prod.db`** if still set — must be `mysql://...` only
+2. Remove **`RUN_SEED=1`** — seed already ran at build time; redeploys would reset demo data otherwise
+3. Check **Runtime logs** — you should see `शरणम् API listening on http://0.0.0.0:...` and memory **> 50 MB**
 
 ---
 
@@ -151,11 +165,12 @@ Then verify:
 
 | Issue | Fix |
 |-------|-----|
-| Build fails on Prisma | Ensure build command includes `npm install` (runs `postinstall` → `prisma generate`) |
-| 503 / app crash | hPanel → Logs; check `JWT_SECRET` and Azure vars are set |
-| Blank page | Build must run `npm run build` so `apps/web/dist` exists |
+| Build fails on Prisma | `DATABASE_URL` must start with `mysql://`; connect MySQL in hPanel first |
+| 503 / memory ~7 MB | App crashed at startup — **Runtime logs**; ensure latest deploy (compiled API via `server.mjs`) |
+| 503 / JWT or Azure | Set `JWT_SECRET` and Azure vars in env |
+| Blank page | Build must run `npm run hostinger:build` so `apps/web/dist` + `apps/api/dist` exist |
 | CORS errors | `WEB_ORIGIN` must be exactly `https://portal.spdc.in` |
-| DB empty after redeploy | Set `SKIP_SEED=1`; data lives in `./data/prod.db` on server |
+| DB reset on redeploy | Remove `RUN_SEED=1`; MySQL data persists in Hostinger MySQL (not SQLite file) |
 | Broke app.spdc.in | You edited wrong site — restore from Hostinger backup |
 
 ---

@@ -1,47 +1,33 @@
 /**
- * Hostinger Node.js Web App entry point — start Express API only.
- * DB migrate + seed run at BUILD time (hostinger:build), not here.
+ * Hostinger entry — must listen on PORT in this process (no child spawn / tsx loader).
  */
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.dirname(fileURLToPath(import.meta.url));
-process.chdir(root);
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+process.chdir(rootDir);
 
 for (const dir of ["data", "uploads"]) {
-  fs.mkdirSync(path.join(root, dir), { recursive: true });
+  fs.mkdirSync(path.join(rootDir, dir), { recursive: true });
 }
 
-const port = process.env.PORT || "4000";
-console.log("==> Sharnam portal starting");
-console.log("    cwd:", root);
-console.log("    PORT:", port);
+console.log("==> Sharnam portal boot");
+console.log("    cwd:", rootDir);
+console.log("    PORT:", process.env.PORT || "(Hostinger injects this)");
 console.log("    NODE:", process.version);
+console.log("    DATABASE:", process.env.DATABASE_URL?.replace(/:[^:@/]+@/, ":***@") || "(not set)");
 
-const entry = path.join(root, "apps", "api", "src", "index.ts");
-if (!fs.existsSync(entry)) {
-  console.error("Missing API entry:", entry);
+const webIndex = path.join(rootDir, "apps", "web", "dist", "index.html");
+if (!fs.existsSync(webIndex)) {
+  console.error("ERROR: Missing apps/web/dist — run hostinger:build first");
   process.exit(1);
 }
 
-const webDist = path.join(root, "apps", "web", "dist", "index.html");
-if (!fs.existsSync(webDist)) {
-  console.warn("WARN: Web UI not built at apps/web/dist — run hostinger:build");
+const apiEntry = path.join(rootDir, "apps", "api", "dist", "index.js");
+if (!fs.existsSync(apiEntry)) {
+  console.error("ERROR: Missing apps/api/dist — run hostinger:build first");
+  process.exit(1);
 }
 
-const child = spawn("npx", ["tsx", entry], {
-  stdio: "inherit",
-  env: { ...process.env, HOST: "0.0.0.0" },
-  cwd: root,
-  shell: true,
-});
-
-child.on("exit", (code) => {
-  console.error("API process exited with code", code);
-  process.exit(code ?? 1);
-});
-
-process.on("SIGTERM", () => child.kill("SIGTERM"));
-process.on("SIGINT", () => child.kill("SIGINT"));
+await import("./apps/api/dist/index.js");

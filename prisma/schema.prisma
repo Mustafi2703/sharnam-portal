@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -42,7 +42,7 @@ model RoleDefinition {
   key         String   @unique
   label       String
   portal      String
-  permissions String
+  permissions String @db.Text
   isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -76,9 +76,9 @@ model Project {
   outlookConnected        Boolean   @default(false)
   outlookConnectedAt      DateTime?
   /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
-  enabledModules          String    @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"reports\"]")
+  enabledModules          String    @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"reports\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
-  workPackages            String    @default("[\"Civil\",\"PEB\"]")
+  workPackages            String    @default("[\"Civil\",\"PEB\"]") @db.Text
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -135,7 +135,7 @@ model EmailOutbox {
   projectId   String?
   toEmails    String
   subject     String
-  body        String
+  body        String @db.Text
   context     String?
   status      String    @default("Queued")
   createdById String?
@@ -274,7 +274,7 @@ model ChecklistSubmission {
   revisionNumber String?
   submittedById  String
   status         String    @default("Draft")
-  responsesJson  String
+  responsesJson  String @db.Text
   remarks        String?
   /// Fill | PreUploadDrawing
   purpose        String    @default("Fill")
@@ -602,7 +602,7 @@ model BoqImportBatch {
   fileName    String
   rowCount    Int      @default(0)
   status      String   @default("Imported")
-  summaryJson String?
+  summaryJson String? @db.Text
   createdAt   DateTime @default(now())
 
   project Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -631,7 +631,7 @@ model AuditEvent {
   action    String
   entity    String?
   entityId  String?
-  metaJson  String?
+  metaJson  String? @db.Text
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id])
@@ -843,7 +843,7 @@ model JobPosting {
   employmentType String?   @default("Permanent")
   description    String?
   requirements   String?
-  channelsJson   String?   @default("[]")
+  channelsJson   String?   @default("[]") @db.Text
   postedAt       DateTime?
   closedAt       DateTime?
   /// Open | Closed | On-Hold
@@ -897,7 +897,7 @@ model InterviewRound {
   candidateId        String
   roundNumber        Int       @default(1)
   roundType          String
-  panelJson          String?   @default("[]")
+  panelJson          String?   @default("[]") @db.Text
   scheduledAt        DateTime?
   durationMins       Int?      @default(60)
   mode               String    @default("Teams")
@@ -1006,7 +1006,7 @@ model OnboardingChecklist {
   reportingManagerAssigned Boolean  @default(false)
   orientationDone          Boolean  @default(false)
   hrPolicyAcknowledged     Boolean  @default(false)
-  itemsCompletedAtJson     String   @default("{}")
+  itemsCompletedAtJson     String   @default("{}") @db.Text
   notes                    String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @default(now()) @updatedAt
@@ -1080,8 +1080,8 @@ model CustomSheet {
   projectId   String?
   name        String
   category    String?
-  headersJson String
-  rowsJson    String
+  headersJson String @db.Text
+  rowsJson    String @db.Text
   sourceFile  String?
   storagePath String?
   createdById String?
@@ -1111,8 +1111,8 @@ model DprSnapshot {
   projectId      String
   logDate        DateTime
   discipline     String    @default("CIVIL")
-  headerJson     String    @default("{}")
-  linesJson      String    @default("[]")
+  headerJson     String    @default("{}") @db.Text
+  linesJson      String    @default("[]") @db.Text
   status         String    @default("Draft")
   publishedAt    DateTime?
   publishedPath  String?
@@ -1142,7 +1142,7 @@ model WprSnapshot {
   projectId      String
   weekEnding     DateTime
   reportNumber   Int?
-  sectionsJson   String    @default("{}")
+  sectionsJson   String    @default("{}") @db.Text
   status         String    @default("Draft")
   publishedAt    DateTime?
   publishedPath  String?
@@ -1198,7 +1198,7 @@ model CrmBidPackage {
   title              String
   status             String    @default("Open")
   revisionLabel      String    @default("R2")
-  vendorNamesJson    String    @default("[]")
+  vendorNamesJson    String    @default("[]") @db.Text
   dueDate            DateTime?
   notes              String?
   comparativeSheetId String?
@@ -1259,7 +1259,7 @@ model Rfi {
   dueDate               DateTime?
   closedAt              DateTime?
   linkedDrawingId       String?
-  drawingPinJson        String?
+  drawingPinJson        String? @db.Text
   /// Legacy: often stores checklist template id
   linkedChecklistItemId String?
   /// Checklist assignment to be filled by matrix parties / vendor
@@ -1267,11 +1267,11 @@ model Rfi {
   specSectionLink       String?
   responsibleVendorId   String?
   questionReceivedFrom  String?
-  distributionJson      String?
+  distributionJson      String? @db.Text
   scheduleImpact        String?   @default("None")
   costImpact            String?   @default("None")
   isPrivate             Boolean   @default(false)
-  attachmentsJson       String?
+  attachmentsJson       String? @db.Text
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -1314,7 +1314,7 @@ model QualityInspection {
   assignedToId        String?
   dueDate             DateTime?
   completedAt         DateTime?
-  attachmentsJson     String?
+  attachmentsJson     String? @db.Text
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -1332,7 +1332,7 @@ model InspectionItem {
   status          String    @default("Pending")
   remarks         String?
   /// JSON array of { url, name, kind, comment? }
-  attachmentsJson String?
+  attachmentsJson String? @db.Text
   sortOrder       Int       @default(0)
   dueDate         DateTime?
   autoGenerateRfi Boolean   @default(false)
@@ -1368,7 +1368,7 @@ model Submittal {
   description     String?
   revisionNumber  String    @default("0")
   reviewerNotes   String?
-  attachmentsJson String?
+  attachmentsJson String? @db.Text
   dueDate         DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -1815,7 +1815,7 @@ model Quotation {
   quotationDate    DateTime  @default(now())
   awardedAt        DateTime?
   awardedProjectId String?
-  sectionsJson     String?
+  sectionsJson     String? @db.Text
   attachmentUrl    String?
   createdById      String?
   createdAt        DateTime  @default(now())
