@@ -160,16 +160,24 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
 
+/** Cinematic hero per portal — each login gets a distinct construction / PMC photo */
 const PORTAL_HERO: Record<string, string> = {
-  hub: "/auth/hero-construction-wide.jpg",
+  hub: "/auth/hero-hub.jpg",
+  master: "/auth/hero-master.jpg",
   office: "/auth/hero-office.jpg",
   site: "/auth/hero-site.jpg",
+  employee: "/auth/hero-employee.jpg",
+  vendor: "/auth/hero-vendor.jpg",
   client: "/auth/hero-client.jpg",
-  vendor: "/auth/hero-construction-wide.jpg",
+  drawings: "/auth/hero-drawings.jpg",
+  quality: "/auth/hero-quality.jpg",
+  comms: "/auth/hero-comms.jpg",
+  hr: "/auth/hero-hr.jpg",
+  field: "/auth/hero-field.jpg",
 };
 
 function portalHero(key: string) {
-  return PORTAL_HERO[key] || "/auth/hero-construction-wide.jpg";
+  return PORTAL_HERO[key] ?? "/auth/hero-construction-wide.jpg";
 }
 
 function portalDisplayName(key: string, shortLabel: string) {
@@ -193,16 +201,11 @@ function AuthLogo({ size = "md" }: { size?: "xs" | "sm" | "md" | "lg" }) {
   );
 }
 
-function AuthScene({ image }: { image: string }) {
+function AuthScene() {
   return (
     <div className="auth-scene" aria-hidden>
-      <div className="auth-scene__band auth-scene__band--top">
-        <img src={image} alt="" decoding="async" />
-      </div>
-      <div className="auth-scene__band auth-scene__band--bottom">
-        <img src={image} alt="" decoding="async" />
-      </div>
-      <div className="auth-scene__wash" />
+      <div className="auth-scene__photo" />
+      <div className="auth-scene__shade" />
     </div>
   );
 }
@@ -315,7 +318,7 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-function AuthMobileNav({ backTo }: { backTo?: string }) {
+function AuthMobileNav({ backTo, logoSize = "sm" }: { backTo?: string; logoSize?: "xs" | "sm" | "md" }) {
   return (
     <nav className={`auth-mobile-nav${backTo ? "" : " auth-mobile-nav--center"}`} aria-label="Login navigation">
       {backTo ? (
@@ -323,7 +326,7 @@ function AuthMobileNav({ backTo }: { backTo?: string }) {
           ← All portals
         </Link>
       ) : null}
-      <AuthLogo size="sm" />
+      <AuthLogo size={logoSize} />
     </nav>
   );
 }
@@ -349,12 +352,20 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
   return (
-    <div className="auth-layout auth-layout--portal" data-portal={portalKey}>
-      <AuthScene image={portalHero(portalKey)} />
+    <div
+      className="auth-layout auth-layout--portal"
+      data-portal={portalKey}
+      style={
+        {
+          ["--portal-accent" as string]: cfg.tone,
+          ["--auth-hero" as string]: `url(${portalHero(portalKey)})`,
+        } as CSSProperties
+      }
+    >
+      <AuthScene />
       <AuthMobileNav backTo="/login" />
       <aside
         className="auth-layout__brand auth-layout__brand--portal"
-        style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
       >
         <BrandMark showTagline={false} />
         <div className="auth-layout__portal-intro">
@@ -372,6 +383,11 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
         </Link>
       </aside>
       <main className="auth-layout__main auth-layout__main--portal">
+        <div className="auth-mobile-intro auth-mobile-intro--portal">
+          <span className="auth-layout__portal-chip">{cfg.icon}</span>
+          <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
+          <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
+        </div>
         <SignInCard cfg={cfg} />
       </main>
     </div>
@@ -402,9 +418,17 @@ export function LoginHubPage() {
   if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
 
   return (
-    <div className="auth-layout auth-layout--hub" style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}>
-      <AuthScene image={portalHero("hub")} />
-      <AuthMobileNav />
+    <div
+      className="auth-layout auth-layout--hub"
+      style={
+        {
+          ["--portal-accent" as string]: "#0B6A78",
+          ["--auth-hero" as string]: `url(${portalHero("hub")})`,
+        } as CSSProperties
+      }
+    >
+      <AuthScene />
+      <AuthMobileNav logoSize="md" />
       <aside className="auth-layout__brand auth-layout__brand--hub">
         <BrandMark />
         <p className="auth-layout__hero-copy">
