@@ -3,9 +3,24 @@ import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { parseBoqBuffer } from "../services/boqParser.js";
+import { parseBbsBuffer, parseMbBuffer } from "../services/costSheetParser.js";
 import { audit } from "../services/audit.js";
+import { mockOneDrive } from "../services/mockOneDrive.js";
+import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+function parseBatchMeta(summaryJson: string | null): Record<string, unknown> {
+  try {
+    return JSON.parse(summaryJson || "{}") as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function safeFolderPart(s: string) {
+  return s.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80) || "General";
+}
 
 const CASHFLOW_SHEET_TOOLS = [
   { id: "chart", label: "Cash Flow Chart", source: "Cashflow - Dashboard.xlsx" },
@@ -138,7 +153,25 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     cashflowForecast: cashflow.filter((c) => /^Forecast/i.test(c.packageName || "")),
     cashflowTracking: cashflow.filter((c) => /^Tracking/i.test(c.packageName || "")),
     rateDiffs,
-    boqBatches,
+    boqBatches: boqBatches.map((b) => ({
+      ...b,
+      meta: parseBatchMeta(b.summaryJson),
+    })),
+    sheetFiles: boqBatches
+      .map((b) => ({ ...b, meta: parseBatchMeta(b.summaryJson) }))
+      .filter((b) => ["bbs", "mb", "bbs_shape"].includes(String(b.meta.kind || "")))
+      .map((b) => ({
+        id: b.id,
+        kind: b.meta.kind,
+        packageName: b.meta.packageName,
+        fileName: b.fileName,
+        rowCount: b.rowCount,
+        storagePath: b.meta.storagePath,
+        shareUrl: b.meta.shareUrl,
+        provider: b.meta.provider,
+        barMark: b.meta.barMark,
+        createdAt: b.createdAt,
+      })),
     mbLines,
     bbsLines,
   });
@@ -620,5 +653,226 @@ costRouter.post(
       });
     }
     res.status(201).json(batch);
+  }
+);
+
+/** List uploaded BBS / MB / shape files for a package */
+costRouter.get("/:projectId/sheets", async (req, res) => {
+  const projectId = req.params.projectId;
+  const kind = String(req.query.kind || "").trim();
+  const pkg = String(req.query.package || "").trim();
+  const batches = await prisma.boqImportBatch.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+    take: 80,
+  });
+  const files = batches
+    .map((b) => ({ ...b, meta: parseBatchMeta(b.summaryJson) }))
+    .filter((b) => {
+      const k = String(b.meta.kind || "");
+      if (!["bbs", "mb", "bbs_shape"].includes(k)) return false;
+      if (kind && k !== kind) return false;
+      if (pkg && String(b.meta.packageName || "") !== pkg) return false;
+      return true;
+    })
+    .map((b) => ({
+      id: b.id,
+      kind: b.meta.kind,
+      packageName: b.meta.packageName,
+      fileName: b.fileName,
+      rowCount: b.rowCount,
+      storagePath: b.meta.storagePath,
+      shareUrl: b.meta.shareUrl,
+      provider: b.meta.provider,
+      barMark: b.meta.barMark,
+      createdAt: b.createdAt,
+    }));
+  res.json(files);
+});
+
+async function importCostSheet(
+  req: AuthedRequest,
+  kind: "bbs" | "mb",
+  parse: (buf: Buffer) => Array<Record<string, unknown>>
+) {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return { status: 404, body: { error: "project not found" } };
+  if (!req.file) return { status: 400, body: { error: "file required (.xlsx / .xls / .csv)" } };
+
+  const packageName = String(req.body.packageName || "Imported").trim();
+  const replace = String(req.body.replace || "") === "1" || req.body.replace === true;
+  const parsed = parse(req.file.buffer);
+  if (!parsed.length) return { status: 400, body: { error: "No rows parsed — check sheet layout (SPDC BBS/MB format)" } };
+
+  if (replace) {
+    if (kind === "bbs") {
+      await prisma.costBbsLine.deleteMany({ where: { projectId: project.id, packageName } });
+    } else {
+      await prisma.costMbLine.deleteMany({ where: { projectId: project.id, packageName } });
+    }
+  }
+
+  const folderKey = kind === "bbs" ? "bbs" : "mb";
+  const relFolder = `${MODULE_TO_ISO_FOLDER[folderKey]}/${safeFolderPart(packageName)}/sheets`;
+  const saved = await mockOneDrive.upload(
+    project.code,
+    relFolder,
+    `${Date.now()}-${req.file.originalname}`,
+    req.file.buffer
+  );
+
+  if (kind === "bbs") {
+    await prisma.costBbsLine.createMany({
+      data: parsed.map((r) => ({
+        projectId: project.id,
+        packageName,
+        barMark: (r.barMark as string) || null,
+        diameterMm: Number(r.diameterMm) || 0,
+        shape: (r.shape as string) || null,
+        lengthMm: Number(r.lengthMm) || 0,
+        nos: Number(r.nos) || 0,
+        totalLength: Number(r.totalLength) || 0,
+        weightKg: Number(r.weightKg) || 0,
+        location: (r.location as string) || null,
+      })),
+    });
+  } else {
+    await prisma.costMbLine.createMany({
+      data: parsed.map((r) => ({
+        projectId: project.id,
+        packageName,
+        srNo: (r.srNo as string) || null,
+        description: String(r.description || "MB line"),
+        nos1: Number(r.nos1) || 0,
+        nos2: Number(r.nos2) || 1,
+        length: Number(r.length) || 0,
+        width: Number(r.width) || 0,
+        height: Number(r.height) || 0,
+        qty: Number(r.qty) || 0,
+        unit: (r.unit as string) || null,
+      })),
+    });
+  }
+
+  const batch = await prisma.boqImportBatch.create({
+    data: {
+      projectId: project.id,
+      fileName: `${packageName} · ${req.file.originalname}`,
+      rowCount: parsed.length,
+      summaryJson: JSON.stringify({
+        kind,
+        packageName,
+        storagePath: saved.path,
+        shareUrl: saved.url,
+        sharePointUrl: saved.sharePointUrl,
+        provider: saved.provider,
+        replace,
+      }),
+    },
+  });
+
+  await audit(`cost.${kind}_import`, {
+    userId: req.user!.id,
+    entity: "BoqImportBatch",
+    entityId: batch.id,
+    meta: { packageName, rows: parsed.length, path: saved.path },
+  });
+
+  return {
+    status: 201,
+    body: {
+      ok: true,
+      id: batch.id,
+      kind,
+      packageName,
+      rowsImported: parsed.length,
+      replace,
+      file: {
+        path: saved.path,
+        url: saved.url,
+        sharePointUrl: saved.sharePointUrl,
+        provider: saved.provider,
+      },
+    },
+  };
+}
+
+costRouter.post(
+  "/:projectId/bbs/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const result = await importCostSheet(req, "bbs", (buf) => parseBbsBuffer(buf) as Array<Record<string, unknown>>);
+    return res.status(result.status).json(result.body);
+  }
+);
+
+costRouter.post(
+  "/:projectId/mb/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const result = await importCostSheet(req, "mb", (buf) => parseMbBuffer(buf) as Array<Record<string, unknown>>);
+    return res.status(result.status).json(result.body);
+  }
+);
+
+costRouter.post(
+  "/:projectId/bbs/shape",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required (PDF or image)" });
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "project not found" });
+
+    const packageName = String(req.body.packageName || "BBS").trim();
+    const barMark = String(req.body.barMark || "").trim();
+    const relFolder = `${MODULE_TO_ISO_FOLDER.bbs}/${safeFolderPart(packageName)}/shapes`;
+    const prefix = barMark ? `${safeFolderPart(barMark)}-` : "";
+    const saved = await mockOneDrive.upload(
+      project.code,
+      relFolder,
+      `${prefix}${Date.now()}-${req.file.originalname}`,
+      req.file.buffer
+    );
+
+    const batch = await prisma.boqImportBatch.create({
+      data: {
+        projectId: project.id,
+        fileName: `${packageName}${barMark ? ` · mark ${barMark}` : ""} · ${req.file.originalname}`,
+        rowCount: 0,
+        summaryJson: JSON.stringify({
+          kind: "bbs_shape",
+          packageName,
+          barMark: barMark || null,
+          storagePath: saved.path,
+          shareUrl: saved.url,
+          sharePointUrl: saved.sharePointUrl,
+          provider: saved.provider,
+          mime: req.file.mimetype,
+        }),
+      },
+    });
+
+    await audit("cost.bbs_shape.upload", {
+      userId: req.user!.id,
+      entity: "BoqImportBatch",
+      entityId: batch.id,
+      meta: { packageName, barMark, path: saved.path },
+    });
+
+    res.status(201).json({
+      ok: true,
+      id: batch.id,
+      packageName,
+      barMark: barMark || null,
+      file: {
+        path: saved.path,
+        url: saved.url,
+        sharePointUrl: saved.sharePointUrl,
+        provider: saved.provider,
+      },
+    });
   }
 );

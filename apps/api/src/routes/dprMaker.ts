@@ -42,6 +42,7 @@ import {
   type DprPhoto,
 } from "../services/dprXlsx.js";
 import { audit } from "../services/audit.js";
+import { buildDprAutoFill } from "../services/dprIntegrations.js";
 
 export const dprMakerRouter = Router();
 dprMakerRouter.use(requireAuth);
@@ -158,34 +159,10 @@ function defaultDelays(): DprDelay[] { return []; }
 function defaultApprovals(): DprApprovalPending[] { return []; }
 function defaultIssues(): DprIssue[] { return []; }
 
-// ─── seed from Cost Monitoring (unchanged) ───
+// ─── seed from Cost + BBS + MB + Planned vs Actual + prior DPR + Q/S ───
 
-async function seedFromCostMonitoring(projectId: string, discipline: string): Promise<DprLine[]> {
-  const packageName = {
-    CIVIL: "Civil", ELECTRICAL: "Electrical", FIRE: "Fire",
-    MECHANICAL: "Mechanical", PEB_ERECTION: "PEB", PEB_SUPPLY: "PEB Supply", PLUMBING: "Plumbing",
-  }[discipline] || "Civil";
-  const rows = await prisma.costMonitoringLine.findMany({
-    where: { projectId, packageName: { equals: packageName } },
-    orderBy: { itemNo: "asc" },
-    take: 15,
-  });
-  if (rows.length > 0) {
-    return rows.map((r) => ({
-      srNo: undefined,
-      group: r.section || undefined,
-      description: r.description,
-      unit: r.uom || undefined,
-      scopeQty: r.boqQty || r.gfcQty || 0,
-      rate: r.rate || 0,
-      start: null,
-      finish: null,
-      cumQtyPrev: r.achievedQty || 0,
-      qtyToday: 0,
-      remarks: "",
-    }));
-  }
-  return [];
+async function seedNewDpr(projectId: string, logDate: Date, discipline: string) {
+  return buildDprAutoFill(projectId, logDate, discipline);
 }
 
 // ═══════════════════════════════ GET current ═══════════════════════════════
@@ -204,11 +181,16 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
 
   let header: DprHeader;
   let extras: DprExtras;
+  let autoSources: string[] = [];
+  let seededLines: DprLine[] = [];
   if (existing) {
     const split = splitExtras(existing.headerJson);
     header = split.header;
     extras = split.extras;
   } else {
+    const auto = await seedNewDpr(projectId, logDate, discipline);
+    autoSources = auto.sources;
+    seededLines = auto.lines;
     header = {
       projectName: project.name,
       projectManager: project.designConsultant || "",
@@ -222,22 +204,22 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
       reportDate: logDate.toISOString(),
       dataDate: logDate.toISOString(),
       reportNumber: `DPR/${discipline.slice(0, 3)}-${Math.round((Date.now() % 10000000) / 1000)}`,
-      acCertifiedToDate: 0,
-      cumManDaysPrev: 0,
-      cumSafeManHoursPrev: 0,
+      acCertifiedToDate: auto.header.acCertifiedToDate ?? 0,
+      cumManDaysPrev: auto.header.cumManDaysPrev ?? 0,
+      cumSafeManHoursPrev: auto.header.cumSafeManHoursPrev ?? 0,
       dateOfLastLti: null,
       preparedBy: "Site Engineer – SPDC (PMC)",
     };
     extras = {
-      manpower: defaultManpower(),
+      manpower: auto.manpower.length ? auto.manpower : defaultManpower(),
       equipment: defaultEquipment(),
-      materials: defaultMaterials(),
-      qualityTests: defaultQualityTests(),
-      safetyRows: defaultSafetyRows(),
-      safety: defaultSafety(),
-      delays: defaultDelays(),
-      approvals: defaultApprovals(),
-      issues: defaultIssues(),
+      materials: auto.materials.length ? auto.materials : defaultMaterials(),
+      qualityTests: auto.qualityTests.length ? auto.qualityTests : defaultQualityTests(),
+      safetyRows: auto.safetyRows.length ? auto.safetyRows : defaultSafetyRows(),
+      safety: { ...defaultSafety(), ...auto.safety },
+      delays: auto.delays.length ? auto.delays : defaultDelays(),
+      approvals: auto.approvals.length ? auto.approvals : defaultApprovals(),
+      issues: auto.issues.length ? auto.issues : defaultIssues(),
       highlights: [],
       nextDayPlan: [],
       decisions: [],
@@ -247,9 +229,7 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     };
   }
 
-  const lines: DprLine[] = existing
-    ? JSON.parse(existing.linesJson || "[]")
-    : await seedFromCostMonitoring(projectId, discipline);
+  const lines: DprLine[] = existing ? JSON.parse(existing.linesJson || "[]") : seededLines;
 
   res.json({
     projectId,
@@ -276,6 +256,7 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     status: existing?.status || "Draft",
     publishedPath: existing?.publishedPath || null,
     publishedAt: existing?.publishedAt || null,
+    autoFillSources: autoSources,
   });
 });
 
@@ -458,7 +439,7 @@ async function loadFullSnapshot(project: { name: string; code: string; endDate?:
   }
   const lines: DprLine[] = existing
     ? JSON.parse(existing.linesJson || "[]")
-    : await seedFromCostMonitoring(projectId, discipline);
+    : (await seedNewDpr(projectId, logDate, discipline)).lines;
   return { existing, header, extras, lines };
 }
 

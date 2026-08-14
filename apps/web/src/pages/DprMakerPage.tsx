@@ -136,6 +136,7 @@ type Snap = {
   status: string;
   publishedPath?: string | null;
   publishedAt?: string | null;
+  autoFillSources?: string[];
 };
 
 function toDateInput(v: string | null | undefined): string {
@@ -560,6 +561,12 @@ export default function DprMakerPage() {
           </div>
         }
       />
+
+      {snap.autoFillSources?.length ? (
+        <p className="text-sm text-muted mx-1 px-3 py-2 rounded-lg bg-paper border border-line">
+          Auto-filled from: {snap.autoFillSources.join(" · ")}. Update BOQ, MB, BBS, Planned vs Actual, Safety, and Quality in their modules — then re-open this date to refresh.
+        </p>
+      ) : null}
 
       <div className="maker-section">
         <div className="maker-toolbar">

@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
+import { CostSheetUploadPanel } from "../components/CostSheetUploadPanel";
 import { BarChart, PieChart } from "../components/PieChart";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
@@ -181,6 +182,11 @@ export default function CostPage() {
   const mbRows = useMemo(() => summary?.mbLines || [], [summary]);
   const bbsRows = useMemo(() => summary?.bbsLines || [], [summary]);
   const monRows = useMemo(() => summary?.monitoring || [], [summary]);
+  const sheetFiles = useMemo(() => summary?.sheetFiles || [], [summary]);
+  const bbsBarMarks = useMemo(
+    () => [...new Set(bbsRows.map((b: any) => b.barMark).filter(Boolean))] as string[],
+    [bbsRows]
+  );
 
   const cashflowRows = useMemo(() => {
     if (cfView === "chart") return summary?.cashflowChart?.length ? summary.cashflowChart : summary?.cashflow || [];
@@ -437,6 +443,18 @@ export default function CostPage() {
 
       {tab === "mb" && (
         <div className="space-y-4">
+          {(canEdit || canSiteEdit) && (
+            <CostSheetUploadPanel
+              projectId={id!}
+              token={token}
+              kind="mb"
+              packageName={pkgFilter}
+              packageOptions={mbPackages.length ? mbPackages : packages.filter((p: string) => p !== "All")}
+              files={sheetFiles}
+              canEdit={canEdit}
+              onChanged={() => void load()}
+            />
+          )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {Object.entries(summary.mbByPackage || {}).map(([pkg, v]: [string, any]) => (
               <Card key={pkg} className="!p-3">
@@ -491,6 +509,19 @@ export default function CostPage() {
 
       {tab === "bbs" && (
         <div className="space-y-4">
+          {(canEdit || canSiteEdit) && (
+            <CostSheetUploadPanel
+              projectId={id!}
+              token={token}
+              kind="bbs"
+              packageName={pkgFilter}
+              packageOptions={bbsPackages.length ? bbsPackages : packages.filter((p: string) => p !== "All")}
+              barMarks={bbsBarMarks}
+              files={sheetFiles}
+              canEdit={canEdit || canSiteEdit}
+              onChanged={() => void load()}
+            />
+          )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {Object.entries(summary.bbsByPackage || {}).map(([pkg, v]: [string, any]) => (
               <Card key={pkg} className="!p-3">
