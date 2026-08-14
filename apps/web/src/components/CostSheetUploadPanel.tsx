@@ -147,10 +147,15 @@ export function CostSheetUploadPanel({
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
       {canEdit && (
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className={kind === "bbs" ? "" : "grid lg:grid-cols-2 gap-4"}>
           <Card>
             <h3 className="font-semibold text-sm mb-1">Upload {kind.toUpperCase()} Excel sheet</h3>
             <p className="text-xs text-steel-muted mb-3 font-mono break-all">{folderHint}</p>
+            {kind === "bbs" && (
+              <p className="text-xs text-steel-muted mb-3">
+                After import, use <strong>Upload</strong> on each bar-mark row in the table below for bend diagrams.
+              </p>
+            )}
             <form className="space-y-3" onSubmit={uploadSheet}>
               <Select value={pkg} onChange={(e) => setPkg(e.target.value)}>
                 {(packageOptions.length ? packageOptions : ["Dormitory BBS", "Dormitory Civil"]).map((p) => (
@@ -175,10 +180,10 @@ export function CostSheetUploadPanel({
           </Card>
 
           {kind === "bbs" && (
-            <Card>
-              <h3 className="font-semibold text-sm mb-1">Upload shape diagram (mark / bend)</h3>
+            <Card className="border-brand/25 bg-paper lg:col-span-2">
+              <h3 className="font-semibold text-sm mb-1">Bulk shape upload (optional)</h3>
               <p className="text-xs text-steel-muted mb-3">
-                PDF or image — annotate with markup before upload. Links to bar mark optional.
+                Prefer per-mark upload in the BBS table below. Use this only for a shared legend or general diagram.
               </p>
               <div className="space-y-3">
                 <Select value={barMark} onChange={(e) => setBarMark(e.target.value)}>

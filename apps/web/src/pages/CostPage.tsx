@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
 import { CostSheetUploadPanel } from "../components/CostSheetUploadPanel";
+import { BbsEntryTable } from "../components/BbsEntryTable";
 import { BarChart, PieChart } from "../components/PieChart";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
@@ -509,6 +510,13 @@ export default function CostPage() {
 
       {tab === "bbs" && (
         <div className="space-y-4">
+          <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm">
+            <strong className="text-ink">BBS upload &amp; shape markup</strong>
+            <span className="text-steel-muted">
+              {" "}
+              — Import the Excel sheet, then upload an annotated bend diagram for <strong>each bar mark row</strong> in the table below (matches SPDC BBS sheet).
+            </span>
+          </div>
           {(canEdit || canSiteEdit) && (
             <CostSheetUploadPanel
               projectId={id!}
@@ -531,20 +539,12 @@ export default function CostPage() {
               </Card>
             ))}
           </div>
-          <SheetTable
-            title="Bar bending schedule (BBS)"
-            headers={["Package", "Mark", "Dia mm", "Shape", "Length", "Nos", "Total L", "Weight kg", "Location"]}
-            rows={bbsRows.map((b: any) => [
-              b.packageName,
-              b.barMark,
-              b.diameterMm,
-              b.shape,
-              b.lengthMm,
-              b.nos,
-              b.totalLength,
-              b.weightKg,
-              b.location,
-            ])}
+          <BbsEntryTable
+            projectId={id!}
+            token={token}
+            rows={bbsRows}
+            canUpload={canEdit || canSiteEdit}
+            onChanged={() => void load()}
           />
         </div>
       )}

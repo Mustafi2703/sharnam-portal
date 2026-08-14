@@ -4,6 +4,7 @@ import path from "path";
 import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
+import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
 import { seedChecklistFillsForReports, seedQualitySafetyFromSheets } from "./qualitySafetySheets.ts";
 import { seedCrmComparative } from "./crmComparativeSeed.ts";
 import { PrismaClient } from "@prisma/client";
@@ -1052,6 +1053,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
 
   // Cost from SPDC Budget workbook (Budget / Monitoring / MB / BBS / rate diffs)
   await seedCostFromBudgetWorkbook(prisma, project.id, EXCEL_ROOT);
+  await seedBbsDemoShapes(prisma, project.id, project.code);
 
   // Communications matrix defaults
   const matrixCount = await prisma.communicationMatrix.count({ where: { projectId: project.id } });

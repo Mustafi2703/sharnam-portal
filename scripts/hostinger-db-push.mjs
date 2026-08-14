@@ -46,4 +46,16 @@ if (process.env.RUN_SEED === "1") {
   console.log("==> Skipping seed (set RUN_SEED=1 for first deploy demo users)");
 }
 
+try {
+  console.log("==> BBS demo bend diagrams (idempotent)...");
+  execSync("npx tsx seed/runBbsDemoShapes.ts", {
+    stdio: "inherit",
+    env: process.env,
+    cwd: rootDir,
+    timeout: 120_000,
+  });
+} catch {
+  console.warn("WARN: BBS demo shapes skipped (non-fatal)");
+}
+
 process.exit(0);

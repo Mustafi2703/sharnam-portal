@@ -283,7 +283,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Cashflow Dashboard · Monitoring",
     },
     { to: "cost", label: "MB sheets", query: "tab=mb", blurb: "Measurement books by package.", sheet: "SPDC Budget · MB" },
-    { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Bar bending schedule by package.", sheet: "SPDC Budget · BBS" },
+    { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Upload BBS Excel + shape diagrams with markup → SharePoint.", sheet: "SPDC Budget · BBS" },
     {
       to: "cost",
       label: "Budget WBS",

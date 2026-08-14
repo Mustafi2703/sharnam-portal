@@ -560,6 +560,9 @@ model CostBbsLine {
   totalLength Float    @default(0)
   weightKg    Float    @default(0)
   location    String?
+  /// Annotated bend diagram (PDF/PNG) for this bar mark — SharePoint path
+  shapeDiagramPath String?
+  shapeDiagramUrl  String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

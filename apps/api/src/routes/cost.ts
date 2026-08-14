@@ -226,8 +226,19 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
   if (kind === "bbs") {
     const rows = await prisma.costBbsLine.findMany({ where, orderBy: [{ packageName: "asc" }, { barMark: "asc" }] });
     const csv = toCsv(
-      ["Package", "Bar mark", "Dia mm", "Shape", "Length mm", "Nos", "Total length", "Weight kg", "Location"],
-      rows.map((r) => [r.packageName, r.barMark, r.diameterMm, r.shape, r.lengthMm, r.nos, r.totalLength, r.weightKg, r.location])
+      ["Package", "Bar mark", "Dia mm", "Shape", "Length mm", "Nos", "Total length", "Weight kg", "Location", "Diagram URL"],
+      rows.map((r) => [
+        r.packageName,
+        r.barMark,
+        r.diameterMm,
+        r.shape,
+        r.lengthMm,
+        r.nos,
+        r.totalLength,
+        r.weightKg,
+        r.location,
+        r.shapeDiagramUrl || r.shapeDiagramPath || "",
+      ])
     );
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="BBS-${pkg || "all"}.csv"`);
@@ -828,14 +839,33 @@ costRouter.post(
 
     const packageName = String(req.body.packageName || "BBS").trim();
     const barMark = String(req.body.barMark || "").trim();
+    const bbsLineId = String(req.body.bbsLineId || "").trim();
     const relFolder = `${MODULE_TO_ISO_FOLDER.bbs}/${safeFolderPart(packageName)}/shapes`;
-    const prefix = barMark ? `${safeFolderPart(barMark)}-` : "";
+    const prefix = barMark ? `${safeFolderPart(barMark)}-` : bbsLineId ? `line-${bbsLineId.slice(0, 8)}-` : "";
     const saved = await mockOneDrive.upload(
       project.code,
       relFolder,
       `${prefix}${Date.now()}-${req.file.originalname}`,
       req.file.buffer
     );
+
+    const shareUrl = saved.sharePointUrl || saved.url;
+
+    if (bbsLineId) {
+      const line = await prisma.costBbsLine.findFirst({
+        where: { id: bbsLineId, projectId: project.id },
+      });
+      if (!line) return res.status(404).json({ error: "BBS line not found" });
+      await prisma.costBbsLine.update({
+        where: { id: line.id },
+        data: { shapeDiagramPath: saved.path, shapeDiagramUrl: shareUrl },
+      });
+    } else if (barMark && packageName) {
+      await prisma.costBbsLine.updateMany({
+        where: { projectId: project.id, packageName, barMark },
+        data: { shapeDiagramPath: saved.path, shapeDiagramUrl: shareUrl },
+      });
+    }
 
     const batch = await prisma.boqImportBatch.create({
       data: {
@@ -859,12 +889,13 @@ costRouter.post(
       userId: req.user!.id,
       entity: "BoqImportBatch",
       entityId: batch.id,
-      meta: { packageName, barMark, path: saved.path },
+      meta: { packageName, barMark, bbsLineId: bbsLineId || null, path: saved.path },
     });
 
     res.status(201).json({
       ok: true,
       id: batch.id,
+      bbsLineId: bbsLineId || null,
       packageName,
       barMark: barMark || null,
       file: {
