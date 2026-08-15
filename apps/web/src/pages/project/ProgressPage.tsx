@@ -21,23 +21,13 @@ type Tab =
   | "procurement";
 
 const READY_TABS: Record<
-  "scurve" | "schedule" | "msproject" | "procurement",
+  "schedule" | "procurement",
   { title: string; sheet: string; blurb: string }
 > = {
-  scurve: {
-    title: "S-curve",
-    sheet: "MS Project / S-curve pack",
-    blurb: "Hub tool is reserved. Drop the client MS Project or S-curve sheet and we wire charts + PDF here.",
-  },
   schedule: {
     title: "Summary schedule",
     sheet: "Project summary schedule",
     blurb: "Upload + in-app PDF viewer will land here when the client schedule pack is shared.",
-  },
-  msproject: {
-    title: "MS Project progress",
-    sheet: "MS Project export",
-    blurb: "Task % / baseline register — ready for import as soon as the sheet arrives.",
   },
   procurement: {
     title: "Procurement plan",
@@ -69,6 +59,9 @@ export default function ProgressPage() {
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
+  const [msProject, setMsProject] = useState<any>(null);
+  const [msBusy, setMsBusy] = useState<"seed" | "import" | "xml" | null>(null);
+  const msImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
   const tab = (searchParams.get("tab") as Tab) || "overview";
   const canEdit =
@@ -121,6 +114,8 @@ export default function ProgressPage() {
 
   const load = () => api(`/api/progress/${id}/summary`, { token }).then(setData);
 
+  const loadMsProject = () => api(`/api/progress/${id}/ms-project/summary`, { token }).then(setMsProject);
+
   async function runVerify() {
     if (!canVerify) return;
     setVerifyBusy(true);
@@ -141,6 +136,10 @@ export default function ProgressPage() {
   useEffect(() => {
     if (canVerify && tab === "overview") void runVerify();
   }, [id, token, canVerify, tab]);
+
+  useEffect(() => {
+    if (tab === "scurve" || tab === "msproject") void loadMsProject();
+  }, [id, token, tab]);
 
   const setTab = (t: Tab) => {
     if (t === "overview") setSearchParams({});
@@ -289,6 +288,59 @@ export default function ProgressPage() {
       setMsg(e instanceof Error ? e.message : "Download failed");
     } finally {
       setPaBusy(null);
+    }
+  }
+
+  async function seedMsProjectDemo() {
+    if (!id || !canEdit) return;
+    setMsBusy("seed");
+    setMsg("");
+    try {
+      const out = await api<{ taskCount: number; scurvePoints: number; fileUrl: string }>(
+        `/api/progress/${id}/ms-project/seed-demo`,
+        { method: "POST", token, body: "{}" }
+      );
+      setMsg(
+        `MS Project demo seeded — ${out.taskCount} tasks · ${out.scurvePoints} S-curve weeks · XML saved to OneDrive`
+      );
+      await Promise.all([load(), loadMsProject()]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "MS Project seed failed");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  async function importMsProject(file: File) {
+    if (!id || !canEdit) return;
+    setMsBusy("import");
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const out = await api<{ taskCount: number; scurvePoints: number }>(
+        `/api/progress/${id}/ms-project/import`,
+        { method: "POST", token, body: fd }
+      );
+      setMsg(`MS Project imported — ${out.taskCount} tasks · ${out.scurvePoints} S-curve points`);
+      await Promise.all([load(), loadMsProject()]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "MS Project import failed");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  async function downloadMsProjectXml() {
+    if (!id) return;
+    setMsBusy("xml");
+    try {
+      await downloadAuthFile(`/api/progress/${id}/ms-project/download.xml`, token, `MS-Project-Schedule.xml`);
+      setMsg("MS Project XML downloaded — open in Microsoft Project or re-import after edits.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setMsBusy(null);
     }
   }
 
@@ -1017,6 +1069,139 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {tab === "scurve" && (
+        <div className="space-y-4">
+          <Card className="!p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">Schedule S-curve</p>
+                <h3 className="font-display text-xl text-ink">Planned vs actual — cumulative %</h3>
+                <p className="text-sm text-steel-muted mt-1 max-w-2xl">
+                  Built from MS Project task baseline + % complete. Same weekly rows feed DPR dashboard charts and WPR progress slides.
+                </p>
+              </div>
+              {canEdit && (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" disabled={!!msBusy} onClick={() => void seedMsProjectDemo()}>
+                    {msBusy === "seed" ? "Seeding…" : "Seed demo MS Project + S-curve"}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
+                    {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => void downloadMsProjectXml()}>
+                    {msBusy === "xml" ? "Downloading…" : "Download XML"}
+                  </Button>
+                  <input
+                    ref={msImportRef}
+                    type="file"
+                    accept=".xml,application/xml,text/xml"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void importMsProject(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            {msProject?.connected && msProject.scurve?.length ? (
+              <>
+                <ProgressScurveChart
+                  points={msProject.scurve.map((p: { periodLabel: string; plannedPct: number; actualPct: number }) => ({
+                    label: p.periodLabel,
+                    planned: p.plannedPct,
+                    actual: p.actualPct,
+                  }))}
+                />
+                <p className="text-xs text-steel-muted mt-3">
+                  {msProject.scurvePoints} weekly points · {msProject.taskCount} tasks · file:{" "}
+                  <span className="font-mono">{msProject.fileFolder}/{msProject.fileName}</span>
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-steel-muted py-8 text-center border border-dashed border-line rounded-lg">
+                No S-curve yet — click <strong>Seed demo MS Project + S-curve</strong> or import a client XML export from Microsoft Project.
+              </p>
+            )}
+          </Card>
+          <Card className="!p-4">
+            <p className="text-xs font-semibold text-ink mb-2">Connection to DPR / WPR</p>
+            <ul className="text-sm text-steel-muted space-y-1 list-disc pl-4">
+              <li>MS Project → <code className="text-xs">ProgressPlannedActual</code> (S-curve weekly %)</li>
+              <li>Tasks → <code className="text-xs">ProgressActivityLine</code> → DPR planned qty hints</li>
+              <li>DPR Maker dashboard charts read published DPR history + BOQ progress</li>
+              <li>WPR Maker progress section reads milestones + hindrance + quality</li>
+            </ul>
+          </Card>
+        </div>
+      )}
+
+      {tab === "msproject" && (
+        <div className="space-y-4">
+          <Card className="!p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">MS Project connectivity</p>
+                <h3 className="font-display text-xl text-ink">Task register · % complete · baseline</h3>
+                <p className="text-sm text-steel-muted mt-1 max-w-2xl">
+                  Import <strong>File → Save As → XML</strong> from Microsoft Project (desktop or Project for the web). MPP binary is not supported — use XML export.
+                </p>
+              </div>
+              {canEdit && (
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" disabled={!!msBusy} onClick={() => void seedMsProjectDemo()}>
+                    {msBusy === "seed" ? "Seeding…" : "Seed demo schedule file"}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
+                    Import XML
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => void downloadMsProjectXml()}>
+                    Download XML
+                  </Button>
+                </div>
+              )}
+            </div>
+            {msProject?.tasks?.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-steel-muted border-b border-line">
+                      <th className="py-2 pr-3">WBS</th>
+                      <th className="py-2 pr-3">Activity</th>
+                      <th className="py-2 pr-3">Plan start</th>
+                      <th className="py-2 pr-3">Plan finish</th>
+                      <th className="py-2 pr-3">Days</th>
+                      <th className="py-2 px-3">% complete</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {msProject.tasks.map((t: { wbs: string; name: string; start?: string; finish?: string; durationDays: number; percentComplete: number }, i: number) => (
+                      <tr key={i} className="border-b border-line/60">
+                        <td className="py-2 pr-3 font-mono text-xs">{t.wbs}</td>
+                        <td className="py-2 pr-3 max-w-[280px]">{t.name}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(t.start)}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(t.finish)}</td>
+                        <td className="py-2 pr-3">{Math.round(t.durationDays)}</td>
+                        <td className="py-2 px-3">
+                          <Badge tone={t.percentComplete >= 100 ? "ok" : t.percentComplete > 0 ? "brand" : "warn"}>
+                            {Math.round(t.percentComplete)}%
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-steel-muted py-8 text-center border border-dashed border-line rounded-lg">
+                No MS Project tasks — seed demo or import client XML to populate this register.
+              </p>
+            )}
+          </Card>
+        </div>
+      )}
+
       {tab in READY_TABS && (
         <Card className="!p-6 max-w-2xl">
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-2">Awaiting client sheet</p>
@@ -1032,6 +1217,38 @@ export default function ProgressPage() {
           </Link>
         </Card>
       )}
+    </div>
+  );
+}
+
+function ProgressScurveChart({ points }: { points: { label: string; planned: number; actual: number }[] }) {
+  if (!points.length) return null;
+  const w = 640;
+  const h = 220;
+  const pad = 36;
+  const maxY = Math.max(100, ...points.flatMap((p) => [p.planned, p.actual])) * 1.08;
+  const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+  const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
+  const planned = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.planned)}`).join(" ");
+  const actual = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.actual)}`).join(" ");
+  return (
+    <div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="S-curve planned vs actual">
+        <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
+        <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
+        <path d={planned} fill="none" stroke="#2563EB" strokeWidth="2.5" />
+        <path d={actual} fill="none" stroke="#0F766E" strokeWidth="2.5" />
+        {[0, 25, 50, 75, 100].filter((v) => v <= maxY).map((v) => (
+          <g key={v}>
+            <line x1={pad - 4} y1={y(v)} x2={w - pad} y2={y(v)} stroke="var(--color-line,#e8eaed)" strokeDasharray="4 4" />
+            <text x={8} y={y(v) + 4} fontSize="9" fill="var(--color-steel-muted,#5c6578)">{v}%</text>
+          </g>
+        ))}
+      </svg>
+      <div className="flex gap-4 text-[11px] text-steel-muted mt-2">
+        <span><span className="inline-block w-3 h-0.5 bg-[#2563EB] align-middle mr-1" />Planned (baseline)</span>
+        <span><span className="inline-block w-3 h-0.5 bg-[#0F766E] align-middle mr-1" />Actual (% complete)</span>
+      </div>
     </div>
   );
 }

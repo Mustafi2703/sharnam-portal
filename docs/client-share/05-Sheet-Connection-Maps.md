@@ -1,8 +1,49 @@
-# Sheet connection maps — Sharnam portal
+*Client diagram pack (SVG — open in browser or insert in slides):*
 
-**For client walkthrough · August 2026**
+| Diagram | File |
+|---------|------|
+| Master hub | `docs/client-share/assets/01-master-dpr-wpr-hub.svg` |
+| Quality + **QAP convention** | `docs/client-share/assets/02-quality-qap-dpr-wpr.svg` |
+| Safety · Progress · Cost | `docs/client-share/assets/03-safety-progress-cost-dpr.svg` |
+| **MS Project → S-curve** | `docs/client-share/assets/04-ms-project-scurve-flow.svg` |
+| Cost → DPR | `docs/client-share/assets/05-cost-module-dpr.svg` |
 
-These maps show how your Excel registers connect inside the portal. **Comms matrix** and **Design coordination** are separate tools and are not shown here.
+Full index: [07-Connection-Diagram-Index.md](./07-Connection-Diagram-Index.md)
+
+---
+
+## 0. QAP vs NCR vs Safety (convention)
+
+| Register | Excel / client | Portal | DPR | WPR |
+|----------|----------------|--------|-----|-----|
+| **QAP** | Weekly QAP sheet | Quality → QAP (`QapActivity`) | — | ✓ quality / compliance |
+| **NCR** | NCR 01.xlsx | Quality → NCR | ✓ quality block | ✓ open NCR list |
+| **Cube** | SPDC CUBE REGISTER | Quality → Cubes | ✓ cubes cast | ✓ |
+| **QI checklist** | Checklist templates | Checklists → QI | manual highlights | ✓ |
+| **Safety obs** | Safety Dashboard | Safety module | ✓ HSE block | ✓ safety slide |
+
+**Rule:** QAP = planned weekly quality sign-off. NCR = defect register. Safety observations stay in **Safety**, not Quality NCR.
+
+---
+
+## 0b. MS Project → S-curve → DPR / WPR
+
+```mermaid
+flowchart LR
+  MSP[MS Project XML export]
+  IMP[Progress → Import XML]
+  DB[(ProgressMilestone + ProgressPlannedActual)]
+  SC[S-curve tab chart]
+  DPR[DPR planned hints + dashboard]
+  WPR[WPR progress slides]
+
+  MSP --> IMP --> DB
+  DB --> SC
+  DB --> DPR
+  DB --> WPR
+```
+
+Portal buttons: **Progress → S-curve** or **MS Project** → *Seed demo MS Project + S-curve* · *Import XML* · *Download XML*
 
 ---
 
@@ -163,4 +204,6 @@ Portal: **WPR Maker** → 24 sections auto-seeded → **Download PPTX** (one sli
 
 ---
 
-*PNG overview: `docs/client-share/assets/portal-sheet-connections.jpg` (for slide decks)*
+*PNG images for slide decks: `docs/client-share/assets/*.png` (same names as SVG)*
+
+*Full index: [07-Connection-Diagram-Index.md](./07-Connection-Diagram-Index.md)*

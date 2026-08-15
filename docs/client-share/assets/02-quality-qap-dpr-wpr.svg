@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" width="1100" height="520">
+  <defs>
+    <style>
+      .t { font: 700 20px system-ui,sans-serif; fill:#1a1d26 }
+      .s { font: 500 12px system-ui,sans-serif; fill:#5c6578 }
+      .b { fill:#fff; stroke:#d5dadd; stroke-width:1.5; rx:8 }
+      .h { fill:#2563eb; rx:8 }
+      .ht { font:700 14px system-ui,sans-serif; fill:#fff }
+      .m { font:600 12px system-ui,sans-serif; fill:#1a1d26 }
+      .d { font:400 11px system-ui,sans-serif; fill:#5c6578 }
+      .a { stroke:#64748b; stroke-width:2; fill:none; marker-end:url(#a) }
+    </style>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="1100" height="520" fill="#f7f8fa"/>
+  <text x="36" y="40" class="t">Quality module to DPR and WPR (QAP convention)</text>
+  <text x="36" y="62" class="s">QAP = weekly sign-off. NCR = defect register. Do not mix with Safety observations.</text>
+
+  <rect x="36" y="90" width="220" height="130" class="b"/>
+  <text x="56" y="118" class="m">QAP register</text>
+  <text x="56" y="140" class="d">Excel: QAP weekly sheet</text>
+  <text x="56" y="158" class="d">Portal: Quality - QAP tab</text>
+  <text x="56" y="176" class="d">Contractor / PMC / Client OK flags</text>
+  <text x="56" y="194" class="d">Table: QapActivity</text>
+  <text x="56" y="212" class="d">Feeds: WPR quality section</text>
+
+  <rect x="36" y="250" width="220" height="110" class="b"/>
+  <text x="56" y="278" class="m">NCR register</text>
+  <text x="56" y="300" class="d">Excel: NCR 01.xlsx</text>
+  <text x="56" y="318" class="d">Portal: Quality - NCR</text>
+  <text x="56" y="336" class="d">Raise, assign, close workflow</text>
+  <text x="56" y="354" class="d">Table: QualityNcr</text>
+
+  <rect x="36" y="390" width="220" height="100" class="b"/>
+  <text x="56" y="418" class="m">Cube + QI checklists</text>
+  <text x="56" y="440" class="d">Cube register - CubeTest</text>
+  <text x="56" y="458" class="d">QI checklist - inspection log</text>
+  <text x="56" y="476" class="d">Photos + signature on mobile</text>
+
+  <rect x="420" y="160" width="180" height="56" class="h"/>
+  <text x="510" y="194" text-anchor="middle" class="ht">DPR Maker</text>
+  <text x="510" y="248" text-anchor="middle" class="d">Quality tests, NCR count, cubes today</text>
+
+  <rect x="420" y="320" width="180" height="56" class="h"/>
+  <text x="510" y="354" text-anchor="middle" class="ht">WPR Maker</text>
+  <text x="510" y="408" text-anchor="middle" class="d">Quality section, QAP status, open NCR</text>
+
+  <path d="M256 155 L410 185" class="a"/>
+  <path d="M256 305 L410 195" class="a"/>
+  <path d="M256 440 L410 200" class="a"/>
+  <path d="M510 216 L510 320" class="a"/>
+
+  <rect x="720" y="90" width="340" height="400" class="b"/>
+  <text x="740" y="118" class="m">Convention - do not mix these</text>
+  <text x="740" y="148" class="d">QAP = planned quality activities (preventive)</text>
+  <text x="740" y="172" class="d">NCR = defects raised on site (reactive)</text>
+  <text x="740" y="196" class="d">Safety observation goes to Safety module</text>
+  <text x="740" y="220" class="d">Cube register = compressive strength stats</text>
+  <text x="740" y="260" class="m">Who fills what</text>
+  <text x="740" y="284" class="d">Daily: site QC logs cubes + DPR quality</text>
+  <text x="740" y="308" class="d">Weekly: PMC QAP sign-off before WPR</text>
+  <text x="740" y="332" class="d">Office: NCR closure dates</text>
+  <text x="740" y="372" class="m">WPR auto-seed (wprMaker.ts)</text>
+  <text x="740" y="396" class="d">QapActivity, QualityNcr, CubeTest</text>
+  <text x="740" y="420" class="d">Same tables as DPR - single source of truth</text>
+</svg>

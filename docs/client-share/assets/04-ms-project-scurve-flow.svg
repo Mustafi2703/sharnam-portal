@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 440" width="1100" height="440">
+  <defs>
+    <style>
+      .t{font:700 20px system-ui,sans-serif;fill:#1a1d26}
+      .s{font:500 12px system-ui,sans-serif;fill:#5c6578}
+      .b{fill:#fff;stroke:#d5dadd;stroke-width:1.5;rx:8}
+      .p{fill:#7c3aed;rx:8}
+      .pt{font:700 13px system-ui,sans-serif;fill:#fff}
+      .m{font:600 12px system-ui,sans-serif;fill:#1a1d26}
+      .d{font:400 11px system-ui,sans-serif;fill:#5c6578}
+      .a{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#a)}
+    </style>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="1100" height="440" fill="#f7f8fa"/>
+  <text x="36" y="40" class="t">MS Project connectivity to S-curve to DPR / WPR</text>
+  <text x="36" y="62" class="s">Import XML export from Microsoft Project (no Project Online license required).</text>
+
+  <rect x="36" y="100" width="200" height="100" class="b"/>
+  <text x="56" y="128" class="m">MS Project file</text>
+  <text x="56" y="150" class="d">File - Save As - XML</text>
+  <text x="56" y="170" class="d">Folder: 07.08 / MS_Project /</text>
+  <text x="56" y="190" class="d">OneDrive or SharePoint</text>
+
+  <rect x="280" y="90" width="220" height="120" class="b"/>
+  <text x="300" y="118" class="m">Portal import</text>
+  <text x="300" y="140" class="d">Progress - MS Project tab</text>
+  <text x="300" y="160" class="d">Seed demo OR Import XML</text>
+  <text x="300" y="180" class="d">POST .../ms-project/import</text>
+  <text x="300" y="200" class="d">Tasks, baseline, percent complete</text>
+
+  <rect x="540" y="80" width="240" height="140" class="b"/>
+  <text x="560" y="108" class="m">Database tables</text>
+  <text x="560" y="130" class="d">ProgressMilestone (tasks)</text>
+  <text x="560" y="150" class="d">ProgressActivityLine (schedule)</text>
+  <text x="560" y="170" class="d">ProgressPlannedActual (S-curve)</text>
+  <text x="560" y="190" class="d">packageName: MS Project S-curve</text>
+  <text x="560" y="210" class="d">category: MS Project XML</text>
+
+  <rect x="820" y="100" width="240" height="100" class="p"/>
+  <text x="940" y="138" text-anchor="middle" class="pt">S-curve chart</text>
+  <text x="940" y="160" text-anchor="middle" class="d" fill="#ede9fe">Progress - S-curve tab</text>
+  <text x="940" y="180" text-anchor="middle" class="d" fill="#ede9fe">Planned vs Actual cumulative %</text>
+
+  <path d="M236 150 L270 150" class="a"/>
+  <path d="M500 150 L530 150" class="a"/>
+  <path d="M780 150 L810 150" class="a"/>
+
+  <rect x="280" y="260" width="780" height="150" class="b"/>
+  <text x="300" y="288" class="m">Downstream reports (same data)</text>
+  <text x="300" y="312" class="d">DPR Maker - dashboard S-curve + planned hints from ProgressActivityLine</text>
+  <text x="300" y="336" class="d">DPR XLSX - INPUT rows 125-137 for Excel DASHBOARD chart</text>
+  <text x="300" y="360" class="d">WPR Maker - progress + milestone sections from ProgressMilestone</text>
+  <text x="300" y="384" class="d">Client civil view - Progress S-curve tab (read-only)</text>
+  <text x="300" y="408" class="d">Button: Seed demo MS Project + S-curve (demo walkthrough)</text>
+</svg>

@@ -9,6 +9,12 @@ import {
   importPlannedActualDashboard,
   renderPlannedActualHtml,
 } from "../services/plannedActualDashboard.js";
+import {
+  importMsProjectToProgress,
+  loadMsProjectSummary,
+  seedDemoMsProject,
+  generateDemoMsProjectXml,
+} from "../services/msProjectSchedule.js";
 
 export const progressRouter = Router();
 progressRouter.use(requireAuth);
@@ -331,3 +337,79 @@ progressRouter.patch(
     res.json(project);
   }
 );
+
+/** MS Project schedule — summary, S-curve, stored XML file */
+progressRouter.get("/:projectId/ms-project/summary", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const summary = await loadMsProjectSummary(project.id);
+  res.json({ project: { id: project.id, code: project.code, name: project.name }, ...summary });
+});
+
+progressRouter.get("/:projectId/ms-project/scurve", async (req, res) => {
+  const summary = await loadMsProjectSummary(req.params.projectId);
+  res.json({ scurve: summary.scurve, connected: summary.connected });
+});
+
+/** Seed demo MS Project XML + import tasks → milestones + S-curve rows */
+progressRouter.post(
+  "/:projectId/ms-project/seed-demo",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    try {
+      const result = await seedDemoMsProject(project.id);
+      await audit("progress.msProject.seedDemo", {
+        userId: req.user!.id,
+        entity: "ProgressPlannedActual",
+        entityId: project.id,
+        meta: { tasks: result.taskCount, scurve: result.scurvePoints, file: result.filePath },
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Seed failed" });
+    }
+  }
+);
+
+/** Import MS Project XML (.xml export from Project desktop / Project for the web) */
+progressRouter.post(
+  "/:projectId/ms-project/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const file = (req as { file?: { buffer: Buffer; originalname: string } }).file;
+    if (!file?.buffer?.length) return res.status(400).json({ error: "MS Project XML required (field: file)" });
+    if (!/\.xml$/i.test(file.originalname) && !file.buffer.toString("utf8", 0, 200).includes("<Project")) {
+      return res.status(400).json({ error: "Upload MS Project XML export (.xml). MPP binary is not supported yet." });
+    }
+    try {
+      const result = await importMsProjectToProgress(project.id, file.buffer, { fileName: file.originalname });
+      await audit("progress.msProject.import", {
+        userId: req.user!.id,
+        entity: "ProgressMilestone",
+        entityId: project.id,
+        meta: { file: file.originalname, tasks: result.taskCount },
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+    }
+  }
+);
+
+progressRouter.get("/:projectId/ms-project/download.xml", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const summary = await loadMsProjectSummary(project.id);
+  const buf = summary.connected
+    ? generateDemoMsProjectXml(project.code, project.name)
+    : generateDemoMsProjectXml(project.code, project.name);
+  const fname = `${project.code}-Schedule.xml`;
+  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});

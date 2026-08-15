@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 480" width="1100" height="480">
+  <defs>
+    <style>
+      .t{font:700 20px system-ui,sans-serif;fill:#1a1d26}
+      .s{font:500 12px system-ui,sans-serif;fill:#5c6578}
+      .b{fill:#fff;stroke:#d5dadd;stroke-width:1.5;rx:8}
+      .g{fill:#0f766e;rx:8}
+      .gt{font:700 13px system-ui,sans-serif;fill:#fff}
+      .m{font:600 12px system-ui,sans-serif;fill:#1a1d26}
+      .d{font:400 11px system-ui,sans-serif;fill:#5c6578}
+      .a{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#a)}
+    </style>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="1100" height="480" fill="#f7f8fa"/>
+  <text x="36" y="40" class="t">Safety + Progress + Cost to DPR and WPR</text>
+  <text x="36" y="62" class="s">Site registers that roll into daily HSE block and weekly progress slides.</text>
+
+  <rect x="36" y="90" width="240" height="150" class="b"/>
+  <text x="56" y="118" class="m">Safety module</text>
+  <text x="56" y="142" class="d">Safety Dashboard.xlsx - SafetyRecord</text>
+  <text x="56" y="162" class="d">Toolbox talk, observations, near miss</text>
+  <text x="56" y="182" class="d">First aid, safe man-hours, LTI date</text>
+  <text x="56" y="202" class="d">Safety checklists (site)</text>
+  <text x="56" y="228" class="d">-&gt; DPR HSE statistics</text>
+
+  <rect x="36" y="270" width="240" height="170" class="b"/>
+  <text x="56" y="298" class="m">Progress module</text>
+  <text x="56" y="322" class="d">Planned Vs Actual Dashboard.xlsx</text>
+  <text x="56" y="342" class="d">-&gt; ProgressActivityLine</text>
+  <text x="56" y="362" class="d">Manpower - ProgressManpower</text>
+  <text x="56" y="382" class="d">Hindrance - ProgressHindrance</text>
+  <text x="56" y="402" class="d">MS Project XML - S-curve + milestones</text>
+  <text x="56" y="428" class="d">-&gt; DPR delays, manpower, planned hints</text>
+
+  <rect x="420" y="130" width="200" height="60" class="g"/>
+  <text x="520" y="158" text-anchor="middle" class="gt">DPR Maker</text>
+  <text x="520" y="178" text-anchor="middle" class="d" fill="#ccfbf1">Manpower, HSE, delays, issues</text>
+
+  <rect x="420" y="290" width="200" height="60" class="g"/>
+  <text x="520" y="318" text-anchor="middle" class="gt">WPR Maker</text>
+  <text x="520" y="338" text-anchor="middle" class="d" fill="#ccfbf1">Safety, hindrance, progress</text>
+
+  <path d="M276 165 L410 155" class="a"/>
+  <path d="M276 355 L410 165" class="a"/>
+  <path d="M520 190 L520 290" class="a"/>
+
+  <rect x="700" y="90" width="360" height="350" class="b"/>
+  <text x="720" y="118" class="m">Sheet to table to report block</text>
+  <text x="720" y="148" class="d">SafetyRecord (day) -&gt; DPR HSE auto-fill</text>
+  <text x="720" y="172" class="d">ProgressManpower -&gt; DPR manpower</text>
+  <text x="720" y="196" class="d">ProgressHindrance (Open) -&gt; DPR delays</text>
+  <text x="720" y="220" class="d">ProgressActivityLine -&gt; BOQ planned match</text>
+  <text x="720" y="244" class="d">ProgressPlannedActual -&gt; S-curve + WPR</text>
+  <text x="720" y="284" class="m">Cost module (DPR qty)</text>
+  <text x="720" y="308" class="d">CostMonitoringLine -&gt; DPR progress rows</text>
+  <text x="720" y="332" class="d">CostMbLine -&gt; cumulative qty</text>
+  <text x="720" y="356" class="d">CostBbsLine -&gt; rebar kg in materials</text>
+  <text x="720" y="380" class="d">CostCashflowPeriod -&gt; AC certified header</text>
+  <text x="720" y="420" class="d">Site engineer still enters today qty + sign-off</text>
+</svg>

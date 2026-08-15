@@ -13,6 +13,7 @@ import { portalForRole } from "../packages/shared/src/index.ts";
 import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
 import { buildWprWorkbook, type WprHeader, type WprSections } from "../apps/api/src/services/wprXlsx.ts";
 import { buildWprPptx } from "../apps/api/src/services/wprPptx.ts";
+import { seedDemoMsProject } from "../apps/api/src/services/msProjectSchedule.ts";
 
 const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
@@ -146,6 +147,10 @@ async function main() {
   await cloneRows("cube tests", demo.id, project.id, () => prisma.cubeTest.findMany({ where: { projectId: demo.id }, take: 20 }), (d) =>
     prisma.cubeTest.create({ data: { ...d, projectId: project.id } })
   );
+
+  console.log(`\nSeeding MS Project demo + S-curve…`);
+  const ms = await seedDemoMsProject(project.id);
+  console.log(`  ✓ ${ms.taskCount} tasks · ${ms.scurvePoints} S-curve weeks · ${ms.filePath}`);
 
   console.log(`\nSeeding 7 published DPR days…\n`);
   for (let i = 0; i < 7; i++) {

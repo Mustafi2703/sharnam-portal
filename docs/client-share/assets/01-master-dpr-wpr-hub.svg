@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="1200" height="780">
+  <defs>
+    <style>
+      .title { font: 700 22px system-ui, sans-serif; fill: #1a1d26; }
+      .sub { font: 500 13px system-ui, sans-serif; fill: #5c6578; }
+      .box { fill: #fff; stroke: #d5dadd; stroke-width: 1.5; rx: 10; }
+      .hub { fill: #0f766e; stroke: #0d5c56; stroke-width: 2; rx: 12; }
+      .hubt { font: 700 16px system-ui, sans-serif; fill: #fff; }
+      .mod { font: 600 13px system-ui, sans-serif; fill: #1a1d26; }
+      .sheet { font: 400 11px system-ui, sans-serif; fill: #5c6578; }
+      .arrow { stroke: #94a3b8; stroke-width: 2; fill: none; marker-end: url(#arr); }
+      .leg { font: 500 11px system-ui, sans-serif; fill: #5c6578; }
+    </style>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+  <rect width="1200" height="780" fill="#f7f8fa"/>
+  <text x="40" y="42" class="title">Sharnam Portal - Master sheet connection map</text>
+  <text x="40" y="66" class="sub">Cost, Progress, Quality, Safety registers auto-fill DPR (daily) and WPR (weekly). Comms and Design coordination excluded.</text>
+
+  <rect x="40" y="100" width="260" height="200" class="box"/>
+  <text x="60" y="128" class="mod">Cost module</text>
+  <text x="60" y="152" class="sheet">BOQ monitoring (per structure upload)</text>
+  <text x="60" y="172" class="sheet">Measurement Book (MB)</text>
+  <text x="60" y="192" class="sheet">Bar Bending Schedule (BBS)</text>
+  <text x="60" y="212" class="sheet">Cashflow / AC certified</text>
+  <text x="60" y="248" class="sheet">-&gt; DPR qty, cum qty, rebar kg, header AC</text>
+
+  <rect x="40" y="330" width="260" height="200" class="box"/>
+  <text x="60" y="358" class="mod">Progress module</text>
+  <text x="60" y="382" class="sheet">Planned vs Actual register</text>
+  <text x="60" y="402" class="sheet">MS Project XML -&gt; S-curve</text>
+  <text x="60" y="422" class="sheet">Weekly manpower, Hindrance register</text>
+  <text x="60" y="442" class="sheet">Milestones, Risk, Legal approvals</text>
+  <text x="60" y="478" class="sheet">-&gt; DPR planned hints, delays, WPR slides</text>
+
+  <rect x="40" y="560" width="260" height="180" class="box"/>
+  <text x="60" y="588" class="mod">Quality module</text>
+  <text x="60" y="612" class="sheet">QAP - weekly activity sign-off</text>
+  <text x="60" y="632" class="sheet">NCR register (NCR 01.xlsx)</text>
+  <text x="60" y="652" class="sheet">Cube register, QI checklists</text>
+  <text x="60" y="688" class="sheet">-&gt; DPR quality block, WPR quality section</text>
+
+  <rect x="900" y="100" width="260" height="160" class="box"/>
+  <text x="920" y="128" class="mod">Safety module</text>
+  <text x="920" y="152" class="sheet">Safety dashboard / observations</text>
+  <text x="920" y="172" class="sheet">Toolbox talks, TBT, near miss</text>
+  <text x="920" y="192" class="sheet">Safety checklists (site)</text>
+  <text x="920" y="228" class="sheet">-&gt; DPR HSE block, WPR safety slide</text>
+
+  <rect x="430" y="260" width="200" height="72" class="hub"/>
+  <text x="530" y="292" text-anchor="middle" class="hubt">DPR Maker</text>
+  <text x="530" y="314" text-anchor="middle" class="sheet" fill="#ccfbf1">Daily x 7 disciplines</text>
+
+  <rect x="430" y="420" width="200" height="72" class="hub"/>
+  <text x="530" y="452" text-anchor="middle" class="hubt">WPR Maker</text>
+  <text x="530" y="474" text-anchor="middle" class="sheet" fill="#ccfbf1">Weekly PPTX, 24 sections</text>
+
+  <path d="M300 180 L420 290" class="arrow"/>
+  <path d="M300 400 L420 300" class="arrow"/>
+  <path d="M300 620 L420 310" class="arrow"/>
+  <path d="M900 180 L630 290" class="arrow"/>
+  <path d="M530 332 L530 420" class="arrow"/>
+
+  <rect x="900" y="300" width="260" height="120" class="box"/>
+  <text x="920" y="328" class="mod">Finance (commercial)</text>
+  <text x="920" y="352" class="sheet">PO -&gt; RA Bill -&gt; COP</text>
+  <text x="920" y="372" class="sheet">Feeds Cost cashflow only</text>
+  <text x="920" y="392" class="sheet">Not mixed into DPR qty rows</text>
+
+  <text x="40" y="760" class="leg">Legend: boxes = portal modules | teal = published reports | arrows = auto-fill direction</text>
+</svg>

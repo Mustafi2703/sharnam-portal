@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" width="1000" height="420">
+  <defs>
+    <style>
+      .t{font:700 20px system-ui,sans-serif;fill:#1a1d26}
+      .s{font:500 12px system-ui,sans-serif;fill:#5c6578}
+      .b{fill:#fff;stroke:#d5dadd;stroke-width:1.5;rx:8}
+      .c{fill:#c45c26;rx:8}
+      .ct{font:700 13px system-ui,sans-serif;fill:#fff}
+      .m{font:600 12px system-ui,sans-serif;fill:#1a1d26}
+      .d{font:400 11px system-ui,sans-serif;fill:#5c6578}
+      .a{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#a)}
+    </style>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="1000" height="420" fill="#f7f8fa"/>
+  <text x="36" y="40" class="t">Cost module sheet connections to DPR</text>
+  <text x="36" y="62" class="s">BOQ per-project upload. MB/BBS from global master then edited on site.</text>
+
+  <rect x="36" y="90" width="180" height="90" class="b"/>
+  <text x="56" y="118" class="m">Global Master</text>
+  <text x="56" y="140" class="d">MB template, BBS template</text>
+  <text x="56" y="158" class="d">BBS shape code library</text>
+
+  <rect x="36" y="210" width="180" height="90" class="b"/>
+  <text x="56" y="238" class="m">Per structure</text>
+  <text x="56" y="260" class="d">Upload BOQ Excel</text>
+  <text x="56" y="278" class="d">Cost - BOQ tab</text>
+
+  <rect x="260" y="120" width="220" height="200" class="b"/>
+  <text x="280" y="148" class="m">Cost module (project)</text>
+  <text x="280" y="172" class="d">Monitoring / GFC / Achieved</text>
+  <text x="280" y="192" class="d">MB sheet - Sync to monitoring</text>
+  <text x="280" y="212" class="d">BBS + bend diagram per bar</text>
+  <text x="280" y="232" class="d">Cashflow / budget / AC certified</text>
+  <text x="280" y="260" class="d">CostMonitoringLine, CostMbLine</text>
+  <text x="280" y="278" class="d">CostBbsLine, CostCashflowPeriod</text>
+
+  <rect x="540" y="150" width="180" height="70" class="c"/>
+  <text x="630" y="182" text-anchor="middle" class="ct">DPR Maker</text>
+  <text x="630" y="202" text-anchor="middle" class="d" fill="#ffedd5">Qty, materials, header</text>
+
+  <path d="M216 135 L250 160" class="a"/>
+  <path d="M216 255 L250 220" class="a"/>
+  <path d="M480 200 L530 185" class="a"/>
+
+  <rect x="760" y="90" width="210" height="280" class="b"/>
+  <text x="780" y="118" class="m">DPR auto-fill mapping</text>
+  <text x="780" y="142" class="d">Monitoring - progress lines</text>
+  <text x="780" y="162" class="d">scope, rate, achieved, today qty</text>
+  <text x="780" y="190" class="d">MB - cumQtyPrev fuzzy match</text>
+  <text x="780" y="218" class="d">BBS - rebar kg consumed row</text>
+  <text x="780" y="246" class="d">Cashflow - AC certified header</text>
+  <text x="780" y="274" class="d">Discipline filter by package</text>
+  <text x="780" y="298" class="d">7 disciplines x daily snapshot</text>
+  <text x="780" y="330" class="d">Ref: dprIntegrations.ts</text>
+  <text x="780" y="354" class="d">SPDC_Budget_Arvind 49.xls</text>
+</svg>
