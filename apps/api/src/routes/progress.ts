@@ -1,11 +1,19 @@
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { verifyProgressProject } from "../services/progressVerify.js";
+import {
+  buildPlannedActualWorkbook,
+  importPlannedActualDashboard,
+  renderPlannedActualHtml,
+} from "../services/plannedActualDashboard.js";
 
 export const progressRouter = Router();
 progressRouter.use(requireAuth);
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 function countBy<T>(rows: T[], keyFn: (r: T) => string) {
   const out: Record<string, number> = {};
@@ -254,6 +262,51 @@ progressRouter.post(
     res.status(201).json(row);
   }
 );
+
+/** Import Planned Vs. Actual Dashboard.xlsx (cashflow + manpower + activity register) */
+progressRouter.post(
+  "/:projectId/planned-actual/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
+    if (!file?.buffer?.length) return res.status(400).json({ error: "Excel file required (field: file)" });
+    try {
+      const counts = await importPlannedActualDashboard(project.id, file.buffer);
+      await audit("progress.plannedActual.import", {
+        userId: req.user!.id,
+        entity: "ProgressActivityLine",
+        entityId: project.id,
+        meta: { file: file.originalname, ...counts },
+      });
+      res.json({ ok: true, ...counts });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+    }
+  }
+);
+
+progressRouter.get("/:projectId/planned-actual/download.xlsx", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const buf = await buildPlannedActualWorkbook(project.id);
+  const fname = `Planned-Vs-Actual-${project.code}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+progressRouter.get("/:projectId/planned-actual/download.html", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const html = await renderPlannedActualHtml(project.id);
+  const fname = `Planned-Vs-Actual-${project.code}.html`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(html);
+});
 
 progressRouter.patch(
   "/:projectId/modules",

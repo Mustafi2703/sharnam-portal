@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
 
 type Tab =
@@ -66,6 +67,8 @@ export default function ProgressPage() {
   const [data, setData] = useState<any>(null);
   const [verify, setVerify] = useState<any>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | null>(null);
+  const paImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
   const tab = (searchParams.get("tab") as Tab) || "overview";
   const canEdit =
@@ -246,6 +249,47 @@ export default function ProgressPage() {
     });
     setMsg("Milestone added");
     await load();
+  }
+
+  async function importPlannedActual(file: File) {
+    if (!id) return;
+    setPaBusy("import");
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const out = await api<{ cashflow: number; manpower: number; activityLines: number }>(
+        `/api/progress/${id}/planned-actual/import`,
+        { method: "POST", token, body: fd }
+      );
+      setMsg(
+        `Planned vs Actual imported — ${out.activityLines} activities · ${out.cashflow} cashflow rows · ${out.manpower} manpower trades`
+      );
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setPaBusy(null);
+    }
+  }
+
+  async function downloadPlannedActual(fmt: "xlsx" | "pdf") {
+    if (!id) return;
+    setPaBusy(fmt);
+    setMsg("");
+    try {
+      if (fmt === "xlsx") {
+        await downloadAuthFile(`/api/progress/${id}/planned-actual/download.xlsx`, token, `Planned-Vs-Actual.xlsx`);
+        setMsg("Planned vs Actual Excel downloaded — matches client dashboard layout.");
+      } else {
+        await downloadAuthFile(`/api/progress/${id}/planned-actual/download.html`, token, `Planned-Vs-Actual.html`);
+        setMsg("Dashboard HTML downloaded — open and Print → Save as PDF.");
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setPaBusy(null);
+    }
   }
 
   async function addLegal(e: FormEvent) {
@@ -536,6 +580,55 @@ export default function ProgressPage() {
 
       {tab === "planned" && (
         <div className="space-y-4 w-full">
+          <Card className="!p-4 flex flex-wrap gap-3 items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">Planned Vs. Actual Dashboard</div>
+              <p className="text-xs text-steel-muted mt-1 max-w-xl">
+                Import the client Excel pack to refresh cashflow, manpower, and the activity register. Export generates
+                the same three sheets from live portal data — feeds DPR auto-fill on matching BOQ lines.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <input
+                ref={paImportRef}
+                type="file"
+                accept=".xlsx,.xlsm"
+                className="hidden"
+                disabled={!!paBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importPlannedActual(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!!paBusy}
+                className="!text-xs"
+                onClick={() => paImportRef.current?.click()}
+              >
+                {paBusy === "import" ? "Importing…" : "Import Excel"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={!!paBusy}
+                onClick={() => void downloadPlannedActual("xlsx")}
+              >
+                {paBusy === "xlsx" ? "…" : "Export Excel"}
+              </Button>
+              <Button
+                type="button"
+                className="!text-xs"
+                disabled={!!paBusy}
+                onClick={() => void downloadPlannedActual("pdf")}
+              >
+                {paBusy === "pdf" ? "…" : "Export PDF"}
+              </Button>
+            </div>
+          </Card>
           <div className="grid lg:grid-cols-2 gap-4 w-full">
             <BarChart
               title="Cashflow planned vs actual"

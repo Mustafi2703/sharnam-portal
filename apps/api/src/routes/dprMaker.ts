@@ -23,7 +23,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
-import { requireAuth, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 import {
@@ -43,6 +43,8 @@ import {
 } from "../services/dprXlsx.js";
 import { audit } from "../services/audit.js";
 import { buildDprAutoFill } from "../services/dprIntegrations.js";
+import { renderDprSnapshotHtml } from "../services/dprSnapshotExport.js";
+import { seedDprDemoDay } from "../services/dprDemoDaySeed.js";
 
 export const dprMakerRouter = Router();
 dprMakerRouter.use(requireAuth);
@@ -468,6 +470,63 @@ dprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(buf);
 });
+
+/** Branded HTML for Print → Save as PDF (same snapshot as SPDC XLSX) */
+dprMakerRouter.get("/:projectId/download.html", async (req, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const logDate = parseDate(req.query.date);
+  const discipline = normDiscipline(req.query.discipline);
+
+  const { existing, header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);
+  const html = renderDprSnapshotHtml({
+    project: { code: project.code, name: project.name, clientName: project.clientName, location: project.location },
+    logDate,
+    discipline,
+    status: existing?.status || "Draft",
+    header,
+    lines,
+    manpower: extras.manpower,
+    materials: extras.materials,
+    safety: extras.safety,
+    highlights: extras.highlights,
+    nextDayPlan: extras.nextDayPlan,
+    delays: extras.delays,
+    issues: extras.issues,
+    signatures: extras.signatures,
+  });
+  const fname = `DPR-${project.code}-${discipline}-${logDate.toISOString().slice(0, 10)}.html`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(html);
+});
+
+// ═══════════════════════════════ POST seed demo day (all 7) ═══════════════════════════════
+
+dprMakerRouter.post(
+  "/:projectId/seed-demo-day",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) return res.status(404).json({ error: "project not found" });
+    const logDate = parseDate(req.body.logDate || req.query.date);
+
+    try {
+      const result = await seedDprDemoDay(prisma, projectId, logDate, req.user!.id);
+      await audit("dpr.demo_day.seeded", {
+        userId: req.user!.id,
+        entity: "DprSnapshot",
+        entityId: projectId,
+        meta: { logDate: result.logDate, disciplines: result.disciplines.length },
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Demo seed failed" });
+    }
+  }
+);
 
 // ═══════════════════════════════ POST publish ═══════════════════════════════
 

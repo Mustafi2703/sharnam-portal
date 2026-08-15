@@ -188,7 +188,8 @@ function buildSavePayload(snap: Snap, logDate: string, discipline: string) {
 
 export default function DprMakerPage() {
   const { id: projectId = "" } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const canSeedDemo = user?.role === "admin" || user?.role === "office";
   const [logDate, setLogDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [discipline, setDiscipline] = useState<string>("CIVIL");
   const [snap, setSnap] = useState<Snap | null>(null);
@@ -539,6 +540,45 @@ export default function DprMakerPage() {
     }
   }
 
+  async function downloadPdf() {
+    if (!snap) return;
+    const url = `${apiBase()}/api/dpr-maker/${projectId}/download.html?date=${logDate}&discipline=${discipline}`;
+    const fname = `DPR-${snap.projectCode}-${discipline}-${logDate}.html`;
+    setBusy(true);
+    try {
+      await downloadWithAuth(url, token, fname);
+      setMsg("PDF pack downloaded — open the HTML file and use Print → Save as PDF (Sharnam logo included).");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function seedDemoDay() {
+    if (!projectId || !canSeedDemo) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{
+        logDate: string;
+        disciplines: { discipline: string; qtyToday: number; signatures: number }[];
+      }>(`/api/dpr-maker/${projectId}/seed-demo-day`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ logDate }),
+      });
+      setMsg(
+        `Demo day ready — ${out.disciplines.length} published DPRs on ${out.logDate} (qty + signatures + XLSX/PDF on disk). Pick any discipline to screenshot.`
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Demo seed failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!snap) {
     return (
       <div className="space-y-4">
@@ -558,6 +598,7 @@ export default function DprMakerPage() {
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
             <button className="text-sm font-semibold text-brand underline" onClick={downloadXlsx} disabled={busy}>Download XLSX</button>
+            <button className="text-sm font-semibold text-brand underline" onClick={downloadPdf} disabled={busy}>Download PDF</button>
           </div>
         }
       />
@@ -583,6 +624,11 @@ export default function DprMakerPage() {
             </Select>
           </div>
           <div className="maker-toolbar__actions">
+            {canSeedDemo && (
+              <Button onClick={seedDemoDay} disabled={busy} variant="secondary" title="Publish all 7 disciplines with demo qty and signatures">
+                Prepare demo day (all 7)
+              </Button>
+            )}
             <Button onClick={save} disabled={busy}>Save draft</Button>
             <Button onClick={publish} disabled={busy} variant="secondary">Publish to SharePoint</Button>
           </div>
@@ -1057,6 +1103,7 @@ export default function DprMakerPage() {
       <div className="maker-sticky-bar">
         <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
         <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>XLSX</Button>
+        <Button type="button" variant="secondary" onClick={downloadPdf} disabled={busy}>PDF</Button>
         <Button type="button" onClick={save} disabled={busy}>Save</Button>
         <Button type="button" variant="secondary" onClick={publish} disabled={busy}>Publish</Button>
       </div>
