@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { DemoProjectsPanel } from "../components/DemoProjectsPanel";
+import { sortDemoProjectsFirst } from "../lib/demoProjects";
 
 const LEAD_STAGES = ["New", "Qualified", "Proposal", "Negotiation", "Converted", "Lost"];
 
@@ -67,7 +69,7 @@ export default function CrmPage() {
       canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
       api<any[]>("/api/crm/quotations", { token }).catch(() => []),
     ]);
-    setProjects(p);
+    setProjects(sortDemoProjectsFirst(p));
     setLeads(l);
     setDeals(d);
     setUsers(u);
@@ -157,33 +159,7 @@ export default function CrmPage() {
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
 
-      <Card className="border-brand/30 bg-brand-soft/40">
-        <h3 className="font-semibold text-sm mb-2">Client demo projects (after seed)</h3>
-        <div className="grid md:grid-cols-2 gap-3 text-sm">
-          {projects
-            .filter((p) => ["SPDC-DEMO-01", "SPDC-PILOT-02"].includes(p.code))
-            .map((p) => (
-              <div key={p.id} className="rounded-lg border border-line bg-paper p-3">
-                <div className="font-mono text-xs text-brand">{p.code}</div>
-                <div className="font-medium">{p.name}</div>
-                <p className="text-xs text-steel-muted mt-1">
-                  {p.code === "SPDC-DEMO-01"
-                    ? "Main demo — DPR day, finance RA/COP, quality/safety"
-                    : "Pilot week — 7 DPR days, WPR PPTX, MS Project S-curve · logins site.pilot@ / client.pilot@"}
-                </p>
-                <Link to={`/projects/${p.id}`} className="inline-flex mt-2 text-xs font-semibold text-brand">
-                  Open project tools →
-                </Link>
-              </div>
-            ))}
-          {!projects.some((p) => p.code === "SPDC-PILOT-02") && (
-            <div className="rounded-lg border border-dashed border-line p-3 text-xs text-steel-muted">
-              <strong>SPDC-PILOT-02</strong> not loaded — run deploy with <code className="text-brand">RUN_SEED=1</code> or{" "}
-              <code className="text-brand">npm run db:seed</code> on server.
-            </div>
-          )}
-        </div>
-      </Card>
+      <DemoProjectsPanel projects={projects} />
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">

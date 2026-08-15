@@ -76,6 +76,7 @@ export async function seedPilotWeekDemo(db: PrismaClientType, opts: { weekEnd?: 
 
   const office = await ensureUser(db, "office@sharnam.demo", "SPDC Office Lead", "office");
   const admin = await db.user.findFirst({ where: { email: "admin@sharnam.demo" } });
+  const siteMain = await db.user.findFirst({ where: { email: "site@sharnam.demo" } });
   await ensureUser(db, "site.pilot@sharnam.demo", "Rajesh Site Engineer", "site_employee");
   await ensureUser(db, "site2.pilot@sharnam.demo", "Priya Site QC", "site_employee");
   await ensureUser(db, "client.pilot@sharnam.demo", "Client PM — Pilot", "client");
@@ -100,6 +101,7 @@ export async function seedPilotWeekDemo(db: PrismaClientType, opts: { weekEnd?: 
   for (const [userId, role] of [
     [office.id, "office"],
     ...(admin ? [[admin.id, "admin"] as const] : []),
+    ...(siteMain ? [[siteMain.id, "site_employee"] as const] : []),
     [(await db.user.findUniqueOrThrow({ where: { email: "site.pilot@sharnam.demo" } })).id, "site_employee"],
     [(await db.user.findUniqueOrThrow({ where: { email: "site2.pilot@sharnam.demo" } })).id, "site_employee"],
     [(await db.user.findUniqueOrThrow({ where: { email: "client.pilot@sharnam.demo" } })).id, "client"],

@@ -23,6 +23,7 @@ import {
   type WorkspaceKey,
 } from "../workspaces";
 import { api } from "../api";
+import { sortDemoProjectsFirst } from "../lib/demoProjects";
 import {
   applyModuleAccent,
   clearModuleAccent,
@@ -218,6 +219,49 @@ function SideNavBody({
           </section>
         )}
 
+        {isOffice && projects.some((p) => p.code === "SPDC-PILOT-02" || p.code === "SPDC-DEMO-01") && (
+          <section className="side-nav__section side-nav__section--demo" aria-label="Client demo">
+            <div className="side-nav__section-head">
+              <p className="side-nav__label">Client demo</p>
+              <span className="side-nav__section-hint">DPR / WPR</span>
+            </div>
+            <nav className="side-nav__group" aria-label="Demo projects">
+              {projects
+                .filter((p) => p.code === "SPDC-DEMO-01" || p.code === "SPDC-PILOT-02")
+                .map((p) => (
+                  <NavLink
+                    key={p.id}
+                    to={`/projects/${p.id}/dpr-maker`}
+                    onClick={() => {
+                      onSelectProject(p.id);
+                      onNavigate?.();
+                    }}
+                    className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+                  >
+                    <ModuleIcon name="reports" size={18} />
+                    <span>{p.code} · DPR</span>
+                  </NavLink>
+                ))}
+              {projects
+                .filter((p) => p.code === "SPDC-PILOT-02")
+                .map((p) => (
+                  <NavLink
+                    key={`wpr-${p.id}`}
+                    to={`/projects/${p.id}/wpr-maker`}
+                    onClick={() => {
+                      onSelectProject(p.id);
+                      onNavigate?.();
+                    }}
+                    className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+                  >
+                    <ModuleIcon name="reports" size={18} />
+                    <span>SPDC-PILOT-02 · WPR</span>
+                  </NavLink>
+                ))}
+            </nav>
+          </section>
+        )}
+
         <section className="side-nav__section side-nav__section--project" aria-label="Active project">
           <div className="side-nav__section-head">
             <p className="side-nav__label">Project</p>
@@ -392,8 +436,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!token) return;
     api<Proj[]>("/api/projects", { token })
       .then((list) => {
-        setProjects(list);
-        setProjectId(resolveStoredProjectId(list));
+        const sorted = sortDemoProjectsFirst(list);
+        setProjects(sorted);
+        setProjectId(resolveStoredProjectId(sorted));
       })
       .catch(() => {
         setProjects([]);

@@ -13,6 +13,8 @@ import {
   type WorkspaceKey,
 } from "../workspaces";
 import { applyModuleAccent } from "../themes";
+import { DemoProjectsPanel } from "../components/DemoProjectsPanel";
+import { sortDemoProjectsFirst } from "../lib/demoProjects";
 
 type Project = { id: string; code: string; name: string; status: string; clientName?: string };
 
@@ -26,13 +28,15 @@ export default function WorkspacePage() {
   useEffect(() => {
     api<Project[]>("/api/projects", { token })
       .then((list) => {
-        setProjects(list);
-        setProjectId(resolveStoredProjectId(list));
+        const sorted = sortDemoProjectsFirst(list);
+        setProjects(sorted);
+        setProjectId(resolveStoredProjectId(sorted));
       })
       .catch(() => setProjects([]));
   }, [token]);
 
   const selected = projects.find((p) => p.id === projectId);
+  const isOffice = user?.role === "admin" || user?.role === "office";
   const visibleWorkspaces = WORKSPACES.filter((w) => !user || w.roles.includes(user.role));
   const firstName = user?.fullName?.split(" ")[0] || "team";
 
@@ -59,6 +63,8 @@ export default function WorkspacePage() {
           </Link>
         }
       />
+
+      {isOffice && <DemoProjectsPanel projects={projects} compact />}
 
       <Card className="!p-4">
         <label className="text-xs font-semibold uppercase tracking-wider text-brand block mb-2">Project</label>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
@@ -209,9 +209,12 @@ function buildSavePayload(snap: Snap, logDate: string, discipline: string) {
 
 export default function DprMakerPage() {
   const { id: projectId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const { token, user } = useAuth();
   const canSeedDemo = user?.role === "admin" || user?.role === "office";
-  const [logDate, setLogDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [logDate, setLogDate] = useState<string>(
+    () => searchParams.get("date") || new Date().toISOString().slice(0, 10)
+  );
   const [discipline, setDiscipline] = useState<string>("CIVIL");
   const [snap, setSnap] = useState<Snap | null>(null);
   const [busy, setBusy] = useState(false);
@@ -232,6 +235,11 @@ export default function DprMakerPage() {
       setBusy(false);
     }
   }, [projectId, logDate, discipline, token]);
+
+  useEffect(() => {
+    const d = searchParams.get("date");
+    if (d) setLogDate(d);
+  }, [searchParams]);
 
   useEffect(() => {
     void load();

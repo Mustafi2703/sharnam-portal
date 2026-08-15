@@ -5,8 +5,10 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHero } from "../components/ui";
 import { PieChart } from "../components/PieChart";
 import { ReportExportButtons } from "../components/ReportExportButtons";
+import { DemoProjectsPanel } from "../components/DemoProjectsPanel";
 import { ModuleIcon, type ModuleIconKey } from "../components/icons";
 import { WORKSPACE_PROJECT_KEY, resolveStoredProjectId } from "../workspaces";
+import { sortDemoProjectsFirst } from "../lib/demoProjects";
 
 type Project = { id: string; code: string; name: string; status: string };
 type Tab = "rfis" | "comms" | "logs" | "safety" | "analytics";
@@ -37,14 +39,16 @@ export default function DashboardPage() {
 
   const selected = projects.find((p) => p.id === projectId) || projects[0];
   const pid = selected?.id;
+  const isOffice = user?.role === "admin" || user?.role === "office";
   const firstName = user?.fullName?.split(" ")[0] || "there";
   const kpis = analytics?.kpis;
 
   useEffect(() => {
     api<Project[]>("/api/projects", { token })
       .then((list) => {
-        setProjects(list);
-        setProjectId(resolveStoredProjectId(list));
+        const sorted = sortDemoProjectsFirst(list);
+        setProjects(sorted);
+        setProjectId(resolveStoredProjectId(sorted));
       })
       .catch((err) => {
         console.error(err);
@@ -105,6 +109,8 @@ export default function DashboardPage() {
           </div>
         }
       />
+
+      {isOffice && <DemoProjectsPanel projects={projects} />}
 
       <Card className="!p-4 flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
         <div className="flex-1 min-w-0">

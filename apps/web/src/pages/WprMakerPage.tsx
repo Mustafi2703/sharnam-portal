@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Input, PageHeader } from "../components/ui";
@@ -89,8 +89,11 @@ async function downloadWithAuth(url: string, token: string | null | undefined, f
 
 export default function WprMakerPage() {
   const { id: projectId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const { token } = useAuth();
-  const [weekEnd, setWeekEnd] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [weekEnd, setWeekEnd] = useState<string>(
+    () => searchParams.get("end") || new Date().toISOString().slice(0, 10)
+  );
   const [reportNumber, setReportNumber] = useState<string>("");
   const [pack, setPack] = useState<Pack | null>(null);
   const [busy, setBusy] = useState(false);
@@ -116,6 +119,11 @@ export default function WprMakerPage() {
       setBusy(false);
     }
   }, [projectId, weekEnd, token]);
+
+  useEffect(() => {
+    const end = searchParams.get("end");
+    if (end) setWeekEnd(end);
+  }, [searchParams]);
 
   useEffect(() => {
     void load();
