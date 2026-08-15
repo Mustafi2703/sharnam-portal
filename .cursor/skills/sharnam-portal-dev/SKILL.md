@@ -17,6 +17,8 @@ Multi-role skill for the **शरणम्** PMC portal (Vite React + Express + 
 
 - Implementing or refactoring any portal module
 - Upload / drawing / checklist / cost / RFI / diary / meetings work
+- **PDF + DWG** drawing uploads, BBS bend diagrams, branded checklist export
+- **Global master** sheet templates (MB/BBS/checklists) reusable across projects
 - Data integrity, idempotency, or multi-tenant project scoping
 - Procore-parity UX (tools, modals, registers)
 - Picking or applying one of the **5 UI directions**
@@ -45,7 +47,7 @@ For cross-cutting features, run **Backend → Frontend → QA** in that order.
 
 ## Module map (integrate these)
 
-Drawings/GFC · Final Index checklists · Quality Inspections · QAP · Safety · RFIs · Day log · Photos · Meetings/Comms matrix · Design coordination · Submittals · DMS · Cost (measurement/cashflow/budget) · Reports/DPR · Email settings · Directory/Vendors · CRM/HRM (office)
+Drawings/GFC · Final Index checklists · **Drawing Check gate (master + per-project fill)** · Quality Inspections · QAP · Safety · RFIs · Day log · Photos · Meetings/Comms matrix · Design coordination · Submittals · DMS · Cost (**MB/BBS full budget columns**, cashflow/budget) · Reports/DPR · Email settings · Directory/Vendors · CRM/HRM (office) · **Master global templates**
 
 ## Workflow for a feature
 

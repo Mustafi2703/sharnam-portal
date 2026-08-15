@@ -23,6 +23,8 @@ export type ParsedMbLine = {
   height: number;
   qty: number;
   unit?: string;
+  raBill?: string;
+  remark?: string;
 };
 
 export type ParsedBbsLine = {
@@ -31,6 +33,13 @@ export type ParsedBbsLine = {
   shape?: string;
   lengthMm: number;
   nos: number;
+  nosPerMember: number;
+  nosOfMember: number;
+  shapeLenA: number;
+  shapeLenB: number;
+  shapeLenC: number;
+  shapeLenD: number;
+  shapeLenE: number;
   totalLength: number;
   weightKg: number;
   location?: string;
@@ -80,6 +89,8 @@ function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
       height,
       qty: qty || nos1 * nos2 * (length || 1) * (width || 1) * (height || 1),
       unit: s(row[8], 20) || undefined,
+      raBill: s(row[9], 80) || undefined,
+      remark: s(row[10], 200) || undefined,
     });
   }
   return out;
@@ -103,11 +114,12 @@ function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
     const barMark = s(row[0], 40) || undefined;
     const dia = n(row[8]) || n(row[3]);
     const totalLen = n(row[18]) || n(row[17]) || n(row[6]);
-    const nos = n(row[11]) || n(row[9]) * n(row[10]) || n(row[5]);
+    const nosPerMember = n(row[9]);
+    const nosOfMember = n(row[10]);
+    const nos = n(row[11]) || (nosPerMember && nosOfMember ? nosPerMember * nosOfMember : n(row[5]));
     if (!description && !barMark) continue;
     if (/name of project|bar bending schedule|sr\.?\s*no|project development consultancy/i.test(description)) continue;
     if (!dia && !totalLen && !nos) continue;
-    // Reject obvious header / narrative rows (dia should be 8–40 mm typically)
     if (dia > 100 || totalLen > 500) continue;
     const weight =
       dia && totalLen ? (Math.PI * (dia / 1000 / 2) ** 2 * totalLen * 7850) / 1000 : n(row[19]) || 0;
@@ -117,6 +129,13 @@ function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
       shape: s(row[2], 80) || undefined,
       lengthMm: n(row[17]) || n(row[12]) || n(row[4]),
       nos: nos || 1,
+      nosPerMember,
+      nosOfMember,
+      shapeLenA: n(row[12]),
+      shapeLenB: n(row[13]),
+      shapeLenC: n(row[14]),
+      shapeLenD: n(row[15]),
+      shapeLenE: n(row[16]),
       totalLength: totalLen,
       weightKg: Math.round(weight * 100) / 100,
       location: description || undefined,

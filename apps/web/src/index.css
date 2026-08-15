@@ -460,6 +460,34 @@ body.is-auth-route #root {
   padding: 2rem 1rem;
 }
 
+.drawings-register > div.overflow-x-auto {
+  max-height: min(78vh, 920px);
+  overflow: auto;
+}
+@media (max-width: 640px) {
+  .drawings-register table {
+    font-size: 0.75rem;
+  }
+  .portal-fill-layout .max-w-6xl {
+    max-width: 100%;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+@media (min-width: 1920px) {
+  .drawings-register table {
+    font-size: 0.875rem;
+  }
+  .sheet-register__scroll {
+    max-height: min(82vh, 1100px);
+  }
+}
+@media (min-width: 2560px) {
+  .portal-fill-layout .max-w-6xl {
+    max-width: 72rem;
+  }
+}
+
 .hero-site {
   background: linear-gradient(135deg, #0f766e 0%, #126e82 50%, #1a1d26 100%);
 }

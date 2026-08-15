@@ -20,6 +20,16 @@
 Each register has **Download CSV** (open in Excel) for the active package filter:
 `/api/cost/:projectId/download/{boq|mb|bbs|budget|cashflow|rates}.csv?package=`
 
+## MB / BBS columns (from `SPDC_Budget_Arvind 49.xls`)
+
+- **MB (14 tabs):** Sr No., Description, No×2, L×W×H, Qty., UoM., RA Bill, Remark — all shown in portal register.
+- **BBS (5 tabs):** SR NO, Description, Shape of bar (diagram upload), DIA, No/member, No of member, Total nos, shape lengths A–E, Cutting L, Total L, Weight kg.
+
+## Global master reuse
+
+- Upload checklist / sheet templates once under **Master → Global masters** or `/custom-sheets`.
+- Assign to new projects via Cost import or checklist assign — do not re-key budget columns per project.
+
 ## Rules
 
 - Cashflow Chart / Forecast / Tracking are **three separate hub tools** (not one combined Cashflow card).

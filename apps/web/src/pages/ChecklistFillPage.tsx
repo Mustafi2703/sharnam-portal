@@ -24,11 +24,6 @@ export default function ChecklistFillPage() {
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
-  const [newDw, setNewDw] = useState({ drawingNumber: "", title: "", revisionNumber: "R0" });
-  const [newFile, setNewFile] = useState<File | null>(null);
-  const [revFile, setRevFile] = useState<File | null>(null);
-  const [revNumber, setRevNumber] = useState("");
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canUploadDrawing = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
 
@@ -157,36 +152,6 @@ export default function ChecklistFillPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function uploadNewDrawing(e: FormEvent) {
-    e.preventDefault();
-    setMsg("Upload drawings from Drawings → GFC (Drawing Check Master opens first). Then link the sheet here.");
-  }
-
-  async function uploadRevision(e: FormEvent) {
-    e.preventDefault();
-    if (!drawingId || !revFile) {
-      setMsg("Select a drawing and choose a revision file.");
-      return;
-    }
-    setUploadBusy(true);
-    setMsg("");
-    try {
-      const fd = new FormData();
-      fd.append("revisionNumber", revNumber || `R${revs.length}`);
-      fd.append("publish", "true");
-      fd.append("file", revFile);
-      const rev = await api<any>(`/api/drawings/${drawingId}/revisions`, { method: "POST", token, body: fd });
-      await load();
-      setRevisionId(rev.id);
-      setRevFile(null);
-      setRevNumber("");
-      setMsg("Revision uploaded and selected.");
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Revision upload failed");
-    } finally {
-      setUploadBusy(false);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-sand">
@@ -215,7 +180,7 @@ export default function ChecklistFillPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-5 py-8 space-y-8">
+      <main className="max-w-6xl mx-auto px-5 py-8 space-y-8 portal-fill-layout">
         {!assignment ? (
           <p className="text-sm text-steel-muted">Loading…</p>
         ) : (
@@ -258,56 +223,23 @@ export default function ChecklistFillPage() {
                   </div>
 
                   {canUploadDrawing && uploadOpen && (
-                    <div className="mb-4 space-y-4 border border-line rounded-lg p-3 bg-sand/50">
-                      <form className="space-y-2" onSubmit={uploadNewDrawing}>
-                        <div className="text-[11px] font-semibold uppercase text-steel-muted">New drawing</div>
-                        <Input
-                          placeholder="Drawing no."
-                          value={newDw.drawingNumber}
-                          onChange={(e) => setNewDw({ ...newDw, drawingNumber: e.target.value })}
-                          required
-                        />
-                        <Input
-                          placeholder="Title"
-                          value={newDw.title}
-                          onChange={(e) => setNewDw({ ...newDw, title: e.target.value })}
-                          required
-                        />
-                        <Input
-                          placeholder="Revision (R0)"
-                          value={newDw.revisionNumber}
-                          onChange={(e) => setNewDw({ ...newDw, revisionNumber: e.target.value })}
-                        />
-                        <input
-                          type="file"
-                          accept=".pdf,image/*"
-                          className="block text-xs w-full"
-                          onChange={(e) => setNewFile(e.target.files?.[0] || null)}
-                          required
-                        />
-                        <Button type="submit" className="!text-xs w-full" disabled={uploadBusy}>
-                          Upload & link
-                        </Button>
-                      </form>
+                    <div className="mb-4 space-y-3 border border-line rounded-lg p-3 bg-sand/50 text-sm">
+                      <p className="text-steel-muted text-xs leading-relaxed">
+                        Uploads require <strong>Drawing Check Master</strong> first. Use the GFC register — checklist unlocks the upload form.
+                      </p>
+                      <Link
+                        to={`/projects/${projectId}/drawings?upload=1`}
+                        className="inline-flex text-xs font-semibold text-brand"
+                      >
+                        GFC register → upload drawing →
+                      </Link>
                       {drawingId && (
-                        <form className="space-y-2 border-t border-line pt-3" onSubmit={uploadRevision}>
-                          <div className="text-[11px] font-semibold uppercase text-steel-muted">New revision on selected</div>
-                          <Input
-                            placeholder={`Next rev (e.g. R${revs.length})`}
-                            value={revNumber}
-                            onChange={(e) => setRevNumber(e.target.value)}
-                          />
-                          <input
-                            type="file"
-                            accept=".pdf,image/*"
-                            className="block text-xs w-full"
-                            onChange={(e) => setRevFile(e.target.files?.[0] || null)}
-                            required
-                          />
-                          <Button type="submit" variant="secondary" className="!text-xs w-full" disabled={uploadBusy}>
-                            Upload revision
-                          </Button>
-                        </form>
+                        <Link
+                          to={`/projects/${projectId}/drawings/precheck?drawingId=${drawingId}`}
+                          className="inline-flex text-xs font-semibold text-brand ml-3"
+                        >
+                          Upload revision (checklist gate) →
+                        </Link>
                       )}
                     </div>
                   )}

@@ -120,11 +120,22 @@ export default function ChecklistMasterPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 portal-fill-layout">
       <PageHeader
-        eyebrow="Checklist master"
+        eyebrow={id ? "Project checklist master" : "Global master · all projects"}
         title="Create, upload & choose checklists"
-        subtitle="Create manually or upload an Excel checklist (description / instruction / section). Choose a template, assign to the project, then request fill. Quality and Safety support Client create/upload."
+        subtitle={
+          id
+            ? "Templates are org-wide — assign to this project after editing. Quality and Safety support Client create/upload."
+            : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
+        }
+        actions={
+          !id ? (
+            <Link to="/master" className="text-sm font-semibold text-brand">
+              ← Master setup
+            </Link>
+          ) : undefined
+        }
       />
 
       <div className="flex flex-wrap gap-2">

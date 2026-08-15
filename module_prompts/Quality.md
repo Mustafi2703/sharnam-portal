@@ -9,7 +9,7 @@
 | **Cube register** | `/inspections?view=cube` | `SPDC CUBE REGISTER` |
 | QAP | `/qap` | `Quality Assurance Plan Week 50.xlsx` |
 | Checklist master | `/checklist-master?family=QualityInspection` | Excel QI templates |
-| QI fill log | `/checklist-logs?family=QualityInspection` | Fill audit |
+| QI fill log | `/checklist-logs?family=QualityInspection` | Fill audit · **Download branded** (HTML → Print PDF) |
 | Site checklists | `/checklist` | Final Index |
 | Request QI fill | `/rfis?kind=QualityInspection` | Inspection request (not information) |
 

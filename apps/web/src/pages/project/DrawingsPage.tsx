@@ -7,6 +7,8 @@ import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
+import PdfMarkup from "../../components/PdfMarkup";
+import ImageMarkup from "../../components/ImageMarkup";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const REV_SLOTS = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
@@ -20,6 +22,7 @@ function fileKind(nameOrUrl?: string | null) {
   const n = (nameOrUrl || "").toLowerCase();
   if (/\.(png|jpe?g|gif|webp|bmp)(\?|$)/.test(n)) return "image";
   if (/\.pdf(\?|$)/.test(n)) return "pdf";
+  if (/\.dwg(\?|$)/.test(n)) return "dwg";
   return "other";
 }
 
@@ -60,6 +63,12 @@ export default function DrawingsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
   const [revFile, setRevFile] = useState<File | null>(null);
+  const [dumpBusy, setDumpBusy] = useState(false);
+  const [markupTarget, setMarkupTarget] = useState<{
+    file: File;
+    target: "register" | "revision";
+    preview?: string;
+  } | null>(null);
   const canUpload = canManageDrawings(user?.role);
   const clientOnly = isClientViewOnly(user?.role);
 
@@ -191,6 +200,72 @@ export default function DrawingsPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function syncRegistersToDrive() {
+    if (!id) return;
+    setDumpBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ ok: boolean; registers?: { name: string; rows: number }[] }>(
+        `/api/dms/${id}/dump-logs`,
+        { method: "POST", token }
+      );
+      const names = (r.registers || []).map((x) => x.name).slice(0, 4).join(", ");
+      setMsg(`Registers synced to SharePoint — ${r.registers?.length || 0} CSVs (e.g. ${names}…).`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "SharePoint sync failed");
+    } finally {
+      setDumpBusy(false);
+    }
+  }
+
+  function pickDrawingFile(f: File | null, target: "register" | "revision") {
+    if (!f) {
+      if (target === "register") setFile(null);
+      else setRevFile(null);
+      return;
+    }
+    const canMarkup =
+      f.type === "application/pdf" ||
+      f.type.startsWith("image/") ||
+      /\.(pdf|png|jpe?g|webp)$/i.test(f.name);
+    if (canMarkup) {
+      setMarkupTarget({
+        file: f,
+        target,
+        preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+      });
+      return;
+    }
+    if (target === "register") setFile(f);
+    else setRevFile(f);
+  }
+
+  function applyMarkedFile(marked: File) {
+    if (!markupTarget) return;
+    if (markupTarget.target === "register") setFile(marked);
+    else setRevFile(marked);
+    if (markupTarget.preview) URL.revokeObjectURL(markupTarget.preview);
+    setMarkupTarget(null);
+  }
+
+  function closeMarkup() {
+    if (markupTarget?.preview) URL.revokeObjectURL(markupTarget.preview);
+    setMarkupTarget(null);
+  }
+
+  function openLatestViewer(d: any) {
+    const revsAsc = [...(d.revisions || [])].sort(
+      (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    const latest = revsAsc[revsAsc.length - 1];
+    if (!latest?.fileUrl) return;
+    setViewer({
+      title: `${d.drawingNumber} · ${latest.revisionNumber || d.currentRev} (latest)`,
+      fileUrl: latest.fileUrl,
+      fileName: latest.fileName,
+    });
+  }
+
   async function registerDrawing(e: FormEvent) {
     e.preventDefault();
     if (!unlockToken) {
@@ -306,6 +381,16 @@ export default function DrawingsPage() {
             <Button type="button" variant="secondary" onClick={() => void exportCsv()}>
               Export GFC CSV
             </Button>
+            {canUpload && (
+              <Button type="button" variant="secondary" disabled={dumpBusy} onClick={() => void syncRegistersToDrive()}>
+                {dumpBusy ? "Syncing…" : "Sync logs → SharePoint"}
+              </Button>
+            )}
+            <Link to={`/projects/${id}/checklist-master?family=DrawingCheck`}>
+              <Button type="button" variant="secondary">
+                Checklist master
+              </Button>
+            </Link>
             <Link to={`/projects/${id}/drawings/library`}>
               <Button type="button" variant="secondary">
                 Drawing files (SharePoint)
@@ -455,7 +540,7 @@ export default function DrawingsPage() {
           title="Upload drawing"
           context={`Project · GFC register · check complete · ${form.discipline}`}
           file={file}
-          onFile={setFile}
+          onFile={(f) => pickDrawingFile(f, "register")}
           accept=".pdf,.png,.jpg,.jpeg,.dwg,.webp"
           primaryLabel={form.publish ? "Upload & publish" : "Upload to register"}
           busy={busy}
@@ -539,7 +624,7 @@ export default function DrawingsPage() {
         />
       )}
 
-      <Card padding={false} className="overflow-hidden">
+      <Card padding={false} className="overflow-hidden drawings-register">
         <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between gap-2">
           <div>
             <div className="text-sm font-semibold">INDORE · Drawing register</div>
@@ -583,19 +668,16 @@ export default function DrawingsPage() {
                       <td className="px-2 py-2 font-medium max-w-[180px]">{d.title}</td>
                       <td className="px-2 py-2">
                         {latest?.fileUrl ? (
-                          <button
-                            type="button"
-                            className="text-xs font-semibold text-brand hover:underline"
-                            onClick={() =>
-                              setViewer({
-                                title: `${d.drawingNumber} · ${d.currentRev}`,
-                                fileUrl: latest.fileUrl,
-                                fileName: latest.fileName,
-                              })
-                            }
-                          >
-                            Open
-                          </button>
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-brand hover:underline text-left"
+                              onClick={() => openLatestViewer(d)}
+                            >
+                              Latest · Open
+                            </button>
+                            <span className="text-[10px] font-mono text-steel-muted">{latest.revisionNumber || d.currentRev}</span>
+                          </div>
                         ) : (
                           <span className="text-xs text-steel-muted">—</span>
                         )}
@@ -741,7 +823,7 @@ export default function DrawingsPage() {
           title="Upload revision"
           context={`${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · check complete`}
           file={revFile}
-          onFile={setRevFile}
+          onFile={(f) => pickDrawingFile(f, "revision")}
           accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg"
           primaryLabel="Upload & log planned/actual"
           busy={busy}
@@ -797,6 +879,45 @@ export default function DrawingsPage() {
         />
       )}
 
+      {markupTarget && (
+        <div className="markup-modal" role="dialog" aria-modal="true" aria-label="Drawing PDF markup">
+          <div className="markup-modal__backdrop" onClick={closeMarkup} />
+          <div className="markup-modal__panel max-w-4xl">
+            <div className="markup-modal__head">
+              <span>
+                Mark up {markupTarget.target === "register" ? "new drawing" : "revision"} before upload
+              </span>
+              <button type="button" className="markup-modal__close" onClick={closeMarkup}>
+                ×
+              </button>
+            </div>
+            <div className="markup-modal__body">
+              {markupTarget.file.type === "application/pdf" ||
+              markupTarget.file.name.toLowerCase().endsWith(".pdf") ? (
+                <PdfMarkup
+                  src={markupTarget.file}
+                  saveLabel="Use marked PDF"
+                  onCancel={closeMarkup}
+                  onSave={async (pages) => {
+                    applyMarkedFile(pages[0] || markupTarget.file);
+                  }}
+                />
+              ) : (
+                <ImageMarkup
+                  src={markupTarget.preview || markupTarget.file}
+                  saveLabel="Use marked image"
+                  filename="drawing-markup"
+                  onCancel={closeMarkup}
+                  onSave={async (marked) => {
+                    applyMarkedFile(marked);
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {viewer && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-3 sm:p-6">
           <div className="bg-white rounded-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
@@ -820,6 +941,22 @@ export default function DrawingsPage() {
               )}
               {viewerKind === "pdf" && (
                 <iframe title={viewer.title} src={viewer.fileUrl} className="w-full h-[75vh] border-0" />
+              )}
+              {viewerKind === "dwg" && (
+                <div className="p-8 text-center space-y-4">
+                  <p className="text-sm text-steel-muted max-w-md mx-auto">
+                    AutoCAD DWG stored in SharePoint / OneDrive — preview is not supported in the browser. Download to open in CAD.
+                  </p>
+                  <a
+                    href={viewer.fileUrl}
+                    download
+                    className="inline-flex items-center gap-2 rounded-lg bg-brand text-white px-4 py-2 text-sm font-semibold"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Download DWG →
+                  </a>
+                </div>
               )}
               {viewerKind === "other" && (
                 <div className="p-8 text-center space-y-3">

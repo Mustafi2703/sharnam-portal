@@ -215,8 +215,21 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
   if (kind === "mb") {
     const rows = await prisma.costMbLine.findMany({ where, orderBy: [{ packageName: "asc" }, { srNo: "asc" }] });
     const csv = toCsv(
-      ["Package", "Sr", "Description", "Nos1", "Nos2", "Length", "Width", "Height", "Qty", "Unit"],
-      rows.map((r) => [r.packageName, r.srNo, r.description, r.nos1, r.nos2, r.length, r.width, r.height, r.qty, r.unit])
+      ["Package", "Sr No.", "Description", "No", "No", "Length", "Width", "Height", "Qty.", "UoM.", "RA Bill", "Remark"],
+      rows.map((r) => [
+        r.packageName,
+        r.srNo,
+        r.description,
+        r.nos1,
+        r.nos2,
+        r.length,
+        r.width,
+        r.height,
+        r.qty,
+        r.unit,
+        r.raBill,
+        r.remark,
+      ])
     );
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="MB-${pkg || "all"}.csv"`);
@@ -226,18 +239,41 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
   if (kind === "bbs") {
     const rows = await prisma.costBbsLine.findMany({ where, orderBy: [{ packageName: "asc" }, { barMark: "asc" }] });
     const csv = toCsv(
-      ["Package", "Bar mark", "Dia mm", "Shape", "Length mm", "Nos", "Total length", "Weight kg", "Location", "Diagram URL"],
+      [
+        "Package",
+        "SR NO",
+        "Description",
+        "Shape of bar (diagram URL)",
+        "DIA",
+        "No per member",
+        "No of member",
+        "Total nos",
+        "Shape A",
+        "Shape B",
+        "Shape C",
+        "Shape D",
+        "Shape E",
+        "Cutting Length",
+        "Total LENGTH",
+        "Weight kg",
+      ],
       rows.map((r) => [
         r.packageName,
         r.barMark,
-        r.diameterMm,
-        r.shape,
-        r.lengthMm,
-        r.nos,
-        r.totalLength,
-        r.weightKg,
         r.location,
         r.shapeDiagramUrl || r.shapeDiagramPath || "",
+        r.diameterMm,
+        r.nosPerMember,
+        r.nosOfMember,
+        r.nos,
+        r.shapeLenA,
+        r.shapeLenB,
+        r.shapeLenC,
+        r.shapeLenD,
+        r.shapeLenE,
+        r.lengthMm,
+        r.totalLength,
+        r.weightKg,
       ])
     );
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -497,6 +533,8 @@ costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee"), a
       height,
       qty,
       unit: req.body.unit || null,
+      raBill: req.body.raBill || null,
+      remark: req.body.remark || null,
     },
   });
   res.status(201).json(row);
@@ -512,6 +550,13 @@ costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee"), 
       shape: req.body.shape || null,
       lengthMm: Number(req.body.lengthMm || 0),
       nos: Number(req.body.nos || 0),
+      nosPerMember: Number(req.body.nosPerMember || 0),
+      nosOfMember: Number(req.body.nosOfMember || 0),
+      shapeLenA: Number(req.body.shapeLenA || 0),
+      shapeLenB: Number(req.body.shapeLenB || 0),
+      shapeLenC: Number(req.body.shapeLenC || 0),
+      shapeLenD: Number(req.body.shapeLenD || 0),
+      shapeLenE: Number(req.body.shapeLenE || 0),
       totalLength: Number(req.body.totalLength || 0),
       weightKg: Number(req.body.weightKg || 0),
       location: req.body.location || null,
@@ -742,6 +787,13 @@ async function importCostSheet(
         shape: (r.shape as string) || null,
         lengthMm: Number(r.lengthMm) || 0,
         nos: Number(r.nos) || 0,
+        nosPerMember: Number(r.nosPerMember) || 0,
+        nosOfMember: Number(r.nosOfMember) || 0,
+        shapeLenA: Number(r.shapeLenA) || 0,
+        shapeLenB: Number(r.shapeLenB) || 0,
+        shapeLenC: Number(r.shapeLenC) || 0,
+        shapeLenD: Number(r.shapeLenD) || 0,
+        shapeLenE: Number(r.shapeLenE) || 0,
         totalLength: Number(r.totalLength) || 0,
         weightKg: Number(r.weightKg) || 0,
         location: (r.location as string) || null,
@@ -761,6 +813,8 @@ async function importCostSheet(
         height: Number(r.height) || 0,
         qty: Number(r.qty) || 0,
         unit: (r.unit as string) || null,
+        raBill: (r.raBill as string) || null,
+        remark: (r.remark as string) || null,
       })),
     });
   }

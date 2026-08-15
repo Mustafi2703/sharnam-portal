@@ -32,6 +32,7 @@ const MASTER_TOOLS = [
   { id: "directory", label: "Directory (4 users)" },
   { id: "roster", label: "PMC roster" },
   { id: "modules", label: "Module toggles" },
+  { id: "global", label: "Global masters" },
   { id: "links", label: "CRM · HRM · Docs" },
 ] as const;
 
@@ -474,6 +475,48 @@ export default function MasterModulePage() {
             <p className="text-sm text-steel-muted">Select a project.</p>
           )}
         </Card>
+      )}
+
+      {masterTab === "global" && (
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[
+            {
+              to: "/master/checklists?family=DrawingCheck",
+              label: "Global checklist master",
+              hint: "Drawing check · Site · Quality · Safety — reused on all projects",
+            },
+            {
+              to: "/custom-sheets",
+              label: "Sheet item templates",
+              hint: "Upload Excel registers · edit line items · export",
+            },
+            {
+              to: dirProjectId ? `/projects/${dirProjectId}/drawings` : "/projects",
+              label: "GFC drawing register",
+              hint: "Per-project drawing types · R0–R5 · markup upload",
+            },
+            {
+              to: dirProjectId ? `/projects/${dirProjectId}/cost?tab=monitoring` : "/projects",
+              label: "Cost / MB / BBS",
+              hint: "Budget sheet packages linked to DPR",
+            },
+            {
+              to: dirProjectId ? `/projects/${dirProjectId}/dms` : "/projects",
+              label: "Document management",
+              hint: "ISO folder tree · SharePoint sync",
+            },
+          ].map((c) => (
+            <Link key={c.label} to={c.to} className="block">
+              <Card className="h-full hover:border-brand/50 transition !p-5">
+                <div className="font-display text-lg">{c.label}</div>
+                <div className="text-sm text-steel-muted mt-1">{c.hint}</div>
+                <div className="mt-3">
+                  <Badge tone="brand">Manage</Badge>
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
       )}
 
       {masterTab === "links" && (

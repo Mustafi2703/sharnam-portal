@@ -492,17 +492,20 @@ export default function CostPage() {
           )}
           <SheetTable
             title="Measurement book (MB)"
-            headers={["Package", "Sr", "Description", "Nos", "L", "W", "H", "Qty", "Unit"]}
+            headers={["Package", "Sr No.", "Description", "No", "No", "Length", "Width", "Height", "Qty.", "UoM.", "RA Bill", "Remark"]}
             rows={mbRows.map((b: any) => [
               b.packageName,
               b.srNo,
               b.description,
               b.nos1,
+              b.nos2,
               b.length,
               b.width,
               b.height,
               b.qty,
               b.unit,
+              b.raBill,
+              b.remark,
             ])}
           />
         </div>
@@ -514,7 +517,7 @@ export default function CostPage() {
             <strong className="text-ink">BBS upload &amp; shape markup</strong>
             <span className="text-steel-muted">
               {" "}
-              — Import the Excel sheet, then upload an annotated bend diagram for <strong>each bar mark row</strong> in the table below (matches SPDC BBS sheet).
+              — Import the Excel sheet, then upload an annotated bend diagram in the <strong>Shape of bar</strong> column for each row (same position as SPDC * BBS sheets).
             </span>
           </div>
           {(canEdit || canSiteEdit) && (

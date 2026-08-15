@@ -540,6 +540,8 @@ model CostMbLine {
   height      Float    @default(0)
   qty         Float    @default(0)
   unit        String?
+  raBill      String?
+  remark      String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -557,6 +559,13 @@ model CostBbsLine {
   shape       String?
   lengthMm    Float    @default(0)
   nos         Float    @default(0)
+  nosPerMember Float   @default(0)
+  nosOfMember  Float   @default(0)
+  shapeLenA   Float    @default(0)
+  shapeLenB   Float    @default(0)
+  shapeLenC   Float    @default(0)
+  shapeLenD   Float    @default(0)
+  shapeLenE   Float    @default(0)
   totalLength Float    @default(0)
   weightKg    Float    @default(0)
   location    String?

@@ -1,10 +1,9 @@
 # MODULE — Sheet Maker (fields)
 
-**Status:** Ready for templates (hub under Office / Comms bind)  
+**Status:** Refine → then build  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.16  
 **LLD:** [system-design/06-LLD-Sheet-Maker.md](../system-design/06-LLD-Sheet-Maker.md)  
-**Consumers:** Comms meetings (primary), optional HR / CRM / Audit registers  
-**Prompt:** `module_prompts/sheet_maker.md`
+**Consumers:** Comms meetings (primary), optional HR / CRM / Audit registers
 
 ---
 
@@ -12,19 +11,7 @@
 
 Office designs **reusable sheet templates** (not one fixed form): sections, columns, party blocks → fill instances in meetings and export Excel/PDF.
 
-When new custom meeting sheets arrive, add a **Ready** hub card under Comms or Master that opens the designer — do not invent a parallel IA.
-
----
-
-## 2. Tools (awaiting build)
-
-| Tool | Status | Notes |
-|------|--------|-------|
-| Template designer | Ready | Sections, columns, party blocks |
-| Publish version | Ready | Idempotent version bump |
-| Import / export Excel | Ready | Round-trip client packs |
-| Fill instance | Ready | Bind to Meeting |
-| Bind to Meeting | Ready | From Comms Agenda tool |
+**Global master:** `/custom-sheets` and **Master → Global masters → Sheet item templates** — upload MB/BBS/monitoring Excel registers once; reuse when seeding or importing on new projects (pairs with Cost module budget tabs).
 
 ---
 
@@ -58,18 +45,9 @@ When new custom meeting sheets arrive, add a **Ready** hub card under Comms or M
 
 ### Column / field types
 
-`text`, `textarea`, `number`, `date`, `select`, `user`, `party`, `checkbox`, `file`, `signature`, **`formula`** (Excel-style)
+`text`, `textarea`, `number`, `date`, `select`, `user`, `party`, `checkbox`, `file`, `signature`
 
-### Formula support (Custom Sheet Maker — live)
-
-| Capability | Behaviour |
-|------------|-----------|
-| Enter formula | Type `=A2+B2`, `=SUM(C2:C20)`, `=AVERAGE(D2:D10)`, `=MIN(E2:E5)`, `=MAX(F2:F5)` |
-| Column refs | Headers show Excel letters **A · B · C**; row 1 = headers, data from row 2 |
-| In-portal preview | Calculated result shown under formula cells |
-| Import Excel | Formulas preserved from uploaded `.xlsx` |
-| Export Excel | Formulas written to `.xlsx` (`f` field) — Excel recalculates on open |
-
+### Example table columns (meeting actions)
 
 | key | label | type |
 |-----|-------|------|
@@ -112,8 +90,7 @@ When new custom meeting sheets arrive, add a **Ready** hub card under Comms or M
 |--------|-----------|
 | Import Excel | Infer columns from header row → draft template |
 | Export blank | Download empty template XLSX |
-| Export filled | Instance → XLSX / PDF **with formulas preserved** |
-| Formula cells | `=SUM()`, `=AVERAGE()`, arithmetic, cell refs A2, B3, … |
+| Export filled | Instance → XLSX / PDF |
 
 ---
 

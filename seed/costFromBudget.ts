@@ -202,6 +202,8 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           height: n(row[6]),
           qty: qty || nos1 * (nos2 || 1) * (n(row[4]) || 1) * (n(row[5]) || 1) * (n(row[6]) || 1),
           unit: s(row[8], 20) || null,
+          raBill: s(row[9], 80) || null,
+          remark: s(row[10], 200) || null,
         });
         pkg++;
       }
@@ -221,7 +223,9 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
         const description = s(row[1], 300);
         const dia = n(row[8]);
         const totalLen = n(row[18]) || n(row[17]);
-        const nos = n(row[11]) || n(row[9]) * n(row[10]);
+        const nosPerMember = n(row[9]);
+        const nosOfMember = n(row[10]);
+        const nos = n(row[11]) || (nosPerMember && nosOfMember ? nosPerMember * nosOfMember : n(row[5]));
         if (!description || /name of project|bar bending|sr\.?\s*no/i.test(description)) continue;
         if (!dia && !totalLen && !nos) continue;
         const weight =
@@ -233,7 +237,14 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           diameterMm: dia,
           shape: s(row[2], 80) || null,
           lengthMm: n(row[17]) || n(row[12]),
-          nos: nos || n(row[9]),
+          nos: nos || nosPerMember,
+          nosPerMember,
+          nosOfMember,
+          shapeLenA: n(row[12]),
+          shapeLenB: n(row[13]),
+          shapeLenC: n(row[14]),
+          shapeLenD: n(row[15]),
+          shapeLenE: n(row[16]),
           totalLength: totalLen,
           weightKg: Math.round(weight * 100) / 100,
           location: s(row[1], 80),

@@ -2,7 +2,6 @@
 
 **Prompt:** `module_prompts/Drawings_ChecklistsRFI.md`  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.3 · §3B  
-**Hub:** `/projects/:id/hub/drawings`  
 **LLD:** [system-design/04-LLD-Project-Modules.md](../system-design/04-LLD-Project-Modules.md)
 
 ---
@@ -13,23 +12,20 @@ Drawing register, revision control, pre-upload checklist gate, coordination issu
 
 ---
 
-## 2. Tools (sheet → hub card)
+## 2. Tools
 
-| Tool | Hub / route | Status | Behaviour |
-|------|-------------|--------|-----------|
-| GFC register | `/drawings` | Built | Log + revisions R0–R5; publish |
-| Checklist manager | `/checklist-master?family=DrawingCheck` | Built | Drawing Check Master gate |
-| Checklist fill log | `/checklist-logs?family=DrawingCheck` | Built | Branded download |
-| Documents (DMS) | `/dms` | Partial | Folders under Drawings |
-| Coordination | `/coordination` | Built | Design issues → Ask |
-| Request checklist fill | `/rfis?kind=DrawingChecklist` | Built | |
-| Ask — Request for Information | `/rfis?kind=RequestForInformation` | Built | **not** inspection |
-
-### Awaiting next sheets
-
-| Tool | Status | Notes |
-|------|--------|-------|
-| Extra discipline drawing logs | Ready | Extend GFC columns / filters from next pack |
+| Tool | Status | Behaviour |
+|------|--------|-----------|
+| GFC register | Built | Log + revisions R0–R5; publish; view |
+| Checklist manager | Built | Drawing Check Master; unlock before upload |
+| Upload / revision | Built | Modal + **Drawing Check overlay**; PDF markup before upload |
+| File types | Built | **PDF, PNG/JPEG, DWG** → SharePoint `04_DESIGN…/Drawings/{discipline}/` |
+| Branded checklist log | Built | Fill log → Download branded HTML → Print as PDF |
+| Documents (DMS) | Partial | Folders under Drawings |
+| Coordination | Built | Design issues → escalate to Ask |
+| Request checklist fill | Built | Kind `DrawingChecklist` |
+| **Ask — Request for Information** | Built (label) | Kind `RequestForInformation` — **not** inspection |
+| Submittals | Out of scope | Dormant |
 
 ---
 
@@ -42,7 +38,7 @@ Drawing register, revision control, pre-upload checklist gate, coordination issu
 | tlNo | text | N | |
 | dwgNo | text | Y | |
 | title | text | Y | |
-| oneDriveUrl / fileUrl | url | N | Latest published |
+| oneDriveUrl / fileUrl | url | N | Latest published; **DWG download-only in viewer** |
 | revision | text | Y | R0–R5 |
 | revisionDate | date | N | |
 | status | enum | Y | Draft / Published / … |
@@ -68,7 +64,18 @@ Drawing register, revision control, pre-upload checklist gate, coordination issu
 | response | Yes / No / N.A. | |
 | completedBy / at | | Must complete before upload |
 
-**Gate:** Server rejects revision upload if checklist incomplete.
+**Gate:** Server rejects revision upload if checklist incomplete.  
+**Master:** `/master/checklists?family=DrawingCheck` — global template reused on all projects.  
+**Per project:** Drawings → Checklist master · fill before upload overlay.
+
+---
+
+## 4b. Branded checklist export
+
+| Endpoint | Notes |
+|----------|-------|
+| `GET /api/checklist/submissions/:id/branded.html` | Sharnam logo HTML attachment |
+| Checklist fill log | “Download branded” → saves file + opens print tab |
 
 ---
 

@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
-import { openBrandedChecklistPrint } from "../../lib/brandedChecklistPrint";
+import { downloadBrandedChecklistPrint } from "../../lib/brandedChecklistPrint";
 
 const FAMILIES = [
   { value: "", label: "All families" },
@@ -49,8 +49,9 @@ export default function ChecklistLogsPage() {
 
   async function downloadBranded(submissionId: string) {
     try {
-      const detail = await api<any>(`/api/checklist/submissions/${submissionId}`, { token });
-      openBrandedChecklistPrint(detail);
+      setMsg("");
+      await downloadBrandedChecklistPrint(submissionId, token);
+      setMsg("Branded checklist downloaded — use Print → Save as PDF in the opened tab.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Download failed");
     }
@@ -112,6 +113,26 @@ export default function ChecklistLogsPage() {
             </Button>
             <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void exportFilledXlsx()}>
               Full schedule XLSX
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!bg-white/15 !text-white !border-white/30"
+              onClick={async () => {
+                if (!id) return;
+                setMsg("");
+                try {
+                  const r = await api<{ ok: boolean; registers?: { name: string }[] }>(
+                    `/api/dms/${id}/dump-logs`,
+                    { method: "POST", token }
+                  );
+                  setMsg(`Synced ${r.registers?.length || 0} register CSVs to SharePoint (incl. checklist fills).`);
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "SharePoint sync failed");
+                }
+              }}
+            >
+              Sync → SharePoint
             </Button>
           </div>
         }
@@ -188,7 +209,7 @@ export default function ChecklistLogsPage() {
       </Card>
 
       <p className="text-xs text-steel-muted">
-        Tip: “Download branded” opens a print-ready page with the Sharnam logo — use Print → Save as PDF for a beautiful archive.
+        Tip: “Download branded” saves an HTML file and opens a print-ready tab with the Sharnam logo — use Print → Save as PDF for archive.
       </p>
     </div>
   );

@@ -4,8 +4,9 @@
 
 | Tool | Behaviour |
 |------|-----------|
-| GFC register | Discipline, building/area, TL no, DWG no, title, OneDrive link, R0–R5 dates. Latest revision only for work. |
-| Drawing checklist master | Pre-upload checklist (Architectural / Structural… Yes/No/N.A.). Must complete before upload/revision. Dummy sign/code auth OK for now. |
+| GFC register | Discipline, building/area, TL no, DWG no, title, OneDrive link, R0–R5 dates. Latest revision only for work. **Accept PDF + DWG** (DWG stored in SharePoint; browser download only). |
+| Drawing checklist master | Pre-upload checklist (Architectural / Structural… Yes/No/N.A.). Must complete **before** upload/revision overlay. Global: `/master/checklists?family=DrawingCheck`. |
+| Checklist fill log | Branded download via `GET /api/checklist/submissions/:id/branded.html` — Print → Save as PDF. |
 | Documents (DMS) | Folder tree under Drawings/{discipline}/{revision}. Sync OneDrive path on open. |
 | Coordination | Design coordination issues (Procore-like); elevate → RFI. |
 | Submittals | _(Excluded for now)_ | — |

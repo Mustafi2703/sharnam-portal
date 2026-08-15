@@ -26,8 +26,21 @@ Office creates projects, enables modules, seeds directory/vendors/packages. Home
 | Matrix seed | Meeting + request parties | Communication Matrix |
 | Audit trail | Who / when / what | Export per module |
 | Roles / Access | Permission matrix | `/roles` |
+| **Global masters** | Reusable templates | `/master` → Global masters: checklists, custom sheet registers, links to cost MB/BBS |
 
-Also linked: **CRM**, **HRMS**, **Sheet Maker**, **Site Audit**, **KPI** (office apps).
+Also linked: **CRM**, **HRMS**, **Sheet Maker** (upload Excel registers reusable across projects), **Site Audit**, **KPI** (office apps).
+
+---
+
+## 2b. Global masters tab
+
+| Link | Purpose |
+|------|---------|
+| Global checklist master | Drawing check · Site · Quality · Safety templates |
+| Sheet item templates (`/custom-sheets`) | Upload MB/BBS/monitoring Excel once — clone to new projects |
+| GFC register | Per-project drawing types |
+| Cost / MB / BBS | Budget sheet packages from `SPDC_Budget_Arvind 49.xls` |
+| DMS | ISO folder tree · SharePoint sync |
 
 ---
 

@@ -35,6 +35,18 @@ Reuse one `UploadModal` pattern across tools.
 - Step 3: Yes / No / N.A. form sections
 - Block submit until drawing + revision chosen
 - Audit sidebar + CSV export (who / when / drawing / rev)
+- **Branded download:** `downloadBrandedChecklistPrint(id)` — fetches `/api/checklist/submissions/:id/branded.html`, saves file + opens print tab (not `window.open("")`)
+
+## Drawings viewer
+
+- PDF → iframe; images → inline; **DWG → download CTA** (SharePoint path, no preview)
+- Upload modal accepts `.pdf,.png,.jpg,.jpeg,.dwg,.webp`
+- Markup overlay (PdfMarkup / ImageMarkup) before upload on register + revision flows
+
+## Cost registers (MB / BBS)
+
+- Horizontal scroll tables (`sheet-register`) — all SPDC budget columns visible
+- BBS **Shape of bar** column holds bend diagram upload (not trailing column)
 
 ## Integrity UX
 

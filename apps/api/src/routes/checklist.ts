@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
+import { buildBrandedChecklistHtml } from "../services/brandedChecklistHtml.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -299,6 +300,31 @@ checklistRouter.get("/submissions/:id", async (req, res) => {
   });
   if (!submission) return res.status(404).json({ error: "Not found" });
   res.json(submission);
+});
+
+/** Branded checklist fill — HTML download (Print → Save as PDF). Avoids popup blockers. */
+checklistRouter.get("/submissions/:id/branded.html", async (req, res) => {
+  const submission = await prisma.checklistSubmission.findUnique({
+    where: { id: req.params.id },
+    include: {
+      assignment: { include: { template: { include: { items: { orderBy: { sortOrder: "asc" } } } } } },
+      submittedBy: { select: { fullName: true, email: true } },
+      drawing: true,
+    },
+  });
+  if (!submission) return res.status(404).send("Not found");
+  const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
+  const html = buildBrandedChecklistHtml(submission, `${webOrigin.replace(/\/$/, "")}/logo.png`);
+  const safeName = (submission.assignment?.template?.name || "checklist")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .slice(0, 40);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${safeName || "checklist"}-${req.params.id.slice(0, 8)}.html"`
+  );
+  res.send(html);
 });
 
 /** Export project checklist fills for site engineers (shared dual-fill audit) */

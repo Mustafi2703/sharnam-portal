@@ -11,6 +11,7 @@ Template designer (sections, columns, party blocks) · Publish version · Import
 ## Rules
 
 - Primary consumer: Comms meetings (custom meeting sheets)  
+- **Global master:** `/custom-sheets` + Master → Global masters — upload MB/BBS/monitoring Excel templates once; reuse on new projects via Cost import  
 - Optional later: HR / CRM / Audit registers  
 - Does not replace Drawing/QI checklist engine in v1  
 - Meetings remain **Teams only** for video links  

@@ -1,5 +1,5 @@
 /**
- * BBS register — one shape diagram upload per bar-mark row (matches SPDC BBS sheet).
+ * BBS register — column order matches SPDC * BBS sheets (diagram in SHAPE OF BAR col).
  */
 import { useState } from "react";
 import { api, apiBase } from "../api";
@@ -15,6 +15,13 @@ export type BbsRow = {
   shape?: string | null;
   lengthMm?: number;
   nos?: number;
+  nosPerMember?: number;
+  nosOfMember?: number;
+  shapeLenA?: number;
+  shapeLenB?: number;
+  shapeLenC?: number;
+  shapeLenD?: number;
+  shapeLenE?: number;
   totalLength?: number;
   weightKg?: number;
   location?: string | null;
@@ -30,6 +37,26 @@ type Props = {
   onChanged: () => void;
 };
 
+/** SPDC BBS sheet column order — all budget columns after Shape of bar. */
+const HEADERS = [
+  "Package",
+  "SR NO",
+  "Description",
+  "Shape of bar",
+  "DIA",
+  "No/member",
+  "No of member",
+  "Total nos",
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "Cutting L",
+  "Total L",
+  "Weight kg",
+] as const;
+
 function fileHref(path?: string | null, shareUrl?: string | null) {
   if (shareUrl?.startsWith("http")) return shareUrl;
   if (!path) return "";
@@ -40,6 +67,11 @@ function fileHref(path?: string | null, shareUrl?: string | null) {
 
 function rowLabel(row: BbsRow) {
   return row.barMark || row.location?.slice(0, 24) || row.id.slice(0, 8);
+}
+
+function fmtNum(v?: number | null) {
+  if (v == null || !Number.isFinite(v) || v === 0) return "—";
+  return Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
 export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: Props) {
@@ -102,9 +134,9 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
       <div className="sheet-register__head">
-        <span>Bar bending schedule — one diagram per mark (SPDC sheet)</span>
+        <span>Bar bending schedule — SPDC column layout</span>
         <span className="text-steel-muted font-normal normal-case tracking-normal">
-          {uploaded}/{rows.length} shared · use Upload + markup on each row
+          {uploaded}/{rows.length} shapes in Shape of bar column
         </span>
       </div>
 
@@ -112,83 +144,105 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
         <table className="sheet-register__table">
           <thead>
             <tr>
-              {["Package", "Mark", "Dia mm", "Shape code", "Length", "Nos", "Total L", "Weight kg", "Location", "Diagram"].map(
-                (h, i) => (
-                  <th key={h} className={i === 0 ? "sticky-col" : undefined}>
-                    {h}
-                  </th>
-                )
-              )}
+              {HEADERS.map((h, i) => (
+                <th key={h} className={i === 0 ? "sticky-col" : i === 3 ? "min-w-[140px]" : undefined}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((b) => {
               const href = fileHref(b.shapeDiagramPath, b.shapeDiagramUrl);
               const hasDiagram = Boolean(href);
+              const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
                 <tr key={b.id}>
                   <td className="sticky-col wrap">{b.packageName}</td>
                   <td className="wrap font-medium">{b.barMark || "—"}</td>
-                  <td>{b.diameterMm ?? "—"}</td>
-                  <td className="wrap">{b.shape || "—"}</td>
-                  <td>{b.lengthMm ?? "—"}</td>
-                  <td>{b.nos ?? "—"}</td>
-                  <td>{b.totalLength ?? "—"}</td>
-                  <td>{b.weightKg ?? "—"}</td>
                   <td className="wrap">{b.location || "—"}</td>
-                  <td className="whitespace-nowrap">
-                    <div className="flex flex-wrap items-center gap-1.5">
+                  <td className="align-top">
+                    <div className="flex flex-col gap-1.5 min-w-[120px]">
                       {hasDiagram ? (
-                        <>
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
-                            Saved
-                          </span>
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-brand font-medium"
-                          >
-                            View
-                          </a>
-                          <button
-                            type="button"
-                            className="text-xs text-brand font-medium underline-offset-2 hover:underline"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(href);
-                                setMsg(`Share link copied for mark ${rowLabel(b)}`);
-                              } catch {
-                                window.open(href, "_blank", "noopener,noreferrer");
-                              }
-                            }}
-                          >
-                            Share
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-xs text-amber-700">Pending</span>
-                      )}
-                      {canUpload && (
-                        <FilePickButton
-                          accept="image/*,application/pdf"
-                          onPick={(files) => onPickForRow(b, files)}
-                          variant="ghost"
-                          className="!text-xs !py-1 !px-2"
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-sm border border-line bg-paper overflow-hidden hover:border-brand/50"
+                          title="Open bend diagram"
                         >
-                          {busyId === b.id ? "…" : hasDiagram ? "Replace" : "Upload + markup"}
-                        </FilePickButton>
+                          {isImage ? (
+                            <img src={href} alt={`Shape ${rowLabel(b)}`} className="h-14 w-full object-contain bg-white" />
+                          ) : (
+                            <div className="h-14 flex items-center justify-center text-[10px] text-steel-muted px-2">
+                              PDF diagram · click to open
+                            </div>
+                          )}
+                        </a>
+                      ) : (
+                        <div className="h-14 rounded-sm border border-dashed border-amber-300/80 bg-amber-50/50 flex items-center justify-center text-[10px] text-amber-800 px-2 text-center">
+                          Pending diagram
+                        </div>
                       )}
-                      {!canUpload && !hasDiagram && <span className="text-steel-muted text-xs">—</span>}
+                      <div className="flex flex-wrap items-center gap-1">
+                        {hasDiagram && (
+                          <>
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-brand font-medium"
+                            >
+                              View
+                            </a>
+                            <button
+                              type="button"
+                              className="text-xs text-brand font-medium underline-offset-2 hover:underline"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(href);
+                                  setMsg(`Share link copied for mark ${rowLabel(b)}`);
+                                } catch {
+                                  window.open(href, "_blank", "noopener,noreferrer");
+                                }
+                              }}
+                            >
+                              Share
+                            </button>
+                          </>
+                        )}
+                        {canUpload && (
+                          <FilePickButton
+                            accept="image/*,application/pdf"
+                            onPick={(files) => onPickForRow(b, files)}
+                            variant="ghost"
+                            className="!text-xs !py-0.5 !px-1.5"
+                          >
+                            {busyId === b.id ? "…" : hasDiagram ? "Replace" : "Upload + markup"}
+                          </FilePickButton>
+                        )}
+                        {!canUpload && !hasDiagram && <span className="text-steel-muted text-xs">—</span>}
+                      </div>
                     </div>
                   </td>
+                  <td>{b.diameterMm ? `${b.diameterMm}` : "—"}</td>
+                  <td>{fmtNum(b.nosPerMember)}</td>
+                  <td>{fmtNum(b.nosOfMember)}</td>
+                  <td>{fmtNum(b.nos)}</td>
+                  <td>{fmtNum(b.shapeLenA)}</td>
+                  <td>{fmtNum(b.shapeLenB)}</td>
+                  <td>{fmtNum(b.shapeLenC)}</td>
+                  <td>{fmtNum(b.shapeLenD)}</td>
+                  <td>{fmtNum(b.shapeLenE)}</td>
+                  <td>{fmtNum(b.lengthMm)}</td>
+                  <td>{fmtNum(b.totalLength)}</td>
+                  <td>{fmtNum(b.weightKg)}</td>
                 </tr>
               );
             })}
             {!rows.length && (
               <tr>
-                <td colSpan={10} className="empty">
+                <td colSpan={HEADERS.length} className="empty">
                   No BBS rows — import Excel above or run seed.
                 </td>
               </tr>
@@ -203,7 +257,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
           <div className="markup-modal__panel max-w-4xl">
             <div className="markup-modal__head">
               <span>
-                Mark {rowLabel(markupRow)} · {markupRow.shape ? `shape ${markupRow.shape}` : "bend diagram"}
+                Mark {rowLabel(markupRow)} · Shape of bar · {markupRow.location || markupRow.packageName}
               </span>
               <button type="button" className="markup-modal__close" onClick={closeMarkup}>
                 ×
@@ -213,7 +267,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
               {shapeDraft.type === "application/pdf" || shapeDraft.name.toLowerCase().endsWith(".pdf") ? (
                 <PdfMarkup
                   src={shapeDraft}
-                  saveLabel="Save diagram for this mark"
+                  saveLabel="Save diagram in Shape of bar column"
                   onCancel={closeMarkup}
                   onSave={async (markedPages) => {
                     const file = markedPages[0] || shapeDraft;
@@ -223,7 +277,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
               ) : (
                 <ImageMarkup
                   src={shapePreview || shapeDraft}
-                  saveLabel="Save diagram for this mark"
+                  saveLabel="Save diagram in Shape of bar column"
                   filename={`bbs-${rowLabel(markupRow)}`}
                   onCancel={closeMarkup}
                   onSave={async (file) => {

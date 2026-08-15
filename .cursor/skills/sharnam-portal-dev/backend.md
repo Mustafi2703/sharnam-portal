@@ -35,11 +35,20 @@ On submit require:
 
 - Store under mock OneDrive path; record `fileUrl`, `fileName`, `uploadedById`, `createdAt`
 - Never allow `client` role on drawing upload routes
+- **Drawings:** accept PDF, PNG/JPEG, **DWG** — stored under `04_DESIGN…/Drawings/{discipline}/` in SharePoint mock path; DWG is download-only (no iframe preview)
+- **BBS shape diagrams:** per-row upload to `07.06…/bbs/<package>/shapes/`
 
 ## Cost / cashflow
 
 - Measurement rows from Monitoring sheet: skip parent narrative rows without UOM/rate
 - Cashflow periods are project-scoped; totals computed in summary endpoint
+- **MB columns** from `SPDC_Budget_Arvind 49.xls`: srNo, description, nos1, nos2, L×W×H, qty, unit, raBill, remark
+- **BBS columns**: barMark, location, shape diagram, dia, nosPerMember, nosOfMember, nos, shapeLen A–E, cutting L, total L, weightKg — parser in `costSheetParser.ts`
+
+## Checklist branded export
+
+- `GET /api/checklist/submissions/:id/branded.html` — Sharnam-branded HTML attachment (Print → PDF)
+- Shared builder: `services/brandedChecklistHtml.ts` — no popup blockers on client
 
 ## Checklist before merge
 

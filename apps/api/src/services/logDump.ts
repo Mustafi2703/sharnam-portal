@@ -184,7 +184,12 @@ export async function dumpAllProjectLogs(projectId: string) {
   /* Drawings + revisions */
   const drawings = await prisma.drawing.findMany({
     where: { projectId },
-    include: { revisions: { orderBy: { createdAt: "asc" } } },
+    include: {
+      revisions: {
+        orderBy: { createdAt: "asc" },
+        include: { uploadedBy: { select: { fullName: true, email: true } } },
+      },
+    },
     orderBy: { drawingNumber: "asc" },
   });
   results.push(
@@ -196,13 +201,64 @@ export async function dumpAllProjectLogs(projectId: string) {
         drawingNumber: d.drawingNumber,
         title: d.title,
         discipline: d.discipline,
+        buildingArea: d.buildingArea ?? "",
+        tlNo: d.tlNo ?? "",
         currentRev: d.currentRev,
         status: d.status,
         published: d.isPublished ? "yes" : "no",
         revisions: d.revisions.length,
+        latestFile: d.revisions[d.revisions.length - 1]?.fileUrl ?? "",
       }))
     )
   );
+
+  /* Full GFC register grid (matches export.csv columns) */
+  const gfcRows: Row[] = [];
+  for (const d of drawings) {
+    const revsAsc = [...d.revisions].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const row: Row = {
+      discipline: d.discipline,
+      buildingArea: d.buildingArea ?? "",
+      tlNo: d.tlNo ?? "",
+      drawingNumber: d.drawingNumber,
+      title: d.title,
+      currentRev: d.currentRev,
+      published: d.isPublished ? "yes" : "no",
+    };
+    for (let i = 0; i < 6; i++) {
+      const r = revsAsc[i];
+      const slot = `R${i}`;
+      row[`${slot}_planned`] = r?.plannedDate ? iso(r.plannedDate).slice(0, 10) : "";
+      row[`${slot}_actual`] = r?.actualDate ? iso(r.actualDate).slice(0, 10) : r ? iso(r.createdAt).slice(0, 10) : "";
+    }
+    row.totalRevisions = revsAsc.length;
+    gfcRows.push(row);
+  }
+  results.push(await dropRegister(code, FOLDER.drawings, "GFC-Drawing-Register", gfcRows));
+
+  /* Per-revision upload log with checklist gate id */
+  const revisionRows: Row[] = [];
+  for (const d of drawings) {
+    for (const r of d.revisions) {
+      revisionRows.push({
+        drawingNumber: d.drawingNumber,
+        title: d.title,
+        discipline: d.discipline,
+        revisionNumber: r.revisionNumber,
+        revisionLabel: r.revisionLabel ?? "",
+        plannedDate: iso(r.plannedDate).slice(0, 10),
+        actualDate: iso(r.actualDate).slice(0, 10),
+        uploadedAt: iso(r.createdAt),
+        uploadedBy: r.uploadedBy?.fullName ?? "",
+        published: r.published ? "yes" : "no",
+        fileName: r.fileName ?? "",
+        fileUrl: r.fileUrl,
+        preCheckSubmissionId: r.preCheckSubmissionId ?? "",
+        checklistFilled: r.preCheckSubmissionId ? "yes" : "",
+      });
+    }
+  }
+  results.push(await dropRegister(code, FOLDER.drawings, "Drawings-Revision-Log", revisionRows));
 
   /* Design Coordination */
   const designIssues = await prisma.designCoordinationIssue.findMany({
@@ -314,7 +370,8 @@ export async function dumpAllProjectLogs(projectId: string) {
       assignment: {
         include: { template: { select: { name: true, category: true, checklistType: true } } },
       },
-      drawing: { select: { drawingNumber: true } },
+      drawing: { select: { drawingNumber: true, title: true } },
+      revision: { select: { revisionNumber: true } },
       submittedBy: { select: { fullName: true } },
       photos: true,
     },
@@ -326,19 +383,54 @@ export async function dumpAllProjectLogs(projectId: string) {
       FOLDER.checklist,
       "Checklist-Submissions-Log",
       submissions.map((s) => ({
+        submissionId: s.id,
         template: s.assignment.template?.name ?? "",
         type: s.assignment.template?.checklistType ?? "",
         category: s.assignment.template?.category ?? "",
         drawing: s.drawing?.drawingNumber ?? "",
+        drawingTitle: s.drawing?.title ?? "",
+        revision: s.revisionNumber || s.revision?.revisionNumber || "",
         purpose: s.purpose,
         status: s.status,
         createdAt: iso(s.createdAt),
         reviewedAt: iso(s.reviewedAt),
         submittedBy: s.submittedBy?.fullName ?? "",
         photos: s.photos.length,
+        unlockUsed: s.unlockUsedAt ? iso(s.unlockUsedAt) : "",
       }))
     )
   );
+
+  /* Line-level filled answers → drive CSV */
+  const filledLines: Row[] = [];
+  for (const s of submissions) {
+    let answers: Record<string, { answer?: string; comment?: string }> = {};
+    try {
+      answers = JSON.parse(s.responsesJson || "{}") as typeof answers;
+    } catch {
+      answers = {};
+    }
+    const templateName = s.assignment.template?.name ?? "";
+    const drawingNo = s.drawing?.drawingNumber ?? "";
+    for (const [itemId, val] of Object.entries(answers)) {
+      filledLines.push({
+        submissionId: s.id,
+        template: templateName,
+        drawing: drawingNo,
+        revision: s.revisionNumber || s.revision?.revisionNumber || "",
+        purpose: s.purpose,
+        status: s.status,
+        submittedAt: iso(s.createdAt),
+        submittedBy: s.submittedBy?.fullName ?? "",
+        itemId,
+        answer: val?.answer ?? "",
+        comment: val?.comment ?? "",
+      });
+    }
+  }
+  if (filledLines.length) {
+    results.push(await dropRegister(code, FOLDER.checklist, "Checklist-Filled-Lines", filledLines));
+  }
 
   /* Safety */
   const safety = await prisma.safetyRecord.findMany({

@@ -7,10 +7,10 @@ Sharnam adapts Procore tool shapes to PMC India workflows (GFC, Final Index, mea
 | Procore concept | Sharnam equivalent | Setup notes |
 |-----------------|-------------------|-------------|
 | Project | `Project` + members/vendors | CRM convert or create |
-| Drawings | GFC register + revisions R0–R5 | Publish unlocks QA |
-| Drawing upload modal | Metadata + file + publish | All roles except client |
+| Drawings | GFC register + revisions R0–R5 | Publish unlocks QA; PDF/DWG to SharePoint |
+| Drawing upload modal | Metadata + file + publish + **Drawing Check overlay** | PDF markup; DWG download-only |
 | Specs / Documents | DMS mock OneDrive | Folder tree per project |
-| Checklists | Final Index (SiteExecution) | Dual-fill Yes/No/N.A. |
+| Checklists | Final Index (SiteExecution) + **Drawing Check gate** | Dual-fill Yes/No/N.A.; branded HTML export |
 | Inspections | QualityInspection templates | Separate from Final Index |
 | Observations / Incidents | Safety records | Types + assignee |
 | RFIs | RFIs & Concerns | Ball-in-court; client can raise |
@@ -19,7 +19,8 @@ Sharnam adapts Procore tool shapes to PMC India workflows (GFC, Final Index, mea
 | Meetings | Meetings + MoM items | Schedule + carry-over |
 | Coordination | Design coordination issues | Elevate → RFI later |
 | Submittals | Submittal register | Status / ball-in-court |
-| Budget / Financials | Cost: Budget, Monitoring, Cashflow | From Cashflow Dashboard.xlsx |
+| Budget / Financials | Cost: Budget, Monitoring, MB, BBS, Cashflow | From `SPDC_Budget_Arvind 49.xls` + Cashflow Dashboard |
+| **Global masters** | `/master` → Global masters tab | Checklist templates, custom sheet registers reusable across projects |
 | Directory | Project directory + vendors | Assign employees |
 | Permissions | Role matrix in `@sharnam/shared` | Portal-based login |
 | Email distribution | Project email settings + outbox | Mock until SMTP/Graph |

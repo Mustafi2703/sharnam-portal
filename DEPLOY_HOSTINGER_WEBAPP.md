@@ -1,7 +1,10 @@
 # Deploy on Hostinger Web App (Cloud plan — no VPS)
 
-Use your **existing Cloud Startup** plan for `spdc.in` (IP **62.72.15.47**).  
+Use your **existing Cloud Startup** plan for `spdc.in`.  
 Deploy Sharnam on **`portal.spdc.in`** — completely **independent** of **`app.spdc.in`**.
+
+> **DNS:** Use the IP/CNAME shown in **hPanel** for the portal web app — Hostinger CDN (hCDN) uses **anycast IPs** (e.g. `147.79.69.x`, `93.127.173.x`), not a single fixed address.  
+> If WiFi fails but mobile data works, see [docs/WIFI_HOSTINGER_TROUBLESHOOTING.md](docs/WIFI_HOSTINGER_TROUBLESHOOTING.md).
 
 Hostinger supports **Express + Vite** Node.js web apps on Business/Cloud plans.
 
@@ -26,7 +29,7 @@ Sharnam and `app.spdc.in` are **two separate websites** on the same Hostinger ac
 
 - Add a **new** website for **`portal.spdc.in`**
 - Connect GitHub repo **`sharnam-portal`** only to that new site
-- Add DNS record **`portal`** → `62.72.15.47` (new A record)
+- Add DNS record **`portal`** → value from hPanel (new A or CNAME)
 - Set `WEB_ORIGIN=https://portal.spdc.in` (not app.spdc.in)
 - After deploy: test **`app.spdc.in` first** — it must behave exactly as before
 
@@ -50,7 +53,7 @@ Sharnam and `app.spdc.in` are **two separate websites** on the same Hostinger ac
 
 | Type | Name | Points to |
 |------|------|-----------|
-| **A** or **CNAME** | **portal** | `62.72.15.47` (same server) |
+| **A** or **CNAME** | **portal** | **hPanel value** for this web app (do not guess an old IP) |
 
 Leave `app` / `app.spdc.in` records unchanged.
 

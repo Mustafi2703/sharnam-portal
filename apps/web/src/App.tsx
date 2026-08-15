@@ -117,6 +117,7 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/master" element={<MasterModulePage />} />
+                <Route path="/master/checklists" element={<ChecklistMasterPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />

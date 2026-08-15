@@ -1,7 +1,10 @@
 # Logins and access
 
-**Demo:** https://sharnam-portal.onrender.com  
+**Live (Hostinger):** https://portal.spdc.in/login  
+**Existing app:** https://app.spdc.in  
 **Demo password:** `Demo@1234`
+
+> WiFi loads on mobile but not office WiFi? See [WIFI_HOSTINGER_TROUBLESHOOTING.md](../WIFI_HOSTINGER_TROUBLESHOOTING.md) — usually CDN/DNS on the router, not the app.
 
 ---
 
@@ -17,7 +20,7 @@
 | **Employee** | `/login/employee` | `employee@sharnam.demo` | Self-service / workspace |
 | **HR admin** | `/login/hr` | `office@sharnam.demo` | HRMS desk (`/hrm`) |
 
-After production cutover, replace the domain with SPDC’s own (e.g. `portal.spdc.in`).
+Production is on **`portal.spdc.in`** (separate from **`app.spdc.in`** — do not merge the two sites).
 
 ---
 
