@@ -20,6 +20,7 @@ import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
 import CrmPage from "./pages/CrmPage";
 import CrmBidComparePage from "./pages/CrmBidComparePage";
+import CrmVendorBidsPage from "./pages/CrmVendorBidsPage";
 import HrmPage from "./pages/HrmPage";
 import HrmsLayout from "./pages/hrms/HrmsLayout";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
@@ -164,6 +165,7 @@ export default function App() {
                 <Route path="/roles" element={<RolesPage />} />
                 <Route path="/crm" element={<CrmPage />} />
                 <Route path="/crm/bid-compare" element={<CrmBidComparePage />} />
+                <Route path="/crm/vendor-bids" element={<CrmVendorBidsPage />} />
                 <Route path="/hrm" element={<HrmsLayout />}>
                   <Route index element={<HrmPage />} />
                   <Route path="recruitment" element={<RecruitmentPage />} />

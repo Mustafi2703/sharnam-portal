@@ -82,8 +82,9 @@ const ROLE_LABELS: Record<string, string> = {
 
 /** Office admin — full control surface */
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
-  { to: "/crm", label: "CRM · Bids", icon: "modules" },
-  { to: "/quotations/new", label: "Quotation maker", icon: "reports" },
+  { to: "/crm", label: "CRM", icon: "modules" },
+  { to: "/crm/bid-compare", label: "Bid management", icon: "cost" },
+  { to: "/quotations/new", label: "PMC proposal", icon: "reports" },
   { to: "/hrm", label: "HRMS", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
   { to: "/upload-lab", label: "Upload lab", icon: "reports" },

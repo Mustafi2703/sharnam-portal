@@ -17,6 +17,7 @@ export default function CrmPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
+  const [bidPackages, setBidPackages] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [convertLead, setConvertLead] = useState<any | null>(null);
   const [leadForm, setLeadForm] = useState({
@@ -61,13 +62,14 @@ export default function CrmPage() {
   const canManage = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
-    const [p, l, d, u, v, q] = await Promise.all([
+    const [p, l, d, u, v, q, bp] = await Promise.all([
       api<any[]>("/api/projects", { token }),
       canManage ? api<any[]>("/api/crm/leads", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/crm/deals", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/users", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
       api<any[]>("/api/crm/quotations", { token }).catch(() => []),
+      canManage ? api<any[]>("/api/crm/bid-packages", { token }).catch(() => []) : Promise.resolve([]),
     ]);
     setProjects(sortDemoProjectsFirst(p));
     setLeads(l);
@@ -75,6 +77,7 @@ export default function CrmPage() {
     setUsers(u);
     setVendors(v);
     setQuotations(q);
+    setBidPackages(bp);
   };
 
   useEffect(() => {
@@ -142,7 +145,7 @@ export default function CrmPage() {
               <Button variant="secondary">+ Quotation maker</Button>
             </Link>
             <Link to="/crm/bid-compare">
-              <Button variant="secondary">Comparative analysis</Button>
+              <Button variant="secondary">Bid management (R2)</Button>
             </Link>
             {canManage && (
               <>
@@ -163,7 +166,10 @@ export default function CrmPage() {
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">
-          <span>Quotations / proposals</span>
+          <div>
+            <span>PMC proposals (quotations)</span>
+            <p className="text-[11px] font-normal text-steel-muted mt-0.5">Client-facing — full 63-page .docx + commercial summary</p>
+          </div>
           <Link to="/quotations/new">
             <Button type="button" variant="secondary" className="!py-1 !text-xs">
               + New
@@ -193,6 +199,45 @@ export default function CrmPage() {
           )}
         </ul>
       </Card>
+
+      {canManage && (
+        <Card padding={false}>
+          <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">
+            <div>
+              <span>Bid management — Comparative Statement R2</span>
+              <p className="text-[11px] font-normal text-steel-muted mt-0.5">
+                Contractors upload discipline BOQs · office compares multiple bids (not PMC proposal)
+              </p>
+            </div>
+            <Link to="/crm/bid-compare">
+              <Button type="button" className="!py-1 !text-xs">
+                Open bid desk
+              </Button>
+            </Link>
+          </div>
+          <ul className="divide-y">
+            {bidPackages.map((bp) => (
+              <li key={bp.id} className="px-4 py-3 flex justify-between gap-3">
+                <div>
+                  <div className="font-medium text-sm">{bp.title}</div>
+                  <div className="text-xs text-steel-muted">
+                    {bp.revisionLabel} · {bp.status} · BOQs {bp.uploadProgress?.done ?? 0}/{bp.uploadProgress?.total ?? 0}
+                  </div>
+                </div>
+                <Link to="/crm/bid-compare" className="text-xs text-brand font-semibold shrink-0">
+                  View comparative →
+                </Link>
+              </li>
+            ))}
+            {!bidPackages.length && (
+              <li className="px-4 py-6 text-sm text-steel-muted">
+                No bid packages — seeded demo: <strong>SPDC-DEMO-01 · Civil & structural — R2 demo bid</strong> after{" "}
+                <code className="text-brand">npm run db:seed</code>
+              </li>
+            )}
+          </ul>
+        </Card>
+      )}
 
       {tab === "leads" && canManage && (
         <>

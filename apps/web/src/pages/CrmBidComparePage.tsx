@@ -1,9 +1,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, apiBase } from "../api";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
+import { ComparativeStatementPanel } from "../components/ComparativeStatementPanel";
+import { downloadAuthFile } from "../lib/downloadReport";
 
 type Discipline = { key: string; label: string; sheetName: string };
 
@@ -28,6 +30,7 @@ type BidPackage = {
   vendorBoqs?: VendorBoqSlot[];
   uploadProgress?: { done: number; total: number };
   lead?: { id: string; title: string } | null;
+  notes?: string | null;
   summary?: {
     vendorLabels: string[];
     sectionTotals: { section: string; title: string; totals: Record<string, number> }[];
@@ -186,16 +189,26 @@ export default function CrmBidComparePage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="CRM · Confidential"
-        title="Comparative analysis (R2)"
-        subtitle="Matches Comparative Statement R2 — summary + master BOQ compare. Each vendor uploads discipline-wise BOQs (CCV, Admin, Security, etc.)."
+        title="Bid management — Comparative Statement R2"
+        subtitle="Not the PMC proposal (quotation). Here contractors upload discipline BOQs; office compares multiple bids project-wise using Comparative Statement - R2.xlsx."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/crm">
               <Button variant="secondary">← CRM</Button>
             </Link>
-            <a href={`${apiBase()}/api/crm/template.xlsx?token=${encodeURIComponent(token || "")}`} download>
-              <Button variant="secondary">Download R2 workbook</Button>
-            </a>
+            <Link to="/quotations/new">
+              <Button variant="secondary">PMC proposal maker</Button>
+            </Link>
+            <Link to="/crm/vendor-bids">
+              <Button variant="secondary">Vendor uploads</Button>
+            </Link>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
+            >
+              Download R2 .xlsx
+            </Button>
           </div>
         }
       />
@@ -313,22 +326,18 @@ export default function CrmBidComparePage() {
                 </div>
 
                 {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
-                  <div className="rounded-xl border border-line bg-sand/30 p-3 mb-4">
-                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Grand total (from summary tab)</p>
-                    <div className="grid sm:grid-cols-3 gap-2">
-                      {detail.summary.vendorLabels.map((v) => (
-                        <div key={v} className="rounded-lg bg-paper border border-line px-3 py-2">
-                          <div className="text-[10px] text-steel-muted truncate">{v}</div>
-                          <div className="font-mono font-semibold text-sm">
-                            {formatINR(detail.summary!.grandTotals[v] || 0)}
-                          </div>
-                          {detail.summary!.lowestVendor === v && (
-                            <span className="text-[10px] text-ok font-semibold">L1</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                  <div className="mb-4">
+                    <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Comparative statement (R2 summary tab)</h4>
+                    <ComparativeStatementPanel
+                      summary={detail.summary}
+                      summarySheetId={detail.summarySheetId}
+                      masterSheetId={detail.comparativeSheetId}
+                    />
                   </div>
+                )}
+
+                {detail.notes && (
+                  <p className="text-xs text-steel-muted mb-3 border-l-2 border-brand pl-2">{detail.notes}</p>
                 )}
 
                 <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor × discipline BOQ uploads</h4>

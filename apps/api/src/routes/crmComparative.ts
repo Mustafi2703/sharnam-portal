@@ -291,6 +291,47 @@ crmComparativeRouter.post("/bid-packages/:id/award", requireRoles("admin", "offi
   res.json(pkg);
 });
 
+/** Vendor / contractor — upload discipline BOQs for assigned bid slots. */
+crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
+  const role = req.user!.role;
+  if (role !== "vendor" && role !== "admin" && role !== "office") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  let vendorId: string | null = null;
+  if (role === "vendor") {
+    const v = await prisma.vendor.findFirst({ where: { email: req.user!.email }, select: { id: true, name: true } });
+    if (!v) return res.json([]);
+    vendorId = v.id;
+  }
+
+  const slots = await prisma.crmVendorBoq.findMany({
+    where: vendorId ? { vendorId } : undefined,
+    include: {
+      bidPackage: { select: { id: true, title: true, status: true, revisionLabel: true, notes: true } },
+      vendor: { select: { id: true, name: true } },
+    },
+    orderBy: [{ bidPackage: { updatedAt: "desc" } }, { discipline: "asc" }],
+  });
+
+  res.json(
+    slots.map((s) => ({
+      id: s.id,
+      bidPackageId: s.bidPackageId,
+      bidPackageTitle: s.bidPackage.title,
+      bidPackageStatus: s.bidPackage.status,
+      revisionLabel: s.bidPackage.revisionLabel,
+      projectNote: s.bidPackage.notes,
+      vendorLabel: s.vendorLabel,
+      discipline: s.discipline,
+      disciplineLabel: COMPARATIVE_DISCIPLINES.find((d) => d.key === s.discipline)?.label || s.discipline,
+      fileName: s.fileName,
+      uploadedAt: s.uploadedAt,
+      sheetId: s.sheetId,
+    }))
+  );
+});
+
 /** Download official Comparative Statement R2 workbook. */
 crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office"), (_req, res) => {
   const src = resolveR2TemplatePath();

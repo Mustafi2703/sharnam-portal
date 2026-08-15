@@ -29,6 +29,7 @@ import {
   renderQuotationHtml,
   writeQuotationFiles,
 } from "../services/quotationExport.js";
+import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -336,6 +337,26 @@ crmRouter.get("/quotations/:id", async (req, res) => {
   });
   if (!row) return res.status(404).json({ error: "not found" });
   res.json(row);
+});
+
+crmRouter.get("/quotations/template.docx", async (_req, res) => {
+  try {
+    const src = resolveProposalDocxPath();
+    res.download(src, "SPDC-PMC-Full-Proposal-Template.docx");
+  } catch (e) {
+    res.status(404).json({ error: e instanceof Error ? e.message : "Template not found" });
+  }
+});
+
+crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
+  const row = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  try {
+    const src = resolveProposalDocxPath();
+    res.download(src, proposalDocxFilename(row.quotationNo));
+  } catch (e) {
+    res.status(404).json({ error: e instanceof Error ? e.message : "Template not found" });
+  }
 });
 
 crmRouter.get("/quotations/:id/download.html", async (req, res) => {

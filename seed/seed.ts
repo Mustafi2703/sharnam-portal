@@ -1114,7 +1114,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       city: "Ahmedabad",
       state: "Gujarat",
       businessPhone: "+91 79 2650 1001",
-      email: "projects@bhavnainfra.demo",
+      email: "vendor@sharnam.demo",
       primaryContactName: "Ketan Shah",
       gstNumber: "24AAAAA0000A1Z5",
       licenseNumber: "LIC-CIV-1042",

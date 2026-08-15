@@ -77,7 +77,7 @@ export default function QuotationMakerPage() {
   });
   const [sections, setSections] = useState<Section[]>(SPDC_DEFAULT_SECTIONS);
   const [saving, setSaving] = useState(false);
-  const [exportBusy, setExportBusy] = useState<"html" | "doc" | null>(null);
+  const [exportBusy, setExportBusy] = useState<"html" | "doc" | "docx" | null>(null);
   const [msg, setMsg] = useState("");
   const [saved, setSaved] = useState<any | null>(null);
   const [awardForm, setAwardForm] = useState({ code: "", name: "", projectId: "" });
@@ -169,21 +169,28 @@ export default function QuotationMakerPage() {
     }
   }
 
-  async function exportFile(kind: "html" | "doc") {
+  async function exportFile(kind: "html" | "doc" | "docx") {
     const qid = saved?.id || id;
-    if (!qid) {
-      setMsg("Save the quotation first, then download the editable proposal file.");
-      return;
-    }
     setExportBusy(kind);
     try {
       const safe = meta.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      if (kind === "docx") {
+        const path = qid ? `/api/crm/quotations/${qid}/download.docx` : "/api/crm/quotations/template.docx";
+        const name = qid ? `${safe}-Full-Proposal.docx` : "SPDC-PMC-Full-Proposal-Template.docx";
+        await downloadAuthFile(path, token, name);
+        setMsg("Full 63-page SPDC proposal .docx downloaded — edit in Microsoft Word.");
+        return;
+      }
+      if (!qid) {
+        setMsg("Save the quotation first for summary exports.");
+        return;
+      }
       if (kind === "html") {
         await downloadAuthFile(`/api/crm/quotations/${qid}/download.html`, token, `${safe}-Proposal.html`);
         setMsg("HTML downloaded — open in browser, edit text, Print → PDF.");
       } else {
         await downloadAuthFile(`/api/crm/quotations/${qid}/download.doc`, token, `${safe}-Proposal.doc`);
-        setMsg("Word .doc downloaded — open in Microsoft Word to edit sections and commercials.");
+        setMsg("Summary Word .doc downloaded — quick commercial summary from maker fields.");
       }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Export failed");
@@ -215,24 +222,30 @@ export default function QuotationMakerPage() {
       <PageHeader
         eyebrow="CRM · Proposal maker"
         title={isEditing ? `Quotation ${meta.quotationNo}` : "New quotation"}
-        subtitle="SPDC PMC proposal format (Arvind docx). Edit sections → Save → download .doc for Word or HTML for PDF."
+        subtitle="PMC proposal to client (not contractor bids). Full ~63-page .docx from SPDC template; maker fields export a short commercial summary."
         actions={
           <div className="flex flex-wrap gap-2 no-print">
             <Link to="/crm">
               <Button type="button" variant="secondary">Back to CRM</Button>
+            </Link>
+            <Link to="/crm/bid-compare">
+              <Button type="button" variant="secondary">Bid management →</Button>
             </Link>
             {canWrite && (
               <Button type="button" onClick={() => void save()} disabled={saving}>
                 {saving ? "Saving…" : isEditing ? "Save changes" : "Save quotation"}
               </Button>
             )}
+            <Button type="button" disabled={!!exportBusy} onClick={() => void exportFile("docx")}>
+              {exportBusy === "docx" ? "…" : "Full proposal .docx"}
+            </Button>
             {(saved?.id || id) && (
               <>
                 <Button type="button" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("doc")}>
-                  {exportBusy === "doc" ? "…" : "Download .doc"}
+                  {exportBusy === "doc" ? "…" : "Summary .doc"}
                 </Button>
                 <Button type="button" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("html")}>
-                  {exportBusy === "html" ? "…" : "Download HTML / PDF"}
+                  {exportBusy === "html" ? "…" : "Summary HTML"}
                 </Button>
               </>
             )}
