@@ -478,7 +478,7 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token }: any) {
         <div className="overflow-x-auto">
           <table className="min-w-[1200px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>PO</th><th>Discipline</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th></tr>
+              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>PO</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th></tr>
             </thead>
             <tbody>
               {ras.map((r: any) => (
@@ -488,6 +488,7 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token }: any) {
                   <td>{d(r.invoiceDate)}</td>
                   <td>{r.purchaseOrder?.poNumber || "—"}</td>
                   <td>{r.discipline || "—"}</td>
+                  <td className="text-right">{money(r.previousBillTotal)}</td>
                   <td className="text-right">{money(r.againstBillRaised)}</td>
                   <td className="text-right">{money(r.priceVariation)}</td>
                   <td className="text-right">{money(r.totalInvoiceWithoutGst)}</td>
@@ -500,7 +501,7 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token }: any) {
                   <td><Badge tone={r.status === "Paid" ? "ok" : r.status === "Rejected" ? "danger" : "brand"}>{r.status}</Badge></td>
                 </tr>
               ))}
-              {!ras.length && <tr><td colSpan={15} className="py-4 text-center text-steel-muted">No RA bills yet.</td></tr>}
+              {!ras.length && <tr><td colSpan={16} className="py-4 text-center text-steel-muted">No RA bills yet — run db:seed or add RA-01 under Finance → RA Bill Tracker.</td></tr>}
             </tbody>
           </table>
         </div>

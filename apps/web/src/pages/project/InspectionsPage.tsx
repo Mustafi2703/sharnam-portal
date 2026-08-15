@@ -24,6 +24,14 @@ export default function InspectionsPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [qapForm, setQapForm] = useState({ weekLabel: "", activity: "", discipline: "" });
+  const [ncrForm, setNcrForm] = useState({
+    kind: "NCR" as "NCR" | "CAR",
+    number: "",
+    ncrType: "",
+    description: "",
+    location: "",
+    contractor: "",
+  });
   const [form, setForm] = useState({
     title: "Site quality inspection",
     drawingId: "",
@@ -159,6 +167,69 @@ export default function InspectionsPage() {
           <h3 className="font-semibold mb-3">
             NCR / CAR register {view === "ncr" ? "(NCR 01 sheet)" : "(from sheet)"}
           </h3>
+          {view === "ncr" && canManage && (
+            <form
+              className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 pb-4 border-b border-line"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  await api(`/api/checklist/project/${id}/ncr`, {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify(ncrForm),
+                  });
+                  setNcrForm({
+                    kind: ncrForm.kind,
+                    number: "",
+                    ncrType: "",
+                    description: "",
+                    location: "",
+                    contractor: "",
+                  });
+                  setMsg(`${ncrForm.kind} raised — feeds DPR quality block and WPR quality slide`);
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Failed");
+                }
+              }}
+            >
+              <Select
+                value={ncrForm.kind}
+                onChange={(e) => setNcrForm({ ...ncrForm, kind: e.target.value as "NCR" | "CAR" })}
+              >
+                <option value="NCR">NCR (defect)</option>
+                <option value="CAR">CAR (corrective action)</option>
+              </Select>
+              <Input
+                placeholder="Number (optional — auto if blank)"
+                value={ncrForm.number}
+                onChange={(e) => setNcrForm({ ...ncrForm, number: e.target.value })}
+              />
+              <Input
+                placeholder="Type (Workmanship / Material / …)"
+                value={ncrForm.ncrType}
+                onChange={(e) => setNcrForm({ ...ncrForm, ncrType: e.target.value })}
+              />
+              <TextArea
+                className="sm:col-span-2 lg:col-span-3"
+                placeholder="Description — what failed / corrective action required"
+                value={ncrForm.description}
+                onChange={(e) => setNcrForm({ ...ncrForm, description: e.target.value })}
+                required
+              />
+              <Input
+                placeholder="Location"
+                value={ncrForm.location}
+                onChange={(e) => setNcrForm({ ...ncrForm, location: e.target.value })}
+              />
+              <Input
+                placeholder="Contractor"
+                value={ncrForm.contractor}
+                onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value })}
+              />
+              <Button type="submit">Raise {ncrForm.kind}</Button>
+            </form>
+          )}
           <div className="overflow-x-auto max-h-[28rem]">
             <table className="w-full text-sm">
               <thead>
@@ -166,7 +237,8 @@ export default function InspectionsPage() {
                   <th className="py-2 pr-3">No</th>
                   <th className="py-2 pr-3">Type</th>
                   <th className="py-2 pr-3">Description</th>
-                  <th className="py-2">Status</th>
+                  <th className="py-2 pr-3">Status</th>
+                  {view === "ncr" && canManage && <th className="py-2">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -175,15 +247,42 @@ export default function InspectionsPage() {
                     <td className="py-2 pr-3 font-mono text-xs">{n.number}</td>
                     <td className="py-2 pr-3">{n.ncrType || "—"}</td>
                     <td className="py-2 pr-3 max-w-md truncate">{n.description}</td>
-                    <td className="py-2">
+                    <td className="py-2 pr-3">
                       <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
                     </td>
+                    {view === "ncr" && canManage && (
+                      <td className="py-2">
+                        {n.status === "Open" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="!py-1 !px-2 !text-xs"
+                            onClick={async () => {
+                              await api(`/api/checklist/project/${id}/ncr/${n.id}`, {
+                                method: "PATCH",
+                                token,
+                                body: JSON.stringify({
+                                  status: "Closed",
+                                  actualClosure: new Date().toISOString().slice(0, 10),
+                                }),
+                              });
+                              setMsg(`${n.number} closed`);
+                              await load();
+                            }}
+                          >
+                            Close
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-steel-muted">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {!dash?.ncrs?.length && (
                   <tr>
-                    <td colSpan={4} className="py-6 text-steel-muted">
-                      No NCR rows seeded yet — re-seed from NCR 01.xlsx.
+                    <td colSpan={view === "ncr" && canManage ? 5 : 4} className="py-6 text-steel-muted">
+                      No NCR rows yet — run <code className="text-xs">npm run db:seed-quality-safety-demo</code> or raise one above.
                     </td>
                   </tr>
                 )}

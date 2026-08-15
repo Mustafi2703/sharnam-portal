@@ -1140,3 +1140,55 @@ checklistRouter.post(
     res.status(201).json(row);
   }
 );
+
+/** Raise quality NCR or CAR row from portal (same table — CAR uses number prefix CAR-) */
+checklistRouter.post(
+  "/project/:projectId/ncr",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const kind = String(body.kind || "NCR").toUpperCase();
+    const autoNo = kind === "CAR" ? `CAR-${Date.now().toString().slice(-6)}` : `NCR-${Date.now().toString().slice(-6)}`;
+    const row = await prisma.qualityNcr.create({
+      data: {
+        projectId: req.params.projectId,
+        number: String(body.number || autoNo).slice(0, 40),
+        issueDate: body.issueDate ? new Date(body.issueDate) : new Date(),
+        ncrType: String(body.ncrType || (kind === "CAR" ? "Corrective Action" : "General")).slice(0, 80),
+        contractor: body.contractor ? String(body.contractor).slice(0, 120) : null,
+        description: String(body.description || "Non-conformance raised from portal"),
+        location: body.location ? String(body.location).slice(0, 120) : null,
+        plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : null,
+        status: String(body.status || "Open").slice(0, 40),
+        source: "portal",
+      },
+    });
+    await audit("quality.ncr.create", {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId, number: row.number },
+    });
+    res.status(201).json(row);
+  }
+);
+
+checklistRouter.patch(
+  "/project/:projectId/ncr/:ncrId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    if (body.status != null) data.status = String(body.status);
+    if (body.description != null) data.description = String(body.description);
+    if (body.location != null) data.location = String(body.location);
+    if (body.plannedClosure !== undefined) data.plannedClosure = body.plannedClosure ? new Date(body.plannedClosure) : null;
+    if (body.actualClosure !== undefined) data.actualClosure = body.actualClosure ? new Date(body.actualClosure) : null;
+    if (body.ncrType != null) data.ncrType = String(body.ncrType);
+    const row = await prisma.qualityNcr.update({
+      where: { id: req.params.ncrId },
+      data,
+    });
+    res.json(row);
+  }
+);

@@ -5,7 +5,9 @@ import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
 import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
-import { seedChecklistFillsForReports, seedQualitySafetyFromSheets } from "./qualitySafetySheets.ts";
+import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr } from "./qualitySafetySheets.ts";
+import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
+import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedCrmComparative } from "./crmComparativeSeed.ts";
 import { PrismaClient } from "@prisma/client";
 import {
@@ -1393,6 +1395,11 @@ async function main() {
     const { project } = await seedProjectAndCost(users);
     console.log("Demo project:", project.code, project.name);
     await seedCrmComparative(prisma);
+    const officeId = users.find((u) => u.role === "office")?.id;
+    if (officeId) {
+      await seedFinanceRaCopDemo(prisma, project.id, officeId);
+      await seedQuotationDemo(prisma, officeId);
+    }
   } catch (e) {
     console.warn(
       "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",

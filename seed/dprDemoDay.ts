@@ -33,6 +33,9 @@ async function main() {
   }
 
   console.log(`\nSeeding DPR demo day: ${logDate.toISOString().slice(0, 10)} · project ${project.code}\n`);
+
+  await seedQualitySafetyDemoForDpr(prisma, project.id, logDate, officeUser.id, { weekDays: 7 });
+
   const result = await seedDprDemoDay(prisma, project.id, logDate, officeUser.id);
 
   for (const row of result.disciplines) {

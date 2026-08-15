@@ -14,6 +14,8 @@ import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
 import { buildWprWorkbook, type WprHeader, type WprSections } from "../apps/api/src/services/wprXlsx.ts";
 import { buildWprPptx } from "../apps/api/src/services/wprPptx.ts";
 import { seedDemoMsProject } from "../apps/api/src/services/msProjectSchedule.ts";
+import { seedQualitySafetyDemoForDpr } from "./qualitySafetySheets.ts";
+import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 
 const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
@@ -151,6 +153,10 @@ async function main() {
   console.log(`\nSeeding MS Project demo + S-curve…`);
   const ms = await seedDemoMsProject(project.id);
   console.log(`  ✓ ${ms.taskCount} tasks · ${ms.scurvePoints} S-curve weeks · ${ms.filePath}`);
+
+  console.log(`\nSeeding quality / safety / checklists for demo week…`);
+  await seedQualitySafetyDemoForDpr(prisma, project.id, weekEnd, office.id, { weekDays: 7 });
+  await seedFinanceRaCopDemo(prisma, project.id, office.id);
 
   console.log(`\nSeeding 7 published DPR days…\n`);
   for (let i = 0; i < 7; i++) {

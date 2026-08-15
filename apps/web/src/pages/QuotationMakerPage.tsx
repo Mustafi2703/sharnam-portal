@@ -15,25 +15,33 @@ type Section = { title: string; note?: string; rows: Row[] };
 
 const SPDC_DEFAULT_SECTIONS: Section[] = [
   {
-    title: "1. Project Management Consultancy (PMC) — Scope",
-    note: "Pre-construction, construction & handover management. Site supervision, monitoring, coordination & reporting.",
+    title: "1. Project Management Consultancy — Scope of Services",
+    note: "Pre-construction, construction phase management, and handover. Site supervision, BOQ monitoring, quality & safety, DPR/WPR, RA/COP tracking.",
     rows: [
       { description: "Consultancy fee — % of executed project cost", unit: "%", qty: 1, rate: 3.5, amount: 3.5 },
+      { description: "Estimated executed cost basis (ex GST)", unit: "INR", qty: 1, rate: 85000000, amount: 85000000 },
+      { description: "Indicative PMC fee (3.5%)", unit: "INR", qty: 1, rate: 2975000, amount: 2975000 },
     ],
   },
   {
-    title: "2. Deliverables",
-    note: "Weekly Progress Report (WPR), Daily Progress Report (DPR), Monthly Progress Dashboard, RFI logs, drawing tracker, cost & cashflow reports.",
+    title: "2. Deliverables (included in fee)",
+    note: "Generated from Sharnam portal — DPR, WPR, QAP, NCR/CAR, safety checklists, cost BOQ/MB/BBS, Finance RA/COP, MS Project S-curve.",
     rows: [
-      { description: "WPR / DPR / Monthly reports", unit: "LS", qty: 1, rate: 0, amount: 0 },
-      { description: "GFC drawing register + RFI / NCR / CAR tracking", unit: "LS", qty: 1, rate: 0, amount: 0 },
-      { description: "Cost, RA-Bill, COP & cashflow tracking dashboard", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "DPR (7 disciplines) + WPR PPTX", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Quality — QAP, NCR/CAR, cubes, QI checklists", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Safety dashboard + safety checklists", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Cost monitoring + cashflow; Finance PO/RA/COP", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Drawings register + RFI / submittal tracker", unit: "LS", qty: 1, rate: 0, amount: 0 },
     ],
   },
   {
     title: "3. Payment Terms",
-    note: "Monthly certification. Retention 5% released on handover. GST as applicable.",
-    rows: [],
+    note: "Monthly certification. Retention 5% on handover. GST extra.",
+    rows: [
+      { description: "Mobilisation on award", unit: "INR", qty: 1, rate: 297500, amount: 297500 },
+      { description: "Running monthly", unit: "INR", qty: 1, rate: 2528750, amount: 2528750 },
+      { description: "Final on handover", unit: "INR", qty: 1, rate: 148750, amount: 148750 },
+    ],
   },
 ];
 
@@ -49,12 +57,13 @@ export default function QuotationMakerPage() {
   const canWrite = ["admin", "office"].includes(user?.role || "");
 
   const [meta, setMeta] = useState({
-    quotationNo: "",
-    clientName: "",
-    clientAddress: "",
-    clientGst: "",
-    scopeSummary: "",
-    validityDays: 30,
+    quotationNo: "SPDC-PMC-ARV-2025-001",
+    clientName: "Arvind Limited",
+    clientAddress: "SPDC Campus · Gujarat, India",
+    clientGst: "24AAAAA0000A1Z5",
+    scopeSummary:
+      "PMC for SPDC dormitory — DPR/WPR, quality & safety, cost & cashflow, RA/COP tracking via Sharnam portal.",
+    validityDays: 90,
     quotationDate: new Date().toISOString().slice(0, 10),
     currency: "INR",
     status: "Draft",

@@ -404,3 +404,249 @@ export async function seedChecklistFillsForReports(
   }
   console.log("Checklist fills seeded for Progress Reports (Drawing / QI / Safety / Site)");
 }
+
+const DEMO_SOURCE = "demo-week-seed";
+
+function dayAt(d: Date, hour = 9) {
+  const x = new Date(d);
+  x.setHours(hour, 0, 0, 0);
+  return x;
+}
+
+async function buildChecklistResponses(prisma: PrismaClient, templateId: string, answers: string[]) {
+  const items = await prisma.checklistItem.findMany({
+    where: { templateId },
+    orderBy: { sortOrder: "asc" },
+    take: 40,
+  });
+  const responses: Record<string, { answer: string; remarks: string }> = {};
+  items.forEach((item, i) => {
+    responses[item.id] = {
+      answer: answers[i % answers.length] || "Yes",
+      remarks: item.section ? `${item.section} — verified on site` : "Verified",
+    };
+  });
+  return responses;
+}
+
+/**
+ * Realistic quality / safety / checklist demo for DPR + WPR auto-fill.
+ * Idempotent per project — re-run safe before DPR demo day or pilot week.
+ */
+export async function seedQualitySafetyDemoForDpr(
+  prisma: PrismaClient,
+  projectId: string,
+  anchorDate: Date,
+  reportedById: string,
+  opts?: { weekDays?: number }
+) {
+  const days = Math.max(1, Math.min(14, opts?.weekDays ?? 1));
+  const weekLabel = `Demo-W${anchorDate.toISOString().slice(5, 7)}`;
+
+  await prisma.qualityNcr.deleteMany({ where: { projectId, source: DEMO_SOURCE } });
+  await prisma.cubeTest.deleteMany({ where: { projectId, source: DEMO_SOURCE } });
+  await prisma.qapActivity.deleteMany({ where: { projectId, weekLabel: { startsWith: "Demo-" } } });
+  await prisma.safetyRecord.deleteMany({ where: { projectId, title: { startsWith: "Demo ·" } } });
+  await prisma.checklistSubmission.deleteMany({
+    where: { assignment: { projectId }, remarks: { contains: DEMO_SOURCE } },
+  });
+
+  const ncrs = [
+    {
+      number: "NCR-101",
+      ncrType: "Workmanship",
+      description: "Honeycomb observed at column C-12 lift 2 — rectification before next pour.",
+      location: "Block A — Grid C-12",
+      status: "Open",
+    },
+    {
+      number: "NCR-102",
+      ncrType: "Material",
+      description: "Mill test certificate pending for Fe 500D batch delivered 12-Aug.",
+      location: "Site store — rebar yard",
+      status: "Open",
+    },
+    {
+      number: "CAR-08",
+      ncrType: "Corrective Action",
+      description: "CAR for repeated cover block spacing non-compliance on slab SOG-03.",
+      location: "SOG-03",
+      status: "Open",
+    },
+    {
+      number: "NCR-099",
+      ncrType: "Documentation",
+      description: "Pour card sign-off missing for raft PCC — closed after resubmission.",
+      location: "Raft foundation Zone 1",
+      status: "Closed",
+      actualClosure: anchorDate,
+    },
+    {
+      number: "CAR-07",
+      ncrType: "Corrective Action",
+      description: "CAR closed — shuttering oil contamination on soffit cleaned and approved.",
+      location: "Level 1 slab",
+      status: "Closed",
+      actualClosure: anchorDate,
+    },
+  ];
+
+  for (const n of ncrs) {
+    await prisma.qualityNcr.create({
+      data: {
+        projectId,
+        number: n.number,
+        issueDate: dayAt(anchorDate, 8),
+        ncrType: n.ncrType,
+        contractor: "NK Infra",
+        description: n.description,
+        location: n.location,
+        plannedClosure: new Date(anchorDate.getTime() + 7 * 86400000),
+        actualClosure: n.actualClosure ? dayAt(n.actualClosure, 17) : null,
+        status: n.status,
+        source: DEMO_SOURCE,
+      },
+    });
+  }
+
+  for (let d = 0; d < days; d++) {
+    const day = new Date(anchorDate);
+    day.setDate(anchorDate.getDate() - (days - 1 - d));
+    await prisma.cubeTest.create({
+      data: {
+        projectId,
+        srNo: String(240 + d),
+        castDate: dayAt(day, 14),
+        description: `M30 raft / column pour — Set ${d + 1}`,
+        grade: "M30",
+        cubeWeight: 8.1,
+        testDate7: new Date(day.getTime() + 7 * 86400000),
+        testDate28: new Date(day.getTime() + 28 * 86400000),
+        strength: d === days - 1 ? 0 : 28.4,
+        result: d === days - 1 ? "Pending" : "Pass",
+        source: DEMO_SOURCE,
+      },
+    });
+
+    await prisma.safetyRecord.create({
+      data: {
+        projectId,
+        recordType: "Toolbox Talk",
+        title: `Demo · Toolbox — working at height & PPE`,
+        description: "Morning toolbox on guard rails, harness anchor points, and housekeeping.",
+        severity: "Medium",
+        status: "Closed",
+        location: "Block A — muster point",
+        correctiveAction: "PPE compliance confirmed",
+        occurredAt: dayAt(day, 7),
+        closedAt: dayAt(day, 8),
+        reportedById,
+      },
+    });
+  }
+
+  await prisma.safetyRecord.create({
+    data: {
+      projectId,
+      recordType: "Near Miss",
+      title: "Demo · Loose plank on scaffold access",
+      description: "Unstable plank on east face tower scaffold — barricaded and replaced.",
+      severity: "High",
+      status: "Open",
+      location: "Block A — East scaffold",
+      occurredAt: dayAt(anchorDate, 11),
+      reportedById,
+    },
+  });
+
+  await prisma.safetyRecord.create({
+    data: {
+      projectId,
+      recordType: "Observation",
+      title: "Demo · Housekeeping — rebar cuttings",
+      description: "Rebar cuttings cleared from walkway after observation.",
+      severity: "Low",
+      status: "Closed",
+      location: "Rebar yard",
+      occurredAt: dayAt(anchorDate, 15),
+      closedAt: dayAt(anchorDate, 16),
+      reportedById,
+    },
+  });
+
+  const qapRows = [
+    { activity: "Reinforcement — cover & spacing check", discipline: "Civil", done: true },
+    { activity: "Shuttering — oil & alignment before pour", discipline: "Civil", done: true },
+    { activity: "Cube casting & slump — M30 raft", discipline: "Civil", done: false },
+    { activity: "DB termination — torque check sample", discipline: "Electrical", done: false },
+    { activity: "Fire hydrant line pressure test witness", discipline: "Fire", done: false },
+  ];
+
+  for (const q of qapRows) {
+    await prisma.qapActivity.create({
+      data: {
+        projectId,
+        weekLabel,
+        activity: q.activity,
+        discipline: q.discipline,
+        contractorOk: true,
+        pmcOk: q.done,
+        clientOk: q.done,
+        status: q.done ? "Done" : "Open",
+        completedAt: q.done ? dayAt(anchorDate, 16) : null,
+      },
+    });
+  }
+
+  const qiAssignment = await prisma.checklistAssignment.findFirst({
+    where: { projectId, template: { checklistType: "QualityInspection" } },
+    include: { template: true },
+  });
+  const safetyAssignment = await prisma.checklistAssignment.findFirst({
+    where: { projectId, template: { checklistType: "Safety" } },
+  });
+
+  if (qiAssignment) {
+    const responses = await buildChecklistResponses(prisma, qiAssignment.templateId, [
+      "Yes",
+      "Yes",
+      "NA",
+      "Yes",
+    ]);
+    await prisma.checklistSubmission.create({
+      data: {
+        assignmentId: qiAssignment.id,
+        submittedById: reportedById,
+        status: "Approved",
+        purpose: "Fill",
+        remarks: `${DEMO_SOURCE}:QI pour inspection`,
+        responsesJson: JSON.stringify(responses),
+        createdAt: dayAt(anchorDate, 10),
+        reviewedAt: dayAt(anchorDate, 11),
+      },
+    });
+  }
+
+  if (safetyAssignment) {
+    const responses = await buildChecklistResponses(prisma, safetyAssignment.templateId, [
+      "Yes",
+      "Yes",
+      "Yes",
+    ]);
+    await prisma.checklistSubmission.create({
+      data: {
+        assignmentId: safetyAssignment.id,
+        submittedById: reportedById,
+        status: "Submitted",
+        purpose: "Fill",
+        remarks: `${DEMO_SOURCE}:Safety site walk`,
+        responsesJson: JSON.stringify(responses),
+        createdAt: dayAt(anchorDate, 9),
+      },
+    });
+  }
+
+  console.log(
+    `Quality/Safety demo seeded — ${ncrs.length} NCR/CAR · ${days} cube days · QAP ${qapRows.length} · checklists ${qiAssignment ? 1 : 0}+${safetyAssignment ? 1 : 0}`
+  );
+}

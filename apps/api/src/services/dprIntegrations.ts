@@ -154,6 +154,7 @@ export async function buildDprAutoFill(
     rfisOpen,
     cashflow,
     prev,
+    checklistFillsToday,
   ] = await Promise.all([
     prisma.costMonitoringLine.findMany({
       where: { projectId, packageName: { in: pkgs } },
@@ -178,6 +179,15 @@ export async function buildDprAutoFill(
       take: 40,
     }),
     previousDprCumulative(projectId, logDate, discipline),
+    prisma.checklistSubmission.findMany({
+      where: {
+        assignment: { projectId },
+        status: { in: ["Submitted", "Approved"] },
+        createdAt: { gte: start, lt: end },
+      },
+      include: { assignment: { include: { template: { select: { checklistType: true } } } } },
+      take: 30,
+    }),
   ]);
 
   if (monitoring.length) sources.push(`BOQ monitoring (${pkgs.slice(0, 2).join(", ")})`);
@@ -188,6 +198,7 @@ export async function buildDprAutoFill(
   if (manpowerRegs.length) sources.push("Progress manpower register");
   if (safetyToday.length || safetyOpen.length) sources.push("Safety records / NCR");
   if (ncrsOpen.length || cubesToday.length) sources.push("Quality NCR / cube tests");
+  if (checklistFillsToday.length) sources.push("QI / Safety checklist fills");
   if (hindrances.length) sources.push("Hindrance register");
   if (rfisOpen.length) sources.push("Open RFIs");
 
@@ -268,6 +279,13 @@ export async function buildDprAutoFill(
     incidents: safetyToday.filter((s) => /incident/i.test(s.recordType)).length,
   };
 
+  const qiChecklists = checklistFillsToday.filter(
+    (s) => s.assignment.template.checklistType === "QualityInspection"
+  ).length;
+  const safetyChecklists = checklistFillsToday.filter(
+    (s) => s.assignment.template.checklistType === "Safety"
+  ).length;
+
   const qualityTests: DprQualityTest[] = [
     {
       parameter: "Pour cards offered / approved",
@@ -277,7 +295,10 @@ export async function buildDprAutoFill(
       parameter: "Concrete cube sets cast / slump tests",
       figure: cubesToday.map((c) => c.description).join("; ") || "—",
     },
-    { parameter: "Reinforcement & shuttering checklists", figure: "—" },
+    {
+      parameter: "QI / Safety checklists filled today",
+      figure: `${qiChecklists} QI · ${safetyChecklists} Safety`,
+    },
     { parameter: "7-day cube result", figure: "—" },
     {
       parameter: "NCRs open / closed today",
