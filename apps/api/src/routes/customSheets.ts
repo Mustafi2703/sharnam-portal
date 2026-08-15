@@ -128,7 +128,12 @@ customSheetsRouter.post(
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "file required" });
     const kind = String(req.body.kind || "mb") as "mb" | "bbs" | "monitoring";
-    if (!MASTER_CATEGORY[kind]) return res.status(400).json({ error: "kind must be mb, bbs, or monitoring" });
+    if (kind === "monitoring") {
+      return res.status(400).json({
+        error: "BOQ / monitoring is per-project only — upload structure BOQ on Cost → BOQ tab, not as a global master.",
+      });
+    }
+    if (!MASTER_CATEGORY[kind]) return res.status(400).json({ error: "kind must be mb or bbs" });
     const name = String(req.body.name || req.file.originalname).trim();
 
     let headers: string[] = [];
@@ -147,12 +152,7 @@ customSheetsRouter.post(
       headers = BBS_HEADERS;
       rows = bbsLinesToSheetRows(lines);
     } else {
-      const { MON_HEADERS } = await import("../services/costMasterLines.js");
-      const wb = readWorkbook(req.file.buffer, req.file.originalname);
-      const target = wb.Sheets[wb.SheetNames[0]];
-      const parsed = parseSheetWithFormulas(target);
-      headers = parsed.headers.length ? parsed.headers : MON_HEADERS;
-      rows = parsed.rows;
+      return res.status(400).json({ error: "kind must be mb or bbs" });
     }
 
     const row = await prisma.customSheet.create({

@@ -500,9 +500,9 @@ export default function MasterModulePage() {
               hint: "Per-project drawing types · R0–R5 · markup upload",
             },
             {
-              to: dirProjectId ? `/projects/${dirProjectId}/cost?tab=monitoring` : "/projects",
-              label: "Cost / MB / BBS",
-              hint: "Budget sheet packages linked to DPR",
+              to: dirProjectId ? `/projects/${dirProjectId}/cost?tab=boq` : "/projects",
+              label: "Cost — BOQ per structure",
+              hint: "Upload BOQ per project structure · MB/BBS from global master",
             },
             {
               to: dirProjectId ? `/projects/${dirProjectId}/dms` : "/projects",

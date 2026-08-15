@@ -1,12 +1,13 @@
 /**
- * Master setup — upload global MB / BBS / BOQ template sheets (CustomSheet, projectId null).
+ * Master setup — upload global MB / BBS template sheets only (CustomSheet, projectId null).
+ * BOQ / monitoring is per-project structure upload on Cost → BOQ tab (not global).
  */
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 
-type MasterKind = "mb" | "bbs" | "monitoring";
+type MasterKind = "mb" | "bbs";
 
 type MasterSummary = {
   id: string;
@@ -17,14 +18,20 @@ type MasterSummary = {
   updatedAt: string;
 };
 
-const KINDS: { id: MasterKind; label: string; hint: string; accept: string }[] = [
-  { id: "mb", label: "MB sheets", hint: "SPDC * MB sheets from budget workbook", accept: ".xlsx,.xls" },
-  { id: "bbs", label: "BBS sheets", hint: "SPDC * BBS sheets — bar schedule columns", accept: ".xlsx,.xls" },
+const KINDS: { id: MasterKind; label: string; hint: string; accept: string; example: string }[] = [
   {
-    id: "monitoring",
-    label: "BOQ / Monitoring",
-    hint: "BOQ line register — Section, Item, Description, Rate, Qty",
-    accept: ".xlsx,.xls,.csv",
+    id: "mb",
+    label: "MB sheets",
+    hint: "Upload SPDC * MB sheets (Dormitory MB, Electric MB, …) from budget workbook or standalone .xls",
+    accept: ".xlsx,.xls",
+    example: "DORMITORY MB · Electric MB · Plumbing MB",
+  },
+  {
+    id: "bbs",
+    label: "BBS sheets",
+    hint: "Upload SPDC * BBS sheets — full bar schedule columns; pair with BBS shape code master for diagrams",
+    accept: ".xlsx,.xls",
+    example: "DORMITORY BBS · UGWT BBS · Compound Wall BBS",
   },
 ];
 
@@ -64,7 +71,7 @@ export function MasterCostTemplatesPanel({ token }: Props) {
         token,
         body: fd,
       });
-      setMsg(`Uploaded master “${res.name}” — ${res.rowCount} rows`);
+      setMsg(`Uploaded ${kind.toUpperCase()} master “${res.name}” — ${res.rowCount} rows`);
       setFile(null);
       setName("");
       await load();
@@ -81,13 +88,17 @@ export function MasterCostTemplatesPanel({ token }: Props) {
     <Card className="sm:col-span-2 xl:col-span-3 !p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl">Cost sheet masters</h2>
+          <h2 className="font-display text-xl">Global MB &amp; BBS sheet masters</h2>
           <p className="text-sm text-steel-muted mt-1">
-            Upload once here — each project picks relevant lines by discipline/package on the Cost module (MB, BBS, BOQ tabs).
+            Like <strong>checklist master → project fill</strong>: upload MB/BBS templates once here; each project picks relevant lines by package on Cost → MB / BBS tabs.
+          </p>
+          <p className="text-xs text-steel-muted mt-1">
+            <strong>BOQ / monitoring</strong> is <em>not</em> global — upload per project structure on{" "}
+            <span className="font-medium text-ink">Cost → BOQ</span> (one package name per structure).
           </p>
         </div>
         <Link to="/custom-sheets" className="text-sm text-brand font-semibold">
-          Open Sheet Maker →
+          Sheet Maker (advanced) →
         </Link>
       </div>
 
@@ -109,7 +120,7 @@ export function MasterCostTemplatesPanel({ token }: Props) {
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
       <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end" onSubmit={onUpload}>
-        <Input placeholder="Master name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input placeholder="Master name (e.g. Dormitory MB)" value={name} onChange={(e) => setName(e.target.value)} />
         <Select value={kind} onChange={(e) => setKind(e.target.value as MasterKind)}>
           {KINDS.map((k) => (
             <option key={k.id} value={k.id}>
@@ -119,10 +130,12 @@ export function MasterCostTemplatesPanel({ token }: Props) {
         </Select>
         <input type="file" accept={active.accept} onChange={(e) => setFile(e.target.files?.[0] || null)} />
         <Button type="submit" disabled={!file || busy}>
-          {busy ? "Uploading…" : "Upload master sheet"}
+          {busy ? "Uploading…" : `Upload ${active.label}`}
         </Button>
       </form>
-      <p className="text-xs text-steel-muted">{active.hint}</p>
+      <p className="text-xs text-steel-muted">
+        {active.hint} · Examples: {active.example}
+      </p>
 
       <div className="border border-line rounded-sm overflow-hidden">
         <table className="w-full text-sm">
@@ -150,7 +163,7 @@ export function MasterCostTemplatesPanel({ token }: Props) {
             {!masters.length && (
               <tr>
                 <td colSpan={4} className="px-3 py-6 text-center text-steel-muted">
-                  No {active.label} master uploaded yet.
+                  No {active.label} uploaded yet — upload SPDC budget * {kind === "mb" ? "MB" : "BBS"} sheet here.
                 </td>
               </tr>
             )}

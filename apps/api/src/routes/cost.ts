@@ -777,6 +777,12 @@ costRouter.post(
       ? (req.body.rowIndexes as unknown[]).map((x) => Number(x)).filter((n) => Number.isFinite(n))
       : [];
 
+    if (kind === "monitoring") {
+      return res.status(400).json({
+        error: "BOQ is per-project — use Cost → BOQ tab to upload each structure/package for this project.",
+      });
+    }
+
     if (!masterId) return res.status(400).json({ error: "masterId required" });
     if (!rowIndexes.length) return res.status(400).json({ error: "Select at least one line" });
 

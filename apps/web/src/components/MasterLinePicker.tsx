@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Button, Card, Input, Select } from "./ui";
 
-type MasterKind = "mb" | "bbs" | "monitoring";
+type MasterKind = "mb" | "bbs";
 
 type MasterSummary = {
   id: string;
@@ -34,7 +34,6 @@ type Props = {
 const KIND_LABEL: Record<MasterKind, string> = {
   mb: "MB sheet",
   bbs: "BBS sheet",
-  monitoring: "BOQ / monitoring",
 };
 
 export function MasterLinePicker({
@@ -134,7 +133,7 @@ export function MasterLinePicker({
         <div>
           <h3 className="font-semibold text-sm">Add from global master</h3>
           <p className="text-xs text-steel-muted mt-0.5">
-            Upload masters in Master → Global masters. Pick lines relevant to this discipline/package.
+            Global templates from Master → Global masters. Pick lines for this project package (not used for BOQ — upload structures on Cost → BOQ).
           </p>
         </div>
         <Button type="button" variant="secondary" onClick={() => setOpen((o) => !o)}>

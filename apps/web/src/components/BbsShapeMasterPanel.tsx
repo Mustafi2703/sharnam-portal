@@ -106,7 +106,7 @@ export function BbsShapeMasterPanel({ token }: Props) {
       <div>
         <h2 className="font-display text-xl">BBS shape code master</h2>
         <p className="text-sm text-steel-muted mt-1">
-          Information table: shape code + bend diagram. Project BBS rows pick by code — diagrams attach automatically on import or sync.
+          Bend diagram library by <strong>code</strong> (A, L1, …) — separate from the BBS line sheet master above. Upload diagrams here; BBS rows pick code in the Shape of bar column.
         </p>
       </div>
 

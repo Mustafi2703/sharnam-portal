@@ -429,6 +429,16 @@ export default function CostPage() {
 
       {tab === "monitoring" && (
         <div className="space-y-3">
+          <Card className="!p-4 border-line bg-paper/80">
+            <h3 className="font-semibold text-sm">BOQ is per project &amp; structure</h3>
+            <p className="text-xs text-steel-muted mt-1">
+              Monitoring lines come from <strong>this project only</strong> — upload each structure/package on the{" "}
+              <button type="button" className="text-brand font-semibold underline-offset-2 hover:underline" onClick={() => setTab("boq")}>
+                BOQ tab
+              </button>{" "}
+              (e.g. Civil Dormitory, Electric, UGWT). Global masters apply to <strong>MB &amp; BBS only</strong>.
+            </p>
+          </Card>
           <p className="text-sm text-steel-muted">
             Edit sections and line items inline. Office edits BOQ rate/qty; site edits GFC and Achieved. MB item codes roll up to Achieved via sync.
           </p>
@@ -461,17 +471,6 @@ export default function CostPage() {
                 Sync from MB &amp; BBS shapes
               </Button>
             </Card>
-          )}
-          {canEdit && (
-            <MasterLinePicker
-              projectId={id!}
-              token={token}
-              kind="monitoring"
-              defaultPackage={pkgFilter}
-              packageOptions={(summary.packages || []).filter((p: string) => p !== "All")}
-              canEdit={canEdit}
-              onImported={() => void load()}
-            />
           )}
           <BoqMonitoringEditor
             projectId={id!}
@@ -928,11 +927,18 @@ export default function CostPage() {
       )}
 
       {tab === "boq" && (
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <Card className="!p-4 border-brand/30 bg-brand-soft/30">
+            <h3 className="font-semibold text-sm">Project-wise structure BOQ upload</h3>
+            <p className="text-xs text-steel-muted mt-1">
+              Each structure gets its own <strong>package name</strong> (Monitoring Civil Dormitory, Electric, …). Lines appear on the Monitoring tab filtered by that package. This is not stored as a global master — only for this project.
+            </p>
+          </Card>
+          <div className="grid lg:grid-cols-2 gap-4">
           <Card>
             <h3 className="font-semibold mb-2">Upload structure / BOQ</h3>
             <p className="text-xs text-steel-muted mb-3">
-              Multiple structures per project — each upload creates monitoring lines under a package name (feeds MB totals).
+              Excel/CSV per structure — creates monitoring lines under the package name you enter below.
             </p>
             {canEdit && (
               <form
@@ -976,6 +982,7 @@ export default function CostPage() {
               {!summary.boqBatches.length && <li className="text-steel-muted">No imports yet.</li>}
             </ul>
           </Card>
+          </div>
         </div>
       )}
     </div>
