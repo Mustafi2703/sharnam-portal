@@ -317,6 +317,21 @@ export default function WprMakerPage() {
     }
   }
 
+  async function downloadPptx() {
+    if (!pack) return;
+    const url = `${apiBase()}/api/wpr-maker/${projectId}/download.pptx?end=${weekEnd}`;
+    const fname = `WPR-${pack.projectCode}-${weekEnd}.pptx`;
+    setBusy(true);
+    try {
+      await downloadWithAuth(url, token, fname);
+      setMsg("WPR PowerPoint downloaded — matches SPDC section list (24 slides).");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!pack) {
     return (
       <div className="maker-shell space-y-4">
@@ -335,6 +350,7 @@ export default function WprMakerPage() {
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>
             <button className="text-sm font-semibold text-brand underline" onClick={downloadXlsx} disabled={busy}>Download XLSX</button>
+            <button className="text-sm font-semibold text-brand underline" onClick={downloadPptx} disabled={busy}>Download PPTX</button>
           </div>
         }
       />
@@ -547,6 +563,7 @@ export default function WprMakerPage() {
         <Button onClick={save} disabled={busy}>Save draft</Button>
         <Button onClick={publish} disabled={busy} variant="secondary">Publish</Button>
         <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export XLSX</Button>
+        <Button type="button" variant="secondary" onClick={downloadPptx} disabled={busy}>Export PPTX</Button>
       </div>
     </div>
   );

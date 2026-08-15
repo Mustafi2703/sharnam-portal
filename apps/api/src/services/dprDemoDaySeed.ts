@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import type { PrismaClient } from "@prisma/client";
 import { buildDprAutoFill } from "./dprIntegrations.js";
+import { buildDprChartPack, loadDprScurveHistory } from "./dprCharts.js";
 import { renderDprSnapshotHtml } from "./dprSnapshotExport.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
 import { mockOneDrive } from "./mockOneDrive.js";
@@ -337,9 +338,16 @@ export async function seedDprDemoDay(
       signatures,
     };
 
-    const xlsxBuf = await buildDprWorkbook({ discipline, header, lines, ...extras });
+    const xlsxBuf = await buildDprWorkbook(
+      { discipline, header, lines, ...extras },
+      { projectId: project.id, logDate }
+    );
     const xlsxName = `DPR-${project.code}-${discipline}-${dateStr}.xlsx`;
     const publishedPath = writeLocalFile(project.code, `${relBase}/${discipline}`, xlsxName, xlsxBuf);
+
+    const snapForCharts = { discipline, header, lines, manpower: extras.manpower, safety: extras.safety };
+    const scurve = await loadDprScurveHistory(project.id, discipline, logDate, snapForCharts);
+    const charts = buildDprChartPack(snapForCharts, scurve);
 
     const html = renderDprSnapshotHtml({
       project: { code: project.code, name: project.name, clientName: project.clientName, location: project.location },
@@ -355,6 +363,7 @@ export async function seedDprDemoDay(
       nextDayPlan: extras.nextDayPlan,
       delays: extras.delays,
       issues: extras.issues,
+      charts,
     });
     const htmlName = `DPR-${project.code}-${discipline}-${dateStr}.html`;
     const htmlPath = writeLocalFile(project.code, `${relBase}/${discipline}`, htmlName, Buffer.from(html, "utf8"));

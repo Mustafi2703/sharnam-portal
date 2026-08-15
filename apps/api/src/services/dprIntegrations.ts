@@ -302,7 +302,7 @@ export async function buildDprAutoFill(
   const delays: DprDelay[] = hindrances.slice(0, 4).map((h) => ({
     cause: h.description,
     category: h.category || "Hindrance",
-    from: h.occurredAt ? h.occurredAt.toISOString().slice(0, 10) : undefined,
+    from: undefined,
     to: undefined,
     hoursLost: h.daysImpacted ? h.daysImpacted * 8 : h.scheduleImpact ? h.scheduleImpact * 8 : undefined,
     eot: "Review",

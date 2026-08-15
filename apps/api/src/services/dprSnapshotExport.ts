@@ -2,6 +2,7 @@
  * Branded HTML export for DPR Maker snapshots (Print → Save as PDF).
  */
 import { renderBrandedReportHtml } from "./brandedExport.js";
+import { dprChartsSvg, type DprChartPack } from "./dprCharts.js";
 import type { DprDelay, DprHeader, DprIssue, DprLine, DprManpower, DprMaterial, DprPhoto, DprSafety } from "./dprXlsx.js";
 
 function inr(v: number | undefined) {
@@ -28,6 +29,7 @@ export function renderDprSnapshotHtml(opts: {
   delays?: DprDelay[];
   issues?: DprIssue[];
   signatures?: DprPhoto[];
+  charts?: DprChartPack;
 }): string {
   const h = opts.header;
   const qtyToday = opts.lines.reduce((s, l) => s + (l.qtyToday || 0), 0);
@@ -107,7 +109,7 @@ export function renderDprSnapshotHtml(opts: {
   }
 
   const s = opts.safety || {};
-  return renderBrandedReportHtml({
+  let html = renderBrandedReportHtml({
     title: `Daily Progress Report · ${opts.discipline.replace(/_/g, " ")}`,
     subtitle: `${fmtDate(opts.logDate.toISOString())} · ${opts.status} · SPDC discipline template data`,
     project: opts.project,
@@ -137,4 +139,11 @@ export function renderDprSnapshotHtml(opts: {
       ...sections,
     ],
   });
+  if (opts.charts) {
+    html = html.replace(
+      '<div class="kpis">',
+      `<div style="padding:18px 28px;border-bottom:1px solid #e2e5eb">${dprChartsSvg(opts.charts)}</div><div class="kpis">`
+    );
+  }
+  return html;
 }

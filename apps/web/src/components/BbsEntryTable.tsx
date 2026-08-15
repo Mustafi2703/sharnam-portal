@@ -76,11 +76,11 @@ type Props = {
   onChanged: () => void;
 };
 
-/** SPDC BBS sheet column order — all budget columns after Shape of bar. */
 const HEADERS = [
   "Package",
-  "SR NO",
-  "Description",
+  "Bar mark",
+  "Item code",
+  "Section",
   "Shape of bar",
   "DIA",
   "No/member",
@@ -246,11 +246,18 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
                       b.barMark || "—"
                     )}
                   </td>
+                  <td className="wrap font-mono text-xs">
+                    {canEditDims ? (
+                      <CellInput value={b.itemCode} onCommit={(v) => void patchLine(b.id, { itemCode: v })} />
+                    ) : (
+                      b.itemCode || "—"
+                    )}
+                  </td>
                   <td className="wrap">
                     {canEditDims ? (
-                      <CellInput value={b.location} onCommit={(v) => void patchLine(b.id, { location: v })} />
+                      <CellInput value={b.sectionMark} onCommit={(v) => void patchLine(b.id, { sectionMark: v })} />
                     ) : (
-                      b.location || "—"
+                      b.sectionMark || "—"
                     )}
                   </td>
                   <td className="align-top">

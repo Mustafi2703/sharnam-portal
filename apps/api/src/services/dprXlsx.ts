@@ -37,6 +37,7 @@
 import ExcelJS from "exceljs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { fillScurveHistorySheet, loadDprScurveHistory } from "./dprCharts.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -459,7 +460,10 @@ function buildSafetyRowsFromLegacy(s?: DprSafety): DprSafetyRow[] {
  * Build the DPR workbook by patching the discipline template.
  * Returns a Buffer ready to send / upload.
  */
-export async function buildDprWorkbook(snap: DprSnapshot): Promise<Buffer> {
+export async function buildDprWorkbook(
+  snap: DprSnapshot,
+  opts?: { projectId?: string; logDate?: Date }
+): Promise<Buffer> {
   const templateName = TEMPLATE_FILE[snap.discipline] || TEMPLATE_FILE.CIVIL;
   const templatePath = path.join(TEMPLATE_DIR, templateName);
 
@@ -471,6 +475,11 @@ export async function buildDprWorkbook(snap: DprSnapshot): Promise<Buffer> {
     throw new Error(`Template ${templateName} is missing the INPUT sheet`);
   }
   fillInputSheet(inputSheet, snap);
+
+  if (opts?.projectId && opts.logDate) {
+    const history = await loadDprScurveHistory(opts.projectId, snap.discipline, opts.logDate, snap);
+    fillScurveHistorySheet(inputSheet, history);
+  }
 
   // Attach a PHOTOS sheet listing every uploaded evidence artefact
   const evidence: (DprPhoto & { kind: string })[] = [

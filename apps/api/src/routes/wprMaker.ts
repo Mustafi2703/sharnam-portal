@@ -28,6 +28,7 @@ import {
   type WprSection,
   type WprSections,
 } from "../services/wprXlsx.js";
+import { buildWprPptx } from "../services/wprPptx.js";
 
 export const wprMakerRouter = Router();
 wprMakerRouter.use(requireAuth);
@@ -476,6 +477,39 @@ wprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
   const buf = buildWprWorkbook({ header, sections });
   const fname = `WPR-${project.code}-${weekEnd.toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+wprMakerRouter.get("/:projectId/download.pptx", async (req, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const weekEnd = parseEnd(req.query.end);
+  const weekStart = new Date(weekEnd);
+  weekStart.setDate(weekEnd.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+  const existing = await prisma.wprSnapshot.findUnique({
+    where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
+  });
+  const header: WprHeader = {
+    projectName: project.name,
+    projectCode: project.code,
+    reportNumber: existing?.reportNumber || undefined,
+    weekStart: weekStart.toISOString(),
+    weekEnd: weekEnd.toISOString(),
+    clientName: project.clientName || "",
+    designConsultant: project.designConsultant || "",
+    contractorName: project.contractorName || "",
+    location: project.location || "",
+    pmc: "Sharnam Project Development Consultants & Co.",
+  };
+  const sections: WprSections = existing
+    ? JSON.parse(existing.sectionsJson || "{}")
+    : await seedSections(projectId, weekStart, weekEnd);
+  const buf = await buildWprPptx({ header, sections });
+  const fname = `WPR-${project.code}-${weekEnd.toISOString().slice(0, 10)}.pptx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(buf);
 });

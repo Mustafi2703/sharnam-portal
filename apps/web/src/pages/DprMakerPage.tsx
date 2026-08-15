@@ -4,6 +4,7 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { EvidencePanel } from "../components/EvidencePanel";
+import { BarChart } from "../components/PieChart";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -137,12 +138,32 @@ type Snap = {
   publishedPath?: string | null;
   publishedAt?: string | null;
   autoFillSources?: string[];
+  charts?: {
+    summary: {
+      plannedPct: number;
+      actualPct: number;
+      variance: number;
+      spi: number;
+      overallStatus: string;
+    };
+    scurve: { label: string; planned: number; actual: number }[];
+    boqProgress: { label: string; planned: number; actual: number }[];
+    manpower: { label: string; planned: number; actual: number }[];
+  };
 };
 
 function toDateInput(v: string | null | undefined): string {
   if (!v) return "";
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+/** Delay log uses HH:mm — strip legacy ISO dates auto-filled from hindrance register. */
+function toTimeInput(v: string | null | undefined): string {
+  if (!v) return "";
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(v)) return v.slice(0, 5);
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return "";
+  return v;
 }
 
 function num(v: unknown): number {
@@ -695,6 +716,50 @@ export default function DprMakerPage() {
         </div>
       )}
 
+      {/* Dashboard charts — mirrors DASHBOARD sheet / PDF export */}
+      {snap.charts && (
+        <div className="maker-section">
+          <div className="maker-section__head">Dashboard charts · planned vs actual</div>
+          <div className="maker-section__body grid lg:grid-cols-2 gap-4">
+            <Card className="!p-4">
+              <DprScurveChart points={snap.charts.scurve} />
+            </Card>
+            <BarChart
+              title="Overall programme %"
+              items={[
+                { label: "Planned", value: snap.charts.summary.plannedPct },
+                { label: "Actual", value: snap.charts.summary.actualPct },
+              ]}
+            />
+            <BarChart
+              title="BOQ items · plan vs achieved %"
+              items={snap.charts.boqProgress.map((r) => ({
+                label: r.label,
+                value: r.planned,
+                actual: r.actual,
+              }))}
+              valueKey="value"
+              compareKey="actual"
+            />
+            {snap.charts.manpower.length > 0 && (
+              <BarChart
+                title="Manpower today"
+                items={snap.charts.manpower.map((m) => ({
+                  label: m.label,
+                  value: m.planned,
+                  actual: m.actual,
+                }))}
+                valueKey="value"
+                compareKey="actual"
+              />
+            )}
+          </div>
+          <p className="text-xs text-steel-muted mt-2 px-1">
+            Same data feeds the SPDC DASHBOARD sheet S-curve (INPUT rows 125–137) when you download XLSX — open in Excel to see full native charts.
+          </p>
+        </div>
+      )}
+
       {/* 2. Quantity */}
       <div className="maker-section maker-section--flush">
         <div className="maker-section__head maker-section__head--row">
@@ -952,8 +1017,8 @@ export default function DprMakerPage() {
                       <option>Other</option>
                     </Select>
                   </td>
-                  <td className="p-1"><Input type="time" value={d.from || ""} onChange={(e) => updateDelay(i, { from: e.target.value })} className="max-w-[110px]" /></td>
-                  <td className="p-1"><Input type="time" value={d.to || ""} onChange={(e) => updateDelay(i, { to: e.target.value })} className="max-w-[110px]" /></td>
+                  <td className="p-1"><Input type="time" value={toTimeInput(d.from)} onChange={(e) => updateDelay(i, { from: e.target.value })} className="max-w-[110px]" /></td>
+                  <td className="p-1"><Input type="time" value={toTimeInput(d.to)} onChange={(e) => updateDelay(i, { to: e.target.value })} className="max-w-[110px]" /></td>
                   <td className="p-1"><Input type="number" step="0.25" value={d.hoursLost ?? 0} onChange={(e) => updateDelay(i, { hoursLost: Number(e.target.value) })} className="max-w-[100px]" /></td>
                   <td className="p-1">
                     <Select value={d.eot || "No"} onChange={(e) => updateDelay(i, { eot: (e.target.value as "Yes" | "No" | "Review") })} className="max-w-[95px]">
@@ -1128,6 +1193,33 @@ export default function DprMakerPage() {
           </ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+function DprScurveChart({ points }: { points: { label: string; planned: number; actual: number }[] }) {
+  if (!points.length) return <p className="text-sm text-steel-muted">Add qty + dates on BOQ lines to build S-curve.</p>;
+  const w = 320;
+  const h = 140;
+  const pad = 24;
+  const maxY = Math.max(100, ...points.flatMap((p) => [p.planned, p.actual])) * 1.05;
+  const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
+  const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
+  const planned = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.planned)}`).join(" ");
+  const actual = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.actual)}`).join(" ");
+  return (
+    <div>
+      <div className="text-sm font-semibold mb-2">S-curve · cumulative %</div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-md" role="img" aria-label="S-curve chart">
+        <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
+        <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
+        <path d={planned} fill="none" stroke="#2563EB" strokeWidth="2.5" />
+        <path d={actual} fill="none" stroke="#0F766E" strokeWidth="2.5" />
+      </svg>
+      <div className="flex gap-4 text-[11px] text-steel-muted mt-1">
+        <span><span className="inline-block w-3 h-0.5 bg-[#2563EB] align-middle mr-1" />Planned</span>
+        <span><span className="inline-block w-3 h-0.5 bg-[#0F766E] align-middle mr-1" />Actual</span>
+      </div>
     </div>
   );
 }

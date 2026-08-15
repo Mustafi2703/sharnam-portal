@@ -43,6 +43,7 @@ import {
 } from "../services/dprXlsx.js";
 import { audit } from "../services/audit.js";
 import { buildDprAutoFill } from "../services/dprIntegrations.js";
+import { buildDprChartPack, loadDprScurveHistory } from "../services/dprCharts.js";
 import { renderDprSnapshotHtml } from "../services/dprSnapshotExport.js";
 import { seedDprDemoDay } from "../services/dprDemoDaySeed.js";
 
@@ -233,6 +234,21 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
 
   const lines: DprLine[] = existing ? JSON.parse(existing.linesJson || "[]") : seededLines;
 
+  const snapForCharts = {
+    discipline,
+    header,
+    lines,
+    manpower: extras.manpower || defaultManpower(),
+    equipment: extras.equipment,
+    materials: extras.materials,
+    qualityTests: extras.qualityTests,
+    safetyRows: extras.safetyRows,
+    safety: extras.safety,
+    delays: extras.delays,
+  };
+  const scurve = await loadDprScurveHistory(projectId, discipline, logDate, snapForCharts);
+  const charts = buildDprChartPack(snapForCharts, scurve);
+
   res.json({
     projectId,
     projectCode: project.code,
@@ -259,6 +275,7 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     publishedPath: existing?.publishedPath || null,
     publishedAt: existing?.publishedAt || null,
     autoFillSources: autoSources,
+    charts,
   });
 });
 
@@ -454,17 +471,29 @@ dprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
 
   const { header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);
 
-  const buf = await buildDprWorkbook({
-    discipline, header, lines,
-    manpower: extras.manpower, equipment: extras.equipment,
-    materials: extras.materials, qualityTests: extras.qualityTests,
-    safetyRows: extras.safetyRows, safety: extras.safety,
-    delays: extras.delays, approvals: extras.approvals,
-    issues: extras.issues, highlights: extras.highlights,
-    nextDayPlan: extras.nextDayPlan, decisions: extras.decisions,
-    photos: extras.photos, attachments: extras.attachments,
-    signatures: extras.signatures,
-  });
+  const buf = await buildDprWorkbook(
+    {
+      discipline,
+      header,
+      lines,
+      manpower: extras.manpower,
+      equipment: extras.equipment,
+      materials: extras.materials,
+      qualityTests: extras.qualityTests,
+      safetyRows: extras.safetyRows,
+      safety: extras.safety,
+      delays: extras.delays,
+      approvals: extras.approvals,
+      issues: extras.issues,
+      highlights: extras.highlights,
+      nextDayPlan: extras.nextDayPlan,
+      decisions: extras.decisions,
+      photos: extras.photos,
+      attachments: extras.attachments,
+      signatures: extras.signatures,
+    },
+    { projectId, logDate }
+  );
   const fname = `DPR-${project.code}-${discipline}-${logDate.toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
@@ -480,6 +509,16 @@ dprMakerRouter.get("/:projectId/download.html", async (req, res) => {
   const discipline = normDiscipline(req.query.discipline);
 
   const { existing, header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);
+  const snapForCharts = {
+    discipline,
+    header,
+    lines,
+    manpower: extras.manpower,
+    safety: extras.safety,
+    delays: extras.delays,
+  };
+  const scurve = await loadDprScurveHistory(projectId, discipline, logDate, snapForCharts);
+  const charts = buildDprChartPack(snapForCharts, scurve);
   const html = renderDprSnapshotHtml({
     project: { code: project.code, name: project.name, clientName: project.clientName, location: project.location },
     logDate,
@@ -495,6 +534,7 @@ dprMakerRouter.get("/:projectId/download.html", async (req, res) => {
     delays: extras.delays,
     issues: extras.issues,
     signatures: extras.signatures,
+    charts,
   });
   const fname = `DPR-${project.code}-${discipline}-${logDate.toISOString().slice(0, 10)}.html`;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -544,17 +584,29 @@ dprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
 
   const { header, extras } = splitExtras(existing.headerJson);
   const lines: DprLine[] = JSON.parse(existing.linesJson || "[]");
-  const buf = await buildDprWorkbook({
-    discipline, header, lines,
-    manpower: extras.manpower, equipment: extras.equipment,
-    materials: extras.materials, qualityTests: extras.qualityTests,
-    safetyRows: extras.safetyRows, safety: extras.safety,
-    delays: extras.delays, approvals: extras.approvals,
-    issues: extras.issues, highlights: extras.highlights,
-    nextDayPlan: extras.nextDayPlan, decisions: extras.decisions,
-    photos: extras.photos, attachments: extras.attachments,
-    signatures: extras.signatures,
-  });
+  const buf = await buildDprWorkbook(
+    {
+      discipline,
+      header,
+      lines,
+      manpower: extras.manpower,
+      equipment: extras.equipment,
+      materials: extras.materials,
+      qualityTests: extras.qualityTests,
+      safetyRows: extras.safetyRows,
+      safety: extras.safety,
+      delays: extras.delays,
+      approvals: extras.approvals,
+      issues: extras.issues,
+      highlights: extras.highlights,
+      nextDayPlan: extras.nextDayPlan,
+      decisions: extras.decisions,
+      photos: extras.photos,
+      attachments: extras.attachments,
+      signatures: extras.signatures,
+    },
+    { projectId, logDate }
+  );
 
   const dateStr = logDate.toISOString().slice(0, 10);
   const fname = `DPR-${project.code}-${discipline}-${dateStr}.xlsx`;

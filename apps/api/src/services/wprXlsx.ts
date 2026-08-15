@@ -65,7 +65,7 @@ export type WprPackInput = {
   sections: WprSections;
 };
 
-const SECTION_ORDER: (keyof WprSections)[] = [
+export const SECTION_ORDER: (keyof WprSections)[] = [
   "cover",
   "index",
   "brief",
