@@ -71,6 +71,11 @@ const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/upload-lab", label: "Upload lab · test", icon: "reports" },
 ];
 
+/** Contractor portal — discipline BOQ uploads per project */
+const vendorContractorNav: { to: string; label: string; icon: ModuleIconKey }[] = [
+  { to: "/crm/vendor-bids", label: "My bid uploads", icon: "cost" },
+];
+
 const ROLE_LABELS: Record<string, string> = {
   admin: "Office",
   office: "Office",
@@ -131,6 +136,7 @@ function SideNavBody({
   const navItems = appNav.filter((n) => !user || n.roles.includes(user.role));
   const isOffice = user?.role === "admin" || user?.role === "office";
   const isSiteDesk = user?.role === "site_employee" || user?.role === "vendor";
+  const isVendor = user?.role === "vendor";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const modules = useMemo(
     () => WORKSPACES.filter((w) => !user || w.roles.includes(user.role)),
@@ -184,6 +190,28 @@ function SideNavBody({
             </div>
             <nav className="side-nav__group" aria-label="Site tools">
               {siteDeskNav.map((n) => (
+                <NavLink
+                  key={n.to}
+                  to={n.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+                >
+                  <ModuleIcon name={n.icon} size={18} />
+                  <span>{n.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+          </section>
+        )}
+
+        {isVendor && (
+          <section className="side-nav__section side-nav__section--vendor" aria-label="Contractor bids">
+            <div className="side-nav__section-head">
+              <p className="side-nav__label">Procurement</p>
+              <span className="side-nav__section-hint">Bids</span>
+            </div>
+            <nav className="side-nav__group" aria-label="Vendor bid uploads">
+              {vendorContractorNav.map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
@@ -540,6 +568,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link to="/upload-lab" className="app-topbar__chip hover:border-brand">
                   Upload lab
                 </Link>
+                {user?.role === "vendor" && (
+                  <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">
+                    My bids
+                  </Link>
+                )}
               </div>
             )}
 

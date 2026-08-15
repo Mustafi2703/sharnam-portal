@@ -10,7 +10,7 @@ import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedCrmComparative } from "./crmComparativeSeed.ts";
 import { seedFullDemoPack } from "./fullDemoPack.ts";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type User } from "@prisma/client";
 import {
   DEFAULT_ROLE_PERMISSIONS,
   portalForRole,
@@ -103,9 +103,11 @@ async function seedUsers() {
     { email: "client@sharnam.demo", fullName: "Client Viewer", role: "client" },
     { email: "employee@sharnam.demo", fullName: "Demo Employee", role: "employee" },
     { email: "vendor@sharnam.demo", fullName: "Vendor Partner", role: "vendor" },
+    { email: "tcc@sharnam.demo", fullName: "TCC Bid Manager", role: "vendor" },
+    { email: "pearl@sharnam.demo", fullName: "Pearl Bid Manager", role: "vendor" },
   ];
 
-  const users = [];
+  const users: User[] = [];
   for (const d of demos) {
     const u = await prisma.user.upsert({
       where: { email: d.email },
@@ -1127,7 +1129,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       trade: "Civil Structural",
       city: "Ahmedabad",
       state: "Gujarat",
-      email: "site@tcc.demo",
+      email: "tcc@sharnam.demo",
       primaryContactName: "Ramesh Desai",
       isPrequalified: true,
       insuranceVerified: true,
@@ -1139,7 +1141,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
       city: "Vadodara",
       state: "Gujarat",
       businessPhone: "+91 265 240 2200",
-      email: "ops@pearl.demo",
+      email: "pearl@sharnam.demo",
       primaryContactName: "Meera Joshi",
       gstNumber: "24BBBBB0000B1Z5",
       isPrequalified: true,
@@ -1412,6 +1414,7 @@ async function main() {
   console.log("Done.");
   console.log("Password for all demo users:", SEED_PASSWORD);
   console.log("Logins: admin / office / site / client / employee / vendor @sharnam.demo");
+  console.log("Bid vendors: vendor@ (Bhavna) · tcc@ · pearl@ @sharnam.demo");
 }
 
 main()

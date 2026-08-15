@@ -125,6 +125,7 @@ model Project {
   certificates          CertificateOfPayment[]
   capexLines            ProjectCapex[]
   quotations            Quotation[]
+  bidPackages           CrmBidPackage[]
 }
 
 /**
@@ -1229,21 +1230,24 @@ model Vendor {
 
 /** CRM bid package — vendor BOQ collection + comparative analysis (office only). */
 model CrmBidPackage {
-  id                 String    @id @default(cuid())
-  leadId             String?
-  title              String
-  status             String    @default("Open")
-  revisionLabel      String    @default("R2")
-  vendorNamesJson    String    @default("[]") @db.Text
-  dueDate            DateTime?
-  notes              String?
-  comparativeSheetId String?
-  summarySheetId     String?
-  awardedVendorId    String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                       String    @id @default(cuid())
+  leadId                   String?
+  projectId                String?
+  title                    String
+  status                   String    @default("Open")
+  revisionLabel            String    @default("R2")
+  vendorNamesJson          String    @default("[]") @db.Text
+  dueDate                  DateTime?
+  notes                    String?
+  comparativeSheetId       String?
+  summarySheetId           String?
+  comparativeSharePointUrl String?
+  awardedVendorId          String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   lead       Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  project    Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   vendorBoqs CrmVendorBoq[]
 }
 
@@ -1256,6 +1260,7 @@ model CrmVendorBoq {
   discipline   String
   fileName     String?
   storagePath  String?
+  sharePointUrl String?
   sheetId      String?
   uploadedById String?
   uploadedAt   DateTime?
@@ -1851,9 +1856,10 @@ model Quotation {
   quotationDate    DateTime  @default(now())
   awardedAt        DateTime?
   awardedProjectId String?
-  sectionsJson     String? @db.Text
-  attachmentUrl    String?
-  createdById      String?
+  sectionsJson              String? @db.Text
+  attachmentUrl             String?
+  attachmentSharePointUrl   String?
+  createdById               String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

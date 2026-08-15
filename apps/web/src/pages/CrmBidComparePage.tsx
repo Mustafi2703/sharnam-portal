@@ -15,6 +15,7 @@ type VendorBoqSlot = {
   discipline: string;
   fileName?: string | null;
   uploadedAt?: string | null;
+  sharePointUrl?: string | null;
   sheetId?: string | null;
 };
 
@@ -25,11 +26,13 @@ type BidPackage = {
   revisionLabel: string;
   comparativeSheetId?: string | null;
   summarySheetId?: string | null;
+  comparativeSharePointUrl?: string | null;
   vendorNames?: string[];
   disciplines?: Discipline[];
   vendorBoqs?: VendorBoqSlot[];
   uploadProgress?: { done: number; total: number };
   lead?: { id: string; title: string } | null;
+  project?: { id: string; code: string; name: string } | null;
   notes?: string | null;
   summary?: {
     vendorLabels: string[];
@@ -54,6 +57,7 @@ export default function CrmBidComparePage() {
   const [packages, setPackages] = useState<BidPackage[]>([]);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
+  const [projects, setProjects] = useState<{ id: string; code: string; name: string }[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<BidPackage | null>(null);
@@ -64,6 +68,7 @@ export default function CrmBidComparePage() {
 
   const [form, setForm] = useState({
     title: "",
+    projectId: "",
     leadId: "",
     revisionLabel: "R2",
     vendorIds: [] as string[],
@@ -71,15 +76,17 @@ export default function CrmBidComparePage() {
 
   const load = useCallback(async () => {
     if (!canManage) return;
-    const [pkgs, disc, l, v] = await Promise.all([
+    const [pkgs, disc, l, p, v] = await Promise.all([
       api<BidPackage[]>("/api/crm/bid-packages", { token }).catch(() => []),
       api<Discipline[]>("/api/crm/disciplines", { token }).catch(() => []),
       api<any[]>("/api/crm/leads", { token }).catch(() => []),
+      api<{ id: string; code: string; name: string }[]>("/api/projects", { token }).catch(() => []),
       api<any[]>("/api/vendors", { token }).catch(() => []),
     ]);
     setPackages(pkgs);
     setDisciplines(disc);
     setLeads(l);
+    setProjects(p);
     setVendors(v.filter((x) => x.partyType === "Contractor" || x.partyType === "Vendor"));
   }, [token, canManage]);
 
@@ -130,13 +137,14 @@ export default function CrmBidComparePage() {
         token,
         body: JSON.stringify({
           title: form.title,
+          projectId: form.projectId || undefined,
           leadId: form.leadId || undefined,
           revisionLabel: form.revisionLabel,
           vendorNames,
         }),
       });
       setMsg(`Bid package created — ${row.uploadProgress?.total || disciplines.length * vendorNames.length} discipline upload slots ready.`);
-      setForm({ title: "", leadId: "", revisionLabel: "R2", vendorIds: [] });
+      setForm({ title: "", projectId: "", leadId: "", revisionLabel: "R2", vendorIds: [] });
       await load();
       setSelectedId(row.id);
     } catch (err) {
@@ -226,6 +234,18 @@ export default function CrmBidComparePage() {
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
+              <Select
+                required
+                value={form.projectId}
+                onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+              >
+                <option value="">Select project (required for SharePoint + vendor portal)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} · {p.name}
+                  </option>
+                ))}
+              </Select>
               <Select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })}>
                 <option value="">Link to lead (optional)</option>
                 {leads.map((l) => (
@@ -262,7 +282,8 @@ export default function CrmBidComparePage() {
                 </div>
               </div>
               <p className="text-[11px] text-steel-muted">
-                Creates {disciplines.length || 8} discipline slots per vendor ({disciplines.map((d) => d.key).join(", ") || "CCV, ADMIN, …"}).
+                Creates {disciplines.length || 8} discipline slots per vendor. Comparative Statement R2 is seeded to SharePoint
+                05.06 when a project is linked; vendor BOQs go to 05.05 per contractor.
               </p>
               <Button type="submit" disabled={busy}>
                 {busy ? "Creating…" : "Create from R2 template"}
@@ -282,6 +303,7 @@ export default function CrmBidComparePage() {
                   >
                     <div className="font-medium text-sm">{p.title}</div>
                     <div className="text-xs text-steel-muted mt-0.5">
+                      {p.project?.code ? `${p.project.code} · ` : ""}
                       {p.revisionLabel} · {p.status}
                     </div>
                     <div className="text-[10px] text-steel-muted mt-1">
@@ -303,6 +325,10 @@ export default function CrmBidComparePage() {
                   <div>
                     <h3 className="font-semibold">{detail.title}</h3>
                     <p className="text-xs text-steel-muted mt-0.5">
+                      {detail.project?.code ? (
+                        <span className="font-mono">{detail.project.code}</span>
+                      ) : null}
+                      {detail.project?.code ? " · " : ""}
                       {detail.revisionLabel} · <Badge>{detail.status}</Badge>
                       {detail.uploadProgress && (
                         <span className="ml-2">
@@ -312,6 +338,11 @@ export default function CrmBidComparePage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {detail.comparativeSharePointUrl && (
+                      <a href={detail.comparativeSharePointUrl} target="_blank" rel="noopener noreferrer">
+                        <Button variant="secondary">R2 SharePoint</Button>
+                      </a>
+                    )}
                     {detail.summarySheetId && (
                       <Link to={`/custom-sheets/${detail.summarySheetId}`}>
                         <Button variant="secondary">Summary sheet</Button>
@@ -352,7 +383,22 @@ export default function CrmBidComparePage() {
                               <div className="font-medium">{discipline.label}</div>
                               <div className="text-[10px] text-steel-muted font-mono">{discipline.sheetName}</div>
                               {slot?.fileName ? (
-                                <div className="text-xs text-steel-muted truncate">{slot.fileName}</div>
+                                <div className="text-xs text-steel-muted truncate">
+                                  {slot.fileName}
+                                  {slot.sharePointUrl && (
+                                    <>
+                                      {" · "}
+                                      <a
+                                        href={slot.sharePointUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-brand font-semibold"
+                                      >
+                                        SharePoint
+                                      </a>
+                                    </>
+                                  )}
+                                </div>
                               ) : (
                                 <div className="text-xs text-warn">Not uploaded</div>
                               )}

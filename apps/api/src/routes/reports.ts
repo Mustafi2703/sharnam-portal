@@ -30,6 +30,10 @@ import {
   writeQuotationFiles,
 } from "../services/quotationExport.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
+import {
+  syncProposalDocx,
+  syncProposalSummaryFile,
+} from "../services/crmSharePoint.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -349,10 +353,23 @@ crmRouter.get("/quotations/template.docx", async (_req, res) => {
 });
 
 crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
-  const row = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  const row = await prisma.quotation.findUnique({
+    where: { id: req.params.id },
+    include: { project: { select: { id: true, code: true } } },
+  });
   if (!row) return res.status(404).json({ error: "not found" });
   try {
     const src = resolveProposalDocxPath();
+    if (row.project?.code) {
+      await mockOneDrive.ensureProjectTree(row.project.id);
+      const sp = await syncProposalDocx(row.project.code, row.quotationNo);
+      if (sp.sharePointUrl && sp.sharePointUrl !== row.attachmentSharePointUrl) {
+        await prisma.quotation.update({
+          where: { id: row.id },
+          data: { attachmentSharePointUrl: sp.sharePointUrl },
+        });
+      }
+    }
     res.download(src, proposalDocxFilename(row.quotationNo));
   } catch (e) {
     res.status(404).json({ error: e instanceof Error ? e.message : "Template not found" });
@@ -360,11 +377,18 @@ crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
 });
 
 crmRouter.get("/quotations/:id/download.html", async (req, res) => {
-  const row = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  const row = await prisma.quotation.findUnique({
+    where: { id: req.params.id },
+    include: { project: { select: { id: true, code: true } } },
+  });
   if (!row) return res.status(404).json({ error: "not found" });
   const doc = quotationFromRecord(row);
   writeQuotationFiles(doc);
   const html = renderQuotationHtml(doc);
+  if (row.project?.code) {
+    await mockOneDrive.ensureProjectTree(row.project.id);
+    await syncProposalSummaryFile(row.project.code, row.quotationNo, Buffer.from(html, "utf8"), "html");
+  }
   const safe = row.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${safe}-Proposal.html"`);
@@ -372,11 +396,18 @@ crmRouter.get("/quotations/:id/download.html", async (req, res) => {
 });
 
 crmRouter.get("/quotations/:id/download.doc", async (req, res) => {
-  const row = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  const row = await prisma.quotation.findUnique({
+    where: { id: req.params.id },
+    include: { project: { select: { id: true, code: true } } },
+  });
   if (!row) return res.status(404).json({ error: "not found" });
   const doc = quotationFromRecord(row);
   writeQuotationFiles(doc);
   const wordHtml = renderQuotationDoc(doc);
+  if (row.project?.code) {
+    await mockOneDrive.ensureProjectTree(row.project.id);
+    await syncProposalSummaryFile(row.project.code, row.quotationNo, Buffer.from(wordHtml, "utf8"), "doc");
+  }
   const safe = row.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
   res.setHeader("Content-Type", "application/msword; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${safe}-Proposal.doc"`);

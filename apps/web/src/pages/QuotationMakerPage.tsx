@@ -178,7 +178,11 @@ export default function QuotationMakerPage() {
         const path = qid ? `/api/crm/quotations/${qid}/download.docx` : "/api/crm/quotations/template.docx";
         const name = qid ? `${safe}-Full-Proposal.docx` : "SPDC-PMC-Full-Proposal-Template.docx";
         await downloadAuthFile(path, token, name);
-        setMsg("Full 63-page SPDC proposal .docx downloaded — edit in Microsoft Word.");
+        if (qid) {
+          const refreshed = await api<any>(`/api/crm/quotations/${qid}`, { token }).catch(() => null);
+          if (refreshed) setSaved(refreshed);
+        }
+        setMsg("Full 63-page SPDC proposal .docx downloaded — synced to SharePoint when project is linked.");
         return;
       }
       if (!qid) {
@@ -255,6 +259,18 @@ export default function QuotationMakerPage() {
       />
 
       {msg && <p className="text-sm text-brand-dark no-print">{msg}</p>}
+      {saved?.attachmentSharePointUrl && (
+        <p className="text-sm no-print">
+          <a
+            href={saved.attachmentSharePointUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand font-semibold"
+          >
+            Open proposal in SharePoint (05.03 Tender Documents) →
+          </a>
+        </p>
+      )}
 
       <Card className="print-card">
         <div className="grid md:grid-cols-4 gap-3 no-print">

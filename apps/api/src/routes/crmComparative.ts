@@ -11,6 +11,11 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
+  CRM_SHAREPOINT,
+  syncBufferToProjectSharePoint,
+  syncComparativeWorkbook,
+} from "../services/crmSharePoint.js";
+import {
   COMPARATIVE_DISCIPLINES,
   importR2WorkbookFromFile,
   parseDisciplineBoqSheet,
@@ -67,12 +72,26 @@ async function loadBidPackage(id: string) {
     where: { id },
     include: {
       lead: { select: { id: true, title: true, stage: true } },
+      project: { select: { id: true, code: true, name: true } },
       vendorBoqs: {
         include: { vendor: { select: { id: true, name: true, email: true } } },
         orderBy: [{ vendorLabel: "asc" }, { discipline: "asc" }],
       },
     },
   });
+}
+
+async function resolveProjectForPackage(projectId?: string | null, leadId?: string | null) {
+  if (projectId) {
+    return prisma.project.findUnique({ where: { id: projectId }, select: { id: true, code: true, name: true } });
+  }
+  if (leadId) {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { projectId: true } });
+    if (lead?.projectId) {
+      return prisma.project.findUnique({ where: { id: lead.projectId }, select: { id: true, code: true, name: true } });
+    }
+  }
+  return null;
 }
 
 crmComparativeRouter.get("/disciplines", (_req, res) => {
@@ -84,6 +103,7 @@ crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async
     orderBy: { updatedAt: "desc" },
     include: {
       lead: { select: { id: true, title: true } },
+      project: { select: { id: true, code: true, name: true } },
       vendorBoqs: { select: { id: true, vendorLabel: true, discipline: true, fileName: true, uploadedAt: true } },
     },
   });
@@ -141,6 +161,10 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
 
   const imported = importR2WorkbookFromFile(undefined, vendorNames);
   const rev = String(req.body.revisionLabel || "R2");
+  const project = await resolveProjectForPackage(
+    req.body.projectId ? String(req.body.projectId) : null,
+    req.body.leadId ? String(req.body.leadId) : null
+  );
 
   const summarySheet = await createSheetFromImport(
     `Summary — ${title} (${rev})`,
@@ -163,10 +187,15 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     data: {
       title,
       leadId: req.body.leadId ? String(req.body.leadId) : null,
+      projectId: project?.id ?? null,
       revisionLabel: rev,
       vendorNamesJson: JSON.stringify(vendorNames),
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
-      notes: req.body.notes ? String(req.body.notes) : null,
+      notes: req.body.notes
+        ? String(req.body.notes)
+        : project
+          ? `Linked project: ${project.code} · ${project.name}. Source: Comparative Statement - R2.xlsx`
+          : null,
       comparativeSheetId: masterSheet.id,
       summarySheetId: summarySheet.id,
       vendorBoqs: {
@@ -177,8 +206,25 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
         })),
       },
     },
-    include: { vendorBoqs: true },
+    include: { vendorBoqs: true, project: { select: { id: true, code: true, name: true } } },
   });
+
+  let comparativeSharePointUrl: string | null = null;
+  if (project?.code) {
+    try {
+      await mockOneDrive.ensureProjectTree(project.id);
+      const sp = await syncComparativeWorkbook(project.code, rev);
+      comparativeSharePointUrl = sp.sharePointUrl || null;
+      if (comparativeSharePointUrl || sp.path) {
+        await prisma.crmBidPackage.update({
+          where: { id: pkg.id },
+          data: { comparativeSharePointUrl: comparativeSharePointUrl || sp.url },
+        });
+      }
+    } catch (err) {
+      console.warn("[CRM] comparative SharePoint sync failed:", err instanceof Error ? err.message : err);
+    }
+  }
 
   await audit("crm.comparative.create", {
     userId: req.user!.id,
@@ -189,6 +235,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
 
   res.status(201).json({
     ...pkg,
+    comparativeSharePointUrl,
     vendorNames,
     disciplines: COMPARATIVE_DISCIPLINES,
     comparativeSheetId: masterSheet.id,
@@ -203,7 +250,10 @@ crmComparativeRouter.post(
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "BOQ Excel file required" });
 
-    const pkg = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
+    const pkg = await prisma.crmBidPackage.findUnique({
+      where: { id: req.params.id },
+      include: { project: { select: { id: true, code: true, name: true } } },
+    });
     if (!pkg) return res.status(404).json({ error: "bid package not found" });
 
     const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
@@ -224,7 +274,14 @@ crmComparativeRouter.post(
 
     const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === slot.discipline);
     const safeName = `${slot.vendorLabel.replace(/[^a-zA-Z0-9._-]/g, "_")}-${slot.discipline}-BOQ-${Date.now()}.xlsx`;
-    const saved = await mockOneDrive.upload("GLOBAL", "CRM/BidPackages", safeName, req.file.buffer);
+    const projectCode = pkg.project?.code || "GLOBAL";
+    const relFolder = pkg.project?.code
+      ? CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel)
+      : "CRM/BidPackages";
+    if (pkg.project?.id) {
+      await mockOneDrive.ensureProjectTree(pkg.project.id);
+    }
+    const saved = await syncBufferToProjectSharePoint(projectCode, relFolder, safeName, req.file.buffer);
 
     const wb = XLSX.read(req.file.buffer, { type: "buffer", cellFormula: true });
     const ws = pickDisciplineWorksheet(wb, slot.discipline);
@@ -249,6 +306,7 @@ crmComparativeRouter.post(
       data: {
         fileName: req.file.originalname,
         storagePath: saved.path,
+        sharePointUrl: saved.sharePointUrl || null,
         sheetId: boqSheet.id,
         uploadedById: req.user!.id,
         uploadedAt: new Date(),
@@ -267,7 +325,14 @@ crmComparativeRouter.post(
       },
     });
 
-    res.json({ slot: updated, boqSheetId: boqSheet.id, discipline: slot.discipline, storagePath: saved.path });
+    res.json({
+      slot: updated,
+      boqSheetId: boqSheet.id,
+      discipline: slot.discipline,
+      storagePath: saved.path,
+      sharePointUrl: saved.sharePointUrl,
+      projectCode: pkg.project?.code || null,
+    });
   }
 );
 
@@ -308,7 +373,19 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
   const slots = await prisma.crmVendorBoq.findMany({
     where: vendorId ? { vendorId } : undefined,
     include: {
-      bidPackage: { select: { id: true, title: true, status: true, revisionLabel: true, notes: true } },
+      bidPackage: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          revisionLabel: true,
+          notes: true,
+          comparativeSharePointUrl: true,
+          summarySheetId: true,
+          comparativeSheetId: true,
+          project: { select: { id: true, code: true, name: true } },
+        },
+      },
       vendor: { select: { id: true, name: true } },
     },
     orderBy: [{ bidPackage: { updatedAt: "desc" } }, { discipline: "asc" }],
@@ -322,18 +399,91 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
       bidPackageStatus: s.bidPackage.status,
       revisionLabel: s.bidPackage.revisionLabel,
       projectNote: s.bidPackage.notes,
+      projectId: s.bidPackage.project?.id || null,
+      projectCode: s.bidPackage.project?.code || null,
+      projectName: s.bidPackage.project?.name || null,
+      comparativeSharePointUrl: s.bidPackage.comparativeSharePointUrl,
+      summarySheetId: s.bidPackage.summarySheetId,
+      comparativeSheetId: s.bidPackage.comparativeSheetId,
       vendorLabel: s.vendorLabel,
       discipline: s.discipline,
       disciplineLabel: COMPARATIVE_DISCIPLINES.find((d) => d.key === s.discipline)?.label || s.discipline,
       fileName: s.fileName,
       uploadedAt: s.uploadedAt,
+      sharePointUrl: s.sharePointUrl,
       sheetId: s.sheetId,
     }))
   );
 });
 
+/** Vendor — comparative summary for a bid package they participate in. */
+crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedRequest, res) => {
+  const role = req.user!.role;
+  if (role !== "vendor" && role !== "admin" && role !== "office") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  let vendorId: string | null = null;
+  if (role === "vendor") {
+    const v = await prisma.vendor.findFirst({ where: { email: req.user!.email }, select: { id: true, name: true } });
+    if (!v) return res.status(404).json({ error: "vendor profile not found" });
+    vendorId = v.id;
+  }
+
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: req.params.id },
+    include: {
+      project: { select: { id: true, code: true, name: true } },
+      vendorBoqs: vendorId ? { where: { vendorId }, select: { id: true } } : { select: { id: true } },
+    },
+  });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+  if (role === "vendor" && !pkg.vendorBoqs.length) {
+    return res.status(403).json({ error: "You are not assigned to this bid package" });
+  }
+
+  let summary = null;
+  if (pkg.summarySheetId) {
+    const sheet = await prisma.customSheet.findUnique({ where: { id: pkg.summarySheetId } });
+    if (sheet) {
+      const headers = JSON.parse(sheet.headersJson || "[]");
+      const rows = parseRowsJson(sheet.rowsJson);
+      summary = parseR2SummarySheet(headers, rows);
+    }
+  }
+
+  const mySlots = vendorId
+    ? await prisma.crmVendorBoq.findMany({
+        where: { bidPackageId: pkg.id, vendorId },
+        select: { id: true, discipline: true, fileName: true, sheetId: true, uploadedAt: true, sharePointUrl: true },
+        orderBy: { discipline: "asc" },
+      })
+    : [];
+
+  res.json({
+    id: pkg.id,
+    title: pkg.title,
+    revisionLabel: pkg.revisionLabel,
+    status: pkg.status,
+    project: pkg.project,
+    comparativeSharePointUrl: pkg.comparativeSharePointUrl,
+    summarySheetId: pkg.summarySheetId,
+    comparativeSheetId: pkg.comparativeSheetId,
+    summary,
+    myVendorLabel: role === "vendor" ? (await prisma.vendor.findUnique({ where: { id: vendorId! }, select: { name: true } }))?.name : null,
+    mySlots: mySlots.map((s) => ({
+      ...s,
+      disciplineLabel: COMPARATIVE_DISCIPLINES.find((d) => d.key === s.discipline)?.label || s.discipline,
+    })),
+    uploadProgress: {
+      done: mySlots.filter((s) => s.fileName).length,
+      total: mySlots.length,
+    },
+  });
+});
+
 /** Download official Comparative Statement R2 workbook. */
-crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office"), (_req, res) => {
+crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office", "vendor"), (_req, res) => {
   const src = resolveR2TemplatePath();
   res.download(src, "Comparative-Statement-R2.xlsx");
 });

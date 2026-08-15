@@ -4,9 +4,16 @@
 import type { PrismaClient } from "@prisma/client";
 import {
   quotationFromRecord,
+  renderQuotationDoc,
+  renderQuotationHtml,
   writeQuotationFiles,
   type QuotationSection,
 } from "../apps/api/src/services/quotationExport.ts";
+import { mockOneDrive } from "../apps/api/src/services/mockOneDrive.ts";
+import {
+  syncProposalDocx,
+  syncProposalSummaryFile,
+} from "../apps/api/src/services/crmSharePoint.ts";
 
 export const ARVIND_DEMO_SECTIONS: QuotationSection[] = [
   {
@@ -62,6 +69,7 @@ export const ARVIND_DEMO_SECTIONS: QuotationSection[] = [
 
 export async function seedQuotationDemo(prisma: PrismaClient, createdById: string) {
   const quotationNo = "SPDC/26-27/INQ/78";
+  const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
   const existing = await prisma.quotation.findFirst({ where: { quotationNo } });
   const totalValue = ARVIND_DEMO_SECTIONS.reduce(
     (s, sec) => s + sec.rows.reduce((r, row) => r + Number(row.amount || 0), 0),
@@ -70,6 +78,7 @@ export async function seedQuotationDemo(prisma: PrismaClient, createdById: strin
 
   const data = {
     quotationNo,
+    projectId: demoProject?.id ?? null,
     clientName: "Arvind Limited",
     clientAddress: "Santej Road, Taluka, near Khatrej, Kalol, Gujarat 382722",
     clientGst: "24AAAAA0000A1Z5",
@@ -95,10 +104,32 @@ export async function seedQuotationDemo(prisma: PrismaClient, createdById: strin
     console.log("Quotation demo created:", quotationNo, "→ /quotations/" + row.id);
   }
 
-  const paths = writeQuotationFiles(quotationFromRecord({ ...data, quotationDate: data.quotationDate }));
+  const doc = quotationFromRecord({ ...data, quotationDate: data.quotationDate });
+  const paths = writeQuotationFiles(doc);
+
+  let attachmentSharePointUrl: string | null = null;
+  if (demoProject?.code) {
+    await mockOneDrive.ensureProjectTree(demoProject.id);
+    const docxSp = await syncProposalDocx(demoProject.code, quotationNo);
+    const htmlSp = await syncProposalSummaryFile(
+      demoProject.code,
+      quotationNo,
+      Buffer.from(renderQuotationHtml(doc), "utf8"),
+      "html"
+    );
+    await syncProposalSummaryFile(
+      demoProject.code,
+      quotationNo,
+      Buffer.from(renderQuotationDoc(doc), "utf8"),
+      "doc"
+    );
+    attachmentSharePointUrl = docxSp.sharePointUrl || docxSp.url || htmlSp.sharePointUrl || null;
+    console.log("  SharePoint (PMC proposals):", attachmentSharePointUrl || docxSp.path);
+  }
+
   await prisma.quotation.update({
     where: { id: rowId },
-    data: { attachmentUrl: paths.docUrl },
+    data: { attachmentUrl: paths.docUrl, attachmentSharePointUrl },
   });
   console.log("  Proposal files:", paths.docUrl, paths.htmlUrl);
 

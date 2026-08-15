@@ -17,6 +17,12 @@ import {
 } from "../apps/api/src/services/comparativeStatement.ts";
 import { evaluateAllRows, type SheetCell } from "@sharnam/shared";
 import path from "path";
+import { mockOneDrive } from "../apps/api/src/services/mockOneDrive.ts";
+import {
+  CRM_SHAREPOINT,
+  syncBufferToProjectSharePoint,
+  syncComparativeWorkbook,
+} from "../apps/api/src/services/crmSharePoint.ts";
 
 const DEMO_VENDORS = ["M/s Bhavna Infra", "TCC Projects PVT. LTD.", "Pearl Electricals"];
 const DEMO_PACKAGE_TITLE = "SPDC-DEMO-01 · Civil & structural — R2 demo bid";
@@ -54,7 +60,9 @@ async function seedVendorBoqUploads(
   prisma: PrismaClient,
   pkgId: string,
   officeUserId: string,
-  vendorBoqs: { id: string; vendorLabel: string; discipline: string }[]
+  vendorBoqs: { id: string; vendorLabel: string; discipline: string; fileName?: string | null; sheetId?: string | null }[],
+  projectCode?: string | null,
+  force = false
 ) {
   const r2Path = resolveR2TemplatePath();
   const buffer = fs.readFileSync(r2Path);
@@ -64,7 +72,7 @@ async function seedVendorBoqUploads(
   let uploaded = 0;
   for (const slot of vendorBoqs) {
     const existing = await prisma.crmVendorBoq.findUnique({ where: { id: slot.id } });
-    if (existing?.fileName) continue;
+    if (!force && existing?.fileName && existing.sheetId) continue;
 
     const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === slot.discipline);
     const template = imported.disciplineTemplates[slot.discipline];
@@ -88,10 +96,31 @@ async function seedVendorBoqUploads(
       },
     });
 
+    const fileName = `R2-${slot.discipline}-${slot.vendorLabel.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
+    let storagePath: string | undefined;
+    let sharePointUrl: string | null = null;
+    if (projectCode) {
+      const miniWb = XLSX.utils.book_new();
+      const aoa = [parsed.headers, ...parsed.rows.map((row) => row.map((c) => c.raw))];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      XLSX.utils.book_append_sheet(miniWb, ws, disc?.sheetName || slot.discipline);
+      const out = XLSX.write(miniWb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+      const saved = await syncBufferToProjectSharePoint(
+        projectCode,
+        CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel),
+        fileName,
+        out
+      );
+      storagePath = saved.path;
+      sharePointUrl = saved.sharePointUrl || null;
+    }
+
     await prisma.crmVendorBoq.update({
       where: { id: slot.id },
       data: {
-        fileName: `R2-${slot.discipline}-${slot.vendorLabel.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`,
+        fileName,
+        storagePath,
+        sharePointUrl,
         sheetId: boqSheet.id,
         uploadedById: officeUserId,
         uploadedAt: new Date(),
@@ -102,11 +131,31 @@ async function seedVendorBoqUploads(
   return uploaded;
 }
 
+async function backfillDemoVendorIds(
+  prisma: PrismaClient,
+  vendorBoqs: { id: string; vendorLabel: string; vendorId?: string | null }[]
+) {
+  const vendors = await prisma.vendor.findMany({
+    where: { name: { in: DEMO_VENDORS } },
+    select: { id: true, name: true },
+  });
+  const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v.id]));
+  let linked = 0;
+  for (const slot of vendorBoqs) {
+    const vendorId = vendorByName[slot.vendorLabel];
+    if (!vendorId || slot.vendorId === vendorId) continue;
+    await prisma.crmVendorBoq.update({ where: { id: slot.id }, data: { vendorId } });
+    linked++;
+  }
+  return linked;
+}
+
 export async function seedCrmComparative(prisma: PrismaClient) {
   writeComparativeTemplateFile(path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"));
 
   const office = await prisma.user.findFirst({ where: { email: "office@sharnam.demo" } });
   const officeId = office?.id;
+  const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
 
   let pkg = await prisma.crmBidPackage.findFirst({
     where: {
@@ -115,20 +164,37 @@ export async function seedCrmComparative(prisma: PrismaClient) {
     include: { vendorBoqs: true },
   });
 
-  if (pkg && pkg.title !== DEMO_PACKAGE_TITLE) {
+  if (pkg && demoProject && (!pkg.projectId || pkg.title !== DEMO_PACKAGE_TITLE)) {
     pkg = await prisma.crmBidPackage.update({
       where: { id: pkg.id },
-      data: { title: DEMO_PACKAGE_TITLE },
+      data: {
+        title: DEMO_PACKAGE_TITLE,
+        projectId: demoProject.id,
+        notes: `Linked project: ${demoProject.code} · ${demoProject.name}. Source: Comparative Statement - R2.xlsx`,
+      },
       include: { vendorBoqs: true },
     });
   }
 
+  if (pkg && demoProject?.code) {
+    await mockOneDrive.ensureProjectTree(demoProject.id);
+    const sp = await syncComparativeWorkbook(demoProject.code, pkg.revisionLabel || "R2");
+    await prisma.crmBidPackage.update({
+      where: { id: pkg.id },
+      data: { comparativeSharePointUrl: sp.sharePointUrl || sp.url },
+    });
+  }
+
   if (pkg) {
-    if (officeId && pkg.vendorBoqs.some((b) => !b.fileName)) {
-      const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs);
+    const linked = await backfillDemoVendorIds(prisma, pkg.vendorBoqs);
+    if (linked) console.log("CRM comparative vendor links backfilled:", linked);
+
+    const needsBoq = pkg.vendorBoqs.some((b) => !b.fileName || !b.sheetId);
+    if (officeId && needsBoq) {
+      const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs, demoProject?.code);
       console.log("CRM comparative demo BOQs refreshed:", n, "uploads on", pkg.title);
     } else {
-      console.log("CRM comparative bid package already seeded:", pkg.title);
+      console.log("CRM comparative bid package already seeded:", pkg.title, "— vendor portal ready");
     }
     return { pkg };
   }
@@ -158,7 +224,6 @@ export async function seedCrmComparative(prisma: PrismaClient) {
   });
 
   const lead = await prisma.lead.findFirst({ where: { title: { contains: "Warehouse" } } });
-  const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
   const vendors = await prisma.vendor.findMany({
     where: { name: { in: DEMO_VENDORS } },
     select: { id: true, name: true },
@@ -170,6 +235,7 @@ export async function seedCrmComparative(prisma: PrismaClient) {
     data: {
       title: DEMO_PACKAGE_TITLE,
       leadId: lead?.id ?? null,
+      projectId: demoProject?.id ?? null,
       revisionLabel: "R2",
       status: "Evaluation",
       vendorNamesJson: JSON.stringify(DEMO_VENDORS),
@@ -189,8 +255,17 @@ export async function seedCrmComparative(prisma: PrismaClient) {
     include: { vendorBoqs: true },
   });
 
+  if (demoProject?.code) {
+    await mockOneDrive.ensureProjectTree(demoProject.id);
+    const sp = await syncComparativeWorkbook(demoProject.code, "R2");
+    await prisma.crmBidPackage.update({
+      where: { id: pkg.id },
+      data: { comparativeSharePointUrl: sp.sharePointUrl || sp.url },
+    });
+  }
+
   if (officeId) {
-    const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs);
+    const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs, demoProject?.code);
     console.log(
       "CRM comparative seeded:",
       pkg.title,
