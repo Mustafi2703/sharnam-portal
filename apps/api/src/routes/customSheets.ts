@@ -18,8 +18,10 @@ import { mockOneDrive } from "../services/mockOneDrive.js";
 import { audit } from "../services/audit.js";
 
 export const customSheetsRouter = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 customSheetsRouter.use(requireAuth);
+
+const WRITE_ROLES = ["admin", "office", "employee"] as const;
 
 function parseSheetWithFormulas(sheet: XLSX.WorkSheet): { headers: string[]; rows: SheetCell[][] } {
   const ref = sheet["!ref"];
@@ -65,6 +67,13 @@ function parseRowsJson(json: string): SheetCell[][] {
   }
 }
 
+function sheetStats(rows: SheetCell[][]) {
+  return {
+    rowCount: rows.length,
+    formulaCount: rows.flat().filter((c) => isFormula(c.raw)).length,
+  };
+}
+
 function buildWorksheet(headers: string[], rows: SheetCell[][]): XLSX.WorkSheet {
   const evaluated = evaluateAllRows(rows);
   const { data, formulas } = sheetCellsToAoa(headers, evaluated);
@@ -73,14 +82,59 @@ function buildWorksheet(headers: string[], rows: SheetCell[][]): XLSX.WorkSheet 
   return ws;
 }
 
+function readWorkbook(buffer: Buffer, fileName: string) {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".csv")) {
+    const text = buffer.toString("utf8");
+    const wb = XLSX.read(text, { type: "string" });
+    return wb;
+  }
+  return XLSX.read(buffer, { type: "buffer", cellFormula: true, cellDates: true });
+}
+
 customSheetsRouter.get("/", async (req, res) => {
   const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
   const rows = await prisma.customSheet.findMany({
     where: projectId ? { projectId } : {},
     orderBy: { updatedAt: "desc" },
-    select: { id: true, name: true, category: true, projectId: true, sourceFile: true, createdAt: true, updatedAt: true, headersJson: true },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      projectId: true,
+      sourceFile: true,
+      storagePath: true,
+      createdAt: true,
+      updatedAt: true,
+      headersJson: true,
+      rowsJson: true,
+    },
   });
-  res.json(rows.map((r) => ({ ...r, headers: JSON.parse(r.headersJson || "[]") })));
+  res.json(
+    rows.map((r) => {
+      const headers = JSON.parse(r.headersJson || "[]");
+      const parsed = parseRowsJson(r.rowsJson);
+      const stats = sheetStats(parsed);
+      return {
+        id: r.id,
+        name: r.name,
+        category: r.category,
+        projectId: r.projectId,
+        sourceFile: r.sourceFile,
+        storagePath: r.storagePath,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        headers,
+        ...stats,
+      };
+    })
+  );
+});
+
+customSheetsRouter.post("/preview-sheets", requireRoles(...WRITE_ROLES), upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "file required" });
+  const wb = readWorkbook(req.file.buffer, req.file.originalname);
+  res.json({ sheets: wb.SheetNames, fileName: req.file.originalname });
 });
 
 customSheetsRouter.get("/:id", async (req, res) => {
@@ -88,32 +142,36 @@ customSheetsRouter.get("/:id", async (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
   const headers = JSON.parse(row.headersJson || "[]");
   const rows = parseRowsJson(row.rowsJson);
-  res.json({ ...row, headers, rows });
+  const stats = sheetStats(rows);
+  res.json({ ...row, headers, rows, ...stats });
 });
 
-customSheetsRouter.post("/upload", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
+customSheetsRouter.post("/upload", requireRoles(...WRITE_ROLES), upload.single("file"), async (req: AuthedRequest, res) => {
   if (!req.file) return res.status(400).json({ error: "file required" });
   const name = String(req.body.name || req.file.originalname).trim();
   const category = String(req.body.category || "General");
   const projectId = req.body.projectId ? String(req.body.projectId) : null;
   const sheetName = req.body.sheet ? String(req.body.sheet) : undefined;
 
-  const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+  const wb = readWorkbook(req.file.buffer, req.file.originalname);
   const targetSheetName = sheetName && wb.Sheets[sheetName] ? sheetName : wb.SheetNames[0];
   const target = wb.Sheets[targetSheetName];
+  if (!target) return res.status(400).json({ error: "No worksheet found in file" });
   const { headers, rows } = parseSheetWithFormulas(target);
 
   let storagePath: string | undefined;
+  let sharePointUrl: string | undefined;
   if (projectId) {
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (project) {
       const saved = await mockOneDrive.upload(
         project.code,
-        "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.18_Management_Review_and_Audit_Programme",
+        "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.18_Management_Review_and_Audit_Programme/Sheet_Maker",
         `${name.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}.xlsx`,
         req.file.buffer
       );
       storagePath = saved.path;
+      sharePointUrl = saved.sharePointUrl || saved.url;
     }
   }
 
@@ -124,22 +182,31 @@ customSheetsRouter.post("/upload", requireRoles("admin", "office"), upload.singl
       category,
       headersJson: JSON.stringify(headers),
       rowsJson: JSON.stringify(rows),
-      sourceFile: req.file.originalname,
+      sourceFile: `${req.file.originalname}${targetSheetName ? ` · ${targetSheetName}` : ""}`,
       storagePath: storagePath || null,
       createdById: req.user!.id,
     },
   });
-  const formulaCount = rows.flat().filter((c) => isFormula(c.raw)).length;
+  const stats = sheetStats(rows);
   await audit("customsheet.upload", {
     userId: req.user!.id,
     entity: "CustomSheet",
     entityId: row.id,
-    meta: { rows: rows.length, headers: headers.length, formulas: formulaCount },
+    meta: { ...stats, headers: headers.length, sheetTab: targetSheetName, sharePointUrl },
   });
-  res.status(201).json({ id: row.id, name: row.name, headers, rowCount: rows.length, formulaCount, storagePath });
+  res.status(201).json({
+    id: row.id,
+    name: row.name,
+    headers,
+    sheetTab: targetSheetName,
+    availableSheets: wb.SheetNames,
+    storagePath,
+    sharePointUrl,
+    ...stats,
+  });
 });
 
-customSheetsRouter.post("/blank", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+customSheetsRouter.post("/blank", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   const name = String(req.body.name || "").trim() || `Untitled sheet — ${new Date().toISOString().slice(0, 10)}`;
   const category = String(req.body.category || "General");
   const projectId = req.body.projectId ? String(req.body.projectId) : null;
@@ -166,10 +233,31 @@ customSheetsRouter.post("/blank", requireRoles("admin", "office"), async (req: A
     entityId: row.id,
     meta: { headers: rawHeaders.length, source: "blank" },
   });
-  res.status(201).json({ id: row.id, name: row.name, headers: rawHeaders, rowCount: 0 });
+  res.status(201).json({ id: row.id, name: row.name, headers: rawHeaders, rowCount: 0, formulaCount: 0 });
 });
 
-customSheetsRouter.put("/:id", requireRoles("admin", "office"), async (req, res) => {
+customSheetsRouter.post("/:id/clone", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
+  const src = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
+  if (!src) return res.status(404).json({ error: "not found" });
+  const name = String(req.body.name || `${src.name} (copy)`).trim();
+  const projectId = req.body.projectId !== undefined ? (req.body.projectId ? String(req.body.projectId) : null) : src.projectId;
+  const row = await prisma.customSheet.create({
+    data: {
+      projectId,
+      name,
+      category: src.category,
+      headersJson: src.headersJson,
+      rowsJson: src.rowsJson,
+      sourceFile: src.sourceFile ? `Clone of ${src.sourceFile}` : null,
+      storagePath: null,
+      createdById: req.user!.id,
+    },
+  });
+  await audit("customsheet.clone", { userId: req.user!.id, entity: "CustomSheet", entityId: row.id, meta: { from: src.id } });
+  res.status(201).json({ id: row.id, name: row.name });
+});
+
+customSheetsRouter.put("/:id", requireRoles(...WRITE_ROLES), async (req, res) => {
   const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;
   const row = await prisma.customSheet.update({
     where: { id: req.params.id },
@@ -180,10 +268,33 @@ customSheetsRouter.put("/:id", requireRoles("admin", "office"), async (req, res)
       rowsJson: rows ? JSON.stringify(rows) : undefined,
     },
   });
-  res.json(row);
+  const headers = JSON.parse(row.headersJson || "[]");
+  const parsed = rows || parseRowsJson(row.rowsJson);
+  res.json({ ...row, headers, rows: parsed, ...sheetStats(parsed) });
 });
 
-customSheetsRouter.post("/:id/export", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+customSheetsRouter.post("/:id/reimport", requireRoles(...WRITE_ROLES), upload.single("file"), async (req: AuthedRequest, res) => {
+  if (!req.file) return res.status(400).json({ error: "file required" });
+  const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const sheetName = req.body.sheet ? String(req.body.sheet) : undefined;
+  const wb = readWorkbook(req.file.buffer, req.file.originalname);
+  const targetSheetName = sheetName && wb.Sheets[sheetName] ? sheetName : wb.SheetNames[0];
+  const target = wb.Sheets[targetSheetName];
+  if (!target) return res.status(400).json({ error: "No worksheet found" });
+  const { headers, rows } = parseSheetWithFormulas(target);
+  const updated = await prisma.customSheet.update({
+    where: { id: row.id },
+    data: {
+      headersJson: JSON.stringify(headers),
+      rowsJson: JSON.stringify(rows),
+      sourceFile: `${req.file.originalname} · ${targetSheetName}`,
+    },
+  });
+  res.json({ ...updated, headers, rows, ...sheetStats(rows) });
+});
+
+customSheetsRouter.post("/:id/export", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
   const headers = JSON.parse(row.headersJson || "[]");
@@ -198,7 +309,7 @@ customSheetsRouter.post("/:id/export", requireRoles("admin", "office"), async (r
     if (project) {
       await mockOneDrive.upload(
         project.code,
-        "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.18_Management_Review_and_Audit_Programme",
+        "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.18_Management_Review_and_Audit_Programme/Sheet_Maker",
         `${row.name.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}.xlsx`,
         buf
       );
@@ -206,11 +317,11 @@ customSheetsRouter.post("/:id/export", requireRoles("admin", "office"), async (r
   }
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${row.name}.xlsx"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${row.name.replace(/"/g, "")}.xlsx"`);
   res.send(buf);
 });
 
-customSheetsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+customSheetsRouter.delete("/:id", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   await prisma.customSheet.delete({ where: { id: req.params.id } });
   await audit("customsheet.delete", { userId: req.user!.id, entity: "CustomSheet", entityId: req.params.id });
   res.json({ ok: true });

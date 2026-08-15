@@ -255,4 +255,5 @@ export {
   evaluateAllRows,
   sheetCellsToAoa,
   applyFormulasToWorksheet,
+  SUPPORTED_FORMULAS,
 } from "./sheetFormulas.js";

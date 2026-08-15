@@ -6,7 +6,11 @@
 
 ## Tools
 
-Template designer (sections, columns, party blocks) · Publish version · Import/export Excel · Fill instance · Bind to Meeting
+Template designer (sections, columns, party blocks) · **Live at `/custom-sheets`** · Upload Excel/CSV with tab picker · Blank sheet · Clone · Formula bar · Export .xlsx · SharePoint backup
+
+## Supported formulas (in-portal + export)
+
+SUM · AVERAGE · MIN · MAX · COUNT · COUNTA · PRODUCT · IF · ROUND · ABS · arithmetic · cell refs (A2, B10)
 
 ## Rules
 
