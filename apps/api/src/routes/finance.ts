@@ -97,7 +97,16 @@ financeRouter.get("/:projectId/summary", async (req, res) => {
     };
   });
 
-  res.json({ totals, raByStatus, copByStatus, paymentSummary, counts: { capex: capex.length, pos: pos.length, ras: ras.length, cops: cops.length } });
+  const { getFinanceCostBridge } = await import("../services/financeCostBridge.js");
+  const costBridge = await getFinanceCostBridge(projectId);
+  res.json({
+    totals,
+    raByStatus,
+    copByStatus,
+    paymentSummary,
+    counts: { capex: capex.length, pos: pos.length, ras: ras.length, cops: cops.length },
+    costBridge,
+  });
 });
 
 /* ─────────────────────────────────────────  CAPEX  ───────────────────────────────────────── */

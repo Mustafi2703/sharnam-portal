@@ -4,6 +4,8 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
 import { ModuleIcon } from "../components/icons";
+import { MasterCostTemplatesPanel } from "../components/MasterCostTemplatesPanel";
+import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import {
   WORKSPACE_PROJECT_KEY,
   setActiveWorkspace,
@@ -479,6 +481,8 @@ export default function MasterModulePage() {
 
       {masterTab === "global" && (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <MasterCostTemplatesPanel token={token} />
+          <BbsShapeMasterPanel token={token} />
           {[
             {
               to: "/master/checklists?family=DrawingCheck",
@@ -488,7 +492,7 @@ export default function MasterModulePage() {
             {
               to: "/custom-sheets",
               label: "Sheet item templates",
-              hint: "Upload Excel registers · edit line items · export",
+              hint: "Formula sheets · clone · export (advanced editing)",
             },
             {
               to: dirProjectId ? `/projects/${dirProjectId}/drawings` : "/projects",

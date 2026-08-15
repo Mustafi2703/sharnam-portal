@@ -94,7 +94,7 @@ export default function FinancePage() {
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {active.id === "overview" && <Overview summary={summary} pos={pos} ras={ras} cops={cops} />}
+      {active.id === "overview" && <Overview summary={summary} pos={pos} ras={ras} cops={cops} projectId={id!} />}
 
       {active.id === "capex" && (
         <CapexTab
@@ -152,7 +152,19 @@ export default function FinancePage() {
 
 /* ─────────────────────────── Overview ─────────────────────────── */
 
-function Overview({ summary, pos, ras, cops }: { summary: any; pos: any[]; ras: any[]; cops: any[] }) {
+function Overview({
+  summary,
+  pos,
+  ras,
+  cops,
+  projectId,
+}: {
+  summary: any;
+  pos: any[];
+  ras: any[];
+  cops: any[];
+  projectId: string;
+}) {
   const t = summary?.totals || {};
   const cards = [
     ["CAPEX budgeted", money(t.capexBudgeted)],
@@ -176,6 +188,30 @@ function Overview({ summary, pos, ras, cops }: { summary: any; pos: any[]; ras: 
           </Card>
         ))}
       </div>
+      {summary?.costBridge && (
+        <Card className="!p-4 border-line">
+          <h3 className="font-semibold text-sm mb-2">Cost module link (engineering)</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted">Budget WBS certified</div>
+              <div className="font-display">{money(summary.costBridge.cost.budgetCertified)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted">Cashflow planned</div>
+              <div className="font-display">{money(summary.costBridge.cost.cashflowPlanned)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted">Cashflow actual</div>
+              <div className="font-display">{money(summary.costBridge.cost.cashflowActual)}</div>
+            </div>
+            <div>
+              <Link to={`/projects/${projectId}/cost?tab=cashflow`} className="text-brand text-xs font-semibold">
+                Open Cost → Cashflow →
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
       <div className="grid lg:grid-cols-2 gap-3">
         <Card>
           <h3 className="font-semibold text-sm mb-2">Latest RA bills</h3>

@@ -15,6 +15,7 @@ function s(v: unknown, max = 500): string {
 
 export type ParsedMbLine = {
   srNo?: string;
+  itemCode?: string;
   description: string;
   nos1: number;
   nos2: number;
@@ -29,6 +30,9 @@ export type ParsedMbLine = {
 
 export type ParsedBbsLine = {
   barMark?: string;
+  shapeCode?: string;
+  sectionMark?: string;
+  itemCode?: string;
   diameterMm: number;
   shape?: string;
   lengthMm: number;
@@ -43,6 +47,7 @@ export type ParsedBbsLine = {
   totalLength: number;
   weightKg: number;
   location?: string;
+  rowKind?: "header" | "data";
 };
 
 function sheetRows(wb: XLSX.WorkBook, name?: string): unknown[][] {
@@ -81,6 +86,7 @@ function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
     if (!qty && !nos1 && !length && !width && !height) continue;
     out.push({
       srNo: s(row[0], 40) || undefined,
+      itemCode: /^\d+$/.test(s(row[0], 40)) ? s(row[0], 40) : undefined,
       description,
       nos1,
       nos2,
@@ -97,7 +103,7 @@ function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
 }
 
 function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
-  let start = 0;
+  let start = 6;
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const joined = (rows[i] as unknown[]).map((c) => s(c, 40)).join(" ").toLowerCase();
     if (/bar bending|bbs|mark|dia/.test(joined)) {
@@ -105,28 +111,93 @@ function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
       break;
     }
   }
-  if (start < 6) start = 6;
 
   const out: ParsedBbsLine[] = [];
+  let currentSection = "";
+  let currentShapeCode = "";
+
   for (let i = start; i < rows.length; i++) {
     const row = rows[i] as unknown[];
+    const markRaw = s(row[0], 40);
     const description = s(row[1], 300);
-    const barMark = s(row[0], 40) || undefined;
+    const shapeCell = s(row[2], 80);
     const dia = n(row[8]) || n(row[3]);
     const totalLen = n(row[18]) || n(row[17]) || n(row[6]);
     const nosPerMember = n(row[9]);
     const nosOfMember = n(row[10]);
     const nos = n(row[11]) || (nosPerMember && nosOfMember ? nosPerMember * nosOfMember : n(row[5]));
-    if (!description && !barMark) continue;
-    if (/name of project|bar bending schedule|sr\.?\s*no|project development consultancy/i.test(description)) continue;
-    if (!dia && !totalLen && !nos) continue;
+
+    if (!description && !markRaw) continue;
+    if (/name of project|bar bending schedule|project development consultancy/i.test(description)) continue;
+
+    // Section / shape-code header rows (A, 1, FOOTING, etc.)
+    if (markRaw && !dia && !totalLen && !nos && description) {
+      currentSection = markRaw;
+      if (/^[A-Z0-9]{1,6}$/i.test(markRaw)) currentShapeCode = markRaw.toUpperCase();
+      out.push({
+        barMark: markRaw,
+        shapeCode: currentShapeCode || undefined,
+        sectionMark: currentSection,
+        diameterMm: 0,
+        lengthMm: 0,
+        nos: 0,
+        nosPerMember: 0,
+        nosOfMember: 0,
+        shapeLenA: 0,
+        shapeLenB: 0,
+        shapeLenC: 0,
+        shapeLenD: 0,
+        shapeLenE: 0,
+        totalLength: 0,
+        weightKg: 0,
+        location: description,
+        rowKind: "header",
+      });
+      continue;
+    }
+
+    if (!description && !markRaw) continue;
+    if (/sr\.?\s*no|description|shape of bar/i.test(description)) continue;
+
+    // Numeric value in shape column = bend dimension sketch text, not a code
+    const shapeFromCell = shapeCell && !/^[\d.]+$/.test(shapeCell) ? shapeCell : undefined;
+
+    if (!dia && !totalLen && !nos && !shapeFromCell) {
+      if (description) {
+        out.push({
+          sectionMark: currentSection || undefined,
+          shapeCode: currentShapeCode || undefined,
+          diameterMm: 0,
+          lengthMm: 0,
+          nos: 0,
+          nosPerMember: 0,
+          nosOfMember: 0,
+          shapeLenA: 0,
+          shapeLenB: 0,
+          shapeLenC: 0,
+          shapeLenD: 0,
+          shapeLenE: 0,
+          totalLength: 0,
+          weightKg: 0,
+          location: description,
+          rowKind: "header",
+        });
+      }
+      continue;
+    }
+
     if (dia > 100 || totalLen > 500) continue;
+
     const weight =
       dia && totalLen ? (Math.PI * (dia / 1000 / 2) ** 2 * totalLen * 7850) / 1000 : n(row[19]) || 0;
+
     out.push({
-      barMark,
+      barMark: markRaw || currentSection || undefined,
+      shapeCode: currentShapeCode || (markRaw && /^[A-Z0-9]{1,4}$/i.test(markRaw) ? markRaw.toUpperCase() : undefined),
+      sectionMark: currentSection || undefined,
+      itemCode: markRaw && /^\d+$/.test(markRaw) ? markRaw : undefined,
       diameterMm: dia,
-      shape: s(row[2], 80) || undefined,
+      shape: shapeFromCell,
       lengthMm: n(row[17]) || n(row[12]) || n(row[4]),
       nos: nos || 1,
       nosPerMember,
@@ -139,6 +210,7 @@ function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
       totalLength: totalLen,
       weightKg: Math.round(weight * 100) / 100,
       location: description || undefined,
+      rowKind: "data",
     });
   }
   return out;

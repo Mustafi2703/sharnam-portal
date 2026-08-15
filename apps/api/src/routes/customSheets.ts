@@ -16,6 +16,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { audit } from "../services/audit.js";
+import { MASTER_CATEGORY } from "../services/costMasterLines.js";
 
 export const customSheetsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -91,6 +92,113 @@ function readWorkbook(buffer: Buffer, fileName: string) {
   }
   return XLSX.read(buffer, { type: "buffer", cellFormula: true, cellDates: true });
 }
+
+customSheetsRouter.get("/masters", async (req, res) => {
+  const kind = String(req.query.kind || "").trim() as "mb" | "bbs" | "monitoring" | "";
+  const category = kind ? MASTER_CATEGORY[kind] : undefined;
+  const rows = await prisma.customSheet.findMany({
+    where: {
+      projectId: null,
+      ...(category ? { category } : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  res.json(
+    rows.map((r) => {
+      const headers = JSON.parse(r.headersJson || "[]");
+      const parsed = parseRowsJson(r.rowsJson);
+      return {
+        id: r.id,
+        name: r.name,
+        category: r.category,
+        sourceFile: r.sourceFile,
+        updatedAt: r.updatedAt,
+        rowCount: parsed.length,
+        headers,
+      };
+    })
+  );
+});
+
+/** Upload SPDC-style MB/BBS master from budget Excel — stored global for all projects */
+customSheetsRouter.post(
+  "/masters/upload",
+  requireRoles(...WRITE_ROLES),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const kind = String(req.body.kind || "mb") as "mb" | "bbs" | "monitoring";
+    if (!MASTER_CATEGORY[kind]) return res.status(400).json({ error: "kind must be mb, bbs, or monitoring" });
+    const name = String(req.body.name || req.file.originalname).trim();
+
+    let headers: string[] = [];
+    let rows: SheetCell[][] = [];
+
+    if (kind === "mb") {
+      const { parseMbBuffer } = await import("../services/costSheetParser.js");
+      const { mbLinesToSheetRows, MB_HEADERS } = await import("../services/costMasterLines.js");
+      const lines = parseMbBuffer(req.file.buffer);
+      headers = MB_HEADERS;
+      rows = mbLinesToSheetRows(lines);
+    } else if (kind === "bbs") {
+      const { parseBbsBuffer } = await import("../services/costSheetParser.js");
+      const { bbsLinesToSheetRows, BBS_HEADERS } = await import("../services/costMasterLines.js");
+      const lines = parseBbsBuffer(req.file.buffer);
+      headers = BBS_HEADERS;
+      rows = bbsLinesToSheetRows(lines);
+    } else {
+      const { MON_HEADERS } = await import("../services/costMasterLines.js");
+      const wb = readWorkbook(req.file.buffer, req.file.originalname);
+      const target = wb.Sheets[wb.SheetNames[0]];
+      const parsed = parseSheetWithFormulas(target);
+      headers = parsed.headers.length ? parsed.headers : MON_HEADERS;
+      rows = parsed.rows;
+    }
+
+    const row = await prisma.customSheet.create({
+      data: {
+        projectId: null,
+        name,
+        category: MASTER_CATEGORY[kind],
+        headersJson: JSON.stringify(headers),
+        rowsJson: JSON.stringify(rows),
+        sourceFile: req.file.originalname,
+        storagePath: null,
+        createdById: req.user!.id,
+      },
+    });
+
+    await audit("customsheet.master.upload", {
+      userId: req.user!.id,
+      entity: "CustomSheet",
+      entityId: row.id,
+      meta: { kind, rows: rows.length },
+    });
+
+    res.status(201).json({ id: row.id, name: row.name, kind, rowCount: rows.length, headers });
+  }
+);
+
+customSheetsRouter.get("/masters/:masterId/lines", async (req, res) => {
+  const row = await prisma.customSheet.findFirst({
+    where: { id: req.params.masterId, projectId: null },
+  });
+  if (!row) return res.status(404).json({ error: "Master not found" });
+  const kind =
+    row.category === MASTER_CATEGORY.bbs ? "bbs" : row.category === MASTER_CATEGORY.monitoring ? "monitoring" : "mb";
+  const headers = JSON.parse(row.headersJson || "[]");
+  const rows = parseRowsJson(row.rowsJson);
+  const { previewMasterLines } = await import("../services/costMasterLines.js");
+  res.json({
+    id: row.id,
+    name: row.name,
+    kind,
+    category: row.category,
+    headers,
+    rows,
+    lines: previewMasterLines(kind as "mb" | "bbs" | "monitoring", headers, rows),
+  });
+});
 
 customSheetsRouter.get("/", async (req, res) => {
   const projectId = req.query.projectId ? String(req.query.projectId) : undefined;

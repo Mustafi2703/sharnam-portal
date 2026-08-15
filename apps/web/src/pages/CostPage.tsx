@@ -7,6 +7,8 @@ import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
 import { CostSheetUploadPanel } from "../components/CostSheetUploadPanel";
 import { BbsEntryTable } from "../components/BbsEntryTable";
+import { MbEntryTable } from "../components/MbEntryTable";
+import { MasterLinePicker } from "../components/MasterLinePicker";
 import { BarChart, PieChart } from "../components/PieChart";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
@@ -428,8 +430,49 @@ export default function CostPage() {
       {tab === "monitoring" && (
         <div className="space-y-3">
           <p className="text-sm text-steel-muted">
-            Edit sections and line items inline. Office can change BOQ fields; site can update GFC / Achieved. Excess and saving recompute on save.
+            Edit sections and line items inline. Office edits BOQ rate/qty; site edits GFC and Achieved. MB item codes roll up to Achieved via sync.
           </p>
+          {canEdit && (
+            <Card className="!p-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-semibold text-sm">MB → BOQ achieved sync</div>
+                <p className="text-xs text-steel-muted mt-0.5">
+                  Matches MB item code to monitoring item no (e.g. Dormitory Civil → Civil Dormitory). GFC qty is never overwritten.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  const pkg = pkgFilter !== "All" ? pkgFilter : undefined;
+                  const res = await api<{ mbSync: { linesUpdated: number }[] }>(
+                    `/api/cost/${id}/sync-from-sheets`,
+                    {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ packageName: pkg, applyShapes: true }),
+                    }
+                  );
+                  const n = (res.mbSync || []).reduce((s, r) => s + r.linesUpdated, 0);
+                  setMsg(`Synced ${n} monitoring line(s) from MB · BBS shape codes applied`);
+                  await load();
+                }}
+              >
+                Sync from MB &amp; BBS shapes
+              </Button>
+            </Card>
+          )}
+          {canEdit && (
+            <MasterLinePicker
+              projectId={id!}
+              token={token}
+              kind="monitoring"
+              defaultPackage={pkgFilter}
+              packageOptions={(summary.packages || []).filter((p: string) => p !== "All")}
+              canEdit={canEdit}
+              onImported={() => void load()}
+            />
+          )}
           <BoqMonitoringEditor
             projectId={id!}
             token={token}
@@ -444,6 +487,17 @@ export default function CostPage() {
 
       {tab === "mb" && (
         <div className="space-y-4">
+          {canEdit && (
+            <MasterLinePicker
+              projectId={id!}
+              token={token}
+              kind="mb"
+              defaultPackage={pkgFilter}
+              packageOptions={mbPackages.length ? mbPackages : packages.filter((p: string) => p !== "All")}
+              canEdit={canEdit}
+              onImported={() => void load()}
+            />
+          )}
           {(canEdit || canSiteEdit) && (
             <CostSheetUploadPanel
               projectId={id!}
@@ -490,29 +544,30 @@ export default function CostPage() {
               </form>
             </Card>
           )}
-          <SheetTable
-            title="Measurement book (MB)"
-            headers={["Package", "Sr No.", "Description", "No", "No", "Length", "Width", "Height", "Qty.", "UoM.", "RA Bill", "Remark"]}
-            rows={mbRows.map((b: any) => [
-              b.packageName,
-              b.srNo,
-              b.description,
-              b.nos1,
-              b.nos2,
-              b.length,
-              b.width,
-              b.height,
-              b.qty,
-              b.unit,
-              b.raBill,
-              b.remark,
-            ])}
+          <MbEntryTable
+            projectId={id!}
+            token={token}
+            rows={mbRows}
+            canFullEdit={canEdit}
+            canSiteEdit={canSiteEdit}
+            onChanged={() => void load()}
           />
         </div>
       )}
 
       {tab === "bbs" && (
         <div className="space-y-4">
+          {canEdit && (
+            <MasterLinePicker
+              projectId={id!}
+              token={token}
+              kind="bbs"
+              defaultPackage={pkgFilter}
+              packageOptions={bbsPackages.length ? bbsPackages : packages.filter((p: string) => p !== "All")}
+              canEdit={canEdit}
+              onImported={() => void load()}
+            />
+          )}
           <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm">
             <strong className="text-ink">BBS upload &amp; shape markup</strong>
             <span className="text-steel-muted">
@@ -547,13 +602,56 @@ export default function CostPage() {
             token={token}
             rows={bbsRows}
             canUpload={canEdit || canSiteEdit}
+            canFullEdit={canEdit}
+            canSiteEdit={canSiteEdit}
             onChanged={() => void load()}
           />
         </div>
       )}
 
       {tab === "budget" && (
-        <SheetTable
+        <div className="space-y-4">
+          {canEdit && (
+            <Card className="!p-4">
+              <h3 className="font-semibold text-sm mb-2">Upload Budget WBS</h3>
+              <p className="text-xs text-steel-muted mb-3">
+                From <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> Budget tab — connects to Cashflow Dashboard forecast structures.
+              </p>
+              <form
+                className="flex flex-wrap gap-3 items-center"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const input = (e.target as HTMLFormElement).elements.namedItem("budgetFile") as HTMLInputElement;
+                  const f = input.files?.[0];
+                  if (!f) return;
+                  const fd = new FormData();
+                  fd.append("file", f);
+                  fd.append("replace", "1");
+                  await api(`/api/cost/${id}/budget/import`, { method: "POST", token, body: fd });
+                  setMsg("Budget WBS imported");
+                  await load();
+                }}
+              >
+                <input name="budgetFile" type="file" accept=".xlsx,.xls" required />
+                <Button type="submit">Import budget sheet</Button>
+              </form>
+            </Card>
+          )}
+          <div className="rounded-sm border border-line bg-paper px-4 py-3 text-sm grid sm:grid-cols-3 gap-3">
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted">Budget WBS total</div>
+              <div className="font-display text-lg">{formatINR(summary.totals.budgeted)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted">Work order</div>
+              <div className="font-display text-lg">{formatINR(summary.totals.workOrder)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted">Cashflow chart planned</div>
+              <div className="font-display text-lg">{formatINR(summary.totals.planned)}</div>
+            </div>
+          </div>
+          <SheetTable
           title="Budget WBS"
           headers={["Sr", "Description", "Stakeholder", "Budgeted", "WO", "Certified", "Forecast"]}
           rows={summary.budget.map((b: any) => [
@@ -566,10 +664,58 @@ export default function CostPage() {
             formatINR(b.forecastedAmount),
           ])}
         />
+        </div>
       )}
 
       {tab === "cashflow" && (
         <div className="space-y-3">
+          {canEdit && (
+            <Card className="!p-4">
+              <h3 className="font-semibold text-sm mb-2">Upload Cashflow Dashboard</h3>
+              <p className="text-xs text-steel-muted mb-3">
+                <code className="font-mono">Cashflow - Dashboard.xlsx</code> — Chart (INR), Forecast, Tracking sheets. Budget WBS totals feed forecast structure rows.
+              </p>
+              <form
+                className="flex flex-wrap gap-3 items-center"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const input = (e.target as HTMLFormElement).elements.namedItem("cfFile") as HTMLInputElement;
+                  const f = input.files?.[0];
+                  if (!f) return;
+                  const fd = new FormData();
+                  fd.append("file", f);
+                  fd.append("replace", "1");
+                  const res = await api<{ imported: number }>(`/api/cost/${id}/cashflow/import`, {
+                    method: "POST",
+                    token,
+                    body: fd,
+                  });
+                  setMsg(`Cashflow imported — ${res.imported} periods`);
+                  await load();
+                }}
+              >
+                <input name="cfFile" type="file" accept=".xlsx,.xls" required />
+                <Button type="submit">Import cashflow dashboard</Button>
+              </form>
+            </Card>
+          )}
+          <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm space-y-1">
+            <div>
+              <strong>Budget ↔ Cashflow:</strong> Budget WBS ({formatINR(summary.totals.budgeted)}) · Cashflow Chart planned (
+              {formatINR(summary.totals.planned)}) · Budget certified ({formatINR(summary.totals.certified)}).
+            </div>
+            {summary.financeBridge && (
+              <div>
+                <strong>Finance COP ↔ Cashflow actual:</strong> COP payable{" "}
+                {formatINR(summary.financeBridge.finance.copPayable)} · Cashflow actual outflow{" "}
+                {formatINR(summary.totals.actual)} — maintain COP in{" "}
+                <Link to={`/projects/${id}/hub/finance?tab=cop`} className="text-brand font-semibold">
+                  Finance → COP
+                </Link>
+                .
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {(
               [
@@ -650,6 +796,32 @@ export default function CostPage() {
 
       {tab === "bills" && (
         <div className="space-y-4">
+          <Card className="!p-4 border-brand/30 bg-brand-soft/30">
+            <h3 className="font-semibold text-sm">Commercial COP lives in Finance</h3>
+            <p className="text-xs text-steel-muted mt-1">
+              Official <strong>Certificate of Payment</strong> (PO → RA Bill → COP) is maintained in{" "}
+              <Link to={`/projects/${id}/hub/finance?tab=cop`} className="text-brand font-semibold">
+                Finance → COP
+              </Link>
+              . Cost → Bills below is a quick vendor log only.
+            </p>
+            {summary.financeBridge && (
+              <div className="grid sm:grid-cols-3 gap-3 mt-3 text-sm">
+                <div>
+                  <div className="text-[10px] uppercase text-steel-muted">Finance COP payable</div>
+                  <div className="font-display">{formatINR(summary.financeBridge.finance.copPayable)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-steel-muted">Finance COP certified</div>
+                  <div className="font-display">{formatINR(summary.financeBridge.finance.copCertified)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-steel-muted">Cashflow chart actual</div>
+                  <div className="font-display">{formatINR(summary.totals.actual)}</div>
+                </div>
+              </div>
+            )}
+          </Card>
           {canEdit && (
             <Card>
               <h3 className="font-semibold mb-2">Vendor / contractor bill · COP</h3>

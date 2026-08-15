@@ -1,16 +1,53 @@
 /**
  * BBS register — column order matches SPDC * BBS sheets (diagram in SHAPE OF BAR col).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, apiBase } from "../api";
 import { FilePickButton } from "./FilePickButton";
+import { Button, Select } from "./ui";
 import PdfMarkup from "./PdfMarkup";
 import ImageMarkup from "./ImageMarkup";
+import { formatQty } from "./BoqMonitoringEditor";
+
+function CellInput({
+  value,
+  disabled,
+  type = "text",
+  className = "",
+  onCommit,
+}: {
+  value: string | number | null | undefined;
+  disabled?: boolean;
+  type?: string;
+  className?: string;
+  onCommit: (v: string) => void;
+}) {
+  return (
+    <input
+      type={type}
+      disabled={disabled}
+      defaultValue={type === "number" ? formatQty(Number(value) || 0) : String(value ?? "")}
+      className={`boq-cell-input ${className}`}
+      step={type === "number" ? "any" : undefined}
+      onBlur={(e) => {
+        const next = e.target.value;
+        const prev = type === "number" ? formatQty(Number(value) || 0) : String(value ?? "");
+        if (next !== prev) onCommit(next);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
 
 export type BbsRow = {
   id: string;
   packageName: string;
   barMark?: string | null;
+  shapeCode?: string | null;
+  itemCode?: string | null;
+  sectionMark?: string | null;
   diameterMm?: number;
   shape?: string | null;
   lengthMm?: number;
@@ -34,6 +71,8 @@ type Props = {
   token?: string | null;
   rows: BbsRow[];
   canUpload: boolean;
+  canFullEdit: boolean;
+  canSiteEdit: boolean;
   onChanged: () => void;
 };
 
@@ -55,6 +94,7 @@ const HEADERS = [
   "Cutting L",
   "Total L",
   "Weight kg",
+  "",
 ] as const;
 
 function fileHref(path?: string | null, shareUrl?: string | null) {
@@ -74,12 +114,46 @@ function fmtNum(v?: number | null) {
   return Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
-export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: Props) {
+export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, canSiteEdit, onChanged }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [markupRow, setMarkupRow] = useState<BbsRow | null>(null);
   const [shapeDraft, setShapeDraft] = useState<File | null>(null);
   const [shapePreview, setShapePreview] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const [shapeMasters, setShapeMasters] = useState<{ shapeCode: string; name?: string | null }[]>([]);
+  const canEditDims = canFullEdit || canSiteEdit;
+
+  useEffect(() => {
+    void api<{ shapeCode: string; name?: string | null }[]>("/api/cost/shape-masters", { token })
+      .then(setShapeMasters)
+      .catch(() => setShapeMasters([]));
+  }, [token]);
+
+  async function patchLine(id: string, body: Record<string, unknown>) {
+    setBusyId(id);
+    setMsg("");
+    try {
+      await api(`/api/cost/${projectId}/bbs/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
+      onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteLine(id: string) {
+    if (!window.confirm("Delete this BBS line?")) return;
+    setBusyId(id);
+    try {
+      await api(`/api/cost/${projectId}/bbs/${id}`, { method: "DELETE", token });
+      onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function uploadShapeForRow(row: BbsRow, file: File) {
     setBusyId(row.id);
@@ -136,7 +210,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
       <div className="sheet-register__head">
         <span>Bar bending schedule — SPDC column layout</span>
         <span className="text-steel-muted font-normal normal-case tracking-normal">
-          {uploaded}/{rows.length} shapes in Shape of bar column
+          {uploaded}/{rows.length} shapes · click cells to edit
         </span>
       </div>
 
@@ -157,12 +231,48 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
               const hasDiagram = Boolean(href);
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
-                <tr key={b.id}>
-                  <td className="sticky-col wrap">{b.packageName}</td>
-                  <td className="wrap font-medium">{b.barMark || "—"}</td>
-                  <td className="wrap">{b.location || "—"}</td>
+                <tr key={b.id} className={busyId === b.id ? "opacity-60" : undefined}>
+                  <td className="sticky-col wrap">
+                    {canFullEdit ? (
+                      <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
+                    ) : (
+                      b.packageName
+                    )}
+                  </td>
+                  <td className="wrap font-medium">
+                    {canEditDims ? (
+                      <CellInput value={b.barMark} onCommit={(v) => void patchLine(b.id, { barMark: v })} />
+                    ) : (
+                      b.barMark || "—"
+                    )}
+                  </td>
+                  <td className="wrap">
+                    {canEditDims ? (
+                      <CellInput value={b.location} onCommit={(v) => void patchLine(b.id, { location: v })} />
+                    ) : (
+                      b.location || "—"
+                    )}
+                  </td>
                   <td className="align-top">
                     <div className="flex flex-col gap-1.5 min-w-[120px]">
+                      {canEditDims && (
+                        <Select
+                          value={b.shapeCode || ""}
+                          onChange={(e) => void patchLine(b.id, { shapeCode: e.target.value })}
+                          className="!text-xs !py-1"
+                        >
+                          <option value="">Shape code…</option>
+                          {shapeMasters.map((m) => (
+                            <option key={m.shapeCode} value={m.shapeCode}>
+                              {m.shapeCode}
+                              {m.name ? ` · ${m.name}` : ""}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                      {b.shapeCode && !b.shapeDiagramPath && !b.shapeDiagramUrl && (
+                        <span className="text-[10px] text-amber-700">Code {b.shapeCode} — upload diagram in Master or below</span>
+                      )}
                       {hasDiagram ? (
                         <a
                           href={href}
@@ -225,18 +335,141 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, onChanged }: 
                       </div>
                     </div>
                   </td>
-                  <td>{b.diameterMm ? `${b.diameterMm}` : "—"}</td>
-                  <td>{fmtNum(b.nosPerMember)}</td>
-                  <td>{fmtNum(b.nosOfMember)}</td>
-                  <td>{fmtNum(b.nos)}</td>
-                  <td>{fmtNum(b.shapeLenA)}</td>
-                  <td>{fmtNum(b.shapeLenB)}</td>
-                  <td>{fmtNum(b.shapeLenC)}</td>
-                  <td>{fmtNum(b.shapeLenD)}</td>
-                  <td>{fmtNum(b.shapeLenE)}</td>
-                  <td>{fmtNum(b.lengthMm)}</td>
-                  <td>{fmtNum(b.totalLength)}</td>
-                  <td>{fmtNum(b.weightKg)}</td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.diameterMm}
+                        onCommit={(v) => void patchLine(b.id, { diameterMm: Number(v) || 0 })}
+                      />
+                    ) : (
+                      b.diameterMm ? `${b.diameterMm}` : "—"
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.nosPerMember}
+                        onCommit={(v) => void patchLine(b.id, { nosPerMember: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.nosPerMember)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.nosOfMember}
+                        onCommit={(v) => void patchLine(b.id, { nosOfMember: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.nosOfMember)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput type="number" value={b.nos} onCommit={(v) => void patchLine(b.id, { nos: Number(v) || 0 })} />
+                    ) : (
+                      fmtNum(b.nos)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.shapeLenA}
+                        onCommit={(v) => void patchLine(b.id, { shapeLenA: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.shapeLenA)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.shapeLenB}
+                        onCommit={(v) => void patchLine(b.id, { shapeLenB: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.shapeLenB)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.shapeLenC}
+                        onCommit={(v) => void patchLine(b.id, { shapeLenC: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.shapeLenC)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.shapeLenD}
+                        onCommit={(v) => void patchLine(b.id, { shapeLenD: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.shapeLenD)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.shapeLenE}
+                        onCommit={(v) => void patchLine(b.id, { shapeLenE: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.shapeLenE)
+                    )}
+                  </td>
+                  <td>
+                    {canEditDims ? (
+                      <CellInput
+                        type="number"
+                        value={b.lengthMm}
+                        onCommit={(v) => void patchLine(b.id, { lengthMm: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.lengthMm)
+                    )}
+                  </td>
+                  <td>
+                    {canFullEdit ? (
+                      <CellInput
+                        type="number"
+                        value={b.totalLength}
+                        onCommit={(v) => void patchLine(b.id, { totalLength: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.totalLength)
+                    )}
+                  </td>
+                  <td>
+                    {canFullEdit ? (
+                      <CellInput
+                        type="number"
+                        value={b.weightKg}
+                        onCommit={(v) => void patchLine(b.id, { weightKg: Number(v) || 0 })}
+                      />
+                    ) : (
+                      fmtNum(b.weightKg)
+                    )}
+                  </td>
+                  <td>
+                    {canFullEdit && (
+                      <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
+                        Del
+                      </Button>
+                    )}
+                  </td>
                 </tr>
               );
             })}

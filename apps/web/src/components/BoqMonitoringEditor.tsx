@@ -14,6 +14,7 @@ export type MonLine = {
   extraQty: number;
   gfcQty: number;
   achievedQty: number;
+  certifiedQty: number;
   excessQty: number;
   savingQty: number;
 };
@@ -539,8 +540,7 @@ export function BoqMonitoringEditor({
         <div className="sheet-register__head">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
-            {rows.length} lines · {grouped.length} sections
-            {canTouch ? " · use Edit for full description" : ""}
+            {rows.length} lines · {grouped.length} sections · click GFC / Achieved to edit inline
           </span>
         </div>
         <div className="sheet-register__scroll">
@@ -591,10 +591,50 @@ export function BoqMonitoringEditor({
                         </td>
                         <td>{b.uom ?? "—"}</td>
                         <td className="num">{formatQty(b.rate)}</td>
-                        <td className="num">{formatQty(b.boqQty)}</td>
-                        <td className="num">{formatQty(b.extraQty)}</td>
-                        <td className="num">{formatQty(b.gfcQty)}</td>
-                        <td className="num">{formatQty(b.achievedQty)}</td>
+                        <td className="num">
+                          {canFullEdit ? (
+                            <CellInput
+                              type="number"
+                              value={b.boqQty}
+                              onCommit={(v) => void patchLine(b.id, { boqQty: Number(v) || 0 })}
+                            />
+                          ) : (
+                            formatQty(b.boqQty)
+                          )}
+                        </td>
+                        <td className="num">
+                          {canFullEdit ? (
+                            <CellInput
+                              type="number"
+                              value={b.extraQty}
+                              onCommit={(v) => void patchLine(b.id, { extraQty: Number(v) || 0 })}
+                            />
+                          ) : (
+                            formatQty(b.extraQty)
+                          )}
+                        </td>
+                        <td className="num">
+                          {canTouch ? (
+                            <CellInput
+                              type="number"
+                              value={b.gfcQty}
+                              onCommit={(v) => void patchLine(b.id, { gfcQty: Number(v) || 0 })}
+                            />
+                          ) : (
+                            formatQty(b.gfcQty)
+                          )}
+                        </td>
+                        <td className="num">
+                          {canTouch ? (
+                            <CellInput
+                              type="number"
+                              value={b.achievedQty}
+                              onCommit={(v) => void patchLine(b.id, { achievedQty: Number(v) || 0 })}
+                            />
+                          ) : (
+                            formatQty(b.achievedQty)
+                          )}
+                        </td>
                         <td className="num">{formatQty(b.excessQty)}</td>
                         <td className="num">{formatQty(b.savingQty)}</td>
                         {canTouch && (

@@ -542,6 +542,8 @@ model CostMbLine {
   unit        String?
   raBill      String?
   remark      String?
+  /// Links to CostMonitoringLine.itemNo for achieved qty rollup
+  itemCode    String?
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -555,6 +557,12 @@ model CostBbsLine {
   projectId   String
   packageName String   @default("Civil")
   barMark     String?
+  /// Bend shape code — links to global BbsShapeMaster
+  shapeCode   String?
+  /// Optional BOQ item code for monitoring rollup
+  itemCode    String?
+  /// Section header mark from BBS sheet (A, 1, FOOTING, etc.)
+  sectionMark String?
   diameterMm  Float    @default(0)
   shape       String?
   lengthMm    Float    @default(0)
@@ -575,6 +583,22 @@ model CostBbsLine {
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Global BBS bend shape library — code + diagram maintained in Master setup.
+ */
+model BbsShapeMaster {
+  id          String   @id @default(cuid())
+  shapeCode   String   @unique
+  name        String?
+  description String?
+  bendInfo    String?
+  packageHint String?
+  diagramPath String?
+  diagramUrl  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model CostCashflowPeriod {

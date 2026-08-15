@@ -31,6 +31,70 @@ const CASHFLOW_SHEET_TOOLS = [
 export const costRouter = Router();
 costRouter.use(requireAuth);
 
+/** Global BBS shape code master — must register before /:projectId routes */
+costRouter.get("/shape-masters", async (_req, res) => {
+  const rows = await prisma.bbsShapeMaster.findMany({ orderBy: [{ shapeCode: "asc" }] });
+  res.json(rows);
+});
+
+costRouter.post("/shape-masters", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const body = req.body || {};
+  const shapeCode = String(body.shapeCode || "").trim().toUpperCase();
+  if (!shapeCode) return res.status(400).json({ error: "shapeCode required" });
+  const row = await prisma.bbsShapeMaster.create({
+    data: {
+      shapeCode,
+      name: body.name ? String(body.name) : null,
+      description: body.description ? String(body.description) : null,
+      bendInfo: body.bendInfo ? String(body.bendInfo) : null,
+      packageHint: body.packageHint ? String(body.packageHint) : null,
+    },
+  });
+  res.status(201).json(row);
+});
+
+costRouter.patch("/shape-masters/:id", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const body = req.body || {};
+  const row = await prisma.bbsShapeMaster.update({
+    where: { id: req.params.id },
+    data: {
+      ...(body.shapeCode != null ? { shapeCode: String(body.shapeCode).trim().toUpperCase() } : {}),
+      ...(body.name !== undefined ? { name: body.name ? String(body.name) : null } : {}),
+      ...(body.description !== undefined ? { description: body.description ? String(body.description) : null } : {}),
+      ...(body.bendInfo !== undefined ? { bendInfo: body.bendInfo ? String(body.bendInfo) : null } : {}),
+      ...(body.packageHint !== undefined ? { packageHint: body.packageHint ? String(body.packageHint) : null } : {}),
+    },
+  });
+  res.json(row);
+});
+
+costRouter.delete("/shape-masters/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.bbsShapeMaster.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+costRouter.post(
+  "/shape-masters/:id/diagram",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const master = await prisma.bbsShapeMaster.findUnique({ where: { id: req.params.id } });
+    if (!master) return res.status(404).json({ error: "Not found" });
+    const saved = await mockOneDrive.upload(
+      "MASTER",
+      "07_EXECUTION_AND_DELIVERY/07.06_Method_Statements_and_Temporary_Works/bbs/shape-library",
+      `${master.shapeCode}-${Date.now()}-${req.file.originalname}`,
+      req.file.buffer
+    );
+    const row = await prisma.bbsShapeMaster.update({
+      where: { id: master.id },
+      data: { diagramPath: saved.path, diagramUrl: saved.url || saved.sharePointUrl || null },
+    });
+    res.json(row);
+  }
+);
+
 function csvEscape(v: unknown) {
   const t = String(v ?? "");
   if (/[",\n]/.test(t)) return `"${t.replace(/"/g, '""')}"`;
@@ -116,6 +180,9 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     ]),
   ].filter(Boolean);
 
+  const { getFinanceCostBridge } = await import("../services/financeCostBridge.js");
+  const financeBridge = await getFinanceCostBridge(projectId);
+
   const sheetTools = {
     sources: ["Cashflow - Dashboard.xlsx", "SPDC_Budget_Arvind 49.xls", "Payment Summary - VIATRIX - Copy.xlsx"],
     cashflow: CASHFLOW_SHEET_TOOLS,
@@ -139,7 +206,10 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       mbQty: mbLines.reduce((s, m) => s + (m.qty || 0), 0),
       bbsWeightKg: bbsLines.reduce((s, b) => s + (b.weightKg || 0), 0),
       monitoringLines: monPkgs.reduce((s, g) => s + g._count, 0),
+      financeCopPayable: financeBridge.finance.copPayable,
+      financeCopCertified: financeBridge.finance.copCertified,
     },
+    financeBridge,
     packages,
     monByPackage,
     mbByPackage,
@@ -566,6 +636,260 @@ costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee"), 
 });
 
 costRouter.patch(
+  "/:projectId/mb/:lineId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.costMbLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const nos1 = body.nos1 != null ? Number(body.nos1) : existing.nos1;
+    const nos2 = body.nos2 != null ? Number(body.nos2) : existing.nos2;
+    const length = body.length != null ? Number(body.length) : existing.length;
+    const width = body.width != null ? Number(body.width) : existing.width;
+    const height = body.height != null ? Number(body.height) : existing.height;
+    const qty =
+      body.qty != null
+        ? Number(body.qty)
+        : nos1 * nos2 * (length || 1) * (width || 1) * (height || 1);
+    const row = await prisma.costMbLine.update({
+      where: { id: existing.id },
+      data: {
+        ...(body.packageName != null ? { packageName: String(body.packageName) } : {}),
+        ...(body.srNo !== undefined ? { srNo: body.srNo ? String(body.srNo) : null } : {}),
+        ...(body.description != null ? { description: String(body.description) } : {}),
+        nos1,
+        nos2,
+        length,
+        width,
+        height,
+        qty,
+        ...(body.unit !== undefined ? { unit: body.unit ? String(body.unit) : null } : {}),
+        ...(body.raBill !== undefined ? { raBill: body.raBill ? String(body.raBill) : null } : {}),
+        ...(body.remark !== undefined ? { remark: body.remark ? String(body.remark) : null } : {}),
+        ...(body.itemCode !== undefined ? { itemCode: body.itemCode ? String(body.itemCode) : null } : {}),
+      },
+    });
+    res.json(row);
+  }
+);
+
+costRouter.delete(
+  "/:projectId/mb/:lineId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.costMbLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    await prisma.costMbLine.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
+  }
+);
+
+costRouter.patch(
+  "/:projectId/bbs/:lineId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.costBbsLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const nosPerMember = body.nosPerMember != null ? Number(body.nosPerMember) : existing.nosPerMember;
+    const nosOfMember = body.nosOfMember != null ? Number(body.nosOfMember) : existing.nosOfMember;
+    const nos = body.nos != null ? Number(body.nos) : existing.nos || nosPerMember * nosOfMember;
+    const dia = body.diameterMm != null ? Number(body.diameterMm) : existing.diameterMm;
+    const totalLen = body.totalLength != null ? Number(body.totalLength) : existing.totalLength;
+    const weight =
+      body.weightKg != null
+        ? Number(body.weightKg)
+        : dia && totalLen
+          ? (Math.PI * (dia / 1000 / 2) ** 2 * totalLen * 7850) / 1000
+          : existing.weightKg;
+    const row = await prisma.costBbsLine.update({
+      where: { id: existing.id },
+      data: {
+        ...(body.packageName != null ? { packageName: String(body.packageName) } : {}),
+        ...(body.barMark !== undefined ? { barMark: body.barMark ? String(body.barMark) : null } : {}),
+        ...(body.shapeCode !== undefined ? { shapeCode: body.shapeCode ? String(body.shapeCode).toUpperCase() : null } : {}),
+        ...(body.itemCode !== undefined ? { itemCode: body.itemCode ? String(body.itemCode) : null } : {}),
+        ...(body.location !== undefined ? { location: body.location ? String(body.location) : null } : {}),
+        diameterMm: dia,
+        nos,
+        nosPerMember,
+        nosOfMember,
+        ...(body.lengthMm != null ? { lengthMm: Number(body.lengthMm) } : {}),
+        ...(body.shapeLenA != null ? { shapeLenA: Number(body.shapeLenA) } : {}),
+        ...(body.shapeLenB != null ? { shapeLenB: Number(body.shapeLenB) } : {}),
+        ...(body.shapeLenC != null ? { shapeLenC: Number(body.shapeLenC) } : {}),
+        ...(body.shapeLenD != null ? { shapeLenD: Number(body.shapeLenD) } : {}),
+        ...(body.shapeLenE != null ? { shapeLenE: Number(body.shapeLenE) } : {}),
+        totalLength: totalLen,
+        weightKg: Math.round(weight * 100) / 100,
+      },
+    });
+
+    if (body.shapeCode) {
+      const master = await prisma.bbsShapeMaster.findUnique({
+        where: { shapeCode: String(body.shapeCode).trim().toUpperCase() },
+      });
+      if (master?.diagramPath || master?.diagramUrl) {
+        const linked = await prisma.costBbsLine.update({
+          where: { id: row.id },
+          data: {
+            shapeDiagramPath: master.diagramPath,
+            shapeDiagramUrl: master.diagramUrl,
+            shape: master.name || row.shape,
+          },
+        });
+        return res.json(linked);
+      }
+    }
+
+    res.json(row);
+  }
+);
+
+costRouter.delete(
+  "/:projectId/bbs/:lineId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.costBbsLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    await prisma.costBbsLine.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
+  }
+);
+
+costRouter.post(
+  "/:projectId/import-master",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const masterId = String(req.body.masterId || "");
+    const kind = String(req.body.kind || "mb") as "mb" | "bbs" | "monitoring";
+    const packageName = String(req.body.packageName || "Civil");
+    const rowIndexes = Array.isArray(req.body.rowIndexes)
+      ? (req.body.rowIndexes as unknown[]).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [];
+
+    if (!masterId) return res.status(400).json({ error: "masterId required" });
+    if (!rowIndexes.length) return res.status(400).json({ error: "Select at least one line" });
+
+    const master = await prisma.customSheet.findFirst({ where: { id: masterId, projectId: null } });
+    if (!master) return res.status(404).json({ error: "Master sheet not found" });
+
+    const headers = JSON.parse(master.headersJson || "[]");
+    let rows: import("@sharnam/shared").SheetCell[][] = [];
+    try {
+      rows = JSON.parse(master.rowsJson || "[]");
+    } catch {
+      rows = [];
+    }
+
+    const { mapMbRow, mapBbsRow, mapMonitoringRow } = await import("../services/costMasterLines.js");
+    const picked = rowIndexes.filter((i) => i >= 0 && i < rows.length);
+    let imported = 0;
+
+    if (kind === "mb") {
+      const lines = picked.map((i) => mapMbRow(headers, rows[i], packageName));
+      await prisma.costMbLine.createMany({ data: lines.map((m) => ({ ...m, projectId })) });
+      imported = lines.length;
+      const { syncAchievedFromMb } = await import("../services/costQuantitySync.js");
+      await syncAchievedFromMb(projectId, packageName);
+    } else if (kind === "bbs") {
+      const lines = picked.map((i) => mapBbsRow(headers, rows[i], packageName));
+      await prisma.costBbsLine.createMany({ data: lines.map((m) => ({ ...m, projectId })) });
+      imported = lines.length;
+      const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
+      await applyShapeMastersToBbs(projectId, packageName);
+    } else {
+      for (const i of picked) {
+        await prisma.costMonitoringLine.create({
+          data: { ...mapMonitoringRow(headers, rows[i], packageName), projectId },
+        });
+      }
+      imported = picked.length;
+    }
+
+    await audit("cost.import_master", {
+      userId: req.user!.id,
+      entity: "CustomSheet",
+      entityId: masterId,
+      meta: { projectId, kind, packageName, lines: imported },
+    });
+
+    res.status(201).json({ ok: true, imported, kind, packageName });
+  }
+);
+
+/** Roll up MB qty → monitoring achievedQty (GFC untouched). Optionally apply BBS shape masters. */
+costRouter.post(
+  "/:projectId/sync-from-sheets",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const packageName = req.body?.packageName ? String(req.body.packageName) : undefined;
+    const applyShapes = req.body?.applyShapes !== false;
+
+    const { syncAchievedFromMb, applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
+    const mbSync = await syncAchievedFromMb(projectId, packageName);
+    const shapesApplied = applyShapes ? await applyShapeMastersToBbs(projectId, packageName) : 0;
+
+    await audit("cost.sync_from_sheets", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: projectId,
+      meta: { packageName, mbSync, shapesApplied },
+    });
+
+    res.json({ ok: true, mbSync, shapesApplied });
+  }
+);
+
+costRouter.post(
+  "/:projectId/cashflow/import",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const replace = String(req.body.replace || "") === "1";
+    const { parseCashflowBuffer } = await import("../services/cashflowParser.js");
+    const parsed = parseCashflowBuffer(req.file.buffer);
+    if (!parsed.length) return res.status(400).json({ error: "No cashflow rows parsed" });
+    const projectId = req.params.projectId;
+    if (replace) await prisma.costCashflowPeriod.deleteMany({ where: { projectId } });
+    await prisma.costCashflowPeriod.createMany({
+      data: parsed.map((p) => ({ ...p, projectId })),
+    });
+    res.status(201).json({ ok: true, imported: parsed.length, replace });
+  }
+);
+
+costRouter.post(
+  "/:projectId/budget/import",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const replace = String(req.body.replace || "") === "1";
+    const { parseBudgetBuffer } = await import("../services/cashflowParser.js");
+    const parsed = parseBudgetBuffer(req.file.buffer);
+    if (!parsed.length) return res.status(400).json({ error: "No budget rows parsed" });
+    const projectId = req.params.projectId;
+    if (replace) await prisma.costBudgetLine.deleteMany({ where: { projectId } });
+    await prisma.costBudgetLine.createMany({
+      data: parsed.map((p) => ({ ...p, projectId })),
+    });
+    res.status(201).json({ ok: true, imported: parsed.length, replace });
+  }
+);
+
+costRouter.patch(
   "/monitoring/:lineId",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
@@ -783,6 +1107,9 @@ async function importCostSheet(
         projectId: project.id,
         packageName,
         barMark: (r.barMark as string) || null,
+        shapeCode: (r.shapeCode as string) || null,
+        itemCode: (r.itemCode as string) || null,
+        sectionMark: (r.sectionMark as string) || null,
         diameterMm: Number(r.diameterMm) || 0,
         shape: (r.shape as string) || null,
         lengthMm: Number(r.lengthMm) || 0,
@@ -799,12 +1126,15 @@ async function importCostSheet(
         location: (r.location as string) || null,
       })),
     });
+    const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
+    await applyShapeMastersToBbs(project.id, packageName);
   } else {
     await prisma.costMbLine.createMany({
       data: parsed.map((r) => ({
         projectId: project.id,
         packageName,
         srNo: (r.srNo as string) || null,
+        itemCode: (r.itemCode as string) || (r.srNo as string) || null,
         description: String(r.description || "MB line"),
         nos1: Number(r.nos1) || 0,
         nos2: Number(r.nos2) || 1,
@@ -817,6 +1147,8 @@ async function importCostSheet(
         remark: (r.remark as string) || null,
       })),
     });
+    const { syncAchievedFromMb } = await import("../services/costQuantitySync.js");
+    await syncAchievedFromMb(project.id, packageName);
   }
 
   const batch = await prisma.boqImportBatch.create({
