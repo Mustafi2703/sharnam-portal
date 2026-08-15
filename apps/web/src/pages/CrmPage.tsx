@@ -14,6 +14,7 @@ export default function CrmPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [quotations, setQuotations] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [convertLead, setConvertLead] = useState<any | null>(null);
   const [leadForm, setLeadForm] = useState({
@@ -58,18 +59,20 @@ export default function CrmPage() {
   const canManage = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
-    const [p, l, d, u, v] = await Promise.all([
+    const [p, l, d, u, v, q] = await Promise.all([
       api<any[]>("/api/projects", { token }),
       canManage ? api<any[]>("/api/crm/leads", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/crm/deals", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/users", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
+      api<any[]>("/api/crm/quotations", { token }).catch(() => []),
     ]);
     setProjects(p);
     setLeads(l);
     setDeals(d);
     setUsers(u);
     setVendors(v);
+    setQuotations(q);
   };
 
   useEffect(() => {
@@ -153,6 +156,67 @@ export default function CrmPage() {
       />
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
+
+      <Card className="border-brand/30 bg-brand-soft/40">
+        <h3 className="font-semibold text-sm mb-2">Client demo projects (after seed)</h3>
+        <div className="grid md:grid-cols-2 gap-3 text-sm">
+          {projects
+            .filter((p) => ["SPDC-DEMO-01", "SPDC-PILOT-02"].includes(p.code))
+            .map((p) => (
+              <div key={p.id} className="rounded-lg border border-line bg-paper p-3">
+                <div className="font-mono text-xs text-brand">{p.code}</div>
+                <div className="font-medium">{p.name}</div>
+                <p className="text-xs text-steel-muted mt-1">
+                  {p.code === "SPDC-DEMO-01"
+                    ? "Main demo — DPR day, finance RA/COP, quality/safety"
+                    : "Pilot week — 7 DPR days, WPR PPTX, MS Project S-curve · logins site.pilot@ / client.pilot@"}
+                </p>
+                <Link to={`/projects/${p.id}`} className="inline-flex mt-2 text-xs font-semibold text-brand">
+                  Open project tools →
+                </Link>
+              </div>
+            ))}
+          {!projects.some((p) => p.code === "SPDC-PILOT-02") && (
+            <div className="rounded-lg border border-dashed border-line p-3 text-xs text-steel-muted">
+              <strong>SPDC-PILOT-02</strong> not loaded — run deploy with <code className="text-brand">RUN_SEED=1</code> or{" "}
+              <code className="text-brand">npm run db:seed</code> on server.
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card padding={false}>
+        <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">
+          <span>Quotations / proposals</span>
+          <Link to="/quotations/new">
+            <Button type="button" variant="secondary" className="!py-1 !text-xs">
+              + New
+            </Button>
+          </Link>
+        </div>
+        <ul className="divide-y">
+          {quotations.map((q) => (
+            <li key={q.id} className="px-4 py-3 flex justify-between gap-3">
+              <div>
+                <div className="font-mono text-xs text-brand">{q.quotationNo}</div>
+                <div className="font-medium">{q.clientName}</div>
+                <div className="text-xs text-steel-muted truncate max-w-md">{q.scopeSummary || "—"}</div>
+              </div>
+              <div className="text-right space-y-1 shrink-0">
+                <Badge>{q.status}</Badge>
+                <Link to={`/quotations/${q.id}`} className="block text-xs text-brand font-semibold">
+                  Open maker →
+                </Link>
+              </div>
+            </li>
+          ))}
+          {!quotations.length && (
+            <li className="px-4 py-6 text-sm text-steel-muted">
+              No quotations yet. Run seed or create one — demo ref <strong>SPDC/26-27/INQ/78</strong> (Arvind).
+            </li>
+          )}
+        </ul>
+      </Card>
 
       {tab === "leads" && canManage && (
         <>

@@ -9,6 +9,7 @@ import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualityS
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedCrmComparative } from "./crmComparativeSeed.ts";
+import { seedFullDemoPack } from "./fullDemoPack.ts";
 import { PrismaClient } from "@prisma/client";
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -1400,6 +1401,7 @@ async function main() {
       await seedFinanceRaCopDemo(prisma, project.id, officeId);
       await seedQuotationDemo(prisma, officeId);
     }
+    await seedFullDemoPack(prisma);
   } catch (e) {
     console.warn(
       "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",

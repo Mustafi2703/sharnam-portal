@@ -124,7 +124,9 @@ SHARNAM_EXCEL_ROOT=./seed/data
 ```
 
 > **PORT** — do **not** set manually; Hostinger injects it automatically.  
-> **Seed** runs during **build** (`hostinger:build` → `prisma db push` + seed). Remove old `RUN_SEED=1` if set.
+> **Seed** runs during **build** when `RUN_SEED=1` (`hostinger:build` → `prisma db push` + full `seed/seed.ts`).  
+> One run loads: users, sheets, **SPDC-DEMO-01**, DPR day, quality/safety, finance RA/COP, quotation, bid compare, **SPDC-PILOT-02** week.  
+> Remove `RUN_SEED=1` after first deploy — redeploys would reset demo data.
 
 ---
 

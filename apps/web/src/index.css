@@ -1028,12 +1028,12 @@ body.is-auth-route #root {
 }
 
 .app-topbar {
-  background: var(--wd-chrome, var(--color-paper));
-  border-bottom: 1px solid var(--wd-chrome-border, var(--color-line));
+  background: linear-gradient(180deg, #085560 0%, #0b6a78 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: none;
-  border-top: 3px solid var(--wd-accent, var(--color-brand));
+  border-top: 3px solid #14b8a6;
   flex-shrink: 0;
-  color: var(--color-ink);
+  color: #fff;
   position: relative;
   z-index: 40;
 }
@@ -1044,14 +1044,37 @@ body.is-auth-route #root {
   font-size: 0.8rem;
   font-weight: 650;
 }
+.app-topbar .app-topbar__title,
+.app-topbar .app-topbar__eyebrow {
+  color: rgba(255, 255, 255, 0.94);
+}
+.app-topbar .app-topbar__role-badge {
+  color: #085560;
+  background: rgba(255, 255, 255, 0.92);
+}
+.app-topbar .app-topbar__chip {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.app-topbar .app-topbar__chip strong {
+  color: #99f6e4;
+}
+.app-topbar .app-topbar__menu-btn,
+.app-topbar button.hidden.md\\:inline-flex {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
 .app-topbar__brand {
   display: inline-flex;
   align-items: center;
   gap: 0;
   padding: 0.1rem 0.85rem 0.1rem 0;
   text-decoration: none;
-  border-right: 1px solid var(--color-line);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
   margin-right: 0.15rem;
+  background: transparent;
 }
 .app-topbar__logo {
   height: 2.75rem;
@@ -1059,10 +1082,11 @@ body.is-auth-route #root {
   max-width: 11rem;
   object-fit: contain;
   display: block;
+  filter: brightness(0) invert(1);
 }
 [data-theme="dark"] .app-topbar__logo {
-  mix-blend-mode: screen;
-  filter: brightness(1.15);
+  mix-blend-mode: normal;
+  filter: brightness(0) invert(1);
 }
 .app-topbar__brand-name {
   font-family: var(--font-display);

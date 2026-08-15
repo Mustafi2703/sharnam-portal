@@ -23,6 +23,12 @@ import {
   wprToSheets,
   type ModuleExportKey,
 } from "../services/brandedExport.js";
+import {
+  quotationFromRecord,
+  renderQuotationDoc,
+  renderQuotationHtml,
+  writeQuotationFiles,
+} from "../services/quotationExport.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -330,6 +336,30 @@ crmRouter.get("/quotations/:id", async (req, res) => {
   });
   if (!row) return res.status(404).json({ error: "not found" });
   res.json(row);
+});
+
+crmRouter.get("/quotations/:id/download.html", async (req, res) => {
+  const row = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const doc = quotationFromRecord(row);
+  writeQuotationFiles(doc);
+  const html = renderQuotationHtml(doc);
+  const safe = row.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${safe}-Proposal.html"`);
+  res.send(html);
+});
+
+crmRouter.get("/quotations/:id/download.doc", async (req, res) => {
+  const row = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const doc = quotationFromRecord(row);
+  writeQuotationFiles(doc);
+  const wordHtml = renderQuotationDoc(doc);
+  const safe = row.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  res.setHeader("Content-Type", "application/msword; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${safe}-Proposal.doc"`);
+  res.send(wordHtml);
 });
 
 crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

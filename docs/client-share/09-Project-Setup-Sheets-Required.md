@@ -120,7 +120,7 @@ After **Quotation maker → Award** (creates project + SharePoint tree):
 | Item | Detail |
 |------|--------|
 | Portal | **Quotation maker** (CRM) — pre-filled Arvind scope |
-| Demo record | `SPDC-PMC-ARV-2025-001` after `npm run db:seed` |
+| Demo record | `SPDC/26-27/INQ/78` after `npm run db:seed` — open CRM → Quotations |
 | Print | **Print / PDF** for proposal walkthrough |
 | Award | Creates **SPDC-xxx** project + ISO folder tree |
 
@@ -141,11 +141,14 @@ Status **Open** → DPR issues + WPR open list. **Closed** → drops from open c
 
 ## 9. Demo seed commands (client evidence)
 
+**Hostinger first deploy:** set `RUN_SEED=1` in hPanel env → build runs everything below in one shot. Remove `RUN_SEED=1` after login works.
+
 ```bash
-npm run db:seed                    # Full demo project + sheets + quotation + RA/COP
+npm run db:seed                    # All-in-one: project, sheets, quotation, RA/COP, DPR day, pilot week
+npm run db:seed-full-demo          # Re-run DPR + pilot only (after base seed)
 npm run db:seed-quality-safety-demo
-npm run db:seed-dpr-demo           # 7 disciplines DPR + quality/safety
-npm run db:seed-pilot-week         # Second project + week of DPRs
+npm run db:seed-dpr-demo           # SPDC-DEMO-01 DPR day only
+npm run db:seed-pilot-week         # SPDC-PILOT-02 week only
 ```
 
 **Logins:** `office@sharnam.demo` / `Demo@1234`

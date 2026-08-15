@@ -15,6 +15,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx seed/seed.ts",
+    "db:seed-full-demo": "tsx seed/runFullDemoPack.ts",
     "db:seed-dpr-demo": "tsx seed/dprDemoDay.ts",
     "db:seed-pilot-week": "tsx seed/pilotWeekDemo.ts",
     "db:seed-quality-safety-demo": "tsx seed/qualitySafetyDemo.ts",

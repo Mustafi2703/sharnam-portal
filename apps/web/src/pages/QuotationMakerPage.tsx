@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
+import { downloadAuthFile } from "../lib/downloadReport";
 
 /**
  * Quotation maker — spits out the SPDC PMC proposal format.
@@ -15,32 +16,38 @@ type Section = { title: string; note?: string; rows: Row[] };
 
 const SPDC_DEFAULT_SECTIONS: Section[] = [
   {
-    title: "1. Project Management Consultancy — Scope of Services",
-    note: "Pre-construction, construction phase management, and handover. Site supervision, BOQ monitoring, quality & safety, DPR/WPR, RA/COP tracking.",
+    title: "Executive Summary",
+    note: "Comprehensive Project Development & Management Consultancy — pre-construction, construction, and post-construction with Sharnam portal (DPR/WPR, quality, safety, cost, finance).",
     rows: [
-      { description: "Consultancy fee — % of executed project cost", unit: "%", qty: 1, rate: 3.5, amount: 3.5 },
-      { description: "Estimated executed cost basis (ex GST)", unit: "INR", qty: 1, rate: 85000000, amount: 85000000 },
-      { description: "Indicative PMC fee (3.5%)", unit: "INR", qty: 1, rate: 2975000, amount: 2975000 },
+      { description: "Reference SPDC/26-27/INQ/78 · Manufacturing Facility, Satej", unit: "—", qty: 1, rate: 0, amount: 0 },
     ],
   },
   {
-    title: "2. Deliverables (included in fee)",
-    note: "Generated from Sharnam portal — DPR, WPR, QAP, NCR/CAR, safety checklists, cost BOQ/MB/BBS, Finance RA/COP, MS Project S-curve.",
+    title: "1. Commercial Proposal — Man-Month Fee",
+    note: "INR 3,40,000 per man-month (plus GST). Pre/post-construction included. No extra charges for initial 7 months.",
     rows: [
-      { description: "DPR (7 disciplines) + WPR PPTX", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Professional PMC fee — per man-month", unit: "INR/mo", qty: 1, rate: 340000, amount: 340000 },
+      { description: "Indicative construction phase (18 months)", unit: "months", qty: 18, rate: 340000, amount: 6120000 },
+    ],
+  },
+  {
+    title: "2. Complete Scope of Services (included)",
+    note: "Initiate · Plan · Execute · Control · Close — aligned to SPDC PMC proposal.",
+    rows: [
+      { description: "DPR (7 disciplines) + WPR PPTX + MS Project S-curve", unit: "LS", qty: 1, rate: 0, amount: 0 },
       { description: "Quality — QAP, NCR/CAR, cubes, QI checklists", unit: "LS", qty: 1, rate: 0, amount: 0 },
       { description: "Safety dashboard + safety checklists", unit: "LS", qty: 1, rate: 0, amount: 0 },
-      { description: "Cost monitoring + cashflow; Finance PO/RA/COP", unit: "LS", qty: 1, rate: 0, amount: 0 },
-      { description: "Drawings register + RFI / submittal tracker", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Cost BOQ/MB/BBS + cashflow; Finance PO/RA/COP", unit: "LS", qty: 1, rate: 0, amount: 0 },
+      { description: "Handover, DLP & retention management", unit: "LS", qty: 1, rate: 0, amount: 0 },
     ],
   },
   {
     title: "3. Payment Terms",
-    note: "Monthly certification. Retention 5% on handover. GST extra.",
+    note: "Monthly billing on 1st of month. Retention 5% on DLP closure. GST extra.",
     rows: [
-      { description: "Mobilisation on award", unit: "INR", qty: 1, rate: 297500, amount: 297500 },
-      { description: "Running monthly", unit: "INR", qty: 1, rate: 2528750, amount: 2528750 },
-      { description: "Final on handover", unit: "INR", qty: 1, rate: 148750, amount: 148750 },
+      { description: "Mobilisation on award", unit: "INR", qty: 1, rate: 340000, amount: 340000 },
+      { description: "Running monthly man-month fee", unit: "INR/mo", qty: 1, rate: 340000, amount: 340000 },
+      { description: "Final on handover", unit: "INR", qty: 1, rate: 340000, amount: 340000 },
     ],
   },
 ];
@@ -57,19 +64,20 @@ export default function QuotationMakerPage() {
   const canWrite = ["admin", "office"].includes(user?.role || "");
 
   const [meta, setMeta] = useState({
-    quotationNo: "SPDC-PMC-ARV-2025-001",
+    quotationNo: "SPDC/26-27/INQ/78",
     clientName: "Arvind Limited",
-    clientAddress: "SPDC Campus · Gujarat, India",
+    clientAddress: "Santej Road, Taluka, near Khatrej, Kalol, Gujarat 382722",
     clientGst: "24AAAAA0000A1Z5",
     scopeSummary:
-      "PMC for SPDC dormitory — DPR/WPR, quality & safety, cost & cashflow, RA/COP tracking via Sharnam portal.",
+      "Proposal for Comprehensive Project Development & Management Consultancy — Manufacturing Facility at Satej, Ahmedabad. Digital transparency via Sharnam portal (DPR/WPR, quality, safety, cost, RA/COP).",
     validityDays: 90,
-    quotationDate: new Date().toISOString().slice(0, 10),
+    quotationDate: "2026-07-29",
     currency: "INR",
     status: "Draft",
   });
   const [sections, setSections] = useState<Section[]>(SPDC_DEFAULT_SECTIONS);
   const [saving, setSaving] = useState(false);
+  const [exportBusy, setExportBusy] = useState<"html" | "doc" | null>(null);
   const [msg, setMsg] = useState("");
   const [saved, setSaved] = useState<any | null>(null);
   const [awardForm, setAwardForm] = useState({ code: "", name: "", projectId: "" });
@@ -161,6 +169,29 @@ export default function QuotationMakerPage() {
     }
   }
 
+  async function exportFile(kind: "html" | "doc") {
+    const qid = saved?.id || id;
+    if (!qid) {
+      setMsg("Save the quotation first, then download the editable proposal file.");
+      return;
+    }
+    setExportBusy(kind);
+    try {
+      const safe = meta.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      if (kind === "html") {
+        await downloadAuthFile(`/api/crm/quotations/${qid}/download.html`, token, `${safe}-Proposal.html`);
+        setMsg("HTML downloaded — open in browser, edit text, Print → PDF.");
+      } else {
+        await downloadAuthFile(`/api/crm/quotations/${qid}/download.doc`, token, `${safe}-Proposal.doc`);
+        setMsg("Word .doc downloaded — open in Microsoft Word to edit sections and commercials.");
+      }
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExportBusy(null);
+    }
+  }
+
   async function award() {
     if (!saved) {
       setMsg("Save the quotation first.");
@@ -184,7 +215,7 @@ export default function QuotationMakerPage() {
       <PageHeader
         eyebrow="CRM · Proposal maker"
         title={isEditing ? `Quotation ${meta.quotationNo}` : "New quotation"}
-        subtitle="Editable SPDC PMC proposal format. Sections & totals compute live. Print / PDF ready. Award → creates project."
+        subtitle="SPDC PMC proposal format (Arvind docx). Edit sections → Save → download .doc for Word or HTML for PDF."
         actions={
           <div className="flex flex-wrap gap-2 no-print">
             <Link to="/crm">
@@ -195,7 +226,17 @@ export default function QuotationMakerPage() {
                 {saving ? "Saving…" : isEditing ? "Save changes" : "Save quotation"}
               </Button>
             )}
-            <Button type="button" variant="secondary" onClick={() => window.print()}>Print / PDF</Button>
+            {(saved?.id || id) && (
+              <>
+                <Button type="button" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("doc")}>
+                  {exportBusy === "doc" ? "…" : "Download .doc"}
+                </Button>
+                <Button type="button" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("html")}>
+                  {exportBusy === "html" ? "…" : "Download HTML / PDF"}
+                </Button>
+              </>
+            )}
+            <Button type="button" variant="secondary" onClick={() => window.print()}>Print</Button>
           </div>
         }
       />

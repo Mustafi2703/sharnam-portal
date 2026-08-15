@@ -29,21 +29,21 @@ try {
 }
 
 if (process.env.RUN_SEED === "1") {
-  console.log("==> RUN_SEED=1 — seeding demo data at build time...");
+  console.log("==> RUN_SEED=1 — seeding full demo (users, sheets, DPR, WPR, pilot week)...");
   try {
     execSync("npx tsx seed/seed.ts", {
       stdio: "inherit",
       env: process.env,
       cwd: rootDir,
-      timeout: 600_000,
+      timeout: 900_000,
     });
-    console.log("==> Seed complete. Remove RUN_SEED=1 after verifying login.");
+    console.log("==> Seed complete (DPR + quality/safety + SPDC-PILOT-02 included). Remove RUN_SEED=1 after verifying login.");
   } catch {
     console.error("FATAL: seed failed during build");
     process.exit(1);
   }
 } else {
-  console.log("==> Skipping seed (set RUN_SEED=1 for first deploy demo users)");
+  console.log("==> Skipping seed (set RUN_SEED=1 for first deploy — seeds everything in one run)");
 }
 
 try {

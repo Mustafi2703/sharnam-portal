@@ -8,7 +8,8 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
-import { PrismaClient } from "@prisma/client";
+import { fileURLToPath } from "node:url";
+import { PrismaClient, type PrismaClient as PrismaClientType } from "@prisma/client";
 import { portalForRole } from "../packages/shared/src/index.ts";
 import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
 import { buildWprWorkbook, type WprHeader, type WprSections } from "../apps/api/src/services/wprXlsx.ts";
@@ -19,19 +20,24 @@ import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 
 const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
-const PILOT_CODE = "SPDC-PILOT-02";
+export const PILOT_CODE = "SPDC-PILOT-02";
 
-function weekEndDate(): Date {
-  const raw = process.env.PILOT_WEEK_END || "2026-08-16";
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) throw new Error(`Invalid PILOT_WEEK_END: ${raw}`);
+function weekEndDate(raw?: string): Date {
+  const value = raw || process.env.PILOT_WEEK_END || "2026-08-16";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) throw new Error(`Invalid PILOT_WEEK_END: ${value}`);
   d.setHours(23, 59, 59, 999);
   return d;
 }
 
-async function ensureUser(email: string, fullName: string, role: "office" | "site_employee" | "client") {
+async function ensureUser(
+  db: PrismaClientType,
+  email: string,
+  fullName: string,
+  role: "office" | "site_employee" | "client"
+) {
   const hash = await bcrypt.hash(SEED_PASSWORD, 10);
-  return prisma.user.upsert({
+  return db.user.upsert({
     where: { email },
     create: { email, fullName, role, portal: portalForRole(role), passwordHash: hash, isActive: true },
     update: { fullName, isActive: true },
@@ -57,24 +63,24 @@ async function cloneRows<T extends { id: string; projectId: string }>(
   console.log(`  cloned ${label}: ${rows.length}`);
 }
 
-async function main() {
-  const weekEnd = weekEndDate();
+export async function seedPilotWeekDemo(db: PrismaClientType, opts: { weekEnd?: string } = {}) {
+  const weekEnd = weekEndDate(opts.weekEnd);
   const weekStart = new Date(weekEnd);
   weekStart.setDate(weekEnd.getDate() - 6);
   weekStart.setHours(0, 0, 0, 0);
 
-  const demo = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
+  const demo = await db.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
   if (!demo) {
-    console.error("Run npm run db:seed first (needs SPDC-DEMO-01).");
-    process.exit(1);
+    throw new Error("Run npm run db:seed first (needs SPDC-DEMO-01).");
   }
 
-  const office = await ensureUser("office@sharnam.demo", "SPDC Office Lead", "office");
-  await ensureUser("site.pilot@sharnam.demo", "Rajesh Site Engineer", "site_employee");
-  await ensureUser("site2.pilot@sharnam.demo", "Priya Site QC", "site_employee");
-  await ensureUser("client.pilot@sharnam.demo", "Client PM — Pilot", "client");
+  const office = await ensureUser(db, "office@sharnam.demo", "SPDC Office Lead", "office");
+  const admin = await db.user.findFirst({ where: { email: "admin@sharnam.demo" } });
+  await ensureUser(db, "site.pilot@sharnam.demo", "Rajesh Site Engineer", "site_employee");
+  await ensureUser(db, "site2.pilot@sharnam.demo", "Priya Site QC", "site_employee");
+  await ensureUser(db, "client.pilot@sharnam.demo", "Client PM — Pilot", "client");
 
-  const project = await prisma.project.upsert({
+  const project = await db.project.upsert({
     where: { code: PILOT_CODE },
     create: {
       code: PILOT_CODE,
@@ -93,11 +99,12 @@ async function main() {
 
   for (const [userId, role] of [
     [office.id, "office"],
-    [(await prisma.user.findUniqueOrThrow({ where: { email: "site.pilot@sharnam.demo" } })).id, "site_employee"],
-    [(await prisma.user.findUniqueOrThrow({ where: { email: "site2.pilot@sharnam.demo" } })).id, "site_employee"],
-    [(await prisma.user.findUniqueOrThrow({ where: { email: "client.pilot@sharnam.demo" } })).id, "client"],
+    ...(admin ? [[admin.id, "admin"] as const] : []),
+    [(await db.user.findUniqueOrThrow({ where: { email: "site.pilot@sharnam.demo" } })).id, "site_employee"],
+    [(await db.user.findUniqueOrThrow({ where: { email: "site2.pilot@sharnam.demo" } })).id, "site_employee"],
+    [(await db.user.findUniqueOrThrow({ where: { email: "client.pilot@sharnam.demo" } })).id, "client"],
   ] as const) {
-    await prisma.projectMember.upsert({
+    await db.projectMember.upsert({
       where: { projectId_userId: { projectId: project.id, userId } },
       create: { projectId: project.id, userId, role },
       update: { role },
@@ -108,46 +115,46 @@ async function main() {
 
   console.log(`\nCloning ${demo.code} → ${project.code} (Cost · Progress · Quality · Safety — no Comms/RFI)…\n`);
 
-  await prisma.progressActivityLine.deleteMany({ where: { projectId: project.id } });
-  await prisma.progressManpower.deleteMany({ where: { projectId: project.id } });
-  await prisma.progressPlannedActual.deleteMany({ where: { projectId: project.id } });
-  await prisma.progressMilestone.deleteMany({ where: { projectId: project.id } });
-  await prisma.progressHindrance.deleteMany({ where: { projectId: project.id } });
-  await prisma.costMonitoringLine.deleteMany({ where: { projectId: project.id } });
-  await prisma.costMbLine.deleteMany({ where: { projectId: project.id } });
-  await prisma.costBbsLine.deleteMany({ where: { projectId: project.id } });
-  await prisma.qualityNcr.deleteMany({ where: { projectId: project.id } });
-  await prisma.cubeTest.deleteMany({ where: { projectId: project.id } });
+  await db.progressActivityLine.deleteMany({ where: { projectId: project.id } });
+  await db.progressManpower.deleteMany({ where: { projectId: project.id } });
+  await db.progressPlannedActual.deleteMany({ where: { projectId: project.id } });
+  await db.progressMilestone.deleteMany({ where: { projectId: project.id } });
+  await db.progressHindrance.deleteMany({ where: { projectId: project.id } });
+  await db.costMonitoringLine.deleteMany({ where: { projectId: project.id } });
+  await db.costMbLine.deleteMany({ where: { projectId: project.id } });
+  await db.costBbsLine.deleteMany({ where: { projectId: project.id } });
+  await db.qualityNcr.deleteMany({ where: { projectId: project.id } });
+  await db.cubeTest.deleteMany({ where: { projectId: project.id } });
 
-  await cloneRows("activity lines", demo.id, project.id, () => prisma.progressActivityLine.findMany({ where: { projectId: demo.id } }), (d) =>
-    prisma.progressActivityLine.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("activity lines", demo.id, project.id, () => db.progressActivityLine.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.progressActivityLine.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("manpower", demo.id, project.id, () => prisma.progressManpower.findMany({ where: { projectId: demo.id } }), (d) =>
-    prisma.progressManpower.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("manpower", demo.id, project.id, () => db.progressManpower.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.progressManpower.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("planned vs actual", demo.id, project.id, () => prisma.progressPlannedActual.findMany({ where: { projectId: demo.id } }), (d) =>
-    prisma.progressPlannedActual.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("planned vs actual", demo.id, project.id, () => db.progressPlannedActual.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.progressPlannedActual.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("milestones", demo.id, project.id, () => prisma.progressMilestone.findMany({ where: { projectId: demo.id }, take: 40 }), (d) =>
-    prisma.progressMilestone.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("milestones", demo.id, project.id, () => db.progressMilestone.findMany({ where: { projectId: demo.id }, take: 40 }), (d) =>
+    db.progressMilestone.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("hindrances", demo.id, project.id, () => prisma.progressHindrance.findMany({ where: { projectId: demo.id }, take: 20 }), (d) =>
-    prisma.progressHindrance.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("hindrances", demo.id, project.id, () => db.progressHindrance.findMany({ where: { projectId: demo.id }, take: 20 }), (d) =>
+    db.progressHindrance.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("BOQ monitoring", demo.id, project.id, () => prisma.costMonitoringLine.findMany({ where: { projectId: demo.id } }), (d) =>
-    prisma.costMonitoringLine.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("BOQ monitoring", demo.id, project.id, () => db.costMonitoringLine.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.costMonitoringLine.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("MB", demo.id, project.id, () => prisma.costMbLine.findMany({ where: { projectId: demo.id } }), (d) =>
-    prisma.costMbLine.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("MB", demo.id, project.id, () => db.costMbLine.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.costMbLine.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("BBS", demo.id, project.id, () => prisma.costBbsLine.findMany({ where: { projectId: demo.id } }), (d) =>
-    prisma.costBbsLine.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("BBS", demo.id, project.id, () => db.costBbsLine.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.costBbsLine.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("NCR", demo.id, project.id, () => prisma.qualityNcr.findMany({ where: { projectId: demo.id }, take: 15 }), (d) =>
-    prisma.qualityNcr.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("NCR", demo.id, project.id, () => db.qualityNcr.findMany({ where: { projectId: demo.id }, take: 15 }), (d) =>
+    db.qualityNcr.create({ data: { ...d, projectId: project.id } })
   );
-  await cloneRows("cube tests", demo.id, project.id, () => prisma.cubeTest.findMany({ where: { projectId: demo.id }, take: 20 }), (d) =>
-    prisma.cubeTest.create({ data: { ...d, projectId: project.id } })
+  await cloneRows("cube tests", demo.id, project.id, () => db.cubeTest.findMany({ where: { projectId: demo.id }, take: 20 }), (d) =>
+    db.cubeTest.create({ data: { ...d, projectId: project.id } })
   );
 
   console.log(`\nSeeding MS Project demo + S-curve…`);
@@ -155,19 +162,19 @@ async function main() {
   console.log(`  ✓ ${ms.taskCount} tasks · ${ms.scurvePoints} S-curve weeks · ${ms.filePath}`);
 
   console.log(`\nSeeding quality / safety / checklists for demo week…`);
-  await seedQualitySafetyDemoForDpr(prisma, project.id, weekEnd, office.id, { weekDays: 7 });
-  await seedFinanceRaCopDemo(prisma, project.id, office.id);
+  await seedQualitySafetyDemoForDpr(db, project.id, weekEnd, office.id, { weekDays: 7 });
+  await seedFinanceRaCopDemo(db, project.id, office.id);
 
   console.log(`\nSeeding 7 published DPR days…\n`);
   for (let i = 0; i < 7; i++) {
     const day = new Date(weekStart);
     day.setDate(weekStart.getDate() + i);
     day.setHours(0, 0, 0, 0);
-    const result = await seedDprDemoDay(prisma, project.id, day, office.id);
+    const result = await seedDprDemoDay(db, project.id, day, office.id);
     console.log(`  ✓ ${result.logDate} · ${result.disciplines.length} disciplines`);
   }
 
-  const demoWpr = await prisma.wprSnapshot.findFirst({
+  const demoWpr = await db.wprSnapshot.findFirst({
     where: { projectId: demo.id },
     orderBy: { weekEnding: "desc" },
   });
@@ -186,7 +193,7 @@ async function main() {
     pmc: "Sharnam Project Development Consultants & Co.",
   };
 
-  await prisma.wprSnapshot.upsert({
+  await db.wprSnapshot.upsert({
     where: { projectId_weekEnding: { projectId: project.id, weekEnding: weekEnd } },
     create: {
       projectId: project.id,
@@ -224,9 +231,18 @@ WPR week ending ${endStr} · PPTX on disk
 `);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+async function main() {
+  await seedPilotWeekDemo(prisma);
+}
+
+const invokedDirectly =
+  process.argv[1] != null && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedDirectly) {
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
