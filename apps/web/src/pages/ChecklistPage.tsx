@@ -34,7 +34,8 @@ type Assignment = {
   id: string;
   status: string;
   template: { id: string; name: string; category: string; checklistType?: string; _count: { items: number } };
-  submissions: { id: string; status: string; createdAt: string; submittedBy: { fullName: string } }[];
+  submissions: { id: string; status: string; createdAt: string; submittedBy: { fullName: string; role?: string }; progress?: { progressLabel: string; answerPct: number; statusHint?: string } }[];
+  latestDraft?: { status: string; submittedBy: { fullName: string; role?: string }; progress?: { progressLabel: string; answerPct: number } } | null;
 };
 
 export default function ChecklistPage({ family = "SiteExecution" as ChecklistFamily }: { family?: ChecklistFamily }) {
@@ -155,10 +156,13 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
 
       {isClient && (
         <Card className="bg-brand-soft/40 border-brand/20">
-          <div className="font-semibold">Client view</div>
+          <div className="font-semibold">Client & PMC status view</div>
           <p className="text-sm text-steel-muted mt-1">
-            You can see which checklist types are on the project. Filling is for matrix parties, office, site, and vendors via fill RFIs.
+            Track how much each checklist is filled (draft or submitted) and evidence links. Filling is for matrix parties, office, site, and vendors.
           </p>
+          <Link to={`/projects/${id}/checklist-logs?family=${family}`} className="inline-block mt-2 text-sm font-semibold text-brand">
+            Open fill log & progress →
+          </Link>
         </Card>
       )}
 
@@ -244,6 +248,8 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
               <ul>
                 {items.map((a) => {
                   const latest = a.submissions[0];
+                  const draft = a.latestDraft || a.submissions.find((s) => s.status === "Draft");
+                  const show = draft || latest;
                   return (
                     <li
                       key={a.id}
@@ -254,10 +260,15 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                         <div className="text-[11px] text-steel-muted mt-1 font-mono">
                           {a.template._count.items} items
                           {a.template.checklistType ? ` · ${a.template.checklistType}` : ""}
-                          {latest
-                            ? ` · last ${latest.status} by ${latest.submittedBy.fullName}`
-                            : " · no fills yet — engineer picks drawing"}
+                          {show
+                            ? ` · ${show.status} · ${show.progress?.progressLabel || "?"} (${show.progress?.answerPct ?? 0}%) by ${show.submittedBy.fullName}`
+                            : " · not started"}
                         </div>
+                        {show?.progress && (
+                          <div className="mt-1.5 w-32 h-1 bg-line rounded-full overflow-hidden">
+                            <div className="h-full bg-brand" style={{ width: `${show.progress.answerPct}%` }} />
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {canFill && (

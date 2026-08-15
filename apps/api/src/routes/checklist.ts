@@ -5,6 +5,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { buildBrandedChecklistHtml } from "../services/brandedChecklistHtml.js";
+import { attachProgress, computeChecklistProgress, parseResponsesJson } from "../services/checklistProgress.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -38,7 +39,7 @@ checklistRouter.delete(
   }
 );
 
-checklistRouter.get("/assignments/:assignmentId", async (req, res) => {
+checklistRouter.get("/assignments/:assignmentId", async (req: AuthedRequest, res) => {
   const assignment = await prisma.checklistAssignment.findUnique({
     where: { id: req.params.assignmentId },
     include: {
@@ -53,6 +54,7 @@ checklistRouter.get("/assignments/:assignmentId", async (req, res) => {
         },
       },
       submissions: {
+        where: { status: { not: "Draft" } },
         orderBy: { createdAt: "desc" },
         take: 40,
         include: {
@@ -65,7 +67,25 @@ checklistRouter.get("/assignments/:assignmentId", async (req, res) => {
     },
   });
   if (!assignment) return res.status(404).json({ error: "Not found" });
-  res.json(assignment);
+
+  const itemCount = assignment.template.items.length;
+  const submissions = assignment.submissions.map((s) => attachProgress(s, itemCount));
+
+  let myDraft: ReturnType<typeof attachProgress> | null = null;
+  if (req.user?.id) {
+    const draft = await prisma.checklistSubmission.findFirst({
+      where: { assignmentId: assignment.id, submittedById: req.user.id, status: "Draft" },
+      include: {
+        submittedBy: { select: { fullName: true, email: true, role: true } },
+        drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
+        revision: { select: { id: true, revisionNumber: true, createdAt: true } },
+        photos: true,
+      },
+    });
+    if (draft) myDraft = attachProgress(draft, itemCount);
+  }
+
+  res.json({ ...assignment, submissions, myDraft, itemCount });
 });
 
 checklistRouter.get("/templates", async (req, res) => {
@@ -99,7 +119,10 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
       submissions: {
         orderBy: { createdAt: "desc" },
         take: 5,
-        include: { submittedBy: { select: { fullName: true } } },
+        include: {
+          submittedBy: { select: { fullName: true, role: true } },
+          photos: { select: { id: true } },
+        },
       },
     },
   });
@@ -123,8 +146,31 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
       status: true,
     },
   });
+  const enriched = await Promise.all(
+    assignments.map(async (a) => {
+      const itemCount = a.template._count.items;
+      const latestDraft = await prisma.checklistSubmission.findFirst({
+        where: { assignmentId: a.id, status: "Draft" },
+        orderBy: { updatedAt: "desc" },
+        include: {
+          submittedBy: { select: { fullName: true, role: true } },
+          photos: { select: { id: true } },
+        },
+      });
+      return {
+        ...a,
+        latestDraft: latestDraft
+          ? { ...latestDraft, progress: computeChecklistProgress(itemCount, latestDraft.responsesJson, latestDraft.photos.length) }
+          : null,
+        submissions: a.submissions.map((s) => ({
+          ...s,
+          progress: computeChecklistProgress(itemCount, s.responsesJson, s.photos?.length || 0),
+        })),
+      };
+    })
+  );
   res.json({
-    assignments,
+    assignments: enriched,
     canSubmit: true,
     publishedDrawings: published,
     checklistType: type || "all",
@@ -145,7 +191,7 @@ checklistRouter.post(
   async (req: AuthedRequest, res) => {
     const assignment = await prisma.checklistAssignment.findUnique({
       where: { id: req.params.assignmentId },
-      include: { template: true, project: true },
+      include: { template: { include: { _count: { select: { items: true } } } }, project: true },
     });
     if (!assignment) return res.status(404).json({ error: "Assignment not found" });
 
@@ -193,25 +239,46 @@ checklistRouter.post(
       (f) => f.mimetype?.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(f.originalname)
     ).length;
     const minPhotos = assignment.template.requirePhotosMin || 0;
-    if (minPhotos > 0 && photoCount < minPhotos) {
+    const linkEvidence = Object.values(parseResponsesJson(responses)).reduce(
+      (s, r) => s + (r.evidenceLinks?.filter((u) => String(u).trim()).length || 0),
+      0
+    );
+    if (minPhotos > 0 && photoCount + linkEvidence < minPhotos) {
       return res.status(400).json({
-        error: `This checklist requires at least ${minPhotos} photos. Attached: ${photoCount}.`,
+        error: `This checklist requires at least ${minPhotos} evidence items (photos or SharePoint links). Attached: ${photoCount + linkEvidence}.`,
       });
     }
 
-    const submission = await prisma.checklistSubmission.create({
-      data: {
-        assignmentId: assignment.id,
-        drawingId: drawing?.id || null,
-        revisionId: rev?.id || null,
-        revisionNumber: revisionNumber || rev?.revisionNumber || null,
-        submittedById: req.user!.id,
-        status: status || "Submitted",
-        responsesJson: responses,
-        remarks,
-        purpose: "Fill",
-      },
+    const submitStatus = status || "Submitted";
+    const existingDraft = await prisma.checklistSubmission.findFirst({
+      where: { assignmentId: assignment.id, submittedById: req.user!.id, status: "Draft" },
     });
+
+    const submission = existingDraft
+      ? await prisma.checklistSubmission.update({
+          where: { id: existingDraft.id },
+          data: {
+            drawingId: drawing?.id || null,
+            revisionId: rev?.id || null,
+            revisionNumber: revisionNumber || rev?.revisionNumber || null,
+            status: submitStatus,
+            responsesJson: responses,
+            remarks,
+          },
+        })
+      : await prisma.checklistSubmission.create({
+          data: {
+            assignmentId: assignment.id,
+            drawingId: drawing?.id || null,
+            revisionId: rev?.id || null,
+            revisionNumber: revisionNumber || rev?.revisionNumber || null,
+            submittedById: req.user!.id,
+            status: submitStatus,
+            responsesJson: responses,
+            remarks,
+            purpose: "Fill",
+          },
+        });
 
     let itemAttachCount = 0;
     if (files.length) {
@@ -241,7 +308,7 @@ checklistRouter.post(
             submissionId: submission.id,
             itemId,
             kind,
-            fileUrl: saved.url,
+            fileUrl: saved.sharePointUrl || saved.url,
             caption: f.originalname,
             comment: itemId ? itemComments[itemId] || null : null,
           },
@@ -267,7 +334,135 @@ checklistRouter.post(
       });
     }
 
-    res.status(201).json(submission);
+    const itemCount = assignment.template._count.items;
+    const withPhotos = await prisma.checklistSubmission.findUnique({
+      where: { id: submission.id },
+      include: { photos: true },
+    });
+
+    res.status(existingDraft ? 200 : 201).json(
+      attachProgress(withPhotos || submission, itemCount)
+    );
+  }
+);
+
+/** Save partial fill — Quality / Safety / Site. Evidence links stored in JSON; files go to SharePoint only. */
+checklistRouter.post(
+  "/assignments/:assignmentId/draft",
+  requireRoles("admin", "office", "site_employee", "employee", "vendor"),
+  upload.any(),
+  async (req: AuthedRequest, res) => {
+    const assignment = await prisma.checklistAssignment.findUnique({
+      where: { id: req.params.assignmentId },
+      include: { template: { include: { items: true } }, project: true },
+    });
+    if (!assignment) return res.status(404).json({ error: "Assignment not found" });
+
+    const { canFillChecklistAssignment } = await import("../services/reportPacks.js");
+    const fillGate = await canFillChecklistAssignment({
+      projectId: assignment.projectId,
+      assignmentId: assignment.id,
+      templateId: assignment.templateId,
+      user: req.user!,
+    });
+    if (!fillGate.ok) return res.status(403).json({ error: fillGate.reason });
+
+    const { responsesJson, drawingId, revisionId, revisionNumber, remarks } = req.body;
+    let drawing: { id: string; revisions: { id: string; revisionNumber: string }[] } | null = null;
+    let rev: { id: string; revisionNumber: string } | null = null;
+    if (drawingId) {
+      const found = await prisma.drawing.findFirst({
+        where: { id: drawingId, projectId: assignment.projectId },
+        include: { revisions: { orderBy: { createdAt: "desc" } } },
+      });
+      if (!found) return res.status(400).json({ error: "Drawing not found on this project." });
+      drawing = found;
+      rev = revisionId
+        ? found.revisions.find((r) => r.id === revisionId) || null
+        : found.revisions[0] || null;
+    }
+
+    let responses = responsesJson;
+    if (typeof responses === "string") {
+      try {
+        JSON.parse(responses);
+      } catch {
+        return res.status(400).json({ error: "Invalid responsesJson" });
+      }
+    } else {
+      responses = JSON.stringify(responsesJson || {});
+    }
+
+    const existingDraft = await prisma.checklistSubmission.findFirst({
+      where: { assignmentId: assignment.id, submittedById: req.user!.id, status: "Draft" },
+    });
+
+    const submission = existingDraft
+      ? await prisma.checklistSubmission.update({
+          where: { id: existingDraft.id },
+          data: {
+            drawingId: drawing?.id || null,
+            revisionId: rev?.id || null,
+            revisionNumber: revisionNumber || rev?.revisionNumber || null,
+            responsesJson: responses,
+            remarks,
+            status: "Draft",
+          },
+        })
+      : await prisma.checklistSubmission.create({
+          data: {
+            assignmentId: assignment.id,
+            drawingId: drawing?.id || null,
+            revisionId: rev?.id || null,
+            revisionNumber: revisionNumber || rev?.revisionNumber || null,
+            submittedById: req.user!.id,
+            status: "Draft",
+            responsesJson: responses,
+            remarks,
+            purpose: "Fill",
+          },
+        });
+
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (files.length) {
+      const { mockOneDrive } = await import("../services/mockOneDrive.js");
+      for (const f of files) {
+        const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
+        const itemId = scoped?.[1] || null;
+        const kind = scoped?.[2] || (f.mimetype?.startsWith("image/") ? "photo" : "doc");
+        const saved = await mockOneDrive.upload(
+          assignment.project.code,
+          "Checklists",
+          f.originalname,
+          f.buffer
+        );
+        await prisma.checklistPhoto.create({
+          data: {
+            submissionId: submission.id,
+            itemId,
+            kind,
+            fileUrl: saved.sharePointUrl || saved.url,
+            caption: f.originalname,
+          },
+        });
+      }
+    }
+
+    const withPhotos = await prisma.checklistSubmission.findUnique({
+      where: { id: submission.id },
+      include: { photos: true },
+    });
+
+    await audit("checklist.draft", {
+      userId: req.user!.id,
+      entity: "ChecklistSubmission",
+      entityId: submission.id,
+      meta: { progress: computeChecklistProgress(assignment.template.items.length, responses, withPhotos?.photos.length || 0) },
+    });
+
+    res.status(existingDraft ? 200 : 201).json(
+      attachProgress(withPhotos || submission, assignment.template.items.length)
+    );
   }
 );
 
@@ -338,15 +533,19 @@ checklistRouter.get("/project/:projectId/submissions", async (req, res) => {
       },
     },
     include: {
-      assignment: { include: { template: true } },
+      assignment: { include: { template: { include: { _count: { select: { items: true } } } } } },
       submittedBy: { select: { fullName: true, role: true, email: true } },
       drawing: { select: { drawingNumber: true, title: true } },
       revision: { select: { revisionNumber: true, createdAt: true } },
+      photos: true,
     },
     orderBy: { createdAt: "desc" },
     take: 500,
   });
-  res.json(submissions);
+  const rows = submissions.map((s) =>
+    attachProgress(s, s.assignment.template._count.items)
+  );
+  res.json(rows);
 });
 
 checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
@@ -359,28 +558,49 @@ checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
       },
     },
     include: {
-      assignment: { include: { template: true } },
+      assignment: { include: { template: { include: { _count: { select: { items: true } } } } } },
       submittedBy: { select: { fullName: true, role: true, email: true } },
       drawing: { select: { drawingNumber: true, title: true } },
       revision: { select: { revisionNumber: true, createdAt: true } },
+      photos: { select: { id: true } },
     },
     orderBy: { createdAt: "desc" },
   });
-  const header = ["Submitted At", "Family", "Checklist", "Drawing", "Revision", "Status", "Filled By", "Role", "Email", "Remarks"];
-  const rows = submissions.map((s) =>
-    [
+  const header = [
+    "Submitted At",
+    "Family",
+    "Checklist",
+    "Drawing",
+    "Revision",
+    "Status",
+    "Progress",
+    "Evidence",
+    "Filled By",
+    "Role",
+    "Email",
+    "Remarks",
+  ];
+  const rows = submissions.map((s) => {
+    const p = computeChecklistProgress(
+      s.assignment.template._count.items,
+      s.responsesJson,
+      s.photos?.length || 0
+    );
+    return [
       new Date(s.createdAt).toISOString(),
       s.assignment.template.checklistType || "",
       `"${(s.assignment.template.name || "").replace(/"/g, '""')}"`,
       s.drawing ? `${s.drawing.drawingNumber}` : "",
       s.revisionNumber || s.revision?.revisionNumber || "",
       s.status,
+      p.progressLabel,
+      String(p.evidenceCount),
       `"${s.submittedBy.fullName.replace(/"/g, '""')}"`,
       s.submittedBy.role || "",
       s.submittedBy.email || "",
       `"${(s.remarks || "").replace(/"/g, '""')}"`,
-    ].join(",")
-  );
+    ].join(",");
+  });
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="checklist-log-${req.params.projectId}.csv"`);
   res.send([header.join(","), ...rows].join("\n"));
@@ -796,7 +1016,11 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes] = await Promise.all([
     prisma.checklistSubmission.findMany({
       where: { assignment: { projectId, template: { checklistType: "QualityInspection" } } },
-      include: { assignment: { include: { template: true } }, submittedBy: { select: { fullName: true } } },
+      include: {
+        assignment: { include: { template: { include: { _count: { select: { items: true } } } } } },
+        submittedBy: { select: { fullName: true, role: true } },
+        photos: { select: { id: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
@@ -829,7 +1053,12 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       cubesPass: cubes.filter((c) => /pass/i.test(c.result || "")).length,
     },
     fillsByDay: byDay,
-    recentFills: qiFills,
+    recentFills: qiFills.map((f) =>
+      attachProgress(
+        { ...f, photos: f.photos || [] },
+        f.assignment.template._count.items
+      )
+    ),
     qap,
     ncrs,
     cubes,

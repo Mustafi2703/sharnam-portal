@@ -104,6 +104,9 @@ export default function SafetyPage() {
             <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
             <Badge tone="brand">{dash?.totals?.checklistFills ?? 0} checklist fills</Badge>
             <ReportExportButtons projectId={id} kind="safety" compact />
+            <Link to={`/projects/${id}/checklist-logs?family=Safety`} className="text-sm font-semibold text-brand">
+              Fill log & progress →
+            </Link>
             <Link to={`/projects/${id}/checklist-master?family=Safety`} className="text-sm font-semibold text-brand">
               Safety checklists →
             </Link>

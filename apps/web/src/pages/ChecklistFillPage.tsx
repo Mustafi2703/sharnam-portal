@@ -6,7 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/
 import { SignaturePad } from "../components/SignaturePad";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string };
-type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[] };
+type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[]; evidenceLinks: string[] };
 
 /** Spacious Procore-style fill form: pick drawing → pick revision → fill lines with evidence */
 export default function ChecklistFillPage() {
@@ -27,7 +27,9 @@ export default function ChecklistFillPage() {
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canUploadDrawing = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
 
-  const emptyLine = (): LineResponse => ({ answer: "", remarks: "", photos: [], docs: [] });
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const emptyLine = (): LineResponse => ({ answer: "", remarks: "", photos: [], docs: [], evidenceLinks: [] });
 
   const load = async () => {
     const [a, d] = await Promise.all([
@@ -41,6 +43,29 @@ export default function ChecklistFillPage() {
     a.template.items.forEach((i: Item) => {
       init[i.id] = emptyLine();
     });
+
+    const draft = a.myDraft;
+    if (draft) {
+      setDraftId(draft.id);
+      setRemarks(draft.remarks || "");
+      if (draft.drawingId) setDrawingId(draft.drawingId);
+      if (draft.revisionId) setRevisionId(draft.revisionId);
+      let saved: Record<string, { answer?: string; remarks?: string; evidenceLinks?: string[] }> = {};
+      try {
+        saved = JSON.parse(draft.responsesJson || "{}");
+      } catch {
+        saved = {};
+      }
+      Object.keys(init).forEach((itemId) => {
+        const row = saved[itemId] || {};
+        init[itemId] = {
+          ...emptyLine(),
+          answer: row.answer || "",
+          remarks: row.remarks || "",
+          evidenceLinks: Array.isArray(row.evidenceLinks) ? row.evidenceLinks : [],
+        };
+      });
+    }
     setResponses(init);
   };
 
@@ -64,7 +89,65 @@ export default function ChecklistFillPage() {
   const items: Item[] = assignment?.template?.items || [];
   const sections = useMemo(() => Array.from(new Set(items.map((i) => i.section || "General"))), [items]);
   const answered = Object.values(responses).filter((r) => r.answer).length;
+  const linkEvidence = Object.values(responses).reduce((s, r) => s + (r.evidenceLinks?.filter(Boolean).length || 0), 0);
+  const answerPct = items.length ? Math.round((answered / items.length) * 100) : 0;
   const selectedRev = revs.find((r: any) => r.id === revisionId);
+
+  function buildPayload() {
+    const payload: Record<string, { answer: string; remarks: string; evidenceLinks?: string[] }> = {};
+    const itemComments: Record<string, string> = {};
+    Object.entries(responses).forEach(([lineId, r]) => {
+      payload[lineId] = {
+        answer: r.answer,
+        remarks: r.remarks,
+        evidenceLinks: r.evidenceLinks?.filter(Boolean) || [],
+      };
+      if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
+    });
+    return { payload, itemComments };
+  }
+
+  function buildFormData(status: "Draft" | "Submitted") {
+    const { payload, itemComments } = buildPayload();
+    const fd = new FormData();
+    fd.append("responsesJson", JSON.stringify(payload));
+    fd.append("itemCommentsJson", JSON.stringify(itemComments));
+    if (drawingId) fd.append("drawingId", drawingId);
+    if (revisionId) fd.append("revisionId", revisionId);
+    if (selectedRev?.revisionNumber) fd.append("revisionNumber", selectedRev.revisionNumber);
+    fd.append("remarks", remarks);
+    if (status === "Submitted") fd.append("status", "Submitted");
+    if (photos) {
+      Array.from(photos).forEach((f) => fd.append("photos", f));
+    }
+    if (signatureFile) {
+      fd.append("photos", signatureFile, signatureFile.name);
+    }
+    Object.entries(responses).forEach(([lineId, r]) => {
+      r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
+      r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
+    });
+    return fd;
+  }
+
+  async function saveDraft() {
+    setSavingDraft(true);
+    setMsg("");
+    try {
+      const fd = buildFormData("Draft");
+      const saved = await api<any>(`/api/checklist/assignments/${assignmentId}/draft`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setDraftId(saved.id);
+      setMsg(`Draft saved — ${saved.progress?.progressLabel || answered + "/" + items.length} answered · ${saved.progress?.evidenceCount || linkEvidence} evidence link(s).`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Draft save failed");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
 
   function patchLine(itemId: string, patch: Partial<LineResponse>) {
     setResponses((prev) => ({
@@ -76,8 +159,9 @@ export default function ChecklistFillPage() {
   const minPhotos = assignment?.template?.requirePhotosMin || 0;
   const photoTotal = useMemo(() => {
     const overall = photos?.length || 0;
-    const line = Object.values(responses).reduce((s, r) => s + (r.photos?.length || 0), 0);
-    return overall + line;
+    const linePhotos = Object.values(responses).reduce((s, r) => s + (r.photos?.length || 0), 0);
+    const links = Object.values(responses).reduce((s, r) => s + (r.evidenceLinks?.filter(Boolean).length || 0), 0);
+    return overall + linePhotos + links;
   }, [photos, responses]);
 
   async function submit(e: FormEvent) {
@@ -88,50 +172,21 @@ export default function ChecklistFillPage() {
       return;
     }
     try {
-      const payload: Record<string, { answer: string; remarks: string }> = {};
-      const itemComments: Record<string, string> = {};
-      Object.entries(responses).forEach(([lineId, r]) => {
-        payload[lineId] = { answer: r.answer, remarks: r.remarks };
-        if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
-      });
-
-      const fd = new FormData();
-      fd.append("responsesJson", JSON.stringify(payload));
-      fd.append("itemCommentsJson", JSON.stringify(itemComments));
-      if (drawingId) fd.append("drawingId", drawingId);
-      if (revisionId) fd.append("revisionId", revisionId);
-      if (selectedRev?.revisionNumber) fd.append("revisionNumber", selectedRev.revisionNumber);
-      fd.append("remarks", remarks);
-      fd.append("status", "Submitted");
-      if (photos) {
-        Array.from(photos).forEach((f) => fd.append("photos", f));
-      }
-      if (signatureFile) {
-        fd.append("photos", signatureFile, signatureFile.name);
-      }
-      let lineFiles = 0;
-      Object.entries(responses).forEach(([lineId, r]) => {
-        r.photos.forEach((f) => {
-          fd.append(`item_${lineId}_photo`, f);
-          lineFiles += 1;
-        });
-        r.docs.forEach((f) => {
-          fd.append(`item_${lineId}_doc`, f);
-          lineFiles += 1;
-        });
-      });
+      const fd = buildFormData("Submitted");
       await api(`/api/checklist/assignments/${assignmentId}/submit`, {
         method: "POST",
         token,
         body: fd,
       });
+      const lineFiles = Object.values(responses).reduce((s, r) => s + r.photos.length + r.docs.length, 0);
       const overall = photos?.length || 0;
       setMsg(
-        overall + lineFiles
-          ? `Submitted with ${lineFiles} line attachment(s)${overall ? ` + ${overall} overall` : ""}.`
+        overall + lineFiles + linkEvidence
+          ? `Submitted — ${answered}/${items.length} answered · evidence saved to SharePoint links / uploads.`
           : "Submitted — audit log updated."
       );
       setPhotos(null);
+      setDraftId(null);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -166,12 +221,24 @@ export default function ChecklistFillPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Badge tone="brand">{family === "QualityInspection" ? "Quality inspection" : "Final Index"}</Badge>
+            <Badge tone="brand">
+              {family === "QualityInspection"
+                ? "Quality inspection"
+                : family === "Safety"
+                  ? "Safety checklist"
+                  : "Final Index"}
+            </Badge>
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => void downloadAuditCsv()}>
               CSV audit log
             </Button>
             <Link
-              to={`/projects/${projectId}/${family === "QualityInspection" ? "quality-inspections" : "checklist"}`}
+              to={`/projects/${projectId}/${
+                family === "QualityInspection"
+                  ? "quality-inspections"
+                  : family === "Safety"
+                    ? "safety"
+                    : "checklist"
+              }`}
               className="text-xs font-semibold text-brand"
             >
               Close
@@ -195,11 +262,15 @@ export default function ChecklistFillPage() {
                 }`
               }
               actions={
-                <div className="text-right">
+                <div className="text-right space-y-1">
                   <div className="text-2xl font-display text-brand">
                     {answered}/{items.length}
                   </div>
-                  <div className="text-[11px] text-steel-muted font-mono uppercase">answered</div>
+                  <div className="text-[11px] text-steel-muted font-mono uppercase">{answerPct}% answered</div>
+                  {draftId && <Badge tone="warn">Draft saved</Badge>}
+                  <div className="w-32 h-1.5 bg-line rounded-full overflow-hidden ml-auto">
+                    <div className="h-full bg-brand transition-all" style={{ width: `${answerPct}%` }} />
+                  </div>
                 </div>
               }
             />
@@ -320,7 +391,11 @@ export default function ChecklistFillPage() {
                         <div className="mt-1 font-medium">{s.submittedBy?.fullName}</div>
                         <div className="text-xs text-steel-muted">
                           {s.drawing?.drawingNumber || "—"} · {s.revisionNumber || s.drawing?.currentRev || "—"}
-                          {s.photos?.length ? ` · ${s.photos.length} file(s)` : ""}
+                          {s.progress
+                            ? ` · ${s.progress.progressLabel} (${s.progress.answerPct}%)`
+                            : s.photos?.length
+                              ? ` · ${s.photos.length} file(s)`
+                              : ""}
                         </div>
                       </li>
                     ))}
@@ -393,8 +468,24 @@ export default function ChecklistFillPage() {
                                 onChange={(e) => patchLine(item.id, { remarks: e.target.value })}
                               />
                               <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                                <label className="text-xs text-steel-muted block sm:col-span-2">
+                                  SharePoint / OneDrive evidence link
+                                  <Input
+                                    className="mt-1 !text-xs"
+                                    placeholder="https://…sharepoint.com/… or OneDrive link"
+                                    value={line.evidenceLinks[0] || ""}
+                                    onChange={(e) =>
+                                      patchLine(item.id, {
+                                        evidenceLinks: e.target.value.trim() ? [e.target.value.trim()] : [],
+                                      })
+                                    }
+                                  />
+                                  <span className="block mt-1 text-[10px] text-steel-muted">
+                                    Link only — file stays in SharePoint; portal stores the URL.
+                                  </span>
+                                </label>
                                 <label className="text-xs text-steel-muted block">
-                                  Photos
+                                  Photos (optional upload → SharePoint)
                                   <input
                                     type="file"
                                     accept="image/*"
@@ -466,9 +557,14 @@ export default function ChecklistFillPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     {canFill && (
-                      <Button type="submit" disabled={minPhotos > 0 && photoTotal < minPhotos}>
-                        Submit checklist form
-                      </Button>
+                      <>
+                        <Button type="button" variant="secondary" disabled={savingDraft} onClick={() => void saveDraft()}>
+                          {savingDraft ? "Saving…" : "Save draft"}
+                        </Button>
+                        <Button type="submit" disabled={minPhotos > 0 && photoTotal < minPhotos}>
+                          Submit checklist form
+                        </Button>
+                      </>
                     )}
                     {msg && <span className="text-sm text-steel-muted">{msg}</span>}
                   </div>

@@ -102,7 +102,7 @@ export default function ChecklistLogsPage() {
     <div className="space-y-5">
       <PageHero
         title={title}
-        subtitle="Every fill logged with line-level data. Download full schedule XLSX (all answers + photos) or branded PDF per row."
+        subtitle="Every fill logged with line-level data. PMC and client can track % filled and SharePoint evidence links."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void load()}>
@@ -167,8 +167,9 @@ export default function ChecklistLogsPage() {
                 <th>When</th>
                 <th>Family</th>
                 <th>Checklist</th>
-                <th>Drawing</th>
-                <th>Filled by</th>
+                <th>Progress</th>
+                <th>Evidence</th>
+                <th>Responsible</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -181,24 +182,41 @@ export default function ChecklistLogsPage() {
                     <Badge tone="neutral">{s.assignment?.template?.checklistType || "—"}</Badge>
                   </td>
                   <td>{s.assignment?.template?.name || "—"}</td>
-                  <td className="font-mono text-xs">{s.drawing?.drawingNumber || "—"}</td>
+                  <td>
+                    <div className="font-mono text-xs">{s.progress?.progressLabel || "—"}</div>
+                    <div className="text-[10px] text-steel-muted">{s.progress?.answerPct ?? 0}% · {s.progress?.statusHint || ""}</div>
+                    <div className="w-20 h-1 bg-line rounded-full mt-1 overflow-hidden">
+                      <div className="h-full bg-brand" style={{ width: `${s.progress?.answerPct || 0}%` }} />
+                    </div>
+                  </td>
+                  <td className="text-xs">
+                    {s.progress?.evidenceCount ?? 0} total
+                    <div className="text-[10px] text-steel-muted">
+                      {s.progress?.linkEvidence || 0} links · {s.progress?.fileEvidence || s.photos?.length || 0} files
+                    </div>
+                  </td>
                   <td>
                     {s.submittedBy?.fullName || "—"}
-                    <div className="text-[11px] text-steel-muted">{s.submittedBy?.role}</div>
+                    <div className="text-[11px] text-steel-muted capitalize">{s.submittedBy?.role || "—"}</div>
+                    <div className="text-[10px] font-mono text-steel-muted">{s.drawing?.drawingNumber || "No drawing"}</div>
                   </td>
                   <td>
-                    <Badge tone={s.status === "Submitted" || s.status === "Approved" ? "ok" : "warn"}>{s.status}</Badge>
+                    <Badge tone={s.status === "Submitted" || s.status === "Approved" ? "ok" : s.status === "Draft" ? "warn" : "neutral"}>
+                      {s.status}
+                    </Badge>
                   </td>
                   <td className="text-right">
-                    <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>
-                      Download branded
-                    </Button>
+                    {s.status !== "Draft" && (
+                      <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>
+                        Download branded
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
               {!rows.length && !busy && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     No fills logged yet for this filter.
                   </td>
                 </tr>
