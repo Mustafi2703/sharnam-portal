@@ -17,6 +17,7 @@ import {
 } from "./qualitySafetySheets.ts";
 import { seedClosureDrawingsForDemoProjects } from "./closureDrawingsSeed.ts";
 import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
+import { seedWprDemoWeek, snapWeekEnding } from "../apps/api/src/services/wprDemoSeed.ts";
 
 export const DEMO_PROJECT_CODES = ["SPDC-DEMO-01", "SPDC-PILOT-02"] as const;
 
@@ -93,9 +94,23 @@ export async function seedAllDemoSheetModules(prisma: PrismaClient) {
 
   const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
   if (demoProject) {
-    console.log("\n==> Published DPR demo day (7 disciplines) — SPDC-DEMO-01");
-    const result = await seedDprDemoDay(prisma, demoProject.id, anchor, reporter.id);
-    console.log(`  ✓ ${result.disciplines.length} disciplines published for ${result.logDate}`);
+    const weekEnd = snapWeekEnding(anchor);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekEnd.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+
+    console.log("\n==> Published DPR demo week (7 days) — SPDC-DEMO-01");
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(weekStart);
+      day.setDate(weekStart.getDate() + i);
+      day.setHours(12, 0, 0, 0);
+      const result = await seedDprDemoDay(prisma, demoProject.id, day, reporter.id);
+      console.log(`  ✓ ${result.logDate} · ${result.disciplines.length} disciplines`);
+    }
+
+    console.log("\n==> Published WPR week (SPDC pack + client workbook) — SPDC-DEMO-01");
+    const wpr = await seedWprDemoWeek(prisma, demoProject.id, anchor, reporter.id);
+    console.log(`  ✓ Week ending ${wpr.weekEnd.toISOString().slice(0, 10)} · ${wpr.spdcName} · ${wpr.clientName}`);
   }
 
   console.log("\n==> CRM comparative (R2 workbook)");
@@ -107,7 +122,7 @@ export async function seedAllDemoSheetModules(prisma: PrismaClient) {
   }
 
   console.log("\n✓ Demo screenshot pack ready on SPDC-DEMO-01 and SPDC-PILOT-02");
-  console.log("  Drawing register · GFC links · Quality · Safety · DPR week · WPR auto-seed");
+  console.log("  Drawing register · GFC links · Quality · Safety · DPR week · WPR week + client pack");
 }
 
 async function main() {

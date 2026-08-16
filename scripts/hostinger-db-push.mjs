@@ -47,19 +47,7 @@ if (process.env.RUN_SEED === "1") {
 }
 
 try {
-  console.log("==> Safety sheet registers (Safety NCR + Dashboard)…");
-  execSync("npx tsx seed/safetySheetsDemo.ts", {
-    stdio: "inherit",
-    env: process.env,
-    cwd: rootDir,
-    timeout: 180_000,
-  });
-} catch {
-  console.warn("WARN: Safety sheet seed skipped (non-fatal — set RUN_SEED=1 for full seed)");
-}
-
-try {
-  console.log("==> Demo screenshot pack (quality, safety, drawing register, closure, CRM)…");
+  console.log("==> Demo screenshot pack (quality, safety, drawing register, DPR/WPR week, CRM)…");
   execSync("npx tsx seed/demoScreenshotsPack.ts", {
     stdio: "inherit",
     env: process.env,
