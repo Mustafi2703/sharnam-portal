@@ -8,7 +8,6 @@ import { ModuleToolNav } from "../../components/ModuleToolNav";
 import { ToolRightPanel } from "../../components/ToolRightPanel";
 import { ModuleIcon, type ModuleIconKey } from "../../components/icons";
 import {
-  getActiveWorkspace,
   setActiveWorkspace,
   clearStoredProjectId,
   MODULE_TOOLS,
@@ -17,6 +16,7 @@ import {
 } from "../../workspaces";
 import { applyModuleAccent, clearModuleAccent, MODULE_THEME_EVENT } from "../../themes";
 import { isToolActive } from "../../lib/moduleToolNav";
+import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
 
 const TOP_MODULES = (
@@ -36,56 +36,8 @@ const TOP_MODULES = (
   ] as const
 ).map((m) => ({ ...m, label: formatUiText(m.label) }));
 
-function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home" {
-  const seg = pathname.split("/").filter(Boolean);
-  const tool = seg[2] || "";
-  if (!tool) return "home";
-  if (tool === "hub" && seg[3] && MODULE_META[seg[3] as WorkspaceKey]) return seg[3] as WorkspaceKey;
-  if (["drawings", "coordination"].includes(tool) || pathname.includes("/drawings/")) return "drawings";
-  if (tool === "closure") return "closure";
-  if (tool === "checklist-master") {
-    if (pathname.includes("/safety/checklist-master")) return "safety";
-    if (pathname.includes("/quality/checklist-master")) return "quality";
-    const q = new URLSearchParams(search).get("family");
-    if (q === "Safety") return "safety";
-    if (q === "DrawingCheck") return "drawings";
-    return "quality";
-  }
-  if (tool === "checklist-logs") {
-    if (pathname.includes("/safety/checklist-logs")) return "safety";
-    if (pathname.includes("/quality/checklist-logs")) return "quality";
-    const q = new URLSearchParams(search).get("family");
-    if (q === "Safety") return "safety";
-    if (q === "DrawingCheck" || q === "SiteExecution") return "drawings";
-    return "quality";
-  }
-  if (tool === "dms") return "dms";
-  if (["checklist", "quality-inspections", "inspections"].includes(tool)) return "quality";
-  if (tool === "safety") return "safety";
-  if (tool === "progress") return "progress";
-  if (["diary", "photos", "site-pilot"].includes(tool)) return "field";
-  if (["dpr-maker", "wpr-maker"].includes(tool)) return "reports";
-  if (["comms", "email"].includes(tool)) return "comms";
-  if (tool === "cost") return "cost";
-  if (tool === "finance") return "finance";
-  if (tool === "qap") return "quality";
-  if (tool === "reports") return "reports";
-  if (tool === "rfis") {
-    const kind = new URLSearchParams(search).get("kind");
-    if (kind === "DrawingChecklist" || kind === "RequestForInformation") {
-      const ws = getActiveWorkspace();
-      if (ws === "drawings" || ws === "comms") return ws;
-      if (kind === "DrawingChecklist") return "drawings";
-      return "comms";
-    }
-    if (kind === "QualityInspection") return "quality";
-    if (kind === "SafetyChecklist") return "safety";
-    const ws = getActiveWorkspace();
-    if (ws && ws !== "progress" && ws !== "reports" && ws !== "cost" && ws !== "finance") return ws;
-    return "quality";
-  }
-  if (["directory", "vendors"].includes(tool)) return "home";
-  return "home";
+function moduleFromPath(pathname: string, search: string) {
+  return resolveProjectWorkspace(pathname, search);
 }
 
 function toolFromPath(pathname: string) {

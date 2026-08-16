@@ -1,4 +1,5 @@
 import type { ModuleToolItem } from "../workspaces";
+import { projectRouteTail } from "./projectWorkspace";
 
 /** Whether a module tool tab matches the current route (shared by layout chrome + ModuleToolNav). */
 export function isToolActive(
@@ -10,14 +11,21 @@ export function isToolActive(
   if (!projectId) return false;
   if (pathname.includes("/hub/")) return false;
 
-  const base = t.to ? `/projects/${projectId}/${t.to}` : `/projects/${projectId}`;
-  const pathOk = t.end ? pathname === base : pathname === base || pathname.startsWith(`${base}/`);
-  if (!pathOk) return false;
-
+  const tail = projectRouteTail(pathname);
   const params = new URLSearchParams(search);
   const currentTab = params.get("tab");
   const currentSheet = params.get("sheet");
   const currentKind = params.get("kind");
+
+  if (t.to.includes("/")) {
+    if (tail !== t.to && !tail.startsWith(`${t.to}/`)) return false;
+  } else if (t.end) {
+    if (tail !== t.to) return false;
+  } else if (t.to) {
+    if (tail !== t.to) return false;
+  } else if (tail) {
+    return false;
+  }
 
   if (t.query) {
     if (t.to === "directory" && t.query.startsWith("party=")) {

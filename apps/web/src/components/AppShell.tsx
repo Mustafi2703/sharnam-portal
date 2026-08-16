@@ -22,6 +22,7 @@ import {
   setActiveWorkspace,
   type WorkspaceKey,
 } from "../workspaces";
+import { resolveProjectWorkspace, isProjectModuleActive } from "../lib/projectWorkspace";
 import { api } from "../api";
 import { downloadAuthFile, exportPaths, type ExportModule } from "../lib/downloadReport";
 import { sortDemoProjectsFirst } from "../lib/demoProjects";
@@ -39,15 +40,9 @@ import { formatUiText } from "../lib/formatUiText";
 const BASE_ACCENT = "#0B6A78";
 const BASE_SOFT = "#E6F4F6";
 
-function moduleKeyFromPath(pathname: string): WorkspaceKey | null {
-  const parts = pathname.split("/").filter(Boolean);
-  if (parts[0] !== "projects" || !parts[1]) return null;
-  const tool = parts[2] || "";
-  if (tool === "hub" && parts[3] && MODULE_META[parts[3] as WorkspaceKey]) return parts[3] as WorkspaceKey;
-  const stored = getActiveWorkspace();
-  if (stored && MODULE_META[stored]) return stored;
-  if (tool && MODULE_META[tool as WorkspaceKey]) return tool as WorkspaceKey;
-  return null;
+function moduleKeyFromPath(pathname: string, search: string): WorkspaceKey | null {
+  const ws = resolveProjectWorkspace(pathname, search);
+  return ws === "home" ? null : ws;
 }
 
 const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[]; end?: boolean }[] = [
@@ -101,21 +96,8 @@ const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
 
 type Proj = { id: string; code: string; name: string };
 
-function moduleActive(pathname: string, key: WorkspaceKey) {
-  if (pathname.includes(`/hub/${key}`)) return true;
-  const map: Record<string, string[]> = {
-    drawings: ["/drawings", "/drawings/coordination", "/coordination"],
-    dms: ["/dms"],
-    quality: ["/inspections", "/checklist", "/qap", "/quality-inspections"],
-    safety: ["/safety"],
-    progress: ["/progress"],
-    field: ["/diary", "/photos"],
-    comms: ["/comms", "/email"],
-    cost: ["/cost"],
-    finance: ["/finance"],
-    reports: ["/reports"],
-  };
-  return (map[key] || []).some((p) => pathname.includes(p));
+function moduleActive(pathname: string, search: string, key: WorkspaceKey) {
+  return isProjectModuleActive(pathname, search, key);
 }
 
 function SideNavBody({
@@ -349,7 +331,7 @@ function SideNavBody({
               </NavLink>
               {modules.map((m) => {
                 const href = `/projects/${activeProjectId || projectId}/${m.path}`;
-                const on = moduleActive(location.pathname, m.key);
+                const on = moduleActive(location.pathname, location.search, m.key);
                 return (
                   <Link
                     key={m.key}
@@ -448,7 +430,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       clearModuleAccent();
       return;
     }
-    const key = moduleKeyFromPath(location.pathname);
+    const key = moduleKeyFromPath(location.pathname, location.search);
     if (key && MODULE_META[key]) {
       applyModuleAccent(MODULE_META[key].accent, MODULE_META[key].soft);
     } else {
@@ -487,7 +469,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const next = toggleColorMode();
     setColorMode(next);
     if (inProject) {
-      const key = moduleKeyFromPath(location.pathname);
+      const key = moduleKeyFromPath(location.pathname, location.search);
       if (key && MODULE_META[key]) {
         applyModuleAccent(MODULE_META[key].accent, MODULE_META[key].soft);
       } else {
