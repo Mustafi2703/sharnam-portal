@@ -211,17 +211,6 @@ export default function CostPage() {
 
   if (!summary) return <div className="text-steel-muted py-10">Loading cost sheets…</div>;
 
-  const tabs = [
-    ["monitoring", "BOQ / Monitoring"],
-    ["mb", "MB sheets"],
-    ["bbs", "BBS"],
-    ["budget", "Budget WBS"],
-    ["cashflow", "Cashflow"],
-    ["rates", "Rate diff"],
-    ["bills", "COP / Bills"],
-    ["boq", "Structure upload"],
-  ] as const;
-
   async function addMb(e: FormEvent) {
     e.preventDefault();
     await api(`/api/cost/${id}/mb`, {
@@ -354,23 +343,6 @@ export default function CostPage() {
           </div>
           <div className="kpi-tile__hint">Planned vs actual periods loaded</div>
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2 items-center">
-        {tabs.map(([k, label]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={`rounded-sm px-3 sm:px-4 py-2 text-sm font-medium border transition ${
-              tab === k
-                ? "bg-brand text-white border-brand"
-                : "bg-paper border-line text-ink hover:border-brand/40"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
       </div>
 
       {["monitoring", "mb", "bbs"].includes(tab) && (

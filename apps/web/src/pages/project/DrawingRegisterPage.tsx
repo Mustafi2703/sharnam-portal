@@ -3,15 +3,14 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
-import { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
-import { DRAWING_REGISTER_SHEET_VIEWS, drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
+import { drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export default function DrawingRegisterPage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const sheetView = drawingRegisterSheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
@@ -60,8 +59,6 @@ export default function DrawingRegisterPage() {
 
   return (
     <div className="space-y-5">
-      {id && <DrawingsModuleNav projectId={id} />}
-
       <PageHeader
         eyebrow="Drawings module"
         title={sheetView.label}
@@ -79,21 +76,6 @@ export default function DrawingRegisterPage() {
           </div>
         }
       />
-
-      <div className="flex flex-wrap gap-1">
-        {DRAWING_REGISTER_SHEET_VIEWS.map((s) => (
-          <button
-            key={s.key || "dashboard"}
-            type="button"
-            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
-            className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
 
       {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
 

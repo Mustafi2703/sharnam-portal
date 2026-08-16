@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { DRAWINGS_MODULE_NAV, drawingsNavActive } from "../lib/drawingsModuleNav";
+import { formatUiText } from "../lib/formatUiText";
 import { useAuth } from "../auth";
 
 /** Shared tab strip for all Drawings-module tools */
@@ -26,7 +27,7 @@ export function DrawingsModuleNav({ projectId }: { projectId: string }) {
               active ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted hover:text-ink"
             }`}
           >
-            {item.label}
+            {formatUiText(item.label)}
           </Link>
         );
       })}

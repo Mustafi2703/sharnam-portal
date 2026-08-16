@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "../../components/ui";
 import { MODULE_TOOLS, MODULE_META, type WorkspaceKey } from "../../workspaces";
+import { formatUiText } from "../../lib/formatUiText";
 import { useAuth } from "../../auth";
 
 /** Module hub — one card per sheet-backed tool (live or ready for sheet drop) */
@@ -26,7 +27,7 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
             <PageHeader
               eyebrow={`${meta.title} module`}
               title={meta.title}
-              subtitle={`${meta.desc} Each card is a separate tool. Ready cards wait for the next client sheet.`}
+              subtitle={`${meta.desc} ${formatUiText("Each card is a separate tool. Ready cards wait for the next client sheet.")}`}
             />
           </div>
         </div>
@@ -59,7 +60,7 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
                     {ready ? "Ready" : t.sheet ? "Sheet" : "Live"}
                   </span>
                 </div>
-                <div className="font-display text-base font-semibold text-ink group-hover:text-brand">{t.label}</div>
+                <div className="font-display text-base font-semibold text-ink group-hover:text-brand">{formatUiText(t.label)}</div>
                 {t.blurb && <p className="text-sm text-steel-muted mt-1.5 leading-relaxed">{t.blurb}</p>}
                 {t.sheet && (
                   <p className="mt-2 text-[11px] font-mono text-steel-muted truncate" title={t.sheet}>

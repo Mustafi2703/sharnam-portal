@@ -203,6 +203,25 @@ export default function CommsPage() {
           eyebrow="Communications"
           title="Meetings · MoM"
           subtitle="Simple flow: set Matrix (who) → Create meeting → Agenda → MoM (minutes + actions) → Follow-up. Use Ask (PMC RFI) for questions — not inside MoM."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/projects/${id}/hub/comms`}>
+                <Button type="button" variant="secondary">
+                  Comms hub
+                </Button>
+              </Link>
+              <Link to={`/projects/${id}/email`}>
+                <Button type="button" variant="ghost" className="!text-xs">
+                  Outlook →
+                </Button>
+              </Link>
+              <Link to={`/projects/${id}/rfis?kind=RequestForInformation`}>
+                <Button type="button" variant="ghost" className="!text-xs">
+                  Ask (PMC RFI) →
+                </Button>
+              </Link>
+            </div>
+          }
         />
       </div>
 
@@ -215,32 +234,6 @@ export default function CommsPage() {
           { label: "Follow-up", hint: "Open actions" },
         ]}
       />
-
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["matrix", "1 · Matrix"],
-            ["agenda", "2 · Create / Agenda"],
-            ["mom", "3 · MoM"],
-            ["followup", "4 · Follow-up"],
-            ["log", "Comm log"],
-          ] as const
-        ).map(([k, label]) => (
-          <Button key={k} type="button" variant={tab === k ? "primary" : "secondary"} onClick={() => setTab(k)}>
-            {label}
-          </Button>
-        ))}
-        <Link to={`/projects/${id}/email`} className="ml-auto">
-          <Button type="button" variant="ghost" className="!text-xs">
-            Outlook →
-          </Button>
-        </Link>
-        <Link to={`/projects/${id}/rfis?kind=RequestForInformation`}>
-          <Button type="button" variant="ghost" className="!text-xs">
-            Ask (PMC RFI) →
-          </Button>
-        </Link>
-      </div>
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 

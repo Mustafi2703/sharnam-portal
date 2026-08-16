@@ -28,7 +28,7 @@ function d(s?: string | null) {
 
 export default function FinancePage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { token, user } = useAuth();
   const tab = (searchParams.get("tab") as ToolId) || "overview";
   const active = TOOLS.find((t) => t.id === tab) || TOOLS[0];
@@ -64,7 +64,7 @@ export default function FinancePage() {
       <PageHeader
         eyebrow="Finance module · commercial ledger"
         title={active.label}
-        subtitle="CAPEX · PO · RA Bill · COP tracking. Everything cross-linked; cumulative computed. Audit sheets dump to SharePoint on demand."
+        subtitle="CAPEX · PO · RA Bill · COP tracking. Switch tools using the module tabs above."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to={`/projects/${id}/hub/finance`}>
@@ -76,21 +76,6 @@ export default function FinancePage() {
           </div>
         }
       />
-
-      <div className="flex flex-wrap gap-2">
-        {TOOLS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setSearchParams(t.id === "overview" ? {} : { tab: t.id })}
-            className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
-              active.id === t.id ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted hover:border-ink"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 

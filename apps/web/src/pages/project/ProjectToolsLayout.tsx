@@ -1,9 +1,10 @@
-import { NavLink, Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, ApiError } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
+import { ModuleToolNav } from "../../components/ModuleToolNav";
 import { ToolRightPanel } from "../../components/ToolRightPanel";
 import { ModuleIcon, type ModuleIconKey } from "../../components/icons";
 import {
@@ -13,24 +14,27 @@ import {
   MODULE_TOOLS,
   MODULE_META,
   type WorkspaceKey,
-  type ModuleToolItem,
 } from "../../workspaces";
 import { applyModuleAccent, clearModuleAccent, MODULE_THEME_EVENT } from "../../themes";
+import { isToolActive } from "../../lib/moduleToolNav";
+import { formatUiText } from "../../lib/formatUiText";
 
-const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string }[] = [
-  { key: "home", label: "Project home", path: "" },
-  { key: "drawings", label: "Drawings", path: "hub/drawings" },
-  { key: "dms", label: "Documents", path: "hub/dms" },
-  { key: "quality", label: "Quality", path: "hub/quality" },
-  { key: "safety", label: "Safety", path: "hub/safety" },
-  { key: "progress", label: "Progress", path: "hub/progress" },
-  { key: "field", label: "Field", path: "hub/field" },
-  { key: "comms", label: "Comms", path: "hub/comms" },
-  { key: "cost", label: "Cost", path: "hub/cost" },
-  { key: "finance", label: "Finance", path: "hub/finance" },
-  { key: "reports", label: "Reports", path: "hub/reports" },
-  { key: "closure", label: "Closure", path: "hub/closure" },
-];
+const TOP_MODULES = (
+  [
+    { key: "home", label: "Project home", path: "" },
+    { key: "drawings", label: "Drawings", path: "hub/drawings" },
+    { key: "dms", label: "Documents", path: "hub/dms" },
+    { key: "quality", label: "Quality", path: "hub/quality" },
+    { key: "safety", label: "Safety", path: "hub/safety" },
+    { key: "progress", label: "Progress", path: "hub/progress" },
+    { key: "field", label: "Field", path: "hub/field" },
+    { key: "comms", label: "Comms", path: "hub/comms" },
+    { key: "cost", label: "Cost", path: "hub/cost" },
+    { key: "finance", label: "Finance", path: "hub/finance" },
+    { key: "reports", label: "Reports", path: "hub/reports" },
+    { key: "closure", label: "Closure", path: "hub/closure" },
+  ] as const
+).map((m) => ({ ...m, label: formatUiText(m.label) }));
 
 function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home" {
   const seg = pathname.split("/").filter(Boolean);
@@ -89,27 +93,6 @@ function toolFromPath(pathname: string) {
   if (seg[2] === "hub") return "hub";
   if (seg[2] === "drawings" && seg[3] === "coordination") return "coordination";
   return seg[2] || "";
-}
-
-function isToolActive(t: ModuleToolItem, pathname: string, search: string, projectId: string | undefined): boolean {
-  if (!projectId) return false;
-  if (pathname.includes("/hub/")) return false;
-  const base = t.to ? `/projects/${projectId}/${t.to}` : `/projects/${projectId}`;
-  const pathOk = t.end ? pathname === base : pathname === base || pathname.startsWith(`${base}/`);
-  if (!pathOk) return false;
-
-  const params = new URLSearchParams(search);
-  const currentTab = params.get("tab");
-
-  if (t.query) {
-    const expected = new URLSearchParams(t.query);
-    return [...expected.entries()].every(([k, v]) => params.get(k) === v);
-  }
-
-  if (t.to === "progress") return !currentTab;
-  if (t.to === "cost") return !currentTab || currentTab === "monitoring";
-  if (params.get("kind") || params.get("family") || params.get("tab")) return false;
-  return true;
 }
 
 export default function ProjectToolsLayout() {
@@ -275,38 +258,6 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
-        <div className="tool-strip px-2 sm:px-4 py-2 flex gap-2 overflow-x-auto border-t border-line bg-paper" aria-label={`${moduleLabel} tools`}>
-          {activeMod !== "home" && (
-            <Link
-              to={`/projects/${id}/hub/${activeMod}`}
-              className={`tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
-                activeTool === "hub" ? "is-on text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
-              }`}
-              style={activeTool === "hub" ? { background: accent, borderColor: accent } : undefined}
-            >
-              Hub
-            </Link>
-          )}
-          {stripItems.map((t) => {
-            const href = t.to ? `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}` : `/projects/${id}`;
-            const on = isToolActive(t, location.pathname, location.search, id);
-            return (
-              <NavLink
-                key={`${t.to}-${t.query || ""}-${t.label}`}
-                to={href}
-                end={t.end}
-                className={() =>
-                  `tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition ${
-                    on ? "is-on text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
-                  }`
-                }
-                style={on ? { background: accent, borderColor: accent } : undefined}
-              >
-                {t.label}
-              </NavLink>
-            );
-          })}
-        </div>
       </div>
 
       <div className={`tool-shell ${rightOpen ? "has-right" : ""} bg-sand w-full`}>
@@ -319,6 +270,15 @@ export default function ProjectToolsLayout() {
           />
         )}
         <div className="tool-main page-stack min-w-0">
+          {id &&
+            activeTool !== "hub" &&
+            (activeMod !== "home" || activeTool === "directory" || activeTool === "vendors") && (
+              <ModuleToolNav
+                projectId={id}
+                moduleKey={(activeMod === "home" ? "home" : activeMod) as WorkspaceKey | "home"}
+                accent={accent}
+              />
+            )}
           <Outlet
             context={{
               project,

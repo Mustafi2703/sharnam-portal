@@ -1,4 +1,5 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -6,8 +7,8 @@ import { canManageDrawings, isClientViewOnly } from "../../permissions";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
+import { DrawingUploadFilePicker, type DrawingFileKind } from "../../components/DrawingUploadFilePicker";
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
-import { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
 import { drawingFileKind, resolveDrawingFileUrl, type DrawingPreview } from "../../lib/drawingPreview";
 import PdfMarkup from "../../components/PdfMarkup";
@@ -15,6 +16,14 @@ import ImageMarkup from "../../components/ImageMarkup";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const REV_SLOTS = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
+
+function nextRevisionNumber(revisions: { revisionNumber?: string }[]): string {
+  const maxNum = revisions.reduce((max, r) => {
+    const n = parseInt(String(r.revisionNumber || "").replace(/\D/g, ""), 10);
+    return Number.isFinite(n) ? Math.max(max, n) : max;
+  }, -1);
+  return `R${Math.min(maxNum + 1, 5)}`;
+}
 
 function fmtDate(d?: string | Date | null) {
   if (!d) return "—";
@@ -50,12 +59,6 @@ export default function DrawingsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [formError, setFormError] = useState("");
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [fillDrawingId, setFillDrawingId] = useState("");
-  const [fillTemplateId, setFillTemplateId] = useState("");
-  const [fillAssignmentId, setFillAssignmentId] = useState("");
-  const [fillMsg, setFillMsg] = useState("");
   const [form, setForm] = useState({
     drawingNumber: "",
     title: "",
@@ -68,6 +71,10 @@ export default function DrawingsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
   const [revFile, setRevFile] = useState<File | null>(null);
+  const [revFileKind, setRevFileKind] = useState<DrawingFileKind | null>(null);
+  const [registerFileKind, setRegisterFileKind] = useState<DrawingFileKind | null>(null);
+  const [revUploadMode, setRevUploadMode] = useState<"new" | "replace">("new");
+  const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [showRegisterLine, setShowRegisterLine] = useState(false);
   const [registerLineBusy, setRegisterLineBusy] = useState(false);
   const [dumpBusy, setDumpBusy] = useState(false);
@@ -80,17 +87,8 @@ export default function DrawingsPage() {
   const clientOnly = isClientViewOnly(user?.role);
 
   const load = async () => {
-    const [d, a, t] = await Promise.all([
-      api<any[]>(`/api/drawings/project/${id}`, { token }),
-      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
-        assignments: [],
-      })),
-      api<any[]>(`/api/checklist/templates?type=SiteExecution`, { token }).catch(() => []),
-    ]);
+    const d = await api<any[]>(`/api/drawings/project/${id}`, { token });
     setDrawings(d);
-    setAssignments(a.assignments || []);
-    setTemplates(t);
-    if (!fillDrawingId && d[0]) setFillDrawingId(d[0].id);
   };
 
   useEffect(() => {
@@ -134,64 +132,10 @@ export default function DrawingsPage() {
     [drawings, filter]
   );
   const uploadTarget = drawings.find((d) => d.id === uploadForId);
-  const fillDrawing = drawings.find((d) => d.id === fillDrawingId);
-  const latestRev = useMemo(() => {
-    const revs = [...(fillDrawing?.revisions || [])].sort(
-      (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    return revs[0] || null;
-  }, [fillDrawing]);
-  const assignedIds = new Set(assignments.map((a) => a.template?.id));
-  const availableTemplates = templates.filter((t) => !assignedIds.has(t.id));
-
-  async function assignChecklistOnDrawing() {
-    if (!fillTemplateId) return;
-    setFillMsg("");
-    try {
-      const a = await api<any>(`/api/checklist/project/${id}/assign`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ templateId: fillTemplateId }),
-      });
-      setFillAssignmentId(a.id);
-      setFillMsg(`Checklist “${a.template?.name || "assigned"}” ready — raise fill RFI next.`);
-      await load();
-    } catch (err) {
-      setFillMsg(err instanceof Error ? err.message : "Assign failed");
-    }
-  }
-
-  async function raiseDrawingFillRfi() {
-    setFillMsg("");
-    const assignmentId = fillAssignmentId || assignments[0]?.id;
-    if (!assignmentId) {
-      setFillMsg("Assign a checklist first.");
-      return;
-    }
-    if (!fillDrawingId) {
-      setFillMsg("Select a drawing.");
-      return;
-    }
-    const assignment = assignments.find((a) => a.id === assignmentId) || { id: assignmentId, template: { name: "Checklist" } };
-    try {
-      const rfi = await api<any>(`/api/rfis/project/${id}`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          rfiKind: "DrawingChecklist",
-          subject: `Fill checklist vs ${fillDrawing?.drawingNumber || "drawing"} ${latestRev?.revisionNumber || "latest"}`,
-          question: `Please complete checklist “${assignment.template?.name || "assigned"}” against drawing ${fillDrawing?.drawingNumber} · ${fillDrawing?.title || ""} · revision ${latestRev?.revisionNumber || "latest"}. Communication matrix parties and responsible vendor fill this form.`,
-          linkedDrawingId: fillDrawingId,
-          linkedAssignmentId: assignmentId,
-          linkedChecklistItemId: assignment.template?.id || null,
-          attachmentNote: latestRev ? `Latest rev ${latestRev.revisionNumber}` : "No revision yet",
-        }),
-      });
-      setFillMsg(`Fill RFI ${rfi.number} raised for matrix / vendor.`);
-    } catch (err) {
-      setFillMsg(err instanceof Error ? err.message : "RFI failed");
-    }
-  }
+  const revModalOpen =
+    revUploadMode === "replace"
+      ? !!uploadForId && !!replaceRevisionId
+      : !!uploadForId && !!revUnlockToken;
 
   async function exportCsv() {
     const res = await fetch(`${API_BASE}/api/drawings/project/${id}/export.csv`, {
@@ -255,26 +199,39 @@ export default function DrawingsPage() {
     }
   }
 
-  function pickDrawingFile(f: File | null, target: "register" | "revision") {
+  function pickDrawingFile(f: File | null, target: "register" | "revision", kind?: DrawingFileKind) {
     if (!f) {
-      if (target === "register") setFile(null);
-      else setRevFile(null);
+      if (target === "register") {
+        setFile(null);
+        setRegisterFileKind(null);
+      } else {
+        setRevFile(null);
+        setRevFileKind(null);
+      }
       return;
     }
+    if (target === "register") {
+      setFile(f);
+      if (kind) setRegisterFileKind(kind);
+    } else {
+      setRevFile(f);
+      if (kind) setRevFileKind(kind);
+    }
+  }
+
+  function openMarkupEditor(target: "register" | "revision") {
+    const source = target === "register" ? file : revFile;
+    if (!source) return;
     const canMarkup =
-      f.type === "application/pdf" ||
-      f.type.startsWith("image/") ||
-      /\.(pdf|png|jpe?g|webp)$/i.test(f.name);
-    if (canMarkup) {
-      setMarkupTarget({
-        file: f,
-        target,
-        preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
-      });
-      return;
-    }
-    if (target === "register") setFile(f);
-    else setRevFile(f);
+      source.type === "application/pdf" ||
+      source.type.startsWith("image/") ||
+      /\.(pdf|png|jpe?g|webp)$/i.test(source.name);
+    if (!canMarkup) return;
+    setMarkupTarget({
+      file: source,
+      target,
+      preview: source.type.startsWith("image/") ? URL.createObjectURL(source) : undefined,
+    });
   }
 
   function applyMarkedFile(marked: File) {
@@ -344,30 +301,52 @@ export default function DrawingsPage() {
     setUnlockToken(null);
   }
 
+  function resetRevUpload() {
+    setUploadForId(null);
+    setRevFile(null);
+    setRevFileKind(null);
+    setRevUnlockToken(null);
+    setReplaceRevisionId(null);
+    setRevUploadMode("new");
+    setFormError("");
+  }
+
   async function uploadRevision(e: FormEvent) {
     e.preventDefault();
     if (!uploadForId) return;
-    if (!revUnlockToken) {
-      setFormError("Complete Drawing Check Master before revision upload.");
+    if (!revFile) {
+      setFormError("Choose a PDF or DWG file first.");
       return;
     }
     setBusy(true);
     setMsg("");
+    setFormError("");
     try {
-      const fd = new FormData();
-      fd.append("revisionNumber", revForm.revisionNumber);
-      fd.append("revisionLabel", revForm.revisionLabel || revForm.revisionNumber);
-      fd.append("publish", String(revForm.publish));
-      fd.append("unlockToken", revUnlockToken);
-      if (plannedDate) fd.append("plannedDate", plannedDate);
-      if (actualDate) fd.append("actualDate", actualDate);
-      if (revFile) fd.append("file", revFile);
-      await api(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
-      setUploadForId(null);
-      setRevFile(null);
-      setRevUnlockToken(null);
-      setExpandedId(uploadForId);
-      setMsg("Revision uploaded — planned/actual logged on the GFC register.");
+      if (revUploadMode === "replace" && replaceRevisionId) {
+        const fd = new FormData();
+        fd.append("file", revFile);
+        fd.append("note", revForm.revisionLabel || "Markup saved on revision");
+        await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
+        setExpandedId(uploadForId);
+        setMsg(`${revForm.revisionNumber} file updated — markup logged on the same revision.`);
+      } else {
+        if (!revUnlockToken) {
+          setFormError("Complete Drawing Check Master before revision upload.");
+          return;
+        }
+        const fd = new FormData();
+        fd.append("revisionNumber", revForm.revisionNumber);
+        fd.append("revisionLabel", revForm.revisionLabel || revForm.revisionNumber);
+        fd.append("publish", String(revForm.publish));
+        fd.append("unlockToken", revUnlockToken);
+        if (plannedDate) fd.append("plannedDate", plannedDate);
+        if (actualDate) fd.append("actualDate", actualDate);
+        fd.append("file", revFile);
+        await api(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
+        setExpandedId(uploadForId);
+        setMsg("Revision uploaded — planned/actual logged on the GFC register.");
+      }
+      resetRevUpload();
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Revision upload failed");
@@ -378,9 +357,12 @@ export default function DrawingsPage() {
 
   function openUploadRev(d: any) {
     if (!id) return;
-    const next = `R${Math.min(d.revisions?.length || 0, 5)}`;
+    const next = nextRevisionNumber(d.revisions || []);
     setUploadForId(d.id);
+    setRevUploadMode("new");
+    setReplaceRevisionId(null);
     setRevUnlockToken(null);
+    setRevFileKind(null);
     setFormError("");
     setPlannedDate("");
     setActualDate(new Date().toISOString().slice(0, 10));
@@ -396,10 +378,28 @@ export default function DrawingsPage() {
     setMsg("Complete Drawing Check Master in the overlay — revision upload unlocks after.");
   }
 
+  function openReplaceRevision(d: any, rev: any, kind: DrawingFileKind = "pdf") {
+    setUploadForId(d.id);
+    setRevUploadMode("replace");
+    setReplaceRevisionId(rev.id);
+    setRevUnlockToken(null);
+    setRevFileKind(kind);
+    setRevFile(null);
+    setFormError("");
+    setPrecheckOpen(false);
+    setPlannedDate("");
+    setActualDate(new Date().toISOString().slice(0, 10));
+    setExpandedId(d.id);
+    setRevForm({
+      revisionNumber: rev.revisionNumber,
+      revisionLabel: `${rev.revisionNumber} — markup update`,
+      publish: !!rev.published,
+    });
+    setMsg(`Update ${rev.revisionNumber} on ${d.drawingNumber} — choose PDF (markup) or DWG. Same revision, logged in upload history.`);
+  }
+
   return (
     <div className="space-y-4 min-w-0">
-      {id && <DrawingsModuleNav projectId={id} />}
-
       <PageHeader
         dense
         eyebrow="Drawings module · GFC"
@@ -407,7 +407,7 @@ export default function DrawingsPage() {
         subtitle={
           clientOnly
             ? "View published sheets and revision dates."
-            : "Upload runs Drawing Check Master first, then opens here. Other tools are in the tabs above."
+            : "Use the module tabs for coordination, files, and checklist tools. Upload GFC from the actions above."
         }
         actions={
           canUpload ? (
@@ -526,81 +526,6 @@ export default function DrawingsPage() {
         </Card>
       )}
 
-      {canUpload && (
-        <Card className="!p-5 border-brand/30 bg-paper text-ink">
-          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-            <div>
-              <h3 className="font-display text-lg text-ink">Checklist + request fill (latest revision)</h3>
-              <p className="text-sm text-ink/75 mt-1 max-w-2xl">
-                Assign a site checklist, then request fill so matrix / vendor open the form against the latest revision —
-                they can upload docs and new drawings / revisions from the fill screen.
-              </p>
-            </div>
-            <Link to={`/projects/${id}/rfis?kind=DrawingChecklist`} className="text-sm font-semibold text-brand">
-              Request checklist fill →
-            </Link>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-            <label className="text-xs text-steel-muted block">
-              Drawing
-              <Select className="mt-1" value={fillDrawingId} onChange={(e) => setFillDrawingId(e.target.value)}>
-                <option value="">Select drawing…</option>
-                {drawings.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.drawingNumber} — {d.title}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <div className="text-sm">
-              <div className="text-xs text-steel-muted">Latest revision</div>
-              <div className="font-mono font-semibold mt-1.5">
-                {latestRev ? `${latestRev.revisionNumber} · ${fmtDate(latestRev.createdAt)}` : "No revision yet"}
-              </div>
-            </div>
-            <label className="text-xs text-steel-muted block">
-              Assign checklist type
-              <Select className="mt-1" value={fillTemplateId} onChange={(e) => setFillTemplateId(e.target.value)}>
-                <option value="">Template…</option>
-                {availableTemplates.slice(0, 80).map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="text-xs text-steel-muted block">
-              Or pick assigned checklist
-              <Select className="mt-1" value={fillAssignmentId} onChange={(e) => setFillAssignmentId(e.target.value)}>
-                <option value="">Assignment…</option>
-                {assignments.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.template?.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" disabled={!fillTemplateId} onClick={() => void assignChecklistOnDrawing()}>
-              Assign checklist
-            </Button>
-            <Button type="button" disabled={!fillDrawingId} onClick={() => void raiseDrawingFillRfi()}>
-              Raise request fill (matrix / vendor)
-            </Button>
-            {fillAssignmentId && (
-              <Link
-                to={`/projects/${id}/checklist/fill/${fillAssignmentId}?family=SiteExecution`}
-                className="self-center text-sm font-semibold text-brand"
-              >
-                Open fill form →
-              </Link>
-            )}
-          </div>
-          {fillMsg && <p className="text-sm text-steel-muted mt-3">{fillMsg}</p>}
-        </Card>
-      )}
-
       {canUpload && showRegister && !unlockToken && !precheckOpen && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">
           <div className="font-semibold text-ink">Waiting for Drawing Check Master</div>
@@ -635,12 +560,20 @@ export default function DrawingsPage() {
 
       {canUpload && (
         <UploadModal
-          open={showRegister && !!unlockToken}
+          open={showRegister && !!unlockToken && !markupTarget}
           title="Upload drawing"
           context={`Project · GFC register · check complete · ${form.discipline}`}
           file={file}
           onFile={(f) => pickDrawingFile(f, "register")}
-          accept=".pdf,.png,.jpg,.jpeg,.dwg,.webp"
+          filePicker={
+            <DrawingUploadFilePicker
+              fileKind={registerFileKind}
+              onFileKind={setRegisterFileKind}
+              file={file}
+              onFile={(f, kind) => pickDrawingFile(f, "register", kind)}
+              onMarkup={() => openMarkupEditor("register")}
+            />
+          }
           primaryLabel={form.publish ? "Upload & publish" : "Upload to register"}
           busy={busy}
           error={formError}
@@ -851,7 +784,7 @@ export default function DrawingsPage() {
                                   </div>
                                   {r.fileName && <div className="text-[11px] font-mono mt-0.5">{r.fileName}</div>}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Badge tone={r.published ? "ok" : "neutral"}>{r.published ? "Live" : "Draft"}</Badge>
                                   {r.fileUrl && (
                                     <Button
@@ -862,6 +795,26 @@ export default function DrawingsPage() {
                                     >
                                       View
                                     </Button>
+                                  )}
+                                  {canUpload && r.fileUrl && (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="!text-xs !px-2 !py-1"
+                                        onClick={() => openReplaceRevision(d, r, "pdf")}
+                                      >
+                                        PDF markup
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="!text-xs !px-2 !py-1"
+                                        onClick={() => openReplaceRevision(d, r, "dwg")}
+                                      >
+                                        Replace DWG
+                                      </Button>
+                                    </>
                                   )}
                                 </div>
                               </li>
@@ -901,8 +854,7 @@ export default function DrawingsPage() {
             className="mt-3 ml-2"
             onClick={() => {
               setUploadForId(null);
-              setRevFile(null);
-              setFormError("");
+              resetRevUpload();
             }}
           >
             Cancel
@@ -912,104 +864,125 @@ export default function DrawingsPage() {
 
       {canUpload && uploadForId && uploadTarget && (
         <UploadModal
-          open={!!revUnlockToken}
-          title="Upload revision"
-          context={`${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · check complete`}
+          open={revModalOpen && !markupTarget}
+          title={revUploadMode === "replace" ? "Update revision file" : "Upload revision"}
+          context={
+            revUploadMode === "replace"
+              ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · same revision — markup / file replace logged`
+              : `${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · check complete`
+          }
           file={revFile}
           onFile={(f) => pickDrawingFile(f, "revision")}
-          accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg"
-          primaryLabel="Upload & log planned/actual"
+          filePicker={
+            <DrawingUploadFilePicker
+              fileKind={revFileKind}
+              onFileKind={setRevFileKind}
+              file={revFile}
+              onFile={(f, kind) => pickDrawingFile(f, "revision", kind)}
+              onMarkup={() => openMarkupEditor("revision")}
+            />
+          }
+          primaryLabel={revUploadMode === "replace" ? "Save on same revision" : "Upload & log planned/actual"}
           busy={busy}
           error={formError}
-          onClose={() => {
-            setUploadForId(null);
-            setRevFile(null);
-            setRevUnlockToken(null);
-            setFormError("");
-          }}
+          onClose={resetRevUpload}
           onSubmit={uploadRevision}
-          fields={[
-            {
-              kind: "text",
-              name: "revisionNumber",
-              label: "Revision",
-              required: true,
-              placeholder: "R1",
-              value: revForm.revisionNumber,
-              onChange: (v) => setRevForm({ ...revForm, revisionNumber: v }),
-            },
-            {
-              kind: "text",
-              name: "revisionLabel",
-              label: "Label / note",
-              value: revForm.revisionLabel,
-              onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
-            },
-            {
-              kind: "text",
-              name: "plannedDate",
-              label: "Planned date",
-              value: plannedDate,
-              onChange: setPlannedDate,
-              placeholder: "YYYY-MM-DD",
-            },
-            {
-              kind: "text",
-              name: "actualDate",
-              label: "Actual date",
-              value: actualDate,
-              onChange: setActualDate,
-              placeholder: "YYYY-MM-DD",
-            },
-            {
-              kind: "checkbox",
-              name: "publish",
-              label: "Set as current published revision",
-              checked: revForm.publish,
-              onChange: (v) => setRevForm({ ...revForm, publish: v }),
-            },
-          ]}
+          fields={
+            revUploadMode === "replace"
+              ? [
+                  {
+                    kind: "text",
+                    name: "revisionLabel",
+                    label: "Log note",
+                    value: revForm.revisionLabel,
+                    onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
+                  },
+                ]
+              : [
+                  {
+                    kind: "text",
+                    name: "revisionNumber",
+                    label: "Revision",
+                    required: true,
+                    placeholder: "R1",
+                    value: revForm.revisionNumber,
+                    onChange: (v) => setRevForm({ ...revForm, revisionNumber: v }),
+                  },
+                  {
+                    kind: "text",
+                    name: "revisionLabel",
+                    label: "Label / note",
+                    value: revForm.revisionLabel,
+                    onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
+                  },
+                  {
+                    kind: "text",
+                    name: "plannedDate",
+                    label: "Planned date",
+                    value: plannedDate,
+                    onChange: setPlannedDate,
+                    placeholder: "YYYY-MM-DD",
+                  },
+                  {
+                    kind: "text",
+                    name: "actualDate",
+                    label: "Actual date",
+                    value: actualDate,
+                    onChange: setActualDate,
+                    placeholder: "YYYY-MM-DD",
+                  },
+                  {
+                    kind: "checkbox",
+                    name: "publish",
+                    label: "Set as current published revision",
+                    checked: revForm.publish,
+                    onChange: (v) => setRevForm({ ...revForm, publish: v }),
+                  },
+                ]
+          }
         />
       )}
 
-      {markupTarget && (
-        <div className="markup-modal" role="dialog" aria-modal="true" aria-label="Drawing PDF markup">
-          <div className="markup-modal__backdrop" onClick={closeMarkup} />
-          <div className="markup-modal__panel max-w-4xl">
-            <div className="markup-modal__head">
-              <span>
-                Mark up {markupTarget.target === "register" ? "new drawing" : "revision"} before upload
-              </span>
-              <button type="button" className="markup-modal__close" onClick={closeMarkup}>
-                ×
-              </button>
+      {markupTarget &&
+        createPortal(
+          <div className="markup-modal" role="dialog" aria-modal="true" aria-label="Drawing PDF markup">
+            <div className="markup-modal__backdrop" onClick={closeMarkup} />
+            <div className="markup-modal__panel max-w-4xl">
+              <div className="markup-modal__head">
+                <span>
+                  Mark up {markupTarget.target === "register" ? "new drawing" : "revision"} — saves back to upload form
+                </span>
+                <button type="button" className="markup-modal__close" onClick={closeMarkup}>
+                  ×
+                </button>
+              </div>
+              <div className="markup-modal__body">
+                {markupTarget.file.type === "application/pdf" ||
+                markupTarget.file.name.toLowerCase().endsWith(".pdf") ? (
+                  <PdfMarkup
+                    src={markupTarget.file}
+                    saveLabel="Save markup"
+                    onCancel={closeMarkup}
+                    onSave={async (pages) => {
+                      applyMarkedFile(pages[0] || markupTarget.file);
+                    }}
+                  />
+                ) : (
+                  <ImageMarkup
+                    src={markupTarget.preview || markupTarget.file}
+                    saveLabel="Save markup"
+                    filename="drawing-markup"
+                    onCancel={closeMarkup}
+                    onSave={async (marked) => {
+                      applyMarkedFile(marked);
+                    }}
+                  />
+                )}
+              </div>
             </div>
-            <div className="markup-modal__body">
-              {markupTarget.file.type === "application/pdf" ||
-              markupTarget.file.name.toLowerCase().endsWith(".pdf") ? (
-                <PdfMarkup
-                  src={markupTarget.file}
-                  saveLabel="Use marked PDF"
-                  onCancel={closeMarkup}
-                  onSave={async (pages) => {
-                    applyMarkedFile(pages[0] || markupTarget.file);
-                  }}
-                />
-              ) : (
-                <ImageMarkup
-                  src={markupTarget.preview || markupTarget.file}
-                  saveLabel="Use marked image"
-                  filename="drawing-markup"
-                  onCancel={closeMarkup}
-                  onSave={async (marked) => {
-                    applyMarkedFile(marked);
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {viewer && <DrawingFileViewer preview={viewer} variant="modal" onClose={() => setViewer(null)} />}
     </div>

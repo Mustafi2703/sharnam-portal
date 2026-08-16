@@ -1,4 +1,5 @@
 /** Quality Dashboard.xlsx — sheet tabs for Quality module UI */
+import { formatUiText } from "./formatUiText";
 export type QualitySheetKey =
   | ""
   | "sor-log"
@@ -53,6 +54,10 @@ export const QUALITY_SHEET_VIEWS: {
     sheet: "Procore QI + QI fills → DPR Quality section",
   },
 ];
+
+for (const view of QUALITY_SHEET_VIEWS) {
+  view.label = formatUiText(view.label);
+}
 
 export function qualitySheetFromParams(searchParams: URLSearchParams): (typeof QUALITY_SHEET_VIEWS)[number] {
   const legacy = searchParams.get("view");

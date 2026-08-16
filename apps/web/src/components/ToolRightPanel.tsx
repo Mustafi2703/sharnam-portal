@@ -4,6 +4,7 @@ import type { RoleKey } from "@sharnam/shared";
 import { Button, Input, TextArea } from "./ui";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { formatUiText } from "../lib/formatUiText";
 
 export type RightPanelContext = {
   projectId: string;
@@ -414,8 +415,8 @@ export function ToolRightPanel({
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">Actions</div>
           <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
         </div>
-        <div className="font-display text-base mt-1.5 text-ink leading-snug">{ctx.moduleLabel}</div>
-        <div className="text-xs text-steel-muted mt-1 capitalize">{tool || "overview"} · contextual</div>
+        <div className="font-display text-base mt-1.5 text-ink leading-snug">{formatUiText(ctx.moduleLabel)}</div>
+        <div className="text-xs text-steel-muted mt-1">{formatUiText(`${tool || "overview"} · contextual`)}</div>
       </div>
 
       <div className="tool-actions__body p-4 space-y-4">

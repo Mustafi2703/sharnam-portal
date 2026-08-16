@@ -1,4 +1,5 @@
 import type { RoleKey } from "@sharnam/shared";
+import { formatUiText } from "./lib/formatUiText";
 
 /** Workspace → tool path filters (Procore modules) */
 export const WORKSPACE_KEY = "sharnam_workspace_key";
@@ -347,13 +348,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     {
       to: "comms",
       label: "Communication matrix",
-      query: "tab=matrix",
+      end: true,
       blurb: "Who talks to whom (roles / channels).",
       sheet: "Communication Matrix_BPCL",
     },
     { to: "comms", label: "Agenda", query: "tab=agenda", blurb: "Create meeting → generate agenda before MoM." },
     { to: "comms", label: "MoM", query: "tab=mom", blurb: "Minutes + action items." },
     { to: "comms", label: "Follow-up", query: "tab=followup", blurb: "Open actions from MoM." },
+    { to: "comms", label: "Comm log", query: "tab=log", blurb: "Communication log entries." },
     {
       to: "rfis",
       label: "Ask (PMC RFI)",
@@ -428,16 +430,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   finance: [
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
-    {
-      to: "finance",
-      label: "Invoice tracking",
-      query: "tab=invoices",
-      blurb: "Invoice register.",
-      sheet: "Payment Summary",
-    },
-    { to: "finance", label: "PO tracking", query: "tab=po", blurb: "Purchase order register." },
-    { to: "finance", label: "RA bill tracking", query: "tab=ra", blurb: "Running account bills." },
-    { to: "finance", label: "COP tracking", query: "tab=cop", blurb: "Certificate of payment." },
+    { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Capital expenditure lines." },
+    { to: "finance", label: "Purchase Orders", query: "tab=po", blurb: "Purchase order register." },
+    { to: "finance", label: "RA Bill Tracker", query: "tab=ra", blurb: "Running account bills." },
+    { to: "finance", label: "COP", query: "tab=cop", blurb: "Certificate of payment." },
+    { to: "finance", label: "Payment Summary", query: "tab=summary", blurb: "Payment summary rollup." },
+    { to: "finance", label: "Audit Sheets", query: "tab=audit", blurb: "Audit sheets → drive export." },
   ],
   reports: [
     { to: "dpr-maker", label: "DPR maker", blurb: "Fill SPDC INPUT → publish template XLSX per discipline.", sheet: "SPDC_DPR_*_DASHBOARD" },
@@ -595,6 +593,19 @@ export const MODULE_META: Record<
     icon: "CLS",
   },
 };
+
+for (const key of Object.keys(MODULE_TOOLS) as (WorkspaceKey | "home")[]) {
+  MODULE_TOOLS[key] = MODULE_TOOLS[key].map((t) => ({
+    ...t,
+    label: formatUiText(t.label),
+    blurb: t.blurb ? formatUiText(t.blurb) : t.blurb,
+  }));
+}
+
+for (const key of Object.keys(MODULE_META) as WorkspaceKey[]) {
+  MODULE_META[key].title = formatUiText(MODULE_META[key].title);
+  MODULE_META[key].desc = formatUiText(MODULE_META[key].desc);
+}
 
 export const WORKSPACES: {
   key: WorkspaceKey;

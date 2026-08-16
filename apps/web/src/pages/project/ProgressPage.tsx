@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -52,7 +52,7 @@ function inr(n: number) {
 
 export default function ProgressPage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [verify, setVerify] = useState<any>(null);
@@ -140,28 +140,6 @@ export default function ProgressPage() {
   useEffect(() => {
     if (tab === "scurve" || tab === "msproject") void loadMsProject();
   }, [id, token, tab]);
-
-  const setTab = (t: Tab) => {
-    if (t === "overview") setSearchParams({});
-    else setSearchParams({ tab: t });
-  };
-
-  const tabs: { key: Tab; label: string }[] = useMemo(
-    () => [
-      { key: "overview", label: "Dashboard" },
-      { key: "milestones", label: "Milestones" },
-      { key: "planned", label: "Planned vs Actual" },
-      { key: "monthly", label: "Monthly progress" },
-      { key: "hindrance", label: "Hindrance" },
-      { key: "risk", label: "Risk" },
-      { key: "legal", label: "Legal approvals" },
-      { key: "scurve", label: "S-curve" },
-      { key: "schedule", label: "Summary schedule" },
-      { key: "msproject", label: "MS Project" },
-      { key: "procurement", label: "Procurement" },
-    ],
-    []
-  );
 
   if (!data) return <div className="text-steel-muted py-10">Loading progress sheets…</div>;
 
@@ -370,7 +348,7 @@ export default function ProgressPage() {
         <PageHeader
           eyebrow="Progress module"
           title="Progress"
-          subtitle="One tool at a time — use the sub-tool chips above for Overview, Milestones, Hindrance, Risk, and more. Calm Workday-style KPIs on Overview."
+          subtitle="Workday-style KPIs on Overview. Switch sub-tools using the module tabs above."
           actions={
             <div className="flex flex-wrap gap-2 items-center">
               <Badge tone="brand">{pct(data.totals.projectProgressPct)} weighted</Badge>
@@ -439,21 +417,6 @@ export default function ProgressPage() {
             <div className="text-[10px] uppercase tracking-wider text-steel-muted">{label}</div>
             <div className="text-2xl font-display mt-1">{val as string | number}</div>
           </Card>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`rounded-sm px-4 py-2 text-sm font-medium border transition ${
-              tab === t.key ? "bg-brand text-white border-brand" : "bg-white border-line text-ink hover:border-brand/40"
-            }`}
-          >
-            {t.label}
-          </button>
         ))}
       </div>
 

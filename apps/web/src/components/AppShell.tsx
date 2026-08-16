@@ -34,6 +34,7 @@ import {
   toggleColorMode,
   type ColorMode,
 } from "../themes";
+import { formatUiText } from "../lib/formatUiText";
 
 const BASE_ACCENT = "#0B6A78";
 const BASE_SOFT = "#E6F4F6";
@@ -178,7 +179,7 @@ function SideNavBody({
                 className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
               >
                 <ModuleIcon name={n.icon} size={18} />
-                <span>{n.label}</span>
+                <span>{formatUiText(n.label)}</span>
               </NavLink>
             ))}
           </nav>
@@ -199,7 +200,7 @@ function SideNavBody({
                   className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
                 >
                   <ModuleIcon name={n.icon} size={18} />
-                  <span>{n.label}</span>
+                  <span>{formatUiText(n.label)}</span>
                 </NavLink>
               ))}
             </nav>
@@ -221,7 +222,7 @@ function SideNavBody({
                   className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
                 >
                   <ModuleIcon name={n.icon} size={18} />
-                  <span>{n.label}</span>
+                  <span>{formatUiText(n.label)}</span>
                 </NavLink>
               ))}
             </nav>
@@ -243,7 +244,7 @@ function SideNavBody({
                   className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
                 >
                   <ModuleIcon name={n.icon} size={18} />
-                  <span>{n.label}</span>
+                  <span>{formatUiText(n.label)}</span>
                 </NavLink>
               ))}
             </nav>
@@ -368,7 +369,7 @@ function SideNavBody({
                     <span className="side-nav__icon-wrap" style={{ color: m.accent }}>
                       <ModuleIcon name={m.key as ModuleIconKey} size={18} />
                     </span>
-                    <span className="min-w-0 truncate">{m.title}</span>
+                    <span className="min-w-0 truncate">{formatUiText(m.title)}</span>
                     {on && <span className="side-nav__item-live" aria-hidden />}
                   </Link>
                 );

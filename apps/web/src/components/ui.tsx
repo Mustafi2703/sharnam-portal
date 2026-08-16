@@ -1,4 +1,9 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { formatUiText } from "../lib/formatUiText";
+
+function fmt(children: ReactNode): ReactNode {
+  return typeof children === "string" ? formatUiText(children) : children;
+}
 
 export function PageHero({
   title,
@@ -31,8 +36,8 @@ export function PageHero({
             </span>
           ) : null}
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-display font-semibold text-white tracking-tight">{title}</h1>
-            {subtitle && <p className="text-sm text-white/75 mt-1.5 max-w-2xl leading-relaxed">{subtitle}</p>}
+            <h1 className="text-xl sm:text-2xl font-display font-semibold text-white tracking-tight">{fmt(title)}</h1>
+            {subtitle && <p className="text-sm text-white/75 mt-1.5 max-w-2xl leading-relaxed">{fmt(subtitle)}</p>}
           </div>
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -68,12 +73,12 @@ export function PageHeader({
         ) : null}
         <div className="min-w-0">
           {eyebrow && (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{eyebrow}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{fmt(eyebrow)}</p>
           )}
-          <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{fmt(title)}</h1>
           {subtitle && (
             <p className="mt-2 text-steel-muted max-w-4xl text-sm sm:text-[15px] leading-relaxed hidden sm:block">
-              {subtitle}
+              {fmt(subtitle)}
             </p>
           )}
         </div>
@@ -115,7 +120,7 @@ export function Badge({
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${tones[tone]}`}
     >
-      {children}
+      {fmt(children)}
     </span>
   );
 }
@@ -142,7 +147,7 @@ export function Button({
       style={style}
       {...props}
     >
-      {children}
+      {fmt(children)}
     </button>
   );
 }
@@ -158,9 +163,9 @@ export function WorkflowStrip({
     <Card className="rise rise-delay-1 overflow-hidden !p-0">
       <div className="px-5 py-3 border-b border-line flex items-center justify-between bg-sand/40">
         <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-steel-muted">
-          How this works
+          {fmt("How this works")}
         </span>
-        <Badge tone="brand">Demo flow</Badge>
+        <Badge tone="brand">{fmt("Demo flow")}</Badge>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-0">
         {steps.map((s, i) => (
@@ -178,9 +183,9 @@ export function WorkflowStrip({
               >
                 {i + 1}
               </span>
-              <span className="font-medium text-sm">{s.label}</span>
+              <span className="font-medium text-sm">{fmt(s.label)}</span>
             </div>
-            {s.hint && <p className="text-xs text-steel-muted leading-relaxed pl-9">{s.hint}</p>}
+            {s.hint && <p className="text-xs text-steel-muted leading-relaxed pl-9">{fmt(s.hint)}</p>}
           </div>
         ))}
       </div>
@@ -199,9 +204,9 @@ export function Stat({
 }) {
   return (
     <Card className="rise">
-      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">{label}</div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">{fmt(label)}</div>
       <div className="mt-2 font-display text-3xl text-ink">{value}</div>
-      {hint && <div className="mt-2 text-xs text-steel-muted">{hint}</div>}
+      {hint && <div className="mt-2 text-xs text-steel-muted">{fmt(hint)}</div>}
     </Card>
   );
 }
@@ -251,10 +256,10 @@ export function FileField({
     <div className="space-y-1.5">
       <label className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-dashed border-line bg-sand/40 px-3 py-3 cursor-pointer hover:border-brand/50 hover:bg-brand-soft/40 transition">
         <span className="inline-flex items-center justify-center rounded-sm bg-black text-white text-xs font-medium px-3 py-1.5 shrink-0">
-          {label}
+          {fmt(label)}
         </span>
-        <span className="text-sm text-steel-muted truncate">
-          {file ? file.name : "PDF, DWG, or image — no file selected"}
+        <span className="text-sm text-steel-muted truncate" data-preserve-case>
+          {file ? file.name : fmt("PDF, DWG, or image — no file selected")}
         </span>
         <input
           type="file"
@@ -263,7 +268,7 @@ export function FileField({
           onChange={(e) => onChange(e.target.files?.[0] || null)}
         />
       </label>
-      {hint && <p className="text-[11px] text-steel-muted">{hint}</p>}
+      {hint && <p className="text-[11px] text-steel-muted">{fmt(hint)}</p>}
     </div>
   );
 }

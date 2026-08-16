@@ -9,7 +9,7 @@ import { QUALITY_SHEET_VIEWS, qualitySheetFromParams } from "../../lib/qualitySh
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const sheetView = qualitySheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
@@ -92,31 +92,6 @@ export default function InspectionsPage() {
           <Link to={`/projects/${id}/safety`}>Safety →</Link>
         </div>
       </div>
-
-      <nav
-        className="module-subnav flex gap-1 border-b border-line pb-3 overflow-x-auto overscroll-x-contain -mx-1 px-1"
-        aria-label="Quality workbook views"
-      >
-        {QUALITY_SHEET_VIEWS.map((s) => (
-          <button
-            key={s.key || "dashboard"}
-            type="button"
-            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
-            className={`shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border whitespace-nowrap ${
-              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
-            }`}
-            title={s.sheet}
-          >
-            {s.label}
-          </button>
-        ))}
-        <Link
-          to={`/projects/${id}/hub/quality`}
-          className="shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted whitespace-nowrap"
-        >
-          Quality hub →
-        </Link>
-      </nav>
 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 

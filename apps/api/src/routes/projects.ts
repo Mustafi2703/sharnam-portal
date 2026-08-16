@@ -627,6 +627,56 @@ drawingsRouter.patch(
   }
 );
 
+/** Replace file on an existing revision (markup save / DWG swap) — logs audit, no new revision row */
+drawingsRouter.patch(
+  "/revision/:revId/file",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const rev = await prisma.drawingRevision.findUnique({
+      where: { id: req.params.revId },
+      include: { drawing: { include: { project: true } } },
+    });
+    if (!rev) return res.status(404).json({ error: "Revision not found" });
+    if (!req.file) return res.status(400).json({ error: "File required" });
+
+    const folder = rev.drawing.folderPath || `Drawings/${rev.drawing.discipline}`;
+    const saved = await mockOneDrive.upload(
+      rev.drawing.project.code,
+      folder,
+      req.file.originalname,
+      req.file.buffer
+    );
+    const note = String(req.body.note || "Markup / file update").trim();
+    const stamp = new Date().toLocaleDateString("en-IN");
+    const updated = await prisma.drawingRevision.update({
+      where: { id: rev.id },
+      data: {
+        fileUrl: saved.url,
+        fileName: req.file.originalname,
+        revisionLabel: `${rev.revisionNumber} — ${note} · ${stamp}`,
+        actualDate: new Date(),
+        uploadedById: req.user!.id,
+      },
+      include: { uploadedBy: { select: { fullName: true } } },
+    });
+
+    await audit("drawing.revision.markup", {
+      userId: req.user!.id,
+      entity: "DrawingRevision",
+      entityId: rev.id,
+      meta: {
+        drawingId: rev.drawingId,
+        revisionNumber: rev.revisionNumber,
+        previousFile: rev.fileName,
+        newFile: req.file.originalname,
+        note,
+      },
+    });
+    res.json(updated);
+  }
+);
+
 drawingsRouter.post("/:id/publish", requireRoles("admin", "office", "employee", "site_employee", "vendor"), async (req: AuthedRequest, res) => {
   const drawing = await prisma.drawing.update({
     where: { id: req.params.id },

@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
-import { CLOSURE_SHEET_VIEWS, closureSheetFromParams } from "../../lib/closureSheetViews";
+import { closureSheetFromParams } from "../../lib/closureSheetViews";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -19,7 +19,7 @@ const SECTION_LABELS: Record<string, string> = {
 
 export default function ProjectClosurePage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const sheetView = closureSheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
@@ -86,21 +86,6 @@ export default function ProjectClosurePage() {
           </div>
         }
       />
-
-      <div className="flex flex-wrap gap-1">
-        {CLOSURE_SHEET_VIEWS.map((s) => (
-          <button
-            key={s.key || "overview"}
-            type="button"
-            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
-            className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
 
       {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
 

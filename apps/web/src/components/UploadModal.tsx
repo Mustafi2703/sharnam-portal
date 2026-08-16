@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type FormEvent, type ReactNode } from "react";
 import { Button, FileField, Input, Select } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 type Field =
   | { kind: "text"; name: string; label: string; required?: boolean; placeholder?: string; value: string; onChange: (v: string) => void }
@@ -21,6 +22,7 @@ export function UploadModal({
   success,
   onClose,
   onSubmit,
+  filePicker,
 }: {
   open: boolean;
   title: string;
@@ -28,6 +30,8 @@ export function UploadModal({
   file: File | null;
   onFile: (f: File | null) => void;
   accept?: string;
+  /** When set, replaces the default browse / dropzone row (e.g. separate PDF vs DWG). */
+  filePicker?: ReactNode;
   fields: Field[];
   primaryLabel: string;
   busy?: boolean;
@@ -71,9 +75,9 @@ export function UploadModal({
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-line bg-paper">
           <div>
             <h2 id={titleId} className="font-display text-xl text-ink">
-              {title}
+              {formatUiText(title)}
             </h2>
-            {context && <p className="text-xs text-steel-muted mt-1">{context}</p>}
+            {context && <p className="text-xs text-steel-muted mt-1">{formatUiText(context)}</p>}
           </div>
           <Button type="button" variant="ghost" className="!px-2 !py-1 !text-xs" onClick={onClose}>
             Close
@@ -81,13 +85,15 @@ export function UploadModal({
         </div>
 
         <form className="p-5 space-y-4" onSubmit={onSubmit}>
-          <FileField
-            file={file}
-            onChange={onFile}
-            label="Browse file"
-            accept={accept || ".pdf,.png,.jpg,.jpeg,.webp,.dwg"}
-            hint="Dropzone · PDF or image preferred for in-app viewer"
-          />
+          {filePicker ?? (
+            <FileField
+              file={file}
+              onChange={onFile}
+              label="Browse file"
+              accept={accept || ".pdf,.png,.jpg,.jpeg,.webp,.dwg"}
+              hint="Dropzone · PDF or image preferred for in-app viewer"
+            />
+          )}
 
           {fields.map((f, i) => {
             if (f.kind === "custom") return <div key={i}>{f.node}</div>;
@@ -95,14 +101,14 @@ export function UploadModal({
               return (
                 <label key={f.name} className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={f.checked} onChange={(e) => f.onChange(e.target.checked)} />
-                  {f.label}
+                  {formatUiText(f.label)}
                 </label>
               );
             }
             if (f.kind === "select") {
               return (
                 <label key={f.name} className="block text-sm">
-                  <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">{f.label}</span>
+                  <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">{formatUiText(f.label)}</span>
                   <Select className="mt-1.5" value={f.value} onChange={(e) => f.onChange(e.target.value)}>
                     {f.options.map((o) => (
                       <option key={o} value={o}>
@@ -115,7 +121,7 @@ export function UploadModal({
             }
             return (
               <label key={f.name} className="block text-sm">
-                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">{f.label}</span>
+                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">{formatUiText(f.label)}</span>
                 <Input
                   className="mt-1.5"
                   required={f.required}
@@ -139,7 +145,7 @@ export function UploadModal({
           )}
 
           <Button type="submit" disabled={busy || !file} className="w-full !py-3">
-            {busy ? "Uploading…" : primaryLabel}
+            {busy ? formatUiText("Uploading…") : formatUiText(primaryLabel)}
           </Button>
         </form>
       </div>

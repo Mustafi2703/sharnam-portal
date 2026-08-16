@@ -21,7 +21,7 @@ const PARTY_TYPES = ["PMC", "Contractor", "Client", "Consultant", "Vendor"] as c
 /** Project directory — four user tools: Office · Site · Client · Contractor */
 export default function DirectoryPage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const partyTab = searchParams.get("party") || "PMC";
   const { token, user } = useAuth();
   const [overview, setOverview] = useState<any>(null);
@@ -139,23 +139,6 @@ export default function DirectoryPage() {
           </div>
         }
       />
-
-      <div className="flex flex-wrap gap-2">
-        {USER_TOOLS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setSearchParams({ party: t.party })}
-            className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
-              activeTool.party === t.party
-                ? "bg-brand text-white border-brand"
-                : "bg-white border-line text-steel-muted hover:border-brand"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-xl">{msg}</p>}
 

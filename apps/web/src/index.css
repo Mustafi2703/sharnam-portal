@@ -5297,7 +5297,7 @@ body {
 .markup-modal {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 90;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -5401,6 +5401,35 @@ body {
 .markup-toolbar__actions { margin-left: auto; display: flex; gap: 0.35rem; flex-shrink: 0; }
 .markup-canvas-wrap { max-width: 100%; }
 .markup-overlay { cursor: crosshair; touch-action: none; }
+
+/* UI copy — title case on nav, tabs, and register headers (skip mono / form fields) */
+.app-shell :where(
+  .side-nav__item,
+  .tool-strip__tab,
+  .module-subnav a,
+  .module-subnav button,
+  .module-card .font-display,
+  .sheet-register__table thead th,
+  .tool-actions__body button
+) {
+  text-transform: capitalize;
+}
+
+.app-shell :where(
+  input,
+  textarea,
+  select,
+  option,
+  .font-mono,
+  [data-preserve-case],
+  .tabular-nums,
+  code,
+  pre,
+  .side-nav__user,
+  .side-nav__project-chip
+) {
+  text-transform: none !important;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Auth layout — sand brand theme (transparent teal logo on #F0F2F4)

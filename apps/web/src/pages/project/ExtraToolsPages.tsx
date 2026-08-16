@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
 import { drawingPreviewFromRecord } from "../../lib/drawingPreview";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
@@ -86,8 +85,6 @@ export function CoordinationPage() {
 
   return (
     <div className="space-y-5">
-      {id && <DrawingsModuleNav projectId={id} />}
-
       <PageHeader
         eyebrow="Drawings module"
         title="Design coordination"

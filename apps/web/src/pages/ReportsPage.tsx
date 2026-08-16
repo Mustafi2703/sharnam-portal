@@ -10,10 +10,9 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 /** DPR / WPR dashboard with branded Excel + PDF (HTML print) client packs */
 export default function ReportsPage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { token } = useAuth();
   const tab = searchParams.get("kind") === "wpr" ? "wpr" : "dpr";
-  const setTab = (t: "dpr" | "wpr") => setSearchParams(t === "dpr" ? {} : { kind: "wpr" });
   const [dpr, setDpr] = useState<any>(null);
   const [wpr, setWpr] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -124,26 +123,6 @@ export default function ReportsPage() {
           </div>
         </Card>
       )}
-
-      <div className="flex gap-1 border-b border-line">
-        {(
-          [
-            ["dpr", "Daily (DPR)"],
-            ["wpr", "Weekly (WPR)"],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px ${
-              tab === k ? "border-brand text-brand" : "border-transparent text-steel-muted"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       {tab === "dpr" && dpr && (
         <div className="space-y-4">
