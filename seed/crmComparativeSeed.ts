@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 import {
   COMPARATIVE_DISCIPLINES,
   buildVendorDisciplineSlots,
+  defaultDisciplines,
   importR2WorkbookFromFile,
   parseDisciplineBoqSheet,
   pickDisciplineWorksheet,
@@ -25,6 +26,8 @@ import {
 } from "../apps/api/src/services/crmSharePoint.ts";
 
 const DEMO_VENDORS = ["M/s Bhavna Infra", "TCC Projects PVT. LTD.", "Pearl Electricals"];
+const DEMO_DISCIPLINES = defaultDisciplines();
+const DEMO_DISCIPLINES_JSON = JSON.stringify(DEMO_DISCIPLINES);
 const DEMO_PACKAGE_TITLE = "SPDC-DEMO-01 · Civil & structural — R2 demo bid";
 
 /** Slight rate variance per vendor so comparative totals differ in demo. */
@@ -164,15 +167,23 @@ export async function seedCrmComparative(prisma: PrismaClient) {
     include: { vendorBoqs: true },
   });
 
-  if (pkg && demoProject && (!pkg.projectId || pkg.title !== DEMO_PACKAGE_TITLE)) {
+  if (pkg && demoProject && (!pkg.projectId || pkg.title !== DEMO_PACKAGE_TITLE || !pkg.disciplinesJson)) {
     pkg = await prisma.crmBidPackage.update({
       where: { id: pkg.id },
       data: {
         title: DEMO_PACKAGE_TITLE,
         projectId: demoProject.id,
+        disciplinesJson: pkg.disciplinesJson || DEMO_DISCIPLINES_JSON,
         notes: `Linked project: ${demoProject.code} · ${demoProject.name}. Source: Comparative Statement - R2.xlsx`,
       },
       include: { vendorBoqs: true },
+    });
+  }
+
+  if (demoProject && !demoProject.bidDisciplinesJson) {
+    await prisma.project.update({
+      where: { id: demoProject.id },
+      data: { bidDisciplinesJson: DEMO_DISCIPLINES_JSON },
     });
   }
 
@@ -229,7 +240,7 @@ export async function seedCrmComparative(prisma: PrismaClient) {
     select: { id: true, name: true },
   });
   const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v.id]));
-  const slots = buildVendorDisciplineSlots(DEMO_VENDORS);
+  const slots = buildVendorDisciplineSlots(DEMO_VENDORS, DEMO_DISCIPLINES);
 
   pkg = await prisma.crmBidPackage.create({
     data: {
@@ -239,6 +250,7 @@ export async function seedCrmComparative(prisma: PrismaClient) {
       revisionLabel: "R2",
       status: "Evaluation",
       vendorNamesJson: JSON.stringify(DEMO_VENDORS),
+      disciplinesJson: DEMO_DISCIPLINES_JSON,
       comparativeSheetId: masterSheet.id,
       summarySheetId: summarySheet.id,
       notes: demoProject

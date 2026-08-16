@@ -67,6 +67,67 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   res.status(201).json(project);
 });
 
+/** Default bid disciplines configured for a project (CRM package setup). */
+projectsRouter.get("/:id/bid-disciplines", requireRoles("admin", "office"), async (req, res) => {
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, code: true, name: true, bidDisciplinesJson: true },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+
+  const { defaultDisciplines, parseDisciplinesJson } = await import("../services/comparativeStatement.js");
+  res.json({
+    projectId: project.id,
+    projectCode: project.code,
+    catalog: defaultDisciplines(),
+    disciplines: parseDisciplinesJson(project.bidDisciplinesJson),
+  });
+});
+
+projectsRouter.patch("/:id/bid-disciplines", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { defaultDisciplines, parseDisciplinesJson, resolveDisciplinesForPackage, normalizeDisciplineKey } =
+    await import("../services/comparativeStatement.js");
+
+  const disciplineKeys = Array.isArray(req.body.disciplineKeys)
+    ? req.body.disciplineKeys.map((x: unknown) => normalizeDisciplineKey(String(x))).filter(Boolean)
+    : undefined;
+  const customDisciplines = Array.isArray(req.body.customDisciplines)
+    ? req.body.customDisciplines
+        .map((d: { key?: string; label?: string; sheetName?: string }) => {
+          const label = String(d.label || "").trim();
+          if (!label) return null;
+          return {
+            key: normalizeDisciplineKey(d.key || label),
+            label,
+            sheetName: String(d.sheetName || label).trim(),
+          };
+        })
+        .filter(Boolean)
+    : undefined;
+
+  const disciplines = resolveDisciplinesForPackage({ disciplineKeys, customDisciplines });
+  if (!disciplines.length) return res.status(400).json({ error: "Select at least one discipline" });
+
+  const project = await prisma.project.update({
+    where: { id: req.params.id },
+    data: { bidDisciplinesJson: JSON.stringify(disciplines) },
+    select: { id: true, code: true, name: true, bidDisciplinesJson: true },
+  });
+
+  await audit("project.bid_disciplines", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { count: disciplines.length },
+  });
+
+  res.json({
+    projectId: project.id,
+    catalog: defaultDisciplines(),
+    disciplines: parseDisciplinesJson(project.bidDisciplinesJson),
+  });
+});
+
 projectsRouter.get("/:id", async (req, res) => {
   const project = await prisma.project.findUnique({
     where: { id: req.params.id },

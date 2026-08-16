@@ -79,6 +79,8 @@ model Project {
   enabledModules          String    @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"reports\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
   workPackages            String    @default("[\"Civil\",\"PEB\"]") @db.Text
+  /// Default R2 bid disciplines for CRM packages on this project (JSON array of {key,label,sheetName})
+  bidDisciplinesJson      String?   @db.Text
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -1237,6 +1239,8 @@ model CrmBidPackage {
   status                   String    @default("Open")
   revisionLabel            String    @default("R2")
   vendorNamesJson          String    @default("[]") @db.Text
+  /// Selected discipline BOQ sheets for this package (JSON array of {key,label,sheetName})
+  disciplinesJson          String?   @db.Text
   dueDate                  DateTime?
   notes                    String?
   comparativeSheetId       String?

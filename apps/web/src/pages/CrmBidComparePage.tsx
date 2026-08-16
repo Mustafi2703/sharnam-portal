@@ -72,7 +72,12 @@ export default function CrmBidComparePage() {
     leadId: "",
     revisionLabel: "R2",
     vendorIds: [] as string[],
+    disciplineKeys: [] as string[],
+    customDisciplines: [] as { key: string; label: string; sheetName: string }[],
   });
+  const [customDiscLabel, setCustomDiscLabel] = useState("");
+  const [customDiscSheet, setCustomDiscSheet] = useState("");
+  const [addDiscKeys, setAddDiscKeys] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -87,7 +92,7 @@ export default function CrmBidComparePage() {
     setDisciplines(disc);
     setLeads(l);
     setProjects(p);
-    setVendors(v.filter((x) => x.partyType === "Contractor" || x.partyType === "Vendor"));
+    setVendors(v);
   }, [token, canManage]);
 
   const loadDetail = useCallback(
@@ -108,6 +113,40 @@ export default function CrmBidComparePage() {
     else setDetail(null);
   }, [selectedId, loadDetail]);
 
+  useEffect(() => {
+    if (disciplines.length && !form.disciplineKeys.length) {
+      setForm((f) => ({ ...f, disciplineKeys: disciplines.map((d) => d.key) }));
+    }
+  }, [disciplines, form.disciplineKeys.length]);
+
+  useEffect(() => {
+    if (!form.projectId || !canManage) return;
+    void api<{ disciplines: Discipline[] }>(`/api/projects/${form.projectId}/bid-disciplines`, { token })
+      .then((r) => {
+        if (r.disciplines?.length) {
+          setForm((f) => ({ ...f, disciplineKeys: r.disciplines.map((d) => d.key) }));
+        }
+      })
+      .catch(() => {});
+  }, [form.projectId, token, canManage]);
+
+  const vendorsByType = useMemo(() => {
+    const groups: Record<string, typeof vendors> = {};
+    for (const v of vendors) {
+      const t = v.partyType || "Vendor";
+      (groups[t] ||= []).push(v);
+    }
+    const order = ["Contractor", "Vendor", "Consultant", "Client", "PMC"];
+    return order
+      .filter((k) => groups[k]?.length)
+      .map((k) => ({ type: k, rows: groups[k]! }))
+      .concat(
+        Object.keys(groups)
+          .filter((k) => !order.includes(k))
+          .map((k) => ({ type: k, rows: groups[k]! }))
+      );
+  }, [vendors]);
+
   const vendorMatrix = useMemo(() => {
     if (!detail?.vendorBoqs?.length) return [];
     const vendorNames = [...new Set(detail.vendorBoqs.map((b) => b.vendorLabel))];
@@ -123,7 +162,11 @@ export default function CrmBidComparePage() {
   async function createPackage(e: FormEvent) {
     e.preventDefault();
     if (form.vendorIds.length < 2) {
-      setMsg("Select at least 2 vendors to compare.");
+      setMsg("Select at least 2 bidders to compare.");
+      return;
+    }
+    if (!form.disciplineKeys.length) {
+      setMsg("Select at least one discipline BOQ sheet.");
       return;
     }
     setBusy(true);
@@ -141,14 +184,81 @@ export default function CrmBidComparePage() {
           leadId: form.leadId || undefined,
           revisionLabel: form.revisionLabel,
           vendorNames,
+          disciplineKeys: form.disciplineKeys,
+          customDisciplines: form.customDisciplines,
         }),
       });
-      setMsg(`Bid package created — ${row.uploadProgress?.total || disciplines.length * vendorNames.length} discipline upload slots ready.`);
-      setForm({ title: "", projectId: "", leadId: "", revisionLabel: "R2", vendorIds: [] });
+      setMsg(`Bid package created — ${row.uploadProgress?.total || form.disciplineKeys.length * vendorNames.length} discipline upload slots ready.`);
+      setForm({
+        title: "",
+        projectId: "",
+        leadId: "",
+        revisionLabel: "R2",
+        vendorIds: [],
+        disciplineKeys: disciplines.map((d) => d.key),
+        customDisciplines: [],
+      });
       await load();
       setSelectedId(row.id);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveProjectDisciplines() {
+    if (!form.projectId) {
+      setMsg("Select a project first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/api/projects/${form.projectId}/bid-disciplines`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          disciplineKeys: form.disciplineKeys,
+          customDisciplines: form.customDisciplines,
+        }),
+      });
+      setMsg("Project default bid disciplines saved.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addCustomDiscipline() {
+    const label = customDiscLabel.trim();
+    if (!label) return;
+    const key = label.toUpperCase().replace(/[^A-Z0-9]+/g, "_").slice(0, 40);
+    const entry = { key, label, sheetName: customDiscSheet.trim() || label };
+    setForm((f) => ({
+      ...f,
+      customDisciplines: [...f.customDisciplines.filter((c) => c.key !== key), entry],
+      disciplineKeys: f.disciplineKeys.includes(key) ? f.disciplineKeys : [...f.disciplineKeys, key],
+    }));
+    setCustomDiscLabel("");
+    setCustomDiscSheet("");
+  }
+
+  async function addDisciplinesToPackage() {
+    if (!selectedId || !addDiscKeys.length) return;
+    setBusy(true);
+    try {
+      await api(`/api/crm/bid-packages/${selectedId}/disciplines`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ disciplineKeys: addDiscKeys }),
+      });
+      setMsg(`Added ${addDiscKeys.length} discipline(s) to package.`);
+      setAddDiscKeys([]);
+      await loadDetail(selectedId);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add disciplines failed");
     } finally {
       setBusy(false);
     }
@@ -246,6 +356,11 @@ export default function CrmBidComparePage() {
                   </option>
                 ))}
               </Select>
+              {form.projectId && (
+                <Button type="button" variant="secondary" className="!text-xs" onClick={() => void saveProjectDisciplines()}>
+                  Save discipline list as project default
+                </Button>
+              )}
               <Select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })}>
                 <option value="">Link to lead (optional)</option>
                 {leads.map((l) => (
@@ -260,30 +375,85 @@ export default function CrmBidComparePage() {
                 onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
               />
               <div>
-                <p className="text-xs font-mono uppercase text-steel-muted mb-1">Vendors to compare (min 2)</p>
-                <div className="max-h-36 overflow-y-auto border rounded-xl p-2 space-y-1">
-                  {vendors.map((v) => (
-                    <label key={v.id} className="flex items-center gap-2 text-sm">
+                <p className="text-xs font-mono uppercase text-steel-muted mb-1">
+                  Discipline BOQ sheets ({form.disciplineKeys.length} selected)
+                </p>
+                <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1 mb-2">
+                  {disciplines.map((d) => (
+                    <label key={d.key} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
-                        checked={form.vendorIds.includes(v.id)}
+                        checked={form.disciplineKeys.includes(d.key)}
                         onChange={(e) => {
                           setForm({
                             ...form,
-                            vendorIds: e.target.checked
-                              ? [...form.vendorIds, v.id]
-                              : form.vendorIds.filter((x) => x !== v.id),
+                            disciplineKeys: e.target.checked
+                              ? [...form.disciplineKeys, d.key]
+                              : form.disciplineKeys.filter((x) => x !== d.key),
                           });
                         }}
                       />
-                      {v.name}
+                      <span>{d.label}</span>
+                      <span className="text-[10px] text-steel-muted font-mono">{d.sheetName}</span>
                     </label>
+                  ))}
+                  {form.customDisciplines.map((d) => (
+                    <label key={d.key} className="flex items-center gap-2 text-sm text-brand-dark">
+                      <input type="checkbox" checked readOnly />
+                      <span>{d.label}</span>
+                      <span className="text-[10px] font-mono">custom · {d.sheetName}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    placeholder="Custom discipline label"
+                    value={customDiscLabel}
+                    onChange={(e) => setCustomDiscLabel(e.target.value)}
+                    className="!text-sm flex-1 min-w-[140px]"
+                  />
+                  <Input
+                    placeholder="Excel sheet name (optional)"
+                    value={customDiscSheet}
+                    onChange={(e) => setCustomDiscSheet(e.target.value)}
+                    className="!text-sm flex-1 min-w-[140px]"
+                  />
+                  <Button type="button" variant="secondary" className="!text-xs" onClick={addCustomDiscipline}>
+                    + Add discipline
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-mono uppercase text-steel-muted mb-1">Bidders to compare (min 2)</p>
+                <div className="max-h-40 overflow-y-auto border rounded-xl p-2 space-y-3">
+                  {vendorsByType.map(({ type, rows }) => (
+                    <div key={type}>
+                      <p className="text-[10px] font-bold uppercase text-steel-muted mb-1">{type}</p>
+                      {rows.map((v) => (
+                        <label key={v.id} className="flex items-center gap-2 text-sm py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={form.vendorIds.includes(v.id)}
+                            onChange={(e) => {
+                              setForm({
+                                ...form,
+                                vendorIds: e.target.checked
+                                  ? [...form.vendorIds, v.id]
+                                  : form.vendorIds.filter((x) => x !== v.id),
+                              });
+                            }}
+                          />
+                          <span>{v.name}</span>
+                          {v.trade && <span className="text-[10px] text-steel-muted">· {v.trade}</span>}
+                        </label>
+                      ))}
+                    </div>
                   ))}
                 </div>
               </div>
               <p className="text-[11px] text-steel-muted">
-                Creates {disciplines.length || 8} discipline slots per vendor. Comparative Statement R2 is seeded to SharePoint
-                05.06 when a project is linked; vendor BOQs go to 05.05 per contractor.
+                Creates {form.disciplineKeys.length || 0} discipline slot(s) per bidder. Contractors vs trade vendors
+                are grouped by party type. Comparative R2 → SharePoint 05.06; vendor BOQs → 05.05.
               </p>
               <Button type="submit" disabled={busy}>
                 {busy ? "Creating…" : "Create from R2 template"}
@@ -370,6 +540,37 @@ export default function CrmBidComparePage() {
                 {detail.notes && (
                   <p className="text-xs text-steel-muted mb-3 border-l-2 border-brand pl-2">{detail.notes}</p>
                 )}
+
+                <div className="mb-4 p-3 border border-dashed border-line rounded-xl">
+                  <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add discipline BOQ slots</p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {disciplines
+                      .filter((d) => !(detail.disciplines || []).some((x) => x.key === d.key))
+                      .map((d) => (
+                        <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
+                          <input
+                            type="checkbox"
+                            checked={addDiscKeys.includes(d.key)}
+                            onChange={(e) =>
+                              setAddDiscKeys((prev) =>
+                                e.target.checked ? [...prev, d.key] : prev.filter((x) => x !== d.key)
+                              )
+                            }
+                          />
+                          {d.label}
+                        </label>
+                      ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!text-xs"
+                    disabled={!addDiscKeys.length || busy}
+                    onClick={() => void addDisciplinesToPackage()}
+                  >
+                    Add selected disciplines to package
+                  </Button>
+                </div>
 
                 <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor × discipline BOQ uploads</h4>
                 <div className="space-y-4">

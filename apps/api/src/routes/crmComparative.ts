@@ -17,12 +17,18 @@ import {
 } from "../services/crmSharePoint.js";
 import {
   COMPARATIVE_DISCIPLINES,
+  type DisciplineDef,
+  defaultDisciplines,
+  disciplineCatalogEntry,
   importR2WorkbookFromFile,
   parseDisciplineBoqSheet,
+  parseDisciplinesJson,
   parseR2SummarySheet,
   pickDisciplineWorksheet,
+  resolveDisciplinesForPackage,
   resolveR2TemplatePath,
   buildVendorDisciplineSlots,
+  normalizeDisciplineKey,
 } from "../services/comparativeStatement.js";
 import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
 
@@ -83,15 +89,43 @@ async function loadBidPackage(id: string) {
 
 async function resolveProjectForPackage(projectId?: string | null, leadId?: string | null) {
   if (projectId) {
-    return prisma.project.findUnique({ where: { id: projectId }, select: { id: true, code: true, name: true } });
+    return prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, code: true, name: true, bidDisciplinesJson: true },
+    });
   }
   if (leadId) {
     const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { projectId: true } });
     if (lead?.projectId) {
-      return prisma.project.findUnique({ where: { id: lead.projectId }, select: { id: true, code: true, name: true } });
+      return prisma.project.findUnique({
+        where: { id: lead.projectId },
+        select: { id: true, code: true, name: true, bidDisciplinesJson: true },
+      });
     }
   }
   return null;
+}
+
+function packageDisciplines(row: { disciplinesJson?: string | null }) {
+  return parseDisciplinesJson(row.disciplinesJson);
+}
+
+function parseCustomDisciplines(raw: unknown): DisciplineDef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((d) => {
+      const row = d as { key?: string; label?: string; sheetName?: string };
+      const label = String(row.label || "").trim();
+      if (!label) return null;
+      const key = normalizeDisciplineKey(row.key || label);
+      return { key, label, sheetName: String(row.sheetName || label).trim() };
+    })
+    .filter(Boolean) as DisciplineDef[];
+}
+
+function parseDisciplineKeys(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((x) => normalizeDisciplineKey(String(x))).filter(Boolean);
 }
 
 crmComparativeRouter.get("/disciplines", (_req, res) => {
@@ -136,7 +170,7 @@ crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), a
   res.json({
     ...row,
     vendorNames: parseVendorNames(row.vendorNamesJson),
-    disciplines: COMPARATIVE_DISCIPLINES,
+    disciplines: packageDisciplines(row),
     summary,
     uploadProgress: {
       done: row.vendorBoqs.filter((b) => b.fileName).length,
@@ -155,16 +189,28 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
 
   const vendors = await prisma.vendor.findMany({
     where: { name: { in: vendorNames } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, partyType: true, trade: true },
   });
   const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v.id]));
 
-  const imported = importR2WorkbookFromFile(undefined, vendorNames);
+  const disciplineKeys = parseDisciplineKeys(req.body.disciplineKeys);
+  const customDisciplines = parseCustomDisciplines(req.body.customDisciplines);
   const rev = String(req.body.revisionLabel || "R2");
   const project = await resolveProjectForPackage(
     req.body.projectId ? String(req.body.projectId) : null,
     req.body.leadId ? String(req.body.leadId) : null
   );
+
+  const selectedDisciplines = resolveDisciplinesForPackage({
+    disciplineKeys,
+    customDisciplines,
+    projectDisciplinesJson: project?.bidDisciplinesJson,
+  });
+  if (!selectedDisciplines.length) {
+    return res.status(400).json({ error: "Select at least one discipline BOQ sheet for this package" });
+  }
+
+  const imported = importR2WorkbookFromFile(undefined, vendorNames);
 
   const summarySheet = await createSheetFromImport(
     `Summary — ${title} (${rev})`,
@@ -181,7 +227,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     "Comparative Statement - R2.xlsx"
   );
 
-  const slots = buildVendorDisciplineSlots(vendorNames);
+  const slots = buildVendorDisciplineSlots(vendorNames, selectedDisciplines);
 
   const pkg = await prisma.crmBidPackage.create({
     data: {
@@ -190,6 +236,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
       projectId: project?.id ?? null,
       revisionLabel: rev,
       vendorNamesJson: JSON.stringify(vendorNames),
+      disciplinesJson: JSON.stringify(selectedDisciplines),
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
       notes: req.body.notes
         ? String(req.body.notes)
@@ -237,10 +284,61 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     ...pkg,
     comparativeSharePointUrl,
     vendorNames,
-    disciplines: COMPARATIVE_DISCIPLINES,
+    disciplines: selectedDisciplines,
     comparativeSheetId: masterSheet.id,
     summarySheetId: summarySheet.id,
   });
+});
+
+/** Add discipline BOQ slots to an existing bid package (all vendors get new upload rows). */
+crmComparativeRouter.post("/bid-packages/:id/disciplines", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: req.params.id },
+    include: { vendorBoqs: { select: { vendorLabel: true, discipline: true } } },
+  });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+  const existing = packageDisciplines(pkg);
+  const disciplineKeys = parseDisciplineKeys(req.body.disciplineKeys) || [];
+  const customDisciplines = parseCustomDisciplines(req.body.customDisciplines);
+  const toAdd = resolveDisciplinesForPackage({ disciplineKeys, customDisciplines }).filter(
+    (d) => !existing.some((e) => e.key === d.key)
+  );
+  if (!toAdd.length) return res.status(400).json({ error: "No new disciplines to add" });
+
+  const vendorNames = parseVendorNames(pkg.vendorNamesJson);
+  const vendors = await prisma.vendor.findMany({
+    where: { name: { in: vendorNames } },
+    select: { id: true, name: true },
+  });
+  const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v.id]));
+
+  const merged = [...existing, ...toAdd];
+  await prisma.crmBidPackage.update({
+    where: { id: pkg.id },
+    data: { disciplinesJson: JSON.stringify(merged) },
+  });
+
+  const created = await prisma.crmVendorBoq.createMany({
+    data: vendorNames.flatMap((vendorLabel) =>
+      toAdd.map((d) => ({
+        bidPackageId: pkg.id,
+        vendorLabel,
+        discipline: d.key,
+        vendorId: vendorByName[vendorLabel] ?? null,
+      }))
+    ),
+    skipDuplicates: true,
+  });
+
+  await audit("crm.comparative.add_disciplines", {
+    userId: req.user!.id,
+    entity: "CrmBidPackage",
+    entityId: pkg.id,
+    meta: { added: toAdd.map((d) => d.key), slots: created.count },
+  });
+
+  res.json({ disciplines: merged, added: toAdd, slotsCreated: created.count });
 });
 
 /** Upload vendor BOQ for a specific discipline (office or matching vendor). */
@@ -272,7 +370,8 @@ crmComparativeRouter.post(
       return res.status(403).json({ error: "Office access required" });
     }
 
-    const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === slot.discipline);
+    const pkgDisciplines = packageDisciplines(pkg);
+    const disc = disciplineCatalogEntry(slot.discipline, pkgDisciplines);
     const safeName = `${slot.vendorLabel.replace(/[^a-zA-Z0-9._-]/g, "_")}-${slot.discipline}-BOQ-${Date.now()}.xlsx`;
     const projectCode = pkg.project?.code || "GLOBAL";
     const relFolder = pkg.project?.code
@@ -284,10 +383,10 @@ crmComparativeRouter.post(
     const saved = await syncBufferToProjectSharePoint(projectCode, relFolder, safeName, req.file.buffer);
 
     const wb = XLSX.read(req.file.buffer, { type: "buffer", cellFormula: true });
-    const ws = pickDisciplineWorksheet(wb, slot.discipline);
+    const ws = pickDisciplineWorksheet(wb, slot.discipline, pkgDisciplines);
     if (!ws) return res.status(400).json({ error: "Could not read BOQ sheet from file" });
 
-    const parsed = parseDisciplineBoqSheet(ws, slot.discipline);
+    const parsed = parseDisciplineBoqSheet(ws, slot.discipline, pkgDisciplines);
 
     const boqSheet = await prisma.customSheet.create({
       data: {
@@ -380,6 +479,7 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
           status: true,
           revisionLabel: true,
           notes: true,
+          disciplinesJson: true,
           comparativeSharePointUrl: true,
           summarySheetId: true,
           comparativeSheetId: true,
@@ -392,27 +492,33 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
   });
 
   res.json(
-    slots.map((s) => ({
-      id: s.id,
-      bidPackageId: s.bidPackageId,
-      bidPackageTitle: s.bidPackage.title,
-      bidPackageStatus: s.bidPackage.status,
-      revisionLabel: s.bidPackage.revisionLabel,
-      projectNote: s.bidPackage.notes,
-      projectId: s.bidPackage.project?.id || null,
-      projectCode: s.bidPackage.project?.code || null,
-      projectName: s.bidPackage.project?.name || null,
-      comparativeSharePointUrl: s.bidPackage.comparativeSharePointUrl,
-      summarySheetId: s.bidPackage.summarySheetId,
-      comparativeSheetId: s.bidPackage.comparativeSheetId,
-      vendorLabel: s.vendorLabel,
-      discipline: s.discipline,
-      disciplineLabel: COMPARATIVE_DISCIPLINES.find((d) => d.key === s.discipline)?.label || s.discipline,
-      fileName: s.fileName,
-      uploadedAt: s.uploadedAt,
-      sharePointUrl: s.sharePointUrl,
-      sheetId: s.sheetId,
-    }))
+    slots.map((s) => {
+      const pkgDisc = parseDisciplinesJson(s.bidPackage.disciplinesJson);
+      return {
+        id: s.id,
+        bidPackageId: s.bidPackageId,
+        bidPackageTitle: s.bidPackage.title,
+        bidPackageStatus: s.bidPackage.status,
+        revisionLabel: s.bidPackage.revisionLabel,
+        projectNote: s.bidPackage.notes,
+        projectId: s.bidPackage.project?.id || null,
+        projectCode: s.bidPackage.project?.code || null,
+        projectName: s.bidPackage.project?.name || null,
+        comparativeSharePointUrl: s.bidPackage.comparativeSharePointUrl,
+        summarySheetId: s.bidPackage.summarySheetId,
+        comparativeSheetId: s.bidPackage.comparativeSheetId,
+        vendorLabel: s.vendorLabel,
+        discipline: s.discipline,
+        disciplineLabel:
+          disciplineCatalogEntry(s.discipline, pkgDisc)?.label ||
+          COMPARATIVE_DISCIPLINES.find((d) => d.key === s.discipline)?.label ||
+          s.discipline,
+        fileName: s.fileName,
+        uploadedAt: s.uploadedAt,
+        sharePointUrl: s.sharePointUrl,
+        sheetId: s.sheetId,
+      };
+    })
   );
 });
 

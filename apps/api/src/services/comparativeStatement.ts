@@ -26,6 +26,81 @@ export const COMPARATIVE_DISCIPLINES = [
 
 export type ComparativeDisciplineKey = (typeof COMPARATIVE_DISCIPLINES)[number]["key"];
 
+export type DisciplineDef = { key: string; label: string; sheetName: string };
+
+export function defaultDisciplines(): DisciplineDef[] {
+  return COMPARATIVE_DISCIPLINES.map((d) => ({ ...d }));
+}
+
+export function normalizeDisciplineKey(input: string): string {
+  return String(input || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}
+
+export function parseDisciplinesJson(json: string | null | undefined): DisciplineDef[] {
+  if (!json) return defaultDisciplines();
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed) || !parsed.length) return defaultDisciplines();
+    return parsed
+      .map((d: { key?: string; label?: string; sheetName?: string }) => ({
+        key: normalizeDisciplineKey(d.key || d.label || ""),
+        label: String(d.label || d.key || "").trim(),
+        sheetName: String(d.sheetName || d.label || d.key || "").trim(),
+      }))
+      .filter((d) => d.key && d.label);
+  } catch {
+    return defaultDisciplines();
+  }
+}
+
+/** Resolve discipline list from explicit keys + optional custom entries + project defaults. */
+export function resolveDisciplinesForPackage(opts: {
+  disciplineKeys?: string[];
+  customDisciplines?: DisciplineDef[];
+  projectDisciplinesJson?: string | null;
+  packageDisciplinesJson?: string | null;
+}): DisciplineDef[] {
+  const catalog = defaultDisciplines();
+  const byKey = Object.fromEntries(catalog.map((d) => [d.key, d]));
+
+  if (opts.packageDisciplinesJson) {
+    const pkg = parseDisciplinesJson(opts.packageDisciplinesJson);
+    if (pkg.length) return pkg;
+  }
+
+  const custom = (opts.customDisciplines || []).map((d) => ({
+    key: normalizeDisciplineKey(d.key || d.label),
+    label: d.label.trim(),
+    sheetName: d.sheetName.trim() || d.label.trim(),
+  }));
+
+  if (opts.disciplineKeys?.length) {
+    const picked = opts.disciplineKeys
+      .map((k) => byKey[normalizeDisciplineKey(k)] || custom.find((c) => c.key === normalizeDisciplineKey(k)))
+      .filter(Boolean) as DisciplineDef[];
+    const extras = custom.filter((c) => !picked.some((p) => p.key === c.key));
+    const merged = [...picked, ...extras];
+    if (merged.length) return merged;
+  }
+
+  if (opts.projectDisciplinesJson) {
+    const projectDisc = parseDisciplinesJson(opts.projectDisciplinesJson);
+    if (projectDisc.length) return projectDisc;
+  }
+
+  return catalog;
+}
+
+export function disciplineCatalogEntry(key: string, disciplines?: DisciplineDef[]): DisciplineDef | undefined {
+  const list = disciplines || defaultDisciplines();
+  return list.find((d) => d.key === key) || defaultDisciplines().find((d) => d.key === key);
+}
+
 export type ComparativeSummary = {
   vendorLabels: string[];
   sectionTotals: { section: string; title: string; totals: Record<string, number> }[];
@@ -187,14 +262,22 @@ function applyVendorLabelsToSummary(sheet: ImportedSheet, vendorLabels: string[]
   }
 }
 
-export function pickDisciplineWorksheet(wb: XLSX.WorkBook, disciplineKey: string): XLSX.WorkSheet | null {
-  const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === disciplineKey);
+export function pickDisciplineWorksheet(
+  wb: XLSX.WorkBook,
+  disciplineKey: string,
+  disciplines?: DisciplineDef[]
+): XLSX.WorkSheet | null {
+  const disc = disciplineCatalogEntry(disciplineKey, disciplines);
   if (!disc) return wb.Sheets[wb.SheetNames[0]] ?? null;
   return findWorksheet(wb, disc.sheetName) || wb.Sheets[wb.SheetNames[0]] || null;
 }
 
-export function parseDisciplineBoqSheet(ws: XLSX.WorkSheet, disciplineKey: string): ImportedSheet {
-  const disc = COMPARATIVE_DISCIPLINES.find((d) => d.key === disciplineKey);
+export function parseDisciplineBoqSheet(
+  ws: XLSX.WorkSheet,
+  disciplineKey: string,
+  disciplines?: DisciplineDef[]
+): ImportedSheet {
+  const disc = disciplineCatalogEntry(disciplineKey, disciplines);
   const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
   let headerIdx = aoa.findIndex((r) => {
     const line = r.map((c) => String(c).toLowerCase()).join(" ");
@@ -299,10 +382,10 @@ export function parseComparativeSummary(headers: string[], rows: SheetCell[][]):
   return parseR2SummarySheet(headers, rows);
 }
 
-export function buildVendorDisciplineSlots(vendorNames: string[]) {
+export function buildVendorDisciplineSlots(vendorNames: string[], disciplines: DisciplineDef[] = defaultDisciplines()) {
   const slots: { vendorLabel: string; discipline: string }[] = [];
   for (const vendorLabel of vendorNames) {
-    for (const d of COMPARATIVE_DISCIPLINES) {
+    for (const d of disciplines) {
       slots.push({ vendorLabel, discipline: d.key });
     }
   }
