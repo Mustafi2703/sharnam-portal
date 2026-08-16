@@ -1,23 +1,43 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
 import { downloadBrandedChecklistPrint } from "../../lib/brandedChecklistPrint";
+import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
   { value: "", label: "All families" },
   { value: "DrawingCheck", label: "Drawing check" },
-  { value: "SiteExecution", label: "Site / drawings fill" },
+  { value: "SiteExecution", label: "Site execution" },
   { value: "QualityInspection", label: "Quality" },
   { value: "Safety", label: "Safety" },
 ];
 
-/** Fill log for Drawing / Quality / Safety — download branded PDF-style print */
+const MODULE_LOG_ROUTES: Record<string, string> = {
+  DrawingCheck: "drawings/checklist-logs",
+  QualityInspection: "quality/checklist-logs",
+  Safety: "safety/checklist-logs",
+};
+
+function familyLockFromPath(pathname: string): string | undefined {
+  const tail = projectRouteTail(pathname);
+  if (tail === "drawings/checklist-logs") return "DrawingCheck";
+  if (tail === "quality/checklist-logs") return "QualityInspection";
+  if (tail === "safety/checklist-logs") return "Safety";
+  return undefined;
+}
+
+/** Fill log — module routes lock to one family; generic `/checklist-logs` is office cross-module only */
 export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: string } = {}) {
   const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const family = lockedFamily || searchParams.get("family") || "";
+  const pathLock = familyLockFromPath(location.pathname);
+  const effectiveLock = lockedFamily || pathLock;
+  const family = effectiveLock || searchParams.get("family") || "";
+  const showFamilyPicker = !effectiveLock && projectRouteTail(location.pathname) === "checklist-logs";
   const { token } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [busy, setBusy] = useState(true);
@@ -37,6 +57,14 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!id || projectRouteTail(location.pathname) !== "checklist-logs") return;
+    const f = searchParams.get("family");
+    if (f && MODULE_LOG_ROUTES[f]) {
+      navigate(`/projects/${id}/${MODULE_LOG_ROUTES[f]}`, { replace: true });
+    }
+  }, [id, location.pathname, searchParams, navigate]);
 
   useEffect(() => {
     void load();
@@ -139,7 +167,7 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
       />
 
       <div className="flex flex-wrap gap-2 items-center">
-        {!lockedFamily &&
+        {showFamilyPicker &&
           FAMILIES.map((f) => (
             <button
               key={f.value || "all"}
@@ -152,17 +180,22 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
               {f.label}
             </button>
           ))}
-        {lockedFamily === "QualityInspection" && id && (
+        {effectiveLock === "DrawingCheck" && id && (
+          <Link to={`/projects/${id}/drawings/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
+            Drawing checklist master →
+          </Link>
+        )}
+        {effectiveLock === "QualityInspection" && id && (
           <Link to={`/projects/${id}/quality/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
             Quality checklist master →
           </Link>
         )}
-        {lockedFamily === "Safety" && id && (
+        {effectiveLock === "Safety" && id && (
           <Link to={`/projects/${id}/safety/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
             Safety checklist master →
           </Link>
         )}
-        {!lockedFamily && id && (
+        {showFamilyPicker && id && (
           <Link to={`/projects/${id}/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
             Checklist master →
           </Link>

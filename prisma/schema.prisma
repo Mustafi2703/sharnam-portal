@@ -226,6 +226,18 @@ model DrawingRevision {
   uploadedById         String?
   /// Pre-upload drawing check submission that unlocked this revision
   preCheckSubmissionId String?
+  /// Site drawing register — receive & issue (per revision R0–Rn)
+  receivedDate           DateTime?
+  copiesReceived         Int?
+  issuedToContractorAt   DateTime?
+  contractorSignName     String?
+  contractorSignUrl      String?
+  contractorSignFileName String?
+  issuedToClientAt       DateTime?
+  clientSignName         String?
+  clientSignUrl          String?
+  clientSignFileName     String?
+  issueRemarks           String?
   createdAt            DateTime  @default(now())
 
   drawing        Drawing                     @relation(fields: [drawingId], references: [id], onDelete: Cascade)

@@ -56,23 +56,28 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Drawing Register - Client",
     },
     {
+      to: "drawings/register",
+      label: "Site register",
+      query: "sheet=site",
+      blurb: "Receive & issue matrix R0–R6 with contractor/client signatures.",
+      sheet: "Site Drawing Register",
+    },
+    {
       to: "drawings/library",
       label: "Drawing files",
       blurb: "PDF/DWG in SharePoint design folders — not the general document manager.",
       sheet: "Drawing & GFC Drawing Log",
     },
     {
-      to: "checklist-master",
+      to: "drawings/checklist-master",
       label: "Checklist manager",
-      query: "family=DrawingCheck",
       roles: ["admin", "office", "employee"],
       blurb: "Manage Drawing Check Master templates; upload opens checklist overlay then file dialog.",
       sheet: "Drawing check master",
     },
     {
-      to: "checklist-logs",
+      to: "drawings/checklist-logs",
       label: "Checklist fill log",
-      query: "family=DrawingCheck",
       blurb: "Who filled what — branded download with Sharnam logo.",
     },
     {

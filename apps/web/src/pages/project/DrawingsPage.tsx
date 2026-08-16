@@ -10,6 +10,12 @@ import { UploadModal } from "../../components/UploadModal";
 import { DrawingUploadFilePicker, type MarkupPageDraft } from "../../components/DrawingUploadFilePicker";
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
+import { DrawingIssueFields } from "../../components/DrawingIssueFields";
+import {
+  appendIssueToFormData,
+  emptyDrawingIssueDraft,
+  issueFromRevision,
+} from "../../lib/drawingIssueFields";
 import {
   drawingFileKind,
   resolveDrawingFileUrl,
@@ -18,17 +24,17 @@ import {
 } from "../../lib/drawingPreview";
 import PdfMarkup from "../../components/PdfMarkup";
 import ImageMarkup from "../../components/ImageMarkup";
+import {
+  gfcCurrentRevision,
+  gfcDateLabel,
+  gfcNextRevisionNumber,
+  gfcRevisionForSlot,
+  gfcRevSlots,
+  gfcRevisionsByNumber,
+  normalizeRevNumber,
+} from "../../lib/gfcRegister";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const REV_SLOTS = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
-
-function nextRevisionNumber(revisions: { revisionNumber?: string }[]): string {
-  const maxNum = revisions.reduce((max, r) => {
-    const n = parseInt(String(r.revisionNumber || "").replace(/\D/g, ""), 10);
-    return Number.isFinite(n) ? Math.max(max, n) : max;
-  }, -1);
-  return `R${Math.min(maxNum + 1, 5)}`;
-}
 
 function fmtDate(d?: string | Date | null) {
   if (!d) return "—";
@@ -87,8 +93,10 @@ export default function DrawingsPage() {
   const [revPdf, setRevPdf] = useState<File | null>(null);
   const [revDwg, setRevDwg] = useState<File | null>(null);
   const [revMarkupPages, setRevMarkupPages] = useState<MarkupPageDraft[]>([]);
+  const [registerIssue, setRegisterIssue] = useState(emptyDrawingIssueDraft);
+  const [revIssue, setRevIssue] = useState(emptyDrawingIssueDraft);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
-  const [revUploadMode, setRevUploadMode] = useState<"new" | "replace">("new");
+  const [revUploadMode, setRevUploadMode] = useState<"new" | "replace" | "update">("new");
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [showRegisterLine, setShowRegisterLine] = useState(false);
@@ -149,11 +157,16 @@ export default function DrawingsPage() {
     () => (filter === "All" ? drawings : drawings.filter((d) => d.discipline === filter)),
     [drawings, filter]
   );
+  const revSlots = useMemo(() => gfcRevSlots(drawings), [drawings]);
   const uploadTarget = drawings.find((d) => d.id === uploadForId);
+  const replaceRev = useMemo(() => {
+    if (!uploadTarget || !replaceRevisionId) return null;
+    return (uploadTarget.revisions || []).find((r: any) => r.id === replaceRevisionId) || null;
+  }, [uploadTarget, replaceRevisionId]);
   const revModalOpen =
-    revUploadMode === "replace"
-      ? !!uploadForId && !!replaceRevisionId
-      : !!uploadForId && !!revUnlockToken;
+    revUploadMode === "new"
+      ? !!uploadForId && !!revUnlockToken
+      : !!uploadForId && !!replaceRevisionId;
 
   async function exportCsv() {
     const res = await fetch(`${API_BASE}/api/drawings/project/${id}/export.csv`, {
@@ -291,11 +304,8 @@ export default function DrawingsPage() {
   }
 
   function openLatestViewer(d: any) {
-    const revsAsc = [...(d.revisions || [])].sort(
-      (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-    const latest = revsAsc[revsAsc.length - 1];
-    if (!revisionHasFiles(latest)) return;
+    const latest = gfcCurrentRevision(d);
+    if (!latest || !revisionHasFiles(latest)) return;
     setViewer(previewFromRev(d, latest));
   }
 
@@ -320,6 +330,7 @@ export default function DrawingsPage() {
       if (actualDate) fd.append("actualDate", actualDate);
       if (registerPdf) fd.append("pdf", registerPdf);
       if (registerDwg) fd.append("dwg", registerDwg);
+      appendIssueToFormData(fd, registerIssue);
       const saved = await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
       const revs = [...(saved?.revisions || [])].sort(
         (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -340,6 +351,7 @@ export default function DrawingsPage() {
       setRegisterPdf(null);
       setRegisterDwg(null);
       setRegisterMarkupPages([]);
+      setRegisterIssue(emptyDrawingIssueDraft());
       setUnlockToken(null);
       setShowRegister(false);
       setMsg("Drawing saved to GFC register (PDF + DWG + markup logged).");
@@ -356,6 +368,7 @@ export default function DrawingsPage() {
     setRegisterPdf(null);
     setRegisterDwg(null);
     setRegisterMarkupPages([]);
+    setRegisterIssue(emptyDrawingIssueDraft());
     setFormError("");
     setUnlockToken(null);
   }
@@ -365,6 +378,7 @@ export default function DrawingsPage() {
     setRevPdf(null);
     setRevDwg(null);
     setRevMarkupPages([]);
+    setRevIssue(emptyDrawingIssueDraft());
     setRevUnlockToken(null);
     setReplaceRevisionId(null);
     setRevUploadMode("new");
@@ -377,11 +391,18 @@ export default function DrawingsPage() {
     if (!uploadForId) return;
     if (revUploadMode === "replace") {
       const replaceFile = revReplaceRole === "dwg" ? revDwg : revPdf;
-      if (!replaceFile) {
-        setFormError(`Choose a ${revReplaceRole.toUpperCase()} file to replace.`);
+      const hasIssue =
+        revIssue.receivedDate ||
+        revIssue.copiesReceived ||
+        revIssue.contractorSignature ||
+        revIssue.clientSignature ||
+        revIssue.issuedToContractorAt ||
+        revIssue.issuedToClientAt;
+      if (!replaceFile && !revMarkupPages.length && !hasIssue) {
+        setFormError(`Choose a ${revReplaceRole.toUpperCase()} file, markup, or receive/issue details.`);
         return;
       }
-    } else if (!revPdf && !revDwg) {
+    } else if (!revPdf && !revDwg && !(revUploadMode === "update" && revMarkupPages.length)) {
       setFormError("Choose at least one of PDF or DWG.");
       return;
     }
@@ -391,40 +412,61 @@ export default function DrawingsPage() {
     try {
       if (revUploadMode === "replace" && replaceRevisionId) {
         const replaceFile = revReplaceRole === "dwg" ? revDwg : revPdf;
-        const fd = new FormData();
-        fd.append("file", replaceFile!);
-        fd.append("fileRole", revReplaceRole);
-        fd.append("note", revForm.revisionLabel || `${revReplaceRole.toUpperCase()} updated on revision`);
-        await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
+        if (replaceFile) {
+          const fd = new FormData();
+          fd.append("file", replaceFile);
+          fd.append("fileRole", revReplaceRole);
+          fd.append("note", revForm.revisionLabel || `${revReplaceRole.toUpperCase()} updated on revision`);
+          appendIssueToFormData(fd, revIssue);
+          await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
+        } else {
+          const fd = new FormData();
+          fd.append("note", revForm.revisionLabel || "Receive & issue update");
+          appendIssueToFormData(fd, revIssue);
+          await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
+        }
         if (revMarkupPages.length) {
           await uploadMarkupPages(replaceRevisionId, revMarkupPages, token, revForm.revisionLabel || "PDF markup");
         }
         setExpandedId(uploadForId);
-        setMsg(`${revForm.revisionNumber} updated — ${revReplaceRole.toUpperCase()} and markup logged on the same revision.`);
-      } else {
-        if (!revUnlockToken) {
-          setFormError("Complete Drawing Check Master before revision upload.");
+        setMsg(`${revForm.revisionNumber} updated — same revision row; register stays in sync.`);
+      } else if (revUploadMode === "update" || revUploadMode === "new") {
+        if (revUploadMode === "new" && !revUnlockToken) {
+          setFormError("Complete Drawing Check Master before a new revision upload.");
           return;
         }
+        if (revUploadMode === "update" && !revPdf && !revDwg && revMarkupPages.length && replaceRevisionId) {
+          await uploadMarkupPages(replaceRevisionId, revMarkupPages, token, revForm.revisionLabel || "PDF markup");
+          setExpandedId(uploadForId);
+          setMsg(`${revForm.revisionNumber} markup saved — same revision row.`);
+        } else {
         const fd = new FormData();
         fd.append("revisionNumber", revForm.revisionNumber);
         fd.append("revisionLabel", revForm.revisionLabel || revForm.revisionNumber);
         fd.append("publish", String(revForm.publish));
-        fd.append("unlockToken", revUnlockToken);
+        if (revUnlockToken) fd.append("unlockToken", revUnlockToken);
         if (plannedDate) fd.append("plannedDate", plannedDate);
         if (actualDate) fd.append("actualDate", actualDate);
         if (revPdf) fd.append("pdf", revPdf);
         if (revDwg) fd.append("dwg", revDwg);
-        const updated = await api<any>(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
-        const revs = [...(updated?.revisions || [])].sort(
-          (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        appendIssueToFormData(fd, revIssue);
+        const hadRev = (uploadTarget?.revisions || []).some(
+          (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
         );
-        const latestRev = revs[revs.length - 1];
-        if (latestRev?.id && revMarkupPages.length) {
-          await uploadMarkupPages(latestRev.id, revMarkupPages, token, revForm.revisionLabel || "Revision markup");
+        const updated = await api<any>(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
+        const targetRev = (updated?.revisions || []).find(
+          (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
+        );
+        if (targetRev?.id && revMarkupPages.length) {
+          await uploadMarkupPages(targetRev.id, revMarkupPages, token, revForm.revisionLabel || "Revision markup");
         }
         setExpandedId(uploadForId);
-        setMsg("Revision uploaded — PDF, DWG, and markup logged on the GFC register.");
+        setMsg(
+          hadRev
+            ? `${revForm.revisionNumber} updated on the same revision row — register and current rev refreshed.`
+            : "Revision uploaded — PDF, DWG, and markup logged on the GFC register."
+        );
+        }
       }
       resetRevUpload();
       await load();
@@ -437,7 +479,7 @@ export default function DrawingsPage() {
 
   function openUploadRev(d: any) {
     if (!id) return;
-    const next = nextRevisionNumber(d.revisions || []);
+    const next = gfcNextRevisionNumber(d.revisions || []);
     setUploadForId(d.id);
     setRevUploadMode("new");
     setReplaceRevisionId(null);
@@ -445,6 +487,7 @@ export default function DrawingsPage() {
     setRevPdf(null);
     setRevDwg(null);
     setRevMarkupPages([]);
+    setRevIssue(emptyDrawingIssueDraft());
     setFormError("");
     setPlannedDate("");
     setActualDate(new Date().toISOString().slice(0, 10));
@@ -460,18 +503,15 @@ export default function DrawingsPage() {
   }
 
   function openReplaceRevision(d: any, rev: any, role: "pdf" | "dwg" = "pdf") {
-    if (role === "pdf") {
-      void openRevisionMarkup(d, rev);
-      return;
-    }
     setUploadForId(d.id);
     setRevUploadMode("replace");
     setReplaceRevisionId(rev.id);
-    setRevReplaceRole("dwg");
+    setRevReplaceRole(role);
     setRevUnlockToken(null);
     setRevPdf(null);
     setRevDwg(null);
     setRevMarkupPages([]);
+    setRevIssue(issueFromRevision(rev));
     setFormError("");
     setPrecheckOpen(false);
     setPlannedDate("");
@@ -479,10 +519,35 @@ export default function DrawingsPage() {
     setExpandedId(d.id);
     setRevForm({
       revisionNumber: rev.revisionNumber,
-      revisionLabel: `${rev.revisionNumber} — DWG update`,
+      revisionLabel: `${rev.revisionNumber} — ${role.toUpperCase()} update`,
       publish: !!rev.published,
     });
-    setMsg(`Replace DWG on ${rev.revisionNumber} for ${d.drawingNumber} — PDF and markup history stay unchanged.`);
+    setMsg(`Replace ${role.toUpperCase()} on ${rev.revisionNumber} — upload modal opens from the log accordion.`);
+  }
+
+  function openUpdateRevision(d: any, rev: any) {
+    setUploadForId(d.id);
+    setRevUploadMode("update");
+    setReplaceRevisionId(rev.id);
+    setRevReplaceRole("pdf");
+    setRevUnlockToken(null);
+    setRevPdf(null);
+    setRevDwg(null);
+    setRevMarkupPages([]);
+    setRevIssue(issueFromRevision(rev));
+    setFormError("");
+    setPrecheckOpen(false);
+    setPlannedDate(rev.plannedDate ? String(rev.plannedDate).slice(0, 10) : "");
+    setActualDate(
+      rev.actualDate ? String(rev.actualDate).slice(0, 10) : new Date().toISOString().slice(0, 10)
+    );
+    setExpandedId(d.id);
+    setRevForm({
+      revisionNumber: rev.revisionNumber,
+      revisionLabel: rev.revisionLabel || rev.revisionNumber,
+      publish: !!rev.published,
+    });
+    setMsg(`Update ${rev.revisionNumber} on ${d.drawingNumber} — no checklist needed for same-revision changes.`);
   }
 
   return (
@@ -741,6 +806,10 @@ export default function DrawingsPage() {
               checked: form.publish,
               onChange: (v) => setForm({ ...form, publish: v }),
             },
+            {
+              kind: "custom",
+              node: <DrawingIssueFields value={registerIssue} onChange={setRegisterIssue} />,
+            },
           ]}
         />
       )}
@@ -749,7 +818,7 @@ export default function DrawingsPage() {
         <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between gap-2">
           <div>
             <div className="text-sm font-semibold">INDORE · Drawing register</div>
-            <div className="text-[11px] text-white/70">Discipline · Area · TL · DWG · R0–R5 dates · browse / revisions</div>
+            <div className="text-[11px] text-white/70">Discipline · Area · TL · DWG · R0–Rn dates · browse / revisions</div>
           </div>
           <Badge tone="neutral">{drawings.filter((d) => d.isPublished).length} published</Badge>
         </div>
@@ -763,7 +832,7 @@ export default function DrawingsPage() {
                 <th className="px-2 py-2">DWG. No.</th>
                 <th className="px-2 py-2">Title</th>
                 <th className="px-2 py-2">Browse</th>
-                {REV_SLOTS.map((r) => (
+                {revSlots.map((r) => (
                   <th key={r} className="px-2 py-2 text-center">
                     {r}
                   </th>
@@ -774,11 +843,10 @@ export default function DrawingsPage() {
             </thead>
             <tbody>
               {filtered.map((d) => {
-                const revsAsc = [...(d.revisions || [])].sort(
-                  (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-                );
-                const latest = revsAsc[revsAsc.length - 1];
+                const revsByNum = gfcRevisionsByNumber(d.revisions || []);
+                const latest = gfcCurrentRevision(d);
                 const open = expandedId === d.id;
+                const colSpan = 6 + revSlots.length + 2;
                 return (
                   <Fragment key={d.id}>
                     <tr className={`border-t border-line ${open ? "bg-brand-soft/30" : "hover:bg-sand/40"}`}>
@@ -803,21 +871,19 @@ export default function DrawingsPage() {
                           <span className="text-xs text-steel-muted">—</span>
                         )}
                       </td>
-                      {REV_SLOTS.map((_, i) => {
-                        const r = revsAsc[i];
-                        const label = r
-                          ? r.actualDate || r.plannedDate
-                            ? `${r.plannedDate ? `P:${fmtDate(r.plannedDate)}` : ""} ${r.actualDate ? `A:${fmtDate(r.actualDate)}` : ""}`.trim() ||
-                              fmtDate(r.createdAt)
-                            : fmtDate(r.createdAt)
-                          : "—";
+                      {revSlots.map((slot) => {
+                        const r = gfcRevisionForSlot(d.revisions || [], slot);
                         return (
-                          <td key={i} className="px-2 py-2 text-[10px] text-center font-mono text-steel-muted whitespace-nowrap" title={r?.revisionLabel || ""}>
-                            {label}
+                          <td
+                            key={slot}
+                            className="px-2 py-2 text-[10px] text-center font-mono text-steel-muted whitespace-nowrap"
+                            title={r?.revisionLabel || ""}
+                          >
+                            {gfcDateLabel(r)}
                           </td>
                         );
                       })}
-                      <td className="px-2 py-2 text-center font-mono text-xs">{revsAsc.length}</td>
+                      <td className="px-2 py-2 text-center font-mono text-xs">{revsByNum.length}</td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap justify-end gap-1">
                           <Button type="button" variant="ghost" className="!px-2 !py-1 !text-xs" onClick={() => setExpandedId(open ? null : d.id)}>
@@ -848,10 +914,10 @@ export default function DrawingsPage() {
                     </tr>
                     {open && (
                       <tr className="border-t border-line bg-[#f8fafc]">
-                        <td colSpan={15} className="px-4 py-4">
+                        <td colSpan={colSpan} className="px-4 py-4">
                           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                             <h4 className="text-xs font-mono uppercase tracking-wide text-steel-muted">
-                              Upload log — {d.drawingNumber} ({d.currentRev})
+                              Upload log — {d.drawingNumber} · current {d.currentRev || "—"}
                             </h4>
                             {canUpload && (
                               <Button type="button" className="!text-xs !py-1" onClick={() => openUploadRev(d)}>
@@ -859,13 +925,18 @@ export default function DrawingsPage() {
                               </Button>
                             )}
                           </div>
+                          <p className="text-xs text-steel-muted mb-3">
+                            Update the same revision many times — replace PDF/DWG, add markup pages, or re-upload with the same rev number. Register columns and current rev stay in sync.
+                          </p>
                           <ul className="space-y-2">
-                            {revsAsc.map((r: any, idx: number) => (
+                            {revsByNum.map((r: any, idx: number) => (
                               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2.5 text-sm">
                                 <div>
                                   <div className="font-semibold">
                                     {r.revisionNumber || `R${idx}`}
-                                    {idx === revsAsc.length - 1 && <span className="ml-2 text-[10px] text-brand font-mono">CURRENT</span>}
+                                    {normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(d.currentRev) && (
+                                      <span className="ml-2 text-[10px] text-brand font-mono">CURRENT</span>
+                                    )}
                                   </div>
                                   <div className="text-xs text-steel-muted">
                                     {fmtDate(r.createdAt)} · {r.revisionLabel || "—"}
@@ -894,15 +965,35 @@ export default function DrawingsPage() {
                                       View
                                     </Button>
                                   )}
-                                  {canUpload && (r.pdfFileUrl || drawingFileKind(r.fileName || r.fileUrl) === "pdf") && (
+                                  {canUpload && (
                                     <Button
                                       type="button"
                                       variant="secondary"
                                       className="!text-xs !px-2 !py-1"
-                                      onClick={() => void openRevisionMarkup(d, r)}
+                                      onClick={() => openUpdateRevision(d, r)}
                                     >
-                                      PDF markup
+                                      Update files
                                     </Button>
+                                  )}
+                                  {canUpload && (r.pdfFileUrl || drawingFileKind(r.fileName || r.fileUrl) === "pdf") && (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="!text-xs !px-2 !py-1"
+                                        onClick={() => openReplaceRevision(d, r, "pdf")}
+                                      >
+                                        Replace PDF
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="!text-xs !px-2 !py-1"
+                                        onClick={() => void openRevisionMarkup(d, r)}
+                                      >
+                                        PDF markup
+                                      </Button>
+                                    </>
                                   )}
                                   {canUpload && (
                                     <Button
@@ -917,7 +1008,7 @@ export default function DrawingsPage() {
                                 </div>
                               </li>
                             ))}
-                            {!revsAsc.length && <li className="text-sm text-steel-muted">No uploads yet.</li>}
+                            {!revsByNum.length && <li className="text-sm text-steel-muted">No uploads yet.</li>}
                           </ul>
                         </td>
                       </tr>
@@ -927,7 +1018,7 @@ export default function DrawingsPage() {
               })}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={15} className="px-4 py-10 text-center text-sm text-steel-muted">
+                  <td colSpan={6 + revSlots.length + 2} className="px-4 py-10 text-center text-sm text-steel-muted">
                     No drawings yet.
                   </td>
                 </tr>
@@ -937,7 +1028,7 @@ export default function DrawingsPage() {
         </div>
       </Card>
 
-      {canUpload && uploadForId && uploadTarget && !revUnlockToken && !precheckOpen && (
+      {canUpload && uploadForId && uploadTarget && revUploadMode === "new" && !revUnlockToken && !precheckOpen && (
         <Card className="border-brand/40 bg-brand-soft/40">
           <h3 className="font-semibold text-sm">Waiting for Drawing Check Master</h3>
           <p className="text-sm text-steel-muted mt-1">
@@ -963,18 +1054,30 @@ export default function DrawingsPage() {
       {canUpload && uploadForId && uploadTarget && (
         <UploadModal
           open={revModalOpen && !markupTarget}
-          title={revUploadMode === "replace" ? "Update revision file" : "Upload revision"}
+          title={
+            revUploadMode === "replace"
+              ? `Replace ${revReplaceRole.toUpperCase()}`
+              : revUploadMode === "update"
+                ? "Update same revision"
+                : "Upload revision"
+          }
           context={
             revUploadMode === "replace"
-              ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · replace ${revReplaceRole.toUpperCase()} on same revision`
-              : `${uploadTarget.drawingNumber} · current ${uploadTarget.currentRev} · check complete`
+              ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only — markup history kept`
+              : revUploadMode === "update"
+                ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · add/replace PDF or DWG on same row (no checklist)`
+                : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist complete`
           }
           file={revPdf || revDwg}
           onFile={() => undefined}
           canSubmit={
             revUploadMode === "replace"
-              ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) || revMarkupPages.length > 0
-              : !!revPdf || !!revDwg
+              ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) ||
+                revMarkupPages.length > 0 ||
+                !!revIssue.receivedDate ||
+                !!revIssue.contractorSignature ||
+                !!revIssue.clientSignature
+              : !!revPdf || !!revDwg || revMarkupPages.length > 0
           }
           filePicker={
             revUploadMode === "replace" && revReplaceRole === "dwg" ? (
@@ -983,6 +1086,15 @@ export default function DrawingsPage() {
                 dwgFile={revDwg}
                 onPdfFile={() => undefined}
                 onDwgFile={setRevDwg}
+              />
+            ) : revUploadMode === "replace" && revReplaceRole === "pdf" ? (
+              <DrawingUploadFilePicker
+                pdfFile={revPdf}
+                dwgFile={null}
+                onPdfFile={setRevPdf}
+                onDwgFile={() => undefined}
+                onMarkupPdf={() => openMarkupEditor("revision")}
+                markupPageCount={revMarkupPages.length}
               />
             ) : (
               <DrawingUploadFilePicker
@@ -995,64 +1107,119 @@ export default function DrawingsPage() {
               />
             )
           }
-          primaryLabel={revUploadMode === "replace" ? "Save on same revision" : "Upload & log planned/actual"}
+          primaryLabel={
+            revUploadMode === "replace" || revUploadMode === "update"
+              ? "Save on same revision"
+              : "Upload & log planned/actual"
+          }
           busy={busy}
           error={formError}
           onClose={resetRevUpload}
           onSubmit={uploadRevision}
-          fields={
-            revUploadMode === "replace"
+          fields={[
+            ...(revUploadMode === "replace"
               ? [
                   {
-                    kind: "text",
+                    kind: "text" as const,
                     name: "revisionLabel",
                     label: "Log note",
                     value: revForm.revisionLabel,
-                    onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
+                    onChange: (v: string) => setRevForm({ ...revForm, revisionLabel: v }),
                   },
                 ]
-              : [
-                  {
-                    kind: "text",
-                    name: "revisionNumber",
-                    label: "Revision",
-                    required: true,
-                    placeholder: "R1",
-                    value: revForm.revisionNumber,
-                    onChange: (v) => setRevForm({ ...revForm, revisionNumber: v }),
-                  },
-                  {
-                    kind: "text",
-                    name: "revisionLabel",
-                    label: "Label / note",
-                    value: revForm.revisionLabel,
-                    onChange: (v) => setRevForm({ ...revForm, revisionLabel: v }),
-                  },
-                  {
-                    kind: "text",
-                    name: "plannedDate",
-                    label: "Planned date",
-                    value: plannedDate,
-                    onChange: setPlannedDate,
-                    placeholder: "YYYY-MM-DD",
-                  },
-                  {
-                    kind: "text",
-                    name: "actualDate",
-                    label: "Actual date",
-                    value: actualDate,
-                    onChange: setActualDate,
-                    placeholder: "YYYY-MM-DD",
-                  },
-                  {
-                    kind: "checkbox",
-                    name: "publish",
-                    label: "Set as current published revision",
-                    checked: revForm.publish,
-                    onChange: (v) => setRevForm({ ...revForm, publish: v }),
-                  },
-                ]
-          }
+              : revUploadMode === "update"
+                ? [
+                    {
+                      kind: "text" as const,
+                      name: "revisionNumber",
+                      label: "Revision (fixed)",
+                      value: revForm.revisionNumber,
+                      onChange: () => undefined,
+                    },
+                    {
+                      kind: "text" as const,
+                      name: "revisionLabel",
+                      label: "Label / note",
+                      value: revForm.revisionLabel,
+                      onChange: (v: string) => setRevForm({ ...revForm, revisionLabel: v }),
+                    },
+                    {
+                      kind: "text" as const,
+                      name: "plannedDate",
+                      label: "Planned date",
+                      value: plannedDate,
+                      onChange: setPlannedDate,
+                      placeholder: "YYYY-MM-DD",
+                    },
+                    {
+                      kind: "text" as const,
+                      name: "actualDate",
+                      label: "Actual date",
+                      value: actualDate,
+                      onChange: setActualDate,
+                      placeholder: "YYYY-MM-DD",
+                    },
+                    {
+                      kind: "checkbox" as const,
+                      name: "publish",
+                      label: "Set as current published revision",
+                      checked: revForm.publish,
+                      onChange: (v: boolean) => setRevForm({ ...revForm, publish: v }),
+                    },
+                  ]
+                : [
+                    {
+                      kind: "text" as const,
+                      name: "revisionNumber",
+                      label: "Revision",
+                      required: true,
+                      placeholder: "R1",
+                      value: revForm.revisionNumber,
+                      onChange: (v: string) => setRevForm({ ...revForm, revisionNumber: v }),
+                    },
+                    {
+                      kind: "text" as const,
+                      name: "revisionLabel",
+                      label: "Label / note",
+                      value: revForm.revisionLabel,
+                      onChange: (v: string) => setRevForm({ ...revForm, revisionLabel: v }),
+                    },
+                    {
+                      kind: "text" as const,
+                      name: "plannedDate",
+                      label: "Planned date",
+                      value: plannedDate,
+                      onChange: setPlannedDate,
+                      placeholder: "YYYY-MM-DD",
+                    },
+                    {
+                      kind: "text" as const,
+                      name: "actualDate",
+                      label: "Actual date",
+                      value: actualDate,
+                      onChange: setActualDate,
+                      placeholder: "YYYY-MM-DD",
+                    },
+                    {
+                      kind: "checkbox" as const,
+                      name: "publish",
+                      label: "Set as current published revision",
+                      checked: revForm.publish,
+                      onChange: (v: boolean) => setRevForm({ ...revForm, publish: v }),
+                    },
+                  ]),
+            {
+              kind: "custom" as const,
+              node: (
+                <DrawingIssueFields
+                  value={revIssue}
+                  onChange={setRevIssue}
+                  existingContractorSignUrl={replaceRev?.contractorSignUrl}
+                  existingClientSignUrl={replaceRev?.clientSignUrl}
+                />
+              ),
+            },
+          ]}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
@@ -8,21 +8,41 @@ import {
   CHECKLIST_CSV_HEADERS,
   downloadCsv,
 } from "../../lib/csvTemplates";
+import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
   { value: "DrawingCheck", label: "Drawing check (pre-upload)" },
-  { value: "SiteExecution", label: "Site / drawings fill" },
+  { value: "SiteExecution", label: "Site execution" },
   { value: "QualityInspection", label: "Quality" },
   { value: "Safety", label: "Safety" },
 ] as const;
+
+const MODULE_MASTER_ROUTES: Record<string, string> = {
+  DrawingCheck: "drawings/checklist-master",
+  QualityInspection: "quality/checklist-master",
+  Safety: "safety/checklist-master",
+};
+
+function familyLockFromPath(pathname: string): Family | undefined {
+  const tail = projectRouteTail(pathname);
+  if (tail === "drawings/checklist-master") return "DrawingCheck";
+  if (tail === "quality/checklist-master") return "QualityInspection";
+  if (tail === "safety/checklist-master") return "Safety";
+  return undefined;
+}
 
 type Family = (typeof FAMILIES)[number]["value"];
 
 /** Create / edit checklist types, line items, QA instructions — per module family */
 export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: Family } = {}) {
   const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const family = lockedFamily || ((searchParams.get("family") as Family) || "QualityInspection");
+  const pathLock = familyLockFromPath(location.pathname);
+  const effectiveLock = lockedFamily || pathLock;
+  const family = effectiveLock || ((searchParams.get("family") as Family) || "QualityInspection");
+  const showFamilyPicker = !effectiveLock && projectRouteTail(location.pathname) === "checklist-master";
   const { token, user } = useAuth();
   const [templates, setTemplates] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -51,6 +71,14 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
     if (activeId && !list.some((t) => t.id === activeId)) setActiveId(list[0]?.id || null);
     else if (!activeId && list[0]) setActiveId(list[0].id);
   };
+
+  useEffect(() => {
+    if (!id || projectRouteTail(location.pathname) !== "checklist-master") return;
+    const f = searchParams.get("family");
+    if (f && MODULE_MASTER_ROUTES[f]) {
+      navigate(`/projects/${id}/${MODULE_MASTER_ROUTES[f]}`, { replace: true });
+    }
+  }, [id, location.pathname, searchParams, navigate]);
 
   useEffect(() => {
     setForm((f) => ({
@@ -128,11 +156,13 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
     <div className="space-y-6 portal-fill-layout">
       <PageHeader
         eyebrow={
-          lockedFamily === "Safety"
+          effectiveLock === "DrawingCheck"
+            ? "Drawings · checklist master"
+            : effectiveLock === "Safety"
             ? id
               ? "Safety · checklist master"
               : "Global · Safety checklists"
-            : lockedFamily === "QualityInspection"
+            : effectiveLock === "QualityInspection"
               ? id
                 ? "Quality · checklist master"
                 : "Global · Quality checklists"
@@ -141,16 +171,20 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 : "Global master · all projects"
         }
         title={
-          lockedFamily === "Safety"
+          effectiveLock === "DrawingCheck"
+            ? "Drawing checklist master"
+            : effectiveLock === "Safety"
             ? "Safety checklist master"
-            : lockedFamily === "QualityInspection"
+            : effectiveLock === "QualityInspection"
               ? "Quality checklist master"
               : "Create, upload & choose checklists"
         }
         subtitle={
-          lockedFamily === "Safety"
+          effectiveLock === "DrawingCheck"
+            ? "Pre-upload drawing review checklists only — complete before GFC upload. Quality and Safety templates live in their own modules."
+            : effectiveLock === "Safety"
             ? "Safety-only templates — separate from Quality QI checklists. Upload Excel, assign to project, raise Safety checklist RFIs."
-            : lockedFamily === "QualityInspection"
+            : effectiveLock === "QualityInspection"
               ? "Quality inspection (QI) templates only — separate from Safety. Client can create/upload QI checklists."
               : id
                 ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
@@ -165,7 +199,21 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         }
       />
 
-      {!lockedFamily && (
+      {!showFamilyPicker && effectiveLock && (
+        <div className="flex flex-wrap gap-2">
+          {FAMILIES.filter((f) => f.value === effectiveLock).map((f) => (
+            <span
+              key={f.value}
+              className="px-3 py-1.5 text-sm font-semibold border rounded-sm text-white border-transparent"
+              style={{ background: "var(--mod-accent, var(--color-brand))" }}
+            >
+              {f.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {showFamilyPicker && (
         <div className="flex flex-wrap gap-2">
           {FAMILIES.map((f) => (
             <button
@@ -183,9 +231,21 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         </div>
       )}
 
-      {lockedFamily && id && (
+      {effectiveLock && id && (
         <p className="text-sm text-steel-muted">
-          {lockedFamily === "Safety" ? (
+          {effectiveLock === "DrawingCheck" ? (
+            <>
+              Quality checklists:{" "}
+              <Link to={`/projects/${id}/quality/checklist-master`} className="text-brand font-semibold">
+                Quality checklist master →
+              </Link>
+              {" · "}
+              Safety checklists:{" "}
+              <Link to={`/projects/${id}/safety/checklist-master`} className="text-brand font-semibold">
+                Safety checklist master →
+              </Link>
+            </>
+          ) : effectiveLock === "Safety" ? (
             <>
               Quality checklists live under{" "}
               <Link to={`/projects/${id}/quality/checklist-master`} className="text-brand font-semibold">

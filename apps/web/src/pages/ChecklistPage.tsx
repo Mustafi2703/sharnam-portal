@@ -160,7 +160,14 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
           <p className="text-sm text-steel-muted mt-1">
             Track how much each checklist is filled (draft or submitted) and evidence links. Filling is for matrix parties, office, site, and vendors.
           </p>
-          <Link to={`/projects/${id}/checklist-logs?family=${family}`} className="inline-block mt-2 text-sm font-semibold text-brand">
+          <Link
+            to={
+              family === "QualityInspection"
+                ? `/projects/${id}/quality/checklist-logs`
+                : `/projects/${id}/checklist-logs?family=${family}`
+            }
+            className="inline-block mt-2 text-sm font-semibold text-brand"
+          >
             Open fill log & progress →
           </Link>
         </Card>

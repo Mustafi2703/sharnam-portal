@@ -150,6 +150,8 @@ export default function App() {
                   <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
                   <Route path="drawings/library" element={<DrawingsLibraryPage />} />
                   <Route path="drawings/coordination" element={<CoordinationPage />} />
+                  <Route path="drawings/checklist-master" element={<ChecklistMasterPage lockedFamily="DrawingCheck" />} />
+                  <Route path="drawings/checklist-logs" element={<ChecklistLogsPage lockedFamily="DrawingCheck" />} />
                   <Route path="dms" element={<DmsPage mode="documents" />} />
                   <Route path="checklist" element={<ChecklistPage family="SiteExecution" />} />
                   <Route path="checklist/assign" element={<ChecklistAssignPage />} />

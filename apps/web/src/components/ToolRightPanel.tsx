@@ -173,7 +173,7 @@ export function ToolRightPanel({
             },
             {
               label: "Checklist manager",
-              onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=DrawingCheck`),
+              onClick: () => navigate(`/projects/${ctx.projectId}/drawings/checklist-master`),
               secondary: true,
             },
             {

@@ -14,20 +14,19 @@ export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
   { key: "register", label: "Register dashboard", to: "drawings/register" },
   { key: "register-master", label: "Master register", to: "drawings/register", query: "sheet=master" },
   { key: "register-client", label: "Client register", to: "drawings/register", query: "sheet=client" },
+  { key: "register-site", label: "Site register", to: "drawings/register", query: "sheet=site" },
   { key: "coordination", label: "Design coordination", to: "drawings/coordination" },
   { key: "library", label: "Drawing files", to: "drawings/library" },
   {
     key: "checklist",
     label: "Checklist manager",
-    to: "checklist-master",
-    query: "family=DrawingCheck",
+    to: "drawings/checklist-master",
     roles: ["admin", "office", "employee"],
   },
   {
     key: "fill-log",
     label: "Checklist fill log",
-    to: "checklist-logs",
-    query: "family=DrawingCheck",
+    to: "drawings/checklist-logs",
   },
   {
     key: "rfi-fill",
@@ -59,14 +58,16 @@ export function drawingsNavActive(key: string, pathname: string, search: string)
       return rest.startsWith("drawings/register") && search.includes("sheet=master");
     case "register-client":
       return rest.startsWith("drawings/register") && search.includes("sheet=client");
+    case "register-site":
+      return rest.startsWith("drawings/register") && search.includes("sheet=site");
     case "coordination":
       return rest === "drawings/coordination" || rest === "coordination";
     case "library":
       return rest.startsWith("drawings/library");
     case "checklist":
-      return rest === "checklist-master" && search.includes("family=DrawingCheck");
+      return rest === "drawings/checklist-master";
     case "fill-log":
-      return rest === "checklist-logs" && search.includes("family=DrawingCheck");
+      return rest === "drawings/checklist-logs";
     case "rfi-fill":
       return rest === "rfis" && search.includes("kind=DrawingChecklist");
     case "rfi-ask":

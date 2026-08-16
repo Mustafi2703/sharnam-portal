@@ -12,7 +12,7 @@ function checklistFamilyModule(search: string, tool: "master" | "logs"): Workspa
   const family = new URLSearchParams(search).get("family");
   if (family === "Safety") return "safety";
   if (family === "DrawingCheck") return "drawings";
-  if (tool === "logs" && family === "SiteExecution") return "drawings";
+  if (tool === "logs" && family === "SiteExecution") return "field";
   return "quality";
 }
 

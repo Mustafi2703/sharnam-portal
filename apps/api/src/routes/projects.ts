@@ -12,13 +12,146 @@ const drawingUpload = upload.fields([
   { name: "pdf", maxCount: 1 },
   { name: "dwg", maxCount: 1 },
   { name: "file", maxCount: 1 },
+  { name: "contractorSignature", maxCount: 1 },
+  { name: "clientSignature", maxCount: 1 },
 ]);
 
 function drawingUploadFiles(req: AuthedRequest) {
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   const pdf = files?.pdf?.[0] || (files?.file?.[0] && /\.pdf$/i.test(files.file[0].originalname) ? files.file[0] : undefined);
   const dwg = files?.dwg?.[0] || (files?.file?.[0] && /\.dwg$/i.test(files.file[0].originalname) ? files.file[0] : undefined);
-  return { pdf, dwg };
+  const contractorSignature = files?.contractorSignature?.[0];
+  const clientSignature = files?.clientSignature?.[0];
+  return { pdf, dwg, contractorSignature, clientSignature };
+}
+
+function parseIssueFields(body: Record<string, unknown>) {
+  const copies = body.copiesReceived != null && String(body.copiesReceived).trim() !== ""
+    ? parseInt(String(body.copiesReceived), 10)
+    : null;
+  return {
+    receivedDate: body.receivedDate ? new Date(String(body.receivedDate)) : null,
+    copiesReceived: Number.isFinite(copies) ? copies : null,
+    issuedToContractorAt: body.issuedToContractorAt ? new Date(String(body.issuedToContractorAt)) : null,
+    issuedToClientAt: body.issuedToClientAt ? new Date(String(body.issuedToClientAt)) : null,
+    contractorSignName: body.contractorSignName ? String(body.contractorSignName).trim() : null,
+    clientSignName: body.clientSignName ? String(body.clientSignName).trim() : null,
+    issueRemarks: body.issueRemarks ? String(body.issueRemarks).trim() : null,
+  };
+}
+
+async function storeRevisionSignatures(opts: {
+  projectCode: string;
+  projectId?: string;
+  drawingNumber: string;
+  revisionNumber: string;
+  discipline?: string | null;
+  contractorSignature?: Express.Multer.File;
+  clientSignature?: Express.Multer.File;
+}) {
+  const base = revisionStorageBase(opts.drawingNumber, opts.revisionNumber, opts.discipline);
+  let contractorSignUrl: string | undefined;
+  let contractorSignFileName: string | undefined;
+  let clientSignUrl: string | undefined;
+  let clientSignFileName: string | undefined;
+
+  if (opts.contractorSignature) {
+    const rel = `${base}/Signatures/contractor`;
+    await touchStorageFolder(opts.projectId, rel);
+    const saved = await mockOneDrive.upload(
+      opts.projectCode,
+      rel,
+      opts.contractorSignature.originalname || "contractor-signature.png",
+      opts.contractorSignature.buffer,
+      contentTypeForFile(opts.contractorSignature)
+    );
+    contractorSignUrl = storageUrl(saved);
+    contractorSignFileName = opts.contractorSignature.originalname;
+  }
+  if (opts.clientSignature) {
+    const rel = `${base}/Signatures/client`;
+    await touchStorageFolder(opts.projectId, rel);
+    const saved = await mockOneDrive.upload(
+      opts.projectCode,
+      rel,
+      opts.clientSignature.originalname || "client-signature.png",
+      opts.clientSignature.buffer,
+      contentTypeForFile(opts.clientSignature)
+    );
+    clientSignUrl = storageUrl(saved);
+    clientSignFileName = opts.clientSignature.originalname;
+  }
+
+  return { contractorSignUrl, contractorSignFileName, clientSignUrl, clientSignFileName };
+}
+
+async function revisionIssuePayload(opts: {
+  body: Record<string, unknown>;
+  req: AuthedRequest;
+  projectCode: string;
+  projectId: string;
+  drawingNumber: string;
+  revisionNumber: string;
+  discipline?: string | null;
+}) {
+  const issue = parseIssueFields(opts.body);
+  const { contractorSignature, clientSignature } = drawingUploadFiles(opts.req);
+  const signs = await storeRevisionSignatures({
+    projectCode: opts.projectCode,
+    projectId: opts.projectId,
+    drawingNumber: opts.drawingNumber,
+    revisionNumber: opts.revisionNumber,
+    discipline: opts.discipline,
+    contractorSignature,
+    clientSignature,
+  });
+  return {
+    ...issue,
+    ...(signs.contractorSignUrl
+      ? { contractorSignUrl: signs.contractorSignUrl, contractorSignFileName: signs.contractorSignFileName }
+      : {}),
+    ...(signs.clientSignUrl ? { clientSignUrl: signs.clientSignUrl, clientSignFileName: signs.clientSignFileName } : {}),
+  };
+}
+
+async function syncMasterRegisterFromRevision(opts: {
+  projectId: string;
+  drawingId: string;
+  drawingNumber: string;
+  revisionNumber: string;
+  revisionLabel?: string | null;
+  plannedDate?: Date | null;
+  actualDate?: Date | null;
+  issueRemarks?: string | null;
+  copiesReceived?: number | null;
+  issuedToContractorAt?: Date | null;
+}) {
+  const line = await prisma.drawingRegisterLine.findUnique({
+    where: { projectId_drawingNumber: { projectId: opts.projectId, drawingNumber: opts.drawingNumber } },
+  });
+  if (!line) return;
+  const planned = opts.plannedDate ?? line.plannedSubmissionDate;
+  const actual = opts.actualDate ?? line.actualSubmissionDate;
+  let submissionDelayDays = line.submissionDelayDays;
+  if (planned && actual) {
+    submissionDelayDays = Math.ceil((actual.getTime() - planned.getTime()) / 86400000);
+  }
+  await prisma.drawingRegisterLine.update({
+    where: { id: line.id },
+    data: {
+      drawingId: opts.drawingId,
+      revisionNumber: opts.revisionNumber,
+      latestRevision: "Yes",
+      revisionDescription: opts.revisionLabel ?? line.revisionDescription,
+      revisionDate: actual ?? line.revisionDate,
+      plannedSubmissionDate: planned,
+      actualSubmissionDate: actual,
+      submissionDelayDays,
+      copiesCount: opts.copiesReceived ?? line.copiesCount,
+      issueDate: opts.issuedToContractorAt ?? line.issueDate,
+      remarks: opts.issueRemarks ?? line.remarks,
+    },
+  });
 }
 
 function primaryRevisionFile(rev: {
@@ -66,6 +199,34 @@ function uniqueMarkupFileName(drawingNumber: string, revisionNumber: string, pag
   const ext = originalName.includes(".") ? originalName.slice(originalName.lastIndexOf(".")) : ".png";
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `${sanitizeDrawingSegment(drawingNumber)}_${sanitizeDrawingSegment(revisionNumber)}_p${String(pageNumber).padStart(2, "0")}_${stamp}${ext}`;
+}
+
+function revNumIndex(revisionNumber?: string | null) {
+  const n = parseInt(String(revisionNumber || "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) ? n : -1;
+}
+
+function normalizeRevNumber(revisionNumber?: string | null) {
+  return String(revisionNumber || "").trim().toUpperCase();
+}
+
+function revisionForSlot(
+  revisions: { revisionNumber: string; createdAt: Date; actualDate?: Date | null; plannedDate?: Date | null }[],
+  slot: number
+) {
+  const matches = revisions.filter((r) => revNumIndex(r.revisionNumber) === slot);
+  if (!matches.length) return null;
+  return matches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+}
+
+function gfcDateCell(rev?: { actualDate?: Date | null; plannedDate?: Date | null; createdAt: Date } | null) {
+  if (!rev) return "";
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const planned = rev.plannedDate ? fmt(rev.plannedDate) : "";
+  const actual = rev.actualDate ? fmt(rev.actualDate) : fmt(rev.createdAt);
+  if (planned && actual) return `P:${planned} A:${actual}`;
+  if (planned) return `P:${planned}`;
+  return actual;
 }
 
 async function touchStorageFolder(projectId: string | undefined, relPath: string) {
@@ -485,7 +646,7 @@ drawingsRouter.post(
       req.body;
     if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
 
-    const { pdf, dwg } = drawingUploadFiles(req);
+    const { pdf, dwg, contractorSignature, clientSignature } = drawingUploadFiles(req);
     if (!pdf && !dwg) return res.status(400).json({ error: "At least one of PDF or DWG required after checklist" });
 
     const existing = await prisma.drawing.findUnique({
@@ -495,6 +656,15 @@ drawingsRouter.post(
     const revIndex = existing?.revisions.length ?? 0;
     const rev = revisionNumber || `R${revIndex}`;
     const isoFolder = drawingIsoFolder(discipline);
+    const issuePayload = await revisionIssuePayload({
+      body: req.body,
+      req,
+      projectCode: project.code,
+      projectId: project.id,
+      drawingNumber,
+      revisionNumber: rev,
+      discipline,
+    });
     const stored = await storeDrawingFiles({
       projectCode: project.code,
       projectId: project.id,
@@ -538,6 +708,7 @@ drawingsRouter.post(
             actualDate: actual,
             preCheckSubmissionId: unlock.submissionId,
             uploadedById: req.user!.id,
+            ...issuePayload,
           },
         },
       },
@@ -570,6 +741,7 @@ drawingsRouter.post(
           actualDate: actual,
           preCheckSubmissionId: unlock.submissionId,
           uploadedById: req.user!.id,
+          ...issuePayload,
         },
       });
     }
@@ -594,6 +766,21 @@ drawingsRouter.post(
         },
       },
     });
+    const latestRev = fresh?.revisions[fresh.revisions.length - 1];
+    if (fresh && latestRev) {
+      await syncMasterRegisterFromRevision({
+        projectId: project.id,
+        drawingId: fresh.id,
+        drawingNumber: fresh.drawingNumber,
+        revisionNumber: latestRev.revisionNumber,
+        revisionLabel: latestRev.revisionLabel,
+        plannedDate: latestRev.plannedDate,
+        actualDate: latestRev.actualDate,
+        issueRemarks: latestRev.issueRemarks,
+        copiesReceived: latestRev.copiesReceived,
+        issuedToContractorAt: latestRev.issuedToContractorAt,
+      });
+    }
     res.status(201).json(fresh);
   }
 );
@@ -766,49 +953,85 @@ drawingsRouter.patch(
 drawingsRouter.patch(
   "/revision/:revId/file",
   requireRoles("admin", "office", "employee", "site_employee", "vendor"),
-  upload.single("file"),
+  drawingUpload,
   async (req: AuthedRequest, res) => {
     const rev = await prisma.drawingRevision.findUnique({
       where: { id: req.params.revId },
       include: { drawing: { include: { project: true } } },
     });
     if (!rev) return res.status(404).json({ error: "Revision not found" });
-    if (!req.file) return res.status(400).json({ error: "File required" });
+
+    const { pdf, dwg, contractorSignature, clientSignature } = drawingUploadFiles(req);
+    const file = req.file || pdf || dwg;
+    const issuePayload = await revisionIssuePayload({
+      body: req.body,
+      req,
+      projectCode: rev.drawing.project.code,
+      projectId: rev.drawing.projectId,
+      drawingNumber: rev.drawing.drawingNumber,
+      revisionNumber: rev.revisionNumber,
+      discipline: rev.drawing.discipline,
+    });
+    if (!file && !contractorSignature && !clientSignature && !issuePayload.receivedDate) {
+      return res.status(400).json({ error: "File or receive/issue details required" });
+    }
 
     const fileRole = String(req.body.fileRole || "pdf").toLowerCase();
-    const isDwg = fileRole === "dwg" || /\.dwg$/i.test(req.file.originalname);
-    const roleFolder = isDwg ? "DWG" : "PDF";
-    const rel = `${revisionStorageBase(rev.drawing.drawingNumber, rev.revisionNumber, rev.drawing.discipline)}/${roleFolder}`;
-    await touchStorageFolder(rev.drawing.projectId, rel);
-    const saved = await mockOneDrive.upload(
-      rev.drawing.project.code,
-      rel,
-      req.file.originalname,
-      req.file.buffer,
-      contentTypeForFile(req.file)
-    );
+    const isDwg = fileRole === "dwg" || (file && /\.dwg$/i.test(file.originalname));
     const note = String(req.body.note || "Markup / file update").trim();
     const stamp = new Date().toLocaleDateString("en-IN");
 
-    const storedUrl = storageUrl(saved);
-    const rolePatch = isDwg
-      ? { dwgFileUrl: storedUrl, dwgFileName: req.file.originalname }
-      : { pdfFileUrl: storedUrl, pdfFileName: req.file.originalname };
+    let rolePatch: Record<string, string> = {};
+    if (file) {
+      const roleFolder = isDwg ? "DWG" : "PDF";
+      const rel = `${revisionStorageBase(rev.drawing.drawingNumber, rev.revisionNumber, rev.drawing.discipline)}/${roleFolder}`;
+      await touchStorageFolder(rev.drawing.projectId, rel);
+      const saved = await mockOneDrive.upload(
+        rev.drawing.project.code,
+        rel,
+        file.originalname,
+        file.buffer,
+        contentTypeForFile(file)
+      );
+      const storedUrl = storageUrl(saved);
+      rolePatch = isDwg
+        ? { dwgFileUrl: storedUrl, dwgFileName: file.originalname }
+        : { pdfFileUrl: storedUrl, pdfFileName: file.originalname };
+    }
 
-    const merged = { ...rev, ...rolePatch };
+    const merged = { ...rev, ...rolePatch, ...issuePayload };
     const primary = primaryRevisionFile(merged);
 
     const updated = await prisma.drawingRevision.update({
       where: { id: rev.id },
       data: {
         ...rolePatch,
+        ...issuePayload,
         fileUrl: primary.fileUrl,
         fileName: primary.fileName,
         revisionLabel: `${rev.revisionNumber} — ${note} · ${stamp}`,
-        actualDate: new Date(),
+        actualDate: issuePayload.receivedDate || new Date(),
         uploadedById: req.user!.id,
       },
       include: revisionInclude,
+    });
+
+    await prisma.drawing.update({
+      where: { id: rev.drawingId },
+      data: { currentRev: rev.revisionNumber },
+    });
+
+    await syncMasterRegisterFromRevision({
+      projectId: rev.drawing.projectId,
+      drawingId: rev.drawingId,
+      drawingNumber: rev.drawing.drawingNumber,
+      revisionNumber: rev.revisionNumber,
+      revisionLabel: updated.revisionLabel,
+      plannedDate: updated.plannedDate,
+      actualDate: updated.actualDate,
+      issueRemarks: updated.issueRemarks,
+      copiesReceived: updated.copiesReceived,
+      issuedToContractorAt: updated.issuedToContractorAt,
     });
 
     await audit("drawing.revision.markup", {
@@ -819,10 +1042,10 @@ drawingsRouter.patch(
         drawingId: rev.drawingId,
         revisionNumber: rev.revisionNumber,
         previousFile: isDwg ? rev.dwgFileName : rev.pdfFileName || rev.fileName,
-        newFile: req.file.originalname,
-        fileRole: isDwg ? "dwg" : "pdf",
+        newFile: file?.originalname || null,
+        fileRole: file ? (isDwg ? "dwg" : "pdf") : null,
         note,
-        sharePointPath: saved.sharePointPath || null,
+        issueUpdated: !!issuePayload.receivedDate || !!issuePayload.contractorSignUrl,
       },
     });
     res.json(updated);
@@ -900,6 +1123,11 @@ drawingsRouter.post(
       include: revisionInclude,
     });
 
+    await prisma.drawing.update({
+      where: { id: rev.drawingId },
+      data: { currentRev: rev.revisionNumber },
+    });
+
     await audit("drawing.revision.markup", {
       userId: req.user!.id,
       entity: "DrawingRevision",
@@ -946,7 +1174,7 @@ drawingsRouter.post("/:id/publish", requireRoles("admin", "office", "employee", 
   res.json(drawing);
 });
 
-/** Upload a new revision onto an existing drawing register row */
+/** Upload or update a revision on an existing GFC register row (same rev number = update, not duplicate row) */
 drawingsRouter.post(
   "/:id/revisions",
   requireRoles("admin", "office", "employee", "site_employee", "vendor"),
@@ -958,13 +1186,6 @@ drawingsRouter.post(
     });
     if (!drawing) return res.status(404).json({ error: "Drawing not found" });
 
-    const unlock = await consumeDrawingUnlockToken({
-      projectId: drawing.projectId,
-      unlockToken: req.body.unlockToken || req.body.preCheckToken,
-      userId: req.user!.id,
-    });
-    if (!unlock.ok) return res.status(400).json({ error: unlock.error });
-
     const revisionNumber = String(req.body.revisionNumber || `R${drawing.revisions.length}`);
     const revisionLabel = String(req.body.revisionLabel || `${revisionNumber} — ${new Date().toLocaleDateString()}`);
     const publish = req.body.publish === "true" || req.body.publish === true;
@@ -973,6 +1194,31 @@ drawingsRouter.post(
 
     const { pdf, dwg } = drawingUploadFiles(req);
     if (!pdf && !dwg) return res.status(400).json({ error: "At least one of PDF or DWG required for revision upload" });
+
+    const issuePayload = await revisionIssuePayload({
+      body: req.body,
+      req,
+      projectCode: drawing.project.code,
+      projectId: drawing.projectId,
+      drawingNumber: drawing.drawingNumber,
+      revisionNumber,
+      discipline: drawing.discipline,
+    });
+
+    const existingRev = drawing.revisions.find(
+      (r) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revisionNumber)
+    );
+
+    let unlockSubmissionId = existingRev?.preCheckSubmissionId || null;
+    if (!existingRev) {
+      const unlock = await consumeDrawingUnlockToken({
+        projectId: drawing.projectId,
+        unlockToken: req.body.unlockToken || req.body.preCheckToken,
+        userId: req.user!.id,
+      });
+      if (!unlock.ok) return res.status(400).json({ error: unlock.error });
+      unlockSubmissionId = unlock.submissionId;
+    }
 
     const stored = await storeDrawingFiles({
       projectCode: drawing.project.code,
@@ -999,30 +1245,63 @@ drawingsRouter.post(
       });
     }
 
-    const rev = await prisma.drawingRevision.create({
-      data: {
-        drawingId: drawing.id,
-        revisionNumber,
-        revisionLabel,
-        fileUrl,
-        fileName,
-        pdfFileUrl: pdfFileUrl || null,
-        pdfFileName: pdfFileName || null,
-        dwgFileUrl: dwgFileUrl || null,
-        dwgFileName: dwgFileName || null,
-        published: publish,
-        plannedDate: planned,
-        actualDate: actual,
-        preCheckSubmissionId: unlock.submissionId,
-        uploadedById: req.user!.id,
-      },
-      include: revisionInclude,
-    });
+    let rev;
+    if (existingRev) {
+      const merged = {
+        ...existingRev,
+        pdfFileUrl: pdf ? pdfFileUrl || existingRev.pdfFileUrl : existingRev.pdfFileUrl,
+        pdfFileName: pdf ? pdfFileName || existingRev.pdfFileName : existingRev.pdfFileName,
+        dwgFileUrl: dwg ? dwgFileUrl || existingRev.dwgFileUrl : existingRev.dwgFileUrl,
+        dwgFileName: dwg ? dwgFileName || existingRev.dwgFileName : existingRev.dwgFileName,
+      };
+      const primary = primaryRevisionFile(merged);
+      rev = await prisma.drawingRevision.update({
+        where: { id: existingRev.id },
+        data: {
+          revisionLabel,
+          fileUrl: primary.fileUrl,
+          fileName: primary.fileName,
+          pdfFileUrl: pdf ? pdfFileUrl || null : existingRev.pdfFileUrl,
+          pdfFileName: pdf ? pdfFileName || null : existingRev.pdfFileName,
+          dwgFileUrl: dwg ? dwgFileUrl || null : existingRev.dwgFileUrl,
+          dwgFileName: dwg ? dwgFileName || null : existingRev.dwgFileName,
+          published: publish ? true : existingRev.published,
+          plannedDate: planned ?? existingRev.plannedDate,
+          actualDate: actual,
+          uploadedById: req.user!.id,
+          ...issuePayload,
+        },
+        include: revisionInclude,
+      });
+    } else {
+      rev = await prisma.drawingRevision.create({
+        data: {
+          drawingId: drawing.id,
+          revisionNumber,
+          revisionLabel,
+          fileUrl,
+          fileName,
+          pdfFileUrl: pdfFileUrl || null,
+          pdfFileName: pdfFileName || null,
+          dwgFileUrl: dwgFileUrl || null,
+          dwgFileName: dwgFileName || null,
+          published: publish,
+          plannedDate: planned,
+          actualDate: actual,
+          preCheckSubmissionId: unlockSubmissionId,
+          uploadedById: req.user!.id,
+          ...issuePayload,
+        },
+        include: revisionInclude,
+      });
 
-    await prisma.checklistSubmission.update({
-      where: { id: unlock.submissionId },
-      data: { drawingId: drawing.id, revisionId: rev.id, revisionNumber },
-    });
+      if (unlockSubmissionId) {
+        await prisma.checklistSubmission.update({
+          where: { id: unlockSubmissionId },
+          data: { drawingId: drawing.id, revisionId: rev.id, revisionNumber },
+        });
+      }
+    }
 
     const updated = await prisma.drawing.update({
       where: { id: drawing.id },
@@ -1038,13 +1317,35 @@ drawingsRouter.post(
       },
     });
 
-    await audit("drawing.revision", {
+    await syncMasterRegisterFromRevision({
+      projectId: drawing.projectId,
+      drawingId: drawing.id,
+      drawingNumber: drawing.drawingNumber,
+      revisionNumber,
+      revisionLabel: rev.revisionLabel,
+      plannedDate: rev.plannedDate,
+      actualDate: rev.actualDate,
+      issueRemarks: rev.issueRemarks,
+      copiesReceived: rev.copiesReceived,
+      issuedToContractorAt: rev.issuedToContractorAt,
+    });
+
+    await audit(existingRev ? "drawing.revision.update" : "drawing.revision", {
       userId: req.user!.id,
       entity: "DrawingRevision",
       entityId: rev.id,
-      meta: { drawingId: drawing.id, revisionNumber, fileName, pdfFileName, dwgFileName, storageBase, preCheck: unlock.submissionId },
+      meta: {
+        drawingId: drawing.id,
+        revisionNumber,
+        fileName,
+        pdfFileName,
+        dwgFileName,
+        storageBase,
+        updatedExisting: !!existingRev,
+        preCheck: unlockSubmissionId,
+      },
     });
-    res.status(201).json(updated);
+    res.status(existingRev ? 200 : 201).json(updated);
   }
 );
 
@@ -1055,6 +1356,11 @@ drawingsRouter.get("/project/:projectId/export.csv", async (req, res) => {
     include: { revisions: { orderBy: { createdAt: "asc" } } },
     orderBy: { drawingNumber: "asc" },
   });
+  const maxSlot = drawings.reduce(
+    (max, d) => Math.max(max, ...d.revisions.map((r) => revNumIndex(r.revisionNumber)), 5),
+    5
+  );
+  const slotHeaders = Array.from({ length: maxSlot + 1 }, (_, i) => `R${i}`);
   const header = [
     "DISCIPLINE",
     "BUILDING/AREA",
@@ -1062,21 +1368,17 @@ drawingsRouter.get("/project/:projectId/export.csv", async (req, res) => {
     "DWG. NO.",
     "TITLE",
     "Drawing Browse",
-    "R0",
-    "R1",
-    "R2",
-    "R3",
-    "R4",
-    "R5",
+    ...slotHeaders,
     "TOTAL",
     "Published",
     "Current Rev",
   ];
+
   const rows = drawings.map((d) => {
-    const dates = [0, 1, 2, 3, 4, 5].map((i) =>
-      d.revisions[i] ? new Date(d.revisions[i].createdAt).toISOString().slice(0, 10) : ""
-    );
-    const latest = d.revisions[d.revisions.length - 1];
+    const uniqueRevCount = new Set(d.revisions.map((r) => normalizeRevNumber(r.revisionNumber))).size;
+    const dates = slotHeaders.map((_, i) => gfcDateCell(revisionForSlot(d.revisions, i)));
+    const latest =
+      d.revisions.find((r) => r.revisionNumber === d.currentRev) || d.revisions[d.revisions.length - 1];
     return [
       d.discipline,
       `"${(d.buildingArea || "").replace(/"/g, '""')}"`,
@@ -1085,7 +1387,7 @@ drawingsRouter.get("/project/:projectId/export.csv", async (req, res) => {
       `"${d.title.replace(/"/g, '""')}"`,
       latest?.fileUrl || "",
       ...dates,
-      String(d.revisions.length),
+      String(uniqueRevCount),
       d.isPublished ? "Yes" : "No",
       d.currentRev,
     ].join(",");

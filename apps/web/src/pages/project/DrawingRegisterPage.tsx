@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
+import { SiteDrawingRegisterTable } from "../../components/SiteDrawingRegisterTable";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
 
@@ -15,6 +16,7 @@ export default function DrawingRegisterPage() {
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
+  const [gfcDrawings, setGfcDrawings] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState({
     drawingNumber: "",
@@ -33,11 +35,15 @@ export default function DrawingRegisterPage() {
   const load = async () => {
     const res = await api(`/api/drawings/project/${id}/register-dashboard`, { token });
     setData(res);
+    if (sheetKey === "site") {
+      const gfc = await api<any[]>(`/api/drawings/project/${id}`, { token });
+      setGfcDrawings(Array.isArray(gfc) ? gfc : []);
+    }
   };
 
   useEffect(() => {
     void load();
-  }, [id, token]);
+  }, [id, token, sheetKey]);
 
   async function addLine(e: FormEvent) {
     e.preventDefault();
@@ -140,29 +146,42 @@ export default function DrawingRegisterPage() {
             {sheetKey === "master" ? "Master Drawing Register" : "Client drawing register view"}
           </h3>
           <div className="overflow-x-auto max-h-[32rem]">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[1600px]">
               <thead>
                 <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
                   <th className="py-2 pr-2">Sr</th>
+                  <th className="py-2 pr-2">Package</th>
+                  <th className="py-2 pr-2">Building</th>
+                  <th className="py-2 pr-2">Discipline</th>
                   <th className="py-2 pr-2">No.</th>
                   <th className="py-2 pr-2">Title</th>
                   {sheetKey === "master" && (
                     <>
-                      <th className="py-2 pr-2">Discipline</th>
                       <th className="py-2 pr-2">Type</th>
+                      <th className="py-2 pr-2">Consultant</th>
                       <th className="py-2 pr-2">Rev</th>
+                      <th className="py-2 pr-2">Rev date</th>
+                      <th className="py-2 pr-2">Rev desc.</th>
+                      <th className="py-2 pr-2">Latest</th>
                       <th className="py-2 pr-2">Planned</th>
+                      <th className="py-2 pr-2">Actual</th>
                       <th className="py-2 pr-2">Delay</th>
-                      <th className="py-2 pr-2">Critical</th>
-                      <th className="py-2 pr-2">Remarks</th>
+                      <th className="py-2 pr-2">Delay resp.</th>
+                      <th className="py-2 pr-2">Issued to</th>
+                      <th className="py-2 pr-2">Issue date</th>
+                      <th className="py-2 pr-2">Copies</th>
                     </>
                   )}
                   {sheetKey === "client" && (
                     <>
                       <th className="py-2 pr-2">Discipline</th>
                       <th className="py-2 pr-2">Issued to</th>
+                      <th className="py-2 pr-2">Issue date</th>
+                      <th className="py-2 pr-2">Copies</th>
                     </>
                   )}
+                  <th className="py-2 pr-2">Critical</th>
+                  <th className="py-2 pr-2">Remarks</th>
                   <th className="py-2">GFC link</th>
                 </tr>
               </thead>
@@ -170,31 +189,50 @@ export default function DrawingRegisterPage() {
                 {lines.map((r: any) => (
                   <tr key={r.id} className="border-b border-line/60">
                     <td className="py-2 pr-2 font-mono text-xs">{r.srNo ?? "—"}</td>
+                    <td className="py-2 pr-2 text-xs">{r.projectPackage || "—"}</td>
+                    <td className="py-2 pr-2 text-xs">{r.building || "—"}</td>
+                    <td className="py-2 pr-2">{r.discipline || "—"}</td>
                     <td className="py-2 pr-2 font-mono text-xs">{String(r.drawingNumber || "").replace(/\s·\s*\d+$/, "")}</td>
                     <td className="py-2 pr-2 max-w-xs truncate">{r.drawingTitle}</td>
                     {sheetKey === "master" && (
                       <>
-                        <td className="py-2 pr-2">{r.discipline || "—"}</td>
-                        <td className="py-2 pr-2 max-w-[8rem] truncate">{r.drawingType || "—"}</td>
-                        <td className="py-2 pr-2">{r.revisionNumber || "—"}</td>
-                        <td className="py-2 pr-2 text-xs">
-                          {r.plannedSubmissionDate
-                            ? new Date(r.plannedSubmissionDate).toLocaleDateString()
-                            : "—"}
+                        <td className="py-2 pr-2 max-w-[8rem] truncate text-xs">{r.drawingType || "—"}</td>
+                        <td className="py-2 pr-2 max-w-[8rem] truncate text-xs">{r.consultantName || "—"}</td>
+                        <td className="py-2 pr-2 font-mono">{r.revisionNumber || "—"}</td>
+                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                          {r.revisionDate ? new Date(r.revisionDate).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="py-2 pr-2 max-w-[10rem] truncate text-xs">{r.revisionDescription || "—"}</td>
+                        <td className="py-2 pr-2">{r.latestRevision || "—"}</td>
+                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                          {r.plannedSubmissionDate ? new Date(r.plannedSubmissionDate).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                          {r.actualSubmissionDate ? new Date(r.actualSubmissionDate).toLocaleDateString() : "—"}
                         </td>
                         <td className="py-2 pr-2 font-mono text-xs">
                           {r.submissionDelayDays != null ? r.submissionDelayDays : "—"}
                         </td>
-                        <td className="py-2 pr-2">{r.criticalDrawing || "—"}</td>
-                        <td className="py-2 pr-2 max-w-[10rem] truncate">{r.remarks || "—"}</td>
+                        <td className="py-2 pr-2 text-xs max-w-[8rem] truncate">{r.delayResponsibility || "—"}</td>
+                        <td className="py-2 pr-2 text-xs max-w-[8rem] truncate">{r.issuedTo || "—"}</td>
+                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                          {r.issueDate ? new Date(r.issueDate).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="py-2 pr-2 font-mono">{r.copiesCount ?? "—"}</td>
                       </>
                     )}
                     {sheetKey === "client" && (
                       <>
                         <td className="py-2 pr-2">{r.discipline || "—"}</td>
                         <td className="py-2 pr-2">{r.issuedTo || "—"}</td>
+                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                          {r.issueDate ? new Date(r.issueDate).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="py-2 pr-2 font-mono">{r.copiesCount ?? "—"}</td>
                       </>
                     )}
+                    <td className="py-2 pr-2">{r.criticalDrawing || "—"}</td>
+                    <td className="py-2 pr-2 max-w-[10rem] truncate text-xs">{r.remarks || "—"}</td>
                     <td className="py-2">
                       {r.drawing?.id ? (
                         <Badge tone="ok">Linked</Badge>
@@ -208,7 +246,7 @@ export default function DrawingRegisterPage() {
                 ))}
                 {!lines.length && (
                   <tr>
-                    <td colSpan={sheetKey === "master" ? 11 : 8} className="py-8 text-steel-muted text-center">
+                    <td colSpan={sheetKey === "master" ? 22 : 13} className="py-8 text-steel-muted text-center">
                       No lines — run seed or add above.
                     </td>
                   </tr>
@@ -216,6 +254,18 @@ export default function DrawingRegisterPage() {
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
+
+      {sheetKey === "site" && (
+        <Card padding={false} className="overflow-hidden">
+          <div className="px-4 py-3 border-b border-line">
+            <h3 className="font-semibold">Site Drawing Register</h3>
+            <p className="text-xs text-steel-muted mt-1">
+              Receive &amp; issue matrix R0–R6 — dates, copies, contractor/client signatures per revision (from GFC uploads).
+            </p>
+          </div>
+          <SiteDrawingRegisterTable drawings={gfcDrawings} projectId={id!} />
         </Card>
       )}
 

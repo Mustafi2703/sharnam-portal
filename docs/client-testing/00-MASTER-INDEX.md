@@ -47,7 +47,7 @@ All routes under `/projects/:id` use **ProjectToolsLayout** (sticky module tool 
 See each `modules/NN-*.md` file for forms, modals, and change tables.
 
 ### Drawings
-`drawings` · `drawings/register` · `drawings/library` · `drawings/coordination` · `drawings/upload-revision` · `drawings/precheck` · `checklist-master?family=DrawingCheck` · `checklist-logs` · `rfis?kind=DrawingChecklist|RequestForInformation`
+`drawings` · `drawings/register` · `drawings/register?sheet=master|client|site` · `drawings/library` · `drawings/coordination` · `drawings/upload-revision` · `drawings/precheck` · `drawings/checklist-master` · `drawings/checklist-logs` · `rfis?kind=DrawingChecklist|RequestForInformation`
 
 ### Documents
 `dms`
