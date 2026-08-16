@@ -13,7 +13,8 @@ export type WorkspaceKey =
   | "field"
   | "cost"
   | "finance"
-  | "reports";
+  | "reports"
+  | "closure";
 
 export type ModuleToolItem = {
   to: string;
@@ -32,6 +33,26 @@ export type ModuleToolItem = {
 export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   drawings: [
     { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish.", sheet: "Drawing & GFC Drawing Log" },
+    {
+      to: "drawings/register",
+      label: "Master drawing register",
+      blurb: "DCI master register from DRAWING REGISTER - 01.xlsx.",
+      sheet: "Master Drawing Register",
+    },
+    {
+      to: "drawings/register",
+      label: "Register dashboard",
+      query: "sheet=",
+      blurb: "Drawing register week KPIs.",
+      sheet: "DRAWING REGISTER - 01.xlsx · Dashboard",
+    },
+    {
+      to: "drawings/register",
+      label: "Client register",
+      query: "sheet=client",
+      blurb: "Client-facing drawing register view.",
+      sheet: "Drawing Register - Client",
+    },
     {
       to: "drawings/library",
       label: "Drawing files",
@@ -91,34 +112,60 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   quality: [
     {
       to: "inspections",
-      label: "Quality dashboard / QI",
-      blurb: "Procore-style quality inspections and QAP status.",
+      label: "Dashboard",
+      blurb: "Quality Dashboard KPIs — week, concreting, QI fills.",
+      sheet: "Quality Dashboard.xlsx · Dashboard",
     },
     {
       to: "inspections",
-      label: "NCR / CAR",
-      query: "view=ncr",
+      label: "SOR Log",
+      query: "sheet=sor-log",
+      blurb: "Site observation register summary.",
+      sheet: "SOR Log",
+    },
+    {
+      to: "inspections",
+      label: "Checklist summary",
+      query: "sheet=checklist-summary",
+      blurb: "Checklists filled by discipline + catalog.",
+      sheet: "Sheet1 / Sheet2",
+    },
+    {
+      to: "inspections",
+      label: "CAR / NCR register",
+      query: "sheet=car-register",
       blurb: "Non-conformance / corrective action register.",
-      sheet: "NCR 01.xlsx",
+      sheet: "CAR register · NCR 01",
     },
     {
       to: "inspections",
-      label: "Cube register",
-      query: "view=cube",
+      label: "Cube Test",
+      query: "sheet=cube-test",
       blurb: "Cube cast / test results.",
-      sheet: "SPDC CUBE REGISTER",
+      sheet: "Cube Test · SPDC Cube Register",
     },
     {
-      to: "checklist-master",
-      label: "Checklist master",
-      query: "family=QualityInspection",
+      to: "inspections",
+      label: "QAP Detail",
+      query: "sheet=qap-detail",
+      blurb: "Quality Assurance Plan detail sheet.",
+      sheet: "Quality Assurance Plan - Detail",
+    },
+    {
+      to: "inspections",
+      label: "QI & checklist fills",
+      query: "sheet=qi",
+      blurb: "Raise QI, fill checklists → DPR Quality section.",
+    },
+    {
+      to: "quality/checklist-master",
+      label: "Quality checklist master",
       roles: ["admin", "office", "employee", "client"],
-      blurb: "Create checklists, upload Excel, choose template for fills.",
+      blurb: "Create QI checklists, upload Excel — separate from Safety.",
     },
     {
-      to: "checklist-logs",
+      to: "quality/checklist-logs",
       label: "QI fill log",
-      query: "family=QualityInspection",
       blurb: "Quality checklist fills — branded download.",
     },
     {
@@ -137,25 +184,65 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   safety: [
-    { to: "safety", label: "Safety dashboard", blurb: "Observations, incidents, open items." },
+    { to: "safety", label: "One Pager", blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
     {
       to: "safety",
-      label: "Safety NCR",
-      query: "view=ncr",
-      blurb: "Safety NCR register from sheet.",
+      label: "Site Instruction",
+      query: "sheet=site-instruction",
+      blurb: "Site instruction register.",
+      sheet: "Site Instruction",
+    },
+    {
+      to: "safety",
+      label: "Unsafe Act Summary",
+      query: "sheet=unsafe-act-summary",
+      blurb: "Unsafe act summary register.",
+      sheet: "Unsafe Act Summary",
+    },
+    {
+      to: "safety",
+      label: "NCR Summary",
+      query: "sheet=ncr-summary",
+      blurb: "NCR summary register.",
+      sheet: "NCR Summary",
+    },
+    {
+      to: "safety",
+      label: "NCR Form",
+      query: "sheet=ncr-form",
+      blurb: "Full NCR form (Safety NCR.xlsx).",
       sheet: "Safety NCR.xlsx",
     },
     {
-      to: "checklist-master",
-      label: "Safety checklists",
-      query: "family=Safety",
-      roles: ["admin", "office", "employee", "client"],
-      blurb: "Create / upload Excel safety checklists and choose for fills.",
+      to: "safety",
+      label: "Observation — Unsafe Act",
+      query: "sheet=observation",
+      blurb: "Unsafe act observation sheet.",
+      sheet: "Observation - Unsafe Act",
     },
     {
-      to: "checklist-logs",
+      to: "safety",
+      label: "HIRA",
+      query: "sheet=hira",
+      blurb: "Hazard identification & risk assessment.",
+      sheet: "HIRA",
+    },
+    {
+      to: "safety",
+      label: "Safety Hours",
+      query: "sheet=safety-hours",
+      blurb: "Safe man-hours & HSE indicators.",
+      sheet: "Safety Hours",
+    },
+    {
+      to: "safety/checklist-master",
+      label: "Safety checklist master",
+      roles: ["admin", "office", "employee", "client"],
+      blurb: "Create / upload Safety checklists only — not Quality QI.",
+    },
+    {
+      to: "safety/checklist-logs",
       label: "Safety fill log",
-      query: "family=Safety",
       blurb: "Safety checklist fills — branded download.",
     },
     {
@@ -352,6 +439,30 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "reports", label: "DPR dashboard", query: "kind=dpr", blurb: "Live KPIs + downloadable client pack.", sheet: "DPR-Sharnam PMC" },
     { to: "reports", label: "WPR dashboard", query: "kind=wpr", blurb: "Weekly register + downloadable pack.", sheet: "WPR File" },
   ],
+  closure: [
+    { to: "closure", label: "Overview", end: true, blurb: "Snag, lessons learnt, closure report KPIs." },
+    {
+      to: "closure",
+      label: "Snaglist",
+      query: "sheet=snaglist",
+      blurb: "Snag register — open/close gate for handover.",
+      sheet: "Snaglist - Sharnam PMC.xlsx",
+    },
+    {
+      to: "closure",
+      label: "Lessons learnt",
+      query: "sheet=lessons",
+      blurb: "Project lessons learnt register.",
+      sheet: "Lessons Learnt - Sharnam PMC.xls",
+    },
+    {
+      to: "closure",
+      label: "Closure report",
+      query: "sheet=closure-report",
+      blurb: "Editable sections + upload Project Closure Report.docx.",
+      sheet: "Project Closure Report.docx",
+    },
+  ],
 };
 
 export const MODULE_META: Record<
@@ -457,6 +568,16 @@ export const MODULE_META: Record<
     ink: "#9A3412",
     icon: "RPT",
   },
+  closure: {
+    title: "Project closure",
+    desc: "Snaglist, lessons learnt, and project closure report — handover and client sign-off pack.",
+    path: "hub/closure",
+    accent: "#4F46E5",
+    soft: "#E0E7FF",
+    glow: "rgba(79,70,229,0.32)",
+    ink: "#312E81",
+    icon: "CLS",
+  },
 };
 
 export const WORKSPACES: {
@@ -474,6 +595,7 @@ export const WORKSPACES: {
   let roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "cost" || key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
+  if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
   return {
     key,
     title: m.title,
@@ -546,4 +668,5 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "cost",
   "finance",
   "reports",
+  "closure",
 ];

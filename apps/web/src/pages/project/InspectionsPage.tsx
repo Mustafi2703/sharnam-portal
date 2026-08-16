@@ -3,19 +3,14 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
+import { QUALITY_SHEET_VIEWS, qualitySheetFromParams } from "../../lib/qualitySheetViews";
 
-type QiView = "qi" | "ncr" | "cube";
-
-/** Raise QA inspection with checklist → becomes fillable form when Ready; drawing + assignee */
+/** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const viewRaw = searchParams.get("view") || "qi";
-  const view: QiView = viewRaw === "ncr" || viewRaw === "cube" ? viewRaw : "qi";
-  const setView = (v: QiView) => {
-    if (v === "qi") setSearchParams({});
-    else setSearchParams({ view: v });
-  };
+  const sheetView = qualitySheetFromParams(searchParams);
+  const sheetKey = sheetView.key;
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [dash, setDash] = useState<any>(null);
@@ -71,14 +66,8 @@ export default function InspectionsPage() {
   }, [id, token]);
 
   const selected = data?.inspections?.find((i: any) => i.id === active);
-  const pageTitle =
-    view === "ncr" ? "NCR / CAR register" : view === "cube" ? "Cube register" : "Quality dashboard & inspections";
-  const pageSubtitle =
-    view === "ncr"
-      ? "Non-conformance / corrective action register from NCR 01 sheet — separate Quality tool."
-      : view === "cube"
-        ? "Cube cast / test results from SPDC Cube Register — separate Quality tool."
-        : "QAP status by week, QI forms (raise → Ready → fill with ≥3 photos), and checklist master for new types / line items.";
+  const pageTitle = sheetView.label;
+  const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   return (
     <div className="space-y-6">
@@ -91,8 +80,11 @@ export default function InspectionsPage() {
             <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
             <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
             <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
-            <Link to={`/projects/${id}/checklist-master?family=QualityInspection`} className="text-sm font-semibold text-brand">
+            <Link to={`/projects/${id}/quality/checklist-master`} className="text-sm font-semibold text-brand">
               Checklist master →
+            </Link>
+            <Link to={`/projects/${id}/quality/checklist-logs`} className="text-sm font-semibold text-brand">
+              QI fill log →
             </Link>
             <Link to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-sm font-semibold text-brand">
               Request QI fill →
@@ -104,70 +96,141 @@ export default function InspectionsPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["qi", "QI dashboard"],
-            ["ncr", "NCR / CAR"],
-            ["cube", "Cube register"],
-          ] as const
-        ).map(([k, label]) => (
+      <div className="flex flex-wrap gap-1">
+        {QUALITY_SHEET_VIEWS.map((s) => (
           <button
-            key={k}
+            key={s.key || "dashboard"}
             type="button"
-            onClick={() => setView(k)}
-            className={`rounded-sm px-3 py-1.5 text-sm font-medium border transition ${
-              view === k ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink hover:border-brand/40"
+            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
+            className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
+              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
             }`}
+            title={s.sheet}
           >
-            {label}
+            {s.label}
           </button>
         ))}
         <Link
           to={`/projects/${id}/hub/quality`}
-          className="rounded-sm px-3 py-1.5 text-sm font-medium border border-line text-steel-muted hover:border-brand/40"
+          className="rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted"
         >
           Quality hub →
         </Link>
       </div>
 
-      {view === "qi" && dash && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            ["QI checklist fills", dash.totals.fills],
-            ["Open QI", dash.totals.openInspections],
-            ["Open NCRs", dash.totals.openNcrs ?? 0],
-            ["Cubes (pass)", `${dash.totals.cubesPass ?? 0}/${dash.totals.cubes ?? 0}`],
-            ["Open fill RFIs", dash.totals.openFillRfis],
-            ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`],
-          ].map(([l, v]) => (
-            <Card key={l as string} className="!p-4">
-              <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-              <div className="text-2xl font-display mt-1">{v as string | number}</div>
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+
+      {sheetKey === "" && dash && (
+        <div className="space-y-4">
+          {dash.workbook?.dashboard && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[
+                ["Week", dash.workbook.dashboard.weekLabel],
+                ["Concreting (m³)", dash.workbook.dashboard.concretingM3],
+                ["Samples last week", dash.workbook.dashboard.samplesLastWeek],
+              ].map(([l, v]) => (
+                <Card key={l as string} className="!p-4 border-brand/20">
+                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                  <div className="text-2xl font-display mt-1">{v as string | number}</div>
+                </Card>
+              ))}
+            </div>
+          )}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            {[
+              ["QI checklist fills", dash.totals.fills],
+              ["Open QI", dash.totals.openInspections],
+              ["Open NCRs", dash.totals.openNcrs ?? 0],
+              ["Cubes (pass)", `${dash.totals.cubesPass ?? 0}/${dash.totals.cubes ?? 0}`],
+              ["Open fill RFIs", dash.totals.openFillRfis],
+              ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`],
+            ].map(([l, v]) => (
+              <Card key={l as string} className="!p-4">
+                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                <div className="text-2xl font-display mt-1">{v as string | number}</div>
+              </Card>
+            ))}
+          </div>
+          {dash.reportMapping && (
+            <Card className="text-xs text-steel-muted">
+              <h3 className="font-semibold text-sm text-ink mb-2">Which fills update Progress Reports (DPR / WPR)?</h3>
+              <ul className="grid sm:grid-cols-2 gap-1.5">
+                {Object.entries(dash.reportMapping).map(([k, v]) => (
+                  <li key={k}>
+                    <span className="font-semibold text-ink">{k}</span> → {String(v)}
+                  </li>
+                ))}
+              </ul>
             </Card>
-          ))}
+          )}
         </div>
       )}
 
-      {view === "qi" && dash?.reportMapping && (
-        <Card className="text-xs text-steel-muted">
-          <h3 className="font-semibold text-sm text-ink mb-2">Which fills update Progress Reports?</h3>
-          <ul className="grid sm:grid-cols-2 gap-1.5">
-            {Object.entries(dash.reportMapping).map(([k, v]) => (
-              <li key={k}>
-                <span className="font-semibold text-ink">{k}</span> → {String(v)}
-              </li>
-            ))}
-          </ul>
+      {sheetKey === "sor-log" && dash?.workbook?.sorLog?.length > 0 && (
+        <Card>
+          <h3 className="font-semibold mb-3">SOR Log (Quality Dashboard.xlsx)</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
+                  <th className="py-2 pr-3">Observation type</th>
+                  <th className="py-2 pr-3">Total</th>
+                  <th className="py-2 pr-3">Open</th>
+                  <th className="py-2 pr-3">Closed</th>
+                  <th className="py-2">Closure rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dash.workbook.sorLog.map((r: any, i: number) => (
+                  <tr key={i} className="border-b border-line/60">
+                    <td className="py-2 pr-3">{r.label}</td>
+                    <td className="py-2 pr-3 font-mono">{r.total}</td>
+                    <td className="py-2 pr-3">{r.open}</td>
+                    <td className="py-2 pr-3">{r.closed}</td>
+                    <td className="py-2 font-mono">{(r.closureRate * 100).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 
-      {(view === "ncr" || (view === "qi" && dash?.ncrs?.length > 0)) && (
+      {sheetKey === "checklist-summary" && dash?.workbook && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <Card>
+            <h3 className="font-semibold mb-3">Checklists filled by discipline (Sheet2)</h3>
+            <ul className="space-y-2 text-sm">
+              {(dash.workbook.checklistByDiscipline || []).map((r: any) => (
+                <li key={r.discipline} className="flex justify-between border-b border-line/60 pb-1">
+                  <span>{r.discipline}</span>
+                  <span className="font-mono font-semibold">{r.filled}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+          <Card>
+            <h3 className="font-semibold mb-3">Checklist catalog (Sheet1)</h3>
+            <div className="max-h-[24rem] overflow-y-auto text-sm space-y-1">
+              {(dash.workbook.checklistCatalog || []).slice(0, 30).map((r: any) => (
+                <div key={r.srNo} className="border-b border-line/40 pb-1">
+                  <span className="font-mono text-xs text-brand mr-2">{r.srNo}</span>
+                  {r.name}
+                  <span className="text-steel-muted text-xs ml-2">· {r.category}</span>
+                </div>
+              ))}
+            </div>
+            <Link to={`/projects/${id}/quality/checklist-master`} className="inline-block mt-3 text-sm font-semibold text-brand">
+              Manage / add checklist line items →
+            </Link>
+          </Card>
+        </div>
+      )}
+
+      {sheetKey === "car-register" && (
         <Card>
-          <h3 className="font-semibold mb-3">
-            NCR / CAR register {view === "ncr" ? "(NCR 01 sheet)" : "(from sheet)"}
-          </h3>
-          {view === "ncr" && canManage && (
+          <h3 className="font-semibold mb-3">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
+          {canManage && (
             <form
               className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 pb-4 border-b border-line"
               onSubmit={async (e) => {
@@ -238,7 +301,7 @@ export default function InspectionsPage() {
                   <th className="py-2 pr-3">Type</th>
                   <th className="py-2 pr-3">Description</th>
                   <th className="py-2 pr-3">Status</th>
-                  {view === "ncr" && canManage && <th className="py-2">Action</th>}
+                  {canManage && <th className="py-2">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -250,7 +313,7 @@ export default function InspectionsPage() {
                     <td className="py-2 pr-3">
                       <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
                     </td>
-                    {view === "ncr" && canManage && (
+                    {canManage && (
                       <td className="py-2">
                         {n.status === "Open" ? (
                           <Button
@@ -281,7 +344,7 @@ export default function InspectionsPage() {
                 ))}
                 {!dash?.ncrs?.length && (
                   <tr>
-                    <td colSpan={view === "ncr" && canManage ? 5 : 4} className="py-6 text-steel-muted">
+                    <td colSpan={canManage ? 5 : 4} className="py-6 text-steel-muted">
                       No NCR rows yet — run <code className="text-xs">npm run db:seed-quality-safety-demo</code> or raise one above.
                     </td>
                   </tr>
@@ -292,11 +355,9 @@ export default function InspectionsPage() {
         </Card>
       )}
 
-      {(view === "cube" || (view === "qi" && dash?.cubes?.length > 0)) && (
+      {sheetKey === "cube-test" && (
         <Card>
-          <h3 className="font-semibold mb-3">
-            Cube register {view === "cube" ? "(SPDC Cube Register)" : "(from sheet)"}
-          </h3>
+          <h3 className="font-semibold mb-3">Cube register (Quality Dashboard · SPDC Cube Register)</h3>
           <div className="overflow-x-auto max-h-[28rem]">
             <table className="w-full text-sm">
               <thead>
@@ -333,11 +394,9 @@ export default function InspectionsPage() {
         </Card>
       )}
 
-      {view === "qi" && (
-        <>
-      {dash?.qap?.length > 0 && (
+      {sheetKey === "qap-detail" && dash?.qap?.length > 0 && (
         <Card>
-          <h3 className="font-semibold mb-3">Quality Assurance Plan · status</h3>
+          <h3 className="font-semibold mb-3">Quality Assurance Plan · Detail</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -369,7 +428,7 @@ export default function InspectionsPage() {
         </Card>
       )}
 
-      {canManage && (
+      {sheetKey === "qap-detail" && canManage && (
         <Card>
           <h3 className="font-semibold mb-3">Add QAP activity</h3>
           <form
@@ -415,6 +474,8 @@ export default function InspectionsPage() {
         </Card>
       )}
 
+      {sheetKey === "qi" && (
+        <>
       <WorkflowStrip
         active={1}
         steps={[
@@ -718,6 +779,26 @@ export default function InspectionsPage() {
           )}
         </Card>
       </div>
+
+      {dash?.recentFills?.length > 0 && (
+        <Card>
+          <h3 className="font-semibold mb-3">Recent QI checklist fills → DPR Quality section</h3>
+          <ul className="text-sm space-y-2">
+            {dash.recentFills.slice(0, 8).map((f: any) => (
+              <li key={f.id} className="flex flex-wrap justify-between gap-2 border-b border-line/60 pb-2">
+                <span>{f.assignment?.template?.name || "Checklist"}</span>
+                <span className="text-steel-muted text-xs">
+                  {f.submittedBy?.fullName} · {new Date(f.createdAt).toLocaleDateString()} · {f.progress?.answered ?? 0}/
+                  {f.progress?.total ?? "?"} lines
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Link to={`/projects/${id}/quality/checklist-logs`} className="inline-block mt-3 text-sm font-semibold text-brand">
+            Open full QI fill log →
+          </Link>
+        </Card>
+      )}
         </>
       )}
     </div>

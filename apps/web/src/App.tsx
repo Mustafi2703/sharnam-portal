@@ -32,6 +32,8 @@ import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 import SafetyPage from "./pages/project/SafetyPage";
+import DrawingRegisterPage from "./pages/project/DrawingRegisterPage";
+import ProjectClosurePage from "./pages/project/ProjectClosurePage";
 import ProgressPage from "./pages/project/ProgressPage";
 import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
 import ChecklistLogsPage from "./pages/project/ChecklistLogsPage";
@@ -131,9 +133,11 @@ export default function App() {
                   <Route path="hub/cost" element={<ModuleHubPage moduleKey="cost" />} />
                   <Route path="hub/finance" element={<ModuleHubPage moduleKey="finance" />} />
                   <Route path="hub/reports" element={<ModuleHubPage moduleKey="reports" />} />
+                  <Route path="hub/closure" element={<ModuleHubPage moduleKey="closure" />} />
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />
+                  <Route path="drawings/register" element={<DrawingRegisterPage />} />
                   <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />
                   <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
                   <Route path="drawings/library" element={<DrawingsLibraryPage />} />
@@ -144,7 +148,12 @@ export default function App() {
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="qap" element={<QapPage />} />
                   <Route path="safety" element={<SafetyPage />} />
+                  <Route path="closure" element={<ProjectClosurePage />} />
                   <Route path="progress" element={<ProgressPage />} />
+                  <Route path="quality/checklist-master" element={<ChecklistMasterPage lockedFamily="QualityInspection" />} />
+                  <Route path="safety/checklist-master" element={<ChecklistMasterPage lockedFamily="Safety" />} />
+                  <Route path="quality/checklist-logs" element={<ChecklistLogsPage lockedFamily="QualityInspection" />} />
+                  <Route path="safety/checklist-logs" element={<ChecklistLogsPage lockedFamily="Safety" />} />
                   <Route path="checklist-master" element={<ChecklistMasterPage />} />
                   <Route path="checklist-logs" element={<ChecklistLogsPage />} />
                   <Route path="rfis" element={<RfisPage />} />

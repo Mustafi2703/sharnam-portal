@@ -27,6 +27,7 @@ const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string }[]
   { key: "cost", label: "Cost", path: "hub/cost" },
   { key: "finance", label: "Finance", path: "hub/finance" },
   { key: "reports", label: "Reports", path: "hub/reports" },
+  { key: "closure", label: "Closure", path: "hub/closure" },
 ];
 
 function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home" {
@@ -34,14 +35,19 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
   const tool = seg[2] || "";
   if (!tool) return "home";
   if (tool === "hub" && seg[3] && MODULE_META[seg[3] as WorkspaceKey]) return seg[3] as WorkspaceKey;
-  if (["drawings", "coordination"].includes(tool)) return "drawings";
+  if (["drawings", "coordination"].includes(tool) || pathname.includes("/drawings/register")) return "drawings";
+  if (tool === "closure") return "closure";
   if (tool === "checklist-master") {
+    if (pathname.includes("/safety/checklist-master")) return "safety";
+    if (pathname.includes("/quality/checklist-master")) return "quality";
     const q = new URLSearchParams(search).get("family");
     if (q === "Safety") return "safety";
     if (q === "DrawingCheck") return "drawings";
     return "quality";
   }
   if (tool === "checklist-logs") {
+    if (pathname.includes("/safety/checklist-logs")) return "safety";
+    if (pathname.includes("/quality/checklist-logs")) return "quality";
     const q = new URLSearchParams(search).get("family");
     if (q === "Safety") return "safety";
     if (q === "DrawingCheck" || q === "SiteExecution") return "drawings";

@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { SAFETY_SHEET_VIEWS, safetySheetFromParams } from "../../lib/safetySheetViews";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
@@ -74,11 +75,13 @@ function recordToForm(r: any): SafetyForm {
 export default function SafetyPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const ncrView = searchParams.get("view") === "ncr";
+  const sheetView = safetySheetFromParams(searchParams);
+  const sheetKey = sheetView.key;
+  const ncrView = sheetKey === "ncr-summary" || sheetKey === "ncr-form" || searchParams.get("view") === "ncr";
   const { token, user } = useAuth();
   const [data, setData] = useState<{ records: any[]; stats: any } | null>(null);
   const [dash, setDash] = useState<any>(null);
-  const [filter, setFilter] = useState(ncrView ? "NCR" : "All");
+  const [filter, setFilter] = useState("All");
   const [active, setActive] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm(ncrView));
   const [editForm, setEditForm] = useState<SafetyForm | null>(null);
@@ -87,11 +90,19 @@ export default function SafetyPage() {
   const canEdit = canCreate;
 
   useEffect(() => {
-    if (ncrView) {
-      setFilter("NCR");
-      setForm(emptyForm(true));
-    }
-  }, [ncrView]);
+    const defaultType =
+      sheetKey === "site-instruction"
+        ? "Site Instruction"
+        : sheetKey === "hira"
+          ? "JHA"
+          : sheetKey === "ncr-summary" || sheetKey === "ncr-form"
+            ? "NCR"
+            : sheetKey === "observation" || sheetKey === "unsafe-act-summary"
+              ? "Observation"
+              : "Observation";
+    setForm((f) => ({ ...emptyForm(ncrView), recordType: defaultType }));
+    setFilter("All");
+  }, [sheetKey, ncrView]);
 
   const load = async () => {
     const [res, d] = await Promise.all([
@@ -107,23 +118,30 @@ export default function SafetyPage() {
     void load();
   }, [id, token]);
 
+  const filtered = useMemo(() => {
+    const rows = data?.records || [];
+    if (sheetView.kpiOnly) return [];
+    if (sheetView.filter) return rows.filter(sheetView.filter);
+    if (filter === "All") return rows;
+    if (filter === "Open" || filter === "Closed") return rows.filter((r) => r.status === filter);
+    return rows.filter((r) => r.recordType === filter);
+  }, [data, filter, sheetView]);
+
+  const selected = data?.records.find((r) => r.id === active);
+  const registerRows = filtered;
+  const sheetHasRegister = !sheetView.kpiOnly && sheetKey !== "";
+
   useEffect(() => {
     const row = data?.records.find((r) => r.id === active);
     setEditForm(row ? recordToForm(row) : null);
   }, [active, data]);
 
-  const filtered = useMemo(() => {
-    const rows = data?.records || [];
-    if (ncrView) {
-      return rows.filter((r) => /ncr/i.test(r.recordType || "") || /ncr/i.test(r.title || ""));
+  useEffect(() => {
+    if (!sheetHasRegister) return;
+    if (filtered.length && !filtered.some((r) => r.id === active)) {
+      setActive(filtered[0].id);
     }
-    if (filter === "All") return rows;
-    if (filter === "Open" || filter === "Closed") return rows.filter((r) => r.status === filter);
-    return rows.filter((r) => r.recordType === filter);
-  }, [data, filter, ncrView]);
-
-  const selected = data?.records.find((r) => r.id === active);
-  const isNcrRecord = (r: any) => /ncr/i.test(r?.recordType || "") || /ncr/i.test(r?.title || "");
+  }, [sheetKey, filtered, active, sheetHasRegister]);
 
   async function createRecord(e: FormEvent) {
     e.preventDefault();
@@ -162,73 +180,106 @@ export default function SafetyPage() {
     }
   }
 
-  const ncrTableRows = filtered.filter(isNcrRecord);
+  const showNcrFields = ncrView || form.recordType === "NCR";
+  const formTypes =
+    sheetView.filter && sheetKey === "site-instruction"
+      ? ["Site Instruction"]
+      : sheetView.filter && sheetKey === "hira"
+        ? ["JHA"]
+        : sheetView.filter && (sheetKey === "ncr-summary" || sheetKey === "ncr-form")
+          ? ["NCR"]
+          : sheetView.filter && (sheetKey === "observation" || sheetKey === "unsafe-act-summary")
+            ? ["Observation"]
+            : TYPES;
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Safety module"
-        title={ncrView ? "Safety NCR register" : "Safety dashboard & register"}
-        subtitle={
-          ncrView
-            ? "Safety NCR sheet (Safety NCR.xlsx / NCR Summary) — raise, edit, and close non-conformance records."
-            : "One-pager dashboard from Safety Dashboard.xlsx — observations, site instructions, unsafe acts, and NCR summary."
-        }
+        title={sheetView.label}
+        subtitle={`${sheetView.sheet} — seeded from client Safety Dashboard / Safety NCR workbooks.`}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
             <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
-            <Badge tone="brand">{dash?.totals?.ncrLike ?? 0} NCR</Badge>
-            <Badge tone="neutral">{dash?.totals?.checklistFills ?? 0} checklist fills</Badge>
+            <Badge tone="brand">{filtered.length} in this sheet</Badge>
+            <Badge tone="neutral">{dash?.totals?.checklistFills ?? 0} safety checklist fills</Badge>
             <ReportExportButtons projectId={id} kind="safety" compact />
-            <Link to={`/projects/${id}/checklist-logs?family=Safety`} className="text-sm font-semibold text-brand">
-              Fill log & progress →
+            <Link to={`/projects/${id}/safety/checklist-logs`} className="text-sm font-semibold text-brand">
+              Safety fill log →
             </Link>
-            <Link to={`/projects/${id}/checklist-master?family=Safety`} className="text-sm font-semibold text-brand">
-              Safety checklists →
+            <Link to={`/projects/${id}/safety/checklist-master`} className="text-sm font-semibold text-brand">
+              Safety checklist master →
             </Link>
             <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-sm font-semibold text-brand">
-              Raise fill RFI →
+              Raise Safety RFI →
             </Link>
           </div>
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setSearchParams({});
-            setFilter("All");
-          }}
-          className={`rounded-sm px-3 py-1.5 text-sm font-medium border ${
-            !ncrView ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
-          }`}
-        >
-          Dashboard
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setSearchParams({ view: "ncr" });
-            setFilter("NCR");
-          }}
-          className={`rounded-sm px-3 py-1.5 text-sm font-medium border ${
-            ncrView ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
-          }`}
-        >
-          Safety NCR
-        </button>
+      <div className="flex flex-wrap gap-1">
+        {SAFETY_SHEET_VIEWS.map((s) => (
+          <button
+            key={s.key || "one-pager"}
+            type="button"
+            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
+            className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
+              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
+            }`}
+            title={s.sheet}
+          >
+            {s.label}
+          </button>
+        ))}
         <Link
           to={`/projects/${id}/hub/safety`}
-          className="rounded-sm px-3 py-1.5 text-sm font-medium border border-line text-steel-muted"
+          className="rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted"
         >
           Safety hub →
         </Link>
       </div>
 
-      {!ncrView && dash && (
+      {sheetView.kpiOnly && dash?.onePager && (
+        <Card>
+          <h3 className="font-semibold mb-3">Safety Hours — HSE indicators</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              ["Safe man-hours (cumulative)", dash.onePager.safeManHours],
+              ["Toolbox talks", dash.onePager.toolboxTalks],
+              ["Site safety instructions", dash.onePager.siteInstructions],
+              ["Incidents (one pager)", dash.onePager.totalIncidents],
+              ["Unsafe acts (one pager)", dash.onePager.totalUnsafeActs],
+              ["NCRs (one pager)", dash.onePager.totalNcrs],
+            ].map(([l, v]) => (
+              <div key={l as string} className="rounded-lg border border-line p-3">
+                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                <div className="text-xl font-display mt-1">{v as number}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {!sheetView.kpiOnly && sheetKey === "" && dash && (
         <div className="space-y-4">
+          {dash.onePager && (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+              {[
+                ["Incidents (sheet)", dash.onePager.totalIncidents],
+                ["Unsafe acts (sheet)", dash.onePager.totalUnsafeActs],
+                ["NCRs (sheet)", dash.onePager.totalNcrs],
+                ["Safe man-hours", dash.onePager.safeManHours],
+                ["Toolbox talks", dash.onePager.toolboxTalks],
+                ["Site instructions", dash.onePager.siteInstructions],
+              ].map(([l, v]) => (
+                <Card key={l as string} className="!p-4 border-brand/20">
+                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                  <div className="text-2xl font-display mt-1">{v as number}</div>
+                </Card>
+              ))}
+            </div>
+          )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             {[
               ["Total records", dash.totals.records],
@@ -259,10 +310,10 @@ export default function SafetyPage() {
 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 
-      {canCreate && (
+      {sheetHasRegister && canCreate && (
         <Card>
           <h3 className="font-semibold mb-1">
-            {ncrView || form.recordType === "NCR" ? "Raise Safety NCR (Safety NCR.xlsx form)" : "Log safety record"}
+            {showNcrFields ? "Raise Safety NCR (Safety NCR.xlsx form)" : `Log ${sheetView.label.toLowerCase()} record`}
           </h3>
           <p className="text-xs text-steel-muted mb-3">
             Reference sheets: Safety NCR.xlsx · Safety Dashboard.xlsx — sync via{" "}
@@ -270,7 +321,7 @@ export default function SafetyPage() {
           </p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
             <Select value={form.recordType} onChange={(e) => setForm({ ...form, recordType: e.target.value })}>
-              {TYPES.map((t) => (
+              {formTypes.map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </Select>
@@ -279,7 +330,7 @@ export default function SafetyPage() {
                 <option key={s}>{s}</option>
               ))}
             </Select>
-            {(ncrView || form.recordType === "NCR") && (
+            {showNcrFields && (
               <>
                 <Input
                   placeholder="NCR number (e.g. Safari-Safety NCR-001)"
@@ -322,7 +373,7 @@ export default function SafetyPage() {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               required
             />
-            {(ncrView || form.recordType === "NCR") && (
+            {showNcrFields && (
               <>
                 <TextArea
                   className="sm:col-span-2"
@@ -388,34 +439,36 @@ export default function SafetyPage() {
         </Card>
       )}
 
-      {ncrView && (
+      {sheetHasRegister && (
         <Card>
-          <h3 className="font-semibold mb-3">NCR Summary register (Safety Dashboard.xlsx)</h3>
+          <h3 className="font-semibold mb-3">
+            {sheetView.label} register ({sheetView.sheet})
+          </h3>
           <div className="overflow-x-auto max-h-[28rem]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
-                  <th className="py-2 pr-3">NCR / title</th>
+                  <th className="py-2 pr-3">Ref / title</th>
+                  <th className="py-2 pr-3">Type</th>
                   <th className="py-2 pr-3">Location</th>
                   <th className="py-2 pr-3">Category</th>
                   <th className="py-2 pr-3">Description</th>
-                  <th className="py-2 pr-3">Time impact</th>
                   <th className="py-2 pr-3">Status</th>
                   {canEdit && <th className="py-2">Action</th>}
                 </tr>
               </thead>
               <tbody>
-                {ncrTableRows.map((n) => (
+                {registerRows.map((n) => (
                   <tr
                     key={n.id}
                     className={`border-b border-line/60 cursor-pointer ${active === n.id ? "bg-brand-soft/40" : ""}`}
                     onClick={() => setActive(n.id)}
                   >
                     <td className="py-2 pr-3 font-mono text-xs">{n.ncrNumber || n.title}</td>
+                    <td className="py-2 pr-3">{n.recordType || "—"}</td>
                     <td className="py-2 pr-3">{n.location || "—"}</td>
                     <td className="py-2 pr-3">{n.category || "—"}</td>
                     <td className="py-2 pr-3 max-w-xs truncate">{n.description || "—"}</td>
-                    <td className="py-2 pr-3">{n.timeImpact || "—"}</td>
                     <td className="py-2 pr-3">
                       <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
                     </td>
@@ -445,10 +498,10 @@ export default function SafetyPage() {
                     )}
                   </tr>
                 ))}
-                {!ncrTableRows.length && (
+                {!registerRows.length && (
                   <tr>
                     <td colSpan={canEdit ? 7 : 6} className="py-6 text-steel-muted">
-                      No NCR rows — run seed or raise one above.
+                      No rows for this sheet — run seed or add one above.
                     </td>
                   </tr>
                 )}
@@ -458,6 +511,8 @@ export default function SafetyPage() {
         </Card>
       )}
 
+      {sheetHasRegister && (
+        <>
       <div className="flex flex-wrap gap-1">
         {["All", "Open", "Closed", ...TYPES].map((f) => (
           <button
@@ -675,6 +730,8 @@ export default function SafetyPage() {
           )}
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }

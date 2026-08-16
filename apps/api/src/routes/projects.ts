@@ -463,6 +463,156 @@ drawingsRouter.post(
   }
 );
 
+/** Add GFC register line without file — upload revision later after Drawing Check */
+drawingsRouter.post(
+  "/project/:projectId/register-line",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Not found" });
+
+    const { drawingNumber, title, discipline, buildingArea, tlNo, revisionNumber } = req.body || {};
+    if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
+
+    const rev = revisionNumber || "R0";
+    const drawing = await prisma.drawing.upsert({
+      where: { projectId_drawingNumber: { projectId: project.id, drawingNumber } },
+      create: {
+        projectId: project.id,
+        drawingNumber,
+        title,
+        discipline: discipline || "Architecture",
+        buildingArea: buildingArea || null,
+        tlNo: tlNo || null,
+        currentRev: rev,
+        status: "Draft",
+        isPublished: false,
+        folderPath: `Drawings/${discipline || "Architecture"}`,
+      },
+      update: {
+        title,
+        discipline: discipline || undefined,
+        buildingArea: buildingArea !== undefined ? buildingArea || null : undefined,
+        tlNo: tlNo !== undefined ? tlNo || null : undefined,
+      },
+      include: {
+        revisions: {
+          orderBy: { createdAt: "asc" },
+          include: { uploadedBy: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    await audit("drawing.register_line", {
+      userId: req.user!.id,
+      entity: "Drawing",
+      entityId: drawing.id,
+      meta: { drawingNumber, title, discipline },
+    });
+    res.status(201).json(drawing);
+  }
+);
+
+drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) => {
+  const projectId = req.params.projectId;
+  const { loadDrawingRegisterDashboard } = await import("../services/drawingRegisterSheets.js");
+  const [lines, dashboard] = await Promise.all([
+    prisma.drawingRegisterLine.findMany({
+      where: { projectId },
+      orderBy: { srNo: "asc" },
+      include: { drawing: { select: { id: true, isPublished: true, currentRev: true } } },
+    }),
+    Promise.resolve(loadDrawingRegisterDashboard()),
+  ]);
+  res.json({
+    dashboard,
+    totals: {
+      lines: lines.length,
+      gfc: lines.filter((l) => /gfc|good for construction/i.test(l.drawingType || "")).length,
+      critical: lines.filter((l) => /yes/i.test(l.criticalDrawing || "")).length,
+      linkedGfc: lines.filter((l) => l.drawingId).length,
+    },
+    lines,
+  });
+});
+
+drawingsRouter.post(
+  "/project/:projectId/register-lines",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    if (!body.drawingNumber || !body.drawingTitle) {
+      return res.status(400).json({ error: "drawingNumber and drawingTitle required" });
+    }
+    const row = await prisma.drawingRegisterLine.upsert({
+      where: {
+        projectId_drawingNumber: {
+          projectId: req.params.projectId,
+          drawingNumber: body.drawingNumber,
+        },
+      },
+      create: {
+        projectId: req.params.projectId,
+        srNo: body.srNo ? Number(body.srNo) : null,
+        projectPackage: body.projectPackage || null,
+        building: body.building || null,
+        discipline: body.discipline || null,
+        drawingNumber: body.drawingNumber,
+        drawingTitle: body.drawingTitle,
+        drawingType: body.drawingType || null,
+        consultantName: body.consultantName || null,
+        revisionNumber: body.revisionNumber || null,
+        revisionDate: body.revisionDate ? new Date(body.revisionDate) : null,
+        revisionDescription: body.revisionDescription || null,
+        latestRevision: body.latestRevision || null,
+        plannedSubmissionDate: body.plannedSubmissionDate ? new Date(body.plannedSubmissionDate) : null,
+        actualSubmissionDate: body.actualSubmissionDate ? new Date(body.actualSubmissionDate) : null,
+        submissionDelayDays: body.submissionDelayDays != null ? Number(body.submissionDelayDays) : null,
+        delayResponsibility: body.delayResponsibility || null,
+        issuedTo: body.issuedTo || null,
+        issueDate: body.issueDate ? new Date(body.issueDate) : null,
+        copiesCount: body.copiesCount != null ? Number(body.copiesCount) : null,
+        criticalDrawing: body.criticalDrawing || null,
+        remarks: body.remarks || null,
+        source: "Portal",
+      },
+      update: {
+        drawingTitle: body.drawingTitle,
+        discipline: body.discipline,
+        drawingType: body.drawingType,
+        consultantName: body.consultantName,
+        revisionNumber: body.revisionNumber,
+        revisionDescription: body.revisionDescription,
+        criticalDrawing: body.criticalDrawing,
+        remarks: body.remarks,
+      },
+    });
+    res.status(201).json(row);
+  }
+);
+
+drawingsRouter.patch(
+  "/register-lines/:id",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const data: Record<string, unknown> = { ...body };
+    for (const d of [
+      "revisionDate",
+      "plannedSubmissionDate",
+      "actualSubmissionDate",
+      "issueDate",
+    ] as const) {
+      if (body[d] !== undefined) data[d] = body[d] ? new Date(body[d]) : null;
+    }
+    const row = await prisma.drawingRegisterLine.update({
+      where: { id: req.params.id },
+      data,
+    });
+    res.json(row);
+  }
+);
+
 drawingsRouter.post("/:id/publish", requireRoles("admin", "office", "employee", "site_employee", "vendor"), async (req: AuthedRequest, res) => {
   const drawing = await prisma.drawing.update({
     where: { id: req.params.id },

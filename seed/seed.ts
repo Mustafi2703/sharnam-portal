@@ -5,7 +5,8 @@ import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
 import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
-import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr } from "./qualitySafetySheets.ts";
+import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr, seedSafetyFromWorkbooksForAllDemoProjects } from "./qualitySafetySheets.ts";
+import { seedClosureDrawingsForDemoProjects } from "./closureDrawingsSeed.ts";
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedCrmComparative } from "./crmComparativeSeed.ts";
@@ -1397,7 +1398,6 @@ async function main() {
   try {
     const { project } = await seedProjectAndCost(users);
     console.log("Demo project:", project.code, project.name);
-    await seedCrmComparative(prisma);
     const officeId = users.find((u) => u.role === "office")?.id;
     if (officeId) {
       await seedFinanceRaCopDemo(prisma, project.id, officeId);
@@ -1409,6 +1409,24 @@ async function main() {
       "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",
       e instanceof Error ? e.message : e
     );
+  }
+
+  try {
+    await seedCrmComparative(prisma);
+  } catch (e) {
+    console.warn("seedCrmComparative failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    await seedSafetyFromWorkbooksForAllDemoProjects(prisma, EXCEL_ROOT);
+  } catch (e) {
+    console.warn("seedSafetyFromWorkbooksForAllDemoProjects failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    await seedClosureDrawingsForDemoProjects(prisma);
+  } catch (e) {
+    console.warn("seedClosureDrawingsForDemoProjects failed:", e instanceof Error ? e.message : e);
   }
 
   console.log("Done.");

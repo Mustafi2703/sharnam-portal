@@ -19,10 +19,10 @@ const FAMILIES = [
 type Family = (typeof FAMILIES)[number]["value"];
 
 /** Create / edit checklist types, line items, QA instructions — per module family */
-export default function ChecklistMasterPage() {
+export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: Family } = {}) {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const family = (searchParams.get("family") as Family) || "QualityInspection";
+  const family = lockedFamily || ((searchParams.get("family") as Family) || "QualityInspection");
   const { token, user } = useAuth();
   const [templates, setTemplates] = useState<any[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -127,12 +127,34 @@ export default function ChecklistMasterPage() {
   return (
     <div className="space-y-6 portal-fill-layout">
       <PageHeader
-        eyebrow={id ? "Project checklist master" : "Global master · all projects"}
-        title="Create, upload & choose checklists"
+        eyebrow={
+          lockedFamily === "Safety"
+            ? id
+              ? "Safety · checklist master"
+              : "Global · Safety checklists"
+            : lockedFamily === "QualityInspection"
+              ? id
+                ? "Quality · checklist master"
+                : "Global · Quality checklists"
+              : id
+                ? "Project checklist master"
+                : "Global master · all projects"
+        }
+        title={
+          lockedFamily === "Safety"
+            ? "Safety checklist master"
+            : lockedFamily === "QualityInspection"
+              ? "Quality checklist master"
+              : "Create, upload & choose checklists"
+        }
         subtitle={
-          id
-            ? "Templates are org-wide — assign to this project after editing. Quality and Safety support Client create/upload."
-            : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
+          lockedFamily === "Safety"
+            ? "Safety-only templates — separate from Quality QI checklists. Upload Excel, assign to project, raise Safety checklist RFIs."
+            : lockedFamily === "QualityInspection"
+              ? "Quality inspection (QI) templates only — separate from Safety. Client can create/upload QI checklists."
+              : id
+                ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
+                : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
         }
         actions={
           !id ? (
@@ -143,21 +165,43 @@ export default function ChecklistMasterPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        {FAMILIES.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => setSearchParams({ family: f.value })}
-            className={`px-3 py-1.5 text-sm font-semibold border rounded-sm ${
-              family === f.value ? "text-white border-transparent" : "bg-white border-line"
-            }`}
-            style={family === f.value ? { background: "var(--mod-accent, var(--color-brand))" } : undefined}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      {!lockedFamily && (
+        <div className="flex flex-wrap gap-2">
+          {FAMILIES.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setSearchParams({ family: f.value })}
+              className={`px-3 py-1.5 text-sm font-semibold border rounded-sm ${
+                family === f.value ? "text-white border-transparent" : "bg-white border-line"
+              }`}
+              style={family === f.value ? { background: "var(--mod-accent, var(--color-brand))" } : undefined}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {lockedFamily && id && (
+        <p className="text-sm text-steel-muted">
+          {lockedFamily === "Safety" ? (
+            <>
+              Quality checklists live under{" "}
+              <Link to={`/projects/${id}/quality/checklist-master`} className="text-brand font-semibold">
+                Quality checklist master →
+              </Link>
+            </>
+          ) : (
+            <>
+              Safety checklists live under{" "}
+              <Link to={`/projects/${id}/safety/checklist-master`} className="text-brand font-semibold">
+                Safety checklist master →
+              </Link>
+            </>
+          )}
+        </p>
+      )}
 
       {msg && <p className="text-sm text-steel-muted">{msg}</p>}
 

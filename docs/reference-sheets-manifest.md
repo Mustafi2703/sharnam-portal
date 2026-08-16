@@ -21,8 +21,9 @@ This copies canonical files into:
 
 | File | Portal module |
 |------|----------------|
-| Safety Dashboard.xlsx | Safety dashboard KPIs, Site Instruction, Unsafe Act Summary, NCR Summary |
+| Safety Dashboard.xlsx | Safety dashboard KPIs, Site Instruction, Unsafe Act Summary, NCR Summary, HIRA, Safety Hours |
 | Safety NCR.xlsx | Safety NCR form + Observation sheet |
+| Comparative Statement - R2.xlsx | CRM bid management comparative + vendor BOQs |
 | NCR 01 .xlsx | Quality NCR / CAR register |
 | SPDC CUBE REGISTER (1).xlsx | Cube register |
 | Quality Assurance Plan Week 50.xlsx | QAP activities |

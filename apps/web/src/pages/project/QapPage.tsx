@@ -77,7 +77,7 @@ export default function QapPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="ok">Always available</Badge>
-            <Link to={`/projects/${id}/checklist-master?family=QualityInspection`}>
+            <Link to={`/projects/${id}/quality/checklist-master`}>
               <Button type="button" variant="secondary">
                 Checklist master →
               </Button>

@@ -118,12 +118,31 @@ export type ImportedSheet = {
 export function resolveR2TemplatePath(): string {
   const candidates = [
     path.join(process.cwd(), "Sharnam_modules_docs", "Comparative Statement - R2.xlsx"),
+    path.join(process.cwd(), "seed", "data", "Comparative Statement - R2.xlsx"),
     path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
   throw new Error("Comparative Statement R2 template not found");
+}
+
+function numCell(cell?: SheetCell): number {
+  const n = Number(cell?.computed ?? cell?.raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Summary tab — keep Excel cached numeric values (cross-sheet refs break evaluateAllRows). */
+function parseR2SummaryWorksheet(ws: XLSX.WorkSheet): ImportedSheet {
+  const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
+  const rows: SheetCell[][] = aoa.map((src) =>
+    src.map((c) => {
+      if (typeof c === "number") return { raw: String(c), computed: c };
+      const t = String(c ?? "").trim();
+      return t ? { raw: t } : { raw: "" };
+    })
+  );
+  return { headers: [], rows, sheetName: "summary" };
 }
 
 function parseWorksheet(ws: XLSX.WorkSheet, sheetName: string): ImportedSheet {
@@ -206,7 +225,7 @@ export function importR2WorkbookFromBuffer(buffer: Buffer, vendorLabels?: string
   const summaryWs = findWorksheet(wb, "summary") || wb.Sheets[wb.SheetNames[0]];
   const masterWs = findWorksheet(wb, "BOQ") || wb.Sheets[wb.SheetNames[1]];
 
-  const summary = parseWorksheet(summaryWs, "summary");
+  const summary = parseR2SummaryWorksheet(summaryWs);
   const masterBoq = parseMasterBoqSheet(masterWs);
 
   if (vendorLabels?.length) {
@@ -321,12 +340,11 @@ export function parseR2SummarySheet(headers: string[], rows: SheetCell[][]): Com
     const sr = String(row[0]?.raw ?? "").trim();
     const section = String(row[1]?.raw ?? "").trim();
     const title = String(row[2]?.raw ?? "").trim();
-    const descLine = `${section} ${title}`.toUpperCase();
+    const line0 = sr.toUpperCase();
 
-    if (descLine.includes("TOTAL AMOUNT OF TENDER")) {
+    if (line0.includes("TOTAL AMOUNT OF TENDER")) {
       for (let i = 0; i < vendorLabels.length; i++) {
-        const val = Number(row[3 + i]?.computed ?? row[3 + i]?.raw ?? 0);
-        if (Number.isFinite(val)) grandTotals[vendorLabels[i]] = val;
+        grandTotals[vendorLabels[i]] = numCell(row[3 + i]);
       }
       continue;
     }
@@ -336,8 +354,7 @@ export function parseR2SummarySheet(headers: string[], rows: SheetCell[][]): Com
 
     const totals: Record<string, number> = {};
     for (let i = 0; i < vendorLabels.length; i++) {
-      const val = Number(row[3 + i]?.computed ?? row[3 + i]?.raw ?? 0);
-      totals[vendorLabels[i]] = Number.isFinite(val) ? val : 0;
+      totals[vendorLabels[i]] = numCell(row[3 + i]);
     }
     sectionTotals.push({ section, title, totals });
   }

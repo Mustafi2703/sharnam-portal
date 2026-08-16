@@ -242,7 +242,7 @@ export function ToolRightPanel({
             { label: "Log safety observation", to: "safety", primary: true },
             {
               label: "Safety checklists",
-              onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=Safety`),
+              onClick: () => navigate(`/projects/${ctx.projectId}/safety/checklist-master`),
               secondary: true,
             },
             {
@@ -284,7 +284,7 @@ export function ToolRightPanel({
           { label: "Quality Inspections", to: "inspections", primary: true },
           {
             label: "Checklist master (Excel)",
-            onClick: () => navigate(`/projects/${ctx.projectId}/checklist-master?family=QualityInspection`),
+            onClick: () => navigate(`/projects/${ctx.projectId}/quality/checklist-master`),
             secondary: true,
           },
           {

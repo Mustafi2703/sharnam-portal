@@ -1013,7 +1013,8 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req, re
 /** Quality + Safety module dashboards */
 checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes] = await Promise.all([
+  const { loadQualityDashboardWorkbook } = await import("../services/qualityDashboardSheets.js");
+  const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, workbook] = await Promise.all([
     prisma.checklistSubmission.findMany({
       where: { assignment: { projectId, template: { checklistType: "QualityInspection" } } },
       include: {
@@ -1034,6 +1035,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     }),
     prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
     prisma.cubeTest.findMany({ where: { projectId }, orderBy: { castDate: "desc" }, take: 40 }),
+    Promise.resolve(loadQualityDashboardWorkbook()),
   ]);
   const byDay: Record<string, number> = {};
   for (const f of qiFills) {
@@ -1041,6 +1043,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     byDay[d] = (byDay[d] || 0) + 1;
   }
   res.json({
+    workbook,
     totals: {
       fills: qiFills.length,
       siteExecutionFills: siteFills,
@@ -1074,7 +1077,8 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
 
 checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const [records, allRecords, safetyFills, openRfis] = await Promise.all([
+  const { loadSafetyDashboardKpis } = await import("../services/safetyDashboardSheets.js");
+  const [records, allRecords, safetyFills, openRfis, onePagerSheet] = await Promise.all([
     prisma.safetyRecord.findMany({
       where: { projectId },
       orderBy: { occurredAt: "desc" },
@@ -1089,9 +1093,19 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
       where: { assignment: { projectId, template: { checklistType: "Safety" } } },
     }),
     prisma.rfi.count({ where: { projectId, status: "Open", rfiKind: "SafetyChecklist" } }),
+    Promise.resolve(loadSafetyDashboardKpis()),
   ]);
   const isNcr = (r: { recordType: string; title: string }) => /ncr/i.test(r.recordType) || /ncr/i.test(r.title);
+  const onePager = onePagerSheet
+    ? {
+        ...onePagerSheet,
+        totalIncidents: onePagerSheet.totalIncidents || allRecords.filter((r) => r.recordType === "Incident").length,
+        totalUnsafeActs: onePagerSheet.totalUnsafeActs || allRecords.filter((r) => r.recordType === "Observation").length,
+        totalNcrs: onePagerSheet.totalNcrs || allRecords.filter(isNcr).length,
+      }
+    : null;
   res.json({
+    onePager,
     totals: {
       records: allRecords.length,
       open: allRecords.filter((r) => r.status === "Open").length,

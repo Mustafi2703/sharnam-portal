@@ -56,7 +56,7 @@ function parseSafetyRegisterTable(rows: unknown[][], recordType: string, source:
       recordType,
       title: `${recordType} #${sn} — ${location || "Site"}`.slice(0, 200),
       description,
-      severity: /height|pit|electrical/i.test(description + s(r[6])) ? "High" : "Medium",
+      severity: /height|pit|electrical|injury|major/i.test(description + s(r[6])) ? "High" : "Medium",
       status,
       location: location || null,
       category: s(r[6], 120) || null,
@@ -67,6 +67,61 @@ function parseSafetyRegisterTable(rows: unknown[][], recordType: string, source:
       responsibleParty: s(r[2], 120) || null,
       occurredAt: excelDate(r[4]) || new Date(),
       closedAt: status === "Closed" ? new Date() : null,
+      reportedById,
+      source,
+      ncrNumber: recordType === "NCR" ? `Safety-NCR-${sn}` : null,
+    });
+  }
+  return out;
+}
+
+function parseHiraRegisterTable(rows: unknown[][], reportedById: string, projectId: string, source: string) {
+  const out: Array<Record<string, unknown>> = [];
+  let activity = "";
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const sr = s(r[0], 20);
+    const act = s(r[1], 200);
+    const riskId = s(r[2], 40);
+    const hazard = s(r[3], 400);
+    const consequence = s(r[4], 200);
+    if (act) activity = act;
+    if (!hazard && !consequence) continue;
+    if (/^sr\.?\s*no/i.test(sr) || /^name of project/i.test(sr)) continue;
+    const title = `${riskId || sr || "Risk"} — ${activity || hazard}`.slice(0, 200);
+    out.push({
+      projectId,
+      recordType: "JHA",
+      title,
+      description: [hazard, consequence].filter(Boolean).join(" · "),
+      category: activity || sr || null,
+      severity: /major|fatality|fire|electrical/i.test(`${hazard} ${consequence}`) ? "High" : "Medium",
+      status: "Open",
+      location: "Site",
+      reportedById,
+      source,
+    });
+  }
+  return out;
+}
+
+function parseObservationUnsafeActSheet(rows: unknown[][], reportedById: string, projectId: string, source: string) {
+  const out: Array<Record<string, unknown>> = [];
+  const location = s(rows[1]?.[2], 120) || "Site";
+  const reportNo = s(rows[6]?.[2], 80);
+  for (let i = 0; i < rows.length; i++) {
+    const actType = s(rows[i]?.[3], 120);
+    if (!actType || /others|specify|\[e\.g/i.test(actType)) continue;
+    if (!/height|tool|ppe|housekeeping|electrical|scaffold|excavation/i.test(actType)) continue;
+    out.push({
+      projectId,
+      recordType: "Observation",
+      title: `Unsafe act — ${actType}`,
+      description: `From Observation - Unsafe Act sheet${reportNo ? ` (${reportNo})` : ""}.`,
+      category: actType,
+      severity: /height|electrical/i.test(actType) ? "High" : "Low",
+      status: "Open",
+      location,
       reportedById,
       source,
     });
@@ -87,13 +142,15 @@ async function seedSafetyRecordsFromWorkbooks(
     const wb = XLSX.readFile(ncrFile);
     const ncrRows = sheet(wb, /^NCR$/i);
     const ncrNo = s(ncrRows[6]?.[2], 80) || "Safari-Safety NCR-Sharnam-001";
+    const ncrDesc = s(ncrRows[9]?.[2], 800);
+    const placeholder = /\[e\.g\.|\[detailed|\[detailed explanation/i.test(ncrDesc);
     batch.push({
       projectId,
       recordType: "NCR",
       ncrNumber: ncrNo,
       title: ncrNo,
       activityTask: s(ncrRows[8]?.[2], 200) || null,
-      description: s(ncrRows[9]?.[2], 800) || "Non-conformity from Safety NCR sheet",
+      description: placeholder ? "Non-conformity logged from Safety NCR form template." : ncrDesc,
       category: s(ncrRows[10]?.[2], 120) || null,
       severity: /high/i.test(String(ncrRows[11]?.[2] ?? "")) ? "High" : "Medium",
       rootCause: s(ncrRows[15]?.[2], 400) || null,
@@ -112,38 +169,47 @@ async function seedSafetyRecordsFromWorkbooks(
       source: "Safety NCR.xlsx",
     });
 
-    const obs = sheet(wb, /Observation/i);
-    const unsafeTypes = ["Working at height", "Improper tool use", "Non-compliance with PPE", "Housekeeping"];
-    for (const t of unsafeTypes) {
-      batch.push({
-        projectId,
-        recordType: "Observation",
-        title: `Unsafe act — ${t}`,
-        description: `From Observation - Unsafe Act sheet (${s(obs[6]?.[2], 80) || "report"}).`,
-        category: t,
-        severity: t.includes("height") ? "High" : "Low",
-        status: "Open",
-        location: s(obs[1]?.[2], 120) || null,
-        reportedById,
-        source: "Safety NCR.xlsx",
-      });
-    }
+    batch.push(
+      ...parseObservationUnsafeActSheet(sheet(wb, /Observation/i), reportedById, projectId, "Safety NCR.xlsx")
+    );
   }
 
   const dashFile = path.join(excelRoot, "Safety Dashboard.xlsx");
   if (fs.existsSync(dashFile)) {
     const wb = XLSX.readFile(dashFile);
+    const ncrSummary = parseSafetyRegisterTable(
+      sheet(wb, /NCR Summary/i),
+      "NCR",
+      "Safety Dashboard.xlsx",
+      reportedById,
+      projectId
+    );
+    batch.push(...ncrSummary);
+
+    // Enrich primary NCR form row from first summary entry when template is blank
+    if (ncrSummary[0]) {
+      const first = ncrSummary[0];
+      const formIdx = batch.findIndex((r) => r.source === "Safety NCR.xlsx" && r.recordType === "NCR");
+      if (formIdx >= 0) {
+        batch[formIdx] = {
+          ...batch[formIdx],
+          description: String(first.description || batch[formIdx].description),
+          location: first.location || batch[formIdx].location,
+          category: first.category || batch[formIdx].category,
+          activityTask: first.category || batch[formIdx].activityTask,
+        };
+      }
+    }
+
     batch.push(
       ...parseSafetyRegisterTable(sheet(wb, /Site Instruction/i), "Site Instruction", "Safety Dashboard.xlsx", reportedById, projectId)
     );
     batch.push(
       ...parseSafetyRegisterTable(sheet(wb, /Unsafe Act Summary/i), "Observation", "Safety Dashboard.xlsx", reportedById, projectId)
     );
+    batch.push(...parseHiraRegisterTable(sheet(wb, /HIRA/i), reportedById, projectId, "Safety Dashboard.xlsx"));
     batch.push(
-      ...parseSafetyRegisterTable(sheet(wb, /NCR Summary/i), "NCR", "Safety Dashboard.xlsx", reportedById, projectId).map((r) => ({
-        ...r,
-        ncrNumber: s(r.title, 80) || null,
-      }))
+      ...parseObservationUnsafeActSheet(sheet(wb, /Observation/i), reportedById, projectId, "Safety Dashboard.xlsx")
     );
   }
 
@@ -177,9 +243,38 @@ async function seedSafetyRecordsFromWorkbooks(
   }
 
   for (const row of batch) {
-    await prisma.safetyRecord.create({ data: row as any });
+    try {
+      await prisma.safetyRecord.create({ data: row as any });
+    } catch (err) {
+      console.warn("Safety record seed row skipped:", row.title, err instanceof Error ? err.message : err);
+    }
   }
-  console.log("Safety records seeded:", batch.length);
+  console.log("Safety records seeded:", batch.length, "from", excelRoot);
+}
+
+/** Refresh safety registers from Safety NCR + Safety Dashboard workbooks (all demo projects). */
+export async function seedSafetyFromWorkbooksForAllDemoProjects(
+  prisma: PrismaClient,
+  excelRoot: string,
+  projectCodes: string[] = ["SPDC-DEMO-01", "SPDC-PILOT-02"]
+) {
+  const reporter =
+    (await prisma.user.findFirst({ where: { email: "site@sharnam.demo" } })) ||
+    (await prisma.user.findFirst({ where: { email: "office@sharnam.demo" } }));
+  if (!reporter) {
+    console.warn("seedSafetyFromWorkbooksForAllDemoProjects: no site/office user — skip");
+    return;
+  }
+
+  for (const code of projectCodes) {
+    const project = await prisma.project.findUnique({ where: { code } });
+    if (!project) {
+      console.warn("Safety seed skip — project not found:", code);
+      continue;
+    }
+    await prisma.safetyRecord.deleteMany({ where: { projectId: project.id } });
+    await seedSafetyRecordsFromWorkbooks(prisma, project.id, excelRoot, reporter.id);
+  }
 }
 
 export async function seedQualitySafetyFromSheets(
@@ -193,6 +288,92 @@ export async function seedQualitySafetyFromSheets(
   await prisma.qualityNcr.deleteMany({ where: { projectId } });
   await prisma.qapActivity.deleteMany({ where: { projectId } });
   await prisma.safetyRecord.deleteMany({ where: { projectId } });
+
+  // --- Quality Dashboard.xlsx (CAR register, Cube Test, QAP Detail) ---
+  {
+    const file = path.join(excelRoot, "Quality Dashboard.xlsx");
+    if (fs.existsSync(file)) {
+      const wb = XLSX.readFile(file);
+      let carCreated = 0;
+      const carRows = sheet(wb, /CAR register/i);
+      for (let i = 2; i < carRows.length && carCreated < 40; i++) {
+        const row = carRows[i] as unknown[];
+        const description = s(row[4], 2000);
+        const no = s(row[0], 20);
+        if (!description || !/^\d+$/.test(no)) continue;
+        const number = `CAR-QD-${no}`;
+        const exists = await prisma.qualityNcr.findFirst({ where: { projectId, number } });
+        if (exists) continue;
+        await prisma.qualityNcr.create({
+          data: {
+            projectId,
+            number,
+            issueDate: excelDate(row[1]),
+            ncrType: s(row[2], 80) || "Quality",
+            contractor: s(row[3], 120) || null,
+            description,
+            location: s(row[5], 120) || null,
+            plannedClosure: excelDate(row[6]),
+            actualClosure: excelDate(row[7]),
+            status: s(row[8], 40) || "Open",
+            source: "Quality Dashboard.xlsx · CAR register",
+          },
+        });
+        carCreated++;
+      }
+      if (carCreated) console.log("Quality Dashboard CAR rows seeded:", carCreated);
+
+      const cubeRows = sheet(wb, /Cube Test/i);
+      let cubeCreated = 0;
+      for (let i = 1; i < cubeRows.length && cubeCreated < 20; i++) {
+        const row = cubeRows[i] as unknown[];
+        const sample = s(row[0], 20);
+        const strength = n(row[1]);
+        const limit = n(row[2]);
+        if (!sample || !/^\d+$/.test(sample) || !strength) continue;
+        await prisma.cubeTest.create({
+          data: {
+            projectId,
+            srNo: sample,
+            description: `Cube sample #${sample} (7-day)`,
+            strength,
+            result: strength >= limit ? "Pass" : "Fail",
+            source: "Quality Dashboard.xlsx · Cube Test",
+          },
+        });
+        cubeCreated++;
+      }
+      if (cubeCreated) console.log("Quality Dashboard cube rows seeded:", cubeCreated);
+
+      const qapRows = sheet(wb, /Quality Assurance Plan - Detail/i);
+      let qapCreated = 0;
+      let activity = "";
+      for (let i = 8; i < qapRows.length && qapCreated < 40; i++) {
+        const row = qapRows[i] as unknown[];
+        const sr = s(row[0], 20);
+        const act = s(row[1], 120);
+        const detail = s(row[2], 300);
+        if (act) activity = act;
+        if (!detail && !act) continue;
+        if (sr && !/^\d+$/.test(sr) && !detail) continue;
+        await prisma.qapActivity.create({
+          data: {
+            projectId,
+            weekLabel: "Dashboard",
+            activity: `${activity}${detail ? ` — ${detail}` : ""}`.slice(0, 400),
+            discipline: activity || null,
+            contractorOk: /yes|perform|qc/i.test(s(row[6], 40)),
+            pmcOk: /yes|review|witness/i.test(s(row[8], 40)),
+            clientOk: /yes|witness|random/i.test(s(row[9], 40)),
+            status: /done|closed|yes/i.test(s(row[11], 40)) ? "Done" : "Open",
+            completedAt: /done|closed|yes/i.test(s(row[11], 40)) ? new Date() : null,
+          },
+        });
+        qapCreated++;
+      }
+      if (qapCreated) console.log("Quality Dashboard QAP rows seeded:", qapCreated);
+    }
+  }
 
   // --- Quality NCR REGISTER ---
   {

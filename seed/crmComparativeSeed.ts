@@ -88,20 +88,26 @@ async function seedVendorBoqUploads(
       parsed = scaleBoqRates(parseDisciplineBoqSheet(ws, slot.discipline), VENDOR_RATE_FACTOR[slot.vendorLabel] ?? 1);
     }
 
-    const boqSheet = await prisma.customSheet.create({
-      data: {
-        name: `${slot.vendorLabel} — ${disc?.label || slot.discipline} — ${DEMO_PACKAGE_TITLE}`,
-        category: "CRM Vendor BOQ",
-        headersJson: JSON.stringify(parsed.headers),
-        rowsJson: JSON.stringify(parsed.rows),
-        sourceFile: "Comparative Statement - R2.xlsx",
-        createdById: officeUserId,
-      },
-    });
+    const sheetPayload = {
+      name: `${slot.vendorLabel} — ${disc?.label || slot.discipline} — ${DEMO_PACKAGE_TITLE}`,
+      headersJson: JSON.stringify(parsed.headers),
+      rowsJson: JSON.stringify(parsed.rows),
+      sourceFile: "Comparative Statement - R2.xlsx",
+    };
+
+    let boqSheetId = existing?.sheetId || null;
+    if (boqSheetId && force) {
+      await prisma.customSheet.update({ where: { id: boqSheetId }, data: sheetPayload });
+    } else if (!boqSheetId) {
+      const boqSheet = await prisma.customSheet.create({
+        data: { ...sheetPayload, category: "CRM Vendor BOQ", createdById: officeUserId },
+      });
+      boqSheetId = boqSheet.id;
+    }
 
     const fileName = `R2-${slot.discipline}-${slot.vendorLabel.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`;
-    let storagePath: string | undefined;
-    let sharePointUrl: string | null = null;
+    let storagePath: string | undefined = existing?.storagePath || undefined;
+    let sharePointUrl: string | null = existing?.sharePointUrl || null;
     if (projectCode) {
       const miniWb = XLSX.utils.book_new();
       const aoa = [parsed.headers, ...parsed.rows.map((row) => row.map((c) => c.raw))];
@@ -124,7 +130,7 @@ async function seedVendorBoqUploads(
         fileName,
         storagePath,
         sharePointUrl,
-        sheetId: boqSheet.id,
+        sheetId: boqSheetId,
         uploadedById: officeUserId,
         uploadedAt: new Date(),
       },
@@ -132,6 +138,80 @@ async function seedVendorBoqUploads(
     uploaded++;
   }
   return uploaded;
+}
+
+async function refreshComparativeSheets(
+  prisma: PrismaClient,
+  pkg: { id: string; summarySheetId: string | null; comparativeSheetId: string | null },
+  officeUserId: string | undefined
+) {
+  const imported = importR2WorkbookFromFile(undefined, DEMO_VENDORS);
+  const summaryPayload = {
+    name: "Comparative Statement R2 — Summary (demo)",
+    headersJson: JSON.stringify(imported.summary.headers),
+    rowsJson: JSON.stringify(imported.summary.rows),
+    sourceFile: "Comparative Statement - R2.xlsx",
+  };
+  const masterPayload = {
+    name: "Comparative Statement R2 — Master BOQ (demo)",
+    headersJson: JSON.stringify(imported.masterBoq.headers),
+    rowsJson: JSON.stringify(imported.masterBoq.rows),
+    sourceFile: "Comparative Statement - R2.xlsx",
+  };
+
+  let summarySheetId = pkg.summarySheetId;
+  let comparativeSheetId = pkg.comparativeSheetId;
+
+  if (summarySheetId) {
+    await prisma.customSheet.update({ where: { id: summarySheetId }, data: summaryPayload });
+  } else if (officeUserId) {
+    const s = await prisma.customSheet.create({
+      data: { ...summaryPayload, category: "CRM Comparative Summary", createdById: officeUserId },
+    });
+    summarySheetId = s.id;
+  }
+
+  if (comparativeSheetId) {
+    await prisma.customSheet.update({ where: { id: comparativeSheetId }, data: masterPayload });
+  } else if (officeUserId) {
+    const m = await prisma.customSheet.create({
+      data: { ...masterPayload, category: "CRM Comparative BOQ", createdById: officeUserId },
+    });
+    comparativeSheetId = m.id;
+  }
+
+  if (summarySheetId !== pkg.summarySheetId || comparativeSheetId !== pkg.comparativeSheetId) {
+    await prisma.crmBidPackage.update({
+      where: { id: pkg.id },
+      data: { summarySheetId, comparativeSheetId },
+    });
+  }
+
+  return { summarySheetId, comparativeSheetId };
+}
+
+async function ensureDemoVendorSlots(prisma: PrismaClient, pkgId: string) {
+  const vendors = await prisma.vendor.findMany({
+    where: { name: { in: DEMO_VENDORS } },
+    select: { id: true, name: true },
+  });
+  const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v.id]));
+  const slots = buildVendorDisciplineSlots(DEMO_VENDORS, DEMO_DISCIPLINES);
+  let created = 0;
+  for (const { vendorLabel, discipline } of slots) {
+    await prisma.crmVendorBoq.upsert({
+      where: { bidPackageId_vendorLabel_discipline: { bidPackageId: pkgId, vendorLabel, discipline } },
+      create: {
+        bidPackageId: pkgId,
+        vendorLabel,
+        discipline,
+        vendorId: vendorByName[vendorLabel] ?? null,
+      },
+      update: { vendorId: vendorByName[vendorLabel] ?? null },
+    });
+    created++;
+  }
+  return created;
 }
 
 async function backfillDemoVendorIds(
@@ -197,15 +277,34 @@ export async function seedCrmComparative(prisma: PrismaClient) {
   }
 
   if (pkg) {
+    await ensureDemoVendorSlots(prisma, pkg.id);
+    pkg = await prisma.crmBidPackage.findUniqueOrThrow({
+      where: { id: pkg.id },
+      include: { vendorBoqs: true },
+    });
+
     const linked = await backfillDemoVendorIds(prisma, pkg.vendorBoqs);
     if (linked) console.log("CRM comparative vendor links backfilled:", linked);
 
-    const needsBoq = pkg.vendorBoqs.some((b) => !b.fileName || !b.sheetId);
-    if (officeId && needsBoq) {
-      const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs, demoProject?.code);
-      console.log("CRM comparative demo BOQs refreshed:", n, "uploads on", pkg.title);
-    } else {
-      console.log("CRM comparative bid package already seeded:", pkg.title, "— vendor portal ready");
+    if (officeId) {
+      await refreshComparativeSheets(prisma, pkg, officeId);
+      const forceBoq = process.env.SEED_FORCE_CRM_BOQ !== "0";
+      const n = await seedVendorBoqUploads(
+        prisma,
+        pkg.id,
+        officeId,
+        pkg.vendorBoqs,
+        demoProject?.code,
+        forceBoq
+      );
+      console.log(
+        "CRM comparative demo BOQs seeded:",
+        n,
+        "/",
+        pkg.vendorBoqs.length,
+        "slots on",
+        pkg.title
+      );
     }
     return { pkg };
   }
@@ -277,7 +376,8 @@ export async function seedCrmComparative(prisma: PrismaClient) {
   }
 
   if (officeId) {
-    const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs, demoProject?.code);
+    await refreshComparativeSheets(prisma, pkg, officeId);
+    const n = await seedVendorBoqUploads(prisma, pkg.id, officeId, pkg.vendorBoqs, demoProject?.code, true);
     console.log(
       "CRM comparative seeded:",
       pkg.title,

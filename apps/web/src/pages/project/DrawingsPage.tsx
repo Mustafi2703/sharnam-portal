@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
-import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
@@ -63,6 +63,8 @@ export default function DrawingsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
   const [revFile, setRevFile] = useState<File | null>(null);
+  const [showRegisterLine, setShowRegisterLine] = useState(false);
+  const [registerLineBusy, setRegisterLineBusy] = useState(false);
   const [dumpBusy, setDumpBusy] = useState(false);
   const [markupTarget, setMarkupTarget] = useState<{
     file: File;
@@ -198,6 +200,36 @@ export default function DrawingsPage() {
     a.download = "gfc-drawing-log.csv";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function addRegisterLine(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setRegisterLineBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/drawings/project/${id}/register-line`, {
+        method: "POST",
+        token,
+        body: JSON.stringify(form),
+      });
+      setMsg(`Register line ${form.drawingNumber} added — upload GFC file when ready (Drawing Check unlocks upload).`);
+      setShowRegisterLine(false);
+      setForm({
+        drawingNumber: "",
+        title: "",
+        discipline: "Architecture",
+        buildingArea: "",
+        tlNo: "",
+        revisionNumber: "R0",
+        publish: false,
+      });
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed to add register line");
+    } finally {
+      setRegisterLineBusy(false);
+    }
   }
 
   async function syncRegistersToDrive() {
@@ -386,6 +418,11 @@ export default function DrawingsPage() {
                 {dumpBusy ? "Syncing…" : "Sync logs → SharePoint"}
               </Button>
             )}
+            <Link to={`/projects/${id}/drawings/register`}>
+              <Button type="button" variant="secondary">
+                Master register
+              </Button>
+            </Link>
             <Link to={`/projects/${id}/checklist-master?family=DrawingCheck`}>
               <Button type="button" variant="secondary">
                 Checklist master
@@ -402,15 +439,62 @@ export default function DrawingsPage() {
               </Button>
             </Link>
             {canUpload && (
-              <Button type="button" onClick={() => startUploadFlow()}>
-                Upload drawing
-              </Button>
+              <>
+                <Button type="button" variant="secondary" onClick={() => setShowRegisterLine((v) => !v)}>
+                  Add register line
+                </Button>
+                <Button type="button" onClick={() => startUploadFlow()}>
+                  Upload GFC drawing
+                </Button>
+              </>
             )}
           </div>
         }
       />
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+
+      {canUpload && showRegisterLine && (
+        <Card>
+          <h3 className="font-semibold mb-1">Add GFC register line (no file yet)</h3>
+          <p className="text-xs text-steel-muted mb-3">
+            Reserve a drawing number in the register. Upload the PDF/DWG later via <strong>Upload GFC drawing</strong> — Drawing Check Master unlocks the file step.
+          </p>
+          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={(e) => void addRegisterLine(e)}>
+            <Input
+              placeholder="Drawing number"
+              value={form.drawingNumber}
+              onChange={(e) => setForm({ ...form, drawingNumber: e.target.value })}
+              required
+            />
+            <Input
+              className="sm:col-span-2"
+              placeholder="Title"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              required
+            />
+            <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
+              {["Architecture", "Structural", "MEP", "Facade", "Landscape", "Interior"].map((d) => (
+                <option key={d}>{d}</option>
+              ))}
+            </Select>
+            <Input
+              placeholder="Building / area"
+              value={form.buildingArea}
+              onChange={(e) => setForm({ ...form, buildingArea: e.target.value })}
+            />
+            <Input
+              placeholder="TL no."
+              value={form.tlNo}
+              onChange={(e) => setForm({ ...form, tlNo: e.target.value })}
+            />
+            <Button type="submit" disabled={registerLineBusy}>
+              {registerLineBusy ? "Saving…" : "Save register line"}
+            </Button>
+          </form>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-1">
         {disciplines.map((d) => (

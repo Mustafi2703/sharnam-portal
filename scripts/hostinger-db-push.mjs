@@ -47,6 +47,30 @@ if (process.env.RUN_SEED === "1") {
 }
 
 try {
+  console.log("==> Safety sheet registers (Safety NCR + Dashboard)…");
+  execSync("npx tsx seed/safetySheetsDemo.ts", {
+    stdio: "inherit",
+    env: process.env,
+    cwd: rootDir,
+    timeout: 180_000,
+  });
+} catch {
+  console.warn("WARN: Safety sheet seed skipped (non-fatal — set RUN_SEED=1 for full seed)");
+}
+
+try {
+  console.log("==> Drawing register + project closure (snag, lessons, report)…");
+  execSync("npx tsx seed/closureDrawingsDemo.ts", {
+    stdio: "inherit",
+    env: process.env,
+    cwd: rootDir,
+    timeout: 180_000,
+  });
+} catch {
+  console.warn("WARN: Closure/drawing register seed skipped (non-fatal)");
+}
+
+try {
   console.log("==> BBS demo bend diagrams (idempotent)...");
   execSync("npx tsx seed/runBbsDemoShapes.ts", {
     stdio: "inherit",

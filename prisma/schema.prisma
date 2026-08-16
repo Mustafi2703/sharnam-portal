@@ -76,7 +76,7 @@ model Project {
   outlookConnected        Boolean   @default(false)
   outlookConnectedAt      DateTime?
   /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
-  enabledModules          String    @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"reports\"]") @db.Text
+  enabledModules          String    @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
   workPackages            String    @default("[\"Civil\",\"PEB\"]") @db.Text
   /// Default R2 bid disciplines for CRM packages on this project (JSON array of {key,label,sheetName})
@@ -128,6 +128,10 @@ model Project {
   capexLines            ProjectCapex[]
   quotations            Quotation[]
   bidPackages           CrmBidPackage[]
+  drawingRegisterLines  DrawingRegisterLine[]
+  snagItems             SnagItem[]
+  lessonsLearnt         LessonLearnt[]
+  closureReport         ProjectClosureReport?
 }
 
 /**
@@ -196,6 +200,7 @@ model Drawing {
   submissions ChecklistSubmission[]
   rfis        Rfi[]
   inspections QualityInspection[]
+  registerLine DrawingRegisterLine?
 
   @@unique([projectId, drawingNumber])
 }
@@ -1884,4 +1889,100 @@ model Quotation {
 
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   lead    Lead?    @relation(fields: [leadId], references: [id])
+}
+
+/** Master Drawing Register row (DRAWING REGISTER - 01.xlsx) — DCI / submission tracking */
+model DrawingRegisterLine {
+  id                    String    @id @default(cuid())
+  projectId             String
+  srNo                  Int?
+  projectPackage        String?
+  building              String?
+  discipline            String?
+  drawingNumber         String
+  drawingTitle          String
+  drawingType           String?
+  consultantName        String?
+  revisionNumber        String?
+  revisionDate          DateTime?
+  revisionDescription   String?
+  latestRevision        String?
+  plannedSubmissionDate DateTime?
+  actualSubmissionDate  DateTime?
+  submissionDelayDays   Int?
+  delayResponsibility   String?
+  issuedTo              String?
+  issueDate             DateTime?
+  copiesCount           Int?
+  criticalDrawing       String?
+  remarks               String?
+  source                String?
+  drawingId             String?   @unique
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  drawing Drawing? @relation(fields: [drawingId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, drawingNumber])
+}
+
+/** Snaglist register (Snaglist - Sharnam PMC.xlsx) */
+model SnagItem {
+  id                   String    @id @default(cuid())
+  projectId            String
+  srNo                 Int?
+  package              String?
+  itemDescription      String
+  location             String?
+  area                 String?
+  severity             String?
+  priority             String?
+  status               String    @default("Open")
+  vendor               String?
+  raisedBy             String?
+  raisedOn             DateTime?
+  targetCompletionDate DateTime?
+  closedAt             DateTime?
+  source               String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Lessons learnt register (Lessons Learnt - Sharnam PMC.xls) */
+model LessonLearnt {
+  id                  String   @id @default(cuid())
+  projectId           String
+  srNo                Int?
+  category            String?
+  description         String?
+  wentWell            String?
+  notMetExpectation   String?  @db.Text
+  lessonsLearnt       String?  @db.Text
+  valueDifferentiator String?
+  source              String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Project closure report — editable sections + uploaded docx pack */
+model ProjectClosureReport {
+  id           String    @id @default(cuid())
+  projectId    String    @unique
+  title        String?
+  status       String    @default("Draft")
+  summary      String?   @db.Text
+  sectionsJson String?   @db.Text
+  fileUrl      String?
+  fileName     String?
+  approvedAt   DateTime?
+  updatedById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

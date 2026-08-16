@@ -24,10 +24,15 @@ const TARGETS = [
 
 /** Canonical filenames used by seed/* and module dashboards */
 const FILES = [
+  "Quality Dashboard.xlsx",
   "Safety Dashboard.xlsx",
   "Safety NCR.xlsx",
+  "Comparative Statement - R2.xlsx",
   "NCR 01 .xlsx",
   "DRAWING REGISTER - 01.xlsx",
+  "Snaglist - Sharnam PMC.xlsx",
+  "Lessons Learnt - Sharnam PMC.xls",
+  "Project Closure Report.docx",
   "HInderance Register Dashboard.xlsx",
   "Legal Approvals - Dashboard.xlsx",
   "Milestone tracking.xlsx",

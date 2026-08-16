@@ -14,10 +14,10 @@ const FAMILIES = [
 ];
 
 /** Fill log for Drawing / Quality / Safety — download branded PDF-style print */
-export default function ChecklistLogsPage() {
+export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: string } = {}) {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const family = searchParams.get("family") || "";
+  const family = lockedFamily || searchParams.get("family") || "";
   const { token } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [busy, setBusy] = useState(true);
@@ -139,21 +139,34 @@ export default function ChecklistLogsPage() {
       />
 
       <div className="flex flex-wrap gap-2 items-center">
-        {FAMILIES.map((f) => (
-          <button
-            key={f.value || "all"}
-            type="button"
-            onClick={() => setSearchParams(f.value ? { family: f.value } : {})}
-            className={`rounded-full px-4 py-2 text-sm font-semibold border ${
-              family === f.value ? "bg-[#1e3a5f] text-white border-[#1e3a5f]" : "bg-white border-line text-steel-muted"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-        <Link to={`/projects/${id}/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
-          Checklist master →
-        </Link>
+        {!lockedFamily &&
+          FAMILIES.map((f) => (
+            <button
+              key={f.value || "all"}
+              type="button"
+              onClick={() => setSearchParams(f.value ? { family: f.value } : {})}
+              className={`rounded-full px-4 py-2 text-sm font-semibold border ${
+                family === f.value ? "bg-[#1e3a5f] text-white border-[#1e3a5f]" : "bg-white border-line text-steel-muted"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        {lockedFamily === "QualityInspection" && id && (
+          <Link to={`/projects/${id}/quality/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
+            Quality checklist master →
+          </Link>
+        )}
+        {lockedFamily === "Safety" && id && (
+          <Link to={`/projects/${id}/safety/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
+            Safety checklist master →
+          </Link>
+        )}
+        {!lockedFamily && id && (
+          <Link to={`/projects/${id}/checklist-master`} className="text-sm font-semibold text-brand ml-auto">
+            Checklist master →
+          </Link>
+        )}
       </div>
 
       {msg && <p className="text-sm text-danger">{msg}</p>}
