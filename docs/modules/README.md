@@ -6,6 +6,8 @@ Shareable definitions + field tables for **every** portal module. Mark **Keep / 
 **IA:** [PRODUCT_IA.md](../../PRODUCT_IA.md)  
 **Sheet map:** [SHEET_TO_DASHBOARD.md](../SHEET_TO_DASHBOARD.md)
 
+**Client UAT pack (pages, forms, modals, meeting change log):** [client-testing/README.md](../client-testing/README.md)
+
 ---
 
 ## Rule: sheet → separate hub tool

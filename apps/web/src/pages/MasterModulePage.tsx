@@ -32,6 +32,7 @@ type VendorRow = { id: string; name: string; trade?: string };
 const MASTER_TOOLS = [
   { id: "projects", label: "Projects" },
   { id: "directory", label: "Directory (4 users)" },
+  { id: "vendors", label: "Company vendors" },
   { id: "roster", label: "PMC roster" },
   { id: "modules", label: "Module toggles" },
   { id: "global", label: "Global masters" },
@@ -521,6 +522,19 @@ export default function MasterModulePage() {
             </Link>
           ))}
         </div>
+      )}
+
+      {masterTab === "vendors" && (
+        <Card className="!p-6">
+          <h2 className="font-display text-xl mb-2">Company vendor directory</h2>
+          <p className="text-sm text-steel-muted mb-4 max-w-2xl">
+            Procore-style company records — contractor, vendor, client, consultant, PMC types with GST, license,
+            prequalification flags. Create here once; assign to each project under Project → Vendors.
+          </p>
+          <Link to="/master/vendors">
+            <Button type="button">Open company directory ({vendors.length} companies)</Button>
+          </Link>
+        </Card>
       )}
 
       {masterTab === "links" && (

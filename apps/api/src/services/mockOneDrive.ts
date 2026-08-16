@@ -130,7 +130,8 @@ export class MockOneDriveService {
     projectCode: string,
     relFolder: string,
     fileName: string,
-    buffer: Buffer
+    buffer: Buffer,
+    contentType = "application/octet-stream"
   ): Promise<{
     path: string;
     url: string;
@@ -140,8 +141,15 @@ export class MockOneDriveService {
   }> {
     const dir = path.join(this.projectRoot(projectCode), relFolder);
     ensureDir(dir);
-    const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const dest = path.join(dir, safe);
+    let safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    let dest = path.join(dir, safe);
+    if (fs.existsSync(dest)) {
+      const dot = safe.lastIndexOf(".");
+      const base = dot > 0 ? safe.slice(0, dot) : safe;
+      const ext = dot > 0 ? safe.slice(dot) : "";
+      safe = `${base}-${Date.now()}${ext}`;
+      dest = path.join(dir, safe);
+    }
     fs.writeFileSync(dest, buffer);
     const rel = path.join(relFolder, safe).replace(/\\/g, "/");
     const local = {
@@ -153,7 +161,7 @@ export class MockOneDriveService {
 
     if (liveSharePoint()) {
       try {
-        const sp = await uploadToProjectLibrary(projectCode, relFolder, fileName, buffer);
+        const sp = await uploadToProjectLibrary(projectCode, relFolder, fileName, buffer, contentType);
         return {
           path: sp.path || rel,
           url: local.url,

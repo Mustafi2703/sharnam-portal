@@ -130,11 +130,14 @@ export default function DirectoryPage() {
         subtitle="Sharnam Office · Site · Client · Contractor — assign people and parties for matrix, RFIs, and fills."
         actions={
           <div className="flex flex-wrap gap-3">
+            <Link to="/master/vendors" className="text-sm font-semibold text-brand">
+              Company directory →
+            </Link>
+            <Link to={`/projects/${id}/vendors`} className="text-sm font-semibold text-brand">
+              Project vendors →
+            </Link>
             <Link to="/master" className="text-sm font-semibold text-brand">
               Master →
-            </Link>
-            <Link to="/hrm" className="text-sm font-semibold text-brand">
-              HRM →
             </Link>
           </div>
         }

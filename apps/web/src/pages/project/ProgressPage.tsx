@@ -475,32 +475,44 @@ export default function ProgressPage() {
             />
             <BarChart title="Hindrance by activity" items={data.charts?.hindranceByActivity || []} />
           </div>
-          <div className="grid md:grid-cols-2 gap-4 w-full">
-            <Card>
-              <h3 className="font-semibold text-sm mb-3">Recent hindrances</h3>
-              <div className="scroll-panel max-h-64 space-y-2 text-sm">
+          <div className="grid md:grid-cols-2 gap-4 w-full min-w-0">
+            <Card className="min-w-0 overflow-hidden flex flex-col">
+              <h3 className="font-semibold text-sm mb-3 shrink-0">Recent hindrances</h3>
+              <div className="scroll-panel max-h-64 min-h-0 space-y-0 text-sm pr-1">
                 {data.hindrances.slice(0, 8).map((h: any) => (
-                  <div key={h.id} className="flex justify-between gap-2 border-b border-line py-2">
-                    <span className="truncate">{h.description}</span>
-                    <Badge tone={h.status === "Open" ? "danger" : "ok"}>{h.status}</Badge>
+                  <div key={h.id} className="flex items-start gap-2 border-b border-line py-2 min-w-0">
+                    <span className="min-w-0 flex-1 text-ink leading-snug break-words line-clamp-2" title={h.description}>
+                      {h.description}
+                    </span>
+                    <span className="shrink-0 mt-0.5">
+                      <Badge tone={h.status === "Open" ? "danger" : "ok"}>{h.status}</Badge>
+                    </span>
                   </div>
                 ))}
-                {!data.hindrances?.length && <p className="text-steel-muted text-sm">No hindrances seeded.</p>}
+                {!data.hindrances?.length && <p className="text-steel-muted text-sm py-2">No hindrances seeded.</p>}
               </div>
             </Card>
-            <Card>
-              <h3 className="font-semibold text-sm mb-3">Top risks by severity</h3>
-              <div className="scroll-panel max-h-64 space-y-2 text-sm">
-                {data.risks.slice(0, 8).map((r: any) => (
-                  <div key={r.id} className="flex justify-between gap-2 border-b border-line py-2">
-                    <span className="truncate">
-                      {r.code ? `${r.code} · ` : ""}
-                      {r.name}
-                    </span>
-                    <Badge tone={Number(r.severity) >= 4 ? "danger" : "warn"}>Sev {r.severity}</Badge>
-                  </div>
-                ))}
-                {!data.risks?.length && <p className="text-steel-muted text-sm">No risks seeded.</p>}
+            <Card className="min-w-0 overflow-hidden flex flex-col">
+              <h3 className="font-semibold text-sm mb-3 shrink-0">Top risks by severity</h3>
+              <div className="scroll-panel max-h-64 min-h-0 space-y-0 text-sm pr-1">
+                {[...(data.risks || [])]
+                  .sort((a: any, b: any) => Number(b.severity || 0) - Number(a.severity || 0))
+                  .slice(0, 8)
+                  .map((r: any) => (
+                    <div key={r.id} className="flex items-start gap-2 border-b border-line py-2 min-w-0">
+                      <span
+                        className="min-w-0 flex-1 text-ink leading-snug break-words line-clamp-2"
+                        title={r.code ? `${r.code} · ${r.name}` : r.name}
+                      >
+                        {r.code ? `${r.code} · ` : ""}
+                        {r.name}
+                      </span>
+                      <span className="shrink-0 mt-0.5">
+                        <Badge tone={Number(r.severity) >= 15 ? "danger" : "warn"}>Sev {r.severity}</Badge>
+                      </span>
+                    </div>
+                  ))}
+                {!data.risks?.length && <p className="text-steel-muted text-sm py-2">No risks seeded.</p>}
               </div>
             </Card>
           </div>

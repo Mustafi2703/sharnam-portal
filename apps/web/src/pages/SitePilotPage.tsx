@@ -202,10 +202,10 @@ export default function SitePilotPage() {
               src={pdfFile}
               onCancel={() => setPdfFile(null)}
               saveLabel="Add annotated pages to submission"
-              onSave={(files) => {
-                setPhotos((prev) => [...prev, ...files]);
+              onSave={(pages) => {
+                setPhotos((prev) => [...prev, ...pages.map((p) => p.file)]);
                 setPdfFile(null);
-                setMsg(`Added ${files.length} annotated page(s) to submission.`);
+                setMsg(`Added ${pages.length} annotated page(s) to submission.`);
               }}
             />
           </div>

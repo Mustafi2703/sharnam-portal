@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
 import MasterModulePage from "./pages/MasterModulePage";
+import GlobalVendorsPage from "./pages/GlobalVendorsPage";
 import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -125,6 +126,7 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/master" element={<MasterModulePage />} />
+                <Route path="/master/vendors" element={<GlobalVendorsPage />} />
                 <Route path="/master/checklists" element={<ChecklistMasterPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>

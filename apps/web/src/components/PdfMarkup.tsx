@@ -11,9 +11,11 @@ import ImageMarkup from "./ImageMarkup";
  * Annotated PDFs come back as PNGs (one per page); a "Save all" returns the array.
  */
 
+type MarkupPage = { pageNumber: number; file: File };
+
 type Props = {
   src: string | File | null;
-  onSave?: (files: File[]) => void;
+  onSave?: (pages: MarkupPage[]) => void;
   onCancel?: () => void;
   saveLabel?: string;
 };
@@ -55,8 +57,10 @@ export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save ann
   }, [src]);
 
   function saveAll() {
-    const files = pages.map((_, i) => markedUp[i]).filter((f): f is File => !!f);
-    onSave?.(files);
+    const pagesOut: MarkupPage[] = Object.entries(markedUp)
+      .map(([idx, file]) => ({ pageNumber: Number(idx) + 1, file }))
+      .filter((p) => p.file && Number.isFinite(p.pageNumber));
+    onSave?.(pagesOut);
   }
 
   if (loading) return <div className="text-sm text-steel-muted">Rendering PDF…</div>;

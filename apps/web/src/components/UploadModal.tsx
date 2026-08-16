@@ -21,6 +21,7 @@ export function UploadModal({
   error,
   success,
   onClose,
+  canSubmit,
   onSubmit,
   filePicker,
 }: {
@@ -32,6 +33,8 @@ export function UploadModal({
   accept?: string;
   /** When set, replaces the default browse / dropzone row (e.g. separate PDF vs DWG). */
   filePicker?: ReactNode;
+  /** Override default single-file submit guard (e.g. PDF + DWG slots). */
+  canSubmit?: boolean;
   fields: Field[];
   primaryLabel: string;
   busy?: boolean;
@@ -144,7 +147,7 @@ export function UploadModal({
             </p>
           )}
 
-          <Button type="submit" disabled={busy || !file} className="w-full !py-3">
+          <Button type="submit" disabled={busy || !(canSubmit ?? !!file)} className="w-full !py-3">
             {busy ? formatUiText("Uploading…") : formatUiText(primaryLabel)}
           </Button>
         </form>

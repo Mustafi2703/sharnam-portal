@@ -2,70 +2,97 @@ import { useRef } from "react";
 import { Button } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 
-export type DrawingFileKind = "pdf" | "dwg";
+export type MarkupPageDraft = { pageNumber: number; file: File };
 
 export function DrawingUploadFilePicker({
-  fileKind,
-  onFileKind,
-  file,
-  onFile,
-  onMarkup,
+  pdfFile,
+  dwgFile,
+  onPdfFile,
+  onDwgFile,
+  onMarkupPdf,
+  markupPageCount = 0,
   disabled,
 }: {
-  fileKind: DrawingFileKind | null;
-  onFileKind: (k: DrawingFileKind | null) => void;
-  file: File | null;
-  onFile: (f: File | null, kind: DrawingFileKind) => void;
-  onMarkup?: () => void;
+  pdfFile: File | null;
+  dwgFile: File | null;
+  onPdfFile: (f: File | null) => void;
+  onDwgFile: (f: File | null) => void;
+  onMarkupPdf?: () => void;
+  markupPageCount?: number;
   disabled?: boolean;
 }) {
   const pdfRef = useRef<HTMLInputElement>(null);
   const dwgRef = useRef<HTMLInputElement>(null);
 
-  function pick(kind: DrawingFileKind, f: File | null) {
-    if (!f) {
-      onFile(null, kind);
-      return;
-    }
-    onFileKind(kind);
-    onFile(f, kind);
-  }
-
   const canMarkup =
-    file &&
-    fileKind === "pdf" &&
-    (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+    pdfFile &&
+    (pdfFile.type === "application/pdf" || pdfFile.name.toLowerCase().endsWith(".pdf"));
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted">{formatUiText("Upload type")}</p>
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant={fileKind === "pdf" ? "primary" : "secondary"}
-          className="!text-xs !py-2.5"
-          disabled={disabled}
-          onClick={() => {
-            onFileKind("pdf");
-            pdfRef.current?.click();
-          }}
-        >
-          PDF
-          <span className="block text-[10px] font-normal opacity-80 mt-0.5">{formatUiText("View + optional markup")}</span>
-        </Button>
-        <Button
-          type="button"
-          variant={fileKind === "dwg" ? "primary" : "secondary"}
-          className="!text-xs !py-2.5"
-          disabled={disabled}
-          onClick={() => {
-            onFileKind("dwg");
-            dwgRef.current?.click();
-          }}
-        >
-          DWG
-          <span className="block text-[10px] font-normal opacity-80 mt-0.5">{formatUiText("Download only · no preview")}</span>
-        </Button>
+      <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
+        {formatUiText("Revision files — PDF and DWG are stored separately")}
+      </p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="rounded-lg border border-line bg-sand/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-ink">PDF</span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs !py-1"
+              disabled={disabled}
+              onClick={() => pdfRef.current?.click()}
+            >
+              {pdfFile ? formatUiText("Replace") : formatUiText("Choose PDF")}
+            </Button>
+          </div>
+          <p className="text-[11px] text-steel-muted">{formatUiText("View in portal · optional multi-page markup")}</p>
+          {pdfFile && (
+            <div className="rounded border border-line bg-white px-2 py-1.5 text-xs font-mono truncate">{pdfFile.name}</div>
+          )}
+          {pdfFile && (
+            <div className="flex flex-wrap gap-2">
+              {canMarkup && onMarkupPdf && (
+                <Button type="button" variant="secondary" className="!text-xs" onClick={onMarkupPdf}>
+                  {formatUiText("Mark up PDF")}
+                </Button>
+              )}
+              <Button type="button" variant="ghost" className="!text-xs" onClick={() => onPdfFile(null)}>
+                {formatUiText("Clear PDF")}
+              </Button>
+            </div>
+          )}
+          {markupPageCount > 0 && (
+            <p className="text-[11px] text-brand font-medium">
+              {formatUiText(`${markupPageCount} marked page(s) ready to save`)}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-line bg-sand/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-ink">DWG</span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs !py-1"
+              disabled={disabled}
+              onClick={() => dwgRef.current?.click()}
+            >
+              {dwgFile ? formatUiText("Replace") : formatUiText("Choose DWG")}
+            </Button>
+          </div>
+          <p className="text-[11px] text-steel-muted">{formatUiText("Download only · no in-app preview")}</p>
+          {dwgFile && (
+            <>
+              <div className="rounded border border-line bg-white px-2 py-1.5 text-xs font-mono truncate">{dwgFile.name}</div>
+              <Button type="button" variant="ghost" className="!text-xs" onClick={() => onDwgFile(null)}>
+                {formatUiText("Clear DWG")}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <input
@@ -73,47 +100,20 @@ export function DrawingUploadFilePicker({
         type="file"
         accept=".pdf,application/pdf"
         className="hidden"
-        onChange={(e) => pick("pdf", e.target.files?.[0] || null)}
+        onChange={(e) => onPdfFile(e.target.files?.[0] || null)}
       />
       <input
         ref={dwgRef}
         type="file"
         accept=".dwg,application/acad,.dwg"
         className="hidden"
-        onChange={(e) => pick("dwg", e.target.files?.[0] || null)}
+        onChange={(e) => onDwgFile(e.target.files?.[0] || null)}
       />
 
-      {file && (
-        <div className="rounded-lg border border-line bg-sand/30 px-3 py-2 text-sm">
-          <div className="font-mono text-xs text-ink truncate">{file.name}</div>
-          <div className="text-[11px] text-steel-muted mt-0.5">
-            {fileKind === "dwg" ? formatUiText("DWG — stored for download") : formatUiText("PDF — ready to upload or mark up")}
-          </div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {canMarkup && onMarkup && (
-              <Button type="button" variant="secondary" className="!text-xs" onClick={onMarkup}>
-                Mark up PDF
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              className="!text-xs"
-              onClick={() => {
-                onFileKind(null);
-                onFile(null, fileKind || "pdf");
-                if (pdfRef.current) pdfRef.current.value = "";
-                if (dwgRef.current) dwgRef.current.value = "";
-              }}
-            >
-              Clear file
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {!file && (
-        <p className="text-xs text-steel-muted">{formatUiText("Choose PDF or DWG above — markup opens in a separate full-screen step.")}</p>
+      {!pdfFile && !dwgFile && (
+        <p className="text-xs text-steel-muted">
+          {formatUiText("Add at least one file per revision. Both PDF and DWG can be uploaded together.")}
+        </p>
       )}
     </div>
   );

@@ -165,9 +165,9 @@ export function EvidencePanel({
                   src={pdfDraft}
                   saveLabel="Save marked pages & upload"
                   onCancel={() => setPdfDraft(null)}
-                  onSave={async (files) => {
-                    for (const file of files) {
-                      await onUploadAttachment(file);
+                  onSave={async (pages) => {
+                    for (const page of pages) {
+                      await onUploadAttachment(page.file);
                     }
                     setPdfDraft(null);
                   }}

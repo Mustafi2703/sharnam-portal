@@ -225,7 +225,7 @@ export function CostSheetUploadPanel({
                   saveLabel="Upload marked shape to SharePoint"
                   onCancel={() => { setShapeDraft(null); setShapePreview(null); }}
                   onSave={async (markedPages) => {
-                    const file = markedPages[0] || shapeDraft;
+                    const file = markedPages[0]?.file || shapeDraft;
                     await uploadShape(file);
                   }}
                 />

@@ -510,7 +510,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
                   saveLabel="Save diagram in Shape of bar column"
                   onCancel={closeMarkup}
                   onSave={async (markedPages) => {
-                    const file = markedPages[0] || shapeDraft;
+                    const file = markedPages[0]?.file || shapeDraft;
                     await uploadShapeForRow(markupRow, file);
                   }}
                 />

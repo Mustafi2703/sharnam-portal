@@ -20,7 +20,8 @@ model User {
   updatedAt    DateTime @updatedAt
 
   memberships          ProjectMember[]
-  uploadedDrawings     DrawingRevision[]     @relation("DrawingUploader")
+  uploadedDrawings     DrawingRevision[]           @relation("DrawingUploader")
+  uploadedDrawingMarkup DrawingRevisionMarkupPage[] @relation("DrawingMarkupUploader")
   checklistSubmissions ChecklistSubmission[]
   dailyLogsCreated     DailyLog[]            @relation("DailyLogCreator")
   auditEvents          AuditEvent[]
@@ -210,8 +211,13 @@ model DrawingRevision {
   drawingId            String
   revisionNumber       String
   revisionLabel        String?
+  /// Primary preview URL (PDF preferred, else DWG) — kept for backward compatibility
   fileUrl              String
   fileName             String?
+  pdfFileUrl           String?
+  pdfFileName          String?
+  dwgFileUrl           String?
+  dwgFileName          String?
   published            Boolean   @default(false)
   /// Planned issue date (GFC register column)
   plannedDate          DateTime?
@@ -222,9 +228,26 @@ model DrawingRevision {
   preCheckSubmissionId String?
   createdAt            DateTime  @default(now())
 
-  drawing        Drawing               @relation(fields: [drawingId], references: [id], onDelete: Cascade)
-  uploadedBy     User?                 @relation("DrawingUploader", fields: [uploadedById], references: [id])
+  drawing        Drawing                     @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  uploadedBy     User?                       @relation("DrawingUploader", fields: [uploadedById], references: [id])
   checklistFills ChecklistSubmission[]
+  markupPages    DrawingRevisionMarkupPage[]
+}
+
+/// Annotated PDF pages — full history per page (latest shown first in UI)
+model DrawingRevisionMarkupPage {
+  id           String   @id @default(cuid())
+  revisionId   String
+  pageNumber   Int
+  fileUrl      String
+  fileName     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  revision   DrawingRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  uploadedBy User?           @relation("DrawingMarkupUploader", fields: [uploadedById], references: [id])
+
+  @@index([revisionId, pageNumber, createdAt])
 }
 
 model ChecklistTemplate {
