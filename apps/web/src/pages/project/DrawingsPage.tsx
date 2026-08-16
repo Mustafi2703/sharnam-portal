@@ -100,8 +100,6 @@ export default function DrawingsPage() {
   const [revUploadMode, setRevUploadMode] = useState<"new" | "replace" | "update">("new");
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
-  const [showRegisterLine, setShowRegisterLine] = useState(false);
-  const [registerLineBusy, setRegisterLineBusy] = useState(false);
   const [dumpBusy, setDumpBusy] = useState(false);
   const [markupTarget, setMarkupTarget] = useState<{
     file: File;
@@ -181,36 +179,6 @@ export default function DrawingsPage() {
     a.download = "gfc-drawing-log.csv";
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  async function addRegisterLine(e: FormEvent) {
-    e.preventDefault();
-    if (!id) return;
-    setRegisterLineBusy(true);
-    setMsg("");
-    try {
-      await api(`/api/drawings/project/${id}/register-line`, {
-        method: "POST",
-        token,
-        body: JSON.stringify(form),
-      });
-      setMsg(`Register line ${form.drawingNumber} added — upload GFC file when ready (Drawing Check unlocks upload).`);
-      setShowRegisterLine(false);
-      setForm({
-        drawingNumber: "",
-        title: "",
-        discipline: "Architecture",
-        buildingArea: "",
-        tlNo: "",
-        revisionNumber: "R0",
-        publish: false,
-      });
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Failed to add register line");
-    } finally {
-      setRegisterLineBusy(false);
-    }
   }
 
   async function syncRegistersToDrive() {
@@ -556,18 +524,21 @@ export default function DrawingsPage() {
       <PageHeader
         dense
         eyebrow="Drawings module · GFC"
-        title="Drawing register"
+        title="GFC register"
         subtitle={
           clientOnly
             ? "View published sheets and revision dates."
-            : "Use the module tabs for coordination, files, and checklist tools. Upload GFC from the actions above."
+            : "Upload PDF/DWG, revisions, and site receive/issue signatures. DCI master lines live under Master register."
         }
         actions={
           canUpload ? (
             <>
-              <Button type="button" variant="secondary" className="flex-1 sm:flex-none" onClick={() => setShowRegisterLine((v) => !v)}>
-                {showRegisterLine ? "Cancel line" : "Add line"}
-              </Button>
+              <Link
+                to={`/projects/${id}/drawings/register?sheet=master`}
+                className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-2 text-xs font-semibold text-brand hover:bg-sand/60"
+              >
+                Master register →
+              </Link>
               <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
                 Upload GFC
               </Button>
@@ -636,48 +607,6 @@ export default function DrawingsPage() {
       </div>
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
-
-      {canUpload && showRegisterLine && (
-        <Card>
-          <h3 className="font-semibold mb-1">Add GFC register line (no file yet)</h3>
-          <p className="text-xs text-steel-muted mb-3">
-            Reserve a drawing number in the register. Upload the PDF/DWG later via <strong>Upload GFC</strong> — Drawing Check Master unlocks the file step.
-          </p>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={(e) => void addRegisterLine(e)}>
-            <Input
-              placeholder="Drawing number"
-              value={form.drawingNumber}
-              onChange={(e) => setForm({ ...form, drawingNumber: e.target.value })}
-              required
-            />
-            <Input
-              className="sm:col-span-2"
-              placeholder="Title"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              required
-            />
-            <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
-              {["Architecture", "Structural", "MEP", "Facade", "Landscape", "Interior"].map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </Select>
-            <Input
-              placeholder="Building / area"
-              value={form.buildingArea}
-              onChange={(e) => setForm({ ...form, buildingArea: e.target.value })}
-            />
-            <Input
-              placeholder="TL no."
-              value={form.tlNo}
-              onChange={(e) => setForm({ ...form, tlNo: e.target.value })}
-            />
-            <Button type="submit" disabled={registerLineBusy}>
-              {registerLineBusy ? "Saving…" : "Save register line"}
-            </Button>
-          </form>
-        </Card>
-      )}
 
       {canUpload && showRegister && !unlockToken && !precheckOpen && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">
@@ -818,8 +747,8 @@ export default function DrawingsPage() {
       <Card padding={false} className="overflow-hidden drawings-register">
         <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between gap-2">
           <div>
-            <div className="text-sm font-semibold">INDORE · Drawing register</div>
-            <div className="text-[11px] text-white/70">Discipline · Area · TL · DWG · R0–Rn dates · browse / revisions</div>
+            <div className="text-sm font-semibold">GFC drawing log</div>
+            <div className="text-[11px] text-white/70">Discipline · Area · TL · DWG · R0–Rn · upload log &amp; signatures</div>
           </div>
           <Badge tone="neutral">{drawings.filter((d) => d.isPublished).length} published</Badge>
         </div>

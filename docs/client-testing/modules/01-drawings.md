@@ -8,9 +8,9 @@
 
 ## Tool nav tabs (module strip)
 
-Module hub · GFC register · Register dashboard · **Master register** · **Site register** · Design coordination · Drawing files · Checklist manager · Checklist fill log · Request fill · Ask RFI
+Module hub · **GFC register** (upload) · Register dashboard · **Master register** (DCI schedule) · **Site register** · Design coordination · Drawing files · Checklist manager · Checklist fill log · Request fill · Ask RFI
 
-> **Note:** The old **Client register** tab was removed — its columns (Issued to, Issue date, Copies, Critical) are already on **Master register**. The workbook sheet *Drawing Register - Client* was a subset view only.
+> **Separation:** **Master register** = DCI schedule (package, building, dates, issued-to, critical). **GFC register** = PDF/DWG upload, revisions, site signatures. Do not add master lines on the GFC page.
 
 ---
 
@@ -31,7 +31,7 @@ Module hub · GFC register · Register dashboard · **Master register** · **Sit
 | | |
 |--|--|
 | **Route** | `/projects/:id/drawings` |
-| **Purpose** | Live GFC drawing log — upload PDF/DWG, revisions R0–Rn, publish, revision history, markup, **receive/issue + signatures**. |
+| **Purpose** | **GFC file log only** — upload PDF/DWG, revisions R0–Rn, publish, site receive/issue + signatures. Not the DCI master schedule. |
 
 ### Register columns (R0–Rn)
 | Rule | Notes |
@@ -55,7 +55,7 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 ### Form: Add register line (no file)
 | Field | Notes |
 |-------|-------|
-| drawingNumber, title, discipline, buildingArea, tlNo | `POST .../register-line` |
+| — | **Removed from GFC page.** Add DCI rows on **Master register** only. |
 
 ### Form: Upload new drawing (modal)
 | Field | Notes |
@@ -135,19 +135,31 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 |--|--|
 | **Route** | `/projects/:id/drawings/register?sheet=master` |
 | **Excel source** | Sheet **Master Drawing Register** in `DRAWING REGISTER - 01.xlsx` |
-| **Purpose** | Single DCI register — supersedes old separate “Client register” view. |
+| **Purpose** | DCI master schedule — all workbook columns. **Separate from GFC upload.** |
+
+### Table filters
+| Filter | Options |
+|--------|---------|
+| Package | All · Package A/B/C/D (+ seeded values) |
+| Building | All · Tower 1… (+ seeded values) |
+| Discipline | All · Architecture / Structural / MEPF / … |
+| Critical | All · Critical only · Non-critical |
 
 ### Columns (match client workbook)
 Sr # · Project Package · Building · Discipline · Drawing Number · Drawing Title · Drawing Type · Consultant Name · Revision Number · Revision Date · Revision Description · Latest Revision · Planned Submission Date · Actual Submission Date · Submission Delay (Days) · Delay Responsibility · **Issued To** · **Issue Date** · **No. of Copies** · **Critical Drawing** · Remarks · GFC link
 
 **Auto-sync:** GFC upload/update on matching `drawingNumber` updates rev, dates, delay, copies, issue date, and GFC link.
 
-### Form: Add register line
+### Form: Add master register line (all DCI fields)
 | Field |
 |-------|
-| drawingNumber, drawingTitle, discipline, projectPackage, building, drawingType, consultantName, revisionNumber, criticalDrawing, remarks |
+| srNo, projectPackage, building, discipline, drawingNumber, drawingTitle, drawingType, consultantName |
+| revisionNumber, revisionDate, revisionDescription, latestRevision |
+| plannedSubmissionDate, actualSubmissionDate, submissionDelayDays, delayResponsibility |
+| issuedTo, issueDate, copiesCount, criticalDrawing, remarks |
 
-**API:** `POST /api/drawings/project/:id/register-lines`
+**API:** `POST /api/drawings/project/:id/register-lines`  
+**Link to GFC:** Upload files on GFC register with the **same drawing number** → GFC link column shows Linked.
 
 ### Client sign-off
 - [ ] Page approved for UAT

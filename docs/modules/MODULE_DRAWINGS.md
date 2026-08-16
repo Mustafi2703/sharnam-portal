@@ -16,8 +16,8 @@ Drawing register (master + site), GFC revision control, pre-upload checklist gat
 
 | Tool | Status | Behaviour |
 |------|--------|-----------|
-| GFC register | Built | Log + revisions R0–Rn; publish; upload log with **signature block** |
-| Master register | Built | Full DCI columns from `DRAWING REGISTER - 01.xlsx` · Master sheet |
+| GFC register | Built | Log + revisions R0–Rn; upload + site signatures only |
+| Master register | Built | Full DCI schedule; filters by package/building/discipline/critical |
 | Site register | Built | R0–R6 receive/issue matrix + signature thumbnails |
 | Register dashboard | Built | Week KPIs + charts |
 | Checklist manager | Built | Drawing Check Master only (module-scoped route) |

@@ -53,6 +53,7 @@ Add a **new row at the top** after each meeting. Dev team marks **Status** when 
 | 2026-08-17 | Drawings · Register | Client | Master + Site registers from workbook; signatures on upload | P1 | Dev | Done | |
 | 2026-08-17 | Drawings · Register | Client | Remove redundant Client register tab | P2 | Dev | Done | |
 | 2026-08-17 | Drawings · Checklist log | Client | No Site / Quality / Safety tabs inside Drawings module | P2 | Dev | Done | |
+| 2026-08-17 | Drawings · GFC vs Master | Client | Separate GFC upload from master DCI schedule; master filters by package | P1 | Dev | Done | |
 | | | | | P1 / P2 / P3 | | Open / In progress / Done / Won't fix / Deferred | |
 | | | | | | | | |
 | | | | | | | | |
@@ -118,19 +119,19 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 
 | Your Excel sheet | Where in portal | What to verify |
 |------------------|-----------------|----------------|
-| Drawing & GFC Drawing Log | **GFC register** | Upload PDF/DWG, revisions R0–R6+, publish |
-| Master Drawing Register | **Master register** tab | All DCI columns incl. Issued to, Copies, Critical |
+| Drawing & GFC Drawing Log | **GFC register** | Upload PDF/DWG only — revisions, signatures, publish |
+| Master Drawing Register | **Master register** tab | Full DCI schedule — add lines here, **filter by package/building** |
 | Site Drawing Register | **Site register** tab | R0–R6 matrix + **signature images** |
 | Dashboard sheet | **Register dashboard** | Week KPIs + charts |
 | Drawing check master | **Checklist manager** | Pre-upload checklist only (Drawings module) |
 
-**Note:** The old **Client register** tab was removed — those columns are already on **Master register**.
+**Important:** Do **not** add master DCI rows on the GFC page. Master schedule and GFC file upload are **separate tabs**.
 
 ### 5.2 GFC register — step-by-step test
 
 | Step | Action | Expected result | Pass |
 |------|--------|-----------------|:----:|
-| 1 | Open **Drawings → GFC register** | Table shows disciplines, R0–Rn columns, 58 drawings on demo | ☐ |
+| 1 | Open **Drawings → GFC register** | Title says **GFC register** — no “Add master line” form; link to Master register | ☐ |
 | 2 | Expand **Log** on drawing **AR-101** | Upload history; **Site register — receive & issue** block visible | ☐ |
 | 3 | Click **Update files** on current revision | Modal shows PDF/DWG + **signature pads** + receive/issue dates | ☐ |
 | 4 | Fill received date, copies, draw **contractor signature**, Save | Log shows signature thumbnail; no duplicate revision row | ☐ |
@@ -142,10 +143,11 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 
 | Step | Action | Expected result | Pass |
 |------|--------|-----------------|:----:|
-| 1 | Open **Master register** | 41 lines; columns match your Master Drawing Register sheet | ☐ |
-| 2 | Find **AR-101** | Package, Building, Rev, Planned, Actual, Delay, Issued to, Copies, Critical | ☐ |
-| 3 | After GFC upload on AR-101 | Row updates rev / dates / copies / **GFC link = Linked** | ☐ |
-| 4 | Add new line (optional) | Save line appears in table | ☐ |
+| 1 | Open **Master register** | 41 lines; full DCI columns; **filters**: package, building, discipline, critical | ☐ |
+| 2 | Filter **Package A** | Table shows Package A rows only | ☐ |
+| 3 | Add line with all fields (package, dates, issued to, copies) | Row appears; delay auto-calculates if dates filled | ☐ |
+| 4 | Find **AR-101** | Package, Building, Rev, Planned, Actual, Delay, Issued to, Copies, Critical | ☐ |
+| 5 | After GFC upload on AR-101 | Row updates rev / dates / copies / **GFC link = Linked** | ☐ |
 
 ### 5.4 Site register — step-by-step test
 

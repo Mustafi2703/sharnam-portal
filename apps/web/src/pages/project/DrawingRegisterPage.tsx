@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -6,6 +6,16 @@ import { PieChart } from "../../components/PieChart";
 import { SiteDrawingRegisterTable } from "../../components/SiteDrawingRegisterTable";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
+import {
+  emptyMasterRegisterForm,
+  MASTER_REGISTER_DISCIPLINES,
+  MASTER_REGISTER_DRAWING_TYPES,
+  MASTER_REGISTER_ISSUED_TO,
+  MASTER_REGISTER_PACKAGES,
+  masterRegisterPayload,
+  uniqSorted,
+  type MasterRegisterForm,
+} from "../../lib/masterDrawingRegister";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -19,18 +29,11 @@ export default function DrawingRegisterPage() {
   const [data, setData] = useState<any>(null);
   const [gfcDrawings, setGfcDrawings] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({
-    drawingNumber: "",
-    drawingTitle: "",
-    discipline: "Architecture",
-    projectPackage: "Package A",
-    building: "Tower 1",
-    drawingType: "Good For Construction (GFC)",
-    consultantName: "",
-    revisionNumber: "R0",
-    criticalDrawing: "No",
-    remarks: "",
-  });
+  const [form, setForm] = useState<MasterRegisterForm>(emptyMasterRegisterForm);
+  const [filterPackage, setFilterPackage] = useState("All");
+  const [filterBuilding, setFilterBuilding] = useState("All");
+  const [filterDiscipline, setFilterDiscipline] = useState("All");
+  const [filterCritical, setFilterCritical] = useState("All");
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
 
   const load = async () => {
@@ -58,10 +61,10 @@ export default function DrawingRegisterPage() {
       await api(`/api/drawings/project/${id}/register-lines`, {
         method: "POST",
         token,
-        body: JSON.stringify(form),
+        body: JSON.stringify(masterRegisterPayload(form)),
       });
-      setMsg(`Register line ${form.drawingNumber} saved`);
-      setForm({ ...form, drawingNumber: "", drawingTitle: "", remarks: "" });
+      setMsg(`Master line ${form.drawingNumber} saved`);
+      setForm({ ...emptyMasterRegisterForm(), projectPackage: form.projectPackage, building: form.building });
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -70,6 +73,30 @@ export default function DrawingRegisterPage() {
 
   const lines = data?.lines || [];
 
+  const packageOptions = useMemo(
+    () => ["All", ...uniqSorted([...MASTER_REGISTER_PACKAGES, ...lines.map((l: any) => l.projectPackage)])],
+    [lines]
+  );
+  const buildingOptions = useMemo(
+    () => ["All", ...uniqSorted(lines.map((l: any) => l.building))],
+    [lines]
+  );
+  const disciplineOptions = useMemo(
+    () => ["All", ...uniqSorted([...MASTER_REGISTER_DISCIPLINES, ...lines.map((l: any) => l.discipline)])],
+    [lines]
+  );
+
+  const filteredLines = useMemo(() => {
+    return lines.filter((r: any) => {
+      if (filterPackage !== "All" && (r.projectPackage || "") !== filterPackage) return false;
+      if (filterBuilding !== "All" && (r.building || "") !== filterBuilding) return false;
+      if (filterDiscipline !== "All" && (r.discipline || "") !== filterDiscipline) return false;
+      if (filterCritical === "Yes" && !/yes/i.test(r.criticalDrawing || "")) return false;
+      if (filterCritical === "No" && /yes/i.test(r.criticalDrawing || "")) return false;
+      return true;
+    });
+  }, [lines, filterPackage, filterBuilding, filterDiscipline, filterCritical]);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -77,7 +104,7 @@ export default function DrawingRegisterPage() {
         title={sheetView.label}
         subtitle={
           sheetKey === "master"
-            ? "Master Drawing Register — full DCI columns from DRAWING REGISTER - 01.xlsx (includes issued-to, copies, critical). Link to GFC upload for files."
+            ? "Master Drawing Register — full DCI schedule from DRAWING REGISTER - 01.xlsx. Add/edit lines here; upload PDF/DWG on GFC register only."
             : sheetKey === "site"
               ? "Site Drawing Register — receive & issue matrix R0–R6 with signatures from GFC uploads."
               : `${sheetView.sheet} — KPIs and charts from client workbook.`
@@ -87,7 +114,7 @@ export default function DrawingRegisterPage() {
             <Badge tone="brand">{data?.totals?.lines ?? 0} lines</Badge>
             <Badge tone="ok">{data?.totals?.gfc ?? 0} GFC</Badge>
             <Link to={`/projects/${id}/drawings`} className="text-sm font-semibold text-brand">
-              GFC register →
+              GFC register (upload) →
             </Link>
             <Link to={`/projects/${id}/hub/drawings`} className="text-sm font-semibold text-brand">
               Drawings hub →
@@ -129,33 +156,115 @@ export default function DrawingRegisterPage() {
 
       {sheetKey === "master" && canEdit && (
         <Card>
-          <h3 className="font-semibold mb-3">Add master register line</h3>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addLine}>
-            <Input placeholder="Drawing number" value={form.drawingNumber} onChange={(e) => setForm({ ...form, drawingNumber: e.target.value })} required />
-            <Input className="lg:col-span-2" placeholder="Drawing title" value={form.drawingTitle} onChange={(e) => setForm({ ...form, drawingTitle: e.target.value })} required />
+          <h3 className="font-semibold mb-1">Add master register line</h3>
+          <p className="text-xs text-steel-muted mb-4">
+            Full DCI row — separate from GFC file upload. After saving, upload PDF/DWG on{" "}
+            <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
+              GFC register
+            </Link>{" "}
+            using the same drawing number to link files.
+          </p>
+          <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addLine}>
+            <Input placeholder="Sr #" value={form.srNo} onChange={(e) => setForm({ ...form, srNo: e.target.value })} />
+            <Select value={form.projectPackage} onChange={(e) => setForm({ ...form, projectPackage: e.target.value })}>
+              {MASTER_REGISTER_PACKAGES.map((p) => (
+                <option key={p}>{p}</option>
+              ))}
+            </Select>
+            <Input placeholder="Building" value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} />
             <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
-              {["Architecture", "Structural", "MEPF", "Facade", "Interior"].map((d) => (
+              {MASTER_REGISTER_DISCIPLINES.map((d) => (
                 <option key={d}>{d}</option>
               ))}
             </Select>
-            <Input placeholder="Package" value={form.projectPackage} onChange={(e) => setForm({ ...form, projectPackage: e.target.value })} />
-            <Input placeholder="Building" value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} />
-            <Input placeholder="Drawing type" value={form.drawingType} onChange={(e) => setForm({ ...form, drawingType: e.target.value })} />
+            <Input placeholder="Drawing number" value={form.drawingNumber} onChange={(e) => setForm({ ...form, drawingNumber: e.target.value })} required />
+            <Input className="lg:col-span-2" placeholder="Drawing title" value={form.drawingTitle} onChange={(e) => setForm({ ...form, drawingTitle: e.target.value })} required />
+            <Select value={form.drawingType} onChange={(e) => setForm({ ...form, drawingType: e.target.value })}>
+              {MASTER_REGISTER_DRAWING_TYPES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </Select>
             <Input placeholder="Consultant" value={form.consultantName} onChange={(e) => setForm({ ...form, consultantName: e.target.value })} />
             <Input placeholder="Revision" value={form.revisionNumber} onChange={(e) => setForm({ ...form, revisionNumber: e.target.value })} />
+            <Input type="date" placeholder="Rev date" value={form.revisionDate} onChange={(e) => setForm({ ...form, revisionDate: e.target.value })} />
+            <Input className="lg:col-span-2" placeholder="Revision description" value={form.revisionDescription} onChange={(e) => setForm({ ...form, revisionDescription: e.target.value })} />
+            <Select value={form.latestRevision} onChange={(e) => setForm({ ...form, latestRevision: e.target.value })}>
+              <option>Yes</option>
+              <option>No</option>
+            </Select>
+            <Input type="date" value={form.plannedSubmissionDate} onChange={(e) => setForm({ ...form, plannedSubmissionDate: e.target.value })} title="Planned submission" />
+            <Input type="date" value={form.actualSubmissionDate} onChange={(e) => setForm({ ...form, actualSubmissionDate: e.target.value })} title="Actual submission" />
+            <Input placeholder="Delay (days)" value={form.submissionDelayDays} onChange={(e) => setForm({ ...form, submissionDelayDays: e.target.value })} />
+            <Input placeholder="Delay responsibility" value={form.delayResponsibility} onChange={(e) => setForm({ ...form, delayResponsibility: e.target.value })} />
+            <Select value={form.issuedTo} onChange={(e) => setForm({ ...form, issuedTo: e.target.value })}>
+              <option value="">Issued to…</option>
+              {MASTER_REGISTER_ISSUED_TO.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </Select>
+            <Input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} title="Issue date" />
+            <Input type="number" min={0} placeholder="Copies" value={form.copiesCount} onChange={(e) => setForm({ ...form, copiesCount: e.target.value })} />
             <Select value={form.criticalDrawing} onChange={(e) => setForm({ ...form, criticalDrawing: e.target.value })}>
               <option>No</option>
               <option>Yes</option>
             </Select>
-            <TextArea className="lg:col-span-3" rows={2} placeholder="Remarks" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
-            <Button type="submit">Save line</Button>
+            <TextArea className="lg:col-span-4" rows={2} placeholder="Remarks" value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+            <Button type="submit">Save master line</Button>
           </form>
         </Card>
       )}
 
       {sheetKey === "master" && (
         <Card>
-          <h3 className="font-semibold mb-3">Master Drawing Register</h3>
+          <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="font-semibold">Master Drawing Register</h3>
+            <Badge tone="neutral">{filteredLines.length} / {lines.length} lines</Badge>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Select className="!w-auto min-w-[8rem]" value={filterPackage} onChange={(e) => setFilterPackage(e.target.value)} aria-label="Filter by package">
+              {packageOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p === "All" ? "All packages" : p}
+                </option>
+              ))}
+            </Select>
+            <Select className="!w-auto min-w-[8rem]" value={filterBuilding} onChange={(e) => setFilterBuilding(e.target.value)} aria-label="Filter by building">
+              {buildingOptions.map((b) => (
+                <option key={b} value={b}>
+                  {b === "All" ? "All buildings" : b}
+                </option>
+              ))}
+            </Select>
+            <Select className="!w-auto min-w-[8rem]" value={filterDiscipline} onChange={(e) => setFilterDiscipline(e.target.value)} aria-label="Filter by discipline">
+              {disciplineOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d === "All" ? "All disciplines" : d}
+                </option>
+              ))}
+            </Select>
+            <Select className="!w-auto min-w-[8rem]" value={filterCritical} onChange={(e) => setFilterCritical(e.target.value)} aria-label="Filter by critical">
+              <option value="All">All critical</option>
+              <option value="Yes">Critical only</option>
+              <option value="No">Non-critical</option>
+            </Select>
+            {(filterPackage !== "All" || filterBuilding !== "All" || filterDiscipline !== "All" || filterCritical !== "All") && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="!text-xs"
+                onClick={() => {
+                  setFilterPackage("All");
+                  setFilterBuilding("All");
+                  setFilterDiscipline("All");
+                  setFilterCritical("All");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+
           <div className="overflow-x-auto max-h-[32rem]">
             <table className="w-full text-sm min-w-[1600px]">
               <thead>
@@ -185,7 +294,7 @@ export default function DrawingRegisterPage() {
                 </tr>
               </thead>
               <tbody>
-                {lines.map((r: any) => (
+                {filteredLines.map((r: any) => (
                   <tr key={r.id} className="border-b border-line/60">
                     <td className="py-2 pr-2 font-mono text-xs">{r.srNo ?? "—"}</td>
                     <td className="py-2 pr-2 text-xs">{r.projectPackage || "—"}</td>
@@ -229,10 +338,10 @@ export default function DrawingRegisterPage() {
                     </td>
                   </tr>
                 ))}
-                {!lines.length && (
+                {!filteredLines.length && (
                   <tr>
                     <td colSpan={22} className="py-8 text-steel-muted text-center">
-                      No lines — run seed or add above.
+                      {lines.length ? "No lines match filters." : "No lines — run seed or add above."}
                     </td>
                   </tr>
                 )}
