@@ -1074,24 +1074,31 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
 
 checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const [records, safetyFills, openRfis] = await Promise.all([
+  const [records, allRecords, safetyFills, openRfis] = await Promise.all([
     prisma.safetyRecord.findMany({
       where: { projectId },
       orderBy: { occurredAt: "desc" },
-      take: 50,
+      take: 200,
       include: { reportedBy: { select: { fullName: true } }, assignedTo: { select: { fullName: true } } },
+    }),
+    prisma.safetyRecord.findMany({
+      where: { projectId },
+      select: { recordType: true, status: true, severity: true, title: true },
     }),
     prisma.checklistSubmission.count({
       where: { assignment: { projectId, template: { checklistType: "Safety" } } },
     }),
     prisma.rfi.count({ where: { projectId, status: "Open", rfiKind: "SafetyChecklist" } }),
   ]);
+  const isNcr = (r: { recordType: string; title: string }) => /ncr/i.test(r.recordType) || /ncr/i.test(r.title);
   res.json({
     totals: {
-      records: records.length,
-      open: records.filter((r) => r.status === "Open").length,
-      incidents: records.filter((r) => r.recordType === "Incident").length,
-      ncrLike: records.filter((r) => /ncr/i.test(r.recordType) || /ncr/i.test(r.title)).length,
+      records: allRecords.length,
+      open: allRecords.filter((r) => r.status === "Open").length,
+      incidents: allRecords.filter((r) => r.recordType === "Incident" || r.recordType === "Near Miss").length,
+      ncrLike: allRecords.filter(isNcr).length,
+      siteInstructions: allRecords.filter((r) => r.recordType === "Site Instruction").length,
+      unsafeActs: allRecords.filter((r) => r.recordType === "Observation").length,
       checklistFills: safetyFills,
       openFillRfis: openRfis,
     },

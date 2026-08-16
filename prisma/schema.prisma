@@ -1443,23 +1443,38 @@ model DesignCoordinationIssue {
 }
 
 model SafetyRecord {
-  id                 String    @id @default(cuid())
-  projectId          String
-  recordType         String    @default("Observation")
-  title              String
-  description        String?
-  severity           String    @default("Low")
-  status             String    @default("Open")
-  location           String?
-  correctiveAction   String?
-  occurredAt         DateTime  @default(now())
-  closedAt           DateTime?
-  reportedById       String
-  assignedToId       String?
-  linkedAssignmentId String?
-  linkedTemplateId   String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  projectId            String
+  recordType           String    @default("Observation")
+  title                String
+  description          String?
+  severity             String    @default("Low")
+  status               String    @default("Open")
+  location             String?
+  correctiveAction     String?
+  ncrNumber            String?
+  activityTask         String?
+  category             String?
+  rootCause            String?
+  contributingFactors  String?
+  immediateAction      String?
+  longTermAction       String?
+  responsibleParty     String?
+  targetCompletion     DateTime?
+  timeImpact           String?
+  costImpact           String?
+  actionTaken          String?
+  issuedTo             String?
+  followUpDate         DateTime?
+  source               String?
+  occurredAt           DateTime  @default(now())
+  closedAt             DateTime?
+  reportedById         String
+  assignedToId         String?
+  linkedAssignmentId   String?
+  linkedTemplateId     String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   reportedBy User    @relation("SafetyReporter", fields: [reportedById], references: [id])

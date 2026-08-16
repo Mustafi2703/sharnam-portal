@@ -4,31 +4,40 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHeader } from "../../components/ui";
 
+/** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
+const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans";
+
+type DriveItem = { name: string; path: string; type: "folder" | "file"; modifiedAt?: string; url?: string };
+
 /**
  * Quality Assurance Plan — upload / update client QAP (Week-50 sheet style).
  */
 export default function QapPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
-  const [docs, setDocs] = useState<any[]>([]);
+  const [docs, setDocs] = useState<DriveItem[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const canEdit = ["admin", "office", "employee", "client", "site_employee"].includes(user?.role || "");
+  const canUpload = ["admin", "office", "site_employee"].includes(user?.role || "");
 
   const load = async () => {
     if (!id) return;
     try {
-      const list = await api<any[]>(`/api/dms/project/${id}?folder=Quality/QAP`, { token }).catch(() =>
-        api<any[]>(`/api/dms/project/${id}`, { token }).catch(() => [])
+      const res = await api<{ children: DriveItem[]; path: string }>(
+        `/api/dms/${id}/browse?path=${encodeURIComponent(QAP_FOLDER)}&sync=0`,
+        { token }
       );
-      const rows = Array.isArray(list) ? list : (list as any)?.files || [];
+      const files = (res.children || []).filter((f) => f.type === "file");
       setDocs(
-        rows.filter(
-          (f: any) =>
-            /qap|assurance|quality.?plan/i.test(f.name || f.fileName || f.path || "") ||
-            (f.folder || f.path || "").toLowerCase().includes("qap")
-        )
+        files.length
+          ? files
+          : (res.children || []).filter(
+              (f) =>
+                f.type === "file" &&
+                (/qap|assurance|quality.?plan/i.test(f.name || f.path || "") ||
+                  (f.path || "").toLowerCase().includes("qap"))
+            )
       );
     } catch {
       setDocs([]);
@@ -47,26 +56,13 @@ export default function QapPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("folder", "Quality/QAP");
-      fd.append("name", file.name);
-      await api(`/api/dms/project/${id}/upload`, { method: "POST", token, body: fd }).catch(async () => {
-        await api(`/api/dms/upload`, {
-          method: "POST",
-          token,
-          body: (() => {
-            const f = new FormData();
-            f.append("file", file);
-            f.append("projectId", id);
-            f.append("folder", "Quality/QAP");
-            return f;
-          })(),
-        });
-      });
-      setMsg("QAP uploaded / updated.");
+      fd.append("folder", QAP_FOLDER);
+      await api(`/api/dms/${id}/upload`, { method: "POST", token, body: fd });
+      setMsg("QAP uploaded to project DMS (Quality Plans folder).");
       setFile(null);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Upload failed — file kept locally in DMS when API path differs.");
+      setMsg(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusy(false);
     }
@@ -92,10 +88,13 @@ export default function QapPage() {
 
       {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {canEdit && (
+      {canUpload && (
         <Card>
           <h3 className="font-semibold mb-2">Upload / update QAP</h3>
-          <p className="text-sm text-steel-muted mb-3">Accepts Excel or PDF from the shared Quality Assurance Plan pack.</p>
+          <p className="text-sm text-steel-muted mb-3">
+            Saves to DMS folder <code className="text-xs">{QAP_FOLDER.split("/").pop()}</code>. Accepts Excel or PDF from
+            the shared Quality Assurance Plan pack.
+          </p>
           <form className="flex flex-wrap items-end gap-3" onSubmit={onUpload}>
             <input
               type="file"
@@ -114,14 +113,17 @@ export default function QapPage() {
         <h3 className="font-semibold mb-3">Current QAP files</h3>
         <ul className="divide-y divide-line text-sm">
           {docs.map((d) => (
-            <li key={d.id || d.name} className="py-2 flex justify-between gap-2">
-              <span>{d.name || d.fileName}</span>
-              <Badge tone="neutral">{d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : "—"}</Badge>
+            <li key={d.path || d.name} className="py-2 flex justify-between gap-2">
+              <span>{d.name}</span>
+              <Badge tone="neutral">{d.modifiedAt ? new Date(d.modifiedAt).toLocaleDateString() : "—"}</Badge>
             </li>
           ))}
           {!docs.length && (
             <li className="py-6 text-steel-muted">
-              No QAP on file yet — upload the Week-50 Quality Assurance Plan Excel (or latest revision).
+              No QAP on file yet — upload the Week-50 Quality Assurance Plan Excel (or latest revision).{" "}
+              <Link to={`/projects/${id}/dms`} className="text-brand font-semibold">
+                Open DMS →
+              </Link>
             </li>
           )}
         </ul>

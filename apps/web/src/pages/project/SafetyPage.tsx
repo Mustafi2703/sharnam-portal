@@ -6,8 +6,70 @@ import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
-const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR"];
+const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
+const NCR_CATEGORIES = [
+  "Working at height",
+  "PPE non-compliance",
+  "Housekeeping",
+  "Electrical",
+  "Scaffolding",
+  "Excavation",
+  "General",
+];
+
+const emptyForm = (ncrView: boolean) => ({
+  recordType: ncrView ? "NCR" : "Observation",
+  title: "",
+  description: "",
+  severity: "Medium",
+  status: "Open",
+  location: "",
+  correctiveAction: "",
+  ncrNumber: "",
+  activityTask: "",
+  category: "",
+  rootCause: "",
+  contributingFactors: "",
+  immediateAction: "",
+  longTermAction: "",
+  responsibleParty: "",
+  targetCompletion: "",
+  timeImpact: "",
+  costImpact: "",
+  actionTaken: "",
+  issuedTo: "",
+  followUpDate: "",
+});
+
+type SafetyForm = ReturnType<typeof emptyForm>;
+
+function recordToForm(r: any): SafetyForm {
+  const d = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : "");
+  return {
+    recordType: r.recordType || "Observation",
+    title: r.title || "",
+    description: r.description || "",
+    severity: r.severity || "Medium",
+    status: r.status || "Open",
+    location: r.location || "",
+    correctiveAction: r.correctiveAction || "",
+    ncrNumber: r.ncrNumber || "",
+    activityTask: r.activityTask || "",
+    category: r.category || "",
+    rootCause: r.rootCause || "",
+    contributingFactors: r.contributingFactors || "",
+    immediateAction: r.immediateAction || "",
+    longTermAction: r.longTermAction || "",
+    responsibleParty: r.responsibleParty || "",
+    targetCompletion: d(r.targetCompletion),
+    timeImpact: r.timeImpact || "",
+    costImpact: r.costImpact || "",
+    actionTaken: r.actionTaken || "",
+    issuedTo: r.issuedTo || "",
+    followUpDate: d(r.followUpDate),
+  };
+}
 
 export default function SafetyPage() {
   const { id } = useParams();
@@ -18,22 +80,16 @@ export default function SafetyPage() {
   const [dash, setDash] = useState<any>(null);
   const [filter, setFilter] = useState(ncrView ? "NCR" : "All");
   const [active, setActive] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    recordType: ncrView ? "NCR" : "Observation",
-    title: "",
-    description: "",
-    severity: "Low",
-    location: "",
-    correctiveAction: "",
-  });
+  const [form, setForm] = useState(emptyForm(ncrView));
+  const [editForm, setEditForm] = useState<SafetyForm | null>(null);
   const [msg, setMsg] = useState("");
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
-  const canClose = user?.role === "admin" || user?.role === "office" || user?.role === "site_employee";
+  const canEdit = canCreate;
 
   useEffect(() => {
     if (ncrView) {
       setFilter("NCR");
-      setForm((f) => ({ ...f, recordType: "NCR" }));
+      setForm(emptyForm(true));
     }
   }, [ncrView]);
 
@@ -51,6 +107,11 @@ export default function SafetyPage() {
     void load();
   }, [id, token]);
 
+  useEffect(() => {
+    const row = data?.records.find((r) => r.id === active);
+    setEditForm(row ? recordToForm(row) : null);
+  }, [active, data]);
+
   const filtered = useMemo(() => {
     const rows = data?.records || [];
     if (ncrView) {
@@ -62,31 +123,46 @@ export default function SafetyPage() {
   }, [data, filter, ncrView]);
 
   const selected = data?.records.find((r) => r.id === active);
+  const isNcrRecord = (r: any) => /ncr/i.test(r?.recordType || "") || /ncr/i.test(r?.title || "");
 
   async function createRecord(e: FormEvent) {
     e.preventDefault();
     setMsg("");
     try {
+      const title =
+        form.title ||
+        (form.recordType === "NCR" && form.ncrNumber ? form.ncrNumber : `${form.recordType} — ${form.location || "Site"}`);
       const row = await api<any>(`/api/safety/project/${id}`, {
         method: "POST",
         token,
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, title }),
       });
-      setForm({
-        recordType: ncrView ? "NCR" : "Observation",
-        title: "",
-        description: "",
-        severity: "Low",
-        location: "",
-        correctiveAction: "",
-      });
+      setForm(emptyForm(ncrView));
       setActive(row.id);
-      setMsg("Safety record logged.");
+      setMsg(`${form.recordType} logged — feeds Safety dashboard and DPR/WPR safety block.`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
     }
   }
+
+  async function saveEdit() {
+    if (!selected || !editForm) return;
+    setMsg("");
+    try {
+      await api(`/api/safety/${selected.id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ ...editForm, title: editForm.title || selected.title }),
+      });
+      setMsg("Record updated.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed to save");
+    }
+  }
+
+  const ncrTableRows = filtered.filter(isNcrRecord);
 
   return (
     <div className="space-y-5">
@@ -95,14 +171,15 @@ export default function SafetyPage() {
         title={ncrView ? "Safety NCR register" : "Safety dashboard & register"}
         subtitle={
           ncrView
-            ? "Safety NCR sheet as a separate tool — log and close non-conformance records."
-            : "Log observations / incidents. Create Safety checklists in Checklist master, raise SafetyChecklist RFI with checklist attached for the assignee to fill (3 photos)."
+            ? "Safety NCR sheet (Safety NCR.xlsx / NCR Summary) — raise, edit, and close non-conformance records."
+            : "One-pager dashboard from Safety Dashboard.xlsx — observations, site instructions, unsafe acts, and NCR summary."
         }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
             <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
-            <Badge tone="brand">{dash?.totals?.checklistFills ?? 0} checklist fills</Badge>
+            <Badge tone="brand">{dash?.totals?.ncrLike ?? 0} NCR</Badge>
+            <Badge tone="neutral">{dash?.totals?.checklistFills ?? 0} checklist fills</Badge>
             <ReportExportButtons projectId={id} kind="safety" compact />
             <Link to={`/projects/${id}/checklist-logs?family=Safety`} className="text-sm font-semibold text-brand">
               Fill log & progress →
@@ -152,12 +229,14 @@ export default function SafetyPage() {
 
       {!ncrView && dash && (
         <div className="space-y-4">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             {[
-              ["Records", dash.totals.records],
+              ["Total records", dash.totals.records],
               ["Open", dash.totals.open],
+              ["NCR / NC", dash.totals.ncrLike],
+              ["Unsafe acts", dash.totals.unsafeActs],
+              ["Site instructions", dash.totals.siteInstructions],
               ["Checklist fills", dash.totals.checklistFills],
-              ["Open fill RFIs", dash.totals.openFillRfis],
             ].map(([l, v]) => (
               <Card key={l as string} className="!p-4">
                 <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
@@ -166,7 +245,9 @@ export default function SafetyPage() {
             ))}
           </div>
           <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">Workday-style safety dashboard</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
+              Safety Dashboard.xlsx — one pager breakdown
+            </p>
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
               <PieChart title="By record type" items={dash.charts?.byType || []} />
               <PieChart title="By severity" items={dash.charts?.bySeverity || []} />
@@ -180,8 +261,14 @@ export default function SafetyPage() {
 
       {canCreate && (
         <Card>
-          <h3 className="font-semibold mb-3">Log safety record</h3>
-          <form className="grid sm:grid-cols-2 gap-3" onSubmit={createRecord}>
+          <h3 className="font-semibold mb-1">
+            {ncrView || form.recordType === "NCR" ? "Raise Safety NCR (Safety NCR.xlsx form)" : "Log safety record"}
+          </h3>
+          <p className="text-xs text-steel-muted mb-3">
+            Reference sheets: Safety NCR.xlsx · Safety Dashboard.xlsx — sync via{" "}
+            <code className="text-[10px]">node scripts/sync-reference-sheets.mjs</code>
+          </p>
+          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
             <Select value={form.recordType} onChange={(e) => setForm({ ...form, recordType: e.target.value })}>
               {TYPES.map((t) => (
                 <option key={t}>{t}</option>
@@ -192,30 +279,182 @@ export default function SafetyPage() {
                 <option key={s}>{s}</option>
               ))}
             </Select>
+            {(ncrView || form.recordType === "NCR") && (
+              <>
+                <Input
+                  placeholder="NCR number (e.g. Safari-Safety NCR-001)"
+                  value={form.ncrNumber}
+                  onChange={(e) => setForm({ ...form, ncrNumber: e.target.value })}
+                />
+                <Input
+                  placeholder="Activity / task"
+                  value={form.activityTask}
+                  onChange={(e) => setForm({ ...form, activityTask: e.target.value })}
+                />
+                <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  <option value="">Category</option>
+                  {NCR_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </>
+            )}
             <Input
-              className="sm:col-span-2"
-              required
-              placeholder="Title"
+              className="lg:col-span-2"
+              placeholder="Title (optional — auto from NCR no / location)"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
             <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <Input placeholder="Issued to / contractor" value={form.issuedTo} onChange={(e) => setForm({ ...form, issuedTo: e.target.value })} />
             <Input
-              placeholder="Corrective action"
-              value={form.correctiveAction}
-              onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })}
+              placeholder="Responsible party"
+              value={form.responsibleParty}
+              onChange={(e) => setForm({ ...form, responsibleParty: e.target.value })}
             />
             <TextArea
-              className="sm:col-span-2"
-              rows={3}
-              placeholder="Description"
+              className="sm:col-span-2 lg:col-span-3"
+              rows={2}
+              placeholder="Description of non-conformity / observation"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+              required
             />
-            <Button type="submit" className="sm:col-span-2">
-              Save safety record
+            {(ncrView || form.recordType === "NCR") && (
+              <>
+                <TextArea
+                  className="sm:col-span-2"
+                  rows={2}
+                  placeholder="Root cause"
+                  value={form.rootCause}
+                  onChange={(e) => setForm({ ...form, rootCause: e.target.value })}
+                />
+                <TextArea
+                  className="sm:col-span-2"
+                  rows={2}
+                  placeholder="Contributing factors"
+                  value={form.contributingFactors}
+                  onChange={(e) => setForm({ ...form, contributingFactors: e.target.value })}
+                />
+                <TextArea
+                  className="sm:col-span-2"
+                  rows={2}
+                  placeholder="Immediate corrective action"
+                  value={form.immediateAction}
+                  onChange={(e) => setForm({ ...form, immediateAction: e.target.value })}
+                />
+                <TextArea
+                  className="sm:col-span-2"
+                  rows={2}
+                  placeholder="Long-term corrective action"
+                  value={form.longTermAction}
+                  onChange={(e) => setForm({ ...form, longTermAction: e.target.value })}
+                />
+                <Input
+                  type="date"
+                  placeholder="Target completion"
+                  value={form.targetCompletion}
+                  onChange={(e) => setForm({ ...form, targetCompletion: e.target.value })}
+                />
+                <Input
+                  type="date"
+                  placeholder="Follow-up date"
+                  value={form.followUpDate}
+                  onChange={(e) => setForm({ ...form, followUpDate: e.target.value })}
+                />
+                <Input
+                  placeholder="Time impact (days)"
+                  value={form.timeImpact}
+                  onChange={(e) => setForm({ ...form, timeImpact: e.target.value })}
+                />
+                <Input
+                  placeholder="Cost impact (INR)"
+                  value={form.costImpact}
+                  onChange={(e) => setForm({ ...form, costImpact: e.target.value })}
+                />
+              </>
+            )}
+            <Input
+              placeholder="Corrective / action taken"
+              value={form.correctiveAction || form.actionTaken}
+              onChange={(e) => setForm({ ...form, correctiveAction: e.target.value, actionTaken: e.target.value })}
+            />
+            <Button type="submit" className="sm:col-span-2 lg:col-span-3">
+              {form.recordType === "NCR" ? "Raise Safety NCR" : "Save safety record"}
             </Button>
           </form>
+        </Card>
+      )}
+
+      {ncrView && (
+        <Card>
+          <h3 className="font-semibold mb-3">NCR Summary register (Safety Dashboard.xlsx)</h3>
+          <div className="overflow-x-auto max-h-[28rem]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
+                  <th className="py-2 pr-3">NCR / title</th>
+                  <th className="py-2 pr-3">Location</th>
+                  <th className="py-2 pr-3">Category</th>
+                  <th className="py-2 pr-3">Description</th>
+                  <th className="py-2 pr-3">Time impact</th>
+                  <th className="py-2 pr-3">Status</th>
+                  {canEdit && <th className="py-2">Action</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {ncrTableRows.map((n) => (
+                  <tr
+                    key={n.id}
+                    className={`border-b border-line/60 cursor-pointer ${active === n.id ? "bg-brand-soft/40" : ""}`}
+                    onClick={() => setActive(n.id)}
+                  >
+                    <td className="py-2 pr-3 font-mono text-xs">{n.ncrNumber || n.title}</td>
+                    <td className="py-2 pr-3">{n.location || "—"}</td>
+                    <td className="py-2 pr-3">{n.category || "—"}</td>
+                    <td className="py-2 pr-3 max-w-xs truncate">{n.description || "—"}</td>
+                    <td className="py-2 pr-3">{n.timeImpact || "—"}</td>
+                    <td className="py-2 pr-3">
+                      <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
+                    </td>
+                    {canEdit && (
+                      <td className="py-2" onClick={(e) => e.stopPropagation()}>
+                        {n.status === "Open" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="!py-1 !px-2 !text-xs"
+                            onClick={async () => {
+                              await api(`/api/safety/${n.id}`, {
+                                method: "PATCH",
+                                token,
+                                body: JSON.stringify({ status: "Closed" }),
+                              });
+                              setMsg(`${n.ncrNumber || n.title} closed`);
+                              await load();
+                            }}
+                          >
+                            Close
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-steel-muted">—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {!ncrTableRows.length && (
+                  <tr>
+                    <td colSpan={canEdit ? 7 : 6} className="py-6 text-steel-muted">
+                      No NCR rows — run seed or raise one above.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 
@@ -249,9 +488,10 @@ export default function SafetyPage() {
                   <span className="text-[11px] font-mono text-brand">{r.recordType}</span>
                   <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
                 </div>
-                <div className="font-medium text-sm mt-1">{r.title}</div>
+                <div className="font-medium text-sm mt-1">{r.ncrNumber || r.title}</div>
                 <div className="text-[11px] text-steel-muted mt-1">
                   {r.severity} · {new Date(r.occurredAt).toLocaleDateString()}
+                  {r.location ? ` · ${r.location}` : ""}
                 </div>
               </button>
             ))}
@@ -261,7 +501,7 @@ export default function SafetyPage() {
 
         <Card>
           {!selected && <p className="text-sm text-steel-muted">Select a safety record</p>}
-          {selected && (
+          {selected && editForm && (
             <div className="space-y-4">
               <div>
                 <div className="flex flex-wrap gap-2 mb-2">
@@ -274,37 +514,162 @@ export default function SafetyPage() {
                   >
                     {selected.severity}
                   </Badge>
+                  {selected.source && <Badge tone="neutral">{selected.source}</Badge>}
                 </div>
-                <h2 className="text-xl font-semibold">{selected.title}</h2>
-                <p className="text-sm text-steel-muted mt-1">
+                <p className="text-sm text-steel-muted">
                   Reported by {selected.reportedBy?.fullName} · {new Date(selected.occurredAt).toLocaleString()}
-                  {selected.location ? ` · ${selected.location}` : ""}
                 </p>
               </div>
-              {selected.description && (
-                <div className="rounded-lg bg-sand/50 p-3 text-sm whitespace-pre-wrap">{selected.description}</div>
-              )}
-              {selected.correctiveAction && (
-                <div>
-                  <div className="text-xs font-mono uppercase text-steel-muted mb-1">Corrective action</div>
-                  <p className="text-sm">{selected.correctiveAction}</p>
+
+              {canEdit ? (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Input
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    placeholder="Title"
+                  />
+                  <Input
+                    value={editForm.ncrNumber}
+                    onChange={(e) => setEditForm({ ...editForm, ncrNumber: e.target.value })}
+                    placeholder="NCR number"
+                  />
+                  <Select
+                    value={editForm.severity}
+                    onChange={(e) => setEditForm({ ...editForm, severity: e.target.value })}
+                  >
+                    {SEVERITIES.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </Select>
+                  <Select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  >
+                    <option>Open</option>
+                    <option>Closed</option>
+                  </Select>
+                  <Input
+                    value={editForm.location}
+                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                    placeholder="Location"
+                  />
+                  <Input
+                    value={editForm.activityTask}
+                    onChange={(e) => setEditForm({ ...editForm, activityTask: e.target.value })}
+                    placeholder="Activity / task"
+                  />
+                  <Input
+                    value={editForm.category}
+                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                    placeholder="Category"
+                  />
+                  <Input
+                    value={editForm.responsibleParty}
+                    onChange={(e) => setEditForm({ ...editForm, responsibleParty: e.target.value })}
+                    placeholder="Responsible party"
+                  />
+                  <Input
+                    value={editForm.issuedTo}
+                    onChange={(e) => setEditForm({ ...editForm, issuedTo: e.target.value })}
+                    placeholder="Issued to"
+                  />
+                  <Input
+                    type="date"
+                    value={editForm.targetCompletion}
+                    onChange={(e) => setEditForm({ ...editForm, targetCompletion: e.target.value })}
+                  />
+                  <Input
+                    type="date"
+                    value={editForm.followUpDate}
+                    onChange={(e) => setEditForm({ ...editForm, followUpDate: e.target.value })}
+                  />
+                  <Input
+                    value={editForm.timeImpact}
+                    onChange={(e) => setEditForm({ ...editForm, timeImpact: e.target.value })}
+                    placeholder="Time impact"
+                  />
+                  <Input
+                    value={editForm.costImpact}
+                    onChange={(e) => setEditForm({ ...editForm, costImpact: e.target.value })}
+                    placeholder="Cost impact"
+                  />
+                  <TextArea
+                    className="sm:col-span-2"
+                    rows={3}
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    placeholder="Description"
+                  />
+                  <TextArea
+                    className="sm:col-span-2"
+                    rows={2}
+                    value={editForm.rootCause}
+                    onChange={(e) => setEditForm({ ...editForm, rootCause: e.target.value })}
+                    placeholder="Root cause"
+                  />
+                  <TextArea
+                    className="sm:col-span-2"
+                    rows={2}
+                    value={editForm.immediateAction}
+                    onChange={(e) => setEditForm({ ...editForm, immediateAction: e.target.value })}
+                    placeholder="Immediate action"
+                  />
+                  <TextArea
+                    className="sm:col-span-2"
+                    rows={2}
+                    value={editForm.longTermAction}
+                    onChange={(e) => setEditForm({ ...editForm, longTermAction: e.target.value })}
+                    placeholder="Long-term action"
+                  />
+                  <TextArea
+                    className="sm:col-span-2"
+                    rows={2}
+                    value={editForm.correctiveAction}
+                    onChange={(e) => setEditForm({ ...editForm, correctiveAction: e.target.value })}
+                    placeholder="Corrective action / action taken"
+                  />
+                  <div className="sm:col-span-2 flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => void saveEdit()}>
+                      Save changes
+                    </Button>
+                    {selected.status === "Open" && (
+                      <Button
+                        type="button"
+                        variant="dark"
+                        onClick={async () => {
+                          await api(`/api/safety/${selected.id}`, {
+                            method: "PATCH",
+                            token,
+                            body: JSON.stringify({ status: "Closed" }),
+                          });
+                          setMsg("Record closed.");
+                          await load();
+                        }}
+                      >
+                        Close record
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
-              {canClose && selected.status === "Open" && (
-                <Button
-                  type="button"
-                  variant="dark"
-                  onClick={async () => {
-                    await api(`/api/safety/${selected.id}`, {
-                      method: "PATCH",
-                      token,
-                      body: JSON.stringify({ status: "Closed" }),
-                    });
-                    await load();
-                  }}
-                >
-                  Close record
-                </Button>
+              ) : (
+                <div className="space-y-3 text-sm">
+                  <h2 className="text-xl font-semibold">{selected.ncrNumber || selected.title}</h2>
+                  {selected.description && (
+                    <div className="rounded-lg bg-sand/50 p-3 whitespace-pre-wrap">{selected.description}</div>
+                  )}
+                  {selected.rootCause && (
+                    <div>
+                      <div className="text-xs font-mono uppercase text-steel-muted mb-1">Root cause</div>
+                      <p>{selected.rootCause}</p>
+                    </div>
+                  )}
+                  {selected.correctiveAction && (
+                    <div>
+                      <div className="text-xs font-mono uppercase text-steel-muted mb-1">Corrective action</div>
+                      <p>{selected.correctiveAction}</p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

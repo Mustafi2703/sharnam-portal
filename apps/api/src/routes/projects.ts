@@ -307,7 +307,7 @@ dmsRouter.post(
 
 dmsRouter.post(
   "/:projectId/upload",
-  requireRoles("admin", "office"),
+  requireRoles("admin", "office", "site_employee"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });

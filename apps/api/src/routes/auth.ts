@@ -46,13 +46,18 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
-  if (!user) return res.status(404).json({ error: "Not found" });
-  const roleDef = await prisma.roleDefinition.findUnique({ where: { key: user.role } });
-  res.json({
-    user: toAuthUser(user),
-    permissions: roleDef ? JSON.parse(roleDef.permissions) : DEFAULT_ROLE_PERMISSIONS[user.role as RoleKey],
-  });
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) return res.status(404).json({ error: "Not found" });
+    const roleDef = await prisma.roleDefinition.findUnique({ where: { key: user.role } });
+    res.json({
+      user: toAuthUser(user),
+      permissions: roleDef ? JSON.parse(roleDef.permissions) : DEFAULT_ROLE_PERMISSIONS[user.role as RoleKey],
+    });
+  } catch (err) {
+    console.error("auth/me error:", err);
+    res.status(503).json({ error: "Database temporarily unavailable — please retry." });
+  }
 });
 
 export const rolesRouter = Router();

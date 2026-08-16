@@ -698,6 +698,71 @@ safetyRouter.get("/project/:projectId", async (req, res) => {
   res.json({ records, stats: { total: records.length, open, incidents } });
 });
 
+function safetyRecordCreate(body: Record<string, unknown>) {
+  const date = (v: unknown) => (v ? new Date(String(v)) : null);
+  const str = (v: unknown, fallback = "") => (v != null && v !== "" ? String(v) : fallback);
+  const opt = (v: unknown) => (v != null && v !== "" ? String(v) : null);
+  return {
+    recordType: str(body.recordType, "Observation"),
+    title: str(body.title),
+    description: opt(body.description),
+    severity: str(body.severity, "Low"),
+    status: str(body.status, "Open"),
+    location: opt(body.location),
+    correctiveAction: opt(body.correctiveAction),
+    ncrNumber: opt(body.ncrNumber),
+    activityTask: opt(body.activityTask),
+    category: opt(body.category),
+    rootCause: opt(body.rootCause),
+    contributingFactors: opt(body.contributingFactors),
+    immediateAction: opt(body.immediateAction),
+    longTermAction: opt(body.longTermAction),
+    responsibleParty: opt(body.responsibleParty),
+    targetCompletion: body.targetCompletion ? date(body.targetCompletion) : null,
+    timeImpact: opt(body.timeImpact),
+    costImpact: opt(body.costImpact),
+    actionTaken: opt(body.actionTaken),
+    issuedTo: opt(body.issuedTo),
+    followUpDate: body.followUpDate ? date(body.followUpDate) : null,
+    source: opt(body.source),
+    assignedToId: opt(body.assignedToId),
+    occurredAt: body.occurredAt ? date(body.occurredAt) ?? new Date() : new Date(),
+  };
+}
+
+function safetyRecordPatch(body: Record<string, unknown>) {
+  const date = (v: unknown) => (v ? new Date(String(v)) : null);
+  const patch: Record<string, unknown> = {};
+  const set = (key: string, val: unknown, transform?: (v: unknown) => unknown) => {
+    if (val !== undefined) patch[key] = transform ? transform(val) : val;
+  };
+  set("recordType", body.recordType);
+  set("title", body.title);
+  set("description", body.description);
+  set("severity", body.severity);
+  set("status", body.status);
+  set("location", body.location);
+  set("correctiveAction", body.correctiveAction);
+  set("ncrNumber", body.ncrNumber);
+  set("activityTask", body.activityTask);
+  set("category", body.category);
+  set("rootCause", body.rootCause);
+  set("contributingFactors", body.contributingFactors);
+  set("immediateAction", body.immediateAction);
+  set("longTermAction", body.longTermAction);
+  set("responsibleParty", body.responsibleParty);
+  set("targetCompletion", body.targetCompletion, date);
+  set("timeImpact", body.timeImpact);
+  set("costImpact", body.costImpact);
+  set("actionTaken", body.actionTaken);
+  set("issuedTo", body.issuedTo);
+  set("followUpDate", body.followUpDate, date);
+  set("source", body.source);
+  set("assignedToId", body.assignedToId);
+  set("occurredAt", body.occurredAt, date);
+  return patch;
+}
+
 safetyRouter.post(
   "/project/:projectId",
   requireRoles("admin", "office", "site_employee", "employee", "vendor"),
@@ -705,16 +770,8 @@ safetyRouter.post(
     const row = await prisma.safetyRecord.create({
       data: {
         projectId: req.params.projectId,
-        recordType: req.body.recordType || "Observation",
-        title: req.body.title,
-        description: req.body.description,
-        severity: req.body.severity || "Low",
-        status: req.body.status || "Open",
-        location: req.body.location,
-        correctiveAction: req.body.correctiveAction,
-        occurredAt: req.body.occurredAt ? new Date(req.body.occurredAt) : new Date(),
+        ...safetyRecordCreate(req.body || {}),
         reportedById: req.user!.id,
-        assignedToId: req.body.assignedToId || null,
       },
       include: {
         reportedBy: { select: { fullName: true } },
@@ -727,19 +784,13 @@ safetyRouter.post(
 );
 
 safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
-  const status = req.body.status;
+  const body = req.body || {};
+  const patch = safetyRecordPatch(body);
+  if (body.status === "Closed") patch.closedAt = new Date();
+  else if (body.closedAt) patch.closedAt = new Date(String(body.closedAt));
   const row = await prisma.safetyRecord.update({
     where: { id: req.params.id },
-    data: {
-      title: req.body.title,
-      description: req.body.description,
-      severity: req.body.severity,
-      status,
-      location: req.body.location,
-      correctiveAction: req.body.correctiveAction,
-      assignedToId: req.body.assignedToId,
-      closedAt: status === "Closed" ? new Date() : req.body.closedAt ? new Date(req.body.closedAt) : undefined,
-    },
+    data: patch,
     include: {
       reportedBy: { select: { fullName: true } },
       assignedTo: { select: { fullName: true } },
