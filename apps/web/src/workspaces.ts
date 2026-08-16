@@ -73,12 +73,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       query: "family=DrawingCheck",
       blurb: "Who filled what — branded download with Sharnam logo.",
     },
-    { to: "dms", label: "Documents (DMS)", blurb: "Procore-style project document manager — ISO folders, upload, preview." },
     {
-      to: "coordination",
-      label: "Coordination",
-      roles: ["admin", "office", "site_employee", "employee"],
-      blurb: "Design issues → escalate to Ask.",
+      to: "drawings/coordination",
+      label: "Design coordination",
+      blurb: "Clash / design issues — discipline, linked drawing, ball-in-court. Escalate open items to Ask RFI.",
+      sheet: "Design coordination register",
     },
     {
       to: "rfis",
@@ -107,7 +106,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "site_employee", "employee", "vendor"],
       blurb: "Vendor assignments.",
     },
-    { to: "dms", label: "Documents (DMS)", blurb: "Procore-style folder browse — all project files except the GFC register workflow." },
+    { to: "dms", label: "Documents (DMS)", blurb: "ISO folder tree — contracts, HSE, daily records (not drawing GFC workflow)." },
   ],
   quality: [
     {

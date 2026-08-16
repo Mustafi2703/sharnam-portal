@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
 import * as XLSX from "xlsx";
+import { applyDatabaseUrl } from "../scripts/resolve-database-url.mjs";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
 import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
 import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr, seedSafetyFromWorkbooksForAllDemoProjects } from "./qualitySafetySheets.ts";
@@ -17,8 +18,49 @@ import {
   type RoleKey,
 } from "../packages/shared/src/index.ts";
 
+applyDatabaseUrl();
+
 const prisma = new PrismaClient();
 const SEED_PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
+
+/** Tiny valid PDF for in-browser iframe preview in GFC / coordination demos */
+function writeMinimalDemoPdf(absPath: string, lines: string[]) {
+  const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  let y = 720;
+  const cmds = lines
+    .filter(Boolean)
+    .slice(0, 6)
+    .map((line) => {
+      const cmd = `72 ${y} Td (${esc(line.slice(0, 72))}) Tj`;
+      y -= 20;
+      return cmd;
+    });
+  const stream = `BT /F1 14 Tf ${cmds.join("\n")} ET`;
+  const len = Buffer.byteLength(stream, "utf8");
+  const pdf = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>>>>>>>endobj
+4 0 obj<</Length ${len}>>stream
+${stream}
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000010 00000 n 
+0000000058 00000 n 
+0000000112 00000 n 
+0000000268 00000 n 
+trailer<</Size 5/Root 1 0 R>>
+startxref
+380
+%%EOF`;
+  fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  fs.writeFileSync(absPath, pdf);
+}
+
+const ISO_DRAWINGS_ROOT = "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications";
 
 /**
  * Where the seed looks for client-shared Excel workbooks.
@@ -101,6 +143,8 @@ async function seedUsers() {
     { email: "site@sharnam.demo", fullName: "Site Engineer", role: "site_employee" },
     { email: "client@sharnam.demo", fullName: "Client Viewer", role: "client" },
     { email: "employee@sharnam.demo", fullName: "Demo Employee", role: "employee" },
+    { email: "mep@sharnam.demo", fullName: "MEP Design Engineer", role: "employee" },
+    { email: "struct@sharnam.demo", fullName: "Structural Reviewer", role: "employee" },
     { email: "vendor@sharnam.demo", fullName: "Vendor Partner", role: "vendor" },
     { email: "tcc@sharnam.demo", fullName: "TCC Bid Manager", role: "vendor" },
     { email: "pearl@sharnam.demo", fullName: "Pearl Bid Manager", role: "vendor" },
@@ -562,13 +606,14 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   for (const d of drawingSet) {
     drawIdx += 1;
     const folder = `Drawings/${d.discipline === "MEP" ? "MEP" : d.discipline}`;
-    const fileName = `${d.drawingNumber}-placeholder.txt`;
+    const fileName = `${d.drawingNumber}-${d.rev.replace("Rev ", "R")}-GFC.pdf`;
     const absDir = path.join(driveRoot, folder);
-    fs.mkdirSync(absDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(absDir, fileName),
-      `Mock IFC sheet ${d.drawingNumber} — ${d.title} (${d.rev})\nReplace with PDF via Office portal.`
-    );
+    writeMinimalDemoPdf(path.join(absDir, fileName), [
+      d.drawingNumber,
+      d.title,
+      `${d.rev} — Good for Construction`,
+      "Sharnam portal demo",
+    ]);
     const drawing = await prisma.drawing.upsert({
       where: {
         projectId_drawingNumber: { projectId: project.id, drawingNumber: d.drawingNumber },
@@ -611,11 +656,13 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     if (d.published) {
       const revCount = await prisma.drawingRevision.count({ where: { drawingId: drawing.id } });
       if (revCount < 2) {
-        const r1Name = `${d.drawingNumber}-R1-placeholder.txt`;
-        fs.writeFileSync(
-          path.join(absDir, r1Name),
-          `Mock IFC sheet ${d.drawingNumber} — ${d.title} (R1)\nRevision uploaded after publish.\n`
-        );
+        const r1Name = `${d.drawingNumber}-R1-GFC.pdf`;
+        writeMinimalDemoPdf(path.join(absDir, r1Name), [
+          d.drawingNumber,
+          d.title,
+          "R1 — IFC revision",
+          "Sharnam portal demo",
+        ]);
         await prisma.drawingRevision.create({
           data: {
             drawingId: drawing.id,
@@ -648,6 +695,47 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   }
   console.log("Drawings seeded:", drawingSet.length);
 
+  // Mirror published sheets into ISO 04.02 library (Drawing files browse in SharePoint tree)
+  for (const sub of ["Architecture", "Structural", "MEP", "Civil"]) {
+    fs.mkdirSync(path.join(driveRoot, ISO_DRAWINGS_ROOT, sub), { recursive: true });
+  }
+  for (const d of drawingSet.filter((x) => x.published)) {
+    const sub = d.discipline === "MEP" ? "MEP" : d.discipline;
+    const relFolder = `${ISO_DRAWINGS_ROOT}/${sub}`;
+    const fileName = `${d.drawingNumber}-GFC.pdf`;
+    writeMinimalDemoPdf(path.join(driveRoot, relFolder, fileName), [
+      d.drawingNumber,
+      d.title,
+      `${d.rev} — Good for Construction`,
+      "SharePoint · 04.02 Drawings and Specifications",
+    ]);
+  }
+
+  // Upgrade legacy .txt revision placeholders to PDF for existing demo DBs
+  const txtRevisions = await prisma.drawingRevision.findMany({
+    where: {
+      drawing: { projectId: project.id },
+      OR: [{ fileName: { endsWith: ".txt" } }, { fileUrl: { endsWith: ".txt" } }],
+    },
+    include: { drawing: true },
+  });
+  for (const rev of txtRevisions) {
+    const oldUrl = rev.fileUrl || "";
+    const oldName = rev.fileName || path.basename(oldUrl);
+    const pdfName = oldName.replace(/-placeholder\.txt$/i, "-GFC.pdf").replace(/\.txt$/i, ".pdf");
+    const relInUrl = oldUrl.replace(/^\/uploads\/onedrive\/[^/]+\//, "");
+    const relPath = relInUrl.replace(oldName, pdfName);
+    const absPath = path.join(driveRoot, relPath);
+    writeMinimalDemoPdf(absPath, [rev.drawing.drawingNumber, rev.drawing.title, rev.revisionNumber || ""]);
+    await prisma.drawingRevision.update({
+      where: { id: rev.id },
+      data: {
+        fileName: pdfName,
+        fileUrl: `/uploads/onedrive/${project.code}/${relPath.replace(/\\/g, "/")}`,
+      },
+    });
+  }
+
   // Assign ALL checklist templates to the demo project
   const templates = await prisma.checklistTemplate.findMany();
   for (const t of templates) {
@@ -658,6 +746,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
   console.log("Checklist assignments:", templates.length);
+
   const drawing = { id: firstDrawingId };
   const structuralDrawing = { id: structuralDrawingId || firstDrawingId };
 
@@ -1059,28 +1148,61 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   await seedCostFromBudgetWorkbook(prisma, project.id, EXCEL_ROOT);
   await seedBbsDemoShapes(prisma, project.id, project.code);
 
-  // Communications matrix defaults
-  const matrixCount = await prisma.communicationMatrix.count({ where: { projectId: project.id } });
-  if (matrixCount === 0) {
-    const matrix = [
-      ["Weekly Report", "office", "client", "Weekly", "Email"],
-      ["Daily Diary Summary", "site_employee", "office", "Daily", "In-App"],
-      ["RFI Update", "office", "client", "Ad-hoc", "Email"],
-      ["Progress Photos", "site_employee", "client", "Weekly", "In-App"],
-      ["Site Meeting MoM", "office", "client", "Weekly", "Email"],
+  // Communications matrix — RFI respond/fill parties (standard + legacy rows)
+  const matrixSpecs = [
+    { communicationType: "RFI Update", fromRole: "office", toRole: "client", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "office", toRole: "vendor", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "office", toRole: "site_employee", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "employee", toRole: "office", frequency: "As needed", channel: "RFI" },
+    { communicationType: "RFI Update", fromRole: "site_employee", toRole: "office", frequency: "As needed", channel: "RFI" },
+    { communicationType: "Checklist fill", fromRole: "office", toRole: "vendor", frequency: "As needed", channel: "RFI" },
+    { communicationType: "Checklist fill", fromRole: "office", toRole: "site_employee", frequency: "As needed", channel: "RFI" },
+    { communicationType: "Checklist fill", fromRole: "office", toRole: "employee", frequency: "As needed", channel: "RFI" },
+    { communicationType: "Weekly Report", fromRole: "office", toRole: "client", frequency: "Weekly", channel: "Email" },
+    { communicationType: "Daily Diary Summary", fromRole: "site_employee", toRole: "office", frequency: "Daily", channel: "In-App" },
+    { communicationType: "Site Meeting MoM", fromRole: "office", toRole: "client", frequency: "Weekly", channel: "Email" },
+  ] as const;
+  for (const s of matrixSpecs) {
+    const exists = await prisma.communicationMatrix.findFirst({
+      where: {
+        projectId: project.id,
+        communicationType: s.communicationType,
+        fromRole: s.fromRole,
+        toRole: s.toRole,
+        channel: s.channel,
+      },
+    });
+    if (!exists) {
+      await prisma.communicationMatrix.create({ data: { projectId: project.id, ...s, isActive: true } });
+    }
+  }
+
+  const contactCount = await prisma.communicationContact.count({ where: { projectId: project.id } });
+  if (contactCount === 0) {
+    const contacts = [
+      ["Client", "SPDC Project Owner", "Client Representative", "SPDC", "client@sharnam.demo", "TO", 1],
+      ["PMC", "Sharnam PMC", "Office Coordinator", "Sharnam", "office@sharnam.demo", "TO", 2],
+      ["PMC", "Sharnam PMC", "MEP Design Engineer", "Sharnam", "mep@sharnam.demo", "CC", 3],
+      ["PMC", "Sharnam PMC", "Structural Reviewer", "Sharnam", "struct@sharnam.demo", "CC", 4],
+      ["Consultant", "MEP Consultant", "Lead MEP", "Consultant Co", "mep@sharnam.demo", "TO", 5],
+      ["Contractor", "M/s Bhavna Infra", "Site Engineer", "Bhavna Infra", "site@sharnam.demo", "TO", 6],
     ] as const;
-    for (const [type, from, to, freq, channel] of matrix) {
-      await prisma.communicationMatrix.create({
+    for (const [section, org, name, company, email, mailRole, sortOrder] of contacts) {
+      await prisma.communicationContact.create({
         data: {
           projectId: project.id,
-          communicationType: type,
-          fromRole: from,
-          toRole: to,
-          frequency: freq,
-          channel,
+          matrixKind: "TECHNICAL",
+          orgSection: section,
+          orgName: org,
+          personName: name,
+          company,
+          email,
+          mailRole,
+          sortOrder,
         },
       });
     }
+    console.log("Communication contacts seeded:", contacts.length);
   }
 
   // CRM / HRM sample
@@ -1224,28 +1346,140 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
   const adminId = users.find((u) => u.role === "admin")?.id!;
   const siteId = users.find((u) => u.role === "site_employee")?.id!;
   const officeUserId = users.find((u) => u.role === "office")?.id!;
+  const mepUserId = users.find((u) => u.email === "mep@sharnam.demo")?.id!;
+  const structUserId = users.find((u) => u.email === "struct@sharnam.demo")?.id!;
+  const employeeId = users.find((u) => u.email === "employee@sharnam.demo")?.id!;
 
-  // Sample RFI
-  const rfiCount = await prisma.rfi.count({ where: { projectId: project.id } });
-  if (rfiCount === 0 && drawing.id) {
-    await prisma.rfi.create({
+  const drawingByNum = async (num: string) =>
+    prisma.drawing.findFirst({ where: { projectId: project.id, drawingNumber: num } });
+
+  const s201 = await drawingByNum("S-201");
+  const e101 = await drawingByNum("E-101");
+  const p101 = await drawingByNum("P-101");
+  const siteExecAssignment = await prisma.checklistAssignment.findFirst({
+    where: { projectId: project.id, template: { checklistType: "SiteExecution" } },
+  });
+
+  // Demo RFIs — varied fill / response states for walkthrough
+  const demoRfis: {
+    number: string;
+    subject: string;
+    question: string;
+    status: string;
+    rfiKind: string;
+    createdById: string;
+    assignedToId?: string;
+    linkedDrawingId?: string | null;
+    linkedAssignmentId?: string | null;
+    scheduleImpact?: string;
+    costImpact?: string;
+    responses?: { text: string; byId: string; official?: boolean }[];
+  }[] = [
+    {
+      number: "RFI-001",
+      subject: "Beam depth conflict at Grid B/3",
+      question:
+        "Structural S-201 shows 450mm beam; architectural ceiling void on A-301 allows only 380mm. Please confirm preferred resolution.",
+      status: "Open",
+      rfiKind: "RequestForInformation",
+      createdById: siteId,
+      assignedToId: structUserId || officeUserId,
+      linkedDrawingId: s201?.id || structuralDrawing.id || null,
+      scheduleImpact: "Medium",
+      costImpact: "Low",
+    },
+    {
+      number: "RFI-002",
+      subject: "DB location at GF electrical room — confirm clearance",
+      question: "E-101 shows DB flush with wall; site measure is 120mm short. Confirm revised layout or wall chase.",
+      status: "Answered",
+      rfiKind: "RequestForInformation",
+      createdById: mepUserId || siteId,
+      assignedToId: officeUserId,
+      linkedDrawingId: e101?.id || null,
+      scheduleImpact: "Low",
+      costImpact: "None",
+      responses: [
+        {
+          text: "Proceed with 150mm chase on grid line B — updated sketch will be issued as E-101 R1.",
+          byId: officeUserId,
+          official: true,
+        },
+      ],
+    },
+    {
+      number: "RFI-003",
+      subject: "Facade fixing detail — request consultant confirmation",
+      question: "Curtain wall bracket spacing differs from shop drawing. Need formal approval before proceed.",
+      status: "Closed",
+      rfiKind: "RequestForInformation",
+      createdById: employeeId || siteId,
+      assignedToId: officeUserId,
+      scheduleImpact: "High",
+      costImpact: "Medium",
+      responses: [
+        { text: "Consultant confirmed 600mm centres — attach approved markup to site file.", byId: officeUserId, official: true },
+        { text: "Closed after site photo uploaded.", byId: officeUserId, official: true },
+      ],
+    },
+    {
+      number: "DWG-RFI-001",
+      subject: "Fill site execution checklist — Block A slab pour",
+      question: "Please fill the linked site checklist and attach pour card photos before tomorrow's review.",
+      status: "Open",
+      rfiKind: "DrawingChecklist",
+      createdById: officeUserId,
+      assignedToId: siteId,
+      linkedAssignmentId: siteExecAssignment?.id || null,
+    },
+    {
+      number: "RFI-004",
+      subject: "Plumbing riser offset at Shaft S-02",
+      question: "Escalated from design coordination — confirm 75mm offset acceptable for insulation clearance.",
+      status: "Open",
+      rfiKind: "RequestForInformation",
+      createdById: mepUserId || officeUserId,
+      assignedToId: officeUserId,
+      linkedDrawingId: p101?.id || null,
+      scheduleImpact: "Medium",
+      costImpact: "Low",
+    },
+  ];
+
+  for (const spec of demoRfis) {
+    const exists = await prisma.rfi.findFirst({ where: { projectId: project.id, number: spec.number } });
+    if (exists) continue;
+    const rfi = await prisma.rfi.create({
       data: {
         projectId: project.id,
-        number: "RFI-001",
-        subject: "Beam depth conflict at Grid B/3",
-        question:
-          "Structural S-201 shows 450mm beam; architectural ceiling void on A-301 allows only 380mm. Please confirm preferred resolution.",
-        status: "Open",
-        ballInCourt: "Assignee",
-        assignedToId: officeUserId,
-        createdById: siteId,
-        linkedDrawingId: structuralDrawing.id,
+        number: spec.number,
+        subject: spec.subject,
+        question: spec.question,
+        status: spec.status,
+        rfiKind: spec.rfiKind,
+        ballInCourt: spec.status === "Closed" ? "Creator" : "Assignee",
+        createdById: spec.createdById,
+        assignedToId: spec.assignedToId || null,
+        linkedDrawingId: spec.linkedDrawingId || null,
+        linkedAssignmentId: spec.linkedAssignmentId || null,
         dueDate: new Date(Date.now() + 5 * 86400000),
-        scheduleImpact: "Medium",
-        costImpact: "Low",
+        scheduleImpact: spec.scheduleImpact || "None",
+        costImpact: spec.costImpact || "None",
+        closedAt: spec.status === "Closed" ? new Date() : null,
       },
     });
+    for (const resp of spec.responses || []) {
+      await prisma.rfiResponse.create({
+        data: {
+          rfiId: rfi.id,
+          respondedById: resp.byId,
+          responseText: resp.text,
+          isOfficialResponse: resp.official !== false,
+        },
+      });
+    }
   }
+  console.log("Demo RFIs seeded (open / answered / closed / checklist fill)");
 
   // Sample QA inspection (gated by published drawings)
   const inspCount = await prisma.qualityInspection.count({ where: { projectId: project.id } });
@@ -1301,16 +1535,65 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     });
   }
   if ((await prisma.designCoordinationIssue.count({ where: { projectId: project.id } })) === 0) {
-    await prisma.designCoordinationIssue.create({
-      data: {
-        projectId: project.id,
-        title: "AHU duct vs beam clash — Level 1 corridor",
-        description: "400x600 duct conflicts with secondary beam at Grid C.",
-        discipline: "MEP",
-        location: "L1 corridor",
-        priority: "High",
-      },
+    const drawingIdByNumber = async (num: string) =>
+      (await prisma.drawing.findFirst({ where: { projectId: project.id, drawingNumber: num } }))?.id ?? null;
+    const [s201, s401, p101] = await Promise.all([
+      drawingIdByNumber("S-201"),
+      drawingIdByNumber("S-401"),
+      drawingIdByNumber("P-101"),
+    ]);
+    await prisma.designCoordinationIssue.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: "AHU duct vs beam clash — Level 1 corridor",
+          description: "400x600 duct conflicts with secondary beam at Grid C.",
+          discipline: "MEP",
+          location: "L1 corridor · Grid C",
+          priority: "High",
+          ballInCourt: "Consultant",
+          assignedToName: "MEP consultant",
+          linkedDrawingId: s201,
+        },
+        {
+          projectId: project.id,
+          title: "Stair headroom below slab soffit — Block A",
+          description: "Finished floor to soffit 2.05 m; code requires 2.10 m at landing.",
+          discipline: "Architecture",
+          location: "Block A stair 01",
+          priority: "Medium",
+          status: "Open",
+          ballInCourt: "PMC",
+          linkedDrawingId: s401,
+        },
+        {
+          projectId: project.id,
+          title: "Cable tray routing vs plumbing riser — Level 2",
+          description: "Electrical tray clashes with plumbing riser at shaft S-02.",
+          discipline: "MEP",
+          location: "Shaft S-02 · L2",
+          priority: "High",
+          ballInCourt: "Contractor",
+          assignedToName: "Electrical contractor",
+          linkedDrawingId: p101,
+        },
+      ],
     });
+  } else {
+    const drawingIdByNumber = async (num: string) =>
+      (await prisma.drawing.findFirst({ where: { projectId: project.id, drawingNumber: num } }))?.id ?? null;
+    for (const [titlePart, num] of [
+      ["AHU duct", "S-201"],
+      ["Stair headroom", "S-401"],
+      ["Cable tray", "P-101"],
+    ] as const) {
+      const linkedDrawingId = await drawingIdByNumber(num);
+      if (!linkedDrawingId) continue;
+      await prisma.designCoordinationIssue.updateMany({
+        where: { projectId: project.id, title: { contains: titlePart }, linkedDrawingId: null },
+        data: { linkedDrawingId },
+      });
+    }
   }
 
   // Sample meeting for MoM demo
@@ -1418,7 +1701,9 @@ async function main() {
 
   console.log("Done.");
   console.log("Password for all demo users:", SEED_PASSWORD);
-  console.log("Logins: admin / office / site / client / employee / vendor @sharnam.demo");
+  console.log(
+    "Logins: admin / office / site / client / employee / mep / struct / vendor @sharnam.demo"
+  );
   console.log("Bid vendors: vendor@ (Bhavna) · tcc@ · pearl@ @sharnam.demo");
 }
 

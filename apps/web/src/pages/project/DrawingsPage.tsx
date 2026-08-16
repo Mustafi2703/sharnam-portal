@@ -7,6 +7,9 @@ import { Badge, Button, Card, Input, PageHeader, Select } from "../../components
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
+import { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
+import { DrawingFileViewer } from "../../components/DrawingFileViewer";
+import { drawingFileKind, resolveDrawingFileUrl, type DrawingPreview } from "../../lib/drawingPreview";
 import PdfMarkup from "../../components/PdfMarkup";
 import ImageMarkup from "../../components/ImageMarkup";
 
@@ -18,12 +21,14 @@ function fmtDate(d?: string | Date | null) {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function fileKind(nameOrUrl?: string | null) {
-  const n = (nameOrUrl || "").toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|bmp)(\?|$)/.test(n)) return "image";
-  if (/\.pdf(\?|$)/.test(n)) return "pdf";
-  if (/\.dwg(\?|$)/.test(n)) return "dwg";
-  return "other";
+function previewFromRev(d: { drawingNumber?: string; currentRev?: string }, rev: { revisionNumber?: string; fileUrl?: string; fileName?: string }): DrawingPreview {
+  const fileName = rev.fileName || rev.fileUrl || "";
+  return {
+    title: `${d.drawingNumber} · ${rev.revisionNumber || d.currentRev || "—"}`,
+    fileUrl: resolveDrawingFileUrl(rev.fileUrl),
+    fileName,
+    kind: drawingFileKind(fileName),
+  };
 }
 
 export default function DrawingsPage() {
@@ -34,7 +39,7 @@ export default function DrawingsPage() {
   const [filter, setFilter] = useState("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
-  const [viewer, setViewer] = useState<{ title: string; fileUrl: string; fileName?: string } | null>(null);
+  const [viewer, setViewer] = useState<DrawingPreview | null>(null);
   const [showRegister, setShowRegister] = useState(false);
   const [precheckOpen, setPrecheckOpen] = useState(false);
   const [precheckMode, setPrecheckMode] = useState<"register" | "revision">("register");
@@ -291,11 +296,7 @@ export default function DrawingsPage() {
     );
     const latest = revsAsc[revsAsc.length - 1];
     if (!latest?.fileUrl) return;
-    setViewer({
-      title: `${d.drawingNumber} · ${latest.revisionNumber || d.currentRev} (latest)`,
-      fileUrl: latest.fileUrl,
-      fileName: latest.fileName,
-    });
+    setViewer(previewFromRev(d, latest));
   }
 
   async function registerDrawing(e: FormEvent) {
@@ -395,62 +396,91 @@ export default function DrawingsPage() {
     setMsg("Complete Drawing Check Master in the overlay — revision upload unlocks after.");
   }
 
-  const viewerKind = fileKind(viewer?.fileName || viewer?.fileUrl);
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 min-w-0">
+      {id && <DrawingsModuleNav projectId={id} />}
+
       <PageHeader
+        dense
         eyebrow="Drawings module · GFC"
         title="Drawing register"
         subtitle={
           clientOnly
-            ? "View published sheets and revision dates. Clients cannot upload."
-            : "Upload opens Drawing Check Master as an overlay on this page. When complete, the upload dialog opens here. Manage templates in Checklist manager."
+            ? "View published sheets and revision dates."
+            : "Upload runs Drawing Check Master first, then opens here. Other tools are in the tabs above."
         }
         actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <ReportExportButtons projectId={id} kind="drawings" compact />
-            <Button type="button" variant="secondary" onClick={() => void exportCsv()}>
+          canUpload ? (
+            <>
+              <Button type="button" variant="secondary" className="flex-1 sm:flex-none" onClick={() => setShowRegisterLine((v) => !v)}>
+                {showRegisterLine ? "Cancel line" : "Add line"}
+              </Button>
+              <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
+                Upload GFC
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-3 -mt-1">
+        <div
+          className="flex gap-1 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-0.5 min-w-0"
+          role="tablist"
+          aria-label="Filter by discipline"
+        >
+          {disciplines.map((d) => (
+            <button
+              key={d}
+              type="button"
+              role="tab"
+              aria-selected={filter === d}
+              onClick={() => setFilter(d)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border whitespace-nowrap ${
+                filter === d ? "bg-procore-navy text-white border-procore-navy" : "bg-paper text-ink border-line"
+              }`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+
+        <details className="relative shrink-0 self-stretch sm:self-auto">
+          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden h-full flex items-center">
+            <span className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60">
+              Export & sync ▾
+            </span>
+          </summary>
+          <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-lg border border-line bg-paper shadow-lg p-2 space-y-1">
+            <ReportExportButtons projectId={id} kind="drawings" label="Register" menu />
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full !justify-start !text-sm !py-2"
+              onClick={(e) => {
+                void exportCsv();
+                (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+              }}
+            >
               Export GFC CSV
             </Button>
             {canUpload && (
-              <Button type="button" variant="secondary" disabled={dumpBusy} onClick={() => void syncRegistersToDrive()}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full !justify-start !text-sm !py-2"
+                disabled={dumpBusy}
+                onClick={(e) => {
+                  void syncRegistersToDrive();
+                  (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                }}
+              >
                 {dumpBusy ? "Syncing…" : "Sync logs → SharePoint"}
               </Button>
             )}
-            <Link to={`/projects/${id}/drawings/register`}>
-              <Button type="button" variant="secondary">
-                Master register
-              </Button>
-            </Link>
-            <Link to={`/projects/${id}/checklist-master?family=DrawingCheck`}>
-              <Button type="button" variant="secondary">
-                Checklist master
-              </Button>
-            </Link>
-            <Link to={`/projects/${id}/drawings/library`}>
-              <Button type="button" variant="secondary">
-                Drawing files (SharePoint)
-              </Button>
-            </Link>
-            <Link to={`/projects/${id}/dms`}>
-              <Button type="button" variant="ghost">
-                Documents (DMS)
-              </Button>
-            </Link>
-            {canUpload && (
-              <>
-                <Button type="button" variant="secondary" onClick={() => setShowRegisterLine((v) => !v)}>
-                  Add register line
-                </Button>
-                <Button type="button" onClick={() => startUploadFlow()}>
-                  Upload GFC drawing
-                </Button>
-              </>
-            )}
           </div>
-        }
-      />
+        </details>
+      </div>
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
@@ -458,7 +488,7 @@ export default function DrawingsPage() {
         <Card>
           <h3 className="font-semibold mb-1">Add GFC register line (no file yet)</h3>
           <p className="text-xs text-steel-muted mb-3">
-            Reserve a drawing number in the register. Upload the PDF/DWG later via <strong>Upload GFC drawing</strong> — Drawing Check Master unlocks the file step.
+            Reserve a drawing number in the register. Upload the PDF/DWG later via <strong>Upload GFC</strong> — Drawing Check Master unlocks the file step.
           </p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={(e) => void addRegisterLine(e)}>
             <Input
@@ -495,21 +525,6 @@ export default function DrawingsPage() {
           </form>
         </Card>
       )}
-
-      <div className="flex flex-wrap gap-1">
-        {disciplines.map((d) => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => setFilter(d)}
-            className={`rounded px-3 py-1 text-xs font-medium border ${
-              filter === d ? "bg-procore-navy text-white border-procore-navy" : "bg-paper text-ink border-line"
-            }`}
-          >
-            {d}
-          </button>
-        ))}
-      </div>
 
       {canUpload && (
         <Card className="!p-5 border-brand/30 bg-paper text-ink">
@@ -843,13 +858,7 @@ export default function DrawingsPage() {
                                       type="button"
                                       variant="ghost"
                                       className="!text-xs !px-2 !py-1"
-                                      onClick={() =>
-                                        setViewer({
-                                          title: `${d.drawingNumber} · ${r.revisionNumber}`,
-                                          fileUrl: r.fileUrl,
-                                          fileName: r.fileName,
-                                        })
-                                      }
+                                      onClick={() => setViewer(previewFromRev(d, r))}
                                     >
                                       View
                                     </Button>
@@ -1002,58 +1011,7 @@ export default function DrawingsPage() {
         </div>
       )}
 
-      {viewer && (
-        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-3 sm:p-6">
-          <div className="bg-white rounded-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line bg-procore-navy text-white">
-              <div className="min-w-0">
-                <div className="font-semibold truncate">{viewer.title}</div>
-                <div className="text-[11px] text-white/70 truncate">{viewer.fileName || viewer.fileUrl}</div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <a href={viewer.fileUrl} target="_blank" rel="noreferrer" className="text-xs underline text-white/90">
-                  Open tab
-                </a>
-                <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setViewer(null)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 min-h-[50vh] bg-sand/60">
-              {viewerKind === "image" && (
-                <img src={viewer.fileUrl} alt={viewer.title} className="max-h-[75vh] mx-auto object-contain p-4" />
-              )}
-              {viewerKind === "pdf" && (
-                <iframe title={viewer.title} src={viewer.fileUrl} className="w-full h-[75vh] border-0" />
-              )}
-              {viewerKind === "dwg" && (
-                <div className="p-8 text-center space-y-4">
-                  <p className="text-sm text-steel-muted max-w-md mx-auto">
-                    AutoCAD DWG stored in SharePoint / OneDrive — preview is not supported in the browser. Download to open in CAD.
-                  </p>
-                  <a
-                    href={viewer.fileUrl}
-                    download
-                    className="inline-flex items-center gap-2 rounded-lg bg-brand text-white px-4 py-2 text-sm font-semibold"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Download DWG →
-                  </a>
-                </div>
-              )}
-              {viewerKind === "other" && (
-                <div className="p-8 text-center space-y-3">
-                  <p className="text-sm text-steel-muted">Preview not available for this file type. Download or open in a new tab.</p>
-                  <a href={viewer.fileUrl} className="text-brand font-semibold" target="_blank" rel="noreferrer">
-                    Download / open file →
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {viewer && <DrawingFileViewer preview={viewer} variant="modal" onClose={() => setViewer(null)} />}
     </div>
   );
 }

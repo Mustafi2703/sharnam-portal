@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
+import { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { DRAWING_REGISTER_SHEET_VIEWS, drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
 
@@ -59,6 +60,8 @@ export default function DrawingRegisterPage() {
 
   return (
     <div className="space-y-5">
+      {id && <DrawingsModuleNav projectId={id} />}
+
       <PageHeader
         eyebrow="Drawings module"
         title={sheetView.label}

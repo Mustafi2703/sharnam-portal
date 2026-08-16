@@ -9,11 +9,14 @@ export function ReportExportButtons({
   kind,
   label = "Export",
   compact = false,
+  menu = false,
 }: {
   projectId?: string | null;
   kind: ExportModule;
   label?: string;
   compact?: boolean;
+  /** Vertical stack for overflow / export menus */
+  menu?: boolean;
 }) {
   const { token } = useAuth();
   const [busy, setBusy] = useState<"xlsx" | "pdf" | null>(null);
@@ -42,16 +45,29 @@ export function ReportExportButtons({
   }
 
   return (
-    <div className={compact ? "inline-flex flex-col items-end gap-1" : "space-y-2"}>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" disabled={!!busy} className="!text-xs !py-1.5" onClick={() => void run("xlsx")}>
+    <div className={menu ? "flex flex-col gap-1 w-full" : compact ? "inline-flex flex-col items-end gap-1" : "space-y-2"}>
+      <div className={menu ? "flex flex-col gap-1 w-full" : "flex flex-wrap gap-2"}>
+        <Button
+          type="button"
+          variant={menu ? "ghost" : "secondary"}
+          disabled={!!busy}
+          className={menu ? "w-full !justify-start !text-sm !py-2" : "!text-xs !py-1.5"}
+          onClick={() => void run("xlsx")}
+        >
           {busy === "xlsx" ? "…" : `${label} Excel`}
         </Button>
-        <Button type="button" disabled={!!busy} className="!text-xs !py-1.5" onClick={() => void run("pdf")}>
+        <Button
+          type="button"
+          variant={menu ? "ghost" : undefined}
+          disabled={!!busy}
+          className={menu ? "w-full !justify-start !text-sm !py-2" : "!text-xs !py-1.5"}
+          onClick={() => void run("pdf")}
+        >
           {busy === "pdf" ? "…" : `${label} PDF`}
         </Button>
       </div>
-      {msg && <p className="text-[11px] text-steel-muted max-w-xs text-right">{msg}</p>}
+      {msg && !menu && <p className="text-[11px] text-steel-muted max-w-xs text-right">{msg}</p>}
+      {msg && menu && <p className="text-[11px] text-steel-muted px-2 py-1">{msg}</p>}
     </div>
   );
 }

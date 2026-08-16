@@ -47,16 +47,20 @@ export function PageHeader({
   subtitle,
   actions,
   icon,
+  dense = false,
 }: {
   eyebrow?: string;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
   icon?: ReactNode;
+  dense?: boolean;
 }) {
   return (
-    <header className="rise flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
-      <div className="flex items-start gap-3 min-w-0">
+    <header
+      className={`rise flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${dense ? "mb-3" : "mb-8"}`}
+    >
+      <div className="flex items-start gap-3 min-w-0 flex-1">
         {icon ? (
           <span className="mt-1 h-11 w-11 shrink-0 rounded-xl grid place-items-center bg-brand text-white shadow-sm">
             {icon}
@@ -67,10 +71,14 @@ export function PageHeader({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{eyebrow}</p>
           )}
           <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
-          {subtitle && <p className="mt-2 text-steel-muted max-w-4xl xl:max-w-5xl text-[15px] leading-relaxed">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-2 text-steel-muted max-w-4xl text-sm sm:text-[15px] leading-relaxed hidden sm:block">
+              {subtitle}
+            </p>
+          )}
         </div>
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto sm:justify-end">{actions}</div>}
     </header>
   );
 }

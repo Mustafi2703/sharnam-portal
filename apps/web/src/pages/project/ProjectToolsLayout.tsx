@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, ApiError } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button } from "../../components/ui";
@@ -35,7 +36,7 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
   const tool = seg[2] || "";
   if (!tool) return "home";
   if (tool === "hub" && seg[3] && MODULE_META[seg[3] as WorkspaceKey]) return seg[3] as WorkspaceKey;
-  if (["drawings", "coordination"].includes(tool) || pathname.includes("/drawings/register")) return "drawings";
+  if (["drawings", "coordination"].includes(tool) || pathname.includes("/drawings/")) return "drawings";
   if (tool === "closure") return "closure";
   if (tool === "checklist-master") {
     if (pathname.includes("/safety/checklist-master")) return "safety";
@@ -53,10 +54,7 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
     if (q === "DrawingCheck" || q === "SiteExecution") return "drawings";
     return "quality";
   }
-  if (tool === "dms") {
-    const ws = getActiveWorkspace();
-    return ws === "drawings" ? "drawings" : "home";
-  }
+  if (tool === "dms") return "home";
   if (["checklist", "quality-inspections", "inspections"].includes(tool)) return "quality";
   if (tool === "safety") return "safety";
   if (tool === "progress") return "progress";
@@ -88,6 +86,7 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
 function toolFromPath(pathname: string) {
   const seg = pathname.split("/").filter(Boolean);
   if (seg[2] === "hub") return "hub";
+  if (seg[2] === "drawings" && seg[3] === "coordination") return "coordination";
   return seg[2] || "";
 }
 
@@ -119,7 +118,12 @@ export default function ProjectToolsLayout() {
   const { token, user } = useAuth();
   const [project, setProject] = useState<any>(null);
   const [gate, setGate] = useState({ publishedCount: 0 });
-  const [rightOpen, setRightOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
+  const [isDesktopPanel, setIsDesktopPanel] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
   const [openRfis, setOpenRfis] = useState(0);
   const [missing, setMissing] = useState(false);
 
@@ -195,11 +199,39 @@ export default function ProjectToolsLayout() {
     if (activeMod !== "home") setActiveWorkspace(activeMod as WorkspaceKey);
   }, [activeMod]);
 
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => {
+      setIsDesktopPanel(mq.matches);
+      if (mq.matches) setRightOpen(true);
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
   if (missing) {
     return (
       <div className="p-8 text-sm text-steel-muted">Project not found. Redirecting…</div>
     );
   }
+
+  const panelCtx = id
+    ? {
+        projectId: id,
+        projectCode: project?.code,
+        projectName: project?.name,
+        publishedCount: gate.publishedCount,
+        tool: activeTool === "hub" ? activeMod : activeTool,
+        moduleLabel: toolLabel,
+        role: user?.role,
+      }
+    : null;
+
+  const actionPanel =
+    rightOpen && panelCtx ? (
+      <ToolRightPanel accent={accent} ctx={panelCtx} />
+    ) : null;
 
   return (
     <div className="w-full tool-workspace" style={{ ["--tool-accent" as string]: accent }}>
@@ -224,8 +256,13 @@ export default function ProjectToolsLayout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button type="button" variant="ghost" className="!text-sm" onClick={() => setRightOpen((o) => !o)}>
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <Button
+              type="button"
+              variant="ghost"
+              className="!text-sm tool-actions-toggle"
+              onClick={() => setRightOpen((o) => !o)}
+            >
               {rightOpen ? "Hide panel" : "Actions"}
             </Button>
             {openRfis > 0 && (
@@ -272,6 +309,14 @@ export default function ProjectToolsLayout() {
       </div>
 
       <div className={`tool-shell ${rightOpen ? "has-right" : ""} bg-sand w-full`}>
+        {rightOpen && !isDesktopPanel && (
+          <button
+            type="button"
+            className="tool-actions-backdrop"
+            aria-label="Close actions panel"
+            onClick={() => setRightOpen(false)}
+          />
+        )}
         <div className="tool-main page-stack min-w-0">
           <Outlet
             context={{
@@ -284,20 +329,11 @@ export default function ProjectToolsLayout() {
           />
         </div>
 
-        {rightOpen && id && (
-          <ToolRightPanel
-            accent={accent}
-            ctx={{
-              projectId: id,
-              projectCode: project?.code,
-              projectName: project?.name,
-              publishedCount: gate.publishedCount,
-              tool: activeTool === "hub" ? activeMod : activeTool,
-              moduleLabel: toolLabel,
-              role: user?.role,
-            }}
-          />
-        )}
+        {isDesktopPanel && actionPanel}
+
+        {!isDesktopPanel &&
+          actionPanel &&
+          createPortal(<div className="tool-actions-portal">{actionPanel}</div>, document.body)}
       </div>
     </div>
   );

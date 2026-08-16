@@ -303,9 +303,66 @@ body.is-auth-route #root {
   background: color-mix(in srgb, var(--mod-accent, var(--color-brand)) 16%, var(--color-paper));
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .tool-shell.has-right {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .tool-shell.has-right .tool-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  .tool-shell.has-right .tool-actions {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    height: 100%;
+    max-height: 100%;
+  }
+}
+
+/* Mobile / tablet: panel portals to body — never stacks under main content */
+.tool-actions-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.tool-actions-portal .tool-actions {
+  pointer-events: auto;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 92vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  z-index: 41;
+  box-shadow: -12px 0 40px rgb(18 20 23 / 0.18);
+}
+
+.tool-actions-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgb(12 14 18 / 0.42);
+  cursor: pointer;
+}
+
+@media (min-width: 1024px) {
+  .tool-actions-backdrop {
+    display: none;
   }
 }
 
@@ -322,6 +379,11 @@ body.is-auth-route #root {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+}
+
+.module-subnav {
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tool-workspace {

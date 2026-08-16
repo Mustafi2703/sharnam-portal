@@ -27,6 +27,7 @@ export default function ProjectHomePage() {
   const tools = isClient
     ? [
         ["drawings", "Drawings", "Published GFC sheets — view only", "DWG", "#E4632A"],
+        ["drawings/coordination", "Design coordination", "View clash / design issues", "DC", "#2563EB"],
         ["rfis", "Concerns / RFIs", "Raise questions without upload control", "RFI", "#0B6A78"],
         ["reports", "Reports", "Weekly packs & DPR visibility", "RPT", "#3D4450"],
         ["checklist", "Checklist catalog", "See assigned types (fills are site-side)", "QA", "#2F6F4E"],
@@ -39,6 +40,7 @@ export default function ProjectHomePage() {
         ["dpr-maker", "DPR maker", "Fill INPUT → publish SPDC template XLSX", "DPR", "#E4632A"],
         ["wpr-maker", "WPR maker", "24-section weekly pack with photos", "WPR", "#C45C26"],
         ["drawings", "Drawings", "Upload, revise, publish sheets", "DWG", "#E4632A"],
+        ["drawings/coordination", "Design coordination", "Clash register · escalate to Ask RFI", "DC", "#2563EB"],
         ["dms", "Documents", "OneDrive-style project docs", "DOC", "#3D4450"],
         ["checklist", "Final Index", "Assign types · fill vs drawing", "FI", "#0B6A78"],
         ["quality-inspections", "Quality Inspections", "QI forms vs published sheets", "QI", "#2F6F4E"],

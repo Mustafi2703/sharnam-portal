@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
+import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
 import { getActiveWorkspace } from "../../workspaces";
 
 type RfiKind = "All" | "RequestForInformation" | "DrawingChecklist" | "QualityInspection" | "SafetyChecklist" | "Manual" | "ClientConcern";
@@ -44,6 +47,7 @@ export default function RfisPage() {
   const [siteAssignments, setSiteAssignments] = useState<any[]>([]);
   const [qiAssignments, setQiAssignments] = useState<any[]>([]);
   const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
+  const createFormRef = useRef<HTMLDivElement>(null);
 
   const isClient = user?.role === "client";
   const canCreate = !!user;
@@ -88,6 +92,26 @@ export default function RfisPage() {
   }, [search]);
 
   useEffect(() => {
+    const subject = search.get("subject");
+    const body = search.get("body");
+    const drawingId = search.get("drawingId");
+    const location = search.get("location");
+    if (!subject && !body && !drawingId && !location) return;
+    const question =
+      body && location ? `${body}\n\nLocation: ${location}` : body || (location ? `Location: ${location}` : "");
+    setForm((f) => ({
+      ...f,
+      rfiKind: "RequestForInformation",
+      subject: subject || f.subject,
+      question: question || f.question,
+      linkedDrawingId: drawingId || f.linkedDrawingId,
+    }));
+    if (search.get("compose") === "1") {
+      window.setTimeout(() => createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    }
+  }, [search]);
+
+  useEffect(() => {
     if (kindFilter === "QualityInspection") {
       setForm((f) => ({ ...f, rfiKind: "QualityInspection" }));
     } else if (kindFilter === "DrawingChecklist") {
@@ -123,6 +147,8 @@ export default function RfisPage() {
   }, [rfis, statusFilter, kindFilter]);
 
   const selected = rfis.find((r) => r.id === active);
+  const selectedProgress = selected ? rfiProgress(selected) : null;
+  const composeProgress = rfiComposeProgress(form);
 
   const fillLink = selected?.linkedAssignmentId
     ? `/projects/${id}/checklist/fill/${selected.linkedAssignmentId}?family=${
@@ -169,8 +195,19 @@ export default function RfisPage() {
       </div>
 
       {canCreate && (
+        <div ref={createFormRef}>
         <Card>
-          <h3 className="font-semibold mb-3">{isClient ? "Raise concern" : "Create request"}</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 className="font-semibold">{isClient ? "Raise concern" : "Create request"}</h3>
+            {!isClient && form.rfiKind === "RequestForInformation" && (
+              <span className="text-[11px] text-steel-muted">{composeProgress}% complete</span>
+            )}
+          </div>
+          {!isClient && form.rfiKind === "RequestForInformation" && (
+            <div className="mb-3">
+              <RfiProgressBar progress={rfiProgress({ ...form, responses: [] })} compact />
+            </div>
+          )}
           <form
             className="space-y-3"
             onSubmit={async (e) => {
@@ -284,6 +321,7 @@ export default function RfisPage() {
             <Button type="submit">{isClient ? "Submit concern" : "Open RFI"}</Button>
           </form>
         </Card>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-1">
@@ -303,7 +341,9 @@ export default function RfisPage() {
         <Card padding={false}>
           <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">Log</div>
           <ul className="divide-y divide-line max-h-[60vh] overflow-y-auto">
-            {filtered.map((r) => (
+            {filtered.map((r) => {
+              const prog = rfiProgress(r);
+              return (
               <button
                 key={r.id}
                 className={`w-full text-left px-4 py-3 ${active === r.id ? "bg-brand-soft" : "hover:bg-sand/30"}`}
@@ -314,12 +354,16 @@ export default function RfisPage() {
                   <Badge tone={r.status === "Open" ? "warn" : r.status === "Closed" ? "ok" : "neutral"}>{r.status}</Badge>
                 </div>
                 <div className="font-medium text-sm mt-1">{r.subject}</div>
-                <div className="text-[11px] text-steel-muted mt-1">
-                  {r.rfiKind || "RequestForInformation"} · BIC: {r.ballInCourt}
+                <div className="mt-2">
+                  <RfiProgressBar progress={prog} compact showLabel={false} />
+                </div>
+                <div className="text-[11px] text-steel-muted mt-1.5">
+                  {r.rfiKind || "RequestForInformation"} · {prog.stage} · BIC: {r.ballInCourt}
                   {r.vendor ? ` · ${r.vendor.name}` : ""}
                 </div>
               </button>
-            ))}
+            );
+            })}
             {!filtered.length && <li className="p-4 text-sm text-steel-muted">No items.</li>}
           </ul>
         </Card>
@@ -331,7 +375,13 @@ export default function RfisPage() {
               <div>
                 <div className="font-mono text-xs text-brand">{selected.number}</div>
                 <h2 className="font-display text-2xl mt-1">{selected.subject}</h2>
-                <div className="flex flex-wrap gap-2 mt-2">
+                {selectedProgress && (
+                  <div className="mt-3 space-y-2">
+                    <RfiStageStepper progress={selectedProgress} />
+                    <RfiProgressBar progress={selectedProgress} />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 mt-3">
                   <Badge tone="brand">{selected.rfiKind || "RequestForInformation"}</Badge>
                   <Badge tone="brand">Ball: {selected.ballInCourt}</Badge>
                   <Badge>{selected.status}</Badge>
@@ -339,6 +389,12 @@ export default function RfisPage() {
                   {selected.vendor && <Badge tone="ok">Vendor: {selected.vendor.name}</Badge>}
                 </div>
               </div>
+              {selectedProgress && (
+                <div>
+                  <h3 className="font-semibold text-sm mb-2">Record completeness</h3>
+                  <RfiFieldChecklist progress={selectedProgress} />
+                </div>
+              )}
               <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
               {(selected.linkedAssignmentId || selected.linkedChecklistItemId) &&
                 (selected.rfiKind === "DrawingChecklist" || selected.rfiKind === "QualityInspection") && (

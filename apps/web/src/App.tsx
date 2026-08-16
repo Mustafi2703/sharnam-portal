@@ -78,6 +78,11 @@ function RedirectHrmsOnboarding() {
   return <Navigate to={`/hrm/onboarding/${offerId || ""}`} replace />;
 }
 
+function RedirectDrawingsCoordination() {
+  const { id } = useParams();
+  return <Navigate to={`/projects/${id}/drawings/coordination`} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -141,6 +146,7 @@ export default function App() {
                   <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />
                   <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
                   <Route path="drawings/library" element={<DrawingsLibraryPage />} />
+                  <Route path="drawings/coordination" element={<CoordinationPage />} />
                   <Route path="dms" element={<DmsPage mode="documents" />} />
                   <Route path="checklist" element={<ChecklistPage family="SiteExecution" />} />
                   <Route path="checklist/assign" element={<ChecklistAssignPage />} />
@@ -161,7 +167,7 @@ export default function App() {
                   <Route path="photos" element={<PhotosPage />} />
                   <Route path="diary" element={<DiaryPage />} />
                   <Route path="comms" element={<CommsPage />} />
-                  <Route path="coordination" element={<CoordinationPage />} />
+                  <Route path="coordination" element={<RedirectDrawingsCoordination />} />
                   <Route path="email" element={<ProjectEmailSettingsPage />} />
                   <Route path="cost" element={<CostPage />} />
                   <Route path="finance" element={<FinancePage />} />

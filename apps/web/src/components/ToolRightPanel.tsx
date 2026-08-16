@@ -334,7 +334,7 @@ export function ToolRightPanel({
         if (canUpload) actions.push({ label: "Assign employee", to: "directory", primary: true }, { label: "Assign vendor", to: "vendors", secondary: true }, { label: "Open HRM master", onClick: () => navigate("/hrm"), secondary: true });
         break;
       case "coordination":
-        if (canUpload) actions.push({ label: "Log coordination issue", to: "coordination", primary: true }, { label: "Escalate to RFI", to: "rfis", secondary: true });
+        if (canUpload) actions.push({ label: "Log coordination issue", to: "drawings/coordination", primary: true }, { label: "Escalate to Ask RFI", to: "rfis?kind=RequestForInformation", secondary: true });
         break;
       case "email":
         if (canEmail) actions.push({ label: "Compose email", onClick: () => openCompose(), primary: true }, { label: "Email settings", to: "email", secondary: true });
@@ -406,7 +406,7 @@ export function ToolRightPanel({
 
   return (
     <aside
-      className="tool-actions border-t xl:border-t-0 xl:border-l border-line bg-paper flex flex-col min-h-0 h-full"
+      className="tool-actions border-line bg-paper flex flex-col min-h-0 h-full border-t-0 lg:border-l lg:border-t-0"
       style={{ ["--tool-accent" as string]: accent || "var(--color-brand)" }}
     >
       <div className="tool-actions__head px-4 py-4 border-b border-line">

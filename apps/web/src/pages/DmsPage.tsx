@@ -4,6 +4,8 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
 import { UploadModal } from "../components/UploadModal";
+import { DrawingFileViewer } from "../components/DrawingFileViewer";
+import { drawingFileKind, type DrawingPreview } from "../lib/drawingPreview";
 
 type DriveItem = {
   name: string;
@@ -73,7 +75,11 @@ function buildFolderTree(folders: string[], rootPrefix = "") {
 }
 
 /** ISO root for GFC / design files — separate from general Documents module */
-export const DRAWINGS_LIBRARY_ROOT = "02_DESIGN_AND_ENGINEERING";
+export const DRAWINGS_LIBRARY_ROOT =
+  "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications";
+
+/** Discipline subfolders shown in Drawings → Drawing files (not full DMS tree) */
+export const DRAWINGS_DISCIPLINE_FOLDERS = ["Architecture", "Structural", "MEP", "Civil"] as const;
 
 export type DmsPageMode = "documents" | "drawings";
 
@@ -84,7 +90,7 @@ export type DmsPageMode = "documents" | "drawings";
  * mode=documents — full project DMS (Procore Documents parity)
  * mode=drawings  — design/engineering folders only (paired with GFC register)
  */
-export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) {
+export default function DmsPage({ mode = "documents", embedded = false }: { mode?: DmsPageMode; embedded?: boolean }) {
   const { id } = useParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
@@ -101,7 +107,7 @@ export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
-  const [viewer, setViewer] = useState<{ title: string; url: string; kind: "pdf" | "image" | "other" } | null>(null);
+  const [viewer, setViewer] = useState<DrawingPreview | null>(null);
   const [treeQuery, setTreeQuery] = useState("");
 
   const load = useCallback(
@@ -156,8 +162,14 @@ export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) 
     const scoped = rootPrefix
       ? folderPaths.filter((f) => f === rootPrefix || f.startsWith(`${rootPrefix}/`))
       : folderPaths;
-    return buildFolderTree(scoped, rootPrefix);
-  }, [folderPaths, rootPrefix]);
+    const tree = buildFolderTree(scoped, rootPrefix);
+    if (!isDrawings) return tree;
+    return tree.filter(
+      (n) =>
+        n.path === rootPrefix ||
+        DRAWINGS_DISCIPLINE_FOLDERS.some((d) => n.path === `${rootPrefix}/${d}` || n.path.startsWith(`${rootPrefix}/${d}/`))
+    );
+  }, [folderPaths, rootPrefix, isDrawings]);
   const filteredTree = useMemo(() => {
     const q = treeQuery.trim().toLowerCase();
     if (!q) return folderTree;
@@ -209,22 +221,30 @@ export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) 
       return;
     }
     const url = fileUrl(data?.projectCode || "", item);
-    const kind = isPdf(item.name) ? "pdf" : isImage(item.name) ? "image" : "other";
-    setViewer({ title: item.name, url, kind });
+    setViewer({
+      title: item.name,
+      fileUrl: url,
+      fileName: item.name,
+      kind: drawingFileKind(item.name),
+    });
   }
+
+  const canPreviewInApp = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
 
   const isSharePoint = data?.provider === "sharepoint";
 
   return (
-    <div className="space-y-4 min-w-0">
-      <Link
-        to={isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}`}
-        className="text-sm text-brand font-medium"
-      >
-        ← {isDrawings ? "Drawings module" : "Project"}
-      </Link>
+    <div className={`space-y-4 min-w-0 ${embedded ? "" : ""}`}>
+      {!embedded && (
+        <Link
+          to={isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}`}
+          className="text-sm text-brand font-medium"
+        >
+          ← {isDrawings ? "Drawings module" : "Project"}
+        </Link>
+      )}
 
-      {isDrawings && (
+      {isDrawings && !embedded && (
         <p className="text-xs text-steel-muted">
           Sheet PDFs and DWG files live here. For revision register, publish gate, and R0–R5 workflow use{" "}
           <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
@@ -238,7 +258,7 @@ export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) 
         title={isDrawings ? "Drawing file library" : "Document manager"}
         subtitle={
           isDrawings
-            ? "Browse design & engineering folders — PDF/DWG sheets synced with SharePoint. Separate from the project document manager."
+            ? "Drawing PDFs/DWG only — discipline folders under 04.02. Office users preview in-app; SharePoint opens in a new tab when required."
             : "Procore-style browse of the ISO folder tree — contracts, HSE, daily records, and all non-drawing project files."
         }
         actions={
@@ -360,7 +380,7 @@ export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) 
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatDate(c.modifiedAt)}</td>
                     <td className="px-4 py-2.5 text-right flex gap-1 justify-end">
                       <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => openItem(c)}>
-                        Preview
+                        {canPreviewInApp && (isPdf(c.name) || isImage(c.name)) ? "Preview" : "Open"}
                       </Button>
                       <a
                         href={fileUrl(data?.projectCode || "", c)}
@@ -407,26 +427,11 @@ export default function DmsPage({ mode = "documents" }: { mode?: DmsPageMode }) 
       />
 
       {viewer && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setViewer(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line bg-ink text-white">
-              <div className="font-semibold truncate">{viewer.title}</div>
-              <div className="flex gap-2 shrink-0">
-                <a href={viewer.url} target="_blank" rel="noreferrer" className="text-xs underline">Download</a>
-                <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setViewer(null)}>Close</Button>
-              </div>
-            </div>
-            <div className="flex-1 min-h-[50vh] bg-sand/60">
-              {viewer.kind === "image" && <img src={viewer.url} alt={viewer.title} className="max-h-[75vh] mx-auto object-contain p-4" />}
-              {viewer.kind === "pdf" && <iframe title={viewer.title} src={viewer.url} className="w-full h-[75vh] border-0" />}
-              {viewer.kind === "other" && (
-                <div className="p-8 text-center">
-                  <a href={viewer.url} className="text-brand font-semibold" target="_blank" rel="noreferrer">Open file →</a>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <DrawingFileViewer
+          preview={viewer}
+          variant="modal"
+          onClose={() => setViewer(null)}
+        />
       )}
     </div>
   );

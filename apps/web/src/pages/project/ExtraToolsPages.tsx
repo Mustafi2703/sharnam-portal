@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
+import { DrawingFileViewer } from "../../components/DrawingFileViewer";
+import { drawingPreviewFromRecord } from "../../lib/drawingPreview";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 export function CoordinationPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -41,13 +47,57 @@ export function CoordinationPage() {
   }, [id, token]);
 
   const filtered = rows.filter((r) => filter === "All" || r.status === filter);
+  const openCount = rows.filter((r) => r.status === "Open").length;
+
+  useEffect(() => {
+    if (!filtered.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !filtered.some((r) => r.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId]);
+
+  const selected = filtered.find((r) => r.id === selectedId) || null;
+  const linkedDrawing = selected?.linkedDrawingId
+    ? drawings.find((d) => d.id === selected.linkedDrawingId)
+    : null;
+  const drawingPreview = linkedDrawing ? drawingPreviewFromRecord(linkedDrawing) : null;
+
+  function escalateToRfi(issue: {
+    title?: string;
+    description?: string;
+    discipline?: string;
+    location?: string;
+    linkedDrawingId?: string;
+  }) {
+    const params = new URLSearchParams({
+      kind: "RequestForInformation",
+      compose: "1",
+      subject: issue.title || "Design coordination issue",
+    });
+    if (issue.description) params.set("body", issue.description);
+    if (issue.discipline) params.set("discipline", issue.discipline);
+    if (issue.location) params.set("location", issue.location);
+    if (issue.linkedDrawingId) params.set("drawingId", issue.linkedDrawingId);
+    navigate(`/projects/${id}/rfis?${params.toString()}`);
+  }
 
   return (
     <div className="space-y-5">
+      {id && <DrawingsModuleNav projectId={id} />}
+
       <PageHeader
-        eyebrow="Design · Procore-style"
+        eyebrow="Drawings module"
         title="Design coordination"
-        subtitle="Clash / coordination register — discipline, drawing, assignee, due date, ball-in-court. Escalate open issues to RFIs. Files pipe into project OneDrive / Documents/Design-Coordination."
+        subtitle="Log clash / design conflicts, preview the linked GFC sheet in a separate viewer, then escalate to Ask RFI. Drawing PDFs live in SharePoint — use Drawing files for folder browse."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="warn">{openCount} open</Badge>
+            <Badge tone="ok">{rows.length - openCount} closed</Badge>
+          </div>
+        }
       />
 
       {canEdit && (
@@ -57,7 +107,7 @@ export function CoordinationPage() {
             className="grid sm:grid-cols-2 gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
-              await api(`/api/directory/project/${id}/coordination`, {
+              const created = await api<any>(`/api/directory/project/${id}/coordination`, {
                 method: "POST",
                 token,
                 body: JSON.stringify(form),
@@ -74,6 +124,7 @@ export function CoordinationPage() {
                 ballInCourt: "Assignee",
               });
               await load();
+              if (created?.id) setSelectedId(created.id);
             }}
           >
             <Input className="sm:col-span-2" required placeholder="Issue title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
@@ -91,10 +142,11 @@ export function CoordinationPage() {
             <Input placeholder="Assignee name" value={form.assignedToName} onChange={(e) => setForm({ ...form, assignedToName: e.target.value })} />
             <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-              <option value="">Linked drawing (optional)</option>
+              <option value="">Linked GFC drawing (for PDF preview)</option>
               {drawings.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.drawingNumber} — {d.title}
+                  {!d.revisions?.length ? " (no file yet)" : ""}
                 </option>
               ))}
             </Select>
@@ -130,61 +182,117 @@ export function CoordinationPage() {
         ))}
       </div>
 
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Coordination register</div>
-        <ul className="divide-y">
-          {filtered.map((r) => (
-            <li key={r.id} className="px-4 py-4 flex flex-wrap justify-between gap-3 text-sm">
-              <div className="min-w-0">
-                <div className="font-medium">{r.title}</div>
-                <div className="text-xs text-steel-muted mt-1">
-                  {r.discipline} · {r.priority}
-                  {r.location ? ` · ${r.location}` : ""}
-                  {r.assignedToName ? ` · ${r.assignedToName}` : ""}
-                  {r.dueDate ? ` · due ${new Date(r.dueDate).toLocaleDateString()}` : ""}
+      <div className="grid xl:grid-cols-2 gap-4 min-h-[480px]">
+        <Card padding={false} className="flex flex-col min-h-[420px]">
+          <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Coordination register</div>
+          <ul className="divide-y flex-1 overflow-y-auto">
+            {filtered.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(r.id)}
+                  className={`w-full text-left px-4 py-3 text-sm transition hover:bg-brand-soft/40 ${
+                    selectedId === r.id ? "bg-brand-soft/70 border-l-4 border-brand" : ""
+                  }`}
+                >
+                  <div className="font-medium">{r.title}</div>
+                  <div className="text-xs text-steel-muted mt-1">
+                    {r.discipline} · {r.priority}
+                    {r.location ? ` · ${r.location}` : ""}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
+                    {r.linkedDrawingId && <Badge tone="brand">Linked drawing</Badge>}
+                  </div>
+                </button>
+              </li>
+            ))}
+            {!filtered.length && <li className="p-4 text-sm text-steel-muted">No coordination issues.</li>}
+          </ul>
+        </Card>
+
+        <div className="flex flex-col gap-4 min-h-[420px]">
+          {selected ? (
+            <Card className="shrink-0">
+              <div className="flex flex-wrap justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-semibold">{selected.title}</h3>
+                  <p className="text-xs text-steel-muted mt-1">
+                    {selected.discipline} · {selected.priority}
+                    {selected.location ? ` · ${selected.location}` : ""}
+                    {selected.assignedToName ? ` · ${selected.assignedToName}` : ""}
+                  </p>
+                  {selected.description && (
+                    <p className="text-sm text-steel-muted mt-2 leading-relaxed">{selected.description}</p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge tone="neutral">BIC: {selected.ballInCourt || "Assignee"}</Badge>
+                    {linkedDrawing && (
+                      <Badge tone="brand">
+                        {linkedDrawing.drawingNumber} · {linkedDrawing.currentRev || "—"}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                {r.description && <p className="text-xs text-steel-muted mt-1.5">{r.description}</p>}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Badge tone="neutral">BIC: {r.ballInCourt || "Assignee"}</Badge>
+                <div className="flex flex-wrap gap-2 items-start">
+                  {drawingPreview && (
+                    <Button type="button" variant="secondary" className="!text-xs" onClick={() => setViewerOpen(true)}>
+                      Full-screen PDF
+                    </Button>
+                  )}
+                  {canEdit && selected.status === "Open" && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        className="!text-xs"
+                        onClick={() => escalateToRfi(selected)}
+                      >
+                        Escalate to Ask RFI
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!text-xs"
+                        onClick={async () => {
+                          await api(`/api/directory/coordination/${selected.id}`, {
+                            method: "PATCH",
+                            token,
+                            body: JSON.stringify({ status: "Closed" }),
+                          });
+                          await load();
+                        }}
+                      >
+                        Close
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
-                {canEdit && r.status === "Open" && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="!text-xs !py-1"
-                      onClick={async () => {
-                        await api(`/api/directory/coordination/${r.id}`, {
-                          method: "PATCH",
-                          token,
-                          body: JSON.stringify({ status: "Closed" }),
-                        });
-                        await load();
-                      }}
-                    >
-                      Close
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="!text-xs !py-1"
-                      onClick={() => {
-                        window.location.href = `/projects/${id}/rfis`;
-                      }}
-                    >
-                      Escalate RFI
-                    </Button>
-                  </>
-                )}
+            </Card>
+          ) : (
+            <Card>
+              <p className="text-sm text-steel-muted">Select an issue to preview the linked drawing and escalate.</p>
+            </Card>
+          )}
+
+          {drawingPreview ? (
+            <DrawingFileViewer preview={drawingPreview} variant="inline" className="flex-1 min-h-[360px]" />
+          ) : (
+            <Card className="flex-1 grid place-items-center text-center p-8">
+              <div className="text-sm text-steel-muted max-w-sm">
+                {selected?.linkedDrawingId
+                  ? "Linked drawing has no published PDF yet — upload GFC in the register first."
+                  : "Link a GFC drawing when logging the issue to open the sheet PDF here."}
               </div>
-            </li>
-          ))}
-          {!filtered.length && <li className="p-4 text-sm text-steel-muted">No coordination issues.</li>}
-        </ul>
-      </Card>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {viewerOpen && drawingPreview && (
+        <DrawingFileViewer preview={drawingPreview} variant="modal" onClose={() => setViewerOpen(false)} />
+      )}
     </div>
   );
 }

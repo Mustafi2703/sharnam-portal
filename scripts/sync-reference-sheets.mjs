@@ -24,6 +24,9 @@ const TARGETS = [
 
 /** Canonical filenames used by seed/* and module dashboards */
 const FILES = [
+  "Final Index.xlsx",
+  "Drwing check master checklist.xlt.xls",
+  "SPDC_Budget_Arvind 49.xls",
   "Quality Dashboard.xlsx",
   "Safety Dashboard.xlsx",
   "Safety NCR.xlsx",
@@ -45,6 +48,7 @@ const FILES = [
   "Planned Vs. Actual Dashboard.xlsx",
   "Cashflow - Dashboard.xlsx",
   "Approval  &  GFC Drawing Log.xlsx",
+  "Communication Matrix_BPCL (1).xlsx",
   "DPR-Sharnam PMC- ARVIND LIMITED (3).xlsx",
   "WPR File.xlsx",
 ];
