@@ -6,7 +6,6 @@ import * as XLSX from "xlsx";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
 import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
 import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr, seedSafetyFromWorkbooksForAllDemoProjects } from "./qualitySafetySheets.ts";
-import { seedClosureDrawingsForDemoProjects } from "./closureDrawingsSeed.ts";
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedCrmComparative } from "./crmComparativeSeed.ts";
@@ -1418,15 +1417,10 @@ async function main() {
   }
 
   try {
-    await seedSafetyFromWorkbooksForAllDemoProjects(prisma, EXCEL_ROOT);
+    const { seedAllDemoSheetModules } = await import("./demoScreenshotsPack.ts");
+    await seedAllDemoSheetModules(prisma);
   } catch (e) {
-    console.warn("seedSafetyFromWorkbooksForAllDemoProjects failed:", e instanceof Error ? e.message : e);
-  }
-
-  try {
-    await seedClosureDrawingsForDemoProjects(prisma);
-  } catch (e) {
-    console.warn("seedClosureDrawingsForDemoProjects failed:", e instanceof Error ? e.message : e);
+    console.warn("seedAllDemoSheetModules failed:", e instanceof Error ? e.message : e);
   }
 
   console.log("Done.");

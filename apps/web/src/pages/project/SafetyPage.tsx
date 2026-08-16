@@ -221,7 +221,7 @@ export default function SafetyPage() {
       <div className="flex flex-wrap gap-1">
         {SAFETY_SHEET_VIEWS.map((s) => (
           <button
-            key={s.key || "one-pager"}
+            key={s.key || "dashboard"}
             type="button"
             onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
             className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
@@ -263,23 +263,21 @@ export default function SafetyPage() {
 
       {!sheetView.kpiOnly && sheetKey === "" && dash && (
         <div className="space-y-4">
-          {dash.onePager && (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-              {[
-                ["Incidents (sheet)", dash.onePager.totalIncidents],
-                ["Unsafe acts (sheet)", dash.onePager.totalUnsafeActs],
-                ["NCRs (sheet)", dash.onePager.totalNcrs],
-                ["Safe man-hours", dash.onePager.safeManHours],
-                ["Toolbox talks", dash.onePager.toolboxTalks],
-                ["Site instructions", dash.onePager.siteInstructions],
-              ].map(([l, v]) => (
-                <Card key={l as string} className="!p-4 border-brand/20">
-                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                  <div className="text-2xl font-display mt-1">{v as number}</div>
-                </Card>
-              ))}
-            </div>
-          )}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            {[
+              ["Incidents (sheet)", dash.onePager?.totalIncidents ?? dash.totals.incidents],
+              ["Unsafe acts (sheet)", dash.onePager?.totalUnsafeActs ?? dash.totals.unsafeActs],
+              ["NCRs (sheet)", dash.onePager?.totalNcrs ?? dash.totals.ncrLike],
+              ["Safe man-hours", dash.onePager?.safeManHours ?? 0],
+              ["Toolbox talks", dash.onePager?.toolboxTalks ?? 0],
+              ["Site instructions", dash.onePager?.siteInstructions ?? dash.totals.siteInstructions],
+            ].map(([l, v]) => (
+              <Card key={l as string} className="!p-4 border-brand/20">
+                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                <div className="text-2xl font-display mt-1">{v as number}</div>
+              </Card>
+            ))}
+          </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             {[
               ["Total records", dash.totals.records],

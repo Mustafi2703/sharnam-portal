@@ -325,6 +325,21 @@ export default function WprMakerPage() {
     }
   }
 
+  async function downloadClientXlsx() {
+    if (!pack) return;
+    const url = `${apiBase()}/api/wpr-maker/${projectId}/download-client.xlsx?end=${weekEnd}`;
+    const fname = `WPR-ClientPack-${pack.projectCode}-${weekEnd}.xlsx`;
+    setBusy(true);
+    try {
+      await downloadWithAuth(url, token, fname);
+      setMsg("Client WPR workbook downloaded — WPR File.xlsx tabs filled from live data.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function downloadPptx() {
     if (!pack) return;
     const url = `${apiBase()}/api/wpr-maker/${projectId}/download.pptx?end=${weekEnd}`;
@@ -357,7 +372,8 @@ export default function WprMakerPage() {
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>
-            <button className="text-sm font-semibold text-brand underline" onClick={downloadXlsx} disabled={busy}>Download XLSX</button>
+            <button className="text-sm font-semibold text-brand underline" onClick={downloadXlsx} disabled={busy}>Download SPDC pack</button>
+            <button className="text-sm font-semibold text-brand underline" onClick={downloadClientXlsx} disabled={busy}>Download client workbook</button>
             <button className="text-sm font-semibold text-brand underline" onClick={downloadPptx} disabled={busy}>Download PPTX</button>
           </div>
         }
@@ -570,7 +586,8 @@ export default function WprMakerPage() {
       <div className="maker-sticky-bar">
         <Button onClick={save} disabled={busy}>Save draft</Button>
         <Button onClick={publish} disabled={busy} variant="secondary">Publish</Button>
-        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export XLSX</Button>
+        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export SPDC pack</Button>
+        <Button type="button" variant="secondary" onClick={downloadClientXlsx} disabled={busy}>Export client workbook</Button>
         <Button type="button" variant="secondary" onClick={downloadPptx} disabled={busy}>Export PPTX</Button>
       </div>
     </div>

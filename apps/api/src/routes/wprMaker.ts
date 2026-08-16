@@ -59,6 +59,7 @@ async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): 
     risk,
     legal,
     drawings,
+    registerLines,
     submittals,
     milestones,
     plannedActual,
@@ -68,6 +69,7 @@ async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): 
     safety,
     ncrs,
     weeklyDiaries,
+    dprSnaps,
   ] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.projectMember.findMany({
@@ -86,20 +88,47 @@ async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): 
       include: { revisions: { orderBy: { createdAt: "desc" }, take: 1 } },
       take: 60,
     }),
+    prisma.drawingRegisterLine.findMany({
+      where: { projectId },
+      orderBy: { srNo: "asc" },
+      take: 80,
+      include: { drawing: { select: { isPublished: true, currentRev: true } } },
+    }),
     prisma.submittal.findMany({ where: { projectId }, take: 40 }),
     prisma.progressMilestone.findMany({ where: { projectId }, take: 60 }),
     prisma.progressPlannedActual.findMany({ where: { projectId }, take: 40 }),
     prisma.costCashflowPeriod.findMany({ where: { projectId }, take: 40 }),
-    prisma.qapActivity.findMany({ where: { projectId }, take: 40 }),
-    prisma.cubeTest.findMany({ where: { projectId }, take: 40, orderBy: { castDate: "desc" } }),
+    prisma.qapActivity.findMany({
+      where: { projectId },
+      orderBy: { weekLabel: "desc" },
+      take: 40,
+    }),
+    prisma.cubeTest.findMany({
+      where: {
+        projectId,
+        OR: [{ castDate: { gte: weekStart, lte: weekEnd } }, { castDate: null }],
+      },
+      take: 40,
+      orderBy: { castDate: "desc" },
+    }),
     prisma.safetyRecord.findMany({
       where: { projectId, occurredAt: { gte: weekStart, lte: weekEnd } },
       take: 40,
     }),
-    prisma.qualityNcr.findMany({ where: { projectId }, take: 40 }),
+    prisma.qualityNcr.findMany({
+      where: {
+        projectId,
+        OR: [{ issueDate: { gte: weekStart, lte: weekEnd } }, { status: "Open" }],
+      },
+      take: 40,
+    }),
     prisma.dailyLog.findMany({
       where: { projectId, logDate: { gte: weekStart, lte: weekEnd } },
       include: { manpower: true },
+      orderBy: { logDate: "asc" },
+    }),
+    prisma.dprSnapshot.findMany({
+      where: { projectId, logDate: { gte: weekStart, lte: weekEnd } },
       orderBy: { logDate: "asc" },
     }),
   ]);
@@ -173,14 +202,15 @@ async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): 
 
   const drawingRegister: WprSection = {
     title: DEFAULT_WPR_TITLES.drawingRegister,
-    headers: ["Dwg No", "Title", "Discipline", "Current Rev", "Status", "Latest Rev Date"],
-    rows: drawings.map((d: any) => [
-      d.drawingNumber || "",
-      d.title || "",
+    headers: ["Dwg No", "Title", "Discipline", "Type", "Rev", "Status", "Critical"],
+    rows: (registerLines.length ? registerLines : drawings).map((d: any) => [
+      (d.drawingNumber || "").replace(/\s·\s*\d+$/, ""),
+      d.drawingTitle || d.title || "",
       d.discipline || "",
-      d.currentRev || "",
-      d.isPublished ? "Published" : "Draft",
-      d.revisions?.[0]?.createdAt ? isoDate(d.revisions[0].createdAt) : "",
+      d.drawingType || "",
+      d.revisionNumber || d.currentRev || d.drawing?.currentRev || "",
+      d.drawing?.isPublished || d.drawingId ? "Linked GFC" : d.isPublished ? "Published" : "Register only",
+      d.criticalDrawing || "",
     ]),
   };
 
@@ -214,21 +244,50 @@ async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): 
     rows: milestones.map((m: any) => [m.code || "", m.activity || "", m.plannedDays || 0, m.actualDays || 0, m.varianceDays || 0, m.status || ""]),
   };
 
+  const manpowerRows =
+    weeklyDiaries.length > 0
+      ? weeklyDiaries.map((d: any) => [
+          isoDate(d.logDate),
+          d.manpower.reduce((s: number, m: any) => s + (m.workerCount || 0), 0),
+        ])
+      : dprSnaps.map((snap: any) => {
+          const extras = JSON.parse(snap.headerJson || "{}")._extras || {};
+          const mp = extras.manpower || [];
+          const total = mp.reduce((s: number, m: any) => s + Number(m.actual || 0), 0);
+          return [isoDate(snap.logDate), total];
+        });
+
   const manpower: WprSection = {
     title: DEFAULT_WPR_TITLES.manpowerHistogram,
     headers: ["Date", "Total workers"],
-    rows: weeklyDiaries.map((d: any) => [
-      isoDate(d.logDate),
-      d.manpower.reduce((s: number, m: any) => s + (m.workerCount || 0), 0),
-    ]),
+    rows: manpowerRows,
   };
+
+  const executedRows: (string | number | null)[][] = [];
+  let execSr = 1;
+  for (const snap of dprSnaps) {
+    const lines = JSON.parse(snap.linesJson || "[]") as { description?: string; qtyToday?: number; unit?: string }[];
+    for (const ln of lines) {
+      if (!Number(ln.qtyToday)) continue;
+      executedRows.push([
+        execSr++,
+        snap.discipline,
+        ln.description || "",
+        ln.qtyToday ?? 0,
+        ln.unit || "",
+        isoDate(snap.logDate),
+      ]);
+    }
+  }
 
   const weeklyExecuted: WprSection = {
     title: DEFAULT_WPR_TITLES.weeklyExecuted,
     notes:
-      "List activities executed this week per location (floor / block / grid). Attach progress photographs in the Photos section.",
-    headers: ["Sr", "Location", "Activity", "Executed qty", "Unit", "Photos"],
-    rows: [],
+      executedRows.length > 0
+        ? "Auto-filled from published DPR snapshots this week."
+        : "List activities executed this week per location (floor / block / grid). Attach progress photographs in the Photos section.",
+    headers: ["Sr", "Discipline", "Activity", "Executed qty", "Unit", "DPR date"],
+    rows: executedRows,
   };
 
   const cashflowSec: WprSection = {
@@ -476,6 +535,23 @@ wprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
     : await seedSections(projectId, weekStart, weekEnd);
   const buf = buildWprWorkbook({ header, sections });
   const fname = `WPR-${project.code}-${weekEnd.toISOString().slice(0, 10)}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+/** Client workbook — fills WPR File.xlsx template tabs (21 sheets) from live data. */
+wprMakerRouter.get("/:projectId/download-client.xlsx", async (req, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const weekEnd = parseEnd(req.query.end);
+  const weekStart = new Date(weekEnd);
+  weekStart.setDate(weekEnd.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+  const { buildWprClientWorkbook } = await import("../services/wprClientPack.js");
+  const buf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
+  const fname = `WPR-ClientPack-${project.code}-${weekEnd.toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(buf);

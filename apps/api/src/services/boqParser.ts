@@ -2,7 +2,7 @@
  * BOQ Excel parser — patterns adapted from Mustafi2703/parikh-procurement
  * (backend/services/boq_import.py): header sniffing, section inference, skip totals.
  */
-import * as XLSX from "xlsx";
+import XLSX from "../lib/xlsx.js";
 
 export type ParsedBoqRow = {
   srNo?: string;

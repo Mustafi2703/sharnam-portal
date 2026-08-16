@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
 import { QUALITY_SHEET_VIEWS, qualitySheetFromParams } from "../../lib/qualitySheetViews";
 
@@ -122,34 +123,45 @@ export default function InspectionsPage() {
 
       {sheetKey === "" && dash && (
         <div className="space-y-4">
-          {dash.workbook?.dashboard && (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[
-                ["Week", dash.workbook.dashboard.weekLabel],
-                ["Concreting (m³)", dash.workbook.dashboard.concretingM3],
-                ["Samples last week", dash.workbook.dashboard.samplesLastWeek],
-              ].map(([l, v]) => (
-                <Card key={l as string} className="!p-4 border-brand/20">
-                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                  <div className="text-2xl font-display mt-1">{v as string | number}</div>
-                </Card>
-              ))}
-            </div>
-          )}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
+              ["Week", dash.workbook?.dashboard?.weekLabel ?? "—"],
+              ["Concreting (m³)", dash.workbook?.dashboard?.concretingM3 ?? 0],
+              ["Samples last week", dash.workbook?.dashboard?.samplesLastWeek ?? 0],
               ["QI checklist fills", dash.totals.fills],
               ["Open QI", dash.totals.openInspections],
               ["Open NCRs", dash.totals.openNcrs ?? 0],
+            ].map(([l, v]) => (
+              <Card key={l as string} className="!p-4 border-brand/20">
+                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                <div className="text-2xl font-display mt-1">{v as string | number}</div>
+              </Card>
+            ))}
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            {[
               ["Cubes (pass)", `${dash.totals.cubesPass ?? 0}/${dash.totals.cubes ?? 0}`],
               ["Open fill RFIs", dash.totals.openFillRfis],
               ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`],
+              ["Site execution fills", dash.totals.siteExecutionFills ?? 0],
             ].map(([l, v]) => (
               <Card key={l as string} className="!p-4">
                 <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
                 <div className="text-2xl font-display mt-1">{v as string | number}</div>
               </Card>
             ))}
+          </div>
+          <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
+              Quality Dashboard.xlsx — breakdown
+            </p>
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <PieChart title="NCR / CAR status" items={dash.charts?.byNcrStatus || []} />
+              <PieChart title="Cube test results" items={dash.charts?.byCubeResult || []} />
+              <PieChart title="QAP status" items={dash.charts?.byQapStatus || []} />
+              <PieChart title="Checklist fills by discipline" items={dash.charts?.fillsByDiscipline || []} />
+              <PieChart title="QI fills (last 14 days)" items={dash.charts?.fillsByDay || []} />
+            </div>
           </div>
           {dash.reportMapping && (
             <Card className="text-xs text-steel-muted">

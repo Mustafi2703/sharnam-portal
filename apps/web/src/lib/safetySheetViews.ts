@@ -32,7 +32,7 @@ export const SAFETY_SHEET_VIEWS: {
 }[] = [
   {
     key: "",
-    label: "One Pager",
+    label: "Dashboard",
     sheet: "Safety Dashboard.xlsx · One Pager",
   },
   {
@@ -47,8 +47,7 @@ export const SAFETY_SHEET_VIEWS: {
     sheet: "Unsafe Act Summary",
     filter: (r) =>
       r.recordType === "Observation" &&
-      r.source === "Safety Dashboard.xlsx" &&
-      /^Observation #/i.test(r.title || ""),
+      (r.source === "Safety Dashboard.xlsx" || /^Observation #/i.test(r.title || "")),
   },
   {
     key: "ncr-summary",

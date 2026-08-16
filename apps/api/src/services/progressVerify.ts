@@ -1,9 +1,7 @@
 import fs from "fs";
 import path from "path";
-import xlsx from "xlsx";
+import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
-
-const XLSX = xlsx;
 
 export type VerifyCheck = {
   key: string;

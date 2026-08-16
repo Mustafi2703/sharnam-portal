@@ -2,7 +2,7 @@
  * Parse Cashflow - Dashboard.xlsx (Chart, Forecast, Tracking).
  * Column layout matches seed/costFromBudget.ts — logic duplicated here (seed not modified).
  */
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook } from "../lib/xlsx.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -20,8 +20,8 @@ function excelMonthLabel(serial: unknown): string {
   return epoch.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
 }
 
-function sheetRows(wb: XLSX.WorkBook, name: string): unknown[][] {
-  const key = wb.SheetNames.find((n) => n === name) || wb.SheetNames.find((n) => n.trim() === name.trim());
+function sheetRows(wb: WorkBook, name: string): unknown[][] {
+  const key = wb.SheetNames.find((n: string) => n === name) || wb.SheetNames.find((n: string) => n.trim() === name.trim());
   if (!key || !wb.Sheets[key]) return [];
   return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], {
     header: 1,

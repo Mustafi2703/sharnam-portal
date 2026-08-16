@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook } from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
@@ -772,7 +772,7 @@ checklistRouter.post(
     const name = String(req.body?.name || req.file.originalname.replace(/\.(xlsx|xls|csv)$/i, "") || "Imported checklist");
     const category = String(req.body?.category || "Imported");
 
-    let workbook: XLSX.WorkBook;
+    let workbook: WorkBook;
     try {
       workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     } catch {
@@ -1042,6 +1042,14 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     const d = new Date(f.createdAt).toISOString().slice(0, 10);
     byDay[d] = (byDay[d] || 0) + 1;
   }
+  const groupCount = (items: { status?: string | null; result?: string | null }[], key: "status" | "result") =>
+    Object.entries(
+      items.reduce((acc: Record<string, number>, item) => {
+        const label = String(item[key] || "Unknown");
+        acc[label] = (acc[label] || 0) + 1;
+        return acc;
+      }, {})
+    ).map(([label, value]) => ({ label, value }));
   res.json({
     workbook,
     totals: {
@@ -1065,6 +1073,19 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     qap,
     ncrs,
     cubes,
+    charts: {
+      byNcrStatus: groupCount(ncrs, "status"),
+      byCubeResult: groupCount(cubes, "result"),
+      byQapStatus: groupCount(qap, "status"),
+      fillsByDiscipline: (workbook?.checklistByDiscipline || []).map((d) => ({
+        label: d.discipline,
+        value: d.filled,
+      })),
+      fillsByDay: Object.entries(byDay)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-14)
+        .map(([label, value]) => ({ label, value })),
+    },
     /** Progress Reports: QI fills → Quality section; SiteExecution → DPR site checklists */
     reportMapping: {
       QualityInspection: "WPR / DPR Quality section",
@@ -1096,14 +1117,19 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
     Promise.resolve(loadSafetyDashboardKpis()),
   ]);
   const isNcr = (r: { recordType: string; title: string }) => /ncr/i.test(r.recordType) || /ncr/i.test(r.title);
-  const onePager = onePagerSheet
-    ? {
-        ...onePagerSheet,
-        totalIncidents: onePagerSheet.totalIncidents || allRecords.filter((r) => r.recordType === "Incident").length,
-        totalUnsafeActs: onePagerSheet.totalUnsafeActs || allRecords.filter((r) => r.recordType === "Observation").length,
-        totalNcrs: onePagerSheet.totalNcrs || allRecords.filter(isNcr).length,
-      }
-    : null;
+  const dbIncidents = allRecords.filter((r) => r.recordType === "Incident" || r.recordType === "Near Miss").length;
+  const dbUnsafeActs = allRecords.filter((r) => r.recordType === "Observation").length;
+  const dbNcrs = allRecords.filter(isNcr).length;
+  const dbSiteInstructions = allRecords.filter((r) => r.recordType === "Site Instruction").length;
+  const onePager = {
+    totalIncidents: onePagerSheet?.totalIncidents || dbIncidents,
+    totalUnsafeActs: onePagerSheet?.totalUnsafeActs || dbUnsafeActs,
+    totalNcrs: onePagerSheet?.totalNcrs || dbNcrs,
+    safeManHours: onePagerSheet?.safeManHours ?? 0,
+    toolboxTalks: onePagerSheet?.toolboxTalks ?? 0,
+    siteInstructions: onePagerSheet?.siteInstructions || dbSiteInstructions,
+    source: onePagerSheet?.source || "database",
+  };
   res.json({
     onePager,
     totals: {

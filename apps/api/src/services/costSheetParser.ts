@@ -1,7 +1,7 @@
 /**
  * Parse SPDC-style MB / BBS Excel sheets (same layout as SPDC_Budget_Arvind *.xls).
  */
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook } from "../lib/xlsx.js";
 
 function n(v: unknown): number {
   const x = Number(v);
@@ -50,7 +50,7 @@ export type ParsedBbsLine = {
   rowKind?: "header" | "data";
 };
 
-function sheetRows(wb: XLSX.WorkBook, name?: string): unknown[][] {
+function sheetRows(wb: WorkBook, name?: string): unknown[][] {
   const key = name || wb.SheetNames[0];
   if (!key || !wb.Sheets[key]) return [];
   return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], { header: 1, defval: "" }) as unknown[][];

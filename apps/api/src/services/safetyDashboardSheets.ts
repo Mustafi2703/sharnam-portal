@@ -3,7 +3,7 @@
  */
 import fs from "fs";
 import path from "path";
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook } from "../lib/xlsx.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -24,8 +24,8 @@ function resolveSafetyDashboardPath(): string | null {
   return null;
 }
 
-function readSheet(wb: XLSX.WorkBook, pattern: RegExp) {
-  const key = wb.SheetNames.find((n) => pattern.test(n));
+function readSheet(wb: WorkBook, pattern: RegExp) {
+  const key = wb.SheetNames.find((n: string) => pattern.test(n));
   if (!key || !wb.Sheets[key]) return [] as unknown[][];
   return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], {
     header: 1,
@@ -43,21 +43,59 @@ export type SafetyOnePagerKpis = {
   source: string;
 };
 
+function labelAt(r: unknown[], col: number) {
+  return String(r[col] ?? "").toLowerCase().trim();
+}
+
+function isNumericCell(v: unknown) {
+  if (v === "" || v == null) return false;
+  return Number.isFinite(Number(v));
+}
+
+/** One Pager uses label row + value row with KPIs in columns 0, 3, 6, 9, 12. */
 export function parseSafetyOnePager(rows: unknown[][]): Partial<SafetyOnePagerKpis> {
   const out: Partial<SafetyOnePagerKpis> = {};
   for (let i = 0; i < rows.length; i++) {
-    const r = rows[i] as unknown[];
-    const label = String(r[0] ?? "").toLowerCase();
-    if (label.includes("total incidents")) out.totalIncidents = n(r[1]);
-    if (label.includes("total unsafe act")) out.totalUnsafeActs = n(r[4] ?? r[1]);
-    if (String(r[7] ?? "").toLowerCase().includes("total ncr")) out.totalNcrs = n(r[8] ?? r[4]);
+    const labels = rows[i] as unknown[];
+    const values = (rows[i + 1] as unknown[]) || [];
+    for (let col = 0; col < labels.length; col++) {
+      const label = labelAt(labels, col);
+      if (!label || !isNumericCell(values[col])) continue;
+      const value = n(values[col]);
+      if (label.includes("total incident")) out.totalIncidents = value;
+      if (label.includes("total unsafe act")) out.totalUnsafeActs = value;
+      if (label.includes("total ncr")) out.totalNcrs = value;
+      if (label.includes("weekley safe") || label.includes("weekly safe")) {
+        out.safeManHours = value || out.safeManHours;
+      }
+      if (label.includes("cumulative safe")) {
+        out.safeManHours = value || out.safeManHours;
+      }
+    }
+    // Legacy single-column layout fallback
+    const solo = labelAt(labels, 0);
+    if (solo.includes("total incident") && isNumericCell(labels[1])) {
+      out.totalIncidents = n(labels[1]) || out.totalIncidents;
+    }
+    if (solo.includes("total unsafe act") && isNumericCell(labels[4] ?? labels[1])) {
+      out.totalUnsafeActs = n(labels[4] ?? labels[1]) || out.totalUnsafeActs;
+    }
+    if (labelAt(labels, 7).includes("total ncr") && isNumericCell(labels[8] ?? labels[4])) {
+      out.totalNcrs = n(labels[8] ?? labels[4]) || out.totalNcrs;
+    }
   }
   return out;
 }
 
 export function parseSafetyHours(rows: unknown[][]): Partial<SafetyOnePagerKpis> {
   const out: Partial<SafetyOnePagerKpis> = {};
-  for (const r of rows) {
+  const headerIdx = rows.findIndex(
+    (r) => /sr\.?\s*no/i.test(String(r[0] ?? "")) && /hse indicators/i.test(String(r[1] ?? ""))
+  );
+  const start = headerIdx >= 0 ? headerIdx + 1 : 8;
+  for (let i = start; i < rows.length; i++) {
+    const r = rows[i] as unknown[];
+    if (!n(r[0])) break;
     const label = String(r[1] ?? "").toLowerCase();
     if (label.includes("safe-manhours") || label.includes("safe manhours")) {
       out.safeManHours = n(r[4]) || n(r[3]);
@@ -78,7 +116,7 @@ export function loadSafetyDashboardKpis(): SafetyOnePagerKpis | null {
     totalIncidents: onePager.totalIncidents ?? 0,
     totalUnsafeActs: onePager.totalUnsafeActs ?? 0,
     totalNcrs: onePager.totalNcrs ?? 0,
-    safeManHours: hours.safeManHours ?? 0,
+    safeManHours: onePager.safeManHours || hours.safeManHours || 0,
     toolboxTalks: hours.toolboxTalks ?? 0,
     siteInstructions: hours.siteInstructions ?? 0,
     source: path.basename(file),

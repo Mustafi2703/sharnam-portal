@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import XLSX from "../lib/xlsx.js";
 import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";

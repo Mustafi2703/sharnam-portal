@@ -2,7 +2,7 @@
  * CRM Comparative Statement — SPDC R2 workbook pattern.
  * summary + master BOQ compare + per-discipline vendor BOQ uploads.
  */
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook, type WorkSheet, type CellObject } from "../lib/xlsx.js";
 import fs from "fs";
 import path from "path";
 import {
@@ -133,7 +133,7 @@ function numCell(cell?: SheetCell): number {
 }
 
 /** Summary tab — keep Excel cached numeric values (cross-sheet refs break evaluateAllRows). */
-function parseR2SummaryWorksheet(ws: XLSX.WorkSheet): ImportedSheet {
+function parseR2SummaryWorksheet(ws: WorkSheet): ImportedSheet {
   const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
   const rows: SheetCell[][] = aoa.map((src) =>
     src.map((c) => {
@@ -145,7 +145,7 @@ function parseR2SummaryWorksheet(ws: XLSX.WorkSheet): ImportedSheet {
   return { headers: [], rows, sheetName: "summary" };
 }
 
-function parseWorksheet(ws: XLSX.WorkSheet, sheetName: string): ImportedSheet {
+function parseWorksheet(ws: WorkSheet, sheetName: string): ImportedSheet {
   const ref = ws["!ref"];
   if (!ref) return { headers: [], rows: [], sheetName };
 
@@ -153,7 +153,7 @@ function parseWorksheet(ws: XLSX.WorkSheet, sheetName: string): ImportedSheet {
   const headers: string[] = [];
   for (let c = range.s.c; c <= range.e.c; c++) {
     const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
-    const cell = ws[addr] as XLSX.CellObject | undefined;
+    const cell = ws[addr] as CellObject | undefined;
     headers.push(cell?.v != null && String(cell.v).trim() ? String(cell.v) : `Column ${c - range.s.c + 1}`);
   }
 
@@ -162,7 +162,7 @@ function parseWorksheet(ws: XLSX.WorkSheet, sheetName: string): ImportedSheet {
     const row: SheetCell[] = [];
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
-      const cell = ws[addr] as XLSX.CellObject | undefined;
+      const cell = ws[addr] as CellObject | undefined;
       if (cell?.f) {
         const formula = cell.f.startsWith("=") ? cell.f : `=${cell.f}`;
         const cv = cell.v;
@@ -181,7 +181,7 @@ function parseWorksheet(ws: XLSX.WorkSheet, sheetName: string): ImportedSheet {
 }
 
 /** Master BOQ sheet uses two header rows (vendor + RATE/GRAND TOTAL). */
-function parseMasterBoqSheet(ws: XLSX.WorkSheet): ImportedSheet {
+function parseMasterBoqSheet(ws: WorkSheet): ImportedSheet {
   const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
   let headerIdx = aoa.findIndex((r) => {
     const line = r.map((c) => String(c).toLowerCase()).join(" ");
@@ -214,9 +214,9 @@ function normalizeSheetKey(name: string) {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function findWorksheet(wb: XLSX.WorkBook, target: string): XLSX.WorkSheet | null {
+function findWorksheet(wb: WorkBook, target: string): WorkSheet | null {
   const key = normalizeSheetKey(target);
-  const hit = wb.SheetNames.find((n) => normalizeSheetKey(n) === key || normalizeSheetKey(n).includes(key));
+  const hit = wb.SheetNames.find((n: string) => normalizeSheetKey(n) === key || normalizeSheetKey(n).includes(key));
   return hit ? wb.Sheets[hit] : null;
 }
 
@@ -282,17 +282,17 @@ function applyVendorLabelsToSummary(sheet: ImportedSheet, vendorLabels: string[]
 }
 
 export function pickDisciplineWorksheet(
-  wb: XLSX.WorkBook,
+  wb: WorkBook,
   disciplineKey: string,
   disciplines?: DisciplineDef[]
-): XLSX.WorkSheet | null {
+): WorkSheet | null {
   const disc = disciplineCatalogEntry(disciplineKey, disciplines);
   if (!disc) return wb.Sheets[wb.SheetNames[0]] ?? null;
   return findWorksheet(wb, disc.sheetName) || wb.Sheets[wb.SheetNames[0]] || null;
 }
 
 export function parseDisciplineBoqSheet(
-  ws: XLSX.WorkSheet,
+  ws: WorkSheet,
   disciplineKey: string,
   disciplines?: DisciplineDef[]
 ): ImportedSheet {
@@ -384,7 +384,7 @@ export function writeComparativeTemplateFile(outPath: string) {
   fs.copyFileSync(src, outPath);
 }
 
-export function comparativeToWorkbook(headers: string[], rows: SheetCell[][], sheetName = "Sheet1"): XLSX.WorkBook {
+export function comparativeToWorkbook(headers: string[], rows: SheetCell[][], sheetName = "Sheet1"): WorkBook {
   const evaluated = evaluateAllRows(rows);
   const { data, formulas } = sheetCellsToAoa(headers, evaluated);
   const ws = XLSX.utils.aoa_to_sheet(data);

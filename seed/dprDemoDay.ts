@@ -8,6 +8,7 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
+import { seedQualitySafetyDemoForDpr } from "./qualitySafetySheets.ts";
 
 const prisma = new PrismaClient();
 

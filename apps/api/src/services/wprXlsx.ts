@@ -8,7 +8,7 @@
  * The user drives the content via the WPR Maker page — this file only
  * turns the persisted sectionsJson into a printable pack.
  */
-import XLSX from "xlsx";
+import XLSX from "../lib/xlsx.js";
 
 export type WprSection = {
   title: string;

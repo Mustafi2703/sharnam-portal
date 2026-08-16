@@ -184,7 +184,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   safety: [
-    { to: "safety", label: "One Pager", blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
+    { to: "safety", label: "Dashboard", blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
     {
       to: "safety",
       label: "Site Instruction",

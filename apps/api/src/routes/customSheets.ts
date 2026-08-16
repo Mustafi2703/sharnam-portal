@@ -3,7 +3,7 @@
  */
 import { Router } from "express";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook, type WorkSheet, type CellObject } from "../lib/xlsx.js";
 import {
   type SheetCell,
   migrateRows,
@@ -24,14 +24,14 @@ customSheetsRouter.use(requireAuth);
 
 const WRITE_ROLES = ["admin", "office", "employee"] as const;
 
-function parseSheetWithFormulas(sheet: XLSX.WorkSheet): { headers: string[]; rows: SheetCell[][] } {
+function parseSheetWithFormulas(sheet: WorkSheet): { headers: string[]; rows: SheetCell[][] } {
   const ref = sheet["!ref"];
   if (!ref) return { headers: [], rows: [] };
   const range = XLSX.utils.decode_range(ref);
   const headers: string[] = [];
   for (let c = range.s.c; c <= range.e.c; c++) {
     const addr = XLSX.utils.encode_cell({ r: range.s.r, c });
-    const cell = sheet[addr] as XLSX.CellObject | undefined;
+    const cell = sheet[addr] as CellObject | undefined;
     headers.push(cell?.v != null && String(cell.v).trim() ? String(cell.v) : `Column ${c - range.s.c + 1}`);
   }
 
@@ -40,7 +40,7 @@ function parseSheetWithFormulas(sheet: XLSX.WorkSheet): { headers: string[]; row
     const row: SheetCell[] = [];
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
-      const cell = sheet[addr] as XLSX.CellObject | undefined;
+      const cell = sheet[addr] as CellObject | undefined;
       if (cell?.f) {
         const formula = cell.f.startsWith("=") ? cell.f : `=${cell.f}`;
         const cv = cell.v;
@@ -75,7 +75,7 @@ function sheetStats(rows: SheetCell[][]) {
   };
 }
 
-function buildWorksheet(headers: string[], rows: SheetCell[][]): XLSX.WorkSheet {
+function buildWorksheet(headers: string[], rows: SheetCell[][]): WorkSheet {
   const evaluated = evaluateAllRows(rows);
   const { data, formulas } = sheetCellsToAoa(headers, evaluated);
   const ws = XLSX.utils.aoa_to_sheet(data);

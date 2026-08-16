@@ -22,6 +22,7 @@
     "db:seed-crm-comparative": "tsx seed/crmComparativeDemo.ts",
     "db:seed-safety-sheets": "tsx seed/safetySheetsDemo.ts",
     "db:seed-closure-drawings": "tsx seed/closureDrawingsDemo.ts",
+    "db:seed-demo-screenshots": "tsx seed/demoScreenshotsPack.ts",
     "sync:reference-sheets": "node scripts/sync-reference-sheets.mjs",
     "db:seed-bbs-shapes": "tsx seed/runBbsDemoShapes.ts",
     "db:verify-progress": "tsx seed/verify-progress.ts",

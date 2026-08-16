@@ -3,11 +3,16 @@
  */
 import fs from "fs";
 import path from "path";
-import * as XLSX from "xlsx";
+import XLSX, { type WorkBook } from "../lib/xlsx.js";
 
 function n(v: unknown) {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
+}
+
+function parseLeadingNumber(v: unknown) {
+  const m = String(v ?? "").match(/(\d+(?:\.\d+)?)/);
+  return m ? n(m[1]) : 0;
 }
 
 function s(v: unknown, max = 200) {
@@ -29,8 +34,8 @@ function resolveQualityDashboardPath(): string | null {
   return null;
 }
 
-function readSheet(wb: XLSX.WorkBook, pattern: RegExp) {
-  const key = wb.SheetNames.find((n) => pattern.test(n));
+function readSheet(wb: WorkBook, pattern: RegExp) {
+  const key = wb.SheetNames.find((n: string) => pattern.test(n));
   if (!key || !wb.Sheets[key]) return [] as unknown[][];
   return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], {
     header: 1,
@@ -74,12 +79,17 @@ export function parseQualityDashboard(rows: unknown[][]): Partial<QualityDashboa
       if (m) out.weekLabel = `Week ${m[1]}`;
     }
     if (/this week concreting/i.test(label)) {
-      out.concretingM3 = n(String(r[0]).replace(/[^\d.]/g, "")) || n(r[1]);
-      out.samplesLastWeek = n(r[6]) || n(r[7]);
+      const next = (rows[i + 1] as unknown[]) || [];
+      out.concretingM3 = parseLeadingNumber(next[0]) || parseLeadingNumber(next[1]);
+      out.samplesLastWeek = n(next[6]) || n(next[7]) || out.samplesLastWeek;
     }
     if (/^\d+\s*m3/i.test(label)) {
-      out.concretingM3 = n(String(r[0]).replace(/[^\d.]/g, ""));
+      out.concretingM3 = parseLeadingNumber(r[0]);
       out.samplesLastWeek = n(r[6]) || out.samplesLastWeek;
+    }
+    if (/no\.?\s*of sample last week/i.test(s(r[6], 80).toLowerCase())) {
+      const next = (rows[i + 1] as unknown[]) || [];
+      out.samplesLastWeek = n(next[6]) || n(next[7]) || out.samplesLastWeek;
     }
   }
   return out;

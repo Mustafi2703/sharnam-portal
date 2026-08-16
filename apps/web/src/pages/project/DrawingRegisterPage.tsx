@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { DRAWING_REGISTER_SHEET_VIEWS, drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
 
@@ -93,20 +94,32 @@ export default function DrawingRegisterPage() {
 
       {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
 
-      {sheetKey === "" && data?.dashboard && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            ["Week", data.dashboard.weekLabel],
-            ["Total drawings", data.dashboard.totalDrawings || data.totals.lines],
-            ["GFC type", data.totals.gfc],
-            ["Critical", data.totals.critical],
-            ["Linked to GFC upload", data.totals.linkedGfc],
-          ].map(([l, v]) => (
-            <Card key={l as string} className="!p-4">
-              <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-              <div className="text-2xl font-display mt-1">{v as string | number}</div>
-            </Card>
-          ))}
+      {sheetKey === "" && data && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {[
+              ["Week", data.dashboard?.weekLabel ?? "Week #"],
+              ["Total drawings", data.dashboard?.totalDrawings || data.totals?.lines || 0],
+              ["GFC type", data.totals?.gfc ?? 0],
+              ["Critical", data.totals?.critical ?? 0],
+              ["Linked to GFC upload", data.totals?.linkedGfc ?? 0],
+            ].map(([l, v]) => (
+              <Card key={l as string} className="!p-4">
+                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                <div className="text-2xl font-display mt-1">{v as string | number}</div>
+              </Card>
+            ))}
+          </div>
+          <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
+              DRAWING REGISTER - 01.xlsx — breakdown
+            </p>
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <PieChart title="By discipline" items={data.charts?.byDiscipline || []} />
+              <PieChart title="By drawing type" items={data.charts?.byDrawingType || []} />
+              <PieChart title="Critical drawings" items={data.charts?.byCritical || []} />
+            </div>
+          </div>
         </div>
       )}
 
@@ -153,7 +166,10 @@ export default function DrawingRegisterPage() {
                       <th className="py-2 pr-2">Discipline</th>
                       <th className="py-2 pr-2">Type</th>
                       <th className="py-2 pr-2">Rev</th>
+                      <th className="py-2 pr-2">Planned</th>
+                      <th className="py-2 pr-2">Delay</th>
                       <th className="py-2 pr-2">Critical</th>
+                      <th className="py-2 pr-2">Remarks</th>
                     </>
                   )}
                   {sheetKey === "client" && (
@@ -169,17 +185,31 @@ export default function DrawingRegisterPage() {
                 {lines.map((r: any) => (
                   <tr key={r.id} className="border-b border-line/60">
                     <td className="py-2 pr-2 font-mono text-xs">{r.srNo ?? "—"}</td>
-                    <td className="py-2 pr-2 font-mono text-xs">{r.drawingNumber}</td>
+                    <td className="py-2 pr-2 font-mono text-xs">{String(r.drawingNumber || "").replace(/\s·\s*\d+$/, "")}</td>
                     <td className="py-2 pr-2 max-w-xs truncate">{r.drawingTitle}</td>
-                    <td className="py-2 pr-2">{r.discipline || "—"}</td>
                     {sheetKey === "master" && (
                       <>
-                        <td className="py-2 pr-2">{r.drawingType || "—"}</td>
+                        <td className="py-2 pr-2">{r.discipline || "—"}</td>
+                        <td className="py-2 pr-2 max-w-[8rem] truncate">{r.drawingType || "—"}</td>
                         <td className="py-2 pr-2">{r.revisionNumber || "—"}</td>
+                        <td className="py-2 pr-2 text-xs">
+                          {r.plannedSubmissionDate
+                            ? new Date(r.plannedSubmissionDate).toLocaleDateString()
+                            : "—"}
+                        </td>
+                        <td className="py-2 pr-2 font-mono text-xs">
+                          {r.submissionDelayDays != null ? r.submissionDelayDays : "—"}
+                        </td>
                         <td className="py-2 pr-2">{r.criticalDrawing || "—"}</td>
+                        <td className="py-2 pr-2 max-w-[10rem] truncate">{r.remarks || "—"}</td>
                       </>
                     )}
-                    {sheetKey === "client" && <td className="py-2 pr-2">{r.issuedTo || "—"}</td>}
+                    {sheetKey === "client" && (
+                      <>
+                        <td className="py-2 pr-2">{r.discipline || "—"}</td>
+                        <td className="py-2 pr-2">{r.issuedTo || "—"}</td>
+                      </>
+                    )}
                     <td className="py-2">
                       {r.drawing?.id ? (
                         <Badge tone="ok">Linked</Badge>
@@ -193,7 +223,7 @@ export default function DrawingRegisterPage() {
                 ))}
                 {!lines.length && (
                   <tr>
-                    <td colSpan={8} className="py-8 text-steel-muted text-center">
+                    <td colSpan={sheetKey === "master" ? 11 : 8} className="py-8 text-steel-muted text-center">
                       No lines — run seed or add above.
                     </td>
                   </tr>

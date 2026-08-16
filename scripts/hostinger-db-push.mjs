@@ -59,15 +59,15 @@ try {
 }
 
 try {
-  console.log("==> Drawing register + project closure (snag, lessons, report)…");
-  execSync("npx tsx seed/closureDrawingsDemo.ts", {
+  console.log("==> Demo screenshot pack (quality, safety, drawing register, closure, CRM)…");
+  execSync("npx tsx seed/demoScreenshotsPack.ts", {
     stdio: "inherit",
     env: process.env,
     cwd: rootDir,
-    timeout: 180_000,
+    timeout: 300_000,
   });
 } catch {
-  console.warn("WARN: Closure/drawing register seed skipped (non-fatal)");
+  console.warn("WARN: Demo screenshot pack skipped (non-fatal — run npm run db:seed-demo-screenshots)");
 }
 
 try {

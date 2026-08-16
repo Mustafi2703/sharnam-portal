@@ -2,7 +2,7 @@
  * Planned Vs. Actual Dashboard.xlsx — import / export.
  * Column layout mirrors seed/seed.ts (Progress Overview + Planned Vs Actual packs).
  */
-import * as XLSX from "xlsx";
+import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { renderBrandedReportHtml, workbookBuffer, type SheetSpec } from "./brandedExport.js";
 

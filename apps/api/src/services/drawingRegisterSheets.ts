@@ -3,7 +3,7 @@
  */
 import fs from "fs";
 import path from "path";
-import * as XLSX from "xlsx";
+import XLSX from "../lib/xlsx.js";
 
 function n(v: unknown) {
   const x = Number(v);

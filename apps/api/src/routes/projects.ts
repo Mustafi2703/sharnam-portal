@@ -524,6 +524,14 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
     }),
     Promise.resolve(loadDrawingRegisterDashboard()),
   ]);
+  const groupCount = (pick: (l: (typeof lines)[number]) => string) =>
+    Object.entries(
+      lines.reduce((acc: Record<string, number>, line) => {
+        const label = pick(line) || "Other";
+        acc[label] = (acc[label] || 0) + 1;
+        return acc;
+      }, {})
+    ).map(([label, value]) => ({ label, value }));
   res.json({
     dashboard,
     totals: {
@@ -531,6 +539,12 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
       gfc: lines.filter((l) => /gfc|good for construction/i.test(l.drawingType || "")).length,
       critical: lines.filter((l) => /yes/i.test(l.criticalDrawing || "")).length,
       linkedGfc: lines.filter((l) => l.drawingId).length,
+      delayed: lines.filter((l) => (l.submissionDelayDays ?? 0) > 0).length,
+    },
+    charts: {
+      byDiscipline: groupCount((l) => l.discipline || "Other"),
+      byDrawingType: groupCount((l) => l.drawingType || "Other"),
+      byCritical: groupCount((l) => (l.criticalDrawing || "No").trim()),
     },
     lines,
   });
