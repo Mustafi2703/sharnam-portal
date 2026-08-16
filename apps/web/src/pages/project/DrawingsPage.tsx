@@ -11,6 +11,7 @@ import { DrawingUploadFilePicker, type MarkupPageDraft } from "../../components/
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
 import { DrawingIssueFields } from "../../components/DrawingIssueFields";
+import { RevisionIssueLogSummary } from "../../components/RevisionIssueLogSummary";
 import {
   appendIssueToFormData,
   emptyDrawingIssueDraft,
@@ -947,6 +948,7 @@ export default function DrawingsPage() {
                                   {!r.pdfFileName && !r.dwgFileName && r.fileName && (
                                     <div className="text-[11px] font-mono mt-0.5">{r.fileName}</div>
                                   )}
+                                  <RevisionIssueLogSummary rev={r} />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge tone={r.published ? "ok" : "neutral"}>{r.published ? "Live" : "Draft"}</Badge>

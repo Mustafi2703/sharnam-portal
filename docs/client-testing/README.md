@@ -4,11 +4,15 @@ Use this folder during **client meetings**, **module walkthroughs**, and **UAT**
 
 ## How to use with Google Docs
 
+**Client-facing (recommended):** Upload **[../client-share/12-Live-Client-UAT-Workbook.md](../client-share/12-Live-Client-UAT-Workbook.md)** to Google Drive → share as **Editor** with SPDC. One live Doc for change log + sign-off + Drawings UAT steps.
+
+**Internal (dev team):**
+
 1. Create a Google Drive folder: `Sharnam Portal — Client UAT`.
-2. Upload this entire `client-testing/` folder, or copy-paste module files into one Doc per module.
-3. Keep **[01-MEETING-CHANGE-LOG.md](./01-MEETING-CHANGE-LOG.md)** as the **live meeting log** (sort by date).
+2. Optionally mirror `modules/` files for route-level detail.
+3. Keep **[01-MEETING-CHANGE-LOG.md](./01-MEETING-CHANGE-LOG.md)** in sync with the client workbook **Section 2**.
 4. For each module session, open the matching file under `modules/` and fill the **Changes during testing** tables on the pages you review.
-5. When a change is built, move the row to **Done** in the meeting log and tick **Client sign-off** on that page.
+5. When a change is built, mark **Done** in both the client Doc and meeting log; tick **Client sign-off** on that page.
 
 ## Recommended test order
 

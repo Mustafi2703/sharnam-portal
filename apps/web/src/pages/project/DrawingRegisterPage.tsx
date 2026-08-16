@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
@@ -11,6 +11,7 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export default function DrawingRegisterPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sheetView = drawingRegisterSheetFromParams(searchParams);
   const sheetKey = sheetView.key;
@@ -42,6 +43,12 @@ export default function DrawingRegisterPage() {
   };
 
   useEffect(() => {
+    if (searchParams.get("sheet") === "client" && id) {
+      navigate(`/projects/${id}/drawings/register?sheet=master`, { replace: true });
+    }
+  }, [id, searchParams, navigate]);
+
+  useEffect(() => {
     void load();
   }, [id, token, sheetKey]);
 
@@ -68,7 +75,13 @@ export default function DrawingRegisterPage() {
       <PageHeader
         eyebrow="Drawings module"
         title={sheetView.label}
-        subtitle={`${sheetView.sheet} — DCI master register from client workbook. Link to GFC upload for file issue.`}
+        subtitle={
+          sheetKey === "master"
+            ? "Master Drawing Register — full DCI columns from DRAWING REGISTER - 01.xlsx (includes issued-to, copies, critical). Link to GFC upload for files."
+            : sheetKey === "site"
+              ? "Site Drawing Register — receive & issue matrix R0–R6 with signatures from GFC uploads."
+              : `${sheetView.sheet} — KPIs and charts from client workbook.`
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{data?.totals?.lines ?? 0} lines</Badge>
@@ -114,7 +127,7 @@ export default function DrawingRegisterPage() {
         </div>
       )}
 
-      {(sheetKey === "master" || sheetKey === "client") && canEdit && (
+      {sheetKey === "master" && canEdit && (
         <Card>
           <h3 className="font-semibold mb-3">Add master register line</h3>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addLine}>
@@ -140,11 +153,9 @@ export default function DrawingRegisterPage() {
         </Card>
       )}
 
-      {(sheetKey === "master" || sheetKey === "client") && (
+      {sheetKey === "master" && (
         <Card>
-          <h3 className="font-semibold mb-3">
-            {sheetKey === "master" ? "Master Drawing Register" : "Client drawing register view"}
-          </h3>
+          <h3 className="font-semibold mb-3">Master Drawing Register</h3>
           <div className="overflow-x-auto max-h-[32rem]">
             <table className="w-full text-sm min-w-[1600px]">
               <thead>
@@ -155,31 +166,19 @@ export default function DrawingRegisterPage() {
                   <th className="py-2 pr-2">Discipline</th>
                   <th className="py-2 pr-2">No.</th>
                   <th className="py-2 pr-2">Title</th>
-                  {sheetKey === "master" && (
-                    <>
-                      <th className="py-2 pr-2">Type</th>
-                      <th className="py-2 pr-2">Consultant</th>
-                      <th className="py-2 pr-2">Rev</th>
-                      <th className="py-2 pr-2">Rev date</th>
-                      <th className="py-2 pr-2">Rev desc.</th>
-                      <th className="py-2 pr-2">Latest</th>
-                      <th className="py-2 pr-2">Planned</th>
-                      <th className="py-2 pr-2">Actual</th>
-                      <th className="py-2 pr-2">Delay</th>
-                      <th className="py-2 pr-2">Delay resp.</th>
-                      <th className="py-2 pr-2">Issued to</th>
-                      <th className="py-2 pr-2">Issue date</th>
-                      <th className="py-2 pr-2">Copies</th>
-                    </>
-                  )}
-                  {sheetKey === "client" && (
-                    <>
-                      <th className="py-2 pr-2">Discipline</th>
-                      <th className="py-2 pr-2">Issued to</th>
-                      <th className="py-2 pr-2">Issue date</th>
-                      <th className="py-2 pr-2">Copies</th>
-                    </>
-                  )}
+                  <th className="py-2 pr-2">Type</th>
+                  <th className="py-2 pr-2">Consultant</th>
+                  <th className="py-2 pr-2">Rev</th>
+                  <th className="py-2 pr-2">Rev date</th>
+                  <th className="py-2 pr-2">Rev desc.</th>
+                  <th className="py-2 pr-2">Latest</th>
+                  <th className="py-2 pr-2">Planned</th>
+                  <th className="py-2 pr-2">Actual</th>
+                  <th className="py-2 pr-2">Delay</th>
+                  <th className="py-2 pr-2">Delay resp.</th>
+                  <th className="py-2 pr-2">Issued to</th>
+                  <th className="py-2 pr-2">Issue date</th>
+                  <th className="py-2 pr-2">Copies</th>
                   <th className="py-2 pr-2">Critical</th>
                   <th className="py-2 pr-2">Remarks</th>
                   <th className="py-2">GFC link</th>
@@ -194,43 +193,29 @@ export default function DrawingRegisterPage() {
                     <td className="py-2 pr-2">{r.discipline || "—"}</td>
                     <td className="py-2 pr-2 font-mono text-xs">{String(r.drawingNumber || "").replace(/\s·\s*\d+$/, "")}</td>
                     <td className="py-2 pr-2 max-w-xs truncate">{r.drawingTitle}</td>
-                    {sheetKey === "master" && (
-                      <>
-                        <td className="py-2 pr-2 max-w-[8rem] truncate text-xs">{r.drawingType || "—"}</td>
-                        <td className="py-2 pr-2 max-w-[8rem] truncate text-xs">{r.consultantName || "—"}</td>
-                        <td className="py-2 pr-2 font-mono">{r.revisionNumber || "—"}</td>
-                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
-                          {r.revisionDate ? new Date(r.revisionDate).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="py-2 pr-2 max-w-[10rem] truncate text-xs">{r.revisionDescription || "—"}</td>
-                        <td className="py-2 pr-2">{r.latestRevision || "—"}</td>
-                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
-                          {r.plannedSubmissionDate ? new Date(r.plannedSubmissionDate).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
-                          {r.actualSubmissionDate ? new Date(r.actualSubmissionDate).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="py-2 pr-2 font-mono text-xs">
-                          {r.submissionDelayDays != null ? r.submissionDelayDays : "—"}
-                        </td>
-                        <td className="py-2 pr-2 text-xs max-w-[8rem] truncate">{r.delayResponsibility || "—"}</td>
-                        <td className="py-2 pr-2 text-xs max-w-[8rem] truncate">{r.issuedTo || "—"}</td>
-                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
-                          {r.issueDate ? new Date(r.issueDate).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="py-2 pr-2 font-mono">{r.copiesCount ?? "—"}</td>
-                      </>
-                    )}
-                    {sheetKey === "client" && (
-                      <>
-                        <td className="py-2 pr-2">{r.discipline || "—"}</td>
-                        <td className="py-2 pr-2">{r.issuedTo || "—"}</td>
-                        <td className="py-2 pr-2 text-xs whitespace-nowrap">
-                          {r.issueDate ? new Date(r.issueDate).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="py-2 pr-2 font-mono">{r.copiesCount ?? "—"}</td>
-                      </>
-                    )}
+                    <td className="py-2 pr-2 max-w-[8rem] truncate text-xs">{r.drawingType || "—"}</td>
+                    <td className="py-2 pr-2 max-w-[8rem] truncate text-xs">{r.consultantName || "—"}</td>
+                    <td className="py-2 pr-2 font-mono">{r.revisionNumber || "—"}</td>
+                    <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                      {r.revisionDate ? new Date(r.revisionDate).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-2 pr-2 max-w-[10rem] truncate text-xs">{r.revisionDescription || "—"}</td>
+                    <td className="py-2 pr-2">{r.latestRevision || "—"}</td>
+                    <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                      {r.plannedSubmissionDate ? new Date(r.plannedSubmissionDate).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                      {r.actualSubmissionDate ? new Date(r.actualSubmissionDate).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-2 pr-2 font-mono text-xs">
+                      {r.submissionDelayDays != null ? r.submissionDelayDays : "—"}
+                    </td>
+                    <td className="py-2 pr-2 text-xs max-w-[8rem] truncate">{r.delayResponsibility || "—"}</td>
+                    <td className="py-2 pr-2 text-xs max-w-[8rem] truncate">{r.issuedTo || "—"}</td>
+                    <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                      {r.issueDate ? new Date(r.issueDate).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="py-2 pr-2 font-mono">{r.copiesCount ?? "—"}</td>
                     <td className="py-2 pr-2">{r.criticalDrawing || "—"}</td>
                     <td className="py-2 pr-2 max-w-[10rem] truncate text-xs">{r.remarks || "—"}</td>
                     <td className="py-2">
@@ -246,7 +231,7 @@ export default function DrawingRegisterPage() {
                 ))}
                 {!lines.length && (
                   <tr>
-                    <td colSpan={sheetKey === "master" ? 22 : 13} className="py-8 text-steel-muted text-center">
+                    <td colSpan={22} className="py-8 text-steel-muted text-center">
                       No lines — run seed or add above.
                     </td>
                   </tr>

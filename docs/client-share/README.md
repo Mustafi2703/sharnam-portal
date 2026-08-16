@@ -17,6 +17,16 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | 3 | [03-Module-Test-Plan.md](./03-Module-Test-Plan.md) | SPDC leads — test each module on your server |
 | 4 | [04-SharePoint-and-Files.md](./04-SharePoint-and-Files.md) | IT — photos & documents to SharePoint |
 | 5 | [05-Brand-and-Logo.md](./05-Brand-and-Logo.md) | Marketing / reports — logo & colours |
+| **12** | **[12-Live-Client-UAT-Workbook.md](./12-Live-Client-UAT-Workbook.md)** | **Everyone — upload to Google Docs; edit live during UAT** |
+
+---
+
+## Live client testing (Google Docs)
+
+1. Upload **[12-Live-Client-UAT-Workbook.md](./12-Live-Client-UAT-Workbook.md)** to Google Drive → open as Google Doc (or paste into a new Doc).
+2. Share with SPDC leads as **Editor**.
+3. During each module session: add rows to the **change log**, tick **sign-off** tables, note issues in **Drawings** section (Section 5).
+4. Dev team marks changes **Done** in the same Doc after deploy; client re-tests and ticks **Pass**.
 
 ---
 

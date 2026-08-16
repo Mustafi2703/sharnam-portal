@@ -79,7 +79,7 @@ npm run db:seed
 
 | Filename | Portal module | Tag | What it seeds / feeds |
 |----------|---------------|-----|------------------------|
-| `DRAWING REGISTER - 01.xlsx` | Drawings → Register | **Required** | Master drawing register (41+ rows), GFC links |
+| `DRAWING REGISTER - 01.xlsx` | Drawings → Register | **Required** | **Master** register (41+ rows, all DCI cols incl. issued-to/copies/critical), **Site** register (R0–R6 signatures), dashboard KPIs. Old *Client* sheet columns are on Master — no separate portal tab. |
 | `Approval  &  GFC Drawing Log.xlsx` | Drawings → GFC log | Recommended | Approval & GFC drawing log |
 | `Snaglist - Sharnam PMC.xlsx` | Closure → Snaglist | Recommended | Snaglist rows (falls back to demo rows if empty) |
 | `Lessons Learnt - Sharnam PMC.xls` | Closure → Lessons | Recommended | Lessons learnt register |

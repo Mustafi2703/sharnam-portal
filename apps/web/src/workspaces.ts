@@ -50,13 +50,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "drawings/register",
-      label: "Client register",
-      query: "sheet=client",
-      blurb: "Client-facing drawing register view.",
-      sheet: "Drawing Register - Client",
-    },
-    {
-      to: "drawings/register",
       label: "Site register",
       query: "sheet=site",
       blurb: "Receive & issue matrix R0–R6 with contractor/client signatures.",
