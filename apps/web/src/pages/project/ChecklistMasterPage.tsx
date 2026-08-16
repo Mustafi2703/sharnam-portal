@@ -43,6 +43,7 @@ export default function ChecklistMasterPage() {
     ((family === "QualityInspection" || family === "Safety") && user?.role === "client");
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
 
   const load = async () => {
     const list = await api<any[]>(`/api/checklist/templates?type=${family}`, { token });
@@ -71,6 +72,8 @@ export default function ChecklistMasterPage() {
 
   async function createTemplate(e: FormEvent) {
     e.preventDefault();
+    if (createBusy || !form.name.trim()) return;
+    setCreateBusy(true);
     setMsg("");
     try {
       const t = await api<any>("/api/checklist/templates", {
@@ -84,6 +87,8 @@ export default function ChecklistMasterPage() {
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setCreateBusy(false);
     }
   }
 
@@ -289,7 +294,9 @@ export default function ChecklistMasterPage() {
                   onChange={(e) => setForm({ ...form, requirePhotosMin: Number(e.target.value) || 0 })}
                 />
               </label>
-              <Button type="submit">Create checklist</Button>
+              <Button type="submit" disabled={createBusy || !form.name.trim()}>
+                {createBusy ? "Creating…" : "Create checklist"}
+              </Button>
             </form>
           )}
         </Card>

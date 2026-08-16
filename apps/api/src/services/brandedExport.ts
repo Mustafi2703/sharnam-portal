@@ -166,6 +166,8 @@ export async function buildAnalyticsPack(projectId: string) {
     hindrances,
     budget,
     cashflow,
+    ncrs,
+    cubes,
   ] = await Promise.all([
     prisma.rfi.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, take: 200 }),
     prisma.meeting.findMany({
@@ -200,6 +202,8 @@ export async function buildAnalyticsPack(projectId: string) {
     prisma.progressHindrance.findMany({ where: { projectId }, take: 80 }),
     prisma.costBudgetLine.findMany({ where: { projectId } }),
     prisma.costCashflowPeriod.findMany({ where: { projectId } }),
+    prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 120 }),
+    prisma.cubeTest.findMany({ where: { projectId }, orderBy: { castDate: "desc" }, take: 120 }),
   ]);
 
   const openRfis = rfis.filter((r) => r.status === "Open" || r.status === "Draft");
@@ -207,6 +211,7 @@ export async function buildAnalyticsPack(projectId: string) {
   const published = drawings.filter((d) => d.isPublished);
   const delayed = milestones.filter((m) => (m.varianceDays || 0) > 0);
   const openHindrance = hindrances.filter((h) => h.status === "Open");
+  const openNcr = ncrs.filter((n) => n.status === "Open");
   const budgeted = budget.reduce((s, b) => s + (b.budgetedAmount || 0), 0);
   const certified = budget.reduce((s, b) => s + (b.certifiedAmount || 0), 0);
 
@@ -220,6 +225,9 @@ export async function buildAnalyticsPack(projectId: string) {
     publishedDrawings: published.length,
     delayedMilestones: delayed.length,
     openHindrances: openHindrance.length,
+    openNcrs: openNcr.length,
+    totalNcrs: ncrs.length,
+    cubeTests: cubes.length,
     budgeted,
     certified,
     diaryDays: diaries.length,
@@ -245,6 +253,7 @@ export async function buildAnalyticsPack(projectId: string) {
         { label: "Unpublished", value: drawings.length - published.length },
       ],
       milestoneStatus: countBy(milestones, (m) => m.status || "Unknown"),
+      ncrByStatus: countBy(ncrs, (n) => n.status || "Unknown"),
     },
     rfis,
     meetings,
@@ -252,6 +261,8 @@ export async function buildAnalyticsPack(projectId: string) {
     safety,
     drawings,
     diaries,
+    ncrs,
+    cubes,
     milestones,
     hindrances,
     budget,
@@ -367,6 +378,28 @@ export function analyticsToSheets(pack: Awaited<ReturnType<typeof buildAnalytics
         ]),
       ],
     },
+    {
+      name: "NCR CAR",
+      rows: [
+        ["Number", "Type", "Status", "Location", "Issue date"],
+        ...pack.ncrs.map((n) => [n.number, n.ncrType, n.status, n.location || "", fmtDate(n.issueDate)]),
+      ],
+    },
+    {
+      name: "Cube tests",
+      rows: [
+        ["Sr", "Cast", "Grade", "Description", "Load 7d", "Load 28d", "Result"],
+        ...pack.cubes.map((c) => [
+          c.srNo,
+          fmtDate(c.castDate),
+          c.grade || "",
+          c.description || "",
+          c.load7 ?? "",
+          c.load28 ?? "",
+          c.result || "",
+        ]),
+      ],
+    },
   ];
 }
 
@@ -384,6 +417,8 @@ export function analyticsToHtml(pack: Awaited<ReturnType<typeof buildAnalyticsPa
       { label: "Published GFC", value: pack.kpis.publishedDrawings },
       { label: "Delayed MS", value: pack.kpis.delayedMilestones },
       { label: "Hindrances", value: pack.kpis.openHindrances },
+      { label: "Open NCR", value: pack.kpis.openNcrs },
+      { label: "Cube tests", value: pack.kpis.cubeTests },
     ],
     sections: [
       {
@@ -424,6 +459,28 @@ export function analyticsToHtml(pack: Awaited<ReturnType<typeof buildAnalyticsPa
         heading: "Drawings register (sample)",
         headers: ["Number", "Title", "Published"],
         rows: pack.drawings.slice(0, 50).map((d) => [d.drawingNumber, d.title, d.isPublished ? "Yes" : "No"]),
+      },
+      {
+        heading: "NCR / CAR register",
+        headers: ["Number", "Type", "Status", "Location", "Issue"],
+        rows: pack.ncrs.slice(0, 40).map((n) => [
+          n.number || "—",
+          n.ncrType || "—",
+          n.status,
+          n.location || "—",
+          fmtDate(n.issueDate),
+        ]),
+      },
+      {
+        heading: "Cube test register",
+        headers: ["Sr", "Cast", "Grade", "Description", "Result"],
+        rows: pack.cubes.slice(0, 40).map((c) => [
+          c.srNo || "—",
+          fmtDate(c.castDate),
+          c.grade || "—",
+          c.description || "—",
+          c.result || "—",
+        ]),
       },
     ],
   });
@@ -516,10 +573,37 @@ export async function buildModuleExport(projectId: string, module: ModuleExportK
           ],
         }),
       };
-    case "quality":
+    case "quality": {
+      const [ncrs, cubes] = await Promise.all([
+        prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 120 }),
+        prisma.cubeTest.findMany({ where: { projectId }, orderBy: { castDate: "desc" }, take: 120 }),
+      ]);
+      const openNcr = ncrs.filter((n) => n.status === "Open").length;
       return {
-        title: "Quality checklist fills",
+        title: "Quality — NCR / CAR / cubes / checklists",
         sheets: [
+          {
+            name: "NCR CAR",
+            rows: [
+              ["Number", "Type", "Status", "Location", "Issue date"],
+              ...ncrs.map((n) => [n.number, n.ncrType, n.status, n.location || "", fmtDate(n.issueDate)]),
+            ],
+          },
+          {
+            name: "Cube tests",
+            rows: [
+              ["Sr", "Cast date", "Grade", "Description", "Load 7d", "Load 28d", "Result"],
+              ...cubes.map((c) => [
+                c.srNo,
+                fmtDate(c.castDate),
+                c.grade || "",
+                c.description || "",
+                c.load7 ?? "",
+                c.load28 ?? "",
+                c.result || "",
+              ]),
+            ],
+          },
           {
             name: "Fills",
             rows: [
@@ -535,15 +619,44 @@ export async function buildModuleExport(projectId: string, module: ModuleExportK
           },
         ] as SheetSpec[],
         html: renderBrandedReportHtml({
-          title: "Quality & checklist fills",
-          subtitle: "Referenced fill log for client QA packs",
+          title: "Quality pack — NCR · CAR · cubes · checklists",
+          subtitle: "Weekly / monthly QA registers for client coordination",
           project: p,
-          kpis: [{ label: "Fills", value: pack.kpis.checklistFills }],
+          kpis: [
+            { label: "NCR/CAR", value: ncrs.length },
+            { label: "Open NCR", value: openNcr },
+            { label: "Cube tests", value: cubes.length },
+            { label: "Checklist fills", value: pack.kpis.checklistFills },
+          ],
           sections: [
             {
-              heading: "Submissions",
+              heading: "NCR / CAR register",
+              headers: ["Number", "Type", "Status", "Location", "Issue"],
+              rows: ncrs.slice(0, 80).map((n) => [
+                n.number || "—",
+                n.ncrType || "—",
+                n.status,
+                n.location || "—",
+                fmtDate(n.issueDate),
+              ]),
+            },
+            {
+              heading: "Cube test register",
+              headers: ["Sr", "Cast", "Grade", "Description", "7d", "28d", "Result"],
+              rows: cubes.slice(0, 80).map((c) => [
+                c.srNo || "—",
+                fmtDate(c.castDate),
+                c.grade || "—",
+                c.description || "—",
+                c.load7 ?? "—",
+                c.load28 ?? "—",
+                c.result || "—",
+              ]),
+            },
+            {
+              heading: "Checklist submissions",
               headers: ["Template", "Type", "By", "Status", "When"],
-              rows: pack.submissions.slice(0, 80).map((s) => [
+              rows: pack.submissions.slice(0, 60).map((s) => [
                 s.assignment?.template?.name || "—",
                 s.assignment?.template?.checklistType || "—",
                 s.submittedBy?.fullName || "—",
@@ -554,6 +667,7 @@ export async function buildModuleExport(projectId: string, module: ModuleExportK
           ],
         }),
       };
+    }
     case "safety":
       return {
         title: "Safety dashboard",

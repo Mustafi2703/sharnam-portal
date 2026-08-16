@@ -1036,7 +1036,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
     if (sor) {
       const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sor, { header: 1, defval: "" }) as unknown[][];
       let n = 0;
-      for (let i = 1; i < Math.min(rows.length, 6); i++) {
+      for (let i = 1; i < Math.min(rows.length, 24); i++) {
         const row = rows[i] as (string | number)[];
         const observation = cellStr(row[1], 120);
         if (!observation || !cellNum(row[0])) continue;

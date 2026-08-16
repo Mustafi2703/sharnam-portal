@@ -1,3 +1,4 @@
+import "./setupExpress.js";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -25,7 +26,7 @@ import { crmComparativeRouter } from "./routes/crmComparative.js";
 import { hrmRecruitmentRouter } from "./routes/hrmRecruitment.js";
 import { dprMakerRouter } from "./routes/dprMaker.js";
 import { wprMakerRouter } from "./routes/wprMaker.js";
-import { prisma } from "./prisma.js";
+import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -144,9 +145,26 @@ if (webDist) {
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
-  res.status(500).json({ error: err.message || "Server error" });
+  if (isPrismaFatal(err)) {
+    if (!res.headersSent) {
+      res.status(503).json({ error: "Database temporarily unavailable — please retry in a few seconds." });
+    }
+    setTimeout(() => process.exit(1), 200);
+    return;
+  }
+  if (!res.headersSent) {
+    res.status(500).json({ error: err.message || "Server error" });
+  }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
+async function start() {
+  await ensureDbConnected();
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+void start().catch((err) => {
+  console.error("FATAL: API failed to connect to database:", err);
+  process.exit(1);
 });

@@ -89,6 +89,8 @@ export default function DashboardPage() {
     { label: "Safety open", value: kpis?.openSafety ?? safetyOpen, color: "bg-[#9A3412]", tab: "safety" as Tab, icon: "safety" as ModuleIconKey },
     { label: "Published GFC", value: kpis?.publishedDrawings ?? 0, color: "bg-[#252b36]", tab: "analytics" as Tab, icon: "drawings" as ModuleIconKey },
     { label: "Delayed MS", value: kpis?.delayedMilestones ?? 0, color: "bg-[#B45309]", tab: "analytics" as Tab, icon: "progress" as ModuleIconKey },
+    { label: "Open NCR", value: kpis?.openNcrs ?? 0, color: "bg-[#DC2626]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
+    { label: "Cube tests", value: kpis?.cubeTests ?? 0, color: "bg-[#0B6A78]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
   ];
 
   return (
@@ -175,11 +177,12 @@ export default function DashboardPage() {
 
       {tab === "analytics" && (
         <div className="space-y-4">
-          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <PieChart title="RFIs by status" items={analytics?.charts?.rfiByStatus || []} />
-            <PieChart title="Safety by status" items={analytics?.charts?.safetyByStatus || []} />
-            <PieChart title="Drawings publish" items={analytics?.charts?.drawingPublish || []} />
-            <PieChart title="Milestones" items={analytics?.charts?.milestoneStatus || []} />
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3 min-w-0">
+            <PieChart title="RFIs by status" items={analytics?.charts?.rfiByStatus || []} size={150} />
+            <PieChart title="Safety by status" items={analytics?.charts?.safetyByStatus || []} size={150} />
+            <PieChart title="Drawings publish" items={analytics?.charts?.drawingPublish || []} size={150} />
+            <PieChart title="Milestones" items={analytics?.charts?.milestoneStatus || []} size={150} />
+            <PieChart title="NCR / CAR" items={analytics?.charts?.ncrByStatus || []} size={150} />
           </div>
           <Card className="!p-4">
             <div className="flex flex-wrap justify-between gap-3 items-start">

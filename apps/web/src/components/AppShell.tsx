@@ -23,6 +23,7 @@ import {
   type WorkspaceKey,
 } from "../workspaces";
 import { api } from "../api";
+import { downloadAuthFile, exportPaths, type ExportModule } from "../lib/downloadReport";
 import { sortDemoProjectsFirst } from "../lib/demoProjects";
 import {
   applyModuleAccent,
@@ -499,6 +500,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isSiteDesk = user?.role === "site_employee" || user?.role === "vendor";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const activeProject = projects.find((p) => p.id === projectId);
+  const routeProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] || "";
+
+  async function quickExport(kind: ExportModule) {
+    if (!routeProjectId || !token) return;
+    const paths = exportPaths(routeProjectId, kind);
+    const code = projects.find((p) => p.id === routeProjectId)?.code || "project";
+    const fname = paths.htmlName.replace(".html", `-${code}.html`);
+    try {
+      await downloadAuthFile(paths.html, token, fname);
+    } catch {
+      /* ignore — user can retry from module page */
+    }
+  }
 
   return (
     <div className={`app-frame ${hidden ? "is-hidden" : ""}`}>
@@ -587,6 +601,29 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link to="/hrm" className="app-topbar__chip hover:border-brand">
                   HRMS
                 </Link>
+              </div>
+            )}
+
+            {inProject && routeProjectId && (
+              <div className="hidden lg:flex items-center gap-1 flex-wrap min-w-0 max-w-[min(46vw,520px)]">
+                {(
+                  [
+                    ["dpr", "DPR PDF"],
+                    ["wpr", "WPR PDF"],
+                    ["rfis", "RFI log"],
+                    ["quality", "Quality PDF"],
+                    ["progress", "Progress PDF"],
+                  ] as const
+                ).map(([kind, label]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    className="app-topbar__chip !text-[10px] !py-1 !px-2 whitespace-nowrap"
+                    onClick={() => void quickExport(kind)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             )}
 

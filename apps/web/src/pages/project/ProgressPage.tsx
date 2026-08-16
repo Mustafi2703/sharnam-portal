@@ -496,11 +496,11 @@ export default function ProgressPage() {
                 );
               })}
             </div>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              <PieChart title="Milestones by status" items={data.charts?.milestoneByStatus || []} />
-              <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
-              <PieChart title="Risk by status" items={data.charts?.riskByStatus || []} />
-              <PieChart title="Legal by status" items={data.charts?.legalByStatus || []} />
+            <div className="grid sm:grid-cols-2 xl:grid-cols-2 gap-3 min-w-0">
+              <div className="min-w-0"><PieChart title="Milestones by status" items={data.charts?.milestoneByStatus || []} size={150} /></div>
+              <div className="min-w-0"><PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} size={150} /></div>
+              <div className="min-w-0"><PieChart title="Risk by status" items={data.charts?.riskByStatus || []} size={150} /></div>
+              <div className="min-w-0"><PieChart title="Legal by status" items={data.charts?.legalByStatus || []} size={150} /></div>
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-4 w-full">

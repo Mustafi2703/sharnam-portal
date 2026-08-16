@@ -150,9 +150,9 @@ export function PieChart({
                       {row.label}
                     </span>
                   </span>
-                  <span className="font-mono tabular-nums text-steel-muted shrink-0">
-                    {row.value}
-                    <span className="text-brand font-semibold ml-1">{pct}%</span>
+                  <span className="font-mono tabular-nums shrink-0 text-right">
+                    <span className="text-ink font-semibold">{row.value}</span>
+                    <span className="text-brand font-semibold ml-1.5">({pct}%)</span>
                   </span>
                 </li>
               );

@@ -52,8 +52,21 @@ export function maskDatabaseUrl(url) {
   return url.replace(/:([^:@/]+)@/, ":***@");
 }
 
+function withMysqlPoolParams(url) {
+  if (!url.startsWith("mysql://")) return url;
+  let normalized = url.includes("@localhost:")
+    ? url.replace("@localhost:", "@127.0.0.1:")
+    : url;
+  const params = new URLSearchParams();
+  if (!normalized.includes("connection_limit=")) params.set("connection_limit", "5");
+  if (!normalized.includes("pool_timeout=")) params.set("pool_timeout", "20");
+  const qs = params.toString();
+  if (!qs) return normalized;
+  return normalized + (normalized.includes("?") ? "&" : "?") + qs;
+}
+
 export function applyDatabaseUrl() {
-  const url = resolveDatabaseUrl();
+  const url = withMysqlPoolParams(resolveDatabaseUrl());
   if (url.startsWith("mysql://")) {
     process.env.DATABASE_URL = url;
     return url;

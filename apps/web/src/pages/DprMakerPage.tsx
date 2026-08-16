@@ -4,7 +4,6 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { EvidencePanel } from "../components/EvidencePanel";
-import { BarChart } from "../components/PieChart";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -724,46 +723,17 @@ export default function DprMakerPage() {
         </div>
       )}
 
-      {/* Dashboard charts — mirrors DASHBOARD sheet / PDF export */}
-      {snap.charts && (
+      {/* Planned vs actual S-curve only — BOQ/manpower charts stay in XLSX export */}
+      {snap.charts?.scurve && snap.charts.scurve.length > 0 && (
         <div className="maker-section">
-          <div className="maker-section__head">Dashboard charts · planned vs actual</div>
-          <div className="maker-section__body grid lg:grid-cols-2 gap-4">
+          <div className="maker-section__head">Planned vs actual progress</div>
+          <div className="maker-section__body">
             <Card className="!p-4">
-              <DprScurveChart points={snap.charts.scurve} />
+              <DprScurveChart points={snap.charts!.scurve} />
             </Card>
-            <BarChart
-              title="Overall programme %"
-              items={[
-                { label: "Planned", value: snap.charts.summary.plannedPct },
-                { label: "Actual", value: snap.charts.summary.actualPct },
-              ]}
-            />
-            <BarChart
-              title="BOQ items · plan vs achieved %"
-              items={snap.charts.boqProgress.map((r) => ({
-                label: r.label,
-                value: r.planned,
-                actual: r.actual,
-              }))}
-              valueKey="value"
-              compareKey="actual"
-            />
-            {snap.charts.manpower.length > 0 && (
-              <BarChart
-                title="Manpower today"
-                items={snap.charts.manpower.map((m) => ({
-                  label: m.label,
-                  value: m.planned,
-                  actual: m.actual,
-                }))}
-                valueKey="value"
-                compareKey="actual"
-              />
-            )}
           </div>
           <p className="text-xs text-steel-muted mt-2 px-1">
-            Same data feeds the SPDC DASHBOARD sheet S-curve (INPUT rows 125–137) when you download XLSX — open in Excel to see full native charts.
+            S-curve data also feeds the SPDC DASHBOARD sheet when you download XLSX.
           </p>
         </div>
       )}

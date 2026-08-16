@@ -122,6 +122,9 @@ export async function seedPilotWeekDemo(db: PrismaClientType, opts: { weekEnd?: 
   await db.progressPlannedActual.deleteMany({ where: { projectId: project.id } });
   await db.progressMilestone.deleteMany({ where: { projectId: project.id } });
   await db.progressHindrance.deleteMany({ where: { projectId: project.id } });
+  await db.progressRisk.deleteMany({ where: { projectId: project.id } });
+  await db.progressLegalApproval.deleteMany({ where: { projectId: project.id } });
+  await db.progressSorStat.deleteMany({ where: { projectId: project.id } });
   await db.costMonitoringLine.deleteMany({ where: { projectId: project.id } });
   await db.costMbLine.deleteMany({ where: { projectId: project.id } });
   await db.costBbsLine.deleteMany({ where: { projectId: project.id } });
@@ -142,6 +145,15 @@ export async function seedPilotWeekDemo(db: PrismaClientType, opts: { weekEnd?: 
   );
   await cloneRows("hindrances", demo.id, project.id, () => db.progressHindrance.findMany({ where: { projectId: demo.id }, take: 20 }), (d) =>
     db.progressHindrance.create({ data: { ...d, projectId: project.id } })
+  );
+  await cloneRows("risks", demo.id, project.id, () => db.progressRisk.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.progressRisk.create({ data: { ...d, projectId: project.id } })
+  );
+  await cloneRows("legal approvals", demo.id, project.id, () => db.progressLegalApproval.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.progressLegalApproval.create({ data: { ...d, projectId: project.id } })
+  );
+  await cloneRows("monthly SOR", demo.id, project.id, () => db.progressSorStat.findMany({ where: { projectId: demo.id } }), (d) =>
+    db.progressSorStat.create({ data: { ...d, projectId: project.id } })
   );
   await cloneRows("BOQ monitoring", demo.id, project.id, () => db.costMonitoringLine.findMany({ where: { projectId: demo.id } }), (d) =>
     db.costMonitoringLine.create({ data: { ...d, projectId: project.id } })

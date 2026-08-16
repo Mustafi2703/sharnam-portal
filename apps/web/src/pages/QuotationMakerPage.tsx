@@ -56,6 +56,8 @@ function money(n: number) {
   return Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
+const SECTION_ACCENTS = ["#0B6A78", "#C45C26", "#2563EB", "#059669", "#7C3AED", "#DB2777"];
+
 export default function QuotationMakerPage() {
   const { id } = useParams<{ id?: string }>();
   const isEditing = !!id;
@@ -222,41 +224,51 @@ export default function QuotationMakerPage() {
   }
 
   return (
-    <div className="space-y-6 print:space-y-2">
+    <div className="space-y-6 print:space-y-2 qtn-maker">
       <PageHeader
         eyebrow="CRM · Proposal maker"
         title={isEditing ? `Quotation ${meta.quotationNo}` : "New quotation"}
-        subtitle="PMC proposal to client (not contractor bids). Full ~63-page .docx from SPDC template; maker fields export a short commercial summary."
-        actions={
-          <div className="flex flex-wrap gap-2 no-print">
-            <Link to="/crm">
-              <Button type="button" variant="secondary">Back to CRM</Button>
-            </Link>
-            <Link to="/crm/bid-compare">
-              <Button type="button" variant="secondary">Bid management →</Button>
-            </Link>
-            {canWrite && (
-              <Button type="button" onClick={() => void save()} disabled={saving}>
-                {saving ? "Saving…" : isEditing ? "Save changes" : "Save quotation"}
-              </Button>
-            )}
-            <Button type="button" disabled={!!exportBusy} onClick={() => void exportFile("docx")}>
-              {exportBusy === "docx" ? "…" : "Full proposal .docx"}
-            </Button>
-            {(saved?.id || id) && (
-              <>
-                <Button type="button" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("doc")}>
-                  {exportBusy === "doc" ? "…" : "Summary .doc"}
-                </Button>
-                <Button type="button" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("html")}>
-                  {exportBusy === "html" ? "…" : "Summary HTML"}
-                </Button>
-              </>
-            )}
-            <Button type="button" variant="secondary" onClick={() => window.print()}>Print</Button>
-          </div>
-        }
+        subtitle="PMC proposal to client — interactive commercial summary + full 63-page SPDC .docx export."
       />
+
+      <div className="qtn-hero no-print">
+        <div className="qtn-hero__copy">
+          <Badge>{meta.status}</Badge>
+          <p className="text-sm text-steel-muted mt-2 max-w-2xl">{meta.scopeSummary || "Fill client details and scope sections below."}</p>
+        </div>
+        <div className="qtn-hero__total">
+          <div className="text-[11px] uppercase tracking-wider text-steel-muted">Grand total (ex GST)</div>
+          <div className="text-2xl font-display text-brand">₹ {money(total)}</div>
+        </div>
+      </div>
+
+      <div className="qtn-action-bar no-print">
+        <div className="flex flex-wrap gap-2">
+          <Link to="/crm"><Button type="button" variant="secondary">← CRM</Button></Link>
+          <Link to="/crm/bid-compare"><Button type="button" variant="secondary">Bid management</Button></Link>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canWrite && (
+            <Button type="button" className="qtn-btn-save" onClick={() => void save()} disabled={saving}>
+              {saving ? "Saving…" : isEditing ? "Save changes" : "Save quotation"}
+            </Button>
+          )}
+          <Button type="button" className="qtn-btn-docx" disabled={!!exportBusy} onClick={() => void exportFile("docx")}>
+            {exportBusy === "docx" ? "…" : "Full .docx"}
+          </Button>
+          {(saved?.id || id) && (
+            <>
+              <Button type="button" className="qtn-btn-doc" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("doc")}>
+                {exportBusy === "doc" ? "…" : "Summary .doc"}
+              </Button>
+              <Button type="button" className="qtn-btn-html" variant="secondary" disabled={!!exportBusy} onClick={() => void exportFile("html")}>
+                {exportBusy === "html" ? "…" : "Summary HTML"}
+              </Button>
+            </>
+          )}
+          <Button type="button" variant="secondary" onClick={() => window.print()}>Print</Button>
+        </div>
+      </div>
 
       {msg && <p className="text-sm text-brand-dark no-print">{msg}</p>}
       {saved?.attachmentSharePointUrl && (
@@ -272,8 +284,9 @@ export default function QuotationMakerPage() {
         </p>
       )}
 
-      <Card className="print-card">
-        <div className="grid md:grid-cols-4 gap-3 no-print">
+      <Card className="print-card qtn-meta-card no-print">
+        <h3 className="text-sm font-semibold mb-3 text-brand">Client & quotation details</h3>
+        <div className="grid md:grid-cols-4 gap-3">
           <Input placeholder="Quotation no." value={meta.quotationNo} onChange={(e) => setMeta({ ...meta, quotationNo: e.target.value })} />
           <Input type="date" value={meta.quotationDate} onChange={(e) => setMeta({ ...meta, quotationDate: e.target.value })} />
           <Input placeholder="Client" value={meta.clientName} onChange={(e) => setMeta({ ...meta, clientName: e.target.value })} />
@@ -287,8 +300,9 @@ export default function QuotationMakerPage() {
           </Select>
           <Input placeholder="Validity (days)" type="number" value={meta.validityDays} onChange={(e) => setMeta({ ...meta, validityDays: Number(e.target.value) })} />
         </div>
+      </Card>
 
-        <div className="mt-4 print-body">
+      <Card className="print-card">
           <div className="text-center mb-6">
             <div className="text-2xl font-display font-bold">शरणम्&nbsp;· Sharnam PMC</div>
             <div className="text-xs text-steel-muted">Project Management Consultancy · Proposal</div>
@@ -310,9 +324,14 @@ export default function QuotationMakerPage() {
           </div>
 
           {sections.map((sec, si) => (
-            <div key={si} className="mb-5">
+            <div
+              key={si}
+              className="qtn-section mb-5"
+              style={{ borderLeftColor: SECTION_ACCENTS[si % SECTION_ACCENTS.length] }}
+            >
               <div className="flex items-center gap-2 mb-2 no-print">
-                <Input value={sec.title} onChange={(e) => setSection(si, { title: e.target.value })} className="!py-1" />
+                <span className="qtn-section__badge">{si + 1}</span>
+                <Input value={sec.title} onChange={(e) => setSection(si, { title: e.target.value })} className="!py-1 flex-1" />
                 <Button type="button" variant="secondary" onClick={() => addRow(si)} className="!py-1 !px-3">+ line</Button>
               </div>
               <div className="print-only text-base font-semibold mb-1">{sec.title}</div>
@@ -371,7 +390,6 @@ export default function QuotationMakerPage() {
               <div className="text-[10px] text-steel-muted">Validity: {meta.validityDays} days · GST as applicable</div>
             </div>
           </div>
-        </div>
       </Card>
 
       {isEditing && canWrite && (

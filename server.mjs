@@ -12,8 +12,18 @@ process.chdir(rootDir);
 process.on("uncaughtException", (err) => {
   console.error("FATAL uncaughtException:", err);
 });
+function isPrismaFatal(err) {
+  const name = err && typeof err === "object" && "name" in err ? String(err.name) : "";
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return name.includes("PrismaClient") || msg.includes("PANIC:") || msg.includes("timer has gone away");
+}
+
 process.on("unhandledRejection", (err) => {
-  console.error("ERROR unhandledRejection (server stays up):", err);
+  console.error("ERROR unhandledRejection:", err);
+  if (isPrismaFatal(err)) {
+    console.error("FATAL: Prisma engine panic — exiting for clean Hostinger restart");
+    setTimeout(() => process.exit(1), 150);
+  }
 });
 
 for (const dir of ["data", "uploads"]) {
