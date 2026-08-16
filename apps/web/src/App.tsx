@@ -130,6 +130,7 @@ export default function App() {
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
                   <Route path="hub/drawings" element={<ModuleHubPage moduleKey="drawings" />} />
+                  <Route path="hub/dms" element={<ModuleHubPage moduleKey="dms" />} />
                   <Route path="hub/quality" element={<ModuleHubPage moduleKey="quality" />} />
                   <Route path="hub/safety" element={<ModuleHubPage moduleKey="safety" />} />
                   <Route path="hub/progress" element={<ModuleHubPage moduleKey="progress" />} />

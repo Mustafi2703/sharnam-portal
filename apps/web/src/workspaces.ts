@@ -6,6 +6,7 @@ export const WORKSPACE_PROJECT_KEY = "sharnam_workspace_project";
 
 export type WorkspaceKey =
   | "drawings"
+  | "dms"
   | "quality"
   | "safety"
   | "progress"
@@ -94,6 +95,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Raise clarification on a drawing — information only.",
     },
   ],
+  dms: [
+    {
+      to: "dms",
+      label: "Document manager",
+      blurb: "Browse ISO Rev 02 folder tree — contracts, HSE, daily records, MIS. Upload and preview PDFs.",
+    },
+  ],
   home: [
     { to: "", label: "Overview", end: true, blurb: "Project desk and module shortcuts." },
     { to: "directory", label: "Directory · Office", query: "party=PMC", blurb: "Sharnam Office / PMC people." },
@@ -106,7 +114,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "site_employee", "employee", "vendor"],
       blurb: "Vendor assignments.",
     },
-    { to: "dms", label: "Documents (DMS)", blurb: "ISO folder tree — contracts, HSE, daily records (not drawing GFC workflow)." },
   ],
   quality: [
     {
@@ -487,6 +494,16 @@ export const MODULE_META: Record<
     ink: "#1E3A8A",
     icon: "DWG",
   },
+  dms: {
+    title: "Documents",
+    desc: "ISO folder tree — contracts, HSE, daily records, MIS. Browse, upload, and preview. Separate from Drawings GFC workflow.",
+    path: "hub/dms",
+    accent: "#3D4450",
+    soft: "#E8EAED",
+    glow: "rgba(61,68,80,0.32)",
+    ink: "#1F2937",
+    icon: "DOC",
+  },
   quality: {
     title: "Quality",
     desc: "QI dashboard, NCR / CAR, Cube register, QAP, Excel checklists, and Request QI fill — each sheet is its own tool.",
@@ -592,6 +609,7 @@ export const WORKSPACES: {
 }[] = (Object.keys(MODULE_META) as WorkspaceKey[]).map((key) => {
   const m = MODULE_META[key];
   let roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
+  if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "cost" || key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
   if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
@@ -659,6 +677,7 @@ export function toolsForWorkspace(key: WorkspaceKey | null): string[] | null {
 
 export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "drawings",
+  "dms",
   "quality",
   "safety",
   "progress",

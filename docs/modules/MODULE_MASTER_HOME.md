@@ -18,7 +18,7 @@ Office creates projects, enables modules, seeds directory/vendors/packages. Home
 |------|-------------|----------------|
 | Projects | Create / edit | name, code, client card, location, packages |
 | Packages | Civil / PEB / work categories | Enable cost/progress filters |
-| Module toggles | On/off per project | Drawings, Quality, Safety, Progress, Field, Comms, Cost, Finance, Reports, … |
+| Module toggles | On/off per project | Drawings, **Documents (DMS)**, Quality, Safety, Progress, Field, Comms, Cost, Finance, Reports, … |
 | PMC roster | People from HRMS | Assign → Directory |
 | Directory | 4 party tools | Office · Site · Client · Contractor |
 | Vendors | Company assign | See Vendor model |
@@ -51,7 +51,8 @@ Also linked: **CRM**, **HRMS**, **Sheet Maker** (upload Excel registers reusable
 | Overview | Ops signals, open requests, alerts |
 | Directory | Live roster by party type |
 | Vendors | Assigned vendors |
-| Documents (DMS) | Project folders (mock → SharePoint) |
+
+**Documents (DMS)** is its own module — sidebar **Documents** → `/projects/:id/hub/dms` → Document manager.
 
 ---
 

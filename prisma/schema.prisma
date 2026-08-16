@@ -76,7 +76,7 @@ model Project {
   outlookConnected        Boolean   @default(false)
   outlookConnectedAt      DateTime?
   /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
-  enabledModules          String    @default("[\"drawings\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
+  enabledModules          String    @default("[\"drawings\",\"dms\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
   workPackages            String    @default("[\"Civil\",\"PEB\"]") @db.Text
   /// Default R2 bid disciplines for CRM packages on this project (JSON array of {key,label,sheetName})

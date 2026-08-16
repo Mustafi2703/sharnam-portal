@@ -15,7 +15,7 @@ Quality inspections, QAP, NCR/cube registers, checklist master (Excel), and **Re
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| QI dashboard | Built | Procore-style inspections |
+| QI dashboard | Built | Procore-style inspections + **Quality Dashboard workbook tabs** |
 | Checklist master | Built | Create; **upload Excel**; choose template; **global master at `/master/checklists`** |
 | Branded fill export | Built | Checklist log → Download branded HTML (Print → PDF) |
 | QAP | Built | Upload / update Week-50 plan |
@@ -110,7 +110,25 @@ Drawing checklist master lives under **Drawings**, not here.
 
 ---
 
-## 9. Sheet sources
+## 9. Quality Dashboard workbook (sheet tabs)
+
+Seeded from client **`Quality Dashboard.xlsx`**, **`NCR 01.xlsx`**, and **`SPDC CUBE REGISTER`**. UI route: `/projects/:id/quality/inspections` with `?sheet=` query.
+
+| Tab | Sheet source | Purpose |
+|-----|--------------|---------|
+| Dashboard | Dashboard | KPI tiles — open QI, QAP open/done, concreting week |
+| **SOR Log** | SOR Log | Site Observation / Site Instruction / NCR totals — open, closed, closure rate |
+| Checklist summary | Sheet1 + Sheet2 | Catalog + filled counts by discipline |
+| CAR / NCR register | CAR register · NCR 01 | Raise NCR/CAR — feeds DPR quality block |
+| Cube Test | Cube Test · SPDC Cube Register | Cast / test results |
+| QAP Detail | QAP Detail | Week-50 activity matrix (contractor / PMC / client) |
+| QI & checklist fills | — | Active inspection assignments |
+
+**SOR Log → DPR:** observation totals and closure rates surface in the DPR Quality section when reports are generated.
+
+---
+
+## 10. Sheet sources
 
 - `Quality Assurance Plan Week 50.xlsx`  
 - `NCR 01.xlsx`  
@@ -119,7 +137,7 @@ Drawing checklist master lives under **Drawings**, not here.
 
 ---
 
-## 10. Roles
+## 11. Roles
 
 | Role | Can |
 |------|-----|
@@ -129,7 +147,7 @@ Drawing checklist master lives under **Drawings**, not here.
 
 ---
 
-## 11. Review checklist
+## 12. Review checklist
 
 - [ ] Confirm photo count rules per checklist type  
 - [ ] Confirm drawing gate for QI create  

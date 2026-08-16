@@ -23,7 +23,7 @@ Use this checklist after deploy to **your server**. One module per session. Sign
 | 1 | **Master** | Create project, enable modules, add directory parties | ☐ | — | — | ☐ |
 | 2 | **Drawings** | GFC register, upload with drawing check, publish revision | ☐ | ☐ | ☐ | ☐ |
 | 3 | **Documents (DMS)** | Browse ISO folders, upload, preview PDF; **matrix party can open granted folders** | ☐ | ☐ | ☐ | ☐ |
-| 4 | **Quality** | QI create, checklist fill, NCR/CAR, cube line | ☐ | ☐ | ☐ | ☐ |
+| 4 | **Quality** | QI dashboard, **SOR Log tab**, checklist fill, NCR/CAR, cube line | ☐ | ☐ | ☐ | ☐ |
 | 5 | **Safety** | Safety observation, safety NCR (separate from QI) | ☐ | ☐ | — | ☐ |
 | 6 | **Field / Site** | Day log, photos, field RFI, **attendance punch IST + SharePoint + geofence** | ☐ | ☐ | — | ☐ |
 | 7 | **Progress** | Milestones, S-curve or schedule, procurement register | ☐ | — | ☐ | ☐ |

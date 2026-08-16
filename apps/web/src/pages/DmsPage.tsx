@@ -237,10 +237,10 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
     <div className={`space-y-4 min-w-0 ${embedded ? "" : ""}`}>
       {!embedded && (
         <Link
-          to={isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}`}
+          to={isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}/hub/dms`}
           className="text-sm text-brand font-medium"
         >
-          ← {isDrawings ? "Drawings module" : "Project"}
+          ← {isDrawings ? "Drawings module" : "Documents module"}
         </Link>
       )}
 

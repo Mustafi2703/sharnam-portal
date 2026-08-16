@@ -23,6 +23,7 @@ export const DEMO_PROJECT_CODES = ["SPDC-DEMO-01", "SPDC-PILOT-02"] as const;
 
 const ALL_MODULES = [
   "drawings",
+  "dms",
   "quality",
   "safety",
   "progress",

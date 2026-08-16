@@ -104,6 +104,7 @@ function moduleActive(pathname: string, key: WorkspaceKey) {
   if (pathname.includes(`/hub/${key}`)) return true;
   const map: Record<string, string[]> = {
     drawings: ["/drawings", "/drawings/coordination", "/coordination"],
+    dms: ["/dms"],
     quality: ["/inspections", "/checklist", "/qap", "/quality-inspections"],
     safety: ["/safety"],
     progress: ["/progress"],

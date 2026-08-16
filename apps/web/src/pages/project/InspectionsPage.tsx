@@ -71,39 +71,38 @@ export default function InspectionsPage() {
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 min-w-0">
       <PageHeader
+        dense
         eyebrow="Quality module"
         title={pageTitle}
         subtitle={pageSubtitle}
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
-            <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
-            <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
-            <Link to={`/projects/${id}/quality/checklist-master`} className="text-sm font-semibold text-brand">
-              Checklist master →
-            </Link>
-            <Link to={`/projects/${id}/quality/checklist-logs`} className="text-sm font-semibold text-brand">
-              QI fill log →
-            </Link>
-            <Link to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-sm font-semibold text-brand">
-              Request QI fill →
-            </Link>
-            <Link to={`/projects/${id}/safety`} className="text-sm font-semibold text-brand">
-              Safety →
-            </Link>
-          </div>
-        }
       />
 
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
+          <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
+          <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
+          <Link to={`/projects/${id}/quality/checklist-master`}>Checklist master →</Link>
+          <Link to={`/projects/${id}/quality/checklist-logs`}>QI fill log →</Link>
+          <Link to={`/projects/${id}/rfis?kind=QualityInspection`}>Request QI fill →</Link>
+          <Link to={`/projects/${id}/safety`}>Safety →</Link>
+        </div>
+      </div>
+
+      <nav
+        className="module-subnav flex gap-1 border-b border-line pb-3 overflow-x-auto overscroll-x-contain -mx-1 px-1"
+        aria-label="Quality workbook views"
+      >
         {QUALITY_SHEET_VIEWS.map((s) => (
           <button
             key={s.key || "dashboard"}
             type="button"
             onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
-            className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
+            className={`shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border whitespace-nowrap ${
               sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
             }`}
             title={s.sheet}
@@ -113,11 +112,11 @@ export default function InspectionsPage() {
         ))}
         <Link
           to={`/projects/${id}/hub/quality`}
-          className="rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted"
+          className="shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted whitespace-nowrap"
         >
           Quality hub →
         </Link>
-      </div>
+      </nav>
 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 
@@ -179,27 +178,32 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "sor-log" && dash?.workbook?.sorLog?.length > 0 && (
-        <Card>
-          <h3 className="font-semibold mb-3">SOR Log (Quality Dashboard.xlsx)</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <Card padding={false}>
+          <div className="px-4 py-3 border-b border-line bg-sand/40">
+            <h3 className="font-semibold text-sm text-left">SOR Log (Quality Dashboard.xlsx)</h3>
+            <p className="text-xs text-steel-muted mt-1 text-left">
+              Site observation summary — totals from seeded client workbook. Fills map to DPR Quality section.
+            </p>
+          </div>
+          <div className="sheet-register overflow-x-auto">
+            <table className="sheet-register__table min-w-[28rem] w-full">
               <thead>
-                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
-                  <th className="py-2 pr-3">Observation type</th>
-                  <th className="py-2 pr-3">Total</th>
-                  <th className="py-2 pr-3">Open</th>
-                  <th className="py-2 pr-3">Closed</th>
-                  <th className="py-2">Closure rate</th>
+                <tr>
+                  <th className="text-left">Observation type</th>
+                  <th className="text-left">Total</th>
+                  <th className="text-left">Open</th>
+                  <th className="text-left">Closed</th>
+                  <th className="text-left">Closure rate</th>
                 </tr>
               </thead>
               <tbody>
                 {dash.workbook.sorLog.map((r: any, i: number) => (
-                  <tr key={i} className="border-b border-line/60">
-                    <td className="py-2 pr-3">{r.label}</td>
-                    <td className="py-2 pr-3 font-mono">{r.total}</td>
-                    <td className="py-2 pr-3">{r.open}</td>
-                    <td className="py-2 pr-3">{r.closed}</td>
-                    <td className="py-2 font-mono">{(r.closureRate * 100).toFixed(1)}%</td>
+                  <tr key={i}>
+                    <td className="text-left font-medium">{r.label}</td>
+                    <td className="text-left font-mono tabular-nums">{r.total}</td>
+                    <td className="text-left tabular-nums">{r.open}</td>
+                    <td className="text-left tabular-nums">{r.closed}</td>
+                    <td className="text-left font-mono tabular-nums">{(r.closureRate * 100).toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -211,7 +215,7 @@ export default function InspectionsPage() {
       {sheetKey === "checklist-summary" && dash?.workbook && (
         <div className="grid lg:grid-cols-2 gap-4">
           <Card>
-            <h3 className="font-semibold mb-3">Checklists filled by discipline (Sheet2)</h3>
+            <h3 className="font-semibold mb-3 text-left">Checklists filled by discipline (Sheet2)</h3>
             <ul className="space-y-2 text-sm">
               {(dash.workbook.checklistByDiscipline || []).map((r: any) => (
                 <li key={r.discipline} className="flex justify-between border-b border-line/60 pb-1">
@@ -222,7 +226,7 @@ export default function InspectionsPage() {
             </ul>
           </Card>
           <Card>
-            <h3 className="font-semibold mb-3">Checklist catalog (Sheet1)</h3>
+            <h3 className="font-semibold mb-3 text-left">Checklist catalog (Sheet1)</h3>
             <div className="max-h-[24rem] overflow-y-auto text-sm space-y-1">
               {(dash.workbook.checklistCatalog || []).slice(0, 30).map((r: any) => (
                 <div key={r.srNo} className="border-b border-line/40 pb-1">
@@ -305,28 +309,28 @@ export default function InspectionsPage() {
               <Button type="submit">Raise {ncrForm.kind}</Button>
             </form>
           )}
-          <div className="overflow-x-auto max-h-[28rem]">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto max-h-[28rem] sheet-register">
+            <table className="sheet-register__table min-w-[40rem] w-full">
               <thead>
-                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
-                  <th className="py-2 pr-3">No</th>
-                  <th className="py-2 pr-3">Type</th>
-                  <th className="py-2 pr-3">Description</th>
-                  <th className="py-2 pr-3">Status</th>
-                  {canManage && <th className="py-2">Action</th>}
+                <tr>
+                  <th className="text-left">No</th>
+                  <th className="text-left">Type</th>
+                  <th className="text-left">Description</th>
+                  <th className="text-left">Status</th>
+                  {canManage && <th className="text-left">Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {(dash?.ncrs || []).map((n: any) => (
-                  <tr key={n.id} className="border-b border-line/60">
-                    <td className="py-2 pr-3 font-mono text-xs">{n.number}</td>
-                    <td className="py-2 pr-3">{n.ncrType || "—"}</td>
-                    <td className="py-2 pr-3 max-w-md truncate">{n.description}</td>
-                    <td className="py-2 pr-3">
+                  <tr key={n.id}>
+                    <td className="text-left font-mono text-xs">{n.number}</td>
+                    <td className="text-left">{n.ncrType || "—"}</td>
+                    <td className="text-left max-w-md">{n.description}</td>
+                    <td className="text-left">
                       <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
                     </td>
                     {canManage && (
-                      <td className="py-2">
+                      <td className="text-left">
                         {n.status === "Open" ? (
                           <Button
                             type="button"
@@ -356,7 +360,7 @@ export default function InspectionsPage() {
                 ))}
                 {!dash?.ncrs?.length && (
                   <tr>
-                    <td colSpan={canManage ? 5 : 4} className="py-6 text-steel-muted">
+                    <td colSpan={canManage ? 5 : 4} className="empty text-left">
                       No NCR rows yet — run <code className="text-xs">npm run db:seed-quality-safety-demo</code> or raise one above.
                     </td>
                   </tr>
@@ -370,32 +374,32 @@ export default function InspectionsPage() {
       {sheetKey === "cube-test" && (
         <Card>
           <h3 className="font-semibold mb-3">Cube register (Quality Dashboard · SPDC Cube Register)</h3>
-          <div className="overflow-x-auto max-h-[28rem]">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto max-h-[28rem] sheet-register">
+            <table className="sheet-register__table min-w-[36rem] w-full">
               <thead>
-                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
-                  <th className="py-2 pr-3">Sr</th>
-                  <th className="py-2 pr-3">Description</th>
-                  <th className="py-2 pr-3">Grade</th>
-                  <th className="py-2 pr-3">Strength</th>
-                  <th className="py-2">Result</th>
+                <tr>
+                  <th className="text-left">Sr</th>
+                  <th className="text-left">Description</th>
+                  <th className="text-left">Grade</th>
+                  <th className="text-left">Strength</th>
+                  <th className="text-left">Result</th>
                 </tr>
               </thead>
               <tbody>
                 {(dash?.cubes || []).map((c: any) => (
-                  <tr key={c.id} className="border-b border-line/60">
-                    <td className="py-2 pr-3 font-mono text-xs">{c.srNo || "—"}</td>
-                    <td className="py-2 pr-3 max-w-md truncate">{c.description}</td>
-                    <td className="py-2 pr-3">{c.grade || "—"}</td>
-                    <td className="py-2 pr-3 font-mono text-xs">{c.strength ?? "—"}</td>
-                    <td className="py-2">
+                  <tr key={c.id}>
+                    <td className="text-left font-mono text-xs">{c.srNo || "—"}</td>
+                    <td className="text-left max-w-md">{c.description}</td>
+                    <td className="text-left">{c.grade || "—"}</td>
+                    <td className="text-left font-mono text-xs tabular-nums">{c.strength ?? "—"}</td>
+                    <td className="text-left">
                       <Badge tone={/pass/i.test(c.result || "") ? "ok" : "warn"}>{c.result || "—"}</Badge>
                     </td>
                   </tr>
                 ))}
                 {!dash?.cubes?.length && (
                   <tr>
-                    <td colSpan={5} className="py-6 text-steel-muted">
+                    <td colSpan={5} className="empty text-left">
                       No cube rows seeded yet — re-seed from SPDC Cube Register.
                     </td>
                   </tr>
@@ -409,27 +413,27 @@ export default function InspectionsPage() {
       {sheetKey === "qap-detail" && dash?.qap?.length > 0 && (
         <Card>
           <h3 className="font-semibold mb-3">Quality Assurance Plan · Detail</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="sheet-register overflow-x-auto">
+            <table className="sheet-register__table min-w-[40rem] w-full">
               <thead>
-                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
-                  <th className="py-2 pr-3">Week</th>
-                  <th className="py-2 pr-3">Activity</th>
-                  <th className="py-2 pr-3">Discipline</th>
-                  <th className="py-2 pr-3">Ctr / PMC / Client</th>
-                  <th className="py-2">Status</th>
+                <tr>
+                  <th className="text-left">Week</th>
+                  <th className="text-left">Activity</th>
+                  <th className="text-left">Discipline</th>
+                  <th className="text-left">Ctr / PMC / Client</th>
+                  <th className="text-left">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {dash.qap.slice(0, 12).map((q: any) => (
-                  <tr key={q.id} className="border-b border-line/60">
-                    <td className="py-2 pr-3 font-mono text-xs">{q.weekLabel}</td>
-                    <td className="py-2 pr-3">{q.activity}</td>
-                    <td className="py-2 pr-3 text-steel-muted">{q.discipline || "—"}</td>
-                    <td className="py-2 pr-3 text-xs">
+                  <tr key={q.id}>
+                    <td className="text-left font-mono text-xs">{q.weekLabel}</td>
+                    <td className="text-left">{q.activity}</td>
+                    <td className="text-left text-steel-muted">{q.discipline || "—"}</td>
+                    <td className="text-left text-xs">
                       {q.contractorOk ? "✓" : "·"} / {q.pmcOk ? "✓" : "·"} / {q.clientOk ? "✓" : "·"}
                     </td>
-                    <td className="py-2">
+                    <td className="text-left">
                       <Badge tone={q.status === "Done" || q.completedAt ? "ok" : "warn"}>{q.status}</Badge>
                     </td>
                   </tr>

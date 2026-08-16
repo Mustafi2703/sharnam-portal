@@ -20,6 +20,7 @@ import { applyModuleAccent, clearModuleAccent, MODULE_THEME_EVENT } from "../../
 const TOP_MODULES: { key: WorkspaceKey | "home"; label: string; path: string }[] = [
   { key: "home", label: "Project home", path: "" },
   { key: "drawings", label: "Drawings", path: "hub/drawings" },
+  { key: "dms", label: "Documents", path: "hub/dms" },
   { key: "quality", label: "Quality", path: "hub/quality" },
   { key: "safety", label: "Safety", path: "hub/safety" },
   { key: "progress", label: "Progress", path: "hub/progress" },
@@ -54,7 +55,7 @@ function moduleFromPath(pathname: string, search: string): WorkspaceKey | "home"
     if (q === "DrawingCheck" || q === "SiteExecution") return "drawings";
     return "quality";
   }
-  if (tool === "dms") return "home";
+  if (tool === "dms") return "dms";
   if (["checklist", "quality-inspections", "inspections"].includes(tool)) return "quality";
   if (tool === "safety") return "safety";
   if (tool === "progress") return "progress";
