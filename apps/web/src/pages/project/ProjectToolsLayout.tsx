@@ -194,6 +194,11 @@ export default function ProjectToolsLayout() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
+  const showModuleNav =
+    !!id &&
+    activeTool !== "hub" &&
+    (activeMod !== "home" || activeTool === "directory" || activeTool === "vendors");
+
   if (missing) {
     return (
       <div className="p-8 text-sm text-steel-muted">Project not found. Redirecting…</div>
@@ -258,6 +263,15 @@ export default function ProjectToolsLayout() {
           </div>
         </div>
 
+        {showModuleNav && (
+          <div className="tool-strip px-2 sm:px-4 py-2 border-t border-line bg-paper">
+            <ModuleToolNav
+              projectId={id!}
+              moduleKey={(activeMod === "home" ? "home" : activeMod) as WorkspaceKey | "home"}
+              accent={accent}
+            />
+          </div>
+        )}
       </div>
 
       <div className={`tool-shell ${rightOpen ? "has-right" : ""} bg-sand w-full`}>
@@ -270,15 +284,6 @@ export default function ProjectToolsLayout() {
           />
         )}
         <div className="tool-main page-stack min-w-0">
-          {id &&
-            activeTool !== "hub" &&
-            (activeMod !== "home" || activeTool === "directory" || activeTool === "vendors") && (
-              <ModuleToolNav
-                projectId={id}
-                moduleKey={(activeMod === "home" ? "home" : activeMod) as WorkspaceKey | "home"}
-                accent={accent}
-              />
-            )}
           <Outlet
             context={{
               project,

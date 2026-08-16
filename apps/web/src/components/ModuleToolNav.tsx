@@ -6,7 +6,12 @@ import { MODULE_TOOLS, type WorkspaceKey } from "../workspaces";
 
 type ModuleNavKey = WorkspaceKey | "home";
 
-/** Single module tool strip — rendered once in ProjectToolsLayout (not duplicated on each page). */
+const tabClass = (on: boolean) =>
+  `tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition whitespace-nowrap ${
+    on ? "is-on text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
+  }`;
+
+/** Single module tool strip — rendered once in ProjectToolsLayout chrome (not duplicated on each page). */
 export function ModuleToolNav({
   projectId,
   moduleKey,
@@ -20,7 +25,7 @@ export function ModuleToolNav({
   const { user } = useAuth();
 
   if (moduleKey === "drawings") {
-    return <DrawingsModuleNav projectId={projectId} />;
+    return <DrawingsModuleNav projectId={projectId} accent={accent} />;
   }
 
   const items = (MODULE_TOOLS[moduleKey] || []).filter(
@@ -31,13 +36,10 @@ export function ModuleToolNav({
   const hubLabel = moduleKey === "home" ? "Project home" : "Hub";
 
   return (
-    <nav
-      className="module-subnav flex gap-1 border-b border-line pb-3 overflow-x-auto overscroll-x-contain -mx-1 px-1 scrollbar-thin"
-      aria-label={`${moduleKey} module tools`}
-    >
+    <nav className="flex gap-2 overflow-x-auto overscroll-x-contain scrollbar-thin" aria-label={`${moduleKey} module tools`}>
       <Link
         to={hubHref}
-        className="shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted hover:text-ink transition whitespace-nowrap"
+        className="tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border border-line text-steel-muted hover:text-ink transition whitespace-nowrap"
       >
         {hubLabel}
       </Link>
@@ -49,11 +51,7 @@ export function ModuleToolNav({
             key={`${t.to}-${t.query || ""}-${t.label}`}
             to={href}
             end={t.end}
-            className={() =>
-              `shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border transition whitespace-nowrap ${
-                on ? "text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
-              }`
-            }
+            className={() => tabClass(on)}
             style={on ? { background: accent, borderColor: accent } : undefined}
           >
             {t.label}
