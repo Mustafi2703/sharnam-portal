@@ -17,6 +17,8 @@ export type FullDemoPackOpts = {
   pilotWeekEnd?: string;
   /** Skip second pilot project (faster local seed) */
   skipPilot?: boolean;
+  /** Skip single DPR day on SPDC-DEMO-01 (demo screenshot pack seeds the full week) */
+  skipDemoDay?: boolean;
 };
 
 function parseDemoDate(raw: string): Date {
@@ -55,7 +57,11 @@ export async function seedDemoDayPack(
 
 /** Everything needed for client walkthrough after base seed */
 export async function seedFullDemoPack(prisma: PrismaClient, opts: FullDemoPackOpts = {}) {
-  await seedDemoDayPack(prisma, opts);
+  if (opts.skipDemoDay) {
+    console.log("==> Skipping SPDC-DEMO-01 single DPR day (demo screenshot pack seeds full week + WPR)");
+  } else {
+    await seedDemoDayPack(prisma, opts);
+  }
 
   if (opts.skipPilot || process.env.SKIP_PILOT_SEED === "1") {
     console.log("==> Skipping SPDC-PILOT-02 (SKIP_PILOT_SEED=1)");

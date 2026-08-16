@@ -8,7 +8,6 @@ import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
 import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr, seedSafetyFromWorkbooksForAllDemoProjects } from "./qualitySafetySheets.ts";
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
-import { seedCrmComparative } from "./crmComparativeSeed.ts";
 import { seedFullDemoPack } from "./fullDemoPack.ts";
 import { PrismaClient, type User } from "@prisma/client";
 import {
@@ -1402,18 +1401,12 @@ async function main() {
       await seedFinanceRaCopDemo(prisma, project.id, officeId);
       await seedQuotationDemo(prisma, officeId);
     }
-    await seedFullDemoPack(prisma);
+    await seedFullDemoPack(prisma, { skipDemoDay: true });
   } catch (e) {
     console.warn(
       "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",
       e instanceof Error ? e.message : e
     );
-  }
-
-  try {
-    await seedCrmComparative(prisma);
-  } catch (e) {
-    console.warn("seedCrmComparative failed:", e instanceof Error ? e.message : e);
   }
 
   try {

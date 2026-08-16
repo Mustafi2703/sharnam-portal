@@ -1,6 +1,10 @@
 /**
  * MySQL migrate + seed at BUILD time only (Hostinger runtime cannot run tsx/esbuild).
  * Uses npx — available during Hostinger build with full PATH.
+ *
+ * RUN_SEED=1     — full seed once (seed.ts includes demo screenshot pack). Remove after first OK deploy.
+ * SKIP_BUILD_SEED=1 — skip all seed (fast redeploy when DB already populated).
+ * Otherwise      — lightweight demo pack refresh only (no full seed.ts).
  */
 import { execSync } from "node:child_process";
 import { applyDatabaseUrl, maskDatabaseUrl } from "./resolve-database-url.mjs";
@@ -28,46 +32,53 @@ try {
   process.exit(1);
 }
 
-if (process.env.RUN_SEED === "1") {
-  console.log("==> RUN_SEED=1 — seeding full demo (users, sheets, DPR, WPR, pilot week)...");
+/** Local mock only during build — avoids slow/failing SharePoint calls on every DPR discipline. */
+const seedEnv = { ...process.env, MOCK_ONEDRIVE: "true" };
+const runFullSeed = process.env.RUN_SEED === "1";
+const skipAllSeed = process.env.SKIP_BUILD_SEED === "1";
+
+if (skipAllSeed) {
+  console.log("==> SKIP_BUILD_SEED=1 — no database seed during this build");
+} else if (runFullSeed) {
+  console.log("==> RUN_SEED=1 — full seed (users, sheets, DPR week, WPR, pilot week, demo pack)…");
+  console.log("    Tip: set RUN_SEED=0 and SKIP_BUILD_SEED=1 on later deploys for faster builds.");
   try {
     execSync("npx tsx seed/seed.ts", {
       stdio: "inherit",
-      env: process.env,
+      env: seedEnv,
       cwd: rootDir,
-      timeout: 900_000,
+      timeout: 1_800_000,
     });
-    console.log("==> Seed complete (DPR + quality/safety + SPDC-PILOT-02 included). Remove RUN_SEED=1 after verifying login.");
+    console.log("==> Full seed complete. Remove RUN_SEED=1 from Hostinger env after verifying login.");
   } catch {
     console.error("FATAL: seed failed during build");
     process.exit(1);
   }
 } else {
-  console.log("==> Skipping seed (set RUN_SEED=1 for first deploy — seeds everything in one run)");
-}
+  console.log("==> Incremental demo refresh (set RUN_SEED=1 once for empty DB)…");
+  try {
+    console.log("==> Demo screenshot pack (quality, safety, drawing register, DPR/WPR week)…");
+    execSync("npx tsx seed/demoScreenshotsPack.ts", {
+      stdio: "inherit",
+      env: seedEnv,
+      cwd: rootDir,
+      timeout: 900_000,
+    });
+  } catch {
+    console.warn("WARN: Demo screenshot pack skipped (non-fatal — run npm run db:seed-demo-screenshots)");
+  }
 
-try {
-  console.log("==> Demo screenshot pack (quality, safety, drawing register, DPR/WPR week, CRM)…");
-  execSync("npx tsx seed/demoScreenshotsPack.ts", {
-    stdio: "inherit",
-    env: process.env,
-    cwd: rootDir,
-    timeout: 300_000,
-  });
-} catch {
-  console.warn("WARN: Demo screenshot pack skipped (non-fatal — run npm run db:seed-demo-screenshots)");
-}
-
-try {
-  console.log("==> BBS demo bend diagrams (idempotent)...");
-  execSync("npx tsx seed/runBbsDemoShapes.ts", {
-    stdio: "inherit",
-    env: process.env,
-    cwd: rootDir,
-    timeout: 120_000,
-  });
-} catch {
-  console.warn("WARN: BBS demo shapes skipped (non-fatal)");
+  try {
+    console.log("==> BBS demo bend diagrams (idempotent)…");
+    execSync("npx tsx seed/runBbsDemoShapes.ts", {
+      stdio: "inherit",
+      env: seedEnv,
+      cwd: rootDir,
+      timeout: 120_000,
+    });
+  } catch {
+    console.warn("WARN: BBS demo shapes skipped (non-fatal)");
+  }
 }
 
 process.exit(0);
