@@ -18,9 +18,18 @@ export function DrawingIssueFields({
   const set = (patch: Partial<DrawingIssueDraft>) => onChange({ ...value, ...patch });
 
   return (
-    <div className="space-y-3 rounded-lg border border-line bg-sand/15 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
-        {formatUiText("Site drawing register — receive & issue (this revision)")}
+    <div className="space-y-3 rounded-lg border border-dashed border-line bg-sand/15 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
+          {formatUiText("Site drawing register — receive & issue (this revision)")}
+        </p>
+        <span className="rounded-full border border-line bg-paper px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-steel-muted">
+          Optional
+        </span>
+      </div>
+      <p className="text-xs text-steel-muted leading-relaxed">
+        Fill when the physical drawing is received or issued on site. You can upload PDF/DWG without this block.
+        Signature pads and dates sync to the Site register tab when saved. Client to confirm exact workflow during UAT.
       </p>
       <div className="grid sm:grid-cols-2 gap-3">
         <label className="block text-sm">

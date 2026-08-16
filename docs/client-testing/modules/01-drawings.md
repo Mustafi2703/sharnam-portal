@@ -66,7 +66,7 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 | pdf, dwg | Separate slots — at least one required per revision |
 | markup pages | Optional multi-page PDF markup; stored per page with full history |
 | unlockToken | after drawing check |
-| **Site register block** | received date, copies, issued to contractor/client, **signature pads** (PNG → SharePoint `…/Signatures/contractor|client`) |
+| **Site register block** | **Optional** — received date, copies, issued to contractor/client, signature pads (PNG → SharePoint). Fill when physical receive/issue happens; not required to upload PDF/DWG. **Pending client UAT decision** on mandatory fields. |
 
 **API:** `POST /api/drawings/project/:id` (multipart: `pdf`, `dwg`, `contractorSignature`, `clientSignature`)
 
@@ -77,7 +77,7 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 | pdf, dwg | Both allowed on same revision |
 | **Same rev number again** | Updates **same row** (no duplicate R2 rows) — checklist not required for update |
 | **New rev number** | Requires Drawing Check unlock token |
-| **Site register block** | Same receive/issue + signature fields — visible on log after save |
+| **Site register block** | Same optional receive/issue + signature fields — visible on log after save |
 | Replace PDF / DWG on log row | `PATCH /api/drawings/revision/:id/file` with `fileRole=pdf|dwg` + issue fields |
 | Markup pages | `POST /api/drawings/revision/:id/markup-pages` — full per-page history |
 
@@ -85,7 +85,7 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 | Action | Modal mode | Checklist required? |
 |--------|------------|---------------------|
 | **+ Next revision** | New revision | Yes |
-| **Update files** | Same revision — PDF + DWG + dates + signatures | No |
+| **Update files** | Same revision — PDF + DWG + dates + **optional** signatures | No |
 | **Replace PDF** | PDF only (+ optional markup + signatures) | No |
 | **Replace DWG** | DWG only (+ optional signatures) | No |
 | **PDF markup** | Full-screen markup editor | No |
@@ -93,10 +93,12 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 
 | Step | Expected |
 |------|----------|
-| Upload R2 with PDF + contractor signature | R2 column shows date; log shows signature thumbnail |
+| Upload R2 with PDF only (skip receive/issue block) | R2 column shows date; Site register rows stay blank for that rev |
+| Upload R2 with PDF + contractor signature (optional block) | R2 column shows date; log shows signature thumbnail |
+| **Update files** → fill receive/issue only (no new PDF) | Same R2 row; Site register + log updated |
 | Replace PDF on R2 | Same R2 row updated; signature block unchanged unless re-captured |
-| Office expands **Log** | Receive/issue dates + both signatures visible |
-| Site register tab | Same data in R2 column matrix |
+| Office expands **Log** | Receive/issue dates + signatures visible when filled |
+| Site register tab | Same data in R2 column matrix when optional block was saved |
 | Master register | Matching drawing number updates rev, dates, copies, issue date |
 | Export GFC CSV | R0–Rn columns match register; Total = unique rev count |
 
@@ -123,6 +125,7 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 | 2026-08-17 | Client | Many file changes per revision; fix duplicate R2 rows; R0–Rn columns by rev number | Upsert same rev; dynamic columns; Replace PDF/DWG | Done |
 | 2026-08-17 | Client | Master + Site drawing registers; signatures on upload | Master all DCI cols; Site R0–R6 matrix; signature pad on GFC upload | Done |
 | 2026-08-17 | Client | Master vs Client register redundant; signatures visible on GFC log | Removed Client tab; signatures on upload log; Master includes client cols | Done |
+| 2026-08-17 | Client | Receive/issue + signatures — keep optional until client confirms workflow | Optional badge on upload block; save signatures without re-uploading PDF | Done · **Pending client UAT** |
 
 ### Client sign-off
 - [ ] Page approved for UAT
@@ -172,7 +175,10 @@ Sr # · Project Package · Building · Discipline · Drawing Number · Drawing T
 |--|--|
 | **Route** | `/projects/:id/drawings/register?sheet=site` |
 | **Excel source** | Sheet **Site Drawing Register** in client workbook |
-| **Purpose** | Receive & issue matrix — R0–R6 × dates, copies, **receiver signatures**. |
+| **Purpose** | Receive & issue matrix — R0–R6 × dates, copies, **receiver signatures** (when filled on GFC upload). |
+
+### Optional receive/issue (pending client UAT)
+The GFC upload modal shows **Site drawing register — receive & issue** with an **Optional** badge. Client to confirm during UAT whether any fields (dates, copies, contractor/client signatures) should become mandatory for their projects.
 
 ### Matrix rows (per drawing)
 Date of receiving · Total copies received · Issued to contractor · Receiver signature (contractor) · Issued to client · Receiver signature (client)
@@ -232,8 +238,20 @@ Quality / Safety checklist masters live under their own modules.
 
 ## UAT script — signatures (office role)
 
+**Note:** Receive/issue block is **optional** until client confirms. Run both paths below.
+
+### Path A — upload without receive/issue
+1. Open **GFC register** → **Upload GFC** or **Update files** with PDF only — leave receive/issue block empty → Save.
+2. Confirm upload succeeds and R column shows planned/actual dates.
+
+### Path B — optional receive/issue + signatures
 1. Open **GFC register** → pick drawing **AR-101** → **Log** → note current revision.
-2. **Update files** on current rev → fill received date, copies, capture **contractor signature** on pad → Save.
+2. **Update files** on current rev → fill received date, copies, capture **contractor signature** on pad → Save (no new PDF required).
 3. Expand **Log** again → confirm **Site register — receive & issue** block shows dates + signature image.
 4. Open **Site register** tab → confirm same revision column shows signature thumbnail.
-5. Open **Master register** → confirm copies / issue date updated for AR-101.
+5. Open **Master register** → confirm copies / issue date updated for AR-101 when those fields were filled.
+
+### Client decision (record in Section 5.6)
+- [ ] Keep receive/issue **optional** for all projects
+- [ ] Make **some fields mandatory** (list): ___________________
+- [ ] Defer Site register signatures to a later phase

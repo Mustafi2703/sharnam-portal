@@ -36,6 +36,21 @@ export function appendIssueToFormData(fd: FormData, issue: DrawingIssueDraft) {
   if (issue.clientSignature) fd.append("clientSignature", issue.clientSignature);
 }
 
+/** True when any receive/issue field is filled — all fields remain optional on upload. */
+export function issueDraftHasData(issue: DrawingIssueDraft) {
+  return !!(
+    issue.receivedDate ||
+    issue.copiesReceived ||
+    issue.issuedToContractorAt ||
+    issue.issuedToClientAt ||
+    issue.contractorSignName.trim() ||
+    issue.clientSignName.trim() ||
+    issue.remarks.trim() ||
+    issue.contractorSignature ||
+    issue.clientSignature
+  );
+}
+
 export function issueFromRevision(rev?: {
   receivedDate?: string | Date | null;
   copiesReceived?: number | null;

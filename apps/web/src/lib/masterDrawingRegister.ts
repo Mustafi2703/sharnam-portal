@@ -26,6 +26,14 @@ export type MasterRegisterForm = {
 
 export const MASTER_REGISTER_PACKAGES = ["Package A", "Package B", "Package C", "Package D"] as const;
 
+export const MASTER_REGISTER_BUILDINGS = [
+  "Tower 1",
+  "Tower 2",
+  "Tower 3",
+  "Tower 4",
+  "Tower 5",
+] as const;
+
 export const MASTER_REGISTER_DISCIPLINES = ["Architecture", "Structural", "MEPF", "Facade", "Interior"] as const;
 
 export const MASTER_REGISTER_DRAWING_TYPES = [
@@ -38,6 +46,28 @@ export const MASTER_REGISTER_DRAWING_TYPES = [
 ] as const;
 
 export const MASTER_REGISTER_ISSUED_TO = ["Main Contractor", "PMC / Client"] as const;
+
+export const MASTER_REGISTER_DELAY_RESP = [
+  "Consultant",
+  "Architecture Consultant",
+  "Structural Consultant",
+  "MEPF Consultant",
+  "Main Contractor",
+  "Client",
+] as const;
+
+/** Package chip colours for table + filters */
+export const PACKAGE_TONE: Record<string, string> = {
+  "Package A": "bg-sky-100 text-sky-900 border-sky-200",
+  "Package B": "bg-violet-100 text-violet-900 border-violet-200",
+  "Package C": "bg-amber-100 text-amber-900 border-amber-200",
+  "Package D": "bg-rose-100 text-rose-900 border-rose-200",
+};
+
+export function packageTone(pkg?: string | null) {
+  if (!pkg) return "bg-sand text-steel-muted border-line";
+  return PACKAGE_TONE[pkg] || "bg-brand-soft text-brand-dark border-brand/20";
+}
 
 export function emptyMasterRegisterForm(): MasterRegisterForm {
   return {

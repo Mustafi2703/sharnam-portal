@@ -89,9 +89,10 @@ Also: `Drwing check master checklist.xlt.xls` → Drawing Check templates
 1. Latest published revision is working set.  
 2. Checklist unlock before **new** revision upload.  
 3. Same revision number → upsert row (no duplicate R2).  
-4. Signatures stored per revision under SharePoint `…/Signatures/`.  
+4. Signatures stored per revision under SharePoint `…/Signatures/` when the optional receive/issue block is filled.  
 5. Client role: view published; **no** drawing upload.  
-6. Module isolation: Drawings checklist log/master exclude Quality/Safety families.
+6. Module isolation: Drawings checklist log/master exclude Quality/Safety families.  
+7. Receive/issue block on GFC upload is **optional** — pending client UAT on mandatory fields.
 
 ---
 

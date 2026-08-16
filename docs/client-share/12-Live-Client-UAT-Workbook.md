@@ -132,9 +132,10 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 | Step | Action | Expected result | Pass |
 |------|--------|-----------------|:----:|
 | 1 | Open **Drawings → GFC register** | Title says **GFC register** — no “Add master line” form; link to Master register | ☐ |
-| 2 | Expand **Log** on drawing **AR-101** | Upload history; **Site register — receive & issue** block visible | ☐ |
-| 3 | Click **Update files** on current revision | Modal shows PDF/DWG + **signature pads** + receive/issue dates | ☐ |
-| 4 | Fill received date, copies, draw **contractor signature**, Save | Log shows signature thumbnail; no duplicate revision row | ☐ |
+| 2 | Expand **Log** on drawing **AR-101** | Upload history; **Site register — receive & issue** block visible when filled | ☐ |
+| 3 | Click **Update files** on current revision | Modal shows PDF/DWG + **optional** receive/issue block (badge **Optional**) + signature pads | ☐ |
+| 4a | Upload PDF only — skip receive/issue block | Upload succeeds; R column updates; Site register blank for that rev | ☐ |
+| 4b | Fill received date, copies, draw **contractor signature**, Save (no new PDF) | Log shows signature thumbnail; Site register updates; no duplicate revision row | ☐ |
 | 5 | Upload **new revision** (e.g. R3) | Drawing check runs first; then upload; R3 column fills | ☐ |
 | 6 | **Replace PDF** on same revision | Same row updates — not a second R3 line | ☐ |
 | 7 | **Export GFC CSV** | R0–Rn columns match screen | ☐ |
@@ -151,11 +152,14 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 
 ### 5.4 Site register — step-by-step test
 
+**Pending client decision:** Receive/issue dates and contractor/client signatures are **optional** on GFC upload until you confirm whether any fields should be mandatory.
+
 | Step | Action | Expected result | Pass |
 |------|--------|-----------------|:----:|
 | 1 | Open **Site register** | Matrix: rows = receive/issue details; columns = R0–R6 | ☐ |
-| 2 | Find **AR-101** after signature upload | Revision column shows dates, copies, **signature image** | ☐ |
-| 3 | Compare with GFC **Log** block | Same dates and signatures | ☐ |
+| 2 | After optional signature upload on AR-101 | Revision column shows dates, copies, **signature image** | ☐ |
+| 3 | Compare with GFC **Log** block | Same dates and signatures when block was filled | ☐ |
+| 4 | **Client decision** — record choice | Optional vs mandatory fields (see 5.6) | ☐ |
 
 ### 5.5 Drawing checklist (Drawings module only)
 
@@ -169,6 +173,7 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 
 | Date | Page | Issue or change | Pass after fix |
 |------|------|-----------------|:--------------:|
+| 2026-08-17 | GFC / Site register | Keep receive/issue + signatures **optional** until client confirms workflow | ☐ |
 | | GFC register | | ☐ |
 | | Master register | | ☐ |
 | | Site register | | ☐ |

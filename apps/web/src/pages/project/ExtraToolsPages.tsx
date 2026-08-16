@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
-import { drawingPreviewFromRecord } from "../../lib/drawingPreview";
+import {
+  currentDrawingRevision,
+  drawingHasPreviewFile,
+  drawingPreviewFromRecord,
+  revisionPreviewFromRecord,
+} from "../../lib/drawingPreview";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 export function CoordinationPage() {
@@ -62,7 +67,22 @@ export function CoordinationPage() {
   const linkedDrawing = selected?.linkedDrawingId
     ? drawings.find((d) => d.id === selected.linkedDrawingId)
     : null;
+  const linkedRevision = linkedDrawing ? currentDrawingRevision(linkedDrawing) : null;
   const drawingPreview = linkedDrawing ? drawingPreviewFromRecord(linkedDrawing) : null;
+  const revisionPreview =
+    linkedDrawing && linkedRevision ? revisionPreviewFromRecord(linkedDrawing, linkedRevision) : null;
+
+  const drawingsWithFiles = useMemo(() => drawings.filter((d) => drawingHasPreviewFile(d)), [drawings]);
+
+  const [linkDrawingId, setLinkDrawingId] = useState("");
+  useEffect(() => {
+    setLinkDrawingId(selected?.linkedDrawingId || "");
+  }, [selected?.id, selected?.linkedDrawingId]);
+
+  async function patchIssue(id: string, body: Record<string, unknown>) {
+    await api(`/api/directory/coordination/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
+    await load();
+  }
 
   function escalateToRfi(issue: {
     title?: string;
@@ -96,6 +116,24 @@ export function CoordinationPage() {
           </div>
         }
       />
+
+      <Card className="border-brand/20 bg-gradient-to-r from-brand-soft/40 to-paper">
+        <h3 className="text-sm font-semibold mb-2">How to use this page</h3>
+        <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
+          <li>
+            Upload the GFC sheet first on{" "}
+            <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
+              GFC register
+            </Link>{" "}
+            ({drawingsWithFiles.length} of {drawings.length} drawings have a PDF/DWG).
+          </li>
+          <li>Log an issue and pick <strong>Linked GFC drawing</strong> from the dropdown — that drives the PDF preview on the right.</li>
+          <li>Select an issue in the register → use <strong>Link / change drawing</strong> if you forgot to link when logging.</li>
+          <li>
+            <strong>Close</strong> when resolved on site, or <strong>Escalate to Ask RFI</strong> for formal consultant response.
+          </li>
+        </ol>
+      </Card>
 
       {canEdit && (
         <Card>
@@ -138,15 +176,34 @@ export function CoordinationPage() {
             <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             <Input placeholder="Assignee name" value={form.assignedToName} onChange={(e) => setForm({ ...form, assignedToName: e.target.value })} />
             <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-            <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-              <option value="">Linked GFC drawing (for PDF preview)</option>
-              {drawings.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.drawingNumber} — {d.title}
-                  {!d.revisions?.length ? " (no file yet)" : ""}
-                </option>
-              ))}
-            </Select>
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
+                Linked GFC drawing (for PDF preview)
+              </span>
+              <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
+                <option value="">— Select drawing with uploaded file —</option>
+                {drawingsWithFiles.length > 0 && (
+                  <optgroup label="Ready for preview">
+                    {drawingsWithFiles.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {drawings.filter((d) => !drawingHasPreviewFile(d)).length > 0 && (
+                  <optgroup label="No file yet — upload on GFC register first">
+                    {drawings
+                      .filter((d) => !drawingHasPreviewFile(d))
+                      .map((d) => (
+                        <option key={d.id} value={d.id} disabled>
+                          {d.drawingNumber} — {d.title} (no PDF/DWG)
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+              </Select>
+            </label>
             <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
               {["Assignee", "Creator", "Consultant", "Contractor", "PMC"].map((b) => (
                 <option key={b}>{b}</option>
@@ -232,7 +289,7 @@ export function CoordinationPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 items-start">
-                  {drawingPreview && (
+                  {revisionPreview?.pdf && (
                     <Button type="button" variant="secondary" className="!text-xs" onClick={() => setViewerOpen(true)}>
                       Full-screen PDF
                     </Button>
@@ -251,21 +308,51 @@ export function CoordinationPage() {
                         type="button"
                         variant="secondary"
                         className="!text-xs"
-                        onClick={async () => {
-                          await api(`/api/directory/coordination/${selected.id}`, {
-                            method: "PATCH",
-                            token,
-                            body: JSON.stringify({ status: "Closed" }),
-                          });
-                          await load();
-                        }}
+                        onClick={() => void patchIssue(selected.id, { status: "Closed" })}
                       >
-                        Close
+                        Close issue
                       </Button>
                     </>
                   )}
+                  {canEdit && selected.status === "Closed" && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs"
+                      onClick={() => void patchIssue(selected.id, { status: "Open" })}
+                    >
+                      Reopen
+                    </Button>
+                  )}
                 </div>
               </div>
+
+              {canEdit && (
+                <div className="mt-4 pt-4 border-t border-line grid sm:grid-cols-[1fr_auto] gap-2 items-end">
+                  <label className="block">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
+                      Link / change GFC drawing
+                    </span>
+                    <Select value={linkDrawingId} onChange={(e) => setLinkDrawingId(e.target.value)}>
+                      <option value="">No linked drawing</option>
+                      {drawingsWithFiles.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!text-xs"
+                    disabled={linkDrawingId === (selected.linkedDrawingId || "")}
+                    onClick={() => void patchIssue(selected.id, { linkedDrawingId: linkDrawingId || null })}
+                  >
+                    Save link
+                  </Button>
+                </div>
+              )}
             </Card>
           ) : (
             <Card>
@@ -273,22 +360,44 @@ export function CoordinationPage() {
             </Card>
           )}
 
-          {drawingPreview ? (
-            <DrawingFileViewer preview={drawingPreview} variant="inline" className="flex-1 min-h-[360px]" />
+          {revisionPreview?.pdf || revisionPreview?.dwg || drawingPreview ? (
+            <DrawingFileViewer
+              {...(revisionPreview?.pdf || revisionPreview?.dwg
+                ? { revision: revisionPreview }
+                : { preview: drawingPreview! })}
+              variant="inline"
+              className="flex-1 min-h-[360px]"
+            />
           ) : (
             <Card className="flex-1 grid place-items-center text-center p-8">
-              <div className="text-sm text-steel-muted max-w-sm">
-                {selected?.linkedDrawingId
-                  ? "Linked drawing has no published PDF yet — upload GFC in the register first."
-                  : "Link a GFC drawing when logging the issue to open the sheet PDF here."}
+              <div className="text-sm text-steel-muted max-w-md space-y-3">
+                {!selected?.linkedDrawingId ? (
+                  <>
+                    <p>No drawing linked yet.</p>
+                    <p className="text-xs">
+                      When logging an issue, choose <strong>Linked GFC drawing</strong>, or select the issue above and use{" "}
+                      <strong>Link / change GFC drawing</strong>.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>Linked drawing has no PDF/DWG file yet.</p>
+                    <Link to={`/projects/${id}/drawings`} className="inline-block text-brand font-semibold text-sm">
+                      Upload on GFC register →
+                    </Link>
+                  </>
+                )}
+                <Link to={`/projects/${id}/drawings/library`} className="inline-block text-xs text-steel-muted underline">
+                  Or browse Drawing files (SharePoint folders)
+                </Link>
               </div>
             </Card>
           )}
         </div>
       </div>
 
-      {viewerOpen && drawingPreview && (
-        <DrawingFileViewer preview={drawingPreview} variant="modal" onClose={() => setViewerOpen(false)} />
+      {viewerOpen && revisionPreview && (
+        <DrawingFileViewer revision={revisionPreview} variant="modal" onClose={() => setViewerOpen(false)} />
       )}
     </div>
   );

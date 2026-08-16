@@ -109,19 +109,68 @@ export function latestMarkupByPage(pages: DrawingMarkupPage[] = []) {
     }));
 }
 
-export function latestDrawingRevision(drawing: { revisions?: { fileUrl?: string; fileName?: string; createdAt?: string }[] }) {
+type RevisionRecord = {
+  revisionNumber?: string;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  pdfFileUrl?: string | null;
+  pdfFileName?: string | null;
+  dwgFileUrl?: string | null;
+  dwgFileName?: string | null;
+  markupPages?: DrawingMarkupPage[];
+  createdAt?: string;
+};
+
+function revisionHasFile(rev?: RevisionRecord | null) {
+  return !!(rev?.pdfFileUrl || rev?.fileUrl || rev?.dwgFileUrl);
+}
+
+export function latestDrawingRevision(drawing: { revisions?: RevisionRecord[] }) {
   const revs = drawing?.revisions || [];
   if (!revs.length) return null;
   return revs[revs.length - 1];
 }
 
+/** Prefer currentRev when it has files, else latest revision with a PDF/DWG. */
+export function currentDrawingRevision(drawing: { currentRev?: string; revisions?: RevisionRecord[] }) {
+  const revs = drawing?.revisions || [];
+  if (!revs.length) return null;
+  const byCurrent = drawing.currentRev ? revs.find((r) => r.revisionNumber === drawing.currentRev) : null;
+  if (byCurrent && revisionHasFile(byCurrent)) return byCurrent;
+  return [...revs].reverse().find(revisionHasFile) || revs[revs.length - 1];
+}
+
+export function drawingHasPreviewFile(drawing: { currentRev?: string; revisions?: RevisionRecord[] }) {
+  return revisionHasFile(currentDrawingRevision(drawing));
+}
+
 export function drawingPreviewFromRecord(drawing: {
   drawingNumber?: string;
   title?: string;
-  revisions?: { fileUrl?: string; fileName?: string }[];
+  currentRev?: string;
+  revisions?: RevisionRecord[];
 }): DrawingPreview | null {
-  const rev = latestDrawingRevision(drawing);
-  if (!rev?.fileUrl) return null;
+  const rev = currentDrawingRevision(drawing);
+  if (!rev) return null;
+  const pdf = revisionPdfUrl(rev);
+  if (pdf) {
+    return {
+      title: `${drawing.drawingNumber || "Drawing"} — ${drawing.title || ""}`.trim(),
+      fileUrl: pdf.fileUrl,
+      fileName: pdf.fileName,
+      kind: "pdf",
+    };
+  }
+  const dwg = revisionDwgUrl(rev);
+  if (dwg) {
+    return {
+      title: `${drawing.drawingNumber || "Drawing"} — ${drawing.title || ""}`.trim(),
+      fileUrl: dwg.fileUrl,
+      fileName: dwg.fileName,
+      kind: "dwg",
+    };
+  }
+  if (!rev.fileUrl) return null;
   const fileName = rev.fileName || rev.fileUrl;
   return {
     title: `${drawing.drawingNumber || "Drawing"} — ${drawing.title || ""}`.trim(),

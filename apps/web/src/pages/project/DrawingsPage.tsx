@@ -15,6 +15,7 @@ import { RevisionIssueLogSummary } from "../../components/RevisionIssueLogSummar
 import {
   appendIssueToFormData,
   emptyDrawingIssueDraft,
+  issueDraftHasData,
   issueFromRevision,
 } from "../../lib/drawingIssueFields";
 import {
@@ -360,18 +361,17 @@ export default function DrawingsPage() {
     if (!uploadForId) return;
     if (revUploadMode === "replace") {
       const replaceFile = revReplaceRole === "dwg" ? revDwg : revPdf;
-      const hasIssue =
-        revIssue.receivedDate ||
-        revIssue.copiesReceived ||
-        revIssue.contractorSignature ||
-        revIssue.clientSignature ||
-        revIssue.issuedToContractorAt ||
-        revIssue.issuedToClientAt;
+      const hasIssue = issueDraftHasData(revIssue);
       if (!replaceFile && !revMarkupPages.length && !hasIssue) {
         setFormError(`Choose a ${revReplaceRole.toUpperCase()} file, markup, or receive/issue details.`);
         return;
       }
-    } else if (!revPdf && !revDwg && !(revUploadMode === "update" && revMarkupPages.length)) {
+    } else if (revUploadMode === "update") {
+      if (!revPdf && !revDwg && !revMarkupPages.length && !issueDraftHasData(revIssue)) {
+        setFormError("Choose PDF/DWG, markup, or optional receive/issue details.");
+        return;
+      }
+    } else if (!revPdf && !revDwg) {
       setFormError("Choose at least one of PDF or DWG.");
       return;
     }
@@ -408,6 +408,13 @@ export default function DrawingsPage() {
           await uploadMarkupPages(replaceRevisionId, revMarkupPages, token, revForm.revisionLabel || "PDF markup");
           setExpandedId(uploadForId);
           setMsg(`${revForm.revisionNumber} markup saved — same revision row.`);
+        } else if (revUploadMode === "update" && !revPdf && !revDwg && !revMarkupPages.length && replaceRevisionId && issueDraftHasData(revIssue)) {
+          const fd = new FormData();
+          fd.append("note", revForm.revisionLabel || "Receive & issue update");
+          appendIssueToFormData(fd, revIssue);
+          await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
+          setExpandedId(uploadForId);
+          setMsg(`${revForm.revisionNumber} receive/issue saved — Site register updated.`);
         } else {
         const fd = new FormData();
         fd.append("revisionNumber", revForm.revisionNumber);
@@ -1005,10 +1012,10 @@ export default function DrawingsPage() {
             revUploadMode === "replace"
               ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) ||
                 revMarkupPages.length > 0 ||
-                !!revIssue.receivedDate ||
-                !!revIssue.contractorSignature ||
-                !!revIssue.clientSignature
-              : !!revPdf || !!revDwg || revMarkupPages.length > 0
+                issueDraftHasData(revIssue)
+              : revUploadMode === "update"
+                ? !!revPdf || !!revDwg || revMarkupPages.length > 0 || issueDraftHasData(revIssue)
+                : !!revPdf || !!revDwg || revMarkupPages.length > 0
           }
           filePicker={
             revUploadMode === "replace" && revReplaceRole === "dwg" ? (
