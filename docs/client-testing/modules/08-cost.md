@@ -34,11 +34,14 @@ BoqMonitoringEditor · BbsEntryTable · MbEntryTable · CostSheetUploadPanel
 ### Modals
 None (upload panels inline).
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | Package list from SPDC budget | | Open |
-| | | BBS bend diagrams | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ### Client sign-off
 - [ ] Page approved for UAT

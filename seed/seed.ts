@@ -450,7 +450,7 @@ async function seedChecklistsFromExcel() {
           create: q.lines.map((description, i) => ({
             itemCode: `${i + 1}.0`,
             description,
-            instruction: "Verify against approved GFC / ITP.",
+            instruction: "Verify on site per QAP / method statement.",
             sortOrder: i + 1,
             section: i === q.lines.length - 1 ? "Close-out" : "Inspection",
             requirePhoto: i === 0,
@@ -458,6 +458,60 @@ async function seedChecklistsFromExcel() {
         },
       },
     });
+  }
+
+  // Quality Dashboard.xlsx Sheet1 — QI checklist type catalog (never reclassify Site / Drawing / Safety)
+  const qdFile = path.join(EXCEL_ROOT, "Quality Dashboard.xlsx");
+  if (fs.existsSync(qdFile)) {
+    const wb = XLSX.readFile(qdFile);
+    const sheetName = wb.SheetNames.find((n) => /^Sheet1$/i.test(n));
+    const rows = sheetName
+      ? (XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheetName], { header: 1, defval: "" }) as unknown[][])
+      : [];
+    let qdCreated = 0;
+    let qdSkipped = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const sr = String(rows[i][0] ?? "").trim();
+      const name = String(rows[i][1] ?? "").trim();
+      const category = String(rows[i][2] ?? "General").trim() || "General";
+      if (!name || !/^\d+$/.test(sr) || /file name/i.test(name)) continue;
+
+      const qiExisting = await prisma.checklistTemplate.findFirst({
+        where: { name, checklistType: "QualityInspection" },
+      });
+      if (qiExisting) continue;
+
+      const otherFamily = await prisma.checklistTemplate.findFirst({
+        where: { name, checklistType: { not: "QualityInspection" } },
+      });
+      if (otherFamily) {
+        qdSkipped++;
+        continue;
+      }
+
+      await prisma.checklistTemplate.create({
+        data: {
+          name,
+          category,
+          checklistType: "QualityInspection",
+          source: "Quality Dashboard.xlsx · Sheet1",
+          requirePhotosMin: 3,
+          instructions: "Minimum 3 observation photos. Upload or add checklist line items in master.",
+          items: {
+            create: [
+              { itemCode: "1", description: `${name} — preliminary checks`, sortOrder: 1, section: "Pre-checks", requirePhoto: true },
+              { itemCode: "2", description: "Materials / method as per QAP", sortOrder: 2, section: "Execution" },
+              { itemCode: "3", description: "Workmanship acceptable to PMC", sortOrder: 3, section: "Execution" },
+              { itemCode: "4", description: "Safety precautions observed", sortOrder: 4, section: "Safety" },
+              { itemCode: "5", description: "Ready for next activity / sign-off", sortOrder: 5, section: "Close-out", requirePhoto: true },
+            ],
+          },
+        },
+      });
+      qdCreated++;
+    }
+    if (qdCreated) console.log("Quality Dashboard Sheet1 QI templates:", qdCreated);
+    if (qdSkipped) console.log("Quality Dashboard Sheet1 skipped (name used by Site/Drawing/Safety):", qdSkipped);
   }
 
   const safetyDefs = [
@@ -1669,6 +1723,7 @@ async function seedProjectAndCost(users: { id: string; role: string }[]) {
 async function main() {
   console.log("Seeding शरणम् portal...");
   console.log("Excel root:", EXCEL_ROOT);
+  console.log("Tip: run `npm run db:push` before seed if QapActivity schema changed.");
   await seedRoles();
   const users = await seedUsers();
   await seedChecklistsFromExcel();

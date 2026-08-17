@@ -27,10 +27,14 @@ Open day (date, weather) · Manpower row · Equipment row · Note · Complete da
 ### Modals
 None.
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ### Client sign-off
 - [ ] Page approved for UAT
@@ -42,10 +46,14 @@ None.
 ### Form: Upload photo
 album, location, trade, description, file
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ---
 
@@ -53,7 +61,11 @@ album, location, trade, description, file
 
 Workflow: Draft → Submit → Review → Approve / Revise / Reject
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+

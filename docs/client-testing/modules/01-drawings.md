@@ -119,13 +119,14 @@ Office UAT: upload a revision with signature pads filled → expand log → conf
 | `/projects/:id/drawings/checklist-master` | Drawing check templates only |
 | `/projects/:id/drawings/checklist-logs` | Drawing fill log only — **no** Site/Quality/Safety tabs |
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| 2026-08-17 | Client | Many file changes per revision; fix duplicate R2 rows; R0–Rn columns by rev number | Upsert same rev; dynamic columns; Replace PDF/DWG | Done |
-| 2026-08-17 | Client | Master + Site drawing registers; signatures on upload | Master all DCI cols; Site R0–R6 matrix; signature pad on GFC upload | Done |
-| 2026-08-17 | Client | Master vs Client register redundant; signatures visible on GFC log | Removed Client tab; signatures on upload log; Master includes client cols | Done |
-| 2026-08-17 | Client | Receive/issue + signatures — keep optional until client confirms workflow | Optional badge on upload block; save signatures without re-uploading PDF | Done · **Pending client UAT** |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ### Client sign-off
 - [ ] Page approved for UAT
@@ -164,6 +165,14 @@ Sr # · Project Package · Building · Discipline · Drawing Number · Drawing T
 **API:** `POST /api/drawings/project/:id/register-lines`  
 **Link to GFC:** Upload files on GFC register with the **same drawing number** → GFC link column shows Linked.
 
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 ### Client sign-off
 - [ ] Page approved for UAT
 
@@ -185,6 +194,14 @@ Date of receiving · Total copies received · Issued to contractor · Receiver s
 
 **Source:** GFC upload modal **Site drawing register — receive & issue** (same data as GFC log block).
 
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 ### Client sign-off
 - [ ] Page approved for UAT
 
@@ -197,6 +214,23 @@ Date of receiving · Total copies received · Issued to contractor · Receiver s
 | **Route** | `/projects/:id/drawings/register` |
 | **Purpose** | Week KPIs and charts from dashboard sheet in `DRAWING REGISTER - 01.xlsx`. |
 
+### Features
+| Feature | Notes |
+|---------|-------|
+| Week KPI tiles | Total drawings, GFC count, critical, linked to GFC |
+| Pie charts | By discipline · drawing type · critical |
+
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
+### Client sign-off
+- [ ] Page approved for UAT
+
 ---
 
 ## Page: Drawing files (SharePoint)
@@ -205,6 +239,20 @@ Date of receiving · Total copies received · Issued to contractor · Receiver s
 |--|--|
 | **Route** | `/projects/:id/drawings/library` |
 | **Purpose** | Browse design folders in SharePoint (not general DMS). |
+
+### Features
+| Feature | Notes |
+|---------|-------|
+| Folder browse | ISO 04.02 design folders in SharePoint |
+| Open / download | PDF and DWG from project library |
+
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
 
 ### Client sign-off
 - [ ] Page approved for UAT
@@ -216,7 +264,24 @@ Date of receiving · Total copies received · Issued to contractor · Receiver s
 | | |
 |--|--|
 | **Route** | `/projects/:id/drawings/coordination` |
-| **Purpose** | Clash/design issues; link drawing; escalate to Ask RFI. |
+| **Purpose** | Clash/design issues; link GFC drawing for PDF preview; close or escalate to Ask RFI. |
+
+### Features
+| Feature | Notes |
+|---------|-------|
+| Log issue | Title, discipline, location, linked GFC drawing |
+| PDF preview | Inline viewer when drawing has uploaded PDF |
+| Link / change drawing | On existing issues after logging |
+| Close / Reopen | Status workflow on each issue |
+| Escalate to Ask RFI | Pre-fills RFI with issue + drawing |
+
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
 
 ### Client sign-off
 - [ ] Page approved for UAT
@@ -233,6 +298,14 @@ Date of receiving · Total copies received · Issued to contractor · Receiver s
 | `/projects/:id/rfis?kind=RequestForInformation` | Ask RFI |
 
 Quality / Safety checklist masters live under their own modules.
+
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
 
 ---
 
@@ -251,7 +324,7 @@ Quality / Safety checklist masters live under their own modules.
 4. Open **Site register** tab → confirm same revision column shows signature thumbnail.
 5. Open **Master register** → confirm copies / issue date updated for AR-101 when those fields were filled.
 
-### Client decision (record in Section 5.6)
+### Client decision (record under **Site register → Meeting changes**)
 - [ ] Keep receive/issue **optional** for all projects
 - [ ] Make **some fields mandatory** (list): ___________________
 - [ ] Defer Site register signatures to a later phase

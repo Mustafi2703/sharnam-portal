@@ -287,7 +287,7 @@ inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "s
 
   if (!items.length) {
     items = [
-      { description: "Work matches approved drawing revision" },
+      { description: "Work per approved method / QAP" },
       { description: "Materials as specified" },
       { description: "Workmanship acceptable" },
       { description: "Safety compliance verified" },

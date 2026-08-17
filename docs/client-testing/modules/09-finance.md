@@ -34,11 +34,14 @@ certificate fields, WO values, amounts, PAN/GST, remarks
 ### Modals
 None.
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | Link COP to cost cashflow | | Open |
-| | | Audit export to SharePoint | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ### Client sign-off
 - [ ] Page approved for UAT

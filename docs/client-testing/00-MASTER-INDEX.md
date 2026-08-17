@@ -44,7 +44,7 @@ All routes under `/projects/:id` use **ProjectToolsLayout** (sticky module tool 
 
 ## Project — tools by module
 
-See each `modules/NN-*.md` file for forms, modals, and change tables.
+See each `modules/NN-*.md` file for **features per page** and a **Meeting changes** stake under each page (fill during UAT — not dev history).
 
 ### Drawings
 `drawings` · `drawings/register` · `drawings/register?sheet=master|site` · `drawings/library` · `drawings/coordination` · `drawings/upload-revision` · `drawings/precheck` · `drawings/checklist-master` · `drawings/checklist-logs` · `rfis?kind=DrawingChecklist|RequestForInformation`

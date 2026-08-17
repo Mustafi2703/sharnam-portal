@@ -61,6 +61,21 @@ export type SorLogRow = {
 export type ChecklistDisciplineRow = { discipline: string; filled: number };
 export type ChecklistCatalogRow = { srNo: number; name: string; category: string };
 
+export type QapDetailRow = {
+  srNo: string | null;
+  section: string;
+  description: string;
+  frequency: string;
+  codeOfConformance: string;
+  testAgency: string;
+  contractorPerformer: string;
+  contractorChecker: string;
+  pmcRole: string;
+  clientRole: string;
+  records: string;
+  remarks: string;
+};
+
 export type QualityWorkbookData = {
   dashboard: QualityDashboardKpis | null;
   sorLog: SorLogRow[];
@@ -135,7 +150,55 @@ export function parseChecklistCatalog(rows: unknown[][]): ChecklistCatalogRow[] 
     if (!sr || !name || /sr no|file name/i.test(String(r[0]))) continue;
     out.push({ srNo: sr, name, category: category || "General" });
   }
-  return out.slice(0, 80);
+  return out.slice(0, 200);
+}
+
+/** Quality Assurance Plan - Detail / Week 50 Sheet1 layout (header row 7–8, data from row 9). */
+export function parseQapDetailSheet(rows: unknown[][], startRow = 9): QapDetailRow[] {
+  const out: QapDetailRow[] = [];
+  let section = "";
+  for (let i = startRow; i < rows.length; i++) {
+    const r = rows[i] as unknown[];
+    const srRaw = s(r[0], 20);
+    const act = s(r[1], 120);
+    const detail = s(r[2], 400);
+    if (act) section = act;
+    if (!detail) continue;
+    const srNo = srRaw && /^\d+$/.test(srRaw) ? srRaw : null;
+    const contractorPerformer = s(r[6], 80);
+    const contractorChecker = s(r[7], 80);
+    const pmcRole = s(r[8], 80);
+    const clientRole = s(r[9], 80);
+    const remarks = s(r[11], 120);
+    out.push({
+      srNo,
+      section: section || act || "General",
+      description: detail,
+      frequency: s(r[3], 120),
+      codeOfConformance: s(r[4], 160),
+      testAgency: s(r[5], 120),
+      contractorPerformer,
+      contractorChecker,
+      pmcRole,
+      clientRole,
+      records: s(r[10], 160),
+      remarks,
+    });
+  }
+  return out;
+}
+
+export function qapStatusFromRow(row: QapDetailRow): { status: string; contractorOk: boolean; pmcOk: boolean; clientOk: boolean } {
+  const done = /complete|done|yes/i.test(row.remarks);
+  const contractorOk = !!(row.contractorPerformer || row.contractorChecker);
+  const pmcOk = /review|witness|yes/i.test(row.pmcRole);
+  const clientOk = /witness|random|yes/i.test(row.clientRole);
+  return {
+    contractorOk,
+    pmcOk,
+    clientOk,
+    status: done || (pmcOk && clientOk) ? "Done" : "Open",
+  };
 }
 
 export function loadQualityDashboardWorkbook(): QualityWorkbookData | null {

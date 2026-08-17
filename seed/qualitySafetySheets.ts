@@ -32,10 +32,115 @@ function sheet(wb: XLSX.WorkBook, name: string | RegExp) {
       ? wb.SheetNames.find((n) => n === name) || name
       : wb.SheetNames.find((n) => name.test(n));
   if (!key || !wb.Sheets[key]) return [] as unknown[][];
-  return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], {
-    header: 1,
-    defval: "",
-  }) as unknown as unknown[][];
+  return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], { header: 1, defval: "" }) as unknown[][];
+}
+
+type ParsedQapRow = {
+  srNo: string | null;
+  section: string;
+  description: string;
+  frequency: string;
+  codeOfConformance: string;
+  testAgency: string;
+  contractorPerformer: string;
+  contractorChecker: string;
+  pmcRole: string;
+  clientRole: string;
+  records: string;
+  remarks: string;
+};
+
+function parseQapRows(rows: unknown[][], startRow = 9): ParsedQapRow[] {
+  const out: ParsedQapRow[] = [];
+  let section = "";
+  for (let i = startRow; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    const srRaw = s(row[0], 20);
+    const act = s(row[1], 120);
+    const detail = s(row[2], 400);
+    if (act) section = act;
+    if (!detail) continue;
+    out.push({
+      srNo: srRaw && /^\d+$/.test(srRaw) ? srRaw : null,
+      section: section || act || "General",
+      description: detail,
+      frequency: s(row[3], 120),
+      codeOfConformance: s(row[4], 160),
+      testAgency: s(row[5], 120),
+      contractorPerformer: s(row[6], 80),
+      contractorChecker: s(row[7], 80),
+      pmcRole: s(row[8], 80),
+      clientRole: s(row[9], 80),
+      records: s(row[10], 160),
+      remarks: s(row[11], 120),
+    });
+  }
+  return out;
+}
+
+async function seedQapRows(
+  prisma: PrismaClient,
+  projectId: string,
+  rows: ParsedQapRow[],
+  weekLabel: string,
+  max = 250
+) {
+  let created = 0;
+  for (const row of rows.slice(0, max)) {
+    const contractorOk = !!(row.contractorPerformer || row.contractorChecker);
+    const pmcOk = /review|witness|yes/i.test(row.pmcRole);
+    const clientOk = /witness|random|yes/i.test(row.clientRole);
+    const done = /complete|done|yes/i.test(row.remarks);
+    const status = done || (pmcOk && clientOk) ? "Done" : "Open";
+    const completedAt = done || (pmcOk && clientOk) ? new Date() : null;
+    const legacyActivity = `${row.section} — ${row.description}`.slice(0, 400);
+
+    try {
+      await prisma.qapActivity.create({
+        data: {
+          projectId,
+          weekLabel,
+          srNo: row.srNo,
+          section: row.section,
+          activity: row.section,
+          description: row.description,
+          frequency: row.frequency || null,
+          codeOfConformance: row.codeOfConformance || null,
+          testAgency: row.testAgency || null,
+          contractorPerformer: row.contractorPerformer || null,
+          contractorChecker: row.contractorChecker || null,
+          pmcRole: row.pmcRole || null,
+          clientRole: row.clientRole || null,
+          records: row.records || null,
+          remarks: row.remarks || null,
+          discipline: row.section,
+          contractorOk,
+          pmcOk,
+          clientOk,
+          status,
+          completedAt,
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!/Unknown column|does not exist|no such column/i.test(msg)) throw err;
+      await prisma.qapActivity.create({
+        data: {
+          projectId,
+          weekLabel,
+          activity: legacyActivity,
+          discipline: row.section || null,
+          contractorOk,
+          pmcOk,
+          clientOk,
+          status,
+          completedAt,
+        },
+      });
+    }
+    created++;
+  }
+  return created;
 }
 
 function parseSafetyRegisterTable(rows: unknown[][], recordType: string, source: string, reportedById: string, projectId: string) {
@@ -345,32 +450,8 @@ export async function seedQualitySafetyFromSheets(
       }
       if (cubeCreated) console.log("Quality Dashboard cube rows seeded:", cubeCreated);
 
-      const qapRows = sheet(wb, /Quality Assurance Plan - Detail/i);
-      let qapCreated = 0;
-      let activity = "";
-      for (let i = 8; i < qapRows.length && qapCreated < 40; i++) {
-        const row = qapRows[i] as unknown[];
-        const sr = s(row[0], 20);
-        const act = s(row[1], 120);
-        const detail = s(row[2], 300);
-        if (act) activity = act;
-        if (!detail && !act) continue;
-        if (sr && !/^\d+$/.test(sr) && !detail) continue;
-        await prisma.qapActivity.create({
-          data: {
-            projectId,
-            weekLabel: "Dashboard",
-            activity: `${activity}${detail ? ` — ${detail}` : ""}`.slice(0, 400),
-            discipline: activity || null,
-            contractorOk: /yes|perform|qc/i.test(s(row[6], 40)),
-            pmcOk: /yes|review|witness/i.test(s(row[8], 40)),
-            clientOk: /yes|witness|random/i.test(s(row[9], 40)),
-            status: /done|closed|yes/i.test(s(row[11], 40)) ? "Done" : "Open",
-            completedAt: /done|closed|yes/i.test(s(row[11], 40)) ? new Date() : null,
-          },
-        });
-        qapCreated++;
-      }
+      const qapRows = parseQapRows(sheet(wb, /Quality Assurance Plan - Detail/i));
+      const qapCreated = await seedQapRows(prisma, projectId, qapRows, "Detail");
       if (qapCreated) console.log("Quality Dashboard QAP rows seeded:", qapCreated);
     }
   }
@@ -503,34 +584,8 @@ export async function seedQualitySafetyFromSheets(
     let created = 0;
     if (fs.existsSync(qapFile)) {
       const wb = XLSX.readFile(qapFile);
-      const rows = sheet(wb, "Sheet1");
-      let activity = "";
-      for (let i = 10; i < Math.min(rows.length, 120); i++) {
-        const row = rows[i] as unknown[];
-        const sr = s(row[0], 20);
-        const act = s(row[1], 120);
-        const detail = s(row[2], 300);
-        if (act) activity = act;
-        if (!detail) continue;
-        if (sr && !/^\d+$/.test(sr) && !act) continue;
-        const contractorOk = /yes|perform|qc|surveyor/i.test(s(row[6], 40));
-        const pmcOk = /yes|review|witness/i.test(s(row[8], 40));
-        const clientOk = /yes|witness|random/i.test(s(row[9], 40));
-        await prisma.qapActivity.create({
-          data: {
-            projectId,
-            weekLabel: "W50",
-            activity: `${activity}${detail ? ` — ${detail}` : ""}`.slice(0, 400),
-            discipline: activity || null,
-            contractorOk,
-            pmcOk,
-            clientOk,
-            status: clientOk && pmcOk ? "Done" : "Open",
-            completedAt: clientOk && pmcOk ? new Date() : null,
-          },
-        });
-        created++;
-      }
+      const rows = parseQapRows(sheet(wb, "Sheet1"), 10);
+      created = await seedQapRows(prisma, projectId, rows, "W50");
     }
     const monthly = path.join(
       excelRoot,

@@ -37,11 +37,14 @@ subject, body, toRoles, channel
 ### Modals
 None (WorkflowStrip shows Matrix → Agenda → MoM → Follow-up).
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | BPCL matrix seed vs live org | | Open |
-| | | Outlook integration | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ### Client sign-off
 - [ ] Page approved for UAT
@@ -60,10 +63,14 @@ subject, question, rfiKind, linkedDrawingId, responsibleVendorId, assignedToId, 
 ### Form: Respond / close
 responseText · status Closed
 
-### Changes during testing
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | Label: RFI vs RFI | | Open |
+### Meeting changes (log in session → dev builds → re-test)
+
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
+
 
 ---
 

@@ -64,6 +64,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
+  const [catalog, setCatalog] = useState<{ srNo: number; name: string; category: string }[]>([]);
 
   const load = async () => {
     const list = await api<any[]>(`/api/checklist/templates?type=${family}`, { token });
@@ -97,6 +98,16 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
     }
     api(`/api/checklist/templates/${activeId}`, { token }).then(setDetail).catch(console.error);
   }, [activeId, token]);
+
+  useEffect(() => {
+    if (family !== "QualityInspection" || !id) {
+      setCatalog([]);
+      return;
+    }
+    api<any>(`/api/checklist/project/${id}/quality-dashboard`, { token })
+      .then((d) => setCatalog(d?.workbook?.checklistCatalog || []))
+      .catch(() => setCatalog([]));
+  }, [family, id, token]);
 
   async function createTemplate(e: FormEvent) {
     e.preventDefault();
@@ -229,6 +240,20 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             </button>
           ))}
         </div>
+      )}
+
+      {family === "QualityInspection" && catalog.length > 0 && (
+        <Card className="!p-4 border-brand/20 bg-brand-soft/30">
+          <p className="text-sm">
+            <span className="font-semibold text-ink">{catalog.length}</span> checklist types from{" "}
+            <span className="font-semibold">Quality Dashboard · Sheet1</span> —{" "}
+            <span className="font-semibold text-ink">{templates.length}</span> templates in master. Create or upload line
+            items for each type; set minimum photos (default 3) before raising QI.
+          </p>
+          <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="inline-block mt-2 text-sm font-semibold text-brand">
+            View full catalog →
+          </Link>
+        </Card>
       )}
 
       {effectiveLock && id && (

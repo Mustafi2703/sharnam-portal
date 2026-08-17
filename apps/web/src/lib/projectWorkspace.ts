@@ -1,4 +1,4 @@
-import { MODULE_META, type WorkspaceKey } from "../workspaces";
+import { MODULE_META, getActiveWorkspace, type WorkspaceKey } from "../workspaces";
 
 /** Route tail after `/projects/:projectId/` (empty on project home). */
 export function projectRouteTail(pathname: string): string {
@@ -15,6 +15,8 @@ function checklistFamilyModule(search: string, tool: "master" | "logs"): Workspa
   if (tool === "logs" && family === "SiteExecution") return "field";
   return "quality";
 }
+
+/** Checklist families are module-scoped: DrawingCheck → drawings, QualityInspection → quality, Safety → safety. */
 
 /** Resolve which project module owns the current route (left nav + tool chrome). */
 export function resolveProjectWorkspace(pathname: string, search: string): WorkspaceKey | "home" {
@@ -54,6 +56,8 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "RequestForInformation") return "comms";
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
+    const stored = getActiveWorkspace();
+    if (stored === "quality" || stored === "drawings" || stored === "safety") return stored;
     return "comms";
   }
 

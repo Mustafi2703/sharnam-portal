@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, PageHeader } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
+import { QapDetailRegister } from "../../components/QapDetailRegister";
 
 /** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
 const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans";
@@ -10,35 +11,56 @@ const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspe
 type DriveItem = { name: string; path: string; type: "folder" | "file"; modifiedAt?: string; url?: string };
 
 /**
- * Quality Assurance Plan — upload / update client QAP (Week-50 sheet style).
+ * Quality Assurance Plan — single module page (Week 50 + Detail sheet, full edit).
  */
 export default function QapPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
   const [docs, setDocs] = useState<DriveItem[]>([]);
+  const [dash, setDash] = useState<any>(null);
+  const [weekFilter, setWeekFilter] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [addForm, setAddForm] = useState({
+    weekLabel: "W50",
+    section: "",
+    description: "",
+    frequency: "",
+    codeOfConformance: "",
+    testAgency: "",
+  });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const canManage = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
   const canUpload = ["admin", "office", "site_employee"].includes(user?.role || "");
 
   const load = async () => {
     if (!id) return;
     try {
-      const res = await api<{ children: DriveItem[]; path: string }>(
-        `/api/dms/${id}/browse?path=${encodeURIComponent(QAP_FOLDER)}&sync=0`,
-        { token }
-      );
-      const files = (res.children || []).filter((f) => f.type === "file");
+      const [dmsRes, dashRes] = await Promise.all([
+        api<{ children: DriveItem[]; path: string }>(
+          `/api/dms/${id}/browse?path=${encodeURIComponent(QAP_FOLDER)}&sync=0`,
+          { token }
+        ).catch(() => ({ children: [] })),
+        api<{ qap?: unknown[]; totals?: { qapOpen?: number; qapDone?: number } }>(
+          `/api/checklist/project/${id}/quality-dashboard`,
+          { token }
+        ).catch(() => null),
+      ]);
+      const files = (dmsRes.children || []).filter((f) => f.type === "file");
       setDocs(
         files.length
           ? files
-          : (res.children || []).filter(
+          : (dmsRes.children || []).filter(
               (f) =>
                 f.type === "file" &&
                 (/qap|assurance|quality.?plan/i.test(f.name || f.path || "") ||
                   (f.path || "").toLowerCase().includes("qap"))
             )
       );
+      setDash(dashRes);
+      if (!weekFilter && dashRes?.qap?.[0] && typeof dashRes.qap[0] === "object" && dashRes.qap[0] && "weekLabel" in dashRes.qap[0]) {
+        setWeekFilter(String((dashRes.qap[0] as { weekLabel?: string }).weekLabel || ""));
+      }
     } catch {
       setDocs([]);
     }
@@ -47,6 +69,18 @@ export default function QapPage() {
   useEffect(() => {
     void load();
   }, [id, token]);
+
+  const weeks = useMemo(() => {
+    const set = new Set<string>();
+    (dash?.qap || []).forEach((q: any) => q.weekLabel && set.add(q.weekLabel));
+    return Array.from(set).sort().reverse();
+  }, [dash?.qap]);
+
+  const qapRows = useMemo(() => {
+    const rows = dash?.qap || [];
+    if (!weekFilter) return rows;
+    return rows.filter((q: any) => q.weekLabel === weekFilter);
+  }, [dash?.qap, weekFilter]);
 
   async function onUpload(e: FormEvent) {
     e.preventDefault();
@@ -58,7 +92,7 @@ export default function QapPage() {
       fd.append("file", file);
       fd.append("folder", QAP_FOLDER);
       await api(`/api/dms/${id}/upload`, { method: "POST", token, body: fd });
-      setMsg("QAP uploaded to project DMS (Quality Plans folder).");
+      setMsg("QAP file saved to DMS. Re-seed or add rows below to sync activity lines.");
       setFile(null);
       await load();
     } catch (err) {
@@ -71,15 +105,16 @@ export default function QapPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Quality · QAP"
+        eyebrow="Quality module"
         title="Quality Assurance Plan"
-        subtitle="Upload and update the project QAP (client Week-50 sheet). Keep the latest plan visible for Office, Site, and Client."
+        subtitle="Full QAP register — same layout as Week 50 / Detail Excel. Edit contractor, PMC & client sign-offs, remarks, and status per line."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Badge tone="ok">Always available</Badge>
-            <Link to={`/projects/${id}/quality/checklist-master`}>
+            <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} open</Badge>
+            <Badge tone="ok">{dash?.totals?.qapDone ?? 0} done</Badge>
+            <Link to={`/projects/${id}/inspections`}>
               <Button type="button" variant="secondary">
-                Checklist master →
+                Quality dashboard →
               </Button>
             </Link>
           </div>
@@ -88,12 +123,104 @@ export default function QapPage() {
 
       {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
+      {weeks.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center text-sm">
+          <span className="text-steel-muted font-semibold">Week / plan:</span>
+          <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]">
+            <option value="">All weeks</option>
+            {weeks.map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      <QapDetailRegister
+        projectId={id!}
+        token={token}
+        rows={qapRows}
+        canEdit={canManage}
+        onUpdated={load}
+        showWeekFilter={false}
+      />
+
+      {canManage && (
+        <Card>
+          <h3 className="font-semibold mb-3">Add QAP line</h3>
+          <form
+            className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await api(`/api/checklist/project/${id}/qap`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify({
+                    weekLabel: addForm.weekLabel,
+                    section: addForm.section,
+                    activity: addForm.section,
+                    description: addForm.description,
+                    discipline: addForm.section,
+                    frequency: addForm.frequency,
+                    codeOfConformance: addForm.codeOfConformance,
+                    testAgency: addForm.testAgency,
+                  }),
+                });
+                setAddForm({ ...addForm, section: "", description: "", frequency: "", codeOfConformance: "", testAgency: "" });
+                setMsg("QAP line added");
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Failed");
+              }
+            }}
+          >
+            <Input
+              placeholder="Week (e.g. W50)"
+              value={addForm.weekLabel}
+              onChange={(e) => setAddForm({ ...addForm, weekLabel: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Activity section (e.g. Site Survey)"
+              value={addForm.section}
+              onChange={(e) => setAddForm({ ...addForm, section: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Description / material"
+              value={addForm.description}
+              onChange={(e) => setAddForm({ ...addForm, description: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Frequency of check"
+              value={addForm.frequency}
+              onChange={(e) => setAddForm({ ...addForm, frequency: e.target.value })}
+            />
+            <Input
+              placeholder="Code of conformance"
+              value={addForm.codeOfConformance}
+              onChange={(e) => setAddForm({ ...addForm, codeOfConformance: e.target.value })}
+            />
+            <Input
+              placeholder="Test agency"
+              value={addForm.testAgency}
+              onChange={(e) => setAddForm({ ...addForm, testAgency: e.target.value })}
+            />
+            <Button type="submit" className="sm:col-span-2 lg:col-span-3 sm:w-auto">
+              Add to QAP
+            </Button>
+          </form>
+        </Card>
+      )}
+
       {canUpload && (
         <Card>
-          <h3 className="font-semibold mb-2">Upload / update QAP</h3>
+          <h3 className="font-semibold mb-2">Upload master QAP file</h3>
           <p className="text-sm text-steel-muted mb-3">
-            Saves to DMS folder <code className="text-xs">{QAP_FOLDER.split("/").pop()}</code>. Accepts Excel or PDF from
-            the shared Quality Assurance Plan pack.
+            Saves to DMS <code className="text-xs">{QAP_FOLDER.split("/").pop()}</code> — Week 50 Excel or latest revision PDF.
           </p>
           <form className="flex flex-wrap items-end gap-3" onSubmit={onUpload}>
             <input
@@ -103,14 +230,14 @@ export default function QapPage() {
               className="text-sm"
             />
             <Button type="submit" disabled={!file || busy}>
-              {busy ? "Uploading…" : "Save QAP"}
+              {busy ? "Uploading…" : "Save to DMS"}
             </Button>
           </form>
         </Card>
       )}
 
       <Card>
-        <h3 className="font-semibold mb-3">Current QAP files</h3>
+        <h3 className="font-semibold mb-3">QAP files on DMS</h3>
         <ul className="divide-y divide-line text-sm">
           {docs.map((d) => (
             <li key={d.path || d.name} className="py-2 flex justify-between gap-2">
@@ -120,9 +247,9 @@ export default function QapPage() {
           ))}
           {!docs.length && (
             <li className="py-6 text-steel-muted">
-              No QAP on file yet — upload the Week-50 Quality Assurance Plan Excel (or latest revision).{" "}
+              No QAP file on DMS yet — upload Week 50 Excel above or{" "}
               <Link to={`/projects/${id}/dms`} className="text-brand font-semibold">
-                Open DMS →
+                open DMS →
               </Link>
             </li>
           )}

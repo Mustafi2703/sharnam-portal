@@ -1029,7 +1029,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       where: { assignment: { projectId, template: { checklistType: "SiteExecution" } } },
     }),
     prisma.qualityInspection.count({ where: { projectId, status: { in: ["Open", "Failed", "Rework"] } } }),
-    prisma.qapActivity.findMany({ where: { projectId }, orderBy: { weekLabel: "desc" }, take: 40 }),
+    prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }], take: 500 }),
     prisma.rfi.count({
       where: { projectId, status: "Open", rfiKind: { in: ["QualityInspection", "DrawingChecklist"] } },
     }),
@@ -1175,8 +1175,13 @@ checklistRouter.post(
       data: {
         projectId: req.params.projectId,
         weekLabel: String(body.weekLabel || `W${Math.ceil((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000)}`),
-        activity: String(body.activity || "QC activity"),
-        discipline: body.discipline || null,
+        section: body.section ? String(body.section) : body.activity ? String(body.activity) : null,
+        activity: String(body.activity || body.section || "QC activity"),
+        description: body.description ? String(body.description) : body.discipline ? String(body.discipline) : null,
+        discipline: body.discipline || body.section || null,
+        frequency: body.frequency ? String(body.frequency) : null,
+        codeOfConformance: body.codeOfConformance ? String(body.codeOfConformance) : null,
+        testAgency: body.testAgency ? String(body.testAgency) : null,
         contractorOk: Boolean(body.contractorOk),
         pmcOk: Boolean(body.pmcOk),
         clientOk: Boolean(body.clientOk),
@@ -1185,6 +1190,39 @@ checklistRouter.post(
       },
     });
     res.status(201).json(row);
+  }
+);
+
+checklistRouter.patch(
+  "/project/:projectId/qap/:qapId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    if (body.status != null) data.status = String(body.status);
+    if (body.contractorOk != null) data.contractorOk = Boolean(body.contractorOk);
+    if (body.pmcOk != null) data.pmcOk = Boolean(body.pmcOk);
+    if (body.clientOk != null) data.clientOk = Boolean(body.clientOk);
+    if (body.activity != null) data.activity = String(body.activity);
+    if (body.section != null) data.section = String(body.section);
+    if (body.description != null) data.description = String(body.description);
+    if (body.discipline != null) data.discipline = String(body.discipline);
+    if (body.frequency != null) data.frequency = String(body.frequency);
+    if (body.codeOfConformance != null) data.codeOfConformance = String(body.codeOfConformance);
+    if (body.testAgency != null) data.testAgency = String(body.testAgency);
+    if (body.contractorPerformer != null) data.contractorPerformer = String(body.contractorPerformer);
+    if (body.contractorChecker != null) data.contractorChecker = String(body.contractorChecker);
+    if (body.pmcRole != null) data.pmcRole = String(body.pmcRole);
+    if (body.clientRole != null) data.clientRole = String(body.clientRole);
+    if (body.records != null) data.records = String(body.records);
+    if (body.remarks != null) data.remarks = String(body.remarks);
+    if (body.status === "Done" || body.completedAt) data.completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
+    if (body.status === "Open") data.completedAt = null;
+    const row = await prisma.qapActivity.update({
+      where: { id: req.params.qapId },
+      data,
+    });
+    res.json(row);
   }
 );
 

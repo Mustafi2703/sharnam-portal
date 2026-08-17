@@ -150,11 +150,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Cube Test · SPDC Cube Register",
     },
     {
-      to: "inspections",
-      label: "QAP Detail",
-      query: "sheet=qap-detail",
-      blurb: "Quality Assurance Plan detail sheet.",
-      sheet: "Quality Assurance Plan - Detail",
+      to: "qap",
+      label: "Quality Assurance Plan",
+      roles: ["admin", "office", "employee", "client", "site_employee"],
+      blurb: "Full QAP sheet — activity sections, sign-offs, Week 50 upload.",
+      sheet: "Quality Assurance Plan Week 50 · Detail",
     },
     {
       to: "inspections",
@@ -174,18 +174,10 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Quality checklist fills — branded download.",
     },
     {
-      to: "qap",
-      label: "Quality Assurance Plan",
-      roles: ["admin", "office", "employee", "client", "site_employee"],
-      blurb: "Upload and update the QAP (Week-50 sheet style).",
-      sheet: "Quality Assurance Plan Week 50",
-    },
-    { to: "checklist", label: "Site checklists", blurb: "Assign and fill site execution forms.", sheet: "Final Index" },
-    {
       to: "rfis",
       label: "Request QI fill",
       query: "kind=QualityInspection",
-      blurb: "Notify matrix / vendor to complete QI checklist.",
+      blurb: "Notify assignee / vendor to complete a QI checklist.",
     },
   ],
   safety: [

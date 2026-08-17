@@ -4,7 +4,7 @@
 **Portal (live):** https://portal.spdc.in  
 **Demo project:** SPDC-DEMO-01 — Sharnam Demo Dormitory Project  
 **Document version:** August 2026 · Rev 01  
-**Purpose:** One shared document for client testing — log changes live, tick sign-off, track sessions.
+**Purpose:** One shared document for client testing — **features + UAT steps per page**, **meeting change stakes** (blank until session), sign-off.
 
 ---
 
@@ -12,13 +12,20 @@
 
 1. Open **Google Drive** → create folder: `Sharnam Portal — Client UAT`.
 2. **Upload this file** (`.md`) or **copy all text** into a new Google Doc.
-   - Google Drive: **New → File upload** → select this file → open with Google Docs (or paste into blank Doc).
 3. Rename the Doc: **Sharnam Portal — Live UAT Workbook**.
 4. **Share** with SPDC leads and module owners → role **Editor** (so they can type during meetings).
 5. Keep **one live copy** — do not email PDFs back and forth; edit this Doc only.
-6. After each session: add rows to **Section 2 (Change log)** and tick **Section 4 (Sign-off)** when a page passes.
 
-**Tip:** Pin the Doc in Drive. Use **Table → Insert row** below existing rows when the change log fills up.
+**During the meeting (tomorrow and each session):**
+
+- Walk each **page** in Section 5 (Drawings) or Section 6 (other modules).
+- **Do not** edit the feature / test steps — those describe what is built today.
+- **Do** add rows under **Meeting changes** on each page you review (blank stakes — fill live).
+- Dev team updates **Dev status** → client ticks **Re-test** → tick **Sign-off** when page passes.
+
+**After the meeting:** Dev builds from page stakes; optional copy to Section 2 for one backlog view.
+
+**Tip:** Pin the Doc in Drive. Use **Table → Insert row** when a page stake fills up.
 
 ---
 
@@ -43,29 +50,24 @@
 
 ---
 
-## Section 2 — Live change log (edit every session)
+## Section 2 — Session backlog (optional — copy from page stakes)
 
-Add a **new row at the top** after each meeting. Dev team marks **Status** when built.
+After each meeting, optionally copy items from **per-page Meeting changes** (Section 5 / 6) here for one dev view. **Do not** use this section as the only place to log — log on each page first.
 
-| Date | Module / page | Raised by | Change requested | Priority | Owner | Status | Re-test date |
-|------|---------------|-----------|------------------|----------|-------|--------|--------------|
-| 2026-08-17 | Drawings · GFC | Client | Many file updates per revision; no duplicate R2 rows | P1 | Dev | Done | |
-| 2026-08-17 | Drawings · Register | Client | Master + Site registers from workbook; signatures on upload | P1 | Dev | Done | |
-| 2026-08-17 | Drawings · Register | Client | Remove redundant Client register tab | P2 | Dev | Done | |
-| 2026-08-17 | Drawings · Checklist log | Client | No Site / Quality / Safety tabs inside Drawings module | P2 | Dev | Done | |
-| 2026-08-17 | Drawings · GFC vs Master | Client | Separate GFC upload from master DCI schedule; master filters by package | P1 | Dev | Done | |
-| | | | | P1 / P2 / P3 | | Open / In progress / Done / Won't fix / Deferred | |
-| | | | | | | | |
-| | | | | | | | |
+| Date | Module / page | Raised by | Change requested | Priority | Owner | Dev status | Re-test |
+|------|---------------|-----------|------------------|----------|-------|------------|---------|
+| | | | | P1 / P2 / P3 | | Open | ☐ |
+| | | | | | | | ☐ |
+| | | | | | | | ☐ |
 
 **Status meanings**
 
-| Status | Meaning |
-|--------|---------|
-| Open | Agreed — not started |
+| Dev status | Meaning |
+|------------|---------|
+| Open | Logged in meeting — not started |
 | In progress | Development working |
 | Done | Deployed — please re-test |
-| Won't fix | Out of scope (note reason in Change column) |
+| Won't fix | Out of scope (note reason) |
 | Deferred | Phase 2 / after go-live |
 
 ---
@@ -140,6 +142,14 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 | 6 | **Replace PDF** on same revision | Same row updates — not a second R3 line | ☐ |
 | 7 | **Export GFC CSV** | R0–Rn columns match screen | ☐ |
 
+**Meeting changes — GFC register** *(fill during session)*
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+| 3 | | | Open | ☐ |
+
 ### 5.3 Master register — step-by-step test
 
 | Step | Action | Expected result | Pass |
@@ -150,6 +160,14 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 | 4 | Find **AR-101** | Package, Building, Rev, Planned, Actual, Delay, Issued to, Copies, Critical | ☐ |
 | 5 | After GFC upload on AR-101 | Row updates rev / dates / copies / **GFC link = Linked** | ☐ |
 
+**Meeting changes — Master register** *(fill during session)*
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+| 3 | | | Open | ☐ |
+
 ### 5.4 Site register — step-by-step test
 
 **Pending client decision:** Receive/issue dates and contractor/client signatures are **optional** on GFC upload until you confirm whether any fields should be mandatory.
@@ -159,7 +177,15 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 | 1 | Open **Site register** | Matrix: rows = receive/issue details; columns = R0–R6 | ☐ |
 | 2 | After optional signature upload on AR-101 | Revision column shows dates, copies, **signature image** | ☐ |
 | 3 | Compare with GFC **Log** block | Same dates and signatures when block was filled | ☐ |
-| 4 | **Client decision** — record choice | Optional vs mandatory fields (see 5.6) | ☐ |
+| 4 | **Client decision** — record choice | Optional vs mandatory receive/issue fields | ☐ |
+
+**Meeting changes — Site register** *(fill during session)*
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+| 3 | | | Open | ☐ |
 
 ### 5.5 Drawing checklist (Drawings module only)
 
@@ -169,19 +195,47 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 | 2 | **Checklist fill log** | Drawing fills only — **no** Site / Quality / Safety filter pills | ☐ |
 | 3 | New revision upload | Checklist required before new rev; not required for same-rev update | ☐ |
 
-### 5.6 Drawings — issues / changes (add rows during testing)
+**Meeting changes — Checklist manager / fill log** *(fill during session)*
 
-| Date | Page | Issue or change | Pass after fix |
-|------|------|-----------------|:--------------:|
-| 2026-08-17 | GFC / Site register | Keep receive/issue + signatures **optional** until client confirms workflow | ☐ |
-| | GFC register | | ☐ |
-| | Master register | | ☐ |
-| | Site register | | ☐ |
-| | Checklist | | ☐ |
-| | Design coordination | | ☐ |
-| | | | ☐ |
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+| 3 | | | Open | ☐ |
 
-### 5.7 Drawings — client sign-off
+### 5.6 Design coordination
+
+| Feature | Notes |
+|---------|-------|
+| Log clash / design issue | Discipline, location, linked GFC drawing |
+| PDF preview | When GFC PDF uploaded for linked drawing |
+| Close / Reopen | Issue status workflow |
+| Escalate to Ask RFI | Pre-fills RFI from issue |
+
+**Meeting changes — Design coordination** *(fill during session)*
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+| 3 | | | Open | ☐ |
+
+### 5.7 Register dashboard & Drawing files
+
+| Page | Features |
+|------|----------|
+| Register dashboard | Week KPIs · pie charts by discipline / type / critical |
+| Drawing files | SharePoint ISO 04.02 folder browse |
+
+**Meeting changes — Dashboard / Drawing files** *(fill during session)*
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+| 3 | | | Open | ☐ |
+
+### 5.8 Drawings — client sign-off
 
 | Page | Approved | Name | Date | Comments |
 |------|:--------:|------|------|----------|
@@ -197,7 +251,7 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 
 ## Section 6 — Other modules (summary checklist)
 
-Use one row per issue during your session. Detail is in internal module docs if needed.
+For each module session: run the tests, then fill **Meeting changes** rows (do not pre-fill dev history).
 
 ### Documents (DMS)
 
@@ -207,6 +261,13 @@ Use one row per issue during your session. Detail is in internal module docs if 
 | Upload PDF — opens in viewer | ☐ | |
 | Matrix party sees granted folder | ☐ | |
 
+**Meeting changes — DMS**
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+
 ### Quality
 
 | Test | Pass | Notes |
@@ -215,12 +276,26 @@ Use one row per issue during your session. Detail is in internal module docs if 
 | SOR Log tab | ☐ | |
 | QI checklist fill + evidence | ☐ | |
 
+**Meeting changes — Quality**
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+
 ### Safety
 
 | Test | Pass | Notes |
 |------|:----:|-------|
 | Safety dashboard / sheets | ☐ | |
 | Safety checklist (separate from Quality) | ☐ | |
+
+**Meeting changes — Safety**
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
 
 ### Field
 
@@ -229,6 +304,13 @@ Use one row per issue during your session. Detail is in internal module docs if 
 | Site diary | ☐ | |
 | Photos upload → SharePoint | ☐ | |
 | Attendance punch (site login) | ☐ | |
+
+**Meeting changes — Field**
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
 
 ### Comms · Cost · Finance · Reports · Closure
 
@@ -239,6 +321,14 @@ Use one row per issue during your session. Detail is in internal module docs if 
 | Finance | PO / RA shell | ☐ | |
 | Reports | DPR / WPR PDF | ☐ | |
 | Closure | Snaglist register | ☐ | |
+
+**Meeting changes — Comms / Cost / Finance / Reports / Closure**
+
+| # | Module | Change / issue | Priority | Dev status | Re-test |
+|---|--------|----------------|----------|------------|---------|
+| 1 | | | P1/P2/P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
 
 ---
 
@@ -262,7 +352,7 @@ Use one row per issue during your session. Detail is in internal module docs if 
 | SPDC IT | | | |
 | Sharnam / Dev team | | | |
 
-**Go-live recommendation:** ☐ Approved for pilot  ☐ Approved with conditions  ☐ Not yet — list blockers in Section 2
+**Go-live recommendation:** ☐ Approved for pilot  ☐ Approved with conditions  ☐ Not yet — list blockers in **page Meeting changes** stakes (Section 5 / 6)
 
 **Conditions / blockers (if any):**
 

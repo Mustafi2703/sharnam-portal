@@ -1525,18 +1525,31 @@ model SafetyRecord {
  * Weekly QAP activity row for Quality dashboard
  */
 model QapActivity {
-  id           String    @id @default(cuid())
-  projectId    String
-  weekLabel    String
-  activity     String
-  discipline   String?
-  contractorOk Boolean   @default(false)
-  pmcOk        Boolean   @default(false)
-  clientOk     Boolean   @default(false)
-  status       String    @default("Open")
-  dueDate      DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  projectId           String
+  weekLabel           String
+  srNo                String?
+  /// Activity group (e.g. Site Survey, Reinforcement)
+  section             String?
+  activity            String
+  description         String?
+  frequency           String?
+  codeOfConformance   String?
+  testAgency          String?
+  contractorPerformer String?
+  contractorChecker   String?
+  discipline          String?
+  contractorOk        Boolean   @default(false)
+  pmcOk               Boolean   @default(false)
+  clientOk            Boolean   @default(false)
+  pmcRole             String?
+  clientRole          String?
+  records             String?
+  remarks             String?
+  status              String    @default("Open")
+  dueDate             DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

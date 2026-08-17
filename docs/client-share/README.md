@@ -25,8 +25,8 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 
 1. Upload **[12-Live-Client-UAT-Workbook.md](./12-Live-Client-UAT-Workbook.md)** to Google Drive → open as Google Doc (or paste into a new Doc).
 2. Share with SPDC leads as **Editor**.
-3. During each module session: add rows to the **change log**, tick **sign-off** tables, note issues in **Drawings** section (Section 5).
-4. Dev team marks changes **Done** in the same Doc after deploy; client re-tests and ticks **Pass**.
+3. During each module session: walk **features + test steps**; add rows only under **Meeting changes** on each page; tick **sign-off** when page passes.
+4. Dev team marks **Dev status** on page stakes after deploy; client re-tests and ticks **Re-test**.
 
 ---
 

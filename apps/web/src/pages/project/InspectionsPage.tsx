@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
-import { QUALITY_SHEET_VIEWS, qualitySheetFromParams } from "../../lib/qualitySheetViews";
+import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams } from "../../lib/qualitySheetViews";
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sheetView = qualitySheetFromParams(searchParams);
   const sheetKey = sheetView.key;
@@ -19,7 +20,6 @@ export default function InspectionsPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
-  const [qapForm, setQapForm] = useState({ weekLabel: "", activity: "", discipline: "" });
   const [ncrForm, setNcrForm] = useState({
     kind: "NCR" as "NCR" | "CAR",
     number: "",
@@ -63,10 +63,20 @@ export default function InspectionsPage() {
   };
 
   useEffect(() => {
+    if (qualityLegacyQapRedirect(searchParams) && id) {
+      navigate(`/projects/${id}/qap`, { replace: true });
+    }
+  }, [searchParams, id, navigate]);
+
+  useEffect(() => {
     void load();
   }, [id, token]);
 
   const selected = data?.inspections?.find((i: any) => i.id === active);
+  const canFillSelected =
+    !!selected &&
+    selected.status !== "Closed" &&
+    (canManage || selected.assignedToId === user?.id || selected.assignedTo?.id === user?.id);
   const pageTitle = sheetView.label;
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
@@ -82,14 +92,18 @@ export default function InspectionsPage() {
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1">
         <div className="flex flex-wrap gap-1.5">
           <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
-          <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
-          <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
+          <Link to={`/projects/${id}/qap`}>
+            <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
+          </Link>
+          <Link to={`/projects/${id}/qap`}>
+            <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
+          </Link>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
           <Link to={`/projects/${id}/quality/checklist-master`}>Checklist master →</Link>
           <Link to={`/projects/${id}/quality/checklist-logs`}>QI fill log →</Link>
           <Link to={`/projects/${id}/rfis?kind=QualityInspection`}>Request QI fill →</Link>
-          <Link to={`/projects/${id}/safety`}>Safety →</Link>
+          <Link to={`/projects/${id}/qap`}>Quality Assurance Plan →</Link>
         </div>
       </div>
 
@@ -114,16 +128,25 @@ export default function InspectionsPage() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
-              ["Cubes (pass)", `${dash.totals.cubesPass ?? 0}/${dash.totals.cubes ?? 0}`],
-              ["Open fill RFIs", dash.totals.openFillRfis],
-              ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`],
-              ["Site execution fills", dash.totals.siteExecutionFills ?? 0],
-            ].map(([l, v]) => (
-              <Card key={l as string} className="!p-4">
-                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                <div className="text-2xl font-display mt-1">{v as string | number}</div>
-              </Card>
-            ))}
+              ["Cubes (pass)", `${dash.totals.cubesPass ?? 0}/${dash.totals.cubes ?? 0}`, null],
+              ["Open fill RFIs", dash.totals.openFillRfis, null],
+              ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`, `/projects/${id}/qap`],
+              ["Site execution fills", dash.totals.siteExecutionFills ?? 0, null],
+            ].map(([l, v, href]) =>
+              href ? (
+                <Link key={l as string} to={href} className="block">
+                  <Card className="!p-4 hover:border-brand/40 transition-colors">
+                    <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                    <div className="text-2xl font-display mt-1">{v as string | number}</div>
+                  </Card>
+                </Link>
+              ) : (
+                <Card key={l as string} className="!p-4">
+                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                  <div className="text-2xl font-display mt-1">{v as string | number}</div>
+                </Card>
+              )
+            )}
           </div>
           <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
@@ -201,18 +224,23 @@ export default function InspectionsPage() {
             </ul>
           </Card>
           <Card>
-            <h3 className="font-semibold mb-3 text-left">Checklist catalog (Sheet1)</h3>
+            <h3 className="font-semibold mb-3 text-left">Checklist catalog (Sheet1 — quality types)</h3>
+            <p className="text-xs text-steel-muted mb-2">
+              All checklist file names from Quality Dashboard — seed into Checklist master to add line items & min. photos per type.
+            </p>
             <div className="max-h-[24rem] overflow-y-auto text-sm space-y-1">
-              {(dash.workbook.checklistCatalog || []).slice(0, 30).map((r: any) => (
-                <div key={r.srNo} className="border-b border-line/40 pb-1">
-                  <span className="font-mono text-xs text-brand mr-2">{r.srNo}</span>
-                  {r.name}
-                  <span className="text-steel-muted text-xs ml-2">· {r.category}</span>
+              {(dash.workbook.checklistCatalog || []).map((r: any) => (
+                <div key={r.srNo} className="border-b border-line/40 pb-1 flex justify-between gap-2">
+                  <span>
+                    <span className="font-mono text-xs text-brand mr-2">{r.srNo}</span>
+                    {r.name}
+                    <span className="text-steel-muted text-xs ml-2">· {r.category}</span>
+                  </span>
                 </div>
               ))}
             </div>
             <Link to={`/projects/${id}/quality/checklist-master`} className="inline-block mt-3 text-sm font-semibold text-brand">
-              Manage / add checklist line items →
+              Open checklist master — create / upload line items →
             </Link>
           </Card>
         </div>
@@ -385,86 +413,6 @@ export default function InspectionsPage() {
         </Card>
       )}
 
-      {sheetKey === "qap-detail" && dash?.qap?.length > 0 && (
-        <Card>
-          <h3 className="font-semibold mb-3">Quality Assurance Plan · Detail</h3>
-          <div className="sheet-register overflow-x-auto">
-            <table className="sheet-register__table min-w-[40rem] w-full">
-              <thead>
-                <tr>
-                  <th className="text-left">Week</th>
-                  <th className="text-left">Activity</th>
-                  <th className="text-left">Discipline</th>
-                  <th className="text-left">Ctr / PMC / Client</th>
-                  <th className="text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dash.qap.slice(0, 12).map((q: any) => (
-                  <tr key={q.id}>
-                    <td className="text-left font-mono text-xs">{q.weekLabel}</td>
-                    <td className="text-left">{q.activity}</td>
-                    <td className="text-left text-steel-muted">{q.discipline || "—"}</td>
-                    <td className="text-left text-xs">
-                      {q.contractorOk ? "✓" : "·"} / {q.pmcOk ? "✓" : "·"} / {q.clientOk ? "✓" : "·"}
-                    </td>
-                    <td className="text-left">
-                      <Badge tone={q.status === "Done" || q.completedAt ? "ok" : "warn"}>{q.status}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {sheetKey === "qap-detail" && canManage && (
-        <Card>
-          <h3 className="font-semibold mb-3">Add QAP activity</h3>
-          <form
-            className="grid sm:grid-cols-4 gap-3"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                await api(`/api/checklist/project/${id}/qap`, {
-                  method: "POST",
-                  token,
-                  body: JSON.stringify(qapForm),
-                });
-                setQapForm({ weekLabel: "", activity: "", discipline: "" });
-                setMsg("QAP row added");
-                await load();
-              } catch (err) {
-                setMsg(err instanceof Error ? err.message : "Failed");
-              }
-            }}
-          >
-            <Input
-              placeholder="Week label (e.g. W50)"
-              value={qapForm.weekLabel}
-              onChange={(e) => setQapForm({ ...qapForm, weekLabel: e.target.value })}
-              required
-            />
-            <Input
-              className="sm:col-span-2"
-              placeholder="Activity"
-              value={qapForm.activity}
-              onChange={(e) => setQapForm({ ...qapForm, activity: e.target.value })}
-              required
-            />
-            <Input
-              placeholder="Discipline"
-              value={qapForm.discipline}
-              onChange={(e) => setQapForm({ ...qapForm, discipline: e.target.value })}
-            />
-            <Button type="submit" className="sm:col-span-4 sm:w-auto">
-              Add to QAP
-            </Button>
-          </form>
-        </Card>
-      )}
-
       {sheetKey === "qi" && (
         <>
       <WorkflowStrip
@@ -491,7 +439,6 @@ export default function InspectionsPage() {
                   token,
                   body: JSON.stringify({
                     title: form.title,
-                    linkedDrawingId: form.drawingId || null,
                     inspectionType: form.inspectionType,
                     checklistTemplateId: form.checklistTemplateId || null,
                     assignedToId: form.assignedToId || null,
@@ -531,14 +478,6 @@ export default function InspectionsPage() {
                 </option>
               ))}
             </Select>
-            <Select value={form.drawingId} onChange={(e) => setForm({ ...form, drawingId: e.target.value })}>
-              <option value="">Published drawing</option>
-              {drawings.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.drawingNumber} — {d.title}
-                </option>
-              ))}
-            </Select>
             <Select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>
               <option value="">Assignee</option>
               {users.map((u) => (
@@ -573,7 +512,7 @@ export default function InspectionsPage() {
                   <Badge tone={i.status === "Ready" || i.status === "Closed" ? "ok" : "warn"}>{i.status}</Badge>
                 </div>
                 <div className="text-[11px] text-steel-muted mt-1">
-                  {i.drawing?.drawingNumber || "No drawing"} · {i.assignedTo?.fullName || "Unassigned"} · {i.items?.length || 0} lines
+                  {i.location || "Site"} · {i.assignedTo?.fullName || "Unassigned"} · {i.items?.length || 0} lines
                 </div>
               </button>
             ))}
@@ -590,10 +529,11 @@ export default function InspectionsPage() {
                 <div className="flex flex-wrap gap-2 mt-2">
                   <Badge>{selected.status}</Badge>
                   <Badge tone="neutral">{selected.inspectionType}</Badge>
-                  {selected.drawing && <Badge tone="brand">{selected.drawing.drawingNumber}</Badge>}
+                  {selected.location && <Badge tone="brand">{selected.location}</Badge>}
                 </div>
                 <p className="text-sm text-steel-muted mt-2">
                   Assignee: {selected.assignedTo?.fullName || "—"} · By {selected.createdBy?.fullName}
+                  {canFillSelected && !canManage ? " · You can fill this checklist" : ""}
                 </p>
               </div>
 
@@ -667,7 +607,8 @@ export default function InspectionsPage() {
                         <div className="flex flex-wrap justify-between gap-2">
                           <span className="font-medium">{it.description}</span>
                           <div className="flex gap-1">
-                            {["Pass", "Fail", "N/A", "Open"].map((st) => (
+                            {canFillSelected &&
+                              ["Pass", "Fail", "N/A", "Open"].map((st) => (
                               <button
                                 key={st}
                                 type="button"
@@ -684,13 +625,20 @@ export default function InspectionsPage() {
                                 {st}
                               </button>
                             ))}
+                            {!canFillSelected && (
+                              <Badge tone={it.status === "Pass" ? "ok" : it.status === "Fail" ? "warn" : "neutral"}>
+                                {it.status}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <TextArea
                           rows={2}
                           placeholder="Comment for this line"
                           defaultValue={it.remarks || ""}
+                          readOnly={!canFillSelected}
                           onBlur={async (e) => {
+                            if (!canFillSelected) return;
                             const remarks = e.target.value;
                             if (remarks === (it.remarks || "")) return;
                             await api(`/api/inspections/items/${it.id}`, {
@@ -702,6 +650,7 @@ export default function InspectionsPage() {
                           }}
                         />
                         <div className="grid sm:grid-cols-2 gap-2">
+                          {canFillSelected && (
                           <label className="text-[11px] text-steel-muted block">
                             Photos / docs
                             <input
@@ -726,6 +675,7 @@ export default function InspectionsPage() {
                               }}
                             />
                           </label>
+                          )}
                           <div className="text-[11px] text-steel-muted">
                             {attachments.length ? (
                               <ul className="space-y-1">

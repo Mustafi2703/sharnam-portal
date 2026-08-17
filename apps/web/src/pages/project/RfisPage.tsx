@@ -1,17 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
 import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
+import {
+  checklistFamilyForRfiKind,
+  defaultRfiKindForModule,
+  isModuleScopedRfi,
+  rfiKindFromSearch,
+  rfiKindPillsForScope,
+  rfiListKindFilter,
+  rfiModuleScope,
+  rfiPageCopy,
+  type RfiKindFilter,
+} from "../../lib/rfiModuleScope";
 import { getActiveWorkspace } from "../../workspaces";
 
-type RfiKind = "All" | "RequestForInformation" | "DrawingChecklist" | "QualityInspection" | "SafetyChecklist" | "Manual" | "ClientConcern";
+type RfiKind = RfiKindFilter;
 
 export default function RfisPage() {
   const { id } = useParams();
+  const location = useLocation();
   const [search] = useSearchParams();
   const { token, user } = useAuth();
   const [rfis, setRfis] = useState<any[]>([]);
@@ -45,6 +57,7 @@ export default function RfisPage() {
   });
   const [answer, setAnswer] = useState("");
   const [siteAssignments, setSiteAssignments] = useState<any[]>([]);
+  const [drawingAssignments, setDrawingAssignments] = useState<any[]>([]);
   const [qiAssignments, setQiAssignments] = useState<any[]>([]);
   const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
   const createFormRef = useRef<HTMLDivElement>(null);
@@ -54,12 +67,20 @@ export default function RfisPage() {
   const canRespond = matrixCanRespond;
   const canClose = matrixCanRespond;
 
+  const moduleScope = rfiModuleScope(location.pathname, location.search);
+  const moduleScoped = isModuleScopedRfi(moduleScope);
+  const pageCopy = rfiPageCopy(moduleScope, kindFilter);
+  const kindPills = rfiKindPillsForScope(moduleScope);
+
   const load = async () => {
-    const [rPayload, u, d, aSite, aQi, aSaf, v] = await Promise.all([
+    const [rPayload, u, d, aSite, aDraw, aQi, aSaf, v] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
+        assignments: [],
+      })),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=DrawingCheck`, { token }).catch(() => ({
         assignments: [],
       })),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=QualityInspection`, { token }).catch(() => ({
@@ -76,6 +97,7 @@ export default function RfisPage() {
     setUsers(u);
     setDrawings(d);
     setSiteAssignments(aSite.assignments || []);
+    setDrawingAssignments(aDraw.assignments || []);
     setQiAssignments(aQi.assignments || []);
     setSafetyAssignments(aSaf.assignments || []);
     setVendors(Array.isArray(v) ? v.map((row: any) => row.vendor || row) : []);
@@ -87,9 +109,32 @@ export default function RfisPage() {
   }, [id, token]);
 
   useEffect(() => {
-    const q = search.get("kind") as RfiKind | null;
-    if (q) setKindFilter(q);
-  }, [search]);
+    const q = rfiKindFromSearch(search);
+    if (q) {
+      setKindFilter(q);
+      return;
+    }
+    const def = defaultRfiKindForModule(moduleScope);
+    if (def) setKindFilter(def);
+  }, [search, moduleScope]);
+
+  useEffect(() => {
+    if (!moduleScoped) return;
+    const locked =
+      moduleScope === "quality"
+        ? "QualityInspection"
+        : moduleScope === "safety"
+          ? "SafetyChecklist"
+          : kindFilter === "RequestForInformation"
+            ? "RequestForInformation"
+            : "DrawingChecklist";
+    setForm((f) => ({
+      ...f,
+      rfiKind: locked,
+      linkedDrawingId: locked === "QualityInspection" ? "" : f.linkedDrawingId,
+    }));
+    if (locked !== "RequestForInformation") setKindFilter(locked as RfiKind);
+  }, [moduleScoped, moduleScope, kindFilter]);
 
   useEffect(() => {
     const subject = search.get("subject");
@@ -132,55 +177,56 @@ export default function RfisPage() {
       ? qiAssignments
       : form.rfiKind === "SafetyChecklist"
         ? safetyAssignments
-        : siteAssignments;
+        : form.rfiKind === "DrawingChecklist"
+          ? drawingAssignments
+          : siteAssignments;
 
   const filtered = useMemo(() => {
     return rfis.filter((r) => {
       const statusOk = statusFilter === "All" || r.status === statusFilter;
       const kind = r.rfiKind || "RequestForInformation";
+      const effectiveKind = rfiListKindFilter(moduleScope, kindFilter);
       const kindOk =
-        kindFilter === "All" ||
-        kind === kindFilter ||
-        (kindFilter === "RequestForInformation" && (kind === "Manual" || kind === "RequestForInformation"));
+        effectiveKind === "All" ||
+        kind === effectiveKind ||
+        (effectiveKind === "RequestForInformation" && (kind === "Manual" || kind === "RequestForInformation"));
       return statusOk && kindOk;
     });
-  }, [rfis, statusFilter, kindFilter]);
+  }, [rfis, statusFilter, kindFilter, moduleScope]);
 
   const selected = rfis.find((r) => r.id === active);
   const selectedProgress = selected ? rfiProgress(selected) : null;
   const composeProgress = rfiComposeProgress(form);
 
+  const fillFamily = checklistFamilyForRfiKind(selected?.rfiKind);
   const fillLink = selected?.linkedAssignmentId
-    ? `/projects/${id}/checklist/fill/${selected.linkedAssignmentId}?family=${
-        selected.rfiKind === "QualityInspection" ? "QualityInspection" : "SiteExecution"
-      }`
+    ? `/projects/${id}/checklist/fill/${selected.linkedAssignmentId}?family=${fillFamily}`
     : selected?.rfiKind === "QualityInspection"
-      ? `/projects/${id}/quality-inspections`
-      : `/projects/${id}/checklist`;
+      ? `/projects/${id}/inspections?sheet=qi`
+      : selected?.rfiKind === "DrawingChecklist"
+        ? `/projects/${id}/drawings/checklist-master`
+        : selected?.rfiKind === "SafetyChecklist"
+          ? `/projects/${id}/safety/checklist-master`
+          : `/projects/${id}/checklist`;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Simple request types"
-        title={isClient ? "Concerns & RFIs" : "Requests"}
-        subtitle={
-          isClient
-            ? "Raise a concern anytime. Matrix parties or office respond and close."
-            : "① Ask (PMC RFI) — clarification. ② Request checklist fill — open the fill form (drawings + docs). ③ Quality Inspection — Procore-style QI is under Quality; use Request QI fill only when needed."
-        }
+        eyebrow={pageCopy.eyebrow}
+        title={isClient ? "Concerns & RFIs" : pageCopy.title}
+        subtitle={isClient ? "Raise a concern anytime. Matrix parties or office respond and close." : pageCopy.subtitle}
       />
 
+      {!isClient && (moduleScoped ? kindPills.length > 1 : true) && (
       <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["All", "All"],
-            ["RequestForInformation", "Ask (PMC)"],
-            ["DrawingChecklist", "Request checklist fill"],
-            ["QualityInspection", "Request QI fill"],
-            ["SafetyChecklist", "Safety checklist fill"],
-            ["ClientConcern", "Client"],
-          ] as [RfiKind, string][]
-        ).map(([k, label]) => (
+        {(moduleScoped ? kindPills : [
+          ["All", "All"],
+          ["RequestForInformation", "Ask (PMC)"],
+          ["DrawingChecklist", "Request checklist fill"],
+          ["QualityInspection", "Request QI fill"],
+          ["SafetyChecklist", "Safety checklist fill"],
+          ["ClientConcern", "Client"],
+        ] as [RfiKind, string][]).map(([k, label]) => (
           <button
             key={k}
             type="button"
@@ -193,6 +239,7 @@ export default function RfisPage() {
           </button>
         ))}
       </div>
+      )}
 
       {canCreate && (
         <div ref={createFormRef}>
@@ -238,12 +285,12 @@ export default function RfisPage() {
               await load();
             }}
           >
-            {!isClient && (
+            {!isClient && !moduleScoped && (
               <Select value={form.rfiKind} onChange={(e) => setForm({ ...form, rfiKind: e.target.value, linkedAssignmentId: "" })}>
                 <option value="RequestForInformation">Ask — Request for Information (PMC)</option>
-                <option value="DrawingChecklist">Request checklist fill (site / drawings)</option>
-                <option value="QualityInspection">Request QI fill (separate from Procore QI form)</option>
-                <option value="SafetyChecklist">Safety checklist fill (attach safety checklist)</option>
+                <option value="DrawingChecklist">Request drawing checklist fill</option>
+                <option value="QualityInspection">Request QI fill (Quality module)</option>
+                <option value="SafetyChecklist">Safety checklist fill (Safety module)</option>
               </Select>
             )}
             <Input required placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
@@ -253,9 +300,15 @@ export default function RfisPage() {
               placeholder={
                 isClient
                   ? "Describe your concern"
-                  : form.rfiKind === "RequestForInformation"
-                    ? "What information do you need?"
-                    : "Ask matrix parties / vendor to open and fill the linked checklist (they can attach drawings, revisions, and docs)."
+                  : form.rfiKind === "QualityInspection"
+                    ? "Describe what the assignee should inspect and any location / grid reference."
+                    : form.rfiKind === "DrawingChecklist"
+                      ? "Ask assignee to fill the linked Drawing Check Master checklist (drawing revision optional)."
+                      : form.rfiKind === "SafetyChecklist"
+                        ? "Describe the safety checklist fill required on site."
+                        : form.rfiKind === "RequestForInformation"
+                          ? "What information do you need?"
+                          : "Ask matrix parties / vendor to open and fill the linked checklist."
               }
               value={form.question}
               onChange={(e) => setForm({ ...form, question: e.target.value })}
@@ -293,32 +346,44 @@ export default function RfisPage() {
                     </option>
                   ))}
                 </Select>
-                <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-                  <option value="">Linked drawing (optional)</option>
-                  {drawings.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.drawingNumber} — {d.title}
-                    </option>
-                  ))}
-                </Select>
+                {!moduleScoped || form.rfiKind === "DrawingChecklist" ? (
+                  <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
+                    <option value="">Linked drawing (optional)</option>
+                    {drawings.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.drawingNumber} — {d.title}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
                 <Input
                   placeholder="Attachment / note"
                   value={form.attachmentNote}
                   onChange={(e) => setForm({ ...form, attachmentNote: e.target.value })}
                 />
+                {!moduleScoped && (
                 <Select value={form.scheduleImpact} onChange={(e) => setForm({ ...form, scheduleImpact: e.target.value })}>
                   {["None", "Low", "Medium", "High"].map((x) => (
                     <option key={x}>{x}</option>
                   ))}
                 </Select>
+                )}
               </div>
             )}
             <p className="text-xs text-steel-muted">
-              {form.rfiKind === "RequestForInformation"
-                ? "PMC Request for Information — matrix parties respond / close."
-                : "Fillers: Communication Matrix parties, assignee, and responsible vendor."}
+              {form.rfiKind === "QualityInspection"
+                ? "Quality QI checklists only — assignee and office can fill. No drawing module link required."
+                : form.rfiKind === "DrawingChecklist"
+                  ? "Drawing Check Master only — use Drawings → Checklist manager. Quality & Safety have separate masters."
+                  : form.rfiKind === "SafetyChecklist"
+                    ? "Safety checklists only — use Safety → Checklist master."
+                    : form.rfiKind === "RequestForInformation"
+                      ? "PMC / drawing clarification — matrix parties respond / close."
+                      : "Fillers: Communication Matrix parties, assignee, and responsible vendor."}
             </p>
-            <Button type="submit">{isClient ? "Submit concern" : "Open RFI"}</Button>
+            <Button type="submit">
+              {isClient ? "Submit concern" : moduleScope === "quality" ? "Request QI fill" : moduleScope === "drawings" && form.rfiKind === "DrawingChecklist" ? "Request checklist fill" : "Open RFI"}
+            </Button>
           </form>
         </Card>
         </div>

@@ -1,4 +1,4 @@
-/** Quality Dashboard.xlsx — sheet tabs for Quality module UI */
+/** Quality Dashboard.xlsx — sheet tabs for Quality module UI (QAP lives at /qap only) */
 import { formatUiText } from "./formatUiText";
 export type QualitySheetKey =
   | ""
@@ -6,7 +6,6 @@ export type QualitySheetKey =
   | "checklist-summary"
   | "car-register"
   | "cube-test"
-  | "qap-detail"
   | "qi";
 
 export const QUALITY_SHEET_VIEWS: {
@@ -44,11 +43,6 @@ export const QUALITY_SHEET_VIEWS: {
     sheet: "Cube Test · SPDC Cube Register",
   },
   {
-    key: "qap-detail",
-    label: "QAP Detail",
-    sheet: "Quality Assurance Plan - Detail",
-  },
-  {
     key: "qi",
     label: "QI & checklist fills",
     sheet: "Procore QI + QI fills → DPR Quality section",
@@ -68,8 +62,13 @@ export function qualitySheetFromParams(searchParams: URLSearchParams): (typeof Q
     return QUALITY_SHEET_VIEWS.find((s) => s.key === "cube-test") || QUALITY_SHEET_VIEWS[0];
   }
   if (legacy === "qi") {
-    return QUALITY_SHEET_VIEWS.find((s) => s.key === "qi") || QUALITY_SHEET_VIEWS[6];
+    return QUALITY_SHEET_VIEWS.find((s) => s.key === "qi") || QUALITY_SHEET_VIEWS[5];
   }
   const key = (searchParams.get("sheet") || "") as QualitySheetKey;
   return QUALITY_SHEET_VIEWS.find((s) => s.key === key) || QUALITY_SHEET_VIEWS[0];
+}
+
+/** Legacy inspections?sheet=qap-detail → project QAP page */
+export function qualityLegacyQapRedirect(searchParams: URLSearchParams): boolean {
+  return searchParams.get("sheet") === "qap-detail";
 }

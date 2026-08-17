@@ -9,6 +9,12 @@
 | **Tool nav tab** | Name in module strip |
 | **Roles** | admin, office, … |
 
+### Features (what this page does)
+
+| Feature | Notes |
+|---------|-------|
+| | |
+
 ### Forms
 
 | Form name | Field | Required | API |
@@ -24,11 +30,13 @@
 ### Key actions
 - 
 
-### Changes during testing
+### Meeting changes (log in session → dev builds → re-test)
 
-| Date | Raised by | Change requested | Decision | Status |
-|------|-----------|------------------|----------|--------|
-| | | | | Open |
+| # | Raised by | Change / issue | Priority | Dev status | Re-test |
+|---|-----------|----------------|----------|------------|---------|
+| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 2 | | | | Open | ☐ |
+| 3 | | | | Open | ☐ |
 
 ### Client sign-off
 - [ ] Page approved for UAT

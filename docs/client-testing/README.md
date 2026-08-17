@@ -1,18 +1,23 @@
 # Client testing & module finalisation pack
 
-Use this folder during **client meetings**, **module walkthroughs**, and **UAT**. Each file maps one portal area: routes, forms, modals, and a **Changes during testing** table per page.
+Use this folder during **client meetings**, **module walkthroughs**, and **UAT**.
+
+| Doc type | What it contains | What it does **not** contain |
+|----------|------------------|------------------------------|
+| **Features per page** | Routes, forms, modals, what the portal does today | Dev history / “Done” change log |
+| **Meeting changes stake** | Blank table under **each page** — fill during the session | Pre-filled dev commits |
 
 ## How to use with Google Docs
 
-**Client-facing (recommended):** Upload **[../client-share/12-Live-Client-UAT-Workbook.md](../client-share/12-Live-Client-UAT-Workbook.md)** to Google Drive → share as **Editor** with SPDC. One live Doc for change log + sign-off + Drawings UAT steps.
+**Client-facing (recommended):** Upload **[../client-share/12-Live-Client-UAT-Workbook.md](../client-share/12-Live-Client-UAT-Workbook.md)** to Google Drive → share as **Editor** with SPDC. Features + UAT steps + **per-page meeting stakes** (Section 5).
 
 **Internal (dev team):**
 
 1. Create a Google Drive folder: `Sharnam Portal — Client UAT`.
-2. Optionally mirror `modules/` files for route-level detail.
-3. Keep **[01-MEETING-CHANGE-LOG.md](./01-MEETING-CHANGE-LOG.md)** in sync with the client workbook **Section 2**.
-4. For each module session, open the matching file under `modules/` and fill the **Changes during testing** tables on the pages you review.
-5. When a change is built, mark **Done** in both the client Doc and meeting log; tick **Client sign-off** on that page.
+2. Open the matching file under `modules/` for route-level **features** detail.
+3. During the meeting: type new rows only in **Meeting changes** tables on the pages you review (see `_MEETING-STAKE.md` for the standard table).
+4. After the meeting: copy page-level stakes into **[01-MEETING-CHANGE-LOG.md](./01-MEETING-CHANGE-LOG.md)** if you want one dev backlog view.
+5. Dev marks **Done** → client **Re-test** tick → **Client sign-off** on that page.
 
 ## Recommended test order
 
@@ -32,11 +37,13 @@ Use this folder during **client meetings**, **module walkthroughs**, and **UAT**
 | 12 | [11-closure](./modules/11-closure.md) | Snag, lessons, closure report |
 | 13 | [12-global-office](./modules/12-global-office.md) | Master, HRMS, CRM, roles |
 
-Full route index: **[00-MASTER-INDEX.md](./00-MASTER-INDEX.md)**
+Full route index: **[00-MASTER-INDEX.md](./00-MASTER-INDEX.md)**  
+Page template: **[_PAGE-TEMPLATE.md](./_PAGE-TEMPLATE.md)** · Meeting stake snippet: **[_MEETING-STAKE.md](./_MEETING-STAKE.md)**
 
 ## Related docs
 
 - Module test checklist (sign-off table): [../client-share/03-Module-Test-Plan.md](../client-share/03-Module-Test-Plan.md)
+- Live UAT workbook (client Doc): [../client-share/12-Live-Client-UAT-Workbook.md](../client-share/12-Live-Client-UAT-Workbook.md)
 - Vendor field spec: [../modules/MODULE_DIRECTORY_VENDORS.md](../modules/MODULE_DIRECTORY_VENDORS.md)
 - Client requirements: [../CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md)
 
