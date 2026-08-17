@@ -164,7 +164,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   }
 
   return (
-    <div className="space-y-6 portal-fill-layout">
+    <div className="space-y-6 min-w-0 portal-fill-layout">
       <PageHeader
         eyebrow={
           effectiveLock === "DrawingCheck"

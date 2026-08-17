@@ -127,7 +127,7 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 min-w-0">
       <PageHero
         title={title}
         subtitle="Every fill logged with line-level data. PMC and client can track % filled and SharePoint evidence links."

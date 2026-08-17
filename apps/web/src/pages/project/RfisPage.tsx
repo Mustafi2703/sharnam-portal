@@ -210,7 +210,7 @@ export default function RfisPage() {
           : `/projects/${id}/checklist`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       <PageHeader
         eyebrow={pageCopy.eyebrow}
         title={isClient ? "Concerns & RFIs" : pageCopy.title}

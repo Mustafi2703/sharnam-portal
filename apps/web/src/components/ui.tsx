@@ -28,7 +28,7 @@ export function PageHero({
       className={`rounded-xl bg-gradient-to-br ${gradients[accent]} p-5 sm:p-6 border border-white/8 relative overflow-hidden mb-5`}
     >
       <div className="absolute inset-x-0 top-0 h-[3px] bg-[var(--wd-accent,var(--color-brand))]" />
-      <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
           {icon ? (
             <span className="mt-0.5 h-10 w-10 shrink-0 rounded-lg grid place-items-center bg-white/10 text-white border border-white/15">
@@ -63,7 +63,7 @@ export function PageHeader({
 }) {
   return (
     <header
-      className={`rise flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between ${dense ? "mb-3" : "mb-8"}`}
+      className={`rise flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${dense ? "mb-3" : "mb-8"}`}
     >
       <div className="flex items-start gap-3 min-w-0 flex-1">
         {icon ? (

@@ -14,7 +14,7 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       <div className="border border-line bg-paper rounded-[var(--ui-radius)] p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <span

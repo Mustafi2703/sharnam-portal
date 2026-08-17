@@ -5,7 +5,7 @@ import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
-import { safetySheetFromParams } from "../../lib/safetySheetViews";
+import { SAFETY_SHEET_VIEWS, safetySheetFromParams } from "../../lib/safetySheetViews";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
@@ -74,7 +74,7 @@ function recordToForm(r: any): SafetyForm {
 
 export default function SafetyPage() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const sheetView = safetySheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const ncrView = sheetKey === "ncr-summary" || sheetKey === "ncr-form" || searchParams.get("view") === "ncr";
@@ -193,30 +193,53 @@ export default function SafetyPage() {
             : TYPES;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 min-w-0">
       <PageHeader
+        dense
         eyebrow="Safety module"
         title={sheetView.label}
         subtitle={`${sheetView.sheet} — seeded from client Safety Dashboard / Safety NCR workbooks.`}
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
-            <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
-            <Badge tone="brand">{filtered.length} in this sheet</Badge>
-            <Badge tone="neutral">{dash?.totals?.checklistFills ?? 0} safety checklist fills</Badge>
-            <ReportExportButtons projectId={id} kind="safety" compact />
-            <Link to={`/projects/${id}/safety/checklist-logs`} className="text-sm font-semibold text-brand">
-              Safety fill log →
-            </Link>
-            <Link to={`/projects/${id}/safety/checklist-master`} className="text-sm font-semibold text-brand">
-              Safety checklist master →
-            </Link>
-            <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-sm font-semibold text-brand">
-              Raise Safety RFI →
-            </Link>
-          </div>
-        }
       />
+
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1">
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
+          <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
+          <Badge tone="brand">{filtered.length} in this sheet</Badge>
+          <Badge tone="neutral">{dash?.totals?.checklistFills ?? 0} safety checklist fills</Badge>
+          <ReportExportButtons projectId={id} kind="safety" compact />
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
+          <Link to={`/projects/${id}/safety/checklist-logs`}>Safety fill log →</Link>
+          <Link to={`/projects/${id}/safety/checklist-master`}>Safety checklist master →</Link>
+          <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`}>Raise Safety RFI →</Link>
+        </div>
+      </div>
+
+      <nav
+        className="module-subnav flex gap-1 border-b border-line pb-3 overflow-x-auto overscroll-x-contain -mx-1 px-1"
+        aria-label="Safety workbook views"
+      >
+        {SAFETY_SHEET_VIEWS.map((s) => (
+          <button
+            key={s.key || "dashboard"}
+            type="button"
+            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
+            className={`shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border whitespace-nowrap ${
+              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
+            }`}
+            title={s.sheet}
+          >
+            {s.label}
+          </button>
+        ))}
+        <Link
+          to={`/projects/${id}/hub/safety`}
+          className="shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted whitespace-nowrap hover:text-ink"
+        >
+          Module hub
+        </Link>
+      </nav>
 
       {sheetView.kpiOnly && dash?.onePager && (
         <Card>
@@ -416,40 +439,42 @@ export default function SafetyPage() {
       )}
 
       {sheetHasRegister && (
-        <Card>
-          <h3 className="font-semibold mb-3">
-            {sheetView.label} register ({sheetView.sheet})
-          </h3>
-          <div className="overflow-x-auto max-h-[28rem]">
-            <table className="w-full text-sm">
+        <Card padding={false}>
+          <div className="px-4 py-3 border-b border-line bg-sand/40">
+            <h3 className="font-semibold text-sm text-left">
+              {sheetView.label} register ({sheetView.sheet})
+            </h3>
+          </div>
+          <div className="sheet-register overflow-x-auto max-h-[28rem]">
+            <table className="sheet-register__table min-w-[48rem] w-full text-sm">
               <thead>
-                <tr className="text-left text-[10px] uppercase text-steel-muted font-mono border-b border-line">
-                  <th className="py-2 pr-3">Ref / title</th>
-                  <th className="py-2 pr-3">Type</th>
-                  <th className="py-2 pr-3">Location</th>
-                  <th className="py-2 pr-3">Category</th>
-                  <th className="py-2 pr-3">Description</th>
-                  <th className="py-2 pr-3">Status</th>
-                  {canEdit && <th className="py-2">Action</th>}
+                <tr>
+                  <th className="text-left">Ref / title</th>
+                  <th className="text-left">Type</th>
+                  <th className="text-left">Location</th>
+                  <th className="text-left">Category</th>
+                  <th className="text-left">Description</th>
+                  <th className="text-left">Status</th>
+                  {canEdit && <th className="text-left">Action</th>}
                 </tr>
               </thead>
               <tbody>
                 {registerRows.map((n) => (
                   <tr
                     key={n.id}
-                    className={`border-b border-line/60 cursor-pointer ${active === n.id ? "bg-brand-soft/40" : ""}`}
+                    className={`cursor-pointer ${active === n.id ? "bg-brand-soft/40" : ""}`}
                     onClick={() => setActive(n.id)}
                   >
-                    <td className="py-2 pr-3 font-mono text-xs">{n.ncrNumber || n.title}</td>
-                    <td className="py-2 pr-3">{n.recordType || "—"}</td>
-                    <td className="py-2 pr-3">{n.location || "—"}</td>
-                    <td className="py-2 pr-3">{n.category || "—"}</td>
-                    <td className="py-2 pr-3 max-w-xs truncate">{n.description || "—"}</td>
-                    <td className="py-2 pr-3">
+                    <td className="text-left font-mono text-xs">{n.ncrNumber || n.title}</td>
+                    <td className="text-left">{n.recordType || "—"}</td>
+                    <td className="text-left">{n.location || "—"}</td>
+                    <td className="text-left">{n.category || "—"}</td>
+                    <td className="text-left max-w-xs truncate">{n.description || "—"}</td>
+                    <td className="text-left">
                       <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
                     </td>
                     {canEdit && (
-                      <td className="py-2" onClick={(e) => e.stopPropagation()}>
+                      <td className="text-left" onClick={(e) => e.stopPropagation()}>
                         {n.status === "Open" ? (
                           <Button
                             type="button"
@@ -476,7 +501,7 @@ export default function SafetyPage() {
                 ))}
                 {!registerRows.length && (
                   <tr>
-                    <td colSpan={canEdit ? 7 : 6} className="py-6 text-steel-muted">
+                    <td colSpan={canEdit ? 7 : 6} className="py-6 text-left text-steel-muted">
                       No rows for this sheet — run seed or add one above.
                     </td>
                   </tr>
