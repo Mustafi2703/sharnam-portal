@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
-import { SiteDrawingRegisterTable } from "../../components/SiteDrawingRegisterTable";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
 import { Badge, Card, PageHeader } from "../../components/ui";
@@ -24,7 +23,6 @@ export default function DrawingRegisterPage() {
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
-  const [gfcDrawings, setGfcDrawings] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState<MasterRegisterForm>(emptyMasterRegisterForm);
   const [filterPackage, setFilterPackage] = useState("All");
@@ -36,14 +34,11 @@ export default function DrawingRegisterPage() {
   const load = async () => {
     const res = await api(`/api/drawings/project/${id}/register-dashboard`, { token });
     setData(res);
-    if (sheetKey === "site") {
-      const gfc = await api<any[]>(`/api/drawings/project/${id}`, { token });
-      setGfcDrawings(Array.isArray(gfc) ? gfc : []);
-    }
   };
 
   useEffect(() => {
-    if (searchParams.get("sheet") === "client" && id) {
+    const sheet = searchParams.get("sheet");
+    if ((sheet === "client" || sheet === "site") && id) {
       navigate(`/projects/${id}/drawings/register?sheet=master`, { replace: true });
     }
   }, [id, searchParams, navigate]);
@@ -89,9 +84,7 @@ export default function DrawingRegisterPage() {
         subtitle={
           sheetKey === "master"
             ? "Master Drawing Register — full DCI schedule from DRAWING REGISTER - 01.xlsx. Add/edit lines here; upload PDF/DWG on GFC register only."
-            : sheetKey === "site"
-              ? "Site Drawing Register — receive & issue matrix R0–R6 with signatures from GFC uploads."
-              : `${sheetView.sheet} — KPIs and charts from client workbook.`
+            : `${sheetView.sheet} — KPIs and charts from client workbook.`
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -163,8 +156,6 @@ export default function DrawingRegisterPage() {
           }}
         />
       )}
-
-      {sheetKey === "site" && <SiteDrawingRegisterTable drawings={gfcDrawings} projectId={id!} />}
 
       {sheetKey === "" && (
         <Card className="text-sm text-steel-muted">

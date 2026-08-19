@@ -28,6 +28,8 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 3. During each module session: walk **features + test steps**; add rows only under **Meeting changes** on each page; tick **sign-off** when page passes.
 4. Dev team marks **Dev status** on page stakes after deploy; client re-tests and ticks **Re-test**.
 
+**Dev team (repo):** Keep module routes and UAT rows in sync with the app using [../client-testing/HOW-TO-MAINTAIN.md](../client-testing/HOW-TO-MAINTAIN.md) and [../client-testing/00-MASTER-INDEX.md](../client-testing/00-MASTER-INDEX.md). When Quality, Drawings, or Safety change, update **03-quality**, **01-drawings**, **04-safety** and the matching rows in doc **12** above.
+
 ---
 
 ## Next step: your server

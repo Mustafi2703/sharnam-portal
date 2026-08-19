@@ -110,6 +110,7 @@ export function latestMarkupByPage(pages: DrawingMarkupPage[] = []) {
 }
 
 type RevisionRecord = {
+  id?: string;
   revisionNumber?: string;
   fileUrl?: string | null;
   fileName?: string | null;

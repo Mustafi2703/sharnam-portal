@@ -201,6 +201,47 @@ export function qapStatusFromRow(row: QapDetailRow): { status: string; contracto
   };
 }
 
+/** Merge workbook SOR summary with live portal site observation / instruction counts */
+export function buildLiveSorLog(
+  workbookRows: SorLogRow[],
+  siteRecords: { recordType: string; status: string }[]
+): SorLogRow[] {
+  const liveByType: Record<string, { total: number; open: number; closed: number }> = {};
+  for (const r of siteRecords) {
+    const key = r.recordType === "Site Instruction" ? "Site Instruction" : "Site Observation";
+    if (!liveByType[key]) liveByType[key] = { total: 0, open: 0, closed: 0 };
+    liveByType[key].total++;
+    if (r.status === "Closed") liveByType[key].closed++;
+    else liveByType[key].open++;
+  }
+
+  const merged = [...workbookRows];
+  for (const [label, counts] of Object.entries(liveByType)) {
+    const idx = merged.findIndex((r) => r.label.toLowerCase().includes(label.toLowerCase().split(" ")[0]!));
+    if (idx >= 0) {
+      merged[idx] = {
+        ...merged[idx],
+        total: merged[idx].total + counts.total,
+        open: merged[idx].open + counts.open,
+        closed: merged[idx].closed + counts.closed,
+        closureRate:
+          merged[idx].total + counts.total
+            ? (merged[idx].closed + counts.closed) / (merged[idx].total + counts.total)
+            : merged[idx].closureRate,
+      };
+    } else {
+      merged.push({
+        label,
+        total: counts.total,
+        open: counts.open,
+        closed: counts.closed,
+        closureRate: counts.total ? counts.closed / counts.total : 0,
+      });
+    }
+  }
+  return merged;
+}
+
 export function loadQualityDashboardWorkbook(): QualityWorkbookData | null {
   const file = resolveQualityDashboardPath();
   if (!file) return null;

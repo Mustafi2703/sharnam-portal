@@ -560,7 +560,7 @@ async function seedChecklistsFromExcel() {
   console.log(`Checklist families — Site: ${siteN}, QI: ${qiN}, DrawingCheck: ${dwN}, Safety: ${safN}`);
 }
 
-async function seedProjectAndCost(users: { id: string; role: string }[]) {
+async function seedProjectAndCost(users: User[]) {
   const project = await prisma.project.upsert({
     where: { code: "SPDC-DEMO-01" },
     create: {

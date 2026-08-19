@@ -55,13 +55,25 @@ Legacy `?sheet=client` redirects to **master** (client columns merged).
 `dms`
 
 ### Quality
-`inspections?sheet=` · `quality/checklist-master` · `quality/checklist-logs` · `qap` · `checklist` · `quality-inspections` · `rfis?kind=QualityInspection`
+`inspections` · `inspections?sheet=sor-log|checklist-summary|car-register|cube-test|qi` · **`qap`** (full QAP sheet — replaces legacy `?sheet=qap-detail`) · `quality/checklist-master` · `quality/checklist-logs` · `rfis?kind=QualityInspection`
+
+> **Not in Quality nav:** Site checklists (Field) · Drawing check (Drawings) · Safety checklists (Safety)
 
 ### Safety
 `safety?sheet=` · `safety/checklist-master` · `safety/checklist-logs` · `rfis?kind=SafetyChecklist`
 
+### Checklist fill (all modules)
+| Family | Master | Logs | Fill URL |
+|--------|--------|------|----------|
+| DrawingCheck | `drawings/checklist-master` | `drawings/checklist-logs` | `?family=DrawingCheck` |
+| QualityInspection | `quality/checklist-master` | `quality/checklist-logs` | `?family=QualityInspection` |
+| Safety | `safety/checklist-master` | `safety/checklist-logs` | `?family=Safety` |
+| SiteExecution | `checklist-master?family=SiteExecution` | field logs | `?family=SiteExecution` |
+
 ### Progress
-`progress?tab=`
+`progress?tab=overview|milestones|planned|monthly|hindrance|risk|legal` · Ready: `scurve|schedule|msproject|procurement`
+
+**Planned vs Actual** (`?tab=planned`) = weekly qty + weekly manpower + RA-month billing from `Planned Vs. Actual Dashboard.xlsx`. **Not** Cost cashflow.
 
 ### Field
 `diary` · `photos` · `site-pilot` · `submittals` · `rfis` (field)

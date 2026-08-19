@@ -5,6 +5,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { buildBrandedChecklistHtml } from "../services/brandedChecklistHtml.js";
+import { buildBrandedChecklistXlsxBuffer } from "../services/brandedChecklistXlsx.js";
 import { attachProgress, computeChecklistProgress, parseResponsesJson } from "../services/checklistProgress.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -522,6 +523,35 @@ checklistRouter.get("/submissions/:id/branded.html", async (req, res) => {
   res.send(html);
 });
 
+/** Branded checklist fill — Excel table (Sharnam header + item grid). */
+checklistRouter.get("/submissions/:id/branded.xlsx", async (req, res) => {
+  const submission = await prisma.checklistSubmission.findUnique({
+    where: { id: req.params.id },
+    include: {
+      assignment: {
+        include: {
+          project: { select: { name: true, code: true } },
+          template: { include: { items: { orderBy: { sortOrder: "asc" } } } },
+        },
+      },
+      submittedBy: { select: { fullName: true, email: true } },
+      drawing: true,
+    },
+  });
+  if (!submission) return res.status(404).json({ error: "Not found" });
+  const buf = buildBrandedChecklistXlsxBuffer(submission, submission.assignment.project);
+  const safeName = (submission.assignment?.template?.name || "checklist")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .slice(0, 40);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${safeName || "checklist"}-${req.params.id.slice(0, 8)}.xlsx"`
+  );
+  res.send(buf);
+});
+
 /** Export project checklist fills for site engineers (shared dual-fill audit) */
 checklistRouter.get("/project/:projectId/submissions", async (req, res) => {
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
@@ -1013,8 +1043,8 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req, re
 /** Quality + Safety module dashboards */
 checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const { loadQualityDashboardWorkbook } = await import("../services/qualityDashboardSheets.js");
-  const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, workbook] = await Promise.all([
+  const { loadQualityDashboardWorkbook, buildLiveSorLog } = await import("../services/qualityDashboardSheets.js");
+  const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, siteRecords, workbook] = await Promise.all([
     prisma.checklistSubmission.findMany({
       where: { assignment: { projectId, template: { checklistType: "QualityInspection" } } },
       include: {
@@ -1034,9 +1064,16 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       where: { projectId, status: "Open", rfiKind: { in: ["QualityInspection", "DrawingChecklist"] } },
     }),
     prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
-    prisma.cubeTest.findMany({ where: { projectId }, orderBy: { castDate: "desc" }, take: 40 }),
+    prisma.cubeTest.findMany({ where: { projectId }, orderBy: { castDate: "desc" }, take: 120 }),
+    prisma.qualitySiteRecord.findMany({
+      where: { projectId },
+      orderBy: { occurredAt: "desc" },
+      include: { reportedBy: { select: { fullName: true } } },
+    }),
     Promise.resolve(loadQualityDashboardWorkbook()),
   ]);
+  const liveSorLog = buildLiveSorLog(workbook?.sorLog || [], siteRecords);
+  const workbookOut = workbook ? { ...workbook, sorLog: liveSorLog } : { sorLog: liveSorLog, checklistByDiscipline: [], checklistCatalog: [], source: "portal" };
   const byDay: Record<string, number> = {};
   for (const f of qiFills) {
     const d = new Date(f.createdAt).toISOString().slice(0, 10);
@@ -1051,7 +1088,8 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       }, {})
     ).map(([label, value]) => ({ label, value }));
   res.json({
-    workbook,
+    workbook: workbookOut,
+    siteRecords,
     totals: {
       fills: qiFills.length,
       siteExecutionFills: siteFills,
@@ -1216,6 +1254,9 @@ checklistRouter.patch(
     if (body.clientRole != null) data.clientRole = String(body.clientRole);
     if (body.records != null) data.records = String(body.records);
     if (body.remarks != null) data.remarks = String(body.remarks);
+    if (body.dailyChecks != null) data.dailyChecks = typeof body.dailyChecks === "string" ? body.dailyChecks : JSON.stringify(body.dailyChecks);
+    if (body.weekLabel != null) data.weekLabel = String(body.weekLabel);
+    if (body.srNo != null) data.srNo = String(body.srNo);
     if (body.status === "Done" || body.completedAt) data.completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
     if (body.status === "Open") data.completedAt = null;
     const row = await prisma.qapActivity.update({
@@ -1277,3 +1318,137 @@ checklistRouter.patch(
     res.json(row);
   }
 );
+
+/** Quality site observation / site instruction — feeds SOR Log */
+checklistRouter.get("/project/:projectId/quality-site-records", async (req, res) => {
+  const type = req.query.type ? String(req.query.type) : undefined;
+  const rows = await prisma.qualitySiteRecord.findMany({
+    where: { projectId: req.params.projectId, ...(type ? { recordType: type } : {}) },
+    orderBy: { occurredAt: "desc" },
+    include: { reportedBy: { select: { fullName: true } } },
+  });
+  res.json(rows);
+});
+
+checklistRouter.post(
+  "/project/:projectId/quality-site-records",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const row = await prisma.qualitySiteRecord.create({
+      data: {
+        projectId: req.params.projectId,
+        recordType: String(body.recordType || "Site Observation"),
+        title: String(body.title || "Site observation"),
+        description: body.description ? String(body.description) : null,
+        location: body.location ? String(body.location) : null,
+        severity: body.severity ? String(body.severity) : null,
+        status: String(body.status || "Open"),
+        issuedTo: body.issuedTo ? String(body.issuedTo) : null,
+        correctiveAction: body.correctiveAction ? String(body.correctiveAction) : null,
+        reportedById: req.user!.id,
+        source: "portal",
+      },
+    });
+    res.status(201).json(row);
+  }
+);
+
+checklistRouter.patch(
+  "/project/:projectId/quality-site-records/:recordId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    for (const k of ["title", "description", "location", "severity", "status", "issuedTo", "correctiveAction", "recordType"] as const) {
+      if (body[k] != null) data[k] = String(body[k]);
+    }
+    const row = await prisma.qualitySiteRecord.update({ where: { id: req.params.recordId }, data });
+    res.json(row);
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/cubes",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const b = req.body || {};
+    const row = await prisma.cubeTest.create({
+      data: {
+        projectId: req.params.projectId,
+        srNo: b.srNo ? String(b.srNo) : null,
+        castDate: b.castDate ? new Date(b.castDate) : null,
+        description: String(b.description || "Cube test"),
+        grade: b.grade ? String(b.grade) : null,
+        cubeWeight: b.cubeWeight != null ? Number(b.cubeWeight) : null,
+        testDate7: b.testDate7 ? new Date(b.testDate7) : null,
+        testDate28: b.testDate28 ? new Date(b.testDate28) : null,
+        load7: b.load7 != null ? Number(b.load7) : null,
+        load28: b.load28 != null ? Number(b.load28) : null,
+        strength7: b.strength7 != null ? Number(b.strength7) : null,
+        strength28: b.strength28 != null ? Number(b.strength28) : null,
+        strength: b.strength7 != null ? Number(b.strength7) : b.strength != null ? Number(b.strength) : null,
+        avgStrength: b.avgStrength != null ? Number(b.avgStrength) : null,
+        result: b.result ? String(b.result) : "Pending",
+        source: "portal",
+      },
+    });
+    res.status(201).json(row);
+  }
+);
+
+checklistRouter.patch(
+  "/project/:projectId/cubes/:cubeId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const b = req.body || {};
+    const data: Record<string, unknown> = {};
+    if (b.srNo != null) data.srNo = String(b.srNo);
+    if (b.description != null) data.description = String(b.description);
+    if (b.grade != null) data.grade = String(b.grade);
+    if (b.result != null) data.result = String(b.result);
+    if (b.castDate !== undefined) data.castDate = b.castDate ? new Date(b.castDate) : null;
+    if (b.testDate7 !== undefined) data.testDate7 = b.testDate7 ? new Date(b.testDate7) : null;
+    if (b.testDate28 !== undefined) data.testDate28 = b.testDate28 ? new Date(b.testDate28) : null;
+    if (b.cubeWeight != null) data.cubeWeight = Number(b.cubeWeight);
+    if (b.load7 != null) data.load7 = Number(b.load7);
+    if (b.load28 != null) data.load28 = Number(b.load28);
+    if (b.strength7 != null) {
+      data.strength7 = Number(b.strength7);
+      data.strength = Number(b.strength7);
+    }
+    if (b.strength28 != null) data.strength28 = Number(b.strength28);
+    if (b.avgStrength != null) data.avgStrength = Number(b.avgStrength);
+    const row = await prisma.cubeTest.update({ where: { id: req.params.cubeId }, data });
+    res.json(row);
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/qap/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer) return res.status(400).json({ error: "Excel file required" });
+    const { importQapWorkbook } = await import("../services/qapImportExport.js");
+    const out = await importQapWorkbook(req.params.projectId, req.file.buffer);
+    res.json(out);
+  }
+);
+
+checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) => {
+  const week = req.query.week ? String(req.query.week) : undefined;
+  const { exportQapWorkbook } = await import("../services/qapImportExport.js");
+  const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="QAP-${weekLabel.replace(/\s+/g, "-")}.xlsx"`);
+  res.send(buffer);
+});
+
+checklistRouter.get("/project/:projectId/qap/download.html", async (req, res) => {
+  const week = req.query.week ? String(req.query.week) : undefined;
+  const { exportQapHtml } = await import("../services/qapImportExport.js");
+  const html = await exportQapHtml(req.params.projectId, week);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});

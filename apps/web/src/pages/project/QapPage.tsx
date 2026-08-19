@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { QapDetailRegister } from "../../components/QapDetailRegister";
@@ -30,6 +31,7 @@ export default function QapPage() {
   });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
   const canManage = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
   const canUpload = ["admin", "office", "site_employee"].includes(user?.role || "");
 
@@ -134,6 +136,65 @@ export default function QapPage() {
               </option>
             ))}
           </Select>
+          {canManage && (
+            <>
+              <input
+                ref={importRef}
+                type="file"
+                accept=".xlsx,.xlsm"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f || !id) return;
+                  setBusy(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append("file", f);
+                    const out = await api<{ imported: number; weekLabel: string }>(
+                      `/api/checklist/project/${id}/qap/import`,
+                      { method: "POST", token, body: fd }
+                    );
+                    setMsg(`Imported ${out.imported} QAP lines for ${out.weekLabel}`);
+                    setWeekFilter(out.weekLabel);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Import failed");
+                  } finally {
+                    setBusy(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+              <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => importRef.current?.click()}>
+                Import Week 50 Excel
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={busy}
+                onClick={async () => {
+                  if (!id) return;
+                  const q = weekFilter ? `?week=${encodeURIComponent(weekFilter)}` : "";
+                  await downloadAuthFile(`/api/checklist/project/${id}/qap/download.xlsx${q}`, token, `QAP-${weekFilter || "export"}.xlsx`);
+                }}
+              >
+                Download Excel
+              </Button>
+              <Button
+                type="button"
+                className="!text-xs"
+                disabled={busy}
+                onClick={async () => {
+                  if (!id) return;
+                  const q = weekFilter ? `?week=${encodeURIComponent(weekFilter)}` : "";
+                  await downloadAuthFile(`/api/checklist/project/${id}/qap/download.html${q}`, token, `QAP-${weekFilter || "export"}.html`);
+                }}
+              >
+                Download PDF (print)
+              </Button>
+            </>
+          )}
         </div>
       )}
 

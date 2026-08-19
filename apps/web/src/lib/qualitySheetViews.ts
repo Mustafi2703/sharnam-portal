@@ -3,6 +3,8 @@ import { formatUiText } from "./formatUiText";
 export type QualitySheetKey =
   | ""
   | "sor-log"
+  | "site-observation"
+  | "site-instruction"
   | "checklist-summary"
   | "car-register"
   | "cube-test"
@@ -27,6 +29,16 @@ export const QUALITY_SHEET_VIEWS: {
     kpiOnly: true,
   },
   {
+    key: "site-observation",
+    label: "Site observation",
+    sheet: "Site Observation — feeds SOR Log",
+  },
+  {
+    key: "site-instruction",
+    label: "Site instruction",
+    sheet: "Site Instruction — feeds SOR Log",
+  },
+  {
     key: "checklist-summary",
     label: "Checklist summary",
     sheet: "Sheet1 / Sheet2",
@@ -40,7 +52,7 @@ export const QUALITY_SHEET_VIEWS: {
   {
     key: "cube-test",
     label: "Cube Test",
-    sheet: "Cube Test · SPDC Cube Register",
+    sheet: "SPDC CUBE REGISTER",
   },
   {
     key: "qi",
@@ -62,7 +74,7 @@ export function qualitySheetFromParams(searchParams: URLSearchParams): (typeof Q
     return QUALITY_SHEET_VIEWS.find((s) => s.key === "cube-test") || QUALITY_SHEET_VIEWS[0];
   }
   if (legacy === "qi") {
-    return QUALITY_SHEET_VIEWS.find((s) => s.key === "qi") || QUALITY_SHEET_VIEWS[5];
+    return QUALITY_SHEET_VIEWS.find((s) => s.key === "qi") || QUALITY_SHEET_VIEWS[7];
   }
   const key = (searchParams.get("sheet") || "") as QualitySheetKey;
   return QUALITY_SHEET_VIEWS.find((s) => s.key === key) || QUALITY_SHEET_VIEWS[0];

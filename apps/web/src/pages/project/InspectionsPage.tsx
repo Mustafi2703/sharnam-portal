@@ -5,6 +5,9 @@ import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
 import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams } from "../../lib/qualitySheetViews";
+import { QualitySiteRegister } from "../../components/QualitySiteRegister";
+import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
+import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
@@ -28,6 +31,16 @@ export default function InspectionsPage() {
     location: "",
     contractor: "",
   });
+  const [ncrEdit, setNcrEdit] = useState<any>(null);
+  const [ncrEditForm, setNcrEditForm] = useState({
+    ncrType: "",
+    description: "",
+    location: "",
+    status: "Open",
+    plannedClosure: "",
+    actualClosure: "",
+  });
+  const [ncrModalBusy, setNcrModalBusy] = useState(false);
   const [form, setForm] = useState({
     title: "Site quality inspection",
     drawingId: "",
@@ -333,7 +346,25 @@ export default function InspectionsPage() {
                       <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
                     </td>
                     {canManage && (
-                      <td className="text-left">
+                      <td className="text-left space-x-1">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!py-1 !px-2 !text-xs"
+                          onClick={() => {
+                            setNcrEdit(n);
+                            setNcrEditForm({
+                              ncrType: n.ncrType || "",
+                              description: n.description || "",
+                              location: n.location || "",
+                              status: n.status || "Open",
+                              plannedClosure: n.plannedClosure ? String(n.plannedClosure).slice(0, 10) : "",
+                              actualClosure: n.actualClosure ? String(n.actualClosure).slice(0, 10) : "",
+                            });
+                          }}
+                        >
+                          Edit
+                        </Button>
                         {n.status === "Open" ? (
                           <Button
                             type="button"
@@ -354,9 +385,7 @@ export default function InspectionsPage() {
                           >
                             Close
                           </Button>
-                        ) : (
-                          <span className="text-xs text-steel-muted">—</span>
-                        )}
+                        ) : null}
                       </td>
                     )}
                   </tr>
@@ -371,46 +400,100 @@ export default function InspectionsPage() {
               </tbody>
             </table>
           </div>
+          <RegisterEntryModal
+            open={!!ncrEdit}
+            title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
+            onClose={() => setNcrEdit(null)}
+            saving={ncrModalBusy}
+            onSave={async () => {
+              if (!ncrEdit || !id) return;
+              setNcrModalBusy(true);
+              try {
+                await api(`/api/checklist/project/${id}/ncr/${ncrEdit.id}`, {
+                  method: "PATCH",
+                  token,
+                  body: JSON.stringify({
+                    ncrType: ncrEditForm.ncrType,
+                    description: ncrEditForm.description,
+                    location: ncrEditForm.location,
+                    status: ncrEditForm.status,
+                    plannedClosure: ncrEditForm.plannedClosure || null,
+                    actualClosure: ncrEditForm.actualClosure || null,
+                  }),
+                });
+                setMsg(`${ncrEdit.number} updated`);
+                setNcrEdit(null);
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Update failed");
+              } finally {
+                setNcrModalBusy(false);
+              }
+            }}
+          >
+            <Select value={ncrEditForm.status} onChange={(e) => setNcrEditForm({ ...ncrEditForm, status: e.target.value })}>
+              <option value="Open">Open</option>
+              <option value="Closed">Closed</option>
+            </Select>
+            <Input
+              placeholder="Type"
+              value={ncrEditForm.ncrType}
+              onChange={(e) => setNcrEditForm({ ...ncrEditForm, ncrType: e.target.value })}
+            />
+            <TextArea
+              placeholder="Description"
+              value={ncrEditForm.description}
+              onChange={(e) => setNcrEditForm({ ...ncrEditForm, description: e.target.value })}
+            />
+            <Input
+              placeholder="Location"
+              value={ncrEditForm.location}
+              onChange={(e) => setNcrEditForm({ ...ncrEditForm, location: e.target.value })}
+            />
+            <Input
+              type="date"
+              placeholder="Planned closure"
+              value={ncrEditForm.plannedClosure}
+              onChange={(e) => setNcrEditForm({ ...ncrEditForm, plannedClosure: e.target.value })}
+            />
+            <Input
+              type="date"
+              placeholder="Actual closure"
+              value={ncrEditForm.actualClosure}
+              onChange={(e) => setNcrEditForm({ ...ncrEditForm, actualClosure: e.target.value })}
+            />
+          </RegisterEntryModal>
         </Card>
       )}
 
-      {sheetKey === "cube-test" && (
-        <Card>
-          <h3 className="font-semibold mb-3">Cube register (Quality Dashboard · SPDC Cube Register)</h3>
-          <div className="overflow-x-auto max-h-[28rem] sheet-register">
-            <table className="sheet-register__table min-w-[36rem] w-full">
-              <thead>
-                <tr>
-                  <th className="text-left">Sr</th>
-                  <th className="text-left">Description</th>
-                  <th className="text-left">Grade</th>
-                  <th className="text-left">Strength</th>
-                  <th className="text-left">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(dash?.cubes || []).map((c: any) => (
-                  <tr key={c.id}>
-                    <td className="text-left font-mono text-xs">{c.srNo || "—"}</td>
-                    <td className="text-left max-w-md">{c.description}</td>
-                    <td className="text-left">{c.grade || "—"}</td>
-                    <td className="text-left font-mono text-xs tabular-nums">{c.strength ?? "—"}</td>
-                    <td className="text-left">
-                      <Badge tone={/pass/i.test(c.result || "") ? "ok" : "warn"}>{c.result || "—"}</Badge>
-                    </td>
-                  </tr>
-                ))}
-                {!dash?.cubes?.length && (
-                  <tr>
-                    <td colSpan={5} className="empty text-left">
-                      No cube rows seeded yet — re-seed from SPDC Cube Register.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+      {sheetKey === "site-observation" && id && (
+        <QualitySiteRegister
+          projectId={id}
+          token={token}
+          recordType="Site Observation"
+          canEdit={canManage}
+          onChanged={load}
+        />
+      )}
+
+      {sheetKey === "site-instruction" && id && (
+        <QualitySiteRegister
+          projectId={id}
+          token={token}
+          recordType="Site Instruction"
+          canEdit={canManage}
+          onChanged={load}
+        />
+      )}
+
+      {sheetKey === "cube-test" && id && (
+        <CubeRegisterPanel
+          projectId={id}
+          token={token}
+          rows={dash?.cubes || []}
+          canEdit={canManage}
+          onChanged={load}
+        />
       )}
 
       {sheetKey === "qi" && (

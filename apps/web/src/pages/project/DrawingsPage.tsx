@@ -1,5 +1,4 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -7,7 +6,7 @@ import { canManageDrawings, isClientViewOnly } from "../../permissions";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
-import { DrawingUploadFilePicker, type MarkupPageDraft } from "../../components/DrawingUploadFilePicker";
+import { DrawingUploadFilePicker } from "../../components/DrawingUploadFilePicker";
 import { DrawingCheckModal } from "../../components/DrawingCheckModal";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
 import { DrawingIssueFields } from "../../components/DrawingIssueFields";
@@ -24,8 +23,6 @@ import {
   revisionPreviewFromRecord,
   type DrawingRevisionPreview,
 } from "../../lib/drawingPreview";
-import PdfMarkup from "../../components/PdfMarkup";
-import ImageMarkup from "../../components/ImageMarkup";
 import {
   gfcCurrentRevision,
   gfcDateLabel,
@@ -45,20 +42,6 @@ function fmtDate(d?: string | Date | null) {
 
 function previewFromRev(d: { drawingNumber?: string; currentRev?: string }, rev: any): DrawingRevisionPreview {
   return revisionPreviewFromRecord(d, rev);
-}
-
-async function uploadMarkupPages(
-  revisionId: string,
-  pages: MarkupPageDraft[],
-  token: string | null,
-  note?: string
-) {
-  if (!pages.length) return;
-  const fd = new FormData();
-  pages.forEach((p) => fd.append("files", p.file));
-  fd.append("pageNumbers", JSON.stringify(pages.map((p) => p.pageNumber)));
-  if (note) fd.append("note", note);
-  await api(`/api/drawings/revision/${revisionId}/markup-pages`, { method: "POST", token, body: fd });
 }
 
 export default function DrawingsPage() {
@@ -91,10 +74,8 @@ export default function DrawingsPage() {
   });
   const [registerPdf, setRegisterPdf] = useState<File | null>(null);
   const [registerDwg, setRegisterDwg] = useState<File | null>(null);
-  const [registerMarkupPages, setRegisterMarkupPages] = useState<MarkupPageDraft[]>([]);
   const [revPdf, setRevPdf] = useState<File | null>(null);
   const [revDwg, setRevDwg] = useState<File | null>(null);
-  const [revMarkupPages, setRevMarkupPages] = useState<MarkupPageDraft[]>([]);
   const [registerIssue, setRegisterIssue] = useState(emptyDrawingIssueDraft);
   const [revIssue, setRevIssue] = useState(emptyDrawingIssueDraft);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
@@ -102,13 +83,6 @@ export default function DrawingsPage() {
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [dumpBusy, setDumpBusy] = useState(false);
-  const [markupTarget, setMarkupTarget] = useState<{
-    file: File;
-    target: "register" | "revision" | "revision-existing";
-    revisionId?: string;
-    drawingLabel?: string;
-    preview?: string;
-  } | null>(null);
   const canUpload = canManageDrawings(user?.role);
   const clientOnly = isClientViewOnly(user?.role);
 
@@ -200,75 +174,6 @@ export default function DrawingsPage() {
     }
   }
 
-  function openMarkupEditor(target: "register" | "revision") {
-    const source = target === "register" ? registerPdf : revPdf;
-    if (!source) return;
-    setMarkupTarget({ file: source, target });
-  }
-
-  async function openRevisionMarkup(d: any, rev: any) {
-    const pdfRef = rev.pdfFileUrl || (drawingFileKind(rev.fileName || rev.fileUrl) === "pdf" ? rev.fileUrl : null);
-    if (!pdfRef) {
-      setMsg("No PDF on this revision — upload PDF first.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(resolveDrawingFileUrl(pdfRef), {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) throw new Error("Could not load PDF for markup");
-      const blob = await res.blob();
-      const file = new File([blob], rev.pdfFileName || rev.fileName || "drawing.pdf", {
-        type: blob.type || "application/pdf",
-      });
-      setMarkupTarget({
-        file,
-        target: "revision-existing",
-        revisionId: rev.id,
-        drawingLabel: `${d.drawingNumber} · ${rev.revisionNumber}`,
-      });
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Failed to open PDF markup");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function applyMarkupPages(pages: MarkupPageDraft[]) {
-    if (!markupTarget) return;
-    if (markupTarget.target === "register") setRegisterMarkupPages(pages);
-    else if (markupTarget.target === "revision") setRevMarkupPages(pages);
-    if (markupTarget.preview) URL.revokeObjectURL(markupTarget.preview);
-    setMarkupTarget(null);
-  }
-
-  async function saveExistingRevisionMarkup(pages: MarkupPageDraft[]) {
-    if (!markupTarget?.revisionId || !pages.length) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      await uploadMarkupPages(
-        markupTarget.revisionId,
-        pages,
-        token,
-        markupTarget.drawingLabel ? `${markupTarget.drawingLabel} markup` : "PDF markup pages saved"
-      );
-      closeMarkup();
-      setMsg(`${pages.length} marked page(s) saved — full history stored per page.`);
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Failed to save markup pages");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function closeMarkup() {
-    if (markupTarget?.preview) URL.revokeObjectURL(markupTarget.preview);
-    setMarkupTarget(null);
-  }
-
   function revisionHasFiles(rev: any) {
     return !!(rev?.pdfFileUrl || rev?.dwgFileUrl || rev?.fileUrl);
   }
@@ -301,14 +206,7 @@ export default function DrawingsPage() {
       if (registerPdf) fd.append("pdf", registerPdf);
       if (registerDwg) fd.append("dwg", registerDwg);
       appendIssueToFormData(fd, registerIssue);
-      const saved = await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
-      const revs = [...(saved?.revisions || [])].sort(
-        (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      );
-      const latestRev = revs[revs.length - 1];
-      if (latestRev?.id && registerMarkupPages.length) {
-        await uploadMarkupPages(latestRev.id, registerMarkupPages, token, "Initial upload markup");
-      }
+      await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
       setForm({
         drawingNumber: "",
         title: "",
@@ -320,11 +218,10 @@ export default function DrawingsPage() {
       });
       setRegisterPdf(null);
       setRegisterDwg(null);
-      setRegisterMarkupPages([]);
       setRegisterIssue(emptyDrawingIssueDraft());
       setUnlockToken(null);
       setShowRegister(false);
-      setMsg("Drawing saved to GFC register (PDF + DWG + markup logged).");
+      setMsg("Drawing saved to GFC register (PDF + DWG).");
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Upload failed");
@@ -337,7 +234,6 @@ export default function DrawingsPage() {
     setShowRegister(false);
     setRegisterPdf(null);
     setRegisterDwg(null);
-    setRegisterMarkupPages([]);
     setRegisterIssue(emptyDrawingIssueDraft());
     setFormError("");
     setUnlockToken(null);
@@ -347,7 +243,6 @@ export default function DrawingsPage() {
     setUploadForId(null);
     setRevPdf(null);
     setRevDwg(null);
-    setRevMarkupPages([]);
     setRevIssue(emptyDrawingIssueDraft());
     setRevUnlockToken(null);
     setReplaceRevisionId(null);
@@ -362,13 +257,13 @@ export default function DrawingsPage() {
     if (revUploadMode === "replace") {
       const replaceFile = revReplaceRole === "dwg" ? revDwg : revPdf;
       const hasIssue = issueDraftHasData(revIssue);
-      if (!replaceFile && !revMarkupPages.length && !hasIssue) {
-        setFormError(`Choose a ${revReplaceRole.toUpperCase()} file, markup, or receive/issue details.`);
+      if (!replaceFile && !hasIssue) {
+        setFormError(`Choose a ${revReplaceRole.toUpperCase()} file or receive/issue details.`);
         return;
       }
     } else if (revUploadMode === "update") {
-      if (!revPdf && !revDwg && !revMarkupPages.length && !issueDraftHasData(revIssue)) {
-        setFormError("Choose PDF/DWG, markup, or optional receive/issue details.");
+      if (!revPdf && !revDwg && !issueDraftHasData(revIssue)) {
+        setFormError("Choose PDF/DWG or optional receive/issue details.");
         return;
       }
     } else if (!revPdf && !revDwg) {
@@ -394,28 +289,20 @@ export default function DrawingsPage() {
           appendIssueToFormData(fd, revIssue);
           await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
         }
-        if (revMarkupPages.length) {
-          await uploadMarkupPages(replaceRevisionId, revMarkupPages, token, revForm.revisionLabel || "PDF markup");
-        }
         setExpandedId(uploadForId);
         setMsg(`${revForm.revisionNumber} updated — same revision row; register stays in sync.`);
-      } else if (revUploadMode === "update" || revUploadMode === "new") {
+      } else if (revUploadMode === "update" && replaceRevisionId && !revPdf && !revDwg && issueDraftHasData(revIssue)) {
+        const fd = new FormData();
+        fd.append("note", revForm.revisionLabel || "Receive & issue update");
+        appendIssueToFormData(fd, revIssue);
+        await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
+        setExpandedId(uploadForId);
+        setMsg(`${revForm.revisionNumber} receive/issue saved.`);
+      } else {
         if (revUploadMode === "new" && !revUnlockToken) {
           setFormError("Complete Drawing Check Master before a new revision upload.");
           return;
         }
-        if (revUploadMode === "update" && !revPdf && !revDwg && revMarkupPages.length && replaceRevisionId) {
-          await uploadMarkupPages(replaceRevisionId, revMarkupPages, token, revForm.revisionLabel || "PDF markup");
-          setExpandedId(uploadForId);
-          setMsg(`${revForm.revisionNumber} markup saved — same revision row.`);
-        } else if (revUploadMode === "update" && !revPdf && !revDwg && !revMarkupPages.length && replaceRevisionId && issueDraftHasData(revIssue)) {
-          const fd = new FormData();
-          fd.append("note", revForm.revisionLabel || "Receive & issue update");
-          appendIssueToFormData(fd, revIssue);
-          await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
-          setExpandedId(uploadForId);
-          setMsg(`${revForm.revisionNumber} receive/issue saved — Site register updated.`);
-        } else {
         const fd = new FormData();
         fd.append("revisionNumber", revForm.revisionNumber);
         fd.append("revisionLabel", revForm.revisionLabel || revForm.revisionNumber);
@@ -429,20 +316,13 @@ export default function DrawingsPage() {
         const hadRev = (uploadTarget?.revisions || []).some(
           (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
         );
-        const updated = await api<any>(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
-        const targetRev = (updated?.revisions || []).find(
-          (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
-        );
-        if (targetRev?.id && revMarkupPages.length) {
-          await uploadMarkupPages(targetRev.id, revMarkupPages, token, revForm.revisionLabel || "Revision markup");
-        }
+        await api<any>(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
         setExpandedId(uploadForId);
         setMsg(
           hadRev
             ? `${revForm.revisionNumber} updated on the same revision row — register and current rev refreshed.`
-            : "Revision uploaded — PDF, DWG, and markup logged on the GFC register."
+            : "Revision uploaded — PDF and DWG logged on the GFC register."
         );
-        }
       }
       resetRevUpload();
       await load();
@@ -462,7 +342,6 @@ export default function DrawingsPage() {
     setRevUnlockToken(null);
     setRevPdf(null);
     setRevDwg(null);
-    setRevMarkupPages([]);
     setRevIssue(emptyDrawingIssueDraft());
     setFormError("");
     setPlannedDate("");
@@ -486,7 +365,6 @@ export default function DrawingsPage() {
     setRevUnlockToken(null);
     setRevPdf(null);
     setRevDwg(null);
-    setRevMarkupPages([]);
     setRevIssue(issueFromRevision(rev));
     setFormError("");
     setPrecheckOpen(false);
@@ -509,7 +387,6 @@ export default function DrawingsPage() {
     setRevUnlockToken(null);
     setRevPdf(null);
     setRevDwg(null);
-    setRevMarkupPages([]);
     setRevIssue(issueFromRevision(rev));
     setFormError("");
     setPrecheckOpen(false);
@@ -649,7 +526,7 @@ export default function DrawingsPage() {
 
       {canUpload && (
         <UploadModal
-          open={showRegister && !!unlockToken && !markupTarget}
+          open={showRegister && !!unlockToken}
           title="Upload drawing"
           context={`Project · GFC register · check complete · ${form.discipline}`}
           file={registerPdf || registerDwg}
@@ -661,8 +538,6 @@ export default function DrawingsPage() {
               dwgFile={registerDwg}
               onPdfFile={setRegisterPdf}
               onDwgFile={setRegisterDwg}
-              onMarkupPdf={() => openMarkupEditor("register")}
-              markupPageCount={registerMarkupPages.length}
             />
           }
           primaryLabel={form.publish ? "Upload & publish" : "Upload to register"}
@@ -745,7 +620,9 @@ export default function DrawingsPage() {
             },
             {
               kind: "custom",
-              node: <DrawingIssueFields value={registerIssue} onChange={setRegisterIssue} />,
+              node: id ? (
+                <DrawingIssueFields projectId={id} token={token} value={registerIssue} onChange={setRegisterIssue} />
+              ) : null,
             },
           ]}
         />
@@ -914,24 +791,14 @@ export default function DrawingsPage() {
                                     </Button>
                                   )}
                                   {canUpload && (r.pdfFileUrl || drawingFileKind(r.fileName || r.fileUrl) === "pdf") && (
-                                    <>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        className="!text-xs !px-2 !py-1"
-                                        onClick={() => openReplaceRevision(d, r, "pdf")}
-                                      >
-                                        Replace PDF
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="secondary"
-                                        className="!text-xs !px-2 !py-1"
-                                        onClick={() => void openRevisionMarkup(d, r)}
-                                      >
-                                        PDF markup
-                                      </Button>
-                                    </>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="!text-xs !px-2 !py-1"
+                                      onClick={() => openReplaceRevision(d, r, "pdf")}
+                                    >
+                                      Replace PDF
+                                    </Button>
                                   )}
                                   {canUpload && (
                                     <Button
@@ -991,7 +858,7 @@ export default function DrawingsPage() {
 
       {canUpload && uploadForId && uploadTarget && (
         <UploadModal
-          open={revModalOpen && !markupTarget}
+          open={revModalOpen}
           title={
             revUploadMode === "replace"
               ? `Replace ${revReplaceRole.toUpperCase()}`
@@ -1010,12 +877,10 @@ export default function DrawingsPage() {
           onFile={() => undefined}
           canSubmit={
             revUploadMode === "replace"
-              ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) ||
-                revMarkupPages.length > 0 ||
-                issueDraftHasData(revIssue)
+              ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) || issueDraftHasData(revIssue)
               : revUploadMode === "update"
-                ? !!revPdf || !!revDwg || revMarkupPages.length > 0 || issueDraftHasData(revIssue)
-                : !!revPdf || !!revDwg || revMarkupPages.length > 0
+                ? !!revPdf || !!revDwg || issueDraftHasData(revIssue)
+                : !!revPdf || !!revDwg
           }
           filePicker={
             revUploadMode === "replace" && revReplaceRole === "dwg" ? (
@@ -1031,18 +896,9 @@ export default function DrawingsPage() {
                 dwgFile={null}
                 onPdfFile={setRevPdf}
                 onDwgFile={() => undefined}
-                onMarkupPdf={() => openMarkupEditor("revision")}
-                markupPageCount={revMarkupPages.length}
               />
             ) : (
-              <DrawingUploadFilePicker
-                pdfFile={revPdf}
-                dwgFile={revDwg}
-                onPdfFile={setRevPdf}
-                onDwgFile={setRevDwg}
-                onMarkupPdf={() => openMarkupEditor("revision")}
-                markupPageCount={revMarkupPages.length}
-              />
+              <DrawingUploadFilePicker pdfFile={revPdf} dwgFile={revDwg} onPdfFile={setRevPdf} onDwgFile={setRevDwg} />
             )
           }
           primaryLabel={
@@ -1150,69 +1006,19 @@ export default function DrawingsPage() {
               kind: "custom" as const,
               node: (
                 <DrawingIssueFields
+                  projectId={id!}
+                  token={token}
                   value={revIssue}
                   onChange={setRevIssue}
-                  existingContractorSignUrl={replaceRev?.contractorSignUrl}
                   existingClientSignUrl={replaceRev?.clientSignUrl}
+                  existingPmcSignUrl={replaceRev?.pmcSignUrl}
+                  existingSiteEngineerSignUrl={replaceRev?.siteEngineerSignUrl}
                 />
               ),
             },
           ]}
         />
       )}
-
-      {markupTarget &&
-        createPortal(
-          <div className="markup-modal" role="dialog" aria-modal="true" aria-label="Drawing PDF markup">
-            <div className="markup-modal__backdrop" onClick={closeMarkup} />
-            <div className="markup-modal__panel max-w-4xl">
-              <div className="markup-modal__head">
-                <span>
-                  Mark up{" "}
-                  {markupTarget.target === "revision-existing"
-                    ? markupTarget.drawingLabel || "revision"
-                    : markupTarget.target === "register"
-                      ? "new drawing"
-                      : "revision upload"}{" "}
-                  — all marked pages saved with history
-                </span>
-                <button type="button" className="markup-modal__close" onClick={closeMarkup}>
-                  ×
-                </button>
-              </div>
-              <div className="markup-modal__body">
-                {markupTarget.file.type === "application/pdf" ||
-                markupTarget.file.name.toLowerCase().endsWith(".pdf") ? (
-                  <PdfMarkup
-                    src={markupTarget.file}
-                    saveLabel={
-                      markupTarget.target === "revision-existing" ? "Save markup to revision" : "Save marked pages"
-                    }
-                    onCancel={closeMarkup}
-                    onSave={async (pages) => {
-                      if (markupTarget.target === "revision-existing") {
-                        await saveExistingRevisionMarkup(pages);
-                      } else {
-                        applyMarkupPages(pages);
-                      }
-                    }}
-                  />
-                ) : (
-                  <ImageMarkup
-                    src={markupTarget.preview || markupTarget.file}
-                    saveLabel="Save markup"
-                    filename="drawing-markup"
-                    onCancel={closeMarkup}
-                    onSave={async (marked) => {
-                      applyMarkupPages([{ pageNumber: 1, file: marked }]);
-                    }}
-                  />
-                )}
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {viewer && <DrawingFileViewer revision={viewer} variant="modal" onClose={() => setViewer(null)} />}
     </div>

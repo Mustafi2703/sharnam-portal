@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
+import PdfMarkup from "../../components/PdfMarkup";
 import {
   currentDrawingRevision,
+  drawingFileKind,
   drawingHasPreviewFile,
   drawingPreviewFromRecord,
+  resolveDrawingFileUrl,
   revisionPreviewFromRecord,
 } from "../../lib/drawingPreview";
+import { uploadDrawingMarkupPages, type MarkupPageDraft } from "../../lib/drawingMarkup";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 export function CoordinationPage() {
@@ -26,11 +31,17 @@ export function CoordinationPage() {
     location: "",
     priority: "Medium",
     assignedToName: "",
+    assignedToEmail: "",
     dueDate: "",
     linkedDrawingId: "",
     ballInCourt: "Assignee",
   });
   const [filter, setFilter] = useState("All");
+  const [msg, setMsg] = useState("");
+  const [followBusy, setFollowBusy] = useState(false);
+  const docRef = useRef<HTMLInputElement>(null);
+  const [markupFile, setMarkupFile] = useState<File | null>(null);
+  const [markupOpen, setMarkupOpen] = useState(false);
   const canEdit =
     user?.role === "admin" ||
     user?.role === "office" ||
@@ -84,7 +95,7 @@ export function CoordinationPage() {
     await load();
   }
 
-  function escalateToRfi(issue: {
+  function escalateToRfiCompose(issue: {
     title?: string;
     description?: string;
     discipline?: string;
@@ -103,12 +114,79 @@ export function CoordinationPage() {
     navigate(`/projects/${id}/rfis?${params.toString()}`);
   }
 
+  async function sendFollowUp(issueId: string) {
+    setFollowBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ issue: any; autoEscalated?: boolean; rfi?: { number: string } }>(
+        `/api/directory/coordination/${issueId}/follow-up`,
+        { method: "POST", token }
+      );
+      setMsg(
+        r.autoEscalated
+          ? `Follow-up ${r.issue.followUpCount}/5 sent — auto-escalated to RFI ${r.rfi?.number || ""}`
+          : `Follow-up ${r.issue.followUpCount}/5 emailed to assignee`
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Follow-up failed");
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  async function escalateToRfiApi(issueId: string) {
+    setFollowBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ rfi: { id: string; number: string } }>(`/api/directory/coordination/${issueId}/escalate-rfi`, {
+        method: "POST",
+        token,
+      });
+      setMsg(`Escalated to ${r.rfi.number} — linked in coordination log`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Escalation failed");
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  async function openCoordinationMarkup() {
+    if (!linkedRevision?.id) {
+      setMsg("Link a drawing with PDF first.");
+      return;
+    }
+    const pdfRef =
+      linkedRevision.pdfFileUrl ||
+      (drawingFileKind(linkedRevision.fileName || linkedRevision.fileUrl) === "pdf" ? linkedRevision.fileUrl : null);
+    if (!pdfRef) {
+      setMsg("No PDF on linked revision.");
+      return;
+    }
+    const res = await fetch(resolveDrawingFileUrl(pdfRef), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Could not load PDF");
+    const blob = await res.blob();
+    setMarkupFile(new File([blob], linkedRevision.pdfFileName || "drawing.pdf", { type: blob.type || "application/pdf" }));
+    setMarkupOpen(true);
+  }
+
+  async function uploadCoordDocument(issueId: string, file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    await api(`/api/directory/coordination/${issueId}/documents`, { method: "POST", token, body: fd });
+    setMsg(`Document ${file.name} attached to issue`);
+    await load();
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Drawings module"
         title="Design coordination"
-        subtitle="Log clash / design conflicts, preview the linked GFC sheet in a separate viewer, then escalate to Ask RFI. Drawing PDFs live in SharePoint — use Drawing files for folder browse."
+        subtitle="Log clash / design conflicts, mark up linked GFC PDFs here, attach DMS files, and email follow-ups (max 5) before auto-RFI escalation."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="warn">{openCount} open</Badge>
@@ -116,6 +194,8 @@ export function CoordinationPage() {
           </div>
         }
       />
+
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 
       <Card className="border-brand/20 bg-gradient-to-r from-brand-soft/40 to-paper">
         <h3 className="text-sm font-semibold mb-2">How to use this page</h3>
@@ -154,6 +234,7 @@ export function CoordinationPage() {
                 location: "",
                 priority: "Medium",
                 assignedToName: "",
+                assignedToEmail: "",
                 dueDate: "",
                 linkedDrawingId: "",
                 ballInCourt: "Assignee",
@@ -175,6 +256,12 @@ export function CoordinationPage() {
             </Select>
             <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             <Input placeholder="Assignee name" value={form.assignedToName} onChange={(e) => setForm({ ...form, assignedToName: e.target.value })} />
+            <Input
+              type="email"
+              placeholder="Assignee email (for follow-ups)"
+              value={form.assignedToEmail}
+              onChange={(e) => setForm({ ...form, assignedToEmail: e.target.value })}
+            />
             <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             <label className="block sm:col-span-2">
               <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
@@ -275,7 +362,11 @@ export function CoordinationPage() {
                     {selected.discipline} · {selected.priority}
                     {selected.location ? ` · ${selected.location}` : ""}
                     {selected.assignedToName ? ` · ${selected.assignedToName}` : ""}
+                    {selected.followUpCount ? ` · ${selected.followUpCount}/5 follow-ups` : ""}
                   </p>
+                  {selected.assignedToEmail && (
+                    <p className="text-xs text-steel-muted mt-1">Follow-up email: {selected.assignedToEmail}</p>
+                  )}
                   {selected.description && (
                     <p className="text-sm text-steel-muted mt-2 leading-relaxed">{selected.description}</p>
                   )}
@@ -298,12 +389,43 @@ export function CoordinationPage() {
                     <>
                       <Button
                         type="button"
+                        variant="secondary"
+                        className="!text-xs"
+                        disabled={followBusy || (selected.followUpCount ?? 0) >= 5}
+                        onClick={() => void sendFollowUp(selected.id)}
+                      >
+                        Send follow-up ({selected.followUpCount ?? 0}/5)
+                      </Button>
+                      <Button
+                        type="button"
                         variant="primary"
                         className="!text-xs"
-                        onClick={() => escalateToRfi(selected)}
+                        disabled={followBusy}
+                        onClick={() => void escalateToRfiApi(selected.id)}
                       >
-                        Escalate to Ask RFI
+                        Escalate to RFI
                       </Button>
+                      <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
+                        Open RFI compose
+                      </Button>
+                      {linkedRevision?.id && (
+                        <Button type="button" variant="secondary" className="!text-xs" onClick={() => void openCoordinationMarkup()}>
+                          Mark up PDF
+                        </Button>
+                      )}
+                      <Button type="button" variant="secondary" className="!text-xs" onClick={() => docRef.current?.click()}>
+                        Attach DMS file
+                      </Button>
+                      <input
+                        ref={docRef}
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadCoordDocument(selected.id, f);
+                          e.target.value = "";
+                        }}
+                      />
                       <Button
                         type="button"
                         variant="secondary"
@@ -313,6 +435,11 @@ export function CoordinationPage() {
                         Close issue
                       </Button>
                     </>
+                  )}
+                  {canEdit && selected.status === "Escalated" && selected.escalatedRfiId && (
+                    <Link to={`/projects/${id}/rfis`} className="text-xs font-semibold text-brand">
+                      View linked RFI →
+                    </Link>
                   )}
                   {canEdit && selected.status === "Closed" && (
                     <Button
@@ -326,6 +453,21 @@ export function CoordinationPage() {
                   )}
                 </div>
               </div>
+
+              {selected.documents?.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-line">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted mb-2">DMS attachments</p>
+                  <ul className="text-sm space-y-1">
+                    {selected.documents.map((d: { id: string; fileUrl: string; fileName?: string | null }) => (
+                      <li key={d.id}>
+                        <a href={d.fileUrl} target="_blank" rel="noreferrer" className="text-brand font-medium">
+                          {d.fileName || "Document"}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {canEdit && (
                 <div className="mt-4 pt-4 border-t border-line grid sm:grid-cols-[1fr_auto] gap-2 items-end">
@@ -399,6 +541,37 @@ export function CoordinationPage() {
       {viewerOpen && revisionPreview && (
         <DrawingFileViewer revision={revisionPreview} variant="modal" onClose={() => setViewerOpen(false)} />
       )}
+
+      {markupOpen &&
+        markupFile &&
+        linkedRevision?.id &&
+        createPortal(
+          <div className="markup-modal" role="dialog" aria-modal="true">
+            <div className="markup-modal__backdrop" onClick={() => setMarkupOpen(false)} />
+            <div className="markup-modal__panel max-w-4xl">
+              <div className="markup-modal__head">
+                <span>Design coordination markup — {linkedDrawing?.drawingNumber}</span>
+                <button type="button" className="markup-modal__close" onClick={() => setMarkupOpen(false)}>
+                  ×
+                </button>
+              </div>
+              <div className="markup-modal__body">
+                <PdfMarkup
+                  src={markupFile}
+                  saveLabel="Save markup to linked revision"
+                  onCancel={() => setMarkupOpen(false)}
+                  onSave={async (pages: MarkupPageDraft[]) => {
+                    if (!linkedRevision?.id) return;
+                    await uploadDrawingMarkupPages(linkedRevision.id, pages, token, "Design coordination markup");
+                    setMarkupOpen(false);
+                    setMsg(`${pages.length} markup page(s) saved on ${linkedDrawing?.drawingNumber}`);
+                  }}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

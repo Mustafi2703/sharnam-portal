@@ -187,7 +187,10 @@ export async function dumpAllProjectLogs(projectId: string) {
     include: {
       revisions: {
         orderBy: { createdAt: "asc" },
-        include: { uploadedBy: { select: { fullName: true, email: true } } },
+        include: {
+          uploadedBy: { select: { fullName: true, email: true } },
+          markupPages: { select: { id: true } },
+        },
       },
     },
     orderBy: { drawingNumber: "asc" },
@@ -248,6 +251,12 @@ export async function dumpAllProjectLogs(projectId: string) {
         revisionLabel: r.revisionLabel ?? "",
         plannedDate: iso(r.plannedDate).slice(0, 10),
         actualDate: iso(r.actualDate).slice(0, 10),
+        receivedDate: r.receivedDate ? iso(r.receivedDate).slice(0, 10) : "",
+        copiesReceived: r.copiesReceived ?? "",
+        clientSignUrl: r.clientSignUrl ?? "",
+        pmcSignUrl: r.pmcSignUrl ?? "",
+        siteEngineerSignUrl: r.siteEngineerSignUrl ?? "",
+        markupPages: r.markupPages?.length ?? 0,
         uploadedAt: iso(r.createdAt),
         uploadedBy: r.uploadedBy?.fullName ?? "",
         published: r.published ? "yes" : "no",
@@ -276,6 +285,13 @@ export async function dumpAllProjectLogs(projectId: string) {
         discipline: i.discipline ?? "",
         status: i.status,
         priority: i.priority,
+        assignedToName: i.assignedToName ?? "",
+        assignedToEmail: i.assignedToEmail ?? "",
+        followUpCount: i.followUpCount,
+        lastFollowUpAt: i.lastFollowUpAt ? iso(i.lastFollowUpAt) : "",
+        escalatedRfiId: i.escalatedRfiId ?? "",
+        linkedDrawingId: i.linkedDrawingId ?? "",
+        dueDate: i.dueDate ? iso(i.dueDate).slice(0, 10) : "",
         createdAt: iso(i.createdAt),
       }))
     )

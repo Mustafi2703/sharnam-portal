@@ -3,10 +3,12 @@ export type DrawingIssueDraft = {
   copiesReceived: string;
   issuedToContractorAt: string;
   issuedToClientAt: string;
-  contractorSignName: string;
   clientSignName: string;
-  contractorSignature: File | null;
-  clientSignature: File | null;
+  pmcSignName: string;
+  siteEngineerSignName: string;
+  clientSignPhotoId: string | null;
+  pmcSignPhotoId: string | null;
+  siteEngineerSignPhotoId: string | null;
   remarks: string;
 };
 
@@ -16,10 +18,12 @@ export function emptyDrawingIssueDraft(): DrawingIssueDraft {
     copiesReceived: "",
     issuedToContractorAt: "",
     issuedToClientAt: "",
-    contractorSignName: "",
     clientSignName: "",
-    contractorSignature: null,
-    clientSignature: null,
+    pmcSignName: "",
+    siteEngineerSignName: "",
+    clientSignPhotoId: null,
+    pmcSignPhotoId: null,
+    siteEngineerSignPhotoId: null,
     remarks: "",
   };
 }
@@ -29,25 +33,28 @@ export function appendIssueToFormData(fd: FormData, issue: DrawingIssueDraft) {
   if (issue.copiesReceived) fd.append("copiesReceived", issue.copiesReceived);
   if (issue.issuedToContractorAt) fd.append("issuedToContractorAt", issue.issuedToContractorAt);
   if (issue.issuedToClientAt) fd.append("issuedToClientAt", issue.issuedToClientAt);
-  if (issue.contractorSignName.trim()) fd.append("contractorSignName", issue.contractorSignName.trim());
   if (issue.clientSignName.trim()) fd.append("clientSignName", issue.clientSignName.trim());
+  if (issue.pmcSignName.trim()) fd.append("pmcSignName", issue.pmcSignName.trim());
+  if (issue.siteEngineerSignName.trim()) fd.append("siteEngineerSignName", issue.siteEngineerSignName.trim());
   if (issue.remarks.trim()) fd.append("issueRemarks", issue.remarks.trim());
-  if (issue.contractorSignature) fd.append("contractorSignature", issue.contractorSignature);
-  if (issue.clientSignature) fd.append("clientSignature", issue.clientSignature);
+  if (issue.clientSignPhotoId) fd.append("clientSignPhotoId", issue.clientSignPhotoId);
+  if (issue.pmcSignPhotoId) fd.append("pmcSignPhotoId", issue.pmcSignPhotoId);
+  if (issue.siteEngineerSignPhotoId) fd.append("siteEngineerSignPhotoId", issue.siteEngineerSignPhotoId);
 }
 
-/** True when any receive/issue field is filled — all fields remain optional on upload. */
 export function issueDraftHasData(issue: DrawingIssueDraft) {
   return !!(
     issue.receivedDate ||
     issue.copiesReceived ||
     issue.issuedToContractorAt ||
     issue.issuedToClientAt ||
-    issue.contractorSignName.trim() ||
     issue.clientSignName.trim() ||
+    issue.pmcSignName.trim() ||
+    issue.siteEngineerSignName.trim() ||
     issue.remarks.trim() ||
-    issue.contractorSignature ||
-    issue.clientSignature
+    issue.clientSignPhotoId ||
+    issue.pmcSignPhotoId ||
+    issue.siteEngineerSignPhotoId
   );
 }
 
@@ -56,8 +63,9 @@ export function issueFromRevision(rev?: {
   copiesReceived?: number | null;
   issuedToContractorAt?: string | Date | null;
   issuedToClientAt?: string | Date | null;
-  contractorSignName?: string | null;
   clientSignName?: string | null;
+  pmcSignName?: string | null;
+  siteEngineerSignName?: string | null;
   issueRemarks?: string | null;
 } | null): DrawingIssueDraft {
   if (!rev) return emptyDrawingIssueDraft();
@@ -67,10 +75,12 @@ export function issueFromRevision(rev?: {
     copiesReceived: rev.copiesReceived != null ? String(rev.copiesReceived) : "",
     issuedToContractorAt: day(rev.issuedToContractorAt),
     issuedToClientAt: day(rev.issuedToClientAt),
-    contractorSignName: rev.contractorSignName || "",
     clientSignName: rev.clientSignName || "",
-    contractorSignature: null,
-    clientSignature: null,
+    pmcSignName: rev.pmcSignName || "",
+    siteEngineerSignName: rev.siteEngineerSignName || "",
+    clientSignPhotoId: null,
+    pmcSignPhotoId: null,
+    siteEngineerSignPhotoId: null,
     remarks: rev.issueRemarks || "",
   };
 }
@@ -82,7 +92,8 @@ export const SITE_REGISTER_ISSUE_ROWS = [
   { key: "receivedDate", label: "Date of receiving" },
   { key: "copiesReceived", label: "Total copies received" },
   { key: "issuedToContractorAt", label: "Issued to contractor" },
-  { key: "contractorSign", label: "Receiver signature (contractor)" },
+  { key: "clientSign", label: "Client signature" },
+  { key: "pmcSign", label: "PMC signature" },
+  { key: "siteEngineerSign", label: "Site engineer signature" },
   { key: "issuedToClientAt", label: "Issued to client" },
-  { key: "clientSign", label: "Receiver signature (client)" },
 ] as const;

@@ -7,6 +7,8 @@ Use this folder during **client meetings**, **module walkthroughs**, and **UAT**
 | **Features per page** | Routes, forms, modals, what the portal does today | Dev history / “Done” change log |
 | **Meeting changes stake** | Blank table under **each page** — fill during the session | Pre-filled dev commits |
 
+**Maintaining docs:** see **[HOW-TO-MAINTAIN.md](./HOW-TO-MAINTAIN.md)** (when to update module files, master index, client workbook, and checklist separation rules).
+
 ## How to use with Google Docs
 
 **Client-facing (recommended):** Upload **[../client-share/12-Live-Client-UAT-Workbook.md](../client-share/12-Live-Client-UAT-Workbook.md)** to Google Drive → share as **Editor** with SPDC. Features + UAT steps + **per-page meeting stakes** (Section 5).
@@ -26,7 +28,7 @@ Use this folder during **client meetings**, **module walkthroughs**, and **UAT**
 | 1 | [00-home-directory-vendors](./modules/00-home-directory-vendors.md) | Project home, **company vendor directory**, project directory |
 | 2 | [01-drawings](./modules/01-drawings.md) | GFC, register, coordination, upload/markup |
 | 3 | [02-dms](./modules/02-dms.md) | ISO document manager |
-| 4 | [03-quality](./modules/03-quality.md) | Dashboard, SOR, QI, NCR, cube, QAP |
+| 4 | [03-quality](./modules/03-quality.md) | Dashboard, SOR, NCR, cube, **QAP** (`/qap`), QI fills, QI master |
 | 5 | [04-safety](./modules/04-safety.md) | Safety sheets, NCR, HIRA |
 | 6 | [05-progress](./modules/05-progress.md) | Milestones, hindrance, risk, legal |
 | 7 | [06-field](./modules/06-field.md) | Diary, photos, site pilot, attendance |
@@ -38,6 +40,7 @@ Use this folder during **client meetings**, **module walkthroughs**, and **UAT**
 | 13 | [12-global-office](./modules/12-global-office.md) | Master, HRMS, CRM, roles |
 
 Full route index: **[00-MASTER-INDEX.md](./00-MASTER-INDEX.md)**  
+Maintain docs: **[HOW-TO-MAINTAIN.md](./HOW-TO-MAINTAIN.md)**  
 Page template: **[_PAGE-TEMPLATE.md](./_PAGE-TEMPLATE.md)** · Meeting stake snippet: **[_MEETING-STAKE.md](./_MEETING-STAKE.md)**
 
 ## Related docs

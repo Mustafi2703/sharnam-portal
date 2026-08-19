@@ -47,7 +47,7 @@ export function DrawingUploadFilePicker({
               {pdfFile ? formatUiText("Replace") : formatUiText("Choose PDF")}
             </Button>
           </div>
-          <p className="text-[11px] text-steel-muted">{formatUiText("View in portal · optional multi-page markup")}</p>
+          <p className="text-[11px] text-steel-muted">{formatUiText("View in portal")}</p>
           {pdfFile && (
             <div className="rounded border border-line bg-white px-2 py-1.5 text-xs font-mono truncate">{pdfFile.name}</div>
           )}

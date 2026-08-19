@@ -49,13 +49,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "DRAWING REGISTER - 01.xlsx · Dashboard",
     },
     {
-      to: "drawings/register",
-      label: "Site register",
-      query: "sheet=site",
-      blurb: "Receive & issue matrix R0–R6 with contractor/client signatures.",
-      sheet: "Site Drawing Register",
-    },
-    {
       to: "drawings/library",
       label: "Drawing files",
       blurb: "PDF/DWG in SharePoint design folders — not the general document manager.",
@@ -125,8 +118,22 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "inspections",
       label: "SOR Log",
       query: "sheet=sor-log",
-      blurb: "Site observation register summary.",
+      blurb: "Site observation summary — includes live portal entries.",
       sheet: "SOR Log",
+    },
+    {
+      to: "inspections",
+      label: "Site observation",
+      query: "sheet=site-observation",
+      blurb: "Log site observations — updates SOR Log totals.",
+      sheet: "Site Observation",
+    },
+    {
+      to: "inspections",
+      label: "Site instruction",
+      query: "sheet=site-instruction",
+      blurb: "Site instruction register — updates SOR Log.",
+      sheet: "Site Instruction",
     },
     {
       to: "inspections",
@@ -146,8 +153,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "inspections",
       label: "Cube Test",
       query: "sheet=cube-test",
-      blurb: "Cube cast / test results.",
-      sheet: "Cube Test · SPDC Cube Register",
+      blurb: "Cube cast / test results — SPDC CUBE REGISTER format.",
+      sheet: "SPDC CUBE REGISTER",
     },
     {
       to: "qap",

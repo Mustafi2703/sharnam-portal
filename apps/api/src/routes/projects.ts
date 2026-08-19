@@ -14,6 +14,8 @@ const drawingUpload = upload.fields([
   { name: "file", maxCount: 1 },
   { name: "contractorSignature", maxCount: 1 },
   { name: "clientSignature", maxCount: 1 },
+  { name: "pmcSignature", maxCount: 1 },
+  { name: "siteEngineerSignature", maxCount: 1 },
 ]);
 
 function drawingUploadFiles(req: AuthedRequest) {
@@ -22,7 +24,9 @@ function drawingUploadFiles(req: AuthedRequest) {
   const dwg = files?.dwg?.[0] || (files?.file?.[0] && /\.dwg$/i.test(files.file[0].originalname) ? files.file[0] : undefined);
   const contractorSignature = files?.contractorSignature?.[0];
   const clientSignature = files?.clientSignature?.[0];
-  return { pdf, dwg, contractorSignature, clientSignature };
+  const pmcSignature = files?.pmcSignature?.[0];
+  const siteEngineerSignature = files?.siteEngineerSignature?.[0];
+  return { pdf, dwg, contractorSignature, clientSignature, pmcSignature, siteEngineerSignature };
 }
 
 function parseIssueFields(body: Record<string, unknown>) {
@@ -36,53 +40,85 @@ function parseIssueFields(body: Record<string, unknown>) {
     issuedToClientAt: body.issuedToClientAt ? new Date(String(body.issuedToClientAt)) : null,
     contractorSignName: body.contractorSignName ? String(body.contractorSignName).trim() : null,
     clientSignName: body.clientSignName ? String(body.clientSignName).trim() : null,
+    pmcSignName: body.pmcSignName ? String(body.pmcSignName).trim() : null,
+    siteEngineerSignName: body.siteEngineerSignName ? String(body.siteEngineerSignName).trim() : null,
     issueRemarks: body.issueRemarks ? String(body.issueRemarks).trim() : null,
+    clientSignPhotoId: body.clientSignPhotoId ? String(body.clientSignPhotoId) : null,
+    pmcSignPhotoId: body.pmcSignPhotoId ? String(body.pmcSignPhotoId) : null,
+    siteEngineerSignPhotoId: body.siteEngineerSignPhotoId ? String(body.siteEngineerSignPhotoId) : null,
   };
 }
 
+async function resolvePhotoSignature(projectId: string, photoId: string | null | undefined) {
+  if (!photoId) return null;
+  const photo = await prisma.projectPhoto.findFirst({
+    where: { id: photoId, projectId },
+    select: { fileUrl: true, description: true },
+  });
+  if (!photo) return null;
+  return { url: photo.fileUrl, fileName: photo.description || "photo-signature.png" };
+}
+
 async function storeRevisionSignatures(opts: {
+  projectId: string;
   projectCode: string;
-  projectId?: string;
   drawingNumber: string;
   revisionNumber: string;
   discipline?: string | null;
   contractorSignature?: Express.Multer.File;
   clientSignature?: Express.Multer.File;
+  pmcSignature?: Express.Multer.File;
+  siteEngineerSignature?: Express.Multer.File;
+  clientSignPhotoId?: string | null;
+  pmcSignPhotoId?: string | null;
+  siteEngineerSignPhotoId?: string | null;
 }) {
   const base = revisionStorageBase(opts.drawingNumber, opts.revisionNumber, opts.discipline);
-  let contractorSignUrl: string | undefined;
-  let contractorSignFileName: string | undefined;
-  let clientSignUrl: string | undefined;
-  let clientSignFileName: string | undefined;
+  type SignOut = { url?: string; fileName?: string };
+  const out: {
+    contractorSignUrl?: string;
+    contractorSignFileName?: string;
+    clientSignUrl?: string;
+    clientSignFileName?: string;
+    pmcSignUrl?: string;
+    pmcSignFileName?: string;
+    siteEngineerSignUrl?: string;
+    siteEngineerSignFileName?: string;
+  } = {};
 
-  if (opts.contractorSignature) {
-    const rel = `${base}/Signatures/contractor`;
+  async function saveUploaded(role: string, file: Express.Multer.File, key: keyof typeof out) {
+    const rel = `${base}/Signatures/${role}`;
     await touchStorageFolder(opts.projectId, rel);
     const saved = await mockOneDrive.upload(
       opts.projectCode,
       rel,
-      opts.contractorSignature.originalname || "contractor-signature.png",
-      opts.contractorSignature.buffer,
-      contentTypeForFile(opts.contractorSignature)
+      file.originalname || `${role}-signature.png`,
+      file.buffer,
+      contentTypeForFile(file)
     );
-    contractorSignUrl = storageUrl(saved);
-    contractorSignFileName = opts.contractorSignature.originalname;
-  }
-  if (opts.clientSignature) {
-    const rel = `${base}/Signatures/client`;
-    await touchStorageFolder(opts.projectId, rel);
-    const saved = await mockOneDrive.upload(
-      opts.projectCode,
-      rel,
-      opts.clientSignature.originalname || "client-signature.png",
-      opts.clientSignature.buffer,
-      contentTypeForFile(opts.clientSignature)
-    );
-    clientSignUrl = storageUrl(saved);
-    clientSignFileName = opts.clientSignature.originalname;
+    const urlKey = key as "clientSignUrl" | "pmcSignUrl" | "siteEngineerSignUrl" | "contractorSignUrl";
+    const nameKey = `${String(key).replace("Url", "FileName")}` as keyof typeof out;
+    (out as Record<string, string | undefined>)[urlKey] = storageUrl(saved);
+    (out as Record<string, string | undefined>)[nameKey] = file.originalname;
   }
 
-  return { contractorSignUrl, contractorSignFileName, clientSignUrl, clientSignFileName };
+  async function applyPhoto(role: string, photoId: string | null | undefined, urlKey: keyof typeof out) {
+    const photo = await resolvePhotoSignature(opts.projectId, photoId);
+    if (!photo) return;
+    const nameKey = `${String(urlKey).replace("Url", "FileName")}` as keyof typeof out;
+    (out as Record<string, string | undefined>)[urlKey] = photo.url;
+    (out as Record<string, string | undefined>)[nameKey] = photo.fileName;
+  }
+
+  if (opts.contractorSignature) await saveUploaded("contractor", opts.contractorSignature, "contractorSignUrl");
+  if (opts.clientSignature) await saveUploaded("client", opts.clientSignature, "clientSignUrl");
+  else await applyPhoto("client", opts.clientSignPhotoId, "clientSignUrl");
+  if (opts.pmcSignature) await saveUploaded("pmc", opts.pmcSignature, "pmcSignUrl");
+  else await applyPhoto("pmc", opts.pmcSignPhotoId, "pmcSignUrl");
+  if (opts.siteEngineerSignature) await saveUploaded("site-engineer", opts.siteEngineerSignature, "siteEngineerSignUrl");
+  else await applyPhoto("site-engineer", opts.siteEngineerSignPhotoId, "siteEngineerSignUrl");
+
+  return out;
 }
 
 async function revisionIssuePayload(opts: {
@@ -95,22 +131,32 @@ async function revisionIssuePayload(opts: {
   discipline?: string | null;
 }) {
   const issue = parseIssueFields(opts.body);
-  const { contractorSignature, clientSignature } = drawingUploadFiles(opts.req);
+  const { contractorSignature, clientSignature, pmcSignature, siteEngineerSignature } = drawingUploadFiles(opts.req);
   const signs = await storeRevisionSignatures({
-    projectCode: opts.projectCode,
     projectId: opts.projectId,
+    projectCode: opts.projectCode,
     drawingNumber: opts.drawingNumber,
     revisionNumber: opts.revisionNumber,
     discipline: opts.discipline,
     contractorSignature,
     clientSignature,
+    pmcSignature,
+    siteEngineerSignature,
+    clientSignPhotoId: issue.clientSignPhotoId,
+    pmcSignPhotoId: issue.pmcSignPhotoId,
+    siteEngineerSignPhotoId: issue.siteEngineerSignPhotoId,
   });
+  const { clientSignPhotoId, pmcSignPhotoId, siteEngineerSignPhotoId, ...issueFields } = issue;
   return {
-    ...issue,
+    ...issueFields,
     ...(signs.contractorSignUrl
       ? { contractorSignUrl: signs.contractorSignUrl, contractorSignFileName: signs.contractorSignFileName }
       : {}),
     ...(signs.clientSignUrl ? { clientSignUrl: signs.clientSignUrl, clientSignFileName: signs.clientSignFileName } : {}),
+    ...(signs.pmcSignUrl ? { pmcSignUrl: signs.pmcSignUrl, pmcSignFileName: signs.pmcSignFileName } : {}),
+    ...(signs.siteEngineerSignUrl
+      ? { siteEngineerSignUrl: signs.siteEngineerSignUrl, siteEngineerSignFileName: signs.siteEngineerSignFileName }
+      : {}),
   };
 }
 

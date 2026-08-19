@@ -494,7 +494,10 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
     prisma.qualityInspection.findMany({ where: { projectId } }),
     prisma.submittal.findMany({ where: { projectId } }),
     prisma.projectPhoto.findMany({ where: { projectId }, take: 20, orderBy: { createdAt: "desc" } }),
-    prisma.designCoordinationIssue.findMany({ where: { projectId } }),
+    prisma.designCoordinationIssue.findMany({
+      where: { projectId },
+      include: { documents: { orderBy: { createdAt: "desc" } } },
+    }),
   ]);
   res.json({
     members,
@@ -656,6 +659,8 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
       ballInCourt: req.body.ballInCourt || "Assignee",
       linkedDrawingId: req.body.linkedDrawingId || null,
       assignedToName: req.body.assignedToName || null,
+      assignedToId: req.body.assignedToId || null,
+      assignedToEmail: req.body.assignedToEmail || null,
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
     },
   });
@@ -674,12 +679,102 @@ directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "empl
       discipline: req.body.discipline,
       ballInCourt: req.body.ballInCourt,
       assignedToName: req.body.assignedToName,
+      assignedToId: req.body.assignedToId,
+      assignedToEmail: req.body.assignedToEmail,
       linkedDrawingId: req.body.linkedDrawingId,
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
     },
   });
   res.json(row);
 });
+
+directoryRouter.post(
+  "/coordination/:id/follow-up",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const issue = await prisma.designCoordinationIssue.findUnique({ where: { id: req.params.id } });
+    if (!issue) return res.status(404).json({ error: "Not found" });
+    try {
+      const { sendCoordinationFollowUp, MAX_FOLLOW_UPS } = await import("../services/coordinationEscalation.js");
+      const result = await sendCoordinationFollowUp({
+        issueId: issue.id,
+        projectId: issue.projectId,
+        userId: req.user!.id,
+      });
+      await audit("coordination.follow-up", {
+        userId: req.user!.id,
+        entity: "DesignCoordinationIssue",
+        entityId: issue.id,
+        meta: { followUpCount: result.issue.followUpCount, autoEscalated: result.autoEscalated },
+      });
+      res.json({ ...result, maxFollowUps: MAX_FOLLOW_UPS });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Follow-up failed" });
+    }
+  }
+);
+
+directoryRouter.post(
+  "/coordination/:id/escalate-rfi",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const issue = await prisma.designCoordinationIssue.findUnique({ where: { id: req.params.id } });
+    if (!issue) return res.status(404).json({ error: "Not found" });
+    if (issue.status === "Closed") return res.status(400).json({ error: "Issue is closed" });
+    try {
+      const { createRfiFromCoordinationIssue, MAX_FOLLOW_UPS } = await import("../services/coordinationEscalation.js");
+      if (issue.followUpCount >= MAX_FOLLOW_UPS && issue.escalatedRfiId) {
+        return res.status(400).json({ error: "Already escalated" });
+      }
+      const rfi = await createRfiFromCoordinationIssue({
+        issueId: issue.id,
+        projectId: issue.projectId,
+        userId: req.user!.id,
+      });
+      await audit("coordination.escalate-rfi", {
+        userId: req.user!.id,
+        entity: "DesignCoordinationIssue",
+        entityId: issue.id,
+        meta: { rfiId: rfi.id, number: rfi.number },
+      });
+      res.status(201).json({ rfi, issue: await prisma.designCoordinationIssue.findUnique({ where: { id: issue.id } }) });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Escalation failed" });
+    }
+  }
+);
+
+const coordDocUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+directoryRouter.post(
+  "/coordination/:id/documents",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  coordDocUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const issue = await prisma.designCoordinationIssue.findUnique({
+      where: { id: req.params.id },
+      include: { project: { select: { code: true } } },
+    });
+    if (!issue) return res.status(404).json({ error: "Not found" });
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "file required" });
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+    const folder = MODULE_TO_ISO_FOLDER.designCoordination || "04.04_Clash_Detection_Design_Coordination";
+    const rel = `${folder}/${issue.id}`;
+    const saved = await mockOneDrive.upload(issue.project.code, rel, file.originalname, file.buffer, file.mimetype);
+    const fileUrl = saved.sharePointUrl || saved.url;
+    const doc = await prisma.coordinationIssueDocument.create({
+      data: {
+        issueId: issue.id,
+        fileUrl,
+        fileName: file.originalname,
+        uploadedById: req.user!.id,
+      },
+    });
+    res.status(201).json(doc);
+  }
+);
 
 export const safetyRouter = Router();
 safetyRouter.use(requireAuth);

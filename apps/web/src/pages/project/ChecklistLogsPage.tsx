@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
-import { downloadBrandedChecklistPrint } from "../../lib/brandedChecklistPrint";
+import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../../lib/brandedChecklistPrint";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
@@ -253,9 +253,26 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                   </td>
                   <td className="text-right">
                     {s.status !== "Draft" && (
-                      <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>
-                        Download branded
-                      </Button>
+                      <div className="flex flex-wrap gap-1 justify-end">
+                        <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>
+                          Branded PDF
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!text-xs !py-1.5"
+                          onClick={async () => {
+                            try {
+                              await downloadBrandedChecklistXlsx(s.id, token);
+                              setMsg("Branded Excel downloaded.");
+                            } catch (err) {
+                              setMsg(err instanceof Error ? err.message : "Excel download failed");
+                            }
+                          }}
+                        >
+                          Branded Excel
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>

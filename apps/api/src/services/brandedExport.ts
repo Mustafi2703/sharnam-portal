@@ -169,7 +169,16 @@ export async function buildAnalyticsPack(projectId: string) {
     ncrs,
     cubes,
   ] = await Promise.all([
-    prisma.rfi.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.rfi.findMany({
+      where: { projectId },
+      include: {
+        assignedTo: { select: { fullName: true, email: true } },
+        createdBy: { select: { fullName: true } },
+        drawing: { select: { drawingNumber: true, title: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
     prisma.meeting.findMany({
       where: { projectId },
       include: { items: true },
@@ -500,13 +509,34 @@ export async function buildModuleExport(projectId: string, module: ModuleExportK
           {
             name: "RFIs",
             rows: [
-              ["Number", "Subject", "Status", "Kind", "Due", "Created"],
-              ...pack.rfis.map((r) => [
+              [
+                "Number",
+                "Subject",
+                "Question",
+                "Status",
+                "Kind",
+                "Ball in court",
+                "Assigned to",
+                "Raised by",
+                "Due",
+                "Drawing",
+                "Schedule impact",
+                "Cost impact",
+                "Created",
+              ],
+              ...pack.rfis.map((r: any) => [
                 r.number,
                 r.subject,
+                r.question,
                 r.status,
                 r.rfiKind || "",
+                r.ballInCourt || "",
+                r.assignedTo?.fullName || "",
+                r.createdBy?.fullName || "",
                 fmtDate(r.dueDate),
+                r.drawing ? `${r.drawing.drawingNumber} — ${r.drawing.title}` : "",
+                r.scheduleImpact || "",
+                r.costImpact || "",
                 fmtDt(r.createdAt),
               ]),
             ],
@@ -514,7 +544,7 @@ export async function buildModuleExport(projectId: string, module: ModuleExportK
         ] as SheetSpec[],
         html: renderBrandedReportHtml({
           title: "RFI register",
-          subtitle: "All referenced RFI data for client coordination",
+          subtitle: "SPDC RFI form columns — linked drawing, assignee, impacts",
           project: p,
           kpis: [
             { label: "Total", value: pack.kpis.totalRfis },
@@ -523,8 +553,16 @@ export async function buildModuleExport(projectId: string, module: ModuleExportK
           sections: [
             {
               heading: "RFIs",
-              headers: ["Number", "Subject", "Status", "Due"],
-              rows: pack.rfis.map((r) => [r.number, r.subject, r.status, fmtDate(r.dueDate)]),
+              headers: ["Number", "Subject", "Status", "Kind", "Assigned", "Due", "Drawing"],
+              rows: pack.rfis.map((r: any) => [
+                r.number,
+                r.subject,
+                r.status,
+                r.rfiKind || "",
+                r.assignedTo?.fullName || "—",
+                fmtDate(r.dueDate),
+                r.drawing?.drawingNumber || "—",
+              ]),
             },
           ],
         }),

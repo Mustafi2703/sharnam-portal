@@ -36,6 +36,7 @@ model User {
   inspectionsAssigned  QualityInspection[]   @relation("InspectionAssignee")
   safetyReported       SafetyRecord[]        @relation("SafetyReporter")
   safetyAssigned       SafetyRecord[]        @relation("SafetyAssignee")
+  qualitySiteReported  QualitySiteRecord[]   @relation("QualitySiteReporter")
 }
 
 model RoleDefinition {
@@ -123,6 +124,7 @@ model Project {
   qapActivities         QapActivity[]
   cubeTests             CubeTest[]
   qualityNcrs           QualityNcr[]
+  qualitySiteRecords    QualitySiteRecord[]
   purchaseOrders        PurchaseOrder[]
   raBills               RaBill[]
   certificates          CertificateOfPayment[]
@@ -237,6 +239,14 @@ model DrawingRevision {
   clientSignName         String?
   clientSignUrl          String?
   clientSignFileName     String?
+  /// PMC approval signature (from photo storage or upload)
+  pmcSignName            String?
+  pmcSignUrl             String?
+  pmcSignFileName        String?
+  /// Site engineer signature (from photo storage or upload)
+  siteEngineerSignName     String?
+  siteEngineerSignUrl      String?
+  siteEngineerSignFileName String?
   issueRemarks           String?
   createdAt            DateTime  @default(now())
 
@@ -1475,11 +1485,28 @@ model DesignCoordinationIssue {
   ballInCourt     String    @default("Assignee")
   linkedDrawingId String?
   assignedToName  String?
+  assignedToId    String?
+  assignedToEmail String?
+  followUpCount   Int       @default(0)
+  lastFollowUpAt  DateTime?
+  escalatedRfiId  String?
   dueDate         DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  documents CoordinationIssueDocument[]
+}
+
+model CoordinationIssueDocument {
+  id           String   @id @default(cuid())
+  issueId      String
+  fileUrl      String
+  fileName     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  issue DesignCoordinationIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
 }
 
 model SafetyRecord {
@@ -1546,6 +1573,8 @@ model QapActivity {
   clientRole          String?
   records             String?
   remarks             String?
+  /// JSON map of day serial/label → checked (Week 50 cols 12–18)
+  dailyChecks         String?   @db.Text
   status              String    @default("Open")
   dueDate             DateTime?
   completedAt         DateTime?
@@ -1569,6 +1598,8 @@ model CubeTest {
   testDate28  DateTime?
   load7       Float?
   load28      Float?
+  strength7   Float?
+  strength28  Float?
   strength    Float?
   avgStrength Float?
   result      String?
@@ -1576,6 +1607,30 @@ model CubeTest {
   createdAt   DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Quality site observation / site instruction — feeds SOR Log totals
+ */
+model QualitySiteRecord {
+  id           String   @id @default(cuid())
+  projectId    String
+  recordType   String   @default("Site Observation")
+  title        String
+  description  String?  @db.Text
+  location     String?
+  severity     String?
+  status       String   @default("Open")
+  issuedTo     String?
+  correctiveAction String? @db.Text
+  reportedById String
+  occurredAt   DateTime @default(now())
+  source       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reportedBy User    @relation("QualitySiteReporter", fields: [reportedById], references: [id])
 }
 
 /**

@@ -566,6 +566,8 @@ export async function seedQualitySafetyFromSheets(
             testDate28: excelDate(row[6]),
             load7: n(row[7]) || null,
             load28: n(row[8]) || null,
+            strength7: n(row[9]) || null,
+            strength28: n(row[9]) && n(row[4]) ? n(row[9]) : null,
             strength: n(row[9]) || null,
             avgStrength: n(row[10]) || null,
             result: result || null,

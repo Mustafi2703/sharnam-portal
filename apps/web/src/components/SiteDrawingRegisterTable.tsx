@@ -20,9 +20,23 @@ function cellHasData(rev: any | undefined, rowKey: (typeof SITE_REGISTER_ISSUE_R
   if (rowKey === "copiesReceived") return rev.copiesReceived != null;
   if (rowKey === "issuedToContractorAt") return !!rev.issuedToContractorAt;
   if (rowKey === "issuedToClientAt") return !!rev.issuedToClientAt;
-  if (rowKey === "contractorSign") return !!(rev.contractorSignUrl || rev.contractorSignName);
   if (rowKey === "clientSign") return !!(rev.clientSignUrl || rev.clientSignName);
+  if (rowKey === "pmcSign") return !!(rev.pmcSignUrl || rev.pmcSignName);
+  if (rowKey === "siteEngineerSign") return !!(rev.siteEngineerSignUrl || rev.siteEngineerSignName);
   return false;
+}
+
+function signCell(rev: any, urlKey: string, nameKey: string, alt: string) {
+  if (rev[urlKey]) {
+    return (
+      <img
+        src={resolveDrawingFileUrl(rev[urlKey])}
+        alt={rev[nameKey] || alt}
+        className="site-register__signature"
+      />
+    );
+  }
+  return rev[nameKey] || "—";
 }
 
 function cellForRow(rev: any | undefined, rowKey: (typeof SITE_REGISTER_ISSUE_ROWS)[number]["key"]) {
@@ -33,30 +47,9 @@ function cellForRow(rev: any | undefined, rowKey: (typeof SITE_REGISTER_ISSUE_RO
   if (rowKey === "copiesReceived") return rev.copiesReceived != null ? String(rev.copiesReceived) : "—";
   if (rowKey === "issuedToContractorAt") return fmtDay(rev.issuedToContractorAt);
   if (rowKey === "issuedToClientAt") return fmtDay(rev.issuedToClientAt);
-  if (rowKey === "contractorSign") {
-    if (rev.contractorSignUrl) {
-      return (
-        <img
-          src={resolveDrawingFileUrl(rev.contractorSignUrl)}
-          alt={rev.contractorSignName || "Contractor signature"}
-          className="site-register__signature"
-        />
-      );
-    }
-    return rev.contractorSignName || "—";
-  }
-  if (rowKey === "clientSign") {
-    if (rev.clientSignUrl) {
-      return (
-        <img
-          src={resolveDrawingFileUrl(rev.clientSignUrl)}
-          alt={rev.clientSignName || "Client signature"}
-          className="site-register__signature"
-        />
-      );
-    }
-    return rev.clientSignName || "—";
-  }
+  if (rowKey === "clientSign") return signCell(rev, "clientSignUrl", "clientSignName", "Client signature");
+  if (rowKey === "pmcSign") return signCell(rev, "pmcSignUrl", "pmcSignName", "PMC signature");
+  if (rowKey === "siteEngineerSign") return signCell(rev, "siteEngineerSignUrl", "siteEngineerSignName", "Site engineer signature");
   return "—";
 }
 

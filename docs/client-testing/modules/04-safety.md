@@ -3,6 +3,8 @@
 **Test order:** #5  
 **Hub:** `/projects/:id/hub/safety`
 
+> **Separation:** Safety checklists and **Safety checklist RFI** live only in this module. Quality QI and Drawing check have their own masters — do not test Safety templates from Quality or Drawings nav.
+
 ---
 
 ## Tool nav tabs

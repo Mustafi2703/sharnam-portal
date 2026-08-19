@@ -11,6 +11,8 @@ BOQ / Monitoring · MB sheets · BBS · Budget WBS · Cash Flow Chart · Cash Fl
 
 Query: `?tab=` · `?pkg=` (package filter on monitoring/MB/BBS) · `?cf=` (chart/forecast/tracking on cashflow)
 
+> **Not Progress Planned vs Actual.** Cost cashflow is **INR by month** from `Cashflow - Dashboard.xlsx`. Weekly qty / manpower planned vs actual lives in **Progress → Planned vs Actual** (`/progress?tab=planned`). Do not test weekly site quantities on Cost.
+
 ---
 
 ## Page: Cost (all tabs)

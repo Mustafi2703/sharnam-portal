@@ -8,7 +8,9 @@
 
 ## Tool nav tabs (module strip)
 
-Module hub · **GFC register** (upload) · Register dashboard · **Master register** (DCI schedule) · **Site register** · Design coordination · Drawing files · Checklist manager · Checklist fill log · Request fill · Ask RFI
+Module hub · **GFC register** (upload) · Register dashboard · **Master register** (DCI schedule) · Design coordination · Drawing files · Checklist manager · Checklist fill log · Request fill · Ask RFI
+
+> **Removed (Aug 2026):** **Site register** tab — not required by client. Legacy `?sheet=site` URLs redirect to Master register. GFC upload log still shows optional receive/issue + signatures per revision.
 
 > **Separation:** **Master register** = DCI schedule (package, building, dates, issued-to, critical). **GFC register** = PDF/DWG upload, revisions, site signatures. Do not add master lines on the GFC page.
 
@@ -20,7 +22,7 @@ Module hub · **GFC register** (upload) · Register dashboard · **Master regist
 |--------------------|--------------|---------|
 | Drawing & GFC Drawing Log | `/projects/:id/drawings` | Live upload log, R0–Rn columns, PDF/DWG |
 | **Master Drawing Register** | `…/register?sheet=master` | Full DCI register (41 cols incl. issue + critical) |
-| **Site Drawing Register** | `…/register?sheet=site` | R0–R6 receive/issue matrix + **signatures** |
+| ~~Site Drawing Register~~ | *(removed)* | Receive/issue now on GFC upload log only |
 | DRAWING REGISTER · Dashboard | `…/register` | Week KPIs + pie charts |
 | Drwing check master checklist | `…/drawings/checklist-master` | Pre-upload Drawing Check only |
 
@@ -31,7 +33,20 @@ Module hub · **GFC register** (upload) · Register dashboard · **Master regist
 | | |
 |--|--|
 | **Route** | `/projects/:id/drawings` |
-| **Purpose** | **GFC file log only** — upload PDF/DWG, revisions R0–Rn, publish, site receive/issue + signatures. Not the DCI master schedule. |
+| **Purpose** | **GFC file log only** — upload PDF/DWG, revisions R0–Rn, publish. Optional receive/issue with **client + PMC + site engineer** signatures picked from **Photo storage**. No PDF markup on upload (markup is in Design coordination). |
+
+### Signatures on upload (optional)
+| Role | Source |
+|------|--------|
+| Client | Pick from Photos module or name field |
+| PMC | Pick from Photos module or name field |
+| Site engineer | Pick from Photos module or name field |
+
+### Branded Drawing Check export
+| Action | Route |
+|--------|-------|
+| Branded HTML (print PDF) | Checklist fill log → **Branded PDF** |
+| Branded Excel table | Checklist fill log → **Branded Excel** (`GET …/submissions/:id/branded.xlsx`) |
 
 ### Register columns (R0–Rn)
 | Rule | Notes |
@@ -264,16 +279,19 @@ Date of receiving · Total copies received · Issued to contractor · Receiver s
 | | |
 |--|--|
 | **Route** | `/projects/:id/drawings/coordination` |
-| **Purpose** | Clash/design issues; link GFC drawing for PDF preview; close or escalate to Ask RFI. |
+| **Purpose** | Clash/design issues; **PDF markup** on linked GFC; **DMS attachments**; assignee **follow-up emails** (max 5, then auto-RFI); manual escalate anytime. |
 
 ### Features
 | Feature | Notes |
 |---------|-------|
-| Log issue | Title, discipline, location, linked GFC drawing |
+| Log issue | Title, discipline, location, assignee name + **email**, linked GFC drawing |
 | PDF preview | Inline viewer when drawing has uploaded PDF |
-| Link / change drawing | On existing issues after logging |
+| **Mark up PDF** | Annotation saved on linked revision (not on GFC upload) |
+| **Attach DMS file** | Upload to design coordination folder in SharePoint |
+| **Send follow-up** | `POST …/coordination/:id/follow-up` — emails assignee; **5th follow-up auto-creates RFI** |
+| **Escalate to RFI** | `POST …/coordination/:id/escalate-rfi` — creates RFI server-side |
 | Close / Reopen | Status workflow on each issue |
-| Escalate to Ask RFI | Pre-fills RFI with issue + drawing |
+| SharePoint logs | Design-Coordination-Log includes assignee, follow-up count, escalation id |
 
 ### Meeting changes (log in session → dev builds → re-test)
 

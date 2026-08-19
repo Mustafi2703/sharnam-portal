@@ -38,7 +38,7 @@
 | Client login | https://portal.spdc.in/login/client |
 | Demo password | Demo@1234 (change on production when agreed) |
 | Test project | SPDC-DEMO-01 |
-| Drawings module | Project → **Drawings** → use tabs: GFC register, Master register, Site register |
+| Drawings module | Project → **Drawings** → use tabs: GFC register, Master register |
 
 **Roles to use in testing**
 
@@ -123,7 +123,7 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 |------------------|-----------------|----------------|
 | Drawing & GFC Drawing Log | **GFC register** | Upload PDF/DWG only — revisions, signatures, publish |
 | Master Drawing Register | **Master register** tab | Full DCI schedule — add lines here, **filter by package/building** |
-| Site Drawing Register | **Site register** tab | R0–R6 matrix + **signature images** |
+| ~~Site Drawing Register~~ | *(removed — client decision)* | Receive/issue + signatures remain on GFC upload log |
 | Dashboard sheet | **Register dashboard** | Week KPIs + charts |
 | Drawing check master | **Checklist manager** | Pre-upload checklist only (Drawings module) |
 
@@ -272,9 +272,20 @@ For each module session: run the tests, then fill **Meeting changes** rows (do n
 
 | Test | Pass | Notes |
 |------|:----:|-------|
-| Quality dashboard KPIs | ☐ | |
-| SOR Log tab | ☐ | |
-| QI checklist fill + evidence | ☐ | |
+| Quality dashboard KPIs | ☐ | `/inspections` |
+| SOR Log tab | ☐ | `?sheet=sor-log` — live totals from site obs/instruction |
+| **Site observation** | ☐ | `?sheet=site-observation` — inline form + Edit popup |
+| **Site instruction** | ☐ | `?sheet=site-instruction` — inline form + Edit popup |
+| Checklist summary (Sheet1 catalog) | ☐ | `?sheet=checklist-summary` |
+| CAR / NCR register | ☐ | Raise inline + **Edit popup** + close |
+| Cube Test register (SPDC format) | ☐ | `?sheet=cube-test` — inline form + Edit popup |
+| **Quality Assurance Plan** | ☐ | **`/qap`** — Week 50 columns, daily checks, **Import Excel**, **Download Excel/PDF** |
+| RFI branded export | ☐ | Reports → RFI register — full columns + linked drawing |
+| QI raise + assignee fill | ☐ | `?sheet=qi` — **no drawing required** |
+| Quality checklist master | ☐ | `/quality/checklist-master` — QI family only |
+| Request QI fill RFI | ☐ | Scoped page — no Ask PMC / drawing / safety pills |
+
+**Do not test here:** Drawing checklist (Drawings module) · Safety checklist (Safety module) · Site checklists (Field)
 
 **Meeting changes — Quality**
 
@@ -312,12 +323,33 @@ For each module session: run the tests, then fill **Meeting changes** rows (do n
 | 1 | | P1/P2/P3 | Open | ☐ |
 | 2 | | | Open | ☐ |
 
+### Progress
+
+| Test | Pass | Notes |
+|------|:----:|-------|
+| Overview KPIs | ☐ | `/progress` |
+| Milestones register | ☐ | `?tab=milestones` |
+| **Planned vs Actual — qty register** | ☐ | `?tab=planned` — Wk plan / Wk act (this week, not Cost) |
+| Planned vs Actual — weekly manpower | ☐ | Same page |
+| Planned vs Actual — RA cashflow table | ☐ | Same pack; **not** Cost cashflow |
+| Import / export Excel | ☐ | Client `Planned Vs. Actual Dashboard.xlsx` |
+| Monthly / hindrance / risk | ☐ | |
+
+**Do not test here:** Cost BOQ / MB / BBS / Cash Flow Chart (Cost module)
+
+**Meeting changes — Progress**
+
+| # | Change / issue | Priority | Dev status | Re-test |
+|---|----------------|----------|------------|---------|
+| 1 | | P1/P2/P3 | Open | ☐ |
+| 2 | | | Open | ☐ |
+
 ### Comms · Cost · Finance · Reports · Closure
 
 | Module | Key test | Pass | Notes |
 |--------|----------|:----:|-------|
 | Comms | Matrix → meeting → MoM | ☐ | |
-| Cost | BOQ / cashflow view | ☐ | |
+| Cost | BOQ / MB / BBS / cashflow (INR months) | ☐ | Not weekly qty PVA |
 | Finance | PO / RA shell | ☐ | |
 | Reports | DPR / WPR PDF | ☐ | |
 | Closure | Snaglist register | ☐ | |

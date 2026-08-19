@@ -18,6 +18,7 @@ type QapRow = {
   clientRole?: string | null;
   records?: string | null;
   remarks?: string | null;
+  dailyChecks?: string | null;
   contractorOk?: boolean;
   pmcOk?: boolean;
   clientOk?: boolean;
@@ -47,6 +48,19 @@ export function QapDetailRegister({ projectId, token, rows, canEdit, onUpdated, 
     return rows.filter((r) => r.weekLabel === weekFilter);
   }, [rows, weekFilter, showWeekFilter]);
 
+  const dayLabels = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows) {
+      if (!r.dailyChecks) continue;
+      try {
+        Object.keys(JSON.parse(r.dailyChecks)).forEach((k) => set.add(k));
+      } catch {
+        /* ignore */
+      }
+    }
+    return Array.from(set).sort();
+  }, [rows]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, QapRow[]>();
     for (const row of filtered) {
@@ -56,6 +70,15 @@ export function QapDetailRegister({ projectId, token, rows, canEdit, onUpdated, 
     }
     return Array.from(map.entries());
   }, [filtered]);
+
+  function parseDaily(q: QapRow): Record<string, boolean> {
+    if (!q.dailyChecks) return {};
+    try {
+      return JSON.parse(q.dailyChecks) as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  }
 
   async function patchRow(id: string, body: Record<string, unknown>) {
     await api(`/api/checklist/project/${projectId}/qap/${id}`, {
@@ -101,6 +124,11 @@ export function QapDetailRegister({ projectId, token, rows, canEdit, onUpdated, 
               <th className="text-left">Client</th>
               <th className="text-left min-w-[8rem]">Records</th>
               <th className="text-left min-w-[7rem]">Remarks</th>
+              {dayLabels.map((d) => (
+                <th key={d} className="text-left min-w-[3rem]" title={`Day ${d}`}>
+                  D{d.slice(-2)}
+                </th>
+              ))}
               <th className="text-left">Status</th>
             </tr>
           </thead>
@@ -108,7 +136,7 @@ export function QapDetailRegister({ projectId, token, rows, canEdit, onUpdated, 
             {grouped.map(([section, sectionRows]) => (
               <Fragment key={section}>
                 <tr className="bg-brand-soft/40">
-                  <td colSpan={12} className="text-left font-semibold text-brand-dark py-2 px-3">
+                  <td colSpan={12 + dayLabels.length} className="text-left font-semibold text-brand-dark py-2 px-3">
                     {section}
                   </td>
                 </tr>
@@ -256,6 +284,28 @@ export function QapDetailRegister({ projectId, token, rows, canEdit, onUpdated, 
                         q.remarks || "—"
                       )}
                     </td>
+                    {dayLabels.map((d) => {
+                      const daily = parseDaily(q);
+                      const checked = !!daily[d];
+                      return (
+                        <td key={d} className="text-left align-top">
+                          {canEdit ? (
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = { ...parseDaily(q), [d]: e.target.checked };
+                                void patchRow(q.id, { dailyChecks: next });
+                              }}
+                            />
+                          ) : checked ? (
+                            "✓"
+                          ) : (
+                            "·"
+                          )}
+                        </td>
+                      );
+                    })}
                     <td className="text-left align-top whitespace-nowrap">
                       <Badge tone={q.status === "Done" ? "ok" : "warn"}>{q.status || "Open"}</Badge>
                       {canEdit && q.status !== "Done" && (
@@ -285,7 +335,7 @@ export function QapDetailRegister({ projectId, token, rows, canEdit, onUpdated, 
             ))}
             {!grouped.length && (
               <tr>
-                <td colSpan={12} className="empty text-left">
+                <td colSpan={12 + dayLabels.length} className="empty text-left">
                   No QAP detail rows — re-run <code>npm run db:seed</code> with Quality Dashboard / Week 50 workbooks.
                 </td>
               </tr>
