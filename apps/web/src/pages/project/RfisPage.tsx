@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
+import { InspectionRequestReference } from "../../components/InspectionRequestReference";
 import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
 import {
   checklistFamilyForRfiKind,
@@ -253,6 +254,14 @@ export default function RfisPage() {
           {!isClient && form.rfiKind === "RequestForInformation" && (
             <div className="mb-3">
               <RfiProgressBar progress={rfiProgress({ ...form, responses: [] })} compact />
+            </div>
+          )}
+          {(form.rfiKind === "QualityInspection" || form.rfiKind === "SafetyChecklist") && (
+            <div className="mb-3">
+              <InspectionRequestReference
+                rfiKind={form.rfiKind}
+                onApplyTemplate={(subject, question) => setForm((f) => ({ ...f, subject, question }))}
+              />
             </div>
           )}
           <form

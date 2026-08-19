@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { api } from "../api";
 import { Badge, Button } from "./ui";
 import { packageClass, delayClass as regDelayClass, disciplineClass } from "../lib/registerTableTheme";
 import { uniqSorted } from "../lib/masterDrawingRegister";
@@ -16,6 +17,9 @@ export function MasterDrawingRegisterTable({
   lines,
   filteredLines,
   projectId,
+  canEdit,
+  token,
+  onLinePatched,
   filterPackage,
   filterBuilding,
   filterDiscipline,
@@ -29,6 +33,9 @@ export function MasterDrawingRegisterTable({
   lines: any[];
   filteredLines: any[];
   projectId: string;
+  canEdit?: boolean;
+  token?: string | null;
+  onLinePatched?: () => void | Promise<void>;
   filterPackage: string;
   filterBuilding: string;
   filterDiscipline: string;
@@ -166,7 +173,30 @@ export function MasterDrawingRegisterTable({
                 <td className="text-xs whitespace-nowrap">{fmtDay(r.revisionDate)}</td>
                 <td className="max-w-[10rem] text-xs">{r.revisionDescription || "—"}</td>
                 <td>{r.latestRevision || "—"}</td>
-                <td className="text-xs whitespace-nowrap">{fmtDay(r.plannedSubmissionDate)}</td>
+                <td className="text-xs whitespace-nowrap">
+                  {canEdit ? (
+                    <input
+                      type="date"
+                      className="text-xs border border-line rounded px-1 py-0.5 bg-white"
+                      defaultValue={r.plannedSubmissionDate ? new Date(r.plannedSubmissionDate).toISOString().slice(0, 10) : ""}
+                      onBlur={async (e) => {
+                        const v = e.target.value;
+                        const prev = r.plannedSubmissionDate
+                          ? new Date(r.plannedSubmissionDate).toISOString().slice(0, 10)
+                          : "";
+                        if (v === prev) return;
+                        await api(`/api/drawings/register-lines/${r.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ plannedSubmissionDate: v || null }),
+                        });
+                        await onLinePatched?.();
+                      }}
+                    />
+                  ) : (
+                    fmtDay(r.plannedSubmissionDate)
+                  )}
+                </td>
                 <td className="text-xs whitespace-nowrap">{fmtDay(r.actualSubmissionDate)}</td>
                 <td className={`text-xs font-mono ${delayClass(r.submissionDelayDays)}`}>
                   {r.submissionDelayDays != null ? r.submissionDelayDays : "—"}

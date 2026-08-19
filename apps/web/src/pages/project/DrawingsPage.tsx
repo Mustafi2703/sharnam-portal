@@ -184,6 +184,15 @@ export default function DrawingsPage() {
     setViewer(previewFromRev(d, latest));
   }
 
+  async function patchRevisionPlanned(revId: string, plannedDate: string) {
+    await api(`/api/drawings/revision/${revId}/dates`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ plannedDate: plannedDate || null }),
+    });
+    await load();
+  }
+
   async function registerDrawing(e: FormEvent) {
     e.preventDefault();
     if (!unlockToken) {
@@ -687,13 +696,28 @@ export default function DrawingsPage() {
                       </td>
                       {revSlots.map((slot) => {
                         const r = gfcRevisionForSlot(d.revisions || [], slot);
+                        const plannedDay = r?.plannedDate
+                          ? new Date(r.plannedDate).toISOString().slice(0, 10)
+                          : "";
                         return (
                           <td
                             key={slot}
-                            className="px-2 py-2 text-[10px] text-center font-mono text-steel-muted whitespace-nowrap"
+                            className="px-1 py-1 text-[10px] text-center font-mono text-steel-muted whitespace-nowrap align-top"
                             title={r?.revisionLabel || ""}
                           >
-                            {gfcDateLabel(r)}
+                            {canUpload && r?.id ? (
+                              <div className="space-y-0.5">
+                                <input
+                                  type="date"
+                                  className="w-full max-w-[6.5rem] text-[10px] border border-line rounded px-0.5 py-0.5 bg-white"
+                                  value={plannedDay}
+                                  onChange={(e) => void patchRevisionPlanned(r.id, e.target.value)}
+                                />
+                                <div className="text-[9px] text-steel-muted">{gfcDateLabel(r).replace(/^P:/, "A:")}</div>
+                              </div>
+                            ) : (
+                              gfcDateLabel(r)
+                            )}
                           </td>
                         );
                       })}
@@ -740,7 +764,7 @@ export default function DrawingsPage() {
                             )}
                           </div>
                           <p className="text-xs text-steel-muted mb-3">
-                            Update the same revision many times — replace PDF/DWG, add markup pages, or re-upload with the same rev number. Register columns and current rev stay in sync.
+                            Update the same revision many times — replace PDF/DWG or re-upload with the same rev number. Register columns and current rev stay in sync.
                           </p>
                           <ul className="space-y-2">
                             {revsByNum.map((r: any, idx: number) => (
@@ -767,9 +791,6 @@ export default function DrawingsPage() {
                                   <Badge tone={r.published ? "ok" : "neutral"}>{r.published ? "Live" : "Draft"}</Badge>
                                   {r.pdfFileUrl && <Badge tone="neutral">PDF</Badge>}
                                   {r.dwgFileUrl && <Badge tone="neutral">DWG</Badge>}
-                                  {(r.markupPages?.length || 0) > 0 && (
-                                    <Badge tone="ok">{r.markupPages.length} markup</Badge>
-                                  )}
                                   {revisionHasFiles(r) && (
                                     <Button
                                       type="button"
@@ -868,7 +889,7 @@ export default function DrawingsPage() {
           }
           context={
             revUploadMode === "replace"
-              ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only — markup history kept`
+              ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only`
               : revUploadMode === "update"
                 ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · add/replace PDF or DWG on same row (no checklist)`
                 : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist complete`

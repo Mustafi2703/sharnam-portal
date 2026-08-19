@@ -1006,6 +1006,41 @@ drawingsRouter.patch(
   }
 );
 
+drawingsRouter.patch(
+  "/revision/:revId/dates",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const rev = await prisma.drawingRevision.findUnique({
+      where: { id: req.params.revId },
+      include: { drawing: true },
+    });
+    if (!rev) return res.status(404).json({ error: "Revision not found" });
+    const data: Record<string, unknown> = {};
+    if (req.body.plannedDate !== undefined) {
+      data.plannedDate = req.body.plannedDate ? new Date(String(req.body.plannedDate)) : null;
+    }
+    if (req.body.actualDate !== undefined) {
+      data.actualDate = req.body.actualDate ? new Date(String(req.body.actualDate)) : null;
+    }
+    const updated = await prisma.drawingRevision.update({
+      where: { id: rev.id },
+      data,
+      include: revisionInclude,
+    });
+    await syncMasterRegisterFromRevision({
+      projectId: rev.drawing.projectId,
+      drawingId: rev.drawingId,
+      drawingNumber: rev.drawing.drawingNumber,
+      revisionNumber: rev.revisionNumber,
+      revisionLabel: updated.revisionLabel,
+      plannedDate: updated.plannedDate,
+      actualDate: updated.actualDate ?? updated.receivedDate,
+      copiesReceived: updated.copiesReceived,
+    });
+    res.json(updated);
+  }
+);
+
 /** Replace PDF or DWG on an existing revision — logs audit, no new revision row */
 drawingsRouter.patch(
   "/revision/:revId/file",

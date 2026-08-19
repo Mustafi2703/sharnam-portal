@@ -140,6 +140,9 @@ export default function DrawingRegisterPage() {
           lines={lines}
           filteredLines={filteredLines}
           projectId={id!}
+          canEdit={canEdit}
+          token={token}
+          onLinePatched={load}
           filterPackage={filterPackage}
           filterBuilding={filterBuilding}
           filterDiscipline={filterDiscipline}

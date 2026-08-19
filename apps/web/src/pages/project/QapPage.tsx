@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
-import { QapDetailRegister } from "../../components/QapDetailRegister";
+import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
 
 /** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
 const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans";
@@ -19,6 +19,7 @@ export default function QapPage() {
   const { token, user } = useAuth();
   const [docs, setDocs] = useState<DriveItem[]>([]);
   const [dash, setDash] = useState<any>(null);
+  const [project, setProject] = useState<QapProjectMeta | null>(null);
   const [weekFilter, setWeekFilter] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [addForm, setAddForm] = useState({
@@ -38,7 +39,7 @@ export default function QapPage() {
   const load = async () => {
     if (!id) return;
     try {
-      const [dmsRes, dashRes] = await Promise.all([
+      const [dmsRes, dashRes, projRes] = await Promise.all([
         api<{ children: DriveItem[]; path: string }>(
           `/api/dms/${id}/browse?path=${encodeURIComponent(QAP_FOLDER)}&sync=0`,
           { token }
@@ -47,6 +48,7 @@ export default function QapPage() {
           `/api/checklist/project/${id}/quality-dashboard`,
           { token }
         ).catch(() => null),
+        api<QapProjectMeta>(`/api/projects/${id}`, { token }).catch(() => null),
       ]);
       const files = (dmsRes.children || []).filter((f) => f.type === "file");
       setDocs(
@@ -60,6 +62,15 @@ export default function QapPage() {
             )
       );
       setDash(dashRes);
+      if (projRes) {
+        setProject({
+          name: projRes.name,
+          code: projRes.code,
+          clientName: projRes.clientName,
+          designConsultant: projRes.designConsultant,
+          contractorName: projRes.contractorName,
+        });
+      }
       if (!weekFilter && dashRes?.qap?.[0] && typeof dashRes.qap[0] === "object" && dashRes.qap[0] && "weekLabel" in dashRes.qap[0]) {
         setWeekFilter(String((dashRes.qap[0] as { weekLabel?: string }).weekLabel || ""));
       }
@@ -205,6 +216,7 @@ export default function QapPage() {
         canEdit={canManage}
         onUpdated={load}
         showWeekFilter={false}
+        project={project}
       />
 
       {canManage && (

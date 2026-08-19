@@ -5,7 +5,7 @@ import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
-import { SAFETY_SHEET_VIEWS, safetySheetFromParams } from "../../lib/safetySheetViews";
+import { safetySheetFromParams } from "../../lib/safetySheetViews";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
@@ -74,7 +74,7 @@ function recordToForm(r: any): SafetyForm {
 
 export default function SafetyPage() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const sheetView = safetySheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const ncrView = sheetKey === "ncr-summary" || sheetKey === "ncr-form" || searchParams.get("view") === "ncr";
@@ -215,31 +215,6 @@ export default function SafetyPage() {
           <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`}>Raise Safety RFI →</Link>
         </div>
       </div>
-
-      <nav
-        className="module-subnav flex gap-1 border-b border-line pb-3 overflow-x-auto overscroll-x-contain -mx-1 px-1"
-        aria-label="Safety workbook views"
-      >
-        {SAFETY_SHEET_VIEWS.map((s) => (
-          <button
-            key={s.key || "dashboard"}
-            type="button"
-            onClick={() => setSearchParams(s.key ? { sheet: s.key } : {})}
-            className={`shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border whitespace-nowrap ${
-              sheetKey === s.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
-            }`}
-            title={s.sheet}
-          >
-            {s.label}
-          </button>
-        ))}
-        <Link
-          to={`/projects/${id}/hub/safety`}
-          className="shrink-0 rounded-sm px-2.5 py-1.5 text-xs font-medium border border-line text-steel-muted whitespace-nowrap hover:text-ink"
-        >
-          Module hub
-        </Link>
-      </nav>
 
       {sheetView.kpiOnly && dash?.onePager && (
         <Card>
