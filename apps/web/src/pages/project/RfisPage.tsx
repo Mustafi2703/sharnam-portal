@@ -7,6 +7,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
 import { InspectionRequestReference } from "../../components/InspectionRequestReference";
 import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
+import { rfiUsesDrawingLink } from "../../lib/inspectionRequestForms";
 import {
   checklistFamilyForRfiKind,
   defaultRfiKindForModule,
@@ -164,6 +165,8 @@ export default function RfisPage() {
       setForm((f) => ({ ...f, rfiKind: "DrawingChecklist" }));
     } else if (kindFilter === "SafetyChecklist") {
       setForm((f) => ({ ...f, rfiKind: "SafetyChecklist" }));
+    } else if (kindFilter === "QualityIR" || kindFilter === "SafetyIR" || kindFilter === "ActivityInspection") {
+      setForm((f) => ({ ...f, rfiKind: kindFilter, linkedDrawingId: "" }));
     } else if (kindFilter === "RequestForInformation" || kindFilter === "All") {
       setForm((f) => ({ ...f, rfiKind: "RequestForInformation" }));
     }
@@ -260,6 +263,7 @@ export default function RfisPage() {
             <div className="mb-3">
               <InspectionRequestReference
                 rfiKind={form.rfiKind}
+                projectId={id}
                 onApplyTemplate={(subject, question) => setForm((f) => ({ ...f, subject, question }))}
               />
             </div>
@@ -280,6 +284,7 @@ export default function RfisPage() {
                   ...form,
                   linkedChecklistItemId: assignment?.template?.id || form.linkedChecklistItemId || null,
                   linkedAssignmentId: form.linkedAssignmentId || null,
+                  linkedDrawingId: rfiUsesDrawingLink(form.rfiKind) ? form.linkedDrawingId || null : null,
                   rfiKind: isClient ? "ClientConcern" : form.rfiKind,
                 }),
               });
@@ -355,7 +360,7 @@ export default function RfisPage() {
                     </option>
                   ))}
                 </Select>
-                {!moduleScoped || form.rfiKind === "DrawingChecklist" ? (
+                {!isClient && rfiUsesDrawingLink(form.rfiKind) ? (
                   <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
                     <option value="">Linked drawing (optional)</option>
                     {drawings.map((d) => (
@@ -381,13 +386,13 @@ export default function RfisPage() {
             )}
             <p className="text-xs text-steel-muted">
               {form.rfiKind === "QualityInspection"
-                ? "Quality QI checklists only — assignee and office can fill. No drawing module link required."
+                ? "Quality QI checklists only — assignee and office can fill. Drawing ref is text-only; use Ask (PMC RFI) to link a drawing file."
                 : form.rfiKind === "DrawingChecklist"
                   ? "Drawing Check Master only — use Drawings → Checklist manager. Quality & Safety have separate masters."
                   : form.rfiKind === "SafetyChecklist"
-                    ? "Safety checklists only — use Safety → Checklist master."
+                    ? "Safety checklists only — use Safety → Checklist master. No drawing file attachment."
                     : form.rfiKind === "RequestForInformation"
-                      ? "PMC / drawing clarification — matrix parties respond / close."
+                      ? "PMC / drawing clarification — link drawing revision here. Matrix parties respond / close."
                       : "Fillers: Communication Matrix parties, assignee, and responsible vendor."}
             </p>
             <Button type="submit">

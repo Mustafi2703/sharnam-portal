@@ -7,16 +7,20 @@ export type RfiKindFilter =
   | "DrawingChecklist"
   | "QualityInspection"
   | "SafetyChecklist"
+  | "QualityIR"
+  | "SafetyIR"
+  | "ActivityInspection"
   | "Manual"
   | "ClientConcern";
 
 /** Which module owns the current RFI page — keeps Drawing / Quality / Safety checklists separate. */
-export type RfiModuleScope = "drawings" | "quality" | "safety" | "comms" | "field" | "home";
+export type RfiModuleScope = "drawings" | "quality" | "safety" | "comms" | "inspection" | "field" | "home";
 
 export function rfiModuleScope(pathname: string, search: string): RfiModuleScope {
   const ws = resolveProjectWorkspace(pathname, search);
   if (ws === "home") return "home";
-  if (ws === "drawings" || ws === "quality" || ws === "safety" || ws === "comms" || ws === "field") return ws;
+  if (ws === "drawings" || ws === "quality" || ws === "safety" || ws === "comms" || ws === "field" || ws === "inspection")
+    return ws;
   return "home";
 }
 
@@ -49,6 +53,9 @@ export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, str
       return [
         ["All", "All"],
         ["RequestForInformation", "Ask (PMC)"],
+        ["QualityIR", "Quality IR"],
+        ["SafetyIR", "Safety IR"],
+        ["ActivityInspection", "Activity checklist"],
         ["ClientConcern", "Client"],
       ];
     default:

@@ -1345,8 +1345,12 @@ model Rfi {
   number                String
   subject               String
   question              String
-  /// RequestForInformation | DrawingChecklist | QualityInspection | Manual | ClientConcern
+  /// RequestForInformation | DrawingChecklist | QualityInspection | QualityIR | SafetyIR | ActivityInspection | SafetyChecklist | Manual | ClientConcern
   rfiKind               String    @default("RequestForInformation")
+  /// SPDC IR / HSE / checklist reference number (IR/CIV/024, HSE/IR/012, CL/CIV/104)
+  irNumber              String?
+  /// Structured SPDC form fields (particulars, drawing ref text, clearance codes, etc.)
+  formDataJson          String? @db.Text
   status                String    @default("Open")
   ballInCourt           String    @default("Assignee")
   assignedToId          String?

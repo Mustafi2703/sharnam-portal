@@ -10,6 +10,7 @@ export type WorkspaceKey =
   | "dms"
   | "quality"
   | "safety"
+  | "inspection"
   | "progress"
   | "comms"
   | "field"
@@ -186,6 +187,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       query: "kind=QualityInspection",
       blurb: "Notify assignee / vendor to complete a QI checklist.",
     },
+    {
+      to: "inspection-register",
+      label: "Quality IR register",
+      blurb: "SPDC/QA/F-01 Request for Inspection — text drawing ref, live register.",
+      sheet: "SPDC_Request_for_Inspection_Form.xlsx",
+    },
   ],
   safety: [
     { to: "safety", label: "Dashboard", blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
@@ -254,6 +261,49 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Safety checklist RFI",
       query: "kind=SafetyChecklist",
       blurb: "Request safety checklist fill.",
+    },
+    {
+      to: "inspection-register",
+      label: "Safety IR register",
+      query: "tab=safety-ir",
+      blurb: "SPDC/HSE/F-01 clearance requests + HSE register.",
+      sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
+    },
+  ],
+  inspection: [
+    {
+      to: "inspection-register",
+      label: "Quality IR (F-01)",
+      end: true,
+      blurb: "SPDC/QA/F-01 Request for Inspection — particulars, activity offered, text drawing ref.",
+      sheet: "SPDC_Request_for_Inspection_Form.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "Safety IR (F-01)",
+      query: "tab=safety-ir",
+      blurb: "High-risk activity clearance — links to quality IR when applicable.",
+      sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "Activity checklist (F-02)",
+      query: "tab=activity-checklist",
+      blurb: "Activity inspection checklist — sections A–H, drawing no. as text.",
+      sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "HSE register",
+      query: "tab=hse-register",
+      blurb: "Safety IRs, inspection findings & observations.",
+      sheet: "HSE Register",
+    },
+    {
+      to: "rfis",
+      label: "Ask (PMC RFI)",
+      query: "kind=RequestForInformation",
+      blurb: "Drawing-linked clarification — use Comms / Drawings for file attachment.",
     },
   ],
   progress: [
@@ -357,7 +407,34 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "rfis",
       label: "Ask (PMC RFI)",
       query: "kind=RequestForInformation",
-      blurb: "Classic request for information.",
+      blurb: "Classic request for information — link drawing revision.",
+    },
+    {
+      to: "inspection-register",
+      label: "Quality IR (F-01)",
+      blurb: "Raise SPDC quality inspection request — register maintained live.",
+      sheet: "SPDC_Request_for_Inspection_Form.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "Safety IR (F-01)",
+      query: "tab=safety-ir",
+      blurb: "High-risk activity clearance — HSE register.",
+      sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "Activity checklist (F-02)",
+      query: "tab=activity-checklist",
+      blurb: "Activity inspection checklist offer — drawing ref as text.",
+      sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "HSE register",
+      query: "tab=hse-register",
+      blurb: "Safety IRs, findings & observations register.",
+      sheet: "HSE Register",
     },
     {
       to: "email",
@@ -518,6 +595,16 @@ export const MODULE_META: Record<
     glow: "rgba(220,38,38,0.32)",
     ink: "#7F1D1D",
     icon: "HSE",
+  },
+  inspection: {
+    title: "Inspection",
+    desc: "SPDC quality IR, safety clearance, activity checklists, and HSE register — forms per client workbook.",
+    path: "hub/inspection",
+    accent: "#0369A1",
+    soft: "#E0F2FE",
+    glow: "rgba(3,105,161,0.32)",
+    ink: "#0C4A6E",
+    icon: "IR",
   },
   progress: {
     title: "Progress",
@@ -688,6 +775,7 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "dms",
   "quality",
   "safety",
+  "inspection",
   "progress",
   "comms",
   "field",

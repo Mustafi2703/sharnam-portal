@@ -38,6 +38,8 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
 
   if (tail === "safety" || tail.startsWith("safety/")) return "safety";
 
+  if (tail === "inspection-register" || tail.startsWith("inspection-register")) return "inspection";
+
   if (tail === "checklist-master") return checklistFamilyModule(search, "master");
   if (tail === "checklist-logs") return checklistFamilyModule(search, "logs");
 
@@ -56,8 +58,9 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "RequestForInformation") return "comms";
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
+    if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
     const stored = getActiveWorkspace();
-    if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms") return stored;
+    if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms" || stored === "inspection") return stored;
     return "quality";
   }
 

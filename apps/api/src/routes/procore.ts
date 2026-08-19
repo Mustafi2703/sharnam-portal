@@ -88,10 +88,11 @@ rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
   const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
   const canRespond = await roleOnRfiMatrix(req.params.projectId, req.user!.role);
   const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
+  const kindList = kind && kind !== "All" ? kind.split(",").map((k) => k.trim()).filter(Boolean) : [];
   const rfis = await prisma.rfi.findMany({
     where: {
       projectId: req.params.projectId,
-      ...(kind && kind !== "All" ? { rfiKind: kind } : {}),
+      ...(kindList.length === 1 ? { rfiKind: kindList[0] } : kindList.length > 1 ? { rfiKind: { in: kindList } } : {}),
     },
     include: {
       assignedTo: { select: { id: true, fullName: true } },
@@ -114,20 +115,35 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       (req.body.linkedChecklistItemId || req.body.linkedAssignmentId
         ? "DrawingChecklist"
         : "RequestForInformation");
+  const noDrawingLink = ["QualityIR", "SafetyIR", "ActivityInspection", "QualityInspection", "SafetyChecklist"].includes(
+    rfiKind,
+  );
   const prefix =
-    rfiKind === "QualityInspection"
-      ? "QI-RFI"
-      : rfiKind === "DrawingChecklist"
-        ? "DWG-RFI"
-        : rfiKind === "SafetyChecklist"
-          ? "SAF-RFI"
-          : rfiKind === "RequestForInformation"
-            ? "RFI"
-            : isClient
-              ? "CON"
-              : "RFI";
+    rfiKind === "QualityIR"
+      ? "IR-QA"
+      : rfiKind === "SafetyIR"
+        ? "HSE-IR"
+        : rfiKind === "ActivityInspection"
+          ? "CL"
+          : rfiKind === "QualityInspection"
+            ? "QI-RFI"
+            : rfiKind === "DrawingChecklist"
+              ? "DWG-RFI"
+              : rfiKind === "SafetyChecklist"
+                ? "SAF-RFI"
+                : rfiKind === "RequestForInformation"
+                  ? "RFI"
+                  : isClient
+                    ? "CON"
+                    : "RFI";
   const number = req.body.number || `${prefix}-${String(count + 1).padStart(3, "0")}`;
   const due = req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 7 * 86400000);
+  const formDataJson =
+    req.body.formDataJson && typeof req.body.formDataJson === "object"
+      ? JSON.stringify(req.body.formDataJson)
+      : typeof req.body.formDataJson === "string"
+        ? req.body.formDataJson
+        : null;
 
   const rfi = await prisma.rfi.create({
     data: {
@@ -136,12 +152,14 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       subject: req.body.subject,
       question: req.body.question,
       rfiKind,
+      irNumber: req.body.irNumber || null,
+      formDataJson,
       status: req.body.status || "Open",
       ballInCourt: "Assignee",
       assignedToId: req.body.assignedToId || null,
       createdById: req.user!.id,
       dueDate: due,
-      linkedDrawingId: isClient ? null : req.body.linkedDrawingId || null,
+      linkedDrawingId: isClient || noDrawingLink ? null : req.body.linkedDrawingId || null,
       linkedChecklistItemId: req.body.linkedChecklistItemId || null,
       linkedAssignmentId: req.body.linkedAssignmentId || null,
       attachmentsJson: req.body.attachmentsJson ? JSON.stringify(req.body.attachmentsJson) : req.body.attachmentNote || null,

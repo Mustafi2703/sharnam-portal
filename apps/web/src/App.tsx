@@ -29,6 +29,7 @@ import ProjectHomePage from "./pages/project/ProjectHomePage";
 import VendorsPage from "./pages/project/VendorsPage";
 import RfisPage from "./pages/project/RfisPage";
 import InspectionsPage from "./pages/project/InspectionsPage";
+import InspectionRegisterPage from "./pages/project/InspectionRegisterPage";
 import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
@@ -135,6 +136,7 @@ export default function App() {
                   <Route path="hub/dms" element={<ModuleHubPage moduleKey="dms" />} />
                   <Route path="hub/quality" element={<ModuleHubPage moduleKey="quality" />} />
                   <Route path="hub/safety" element={<ModuleHubPage moduleKey="safety" />} />
+                  <Route path="hub/inspection" element={<ModuleHubPage moduleKey="inspection" />} />
                   <Route path="hub/progress" element={<ModuleHubPage moduleKey="progress" />} />
                   <Route path="hub/field" element={<ModuleHubPage moduleKey="field" />} />
                   <Route path="hub/comms" element={<ModuleHubPage moduleKey="comms" />} />
@@ -157,6 +159,7 @@ export default function App() {
                   <Route path="checklist/assign" element={<ChecklistAssignPage />} />
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
+                  <Route path="inspection-register" element={<InspectionRegisterPage />} />
                   <Route path="qap" element={<QapPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />
