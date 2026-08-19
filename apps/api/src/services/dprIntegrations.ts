@@ -149,12 +149,14 @@ export async function buildDprAutoFill(
     safetyToday,
     safetyOpen,
     ncrsOpen,
+    ncrsToday,
     cubesToday,
     hindrances,
     rfisOpen,
     cashflow,
     prev,
     checklistFillsToday,
+    siteRecordsToday,
   ] = await Promise.all([
     prisma.costMonitoringLine.findMany({
       where: { projectId, packageName: { in: pkgs } },
@@ -168,6 +170,17 @@ export async function buildDprAutoFill(
     prisma.safetyRecord.findMany({ where: { projectId, occurredAt: { gte: start, lt: end } } }),
     prisma.safetyRecord.findMany({ where: { projectId, status: "Open" }, take: 50 }),
     prisma.qualityNcr.findMany({ where: { projectId, status: "Open" }, take: 50 }),
+    prisma.qualityNcr.findMany({
+      where: {
+        projectId,
+        OR: [
+          { issueDate: { gte: start, lt: end } },
+          { actualClosure: { gte: start, lt: end } },
+          { createdAt: { gte: start, lt: end } },
+        ],
+      },
+      take: 30,
+    }),
     prisma.cubeTest.findMany({
       where: {
         projectId,
@@ -196,6 +209,11 @@ export async function buildDprAutoFill(
       include: { assignment: { include: { template: { select: { checklistType: true } } } } },
       take: 30,
     }),
+    prisma.qualitySiteRecord.findMany({
+      where: { projectId, occurredAt: { gte: start, lt: end } },
+      orderBy: { occurredAt: "desc" },
+      take: 40,
+    }),
   ]);
 
   if (monitoring.length) sources.push(`BOQ monitoring (${pkgs.slice(0, 2).join(", ")})`);
@@ -207,6 +225,7 @@ export async function buildDprAutoFill(
   if (safetyToday.length || safetyOpen.length) sources.push("Safety records / NCR");
   if (ncrsOpen.length || cubesToday.length) sources.push("Quality NCR / cube tests");
   if (checklistFillsToday.length) sources.push("QI / Safety checklist fills");
+  if (siteRecordsToday.length) sources.push("SOR log (site obs / instruction)");
   if (hindrances.length) sources.push("Hindrance register");
   if (rfisOpen.length) sources.push("Open RFIs");
 
@@ -322,7 +341,28 @@ export async function buildDprAutoFill(
       .join("; ");
   };
 
+  const sorObsToday = siteRecordsToday.filter((r) => r.recordType !== "Site Instruction");
+  const sorInstrToday = siteRecordsToday.filter((r) => r.recordType === "Site Instruction");
+  const sorNcrToday = ncrsToday.filter((n) => !/^CAR/i.test(n.number || ""));
+  const sorCarToday = ncrsToday.filter((n) => /^CAR/i.test(n.number || ""));
+  const sorLinesToday = [
+    ...siteRecordsToday.map((r) => `${r.recordType}: ${r.title}`),
+    ...ncrsToday.map((n) => `${/^CAR/i.test(n.number || "") ? "CAR" : "NCR"} ${n.number}: ${n.description.slice(0, 80)}`),
+  ];
+
   const qualityTests: DprQualityTest[] = [
+    {
+      parameter: "SOR — site observations today",
+      figure: sorObsToday.length
+        ? `${sorObsToday.length} raised · ${sorObsToday.filter((r) => r.status === "Closed").length} closed`
+        : "—",
+    },
+    {
+      parameter: "SOR — site instructions today",
+      figure: sorInstrToday.length
+        ? `${sorInstrToday.length} issued · ${sorInstrToday.filter((r) => r.status === "Closed").length} closed`
+        : "—",
+    },
     {
       parameter: "Pour cards offered / approved",
       figure: String(cubesToday.length ? new Set(cubesToday.map((c) => c.srNo)).size : "—"),
@@ -341,8 +381,12 @@ export async function buildDprAutoFill(
     { parameter: "7-day cube result", figure: cubeSummary(cubesToday, "7") },
     { parameter: "28-day cube result", figure: cubeSummary(cubesToday, "28") },
     {
-      parameter: "NCRs open / closed today",
-      figure: `${ncrsOpen.length} open · ${safetyOpen.filter((s) => /ncr/i.test(s.recordType)).length} safety`,
+      parameter: "NCR / CAR today (SOR register)",
+      figure: `${sorNcrToday.length} NCR · ${sorCarToday.length} CAR · ${ncrsOpen.length} open total`,
+    },
+    {
+      parameter: "SOR dated lines (report day)",
+      figure: sorLinesToday.length ? sorLinesToday.slice(0, 4).join("; ") : "—",
     },
     { parameter: "Field density (compaction) tests", figure: "—" },
   ];

@@ -212,10 +212,11 @@ export function qapStatusFromRow(row: QapDetailRow): { status: string; contracto
   };
 }
 
-/** Merge workbook SOR summary with live portal site observation / instruction counts */
+/** Merge workbook SOR summary with live portal site observation / instruction / NCR / CAR counts */
 export function buildLiveSorLog(
   workbookRows: SorLogRow[],
-  siteRecords: { recordType: string; status: string }[]
+  siteRecords: { recordType: string; status: string }[],
+  ncrs?: { status: string; number?: string | null }[]
 ): SorLogRow[] {
   const liveByType: Record<string, { total: number; open: number; closed: number }> = {};
   for (const r of siteRecords) {
@@ -248,6 +249,45 @@ export function buildLiveSorLog(
         closed: counts.closed,
         closureRate: counts.total ? counts.closed / counts.total : 0,
       });
+    }
+  }
+
+  if (ncrs?.length) {
+    const ncrCounts = { total: 0, open: 0, closed: 0 };
+    const carCounts = { total: 0, open: 0, closed: 0 };
+    for (const n of ncrs) {
+      const isCar = /^CAR/i.test(n.number || "");
+      const bucket = isCar ? carCounts : ncrCounts;
+      bucket.total++;
+      if (n.status === "Closed") bucket.closed++;
+      else bucket.open++;
+    }
+    for (const [label, counts] of [
+      ["NCR", ncrCounts],
+      ["CAR", carCounts],
+    ] as const) {
+      if (!counts.total) continue;
+      const idx = merged.findIndex((r) => r.label.toLowerCase().includes(label.toLowerCase()));
+      if (idx >= 0) {
+        merged[idx] = {
+          ...merged[idx],
+          total: merged[idx].total + counts.total,
+          open: merged[idx].open + counts.open,
+          closed: merged[idx].closed + counts.closed,
+          closureRate:
+            merged[idx].total + counts.total
+              ? (merged[idx].closed + counts.closed) / (merged[idx].total + counts.total)
+              : merged[idx].closureRate,
+        };
+      } else {
+        merged.push({
+          label,
+          total: counts.total,
+          open: counts.open,
+          closed: counts.closed,
+          closureRate: counts.total ? counts.closed / counts.total : 0,
+        });
+      }
     }
   }
   return merged;

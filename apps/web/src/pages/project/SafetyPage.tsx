@@ -6,6 +6,7 @@ import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
+import { openNcrFormWindow } from "../../lib/ncrFormFields";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
@@ -446,11 +447,29 @@ export default function SafetyPage() {
                     <td className="text-left">{n.category || "—"}</td>
                     <td className="text-left max-w-xs truncate">{n.description || "—"}</td>
                     <td className="text-left">
-                      <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          n.status === "Open" && n.recordType === "NCR" && id
+                            ? openNcrFormWindow(id, "safety", n.id)
+                            : setActive(n.id)
+                        }
+                      >
+                        <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
+                      </button>
                     </td>
                     {canEdit && (
                       <td className="text-left" onClick={(e) => e.stopPropagation()}>
-                        {n.status === "Open" ? (
+                        {n.status === "Open" && n.recordType === "NCR" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="!py-1 !px-2 !text-xs"
+                            onClick={() => id && openNcrFormWindow(id, "safety", n.id)}
+                          >
+                            Fill NCR form
+                          </Button>
+                        ) : n.status === "Open" ? (
                           <Button
                             type="button"
                             variant="secondary"
@@ -663,7 +682,24 @@ export default function SafetyPage() {
                     <Button type="button" onClick={() => void saveEdit()}>
                       Save changes
                     </Button>
-                    {selected.status === "Open" && (
+                    {selected.recordType === "NCR" && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => id && openNcrFormWindow(id, "safety", selected.id)}
+                      >
+                        {selected.status === "Open" ? "Open NCR form (Safety NCR.xlsx)" : "View / download NCR form"}
+                      </Button>
+                    )}
+                    {selected.status === "Open" && selected.recordType === "NCR" ? (
+                      <Button
+                        type="button"
+                        variant="dark"
+                        onClick={() => id && openNcrFormWindow(id, "safety", selected.id)}
+                      >
+                        Close via NCR form
+                      </Button>
+                    ) : selected.status === "Open" ? (
                       <Button
                         type="button"
                         variant="dark"
@@ -679,7 +715,7 @@ export default function SafetyPage() {
                       >
                         Close record
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               ) : (

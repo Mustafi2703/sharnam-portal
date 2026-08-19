@@ -30,6 +30,7 @@ import VendorsPage from "./pages/project/VendorsPage";
 import RfisPage from "./pages/project/RfisPage";
 import InspectionsPage from "./pages/project/InspectionsPage";
 import InspectionRegisterPage from "./pages/project/InspectionRegisterPage";
+import NcrFormPage from "./pages/project/NcrFormPage";
 import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
@@ -160,6 +161,7 @@ export default function App() {
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="inspection-register" element={<InspectionRegisterPage />} />
+                  <Route path="ncr-form/:scope/:recordId" element={<NcrFormPage />} />
                   <Route path="qap" element={<QapPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />

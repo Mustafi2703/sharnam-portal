@@ -253,6 +253,16 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       closedAt: req.body.status === "Closed" ? new Date() : undefined,
     },
   });
+  if (req.body.status && req.body.status !== existing.status) {
+    const { notifyRfiStatus } = await import("../services/ncrNotify.js");
+    await notifyRfiStatus({
+      projectId: existing.projectId,
+      number: rfi.number,
+      subject: rfi.subject,
+      status: rfi.status,
+      createdById: req.user!.id,
+    });
+  }
   res.json(rfi);
 });
 
@@ -892,12 +902,41 @@ safetyRouter.post(
       },
     });
     await audit("safety.create", { userId: req.user!.id, entity: "SafetyRecord", entityId: row.id });
+    if (row.recordType === "NCR") {
+      const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+      await notifyNcrStatus({
+        projectId: req.params.projectId,
+        kind: "SafetyNCR",
+        number: row.ncrNumber || row.title,
+        status: row.status,
+        description: row.description || row.title,
+        createdById: req.user!.id,
+        event: "created",
+      });
+    }
     res.status(201).json(row);
   }
 );
 
 safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const body = req.body || {};
+  const existing = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+
+  const nextStatus = body.status != null ? String(body.status) : existing.status;
+  if (nextStatus === "Closed" && existing.status !== "Closed" && existing.recordType === "NCR") {
+    const { safetyNcrMissingFields } = await import("../services/ncrFormExport.js");
+    const merged = { ...existing, ...body };
+    const missing = safetyNcrMissingFields(merged);
+    if (missing.length) {
+      return res.status(400).json({
+        error: "Complete the Safety NCR form before closing",
+        missingFields: missing,
+        formUrl: `/projects/${existing.projectId}/ncr-form/safety/${existing.id}`,
+      });
+    }
+  }
+
   const patch = safetyRecordPatch(body);
   if (body.status === "Closed") patch.closedAt = new Date();
   else if (body.closedAt) patch.closedAt = new Date(String(body.closedAt));
@@ -910,5 +949,32 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
     },
   });
   await audit("safety.update", { userId: req.user!.id, entity: "SafetyRecord", entityId: row.id });
+  if (row.recordType === "NCR") {
+    const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+    await notifyNcrStatus({
+      projectId: row.projectId,
+      kind: "SafetyNCR",
+      number: row.ncrNumber || row.title,
+      status: row.status,
+      description: row.description || row.title,
+      createdById: req.user!.id,
+      event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
+    });
+  }
   res.json(row);
+});
+
+safetyRouter.get("/:id/export.xlsx", async (req, res) => {
+  const row = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  const project = await prisma.project.findUnique({
+    where: { id: row.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  const { buildSafetyNcrXlsxBuffer } = await import("../services/ncrFormExport.js");
+  const buf = buildSafetyNcrXlsxBuffer(row, project || undefined);
+  const name = `${row.ncrNumber || row.title || "Safety-NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(buf);
 });

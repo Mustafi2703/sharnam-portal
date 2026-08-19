@@ -1653,6 +1653,8 @@ model QualityNcr {
   actualClosure  DateTime?
   status         String    @default("Open")
   source         String?
+  /// NCR 01 extended fields (to/from, action required, follow-up sign-offs)
+  formDataJson   String?   @db.Text
   createdAt      DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

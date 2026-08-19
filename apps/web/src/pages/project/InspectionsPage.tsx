@@ -8,6 +8,7 @@ import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams }
 import { QualitySiteRegister } from "../../components/QualitySiteRegister";
 import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
 import { SorLogPanel } from "../../components/SorLogPanel";
+import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
@@ -168,6 +169,8 @@ export default function InspectionsPage() {
             </p>
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
               <PieChart title="NCR / CAR status" items={dash.charts?.byNcrStatus || []} />
+              <PieChart title="SOR register by type" items={dash.charts?.sorByType || []} />
+              <PieChart title="SOR register by status" items={dash.charts?.sorByStatus || []} />
               <PieChart title="Cube test results" items={dash.charts?.byCubeResult || []} />
               <PieChart title="QAP status" items={dash.charts?.byQapStatus || []} />
               <PieChart title="Checklist fills by discipline" items={dash.charts?.fillsByDiscipline || []} />
@@ -317,10 +320,25 @@ export default function InspectionsPage() {
                     <td className="text-left">{n.ncrType || "—"}</td>
                     <td className="text-left max-w-md">{n.description}</td>
                     <td className="text-left">
-                      <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
+                      <button
+                        type="button"
+                        className="inline-flex"
+                        onClick={() => n.status === "Open" && id && openNcrFormWindow(id, "quality", n.id)}
+                        title={n.status === "Open" ? "Open NCR form (NCR 01)" : undefined}
+                      >
+                        <Badge tone={n.status === "Open" ? "warn" : "ok"}>{n.status}</Badge>
+                      </button>
                     </td>
                     {canManage && (
                       <td className="text-left space-x-1">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!py-1 !px-2 !text-xs"
+                          onClick={() => id && openNcrFormWindow(id, "quality", n.id)}
+                        >
+                          {n.status === "Open" ? "Fill form" : "View form"}
+                        </Button>
                         <Button
                           type="button"
                           variant="secondary"
@@ -337,27 +355,16 @@ export default function InspectionsPage() {
                             });
                           }}
                         >
-                          Edit
+                          Quick edit
                         </Button>
                         {n.status === "Open" ? (
                           <Button
                             type="button"
                             variant="secondary"
                             className="!py-1 !px-2 !text-xs"
-                            onClick={async () => {
-                              await api(`/api/checklist/project/${id}/ncr/${n.id}`, {
-                                method: "PATCH",
-                                token,
-                                body: JSON.stringify({
-                                  status: "Closed",
-                                  actualClosure: new Date().toISOString().slice(0, 10),
-                                }),
-                              });
-                              setMsg(`${n.number} closed`);
-                              await load();
-                            }}
+                            onClick={() => id && openNcrFormWindow(id, "quality", n.id)}
                           >
-                            Close
+                            Close via form
                           </Button>
                         ) : null}
                       </td>

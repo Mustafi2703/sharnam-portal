@@ -1072,7 +1072,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     }),
     Promise.resolve(loadQualityDashboardWorkbook()),
   ]);
-  const liveSorLog = buildLiveSorLog(workbook?.sorLog || [], siteRecords);
+  const liveSorLog = buildLiveSorLog(workbook?.sorLog || [], siteRecords, ncrs);
   const sorEntries = buildLiveSorEntries(siteRecords, ncrs);
   const workbookOut = workbook ? { ...workbook, sorLog: liveSorLog } : { sorLog: liveSorLog, checklistByDiscipline: [], checklistCatalog: [], source: "portal" };
   const byDay: Record<string, number> = {};
@@ -1125,6 +1125,18 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         .sort(([a], [b]) => a.localeCompare(b))
         .slice(-14)
         .map(([label, value]) => ({ label, value })),
+      sorByType: Object.entries(
+        sorEntries.reduce((acc: Record<string, number>, e) => {
+          acc[e.type] = (acc[e.type] || 0) + 1;
+          return acc;
+        }, {})
+      ).map(([label, value]) => ({ label, value })),
+      sorByStatus: Object.entries(
+        sorEntries.reduce((acc: Record<string, number>, e) => {
+          acc[e.status] = (acc[e.status] || 0) + 1;
+          return acc;
+        }, {})
+      ).map(([label, value]) => ({ label, value })),
     },
     /** Progress Reports: QI fills → Quality section; SiteExecution → DPR site checklists */
     reportMapping: {
@@ -1289,6 +1301,12 @@ checklistRouter.post(
         plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : null,
         status: String(body.status || "Open").slice(0, 40),
         source: "portal",
+        formDataJson:
+          body.formDataJson && typeof body.formDataJson === "object"
+            ? JSON.stringify(body.formDataJson)
+            : typeof body.formDataJson === "string"
+              ? body.formDataJson
+              : null,
       },
     });
     await audit("quality.ncr.create", {
@@ -1296,6 +1314,16 @@ checklistRouter.post(
       entity: "QualityNcr",
       entityId: row.id,
       meta: { projectId: req.params.projectId, number: row.number },
+    });
+    const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+    await notifyNcrStatus({
+      projectId: req.params.projectId,
+      kind: kind === "CAR" ? "QualityCAR" : "QualityNCR",
+      number: row.number || row.id,
+      status: row.status,
+      description: row.description,
+      createdById: req.user!.id,
+      event: "created",
     });
     res.status(201).json(row);
   }
@@ -1306,20 +1334,80 @@ checklistRouter.patch(
   requireRoles("admin", "office", "employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
+    const existing = await prisma.qualityNcr.findFirst({
+      where: { id: req.params.ncrId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "NCR not found" });
+
+    const nextStatus = body.status != null ? String(body.status) : existing.status;
+    if (nextStatus === "Closed" && existing.status !== "Closed") {
+      const { qualityNcrCloseMissingFields } = await import("../services/ncrFormExport.js");
+      const merged = {
+        ...existing,
+        ...body,
+        formDataJson:
+          body.formDataJson && typeof body.formDataJson === "object"
+            ? JSON.stringify(body.formDataJson)
+            : body.formDataJson ?? existing.formDataJson,
+        plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : existing.plannedClosure,
+        actualClosure: body.actualClosure ? new Date(body.actualClosure) : existing.actualClosure,
+      };
+      const missing = qualityNcrCloseMissingFields(merged);
+      if (missing.length) {
+        return res.status(400).json({
+          error: "Complete the NCR / CAR form before closing",
+          missingFields: missing,
+          formUrl: `/projects/${req.params.projectId}/ncr-form/quality/${existing.id}`,
+        });
+      }
+    }
+
     const data: Record<string, unknown> = {};
     if (body.status != null) data.status = String(body.status);
     if (body.description != null) data.description = String(body.description);
     if (body.location != null) data.location = String(body.location);
+    if (body.contractor != null) data.contractor = String(body.contractor);
     if (body.plannedClosure !== undefined) data.plannedClosure = body.plannedClosure ? new Date(body.plannedClosure) : null;
     if (body.actualClosure !== undefined) data.actualClosure = body.actualClosure ? new Date(body.actualClosure) : null;
     if (body.ncrType != null) data.ncrType = String(body.ncrType);
+    if (body.formDataJson != null) {
+      data.formDataJson =
+        typeof body.formDataJson === "object" ? JSON.stringify(body.formDataJson) : String(body.formDataJson);
+    }
     const row = await prisma.qualityNcr.update({
       where: { id: req.params.ncrId },
       data,
     });
+    const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+    await notifyNcrStatus({
+      projectId: req.params.projectId,
+      kind: /^CAR/i.test(row.number || "") ? "QualityCAR" : "QualityNCR",
+      number: row.number || row.id,
+      status: row.status,
+      description: row.description,
+      createdById: req.user!.id,
+      event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
+    });
     res.json(row);
   }
 );
+
+checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req, res) => {
+  const row = await prisma.qualityNcr.findFirst({
+    where: { id: req.params.ncrId, projectId: req.params.projectId },
+  });
+  if (!row) return res.status(404).json({ error: "NCR not found" });
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  const { buildQualityNcrXlsxBuffer } = await import("../services/ncrFormExport.js");
+  const buf = buildQualityNcrXlsxBuffer(row, project || undefined);
+  const name = `${row.number || "NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(buf);
+});
 
 /** Quality site observation / site instruction — feeds SOR Log */
 checklistRouter.get("/project/:projectId/quality-site-records", async (req, res) => {
