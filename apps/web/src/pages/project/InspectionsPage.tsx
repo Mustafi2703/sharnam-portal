@@ -7,6 +7,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip
 import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams } from "../../lib/qualitySheetViews";
 import { QualitySiteRegister } from "../../components/QualitySiteRegister";
 import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
+import { SorLogPanel } from "../../components/SorLogPanel";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
@@ -115,7 +116,7 @@ export default function InspectionsPage() {
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
           <Link to={`/projects/${id}/quality/checklist-master`}>Checklist master →</Link>
           <Link to={`/projects/${id}/quality/checklist-logs`}>QI fill log →</Link>
-          <Link to={`/projects/${id}/rfis?kind=QualityInspection`}>Request QI fill →</Link>
+          <Link to={`/projects/${id}/rfis?kind=QualityInspection`}>Raise quality RFI →</Link>
           <Link to={`/projects/${id}/qap`}>Quality Assurance Plan →</Link>
         </div>
       </div>
@@ -188,39 +189,12 @@ export default function InspectionsPage() {
         </div>
       )}
 
-      {sheetKey === "sor-log" && dash?.workbook?.sorLog?.length > 0 && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-sand/40">
-            <h3 className="font-semibold text-sm text-left">SOR Log (Quality Dashboard.xlsx)</h3>
-            <p className="text-xs text-steel-muted mt-1 text-left">
-              Site observation summary — totals from seeded client workbook. Fills map to DPR Quality section.
-            </p>
-          </div>
-          <div className="sheet-register overflow-x-auto">
-            <table className="sheet-register__table min-w-[28rem] w-full">
-              <thead>
-                <tr>
-                  <th className="text-left">Observation type</th>
-                  <th className="text-left">Total</th>
-                  <th className="text-left">Open</th>
-                  <th className="text-left">Closed</th>
-                  <th className="text-left">Closure rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dash.workbook.sorLog.map((r: any, i: number) => (
-                  <tr key={i}>
-                    <td className="text-left font-medium">{r.label}</td>
-                    <td className="text-left font-mono tabular-nums">{r.total}</td>
-                    <td className="text-left tabular-nums">{r.open}</td>
-                    <td className="text-left tabular-nums">{r.closed}</td>
-                    <td className="text-left font-mono tabular-nums">{(r.closureRate * 100).toFixed(1)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+      {sheetKey === "sor-log" && (
+        <SorLogPanel
+          projectId={id!}
+          summary={dash?.workbook?.sorLog || []}
+          entries={dash?.sorEntries || []}
+        />
       )}
 
       {sheetKey === "checklist-summary" && dash?.workbook && (

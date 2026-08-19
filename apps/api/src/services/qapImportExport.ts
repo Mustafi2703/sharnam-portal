@@ -1,6 +1,8 @@
 /**
  * Quality Assurance Plan Week 50.xlsx — import / export with daily check columns.
  */
+import fs from "fs";
+import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { parseQapDetailSheet, qapStatusFromRow, type QapDetailRow } from "./qualityDashboardSheets.js";
@@ -11,15 +13,43 @@ function s(v: unknown, max = 500) {
   return t ? t.slice(0, max) : "";
 }
 
+function excelSerialToDay(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (typeof v === "number" && v > 40000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    epoch.setUTCDate(epoch.getUTCDate() + Math.floor(v));
+    return epoch.toISOString().slice(0, 10);
+  }
+  const t = s(v, 40);
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  if (/^\d{1,2}[/-]/.test(t)) return t;
+  return null;
+}
+
 function parseDailyChecks(row: unknown[], headerRow: unknown[]): Record<string, boolean> {
   const out: Record<string, boolean> = {};
-  for (let c = 12; c <= 18; c++) {
-    const label = s(headerRow[c], 40);
-    if (!label || !/^\d/.test(label)) continue;
+  for (let c = 12; c <= 25; c++) {
+    const label = excelSerialToDay(headerRow[c]) || s(headerRow[c], 40);
+    if (!label) continue;
     const val = row[c];
     out[label] = val === true || val === "x" || val === "X" || val === 1 || val === "1" || val === "yes" || val === "Yes";
   }
   return out;
+}
+
+export function resolveQapWeek50Path(): string | null {
+  const candidates = [
+    process.env.SHARNAM_EXCEL_ROOT
+      ? path.join(process.env.SHARNAM_EXCEL_ROOT, "Quality Assurance Plan Week 50.xlsx")
+      : "",
+    path.join(process.cwd(), "seed", "data", "Quality Assurance Plan Week 50.xlsx"),
+    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Quality Assurance Plan Week 50.xlsx"),
+  ].filter(Boolean);
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
 }
 
 export function parseQapWeek50Workbook(buffer: Buffer): {
@@ -34,18 +64,20 @@ export function parseQapWeek50Workbook(buffer: Buffer): {
     defval: "",
   }) as unknown[][];
 
-  let weekLabel = "W50";
-  for (let i = 0; i < Math.min(rows.length, 10); i++) {
-    const cell = s(rows[i]?.[0], 80);
-    const m = cell.match(/week\s*(\d+)/i);
-    if (m) weekLabel = `Week ${m[1]}`;
+  let weekLabel = "Week 50";
+  for (let i = 0; i < Math.min(rows.length, 12); i++) {
+    for (let c = 0; c < 20; c++) {
+      const cell = s(rows[i]?.[c], 80);
+      const m = cell.match(/week\s*(\d+)/i);
+      if (m) weekLabel = `Week ${m[1]}`;
+    }
   }
 
   const headerRow = rows[7] || [];
   const dayLabels: string[] = [];
-  for (let c = 12; c <= 18; c++) {
-    const label = s(headerRow[c], 40);
-    if (label && /^\d/.test(label)) dayLabels.push(label);
+  for (let c = 12; c <= 25; c++) {
+    const label = excelSerialToDay(headerRow[c]) || s(headerRow[c], 40);
+    if (label && (excelSerialToDay(headerRow[c]) || /^\d/.test(label))) dayLabels.push(label);
   }
 
   const base = parseQapDetailSheet(rows, 9);

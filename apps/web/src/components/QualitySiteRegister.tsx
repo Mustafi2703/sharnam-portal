@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
+import { RegisterFilterBar } from "./RegisterFilterBar";
 
 export type QualitySiteRecord = {
   id: string;
@@ -46,6 +47,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
   const [editForm, setEditForm] = useState(emptyForm(recordType));
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string>>({ status: "All", from: "", to: "", q: "" });
 
   const load = async () => {
     const list = await api<QualitySiteRecord[]>(
@@ -59,7 +61,20 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
     void load();
   }, [projectId, token, recordType]);
 
-  const filtered = useMemo(() => rows.filter((r) => r.recordType === recordType), [rows, recordType]);
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (r.recordType !== recordType) return false;
+      if (filters.status !== "All" && r.status !== filters.status) return false;
+      const day = r.occurredAt.slice(0, 10);
+      if (filters.from && day < filters.from) return false;
+      if (filters.to && day > filters.to) return false;
+      if (filters.q) {
+        const hay = `${r.title} ${r.description || ""} ${r.location || ""}`.toLowerCase();
+        if (!hay.includes(filters.q.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [rows, recordType, filters]);
 
   async function createRecord(e: FormEvent) {
     e.preventDefault();
@@ -157,13 +172,24 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
         </Card>
       )}
 
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40">
+      <Card padding={false} className="flex flex-col max-h-[calc(100vh-14rem)] min-h-[20rem]">
+        <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
           <h3 className="font-semibold text-sm text-left">
             {recordType} register ({filtered.length})
           </h3>
         </div>
-        <div className="sheet-register overflow-x-auto max-h-[28rem]">
+        <RegisterFilterBar
+          fields={[
+            { key: "status", label: "Status", type: "select", options: ["Open", "Closed"] },
+            { key: "from", label: "From", type: "date" },
+            { key: "to", label: "To", type: "date" },
+            { key: "q", label: "Search", type: "text", placeholder: "Title, location…" },
+          ]}
+          values={filters}
+          onChange={(k, v) => setFilters({ ...filters, [k]: v })}
+          onClear={() => setFilters({ status: "All", from: "", to: "", q: "" })}
+        />
+        <div className="sheet-register overflow-auto flex-1 min-h-0">
           <table className="sheet-register__table min-w-[48rem] w-full text-sm">
             <thead>
               <tr>

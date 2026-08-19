@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
+import { RegisterFilterBar } from "./RegisterFilterBar";
 
 export type CubeRow = {
   id: string;
@@ -50,7 +51,7 @@ type Props = {
   onChanged: () => void | Promise<void>;
 };
 
-/** SPDC CUBE REGISTER layout — cast, 7-day / 28-day load & strength, result. */
+/** SPDC CUBE REGISTER — grouped by Sr. No. / footing description with filters. */
 export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }: Props) {
   const [form, setForm] = useState(emptyCube());
   const [modalOpen, setModalOpen] = useState(false);
@@ -58,10 +59,53 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
   const [editForm, setEditForm] = useState(emptyCube());
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string>>({
+    grade: "All",
+    result: "All",
+    from: "",
+    to: "",
+    q: "",
+  });
 
   useEffect(() => {
     if (!modalOpen) setEditForm(emptyCube());
   }, [modalOpen]);
+
+  const grades = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => r.grade && set.add(r.grade));
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    return rows.filter((c) => {
+      if (filters.grade !== "All" && (c.grade || "") !== filters.grade) return false;
+      if (filters.result !== "All") {
+        const res = (c.result || "Pending").toLowerCase();
+        if (filters.result === "PASS" && !/pass/.test(res)) return false;
+        if (filters.result === "FAIL" && !/fail/.test(res)) return false;
+        if (filters.result === "Pending" && !/pending/.test(res)) return false;
+      }
+      const castDay = c.castDate ? c.castDate.slice(0, 10) : "";
+      if (filters.from && castDay && castDay < filters.from) return false;
+      if (filters.to && castDay && castDay > filters.to) return false;
+      if (filters.q) {
+        const hay = `${c.srNo} ${c.description} ${c.grade}`.toLowerCase();
+        if (!hay.includes(filters.q.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [rows, filters]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, CubeRow[]>();
+    for (const row of filtered) {
+      const key = row.srNo || row.description.slice(0, 40) || row.id;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(row);
+    }
+    return Array.from(map.entries());
+  }, [filtered]);
 
   async function submitCube(body: Record<string, unknown>, method: "POST" | "PATCH", id?: string) {
     const url =
@@ -146,7 +190,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
     <>
       <Input placeholder="Sr. No." value={form.srNo} onChange={(e) => setForm({ ...form, srNo: e.target.value })} />
       <Input type="date" value={form.castDate} onChange={(e) => setForm({ ...form, castDate: e.target.value })} />
-      <Input className="sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
+      <Input className="sm:col-span-2" placeholder="Description / footing" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
       <Input placeholder="Concrete grade (e.g. M:25)" value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} />
       <Input placeholder="Weight of cube (kg)" value={form.cubeWeight} onChange={(e) => setForm({ ...form, cubeWeight: e.target.value })} />
       <Input type="date" value={form.testDate7} onChange={(e) => setForm({ ...form, testDate7: e.target.value })} title="7-day testing date" />
@@ -171,7 +215,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
       {canEdit && (
         <Card>
           <h3 className="font-semibold mb-1">Add cube test entry</h3>
-          <p className="text-xs text-steel-muted mb-3">Matches SPDC CUBE REGISTER — inline form below; Edit opens popup.</p>
+          <p className="text-xs text-steel-muted mb-3">SPDC CUBE REGISTER — group by Sr. No. / footing; multiple test rows per group.</p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={onCreate}>
             {formFields}
             <Button type="submit" disabled={busy} className="sm:col-span-2 lg:col-span-4 sm:w-auto">
@@ -181,17 +225,33 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
         </Card>
       )}
 
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40">
-          <h3 className="font-semibold text-sm text-left">Cube register — SPDC format ({rows.length} rows)</h3>
+      <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem]">
+        <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
+          <h3 className="font-semibold text-sm text-left">
+            Cube register — SPDC format ({filtered.length} rows · {grouped.length} groups)
+          </h3>
         </div>
-        <div className="sheet-register overflow-x-auto max-h-[32rem]">
-          <table className="sheet-register__table min-w-[72rem] w-full text-xs">
-            <thead>
+
+        <RegisterFilterBar
+          fields={[
+            { key: "grade", label: "Grade", type: "select", options: grades },
+            { key: "result", label: "Result", type: "select", options: ["PASS", "FAIL", "Pending"] },
+            { key: "from", label: "Cast from", type: "date" },
+            { key: "to", label: "Cast to", type: "date" },
+            { key: "q", label: "Search", type: "text", placeholder: "Sr, footing, grade…" },
+          ]}
+          values={filters}
+          onChange={(k, v) => setFilters({ ...filters, [k]: v })}
+          onClear={() => setFilters({ grade: "All", result: "All", from: "", to: "", q: "" })}
+        />
+
+        <div className="sheet-register overflow-auto flex-1 min-h-0">
+          <table className="sheet-register__table min-w-[76rem] w-full text-xs">
+            <thead className="sticky top-0 z-10 bg-white shadow-sm">
               <tr>
                 <th className="text-left">Sr</th>
                 <th className="text-left">Cast date</th>
-                <th className="text-left">Description</th>
+                <th className="text-left min-w-[10rem]">Description / footing</th>
                 <th className="text-left">Grade</th>
                 <th className="text-left">Weight</th>
                 <th className="text-left">7-day test</th>
@@ -199,43 +259,58 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
                 <th className="text-left">7-day load</th>
                 <th className="text-left">28-day load</th>
                 <th className="text-left">7-day str.</th>
+                <th className="text-left">28-day str.</th>
                 <th className="text-left">Avg str.</th>
                 <th className="text-left">Result</th>
                 {canEdit && <th className="text-left">Action</th>}
               </tr>
             </thead>
             <tbody>
-              {rows.map((c) => (
-                <tr key={c.id}>
-                  <td className="text-left font-mono">{c.srNo || "—"}</td>
-                  <td className="text-left whitespace-nowrap">{fmtDate(c.castDate)}</td>
-                  <td className="text-left max-w-[12rem] truncate">{c.description}</td>
-                  <td className="text-left">{c.grade || "—"}</td>
-                  <td className="text-left tabular-nums">{c.cubeWeight ?? "—"}</td>
-                  <td className="text-left whitespace-nowrap">{fmtDate(c.testDate7)}</td>
-                  <td className="text-left whitespace-nowrap">{fmtDate(c.testDate28)}</td>
-                  <td className="text-left tabular-nums">{c.load7 ?? "—"}</td>
-                  <td className="text-left tabular-nums">{c.load28 ?? "—"}</td>
-                  <td className="text-left tabular-nums">{c.strength7 ?? "—"}</td>
-                  <td className="text-left tabular-nums">{c.avgStrength ?? "—"}</td>
-                  <td className="text-left">
-                    <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
-                      {c.result || "—"}
-                    </Badge>
-                  </td>
-                  {canEdit && (
-                    <td className="text-left">
-                      <Button type="button" variant="secondary" className="!py-1 !px-2 !text-[10px]" onClick={() => openEdit(c)}>
-                        Edit
-                      </Button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {!rows.length && (
+              {grouped.map(([groupKey, groupRows]) => {
+                const head = groupRows[0];
+                return (
+                  <Fragment key={groupKey}>
+                    <tr className="bg-brand-soft/50">
+                      <td colSpan={canEdit ? 14 : 13} className="text-left py-1.5 px-2 font-semibold text-brand-dark text-[11px]">
+                        Group {head.srNo || "—"} · {head.description.split(",")[0]} · Grade {head.grade || "—"} · Cast{" "}
+                        {fmtDate(head.castDate)}
+                      </td>
+                    </tr>
+                    {groupRows.map((c) => (
+                      <tr key={c.id}>
+                        <td className="text-left font-mono">{c.srNo || "·"}</td>
+                        <td className="text-left whitespace-nowrap">{fmtDate(c.castDate)}</td>
+                        <td className="text-left max-w-[12rem]">{c.description}</td>
+                        <td className="text-left">{c.grade || "—"}</td>
+                        <td className="text-left tabular-nums">{c.cubeWeight ?? "—"}</td>
+                        <td className="text-left whitespace-nowrap">{fmtDate(c.testDate7)}</td>
+                        <td className="text-left whitespace-nowrap">{fmtDate(c.testDate28)}</td>
+                        <td className="text-left tabular-nums">{c.load7 ?? "—"}</td>
+                        <td className="text-left tabular-nums">{c.load28 ?? "—"}</td>
+                        <td className="text-left tabular-nums">{c.strength7 ?? "—"}</td>
+                        <td className="text-left tabular-nums">{c.strength28 ?? "—"}</td>
+                        <td className="text-left tabular-nums">{c.avgStrength ?? "—"}</td>
+                        <td className="text-left">
+                          <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
+                            {c.result || "—"}
+                          </Badge>
+                        </td>
+                        {canEdit && (
+                          <td className="text-left">
+                            <Button type="button" variant="secondary" className="!py-1 !px-2 !text-[10px]" onClick={() => openEdit(c)}>
+                              Edit
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
+              {!grouped.length && (
                 <tr>
-                  <td colSpan={canEdit ? 13 : 12} className="empty text-left">
-                    No cube rows — add above or re-seed from SPDC CUBE REGISTER.
+                  <td colSpan={canEdit ? 14 : 13} className="empty text-left p-4">
+                    No cube rows — add above, adjust filters, or re-seed from SPDC CUBE REGISTER.
                   </td>
                 </tr>
               )}

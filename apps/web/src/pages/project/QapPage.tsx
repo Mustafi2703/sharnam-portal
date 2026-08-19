@@ -23,7 +23,7 @@ export default function QapPage() {
   const [weekFilter, setWeekFilter] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [addForm, setAddForm] = useState({
-    weekLabel: "W50",
+    weekLabel: "Week 50",
     section: "",
     description: "",
     frequency: "",
@@ -71,8 +71,13 @@ export default function QapPage() {
           contractorName: projRes.contractorName,
         });
       }
-      if (!weekFilter && dashRes?.qap?.[0] && typeof dashRes.qap[0] === "object" && dashRes.qap[0] && "weekLabel" in dashRes.qap[0]) {
-        setWeekFilter(String((dashRes.qap[0] as { weekLabel?: string }).weekLabel || ""));
+      if (!weekFilter && dashRes?.qap?.length) {
+        const qapList = dashRes.qap as { weekLabel?: string }[];
+        const preferred =
+          qapList.find((q) => /week\s*50/i.test(String(q.weekLabel || ""))) ||
+          qapList.find((q) => q.weekLabel === "W50") ||
+          qapList[0];
+        if (preferred?.weekLabel) setWeekFilter(String(preferred.weekLabel));
       }
     } catch {
       setDocs([]);
@@ -86,12 +91,15 @@ export default function QapPage() {
   const weeks = useMemo(() => {
     const set = new Set<string>();
     (dash?.qap || []).forEach((q: any) => q.weekLabel && set.add(q.weekLabel));
-    return Array.from(set).sort().reverse();
+    return Array.from(set).sort((a, b) => {
+      const prefer = (w: string) => (/week\s*50/i.test(w) ? 0 : w === "W50" ? 1 : 2);
+      return prefer(a) - prefer(b) || b.localeCompare(a);
+    });
   }, [dash?.qap]);
 
   const qapRows = useMemo(() => {
     const rows = dash?.qap || [];
-    if (!weekFilter) return rows;
+    if (!weekFilter) return rows.filter((q: any) => /week\s*50|^w50$/i.test(q.weekLabel || ""));
     return rows.filter((q: any) => q.weekLabel === weekFilter);
   }, [dash?.qap, weekFilter]);
 
@@ -125,6 +133,7 @@ export default function QapPage() {
           <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} open</Badge>
             <Badge tone="ok">{dash?.totals?.qapDone ?? 0} done</Badge>
+            <Badge tone="neutral">{qapRows.length} lines</Badge>
             <Link to={`/projects/${id}/inspections`}>
               <Button type="button" variant="secondary">
                 Quality dashboard →
@@ -149,6 +158,31 @@ export default function QapPage() {
           </Select>
           {canManage && (
             <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={busy}
+                onClick={async () => {
+                  if (!id) return;
+                  setBusy(true);
+                  try {
+                    const out = await api<{ imported: number; weekLabel: string }>(
+                      `/api/checklist/project/${id}/qap/sync-template`,
+                      { method: "POST", token }
+                    );
+                    setMsg(`Loaded ${out.imported} QAP lines from Week 50 template (${out.weekLabel})`);
+                    setWeekFilter(out.weekLabel);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Sync failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Load Week 50 template
+              </Button>
               <input
                 ref={importRef}
                 type="file"

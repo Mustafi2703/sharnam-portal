@@ -207,7 +207,19 @@ export default function ProjectToolsLayout() {
               {rightOpen ? "Hide panel" : "Actions"}
             </Button>
             {openRfis > 0 && (
-              <Link to={`/projects/${id}/rfis`}>
+              <Link
+                to={`/projects/${id}/rfis${
+                  activeMod === "quality"
+                    ? "?kind=QualityInspection"
+                    : activeMod === "safety"
+                      ? "?kind=SafetyChecklist"
+                      : activeMod === "drawings"
+                        ? "?kind=DrawingChecklist"
+                        : activeMod === "comms"
+                          ? "?kind=RequestForInformation"
+                          : ""
+                }`}
+              >
                 <Badge tone="warn">{openRfis} open RFIs</Badge>
               </Link>
             )}

@@ -83,7 +83,7 @@ async function seedQapRows(
   projectId: string,
   rows: ParsedQapRow[],
   weekLabel: string,
-  max = 250
+  max = 500
 ) {
   let created = 0;
   for (const row of rows.slice(0, max)) {
@@ -450,9 +450,7 @@ export async function seedQualitySafetyFromSheets(
       }
       if (cubeCreated) console.log("Quality Dashboard cube rows seeded:", cubeCreated);
 
-      const qapRows = parseQapRows(sheet(wb, /Quality Assurance Plan - Detail/i));
-      const qapCreated = await seedQapRows(prisma, projectId, qapRows, "Detail");
-      if (qapCreated) console.log("Quality Dashboard QAP rows seeded:", qapCreated);
+      // QAP Detail sheet skipped — full Week 50 workbook is authoritative
     }
   }
 
@@ -539,7 +537,7 @@ export async function seedQualitySafetyFromSheets(
       let lastGrade = "";
       let lastCast: Date | null = null;
       let lastSr = "";
-      for (let i = 10; i < rows.length && created < 120; i++) {
+      for (let i = 10; i < rows.length && created < 400; i++) {
         const row = rows[i] as unknown[];
         const sr = s(row[0], 20);
         const desc = s(row[2], 300);
@@ -580,14 +578,18 @@ export async function seedQualitySafetyFromSheets(
     }
   }
 
-  // --- QAP from Week 50 + Monthly QAP Detail ---
+  // --- QAP from Week 50 (full sheet — all rows + daily checks) ---
   {
     const qapFile = path.join(excelRoot, "Quality Assurance Plan Week 50.xlsx");
     let created = 0;
     if (fs.existsSync(qapFile)) {
-      const wb = XLSX.readFile(qapFile);
-      const rows = parseQapRows(sheet(wb, "Sheet1"), 10);
-      created = await seedQapRows(prisma, projectId, rows, "W50");
+      const { importQapWorkbook } = await import("../apps/api/src/services/qapImportExport.ts");
+      await prisma.qapActivity.deleteMany({
+        where: { projectId, weekLabel: { in: ["W50", "Week 50", "Detail"] } },
+      });
+      const out = await importQapWorkbook(projectId, fs.readFileSync(qapFile), false);
+      created = out.imported;
+      console.log("QAP Week 50 seeded:", created, "weekLabel:", out.weekLabel);
     }
     const monthly = path.join(
       excelRoot,

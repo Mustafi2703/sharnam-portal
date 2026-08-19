@@ -1043,7 +1043,7 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req, re
 /** Quality + Safety module dashboards */
 checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const { loadQualityDashboardWorkbook, buildLiveSorLog } = await import("../services/qualityDashboardSheets.js");
+  const { loadQualityDashboardWorkbook, buildLiveSorLog, buildLiveSorEntries } = await import("../services/qualityDashboardSheets.js");
   const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, siteRecords, workbook] = await Promise.all([
     prisma.checklistSubmission.findMany({
       where: { assignment: { projectId, template: { checklistType: "QualityInspection" } } },
@@ -1059,7 +1059,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       where: { assignment: { projectId, template: { checklistType: "SiteExecution" } } },
     }),
     prisma.qualityInspection.count({ where: { projectId, status: { in: ["Open", "Failed", "Rework"] } } }),
-    prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }], take: 500 }),
+    prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }] }),
     prisma.rfi.count({
       where: { projectId, status: "Open", rfiKind: { in: ["QualityInspection", "DrawingChecklist"] } },
     }),
@@ -1073,6 +1073,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     Promise.resolve(loadQualityDashboardWorkbook()),
   ]);
   const liveSorLog = buildLiveSorLog(workbook?.sorLog || [], siteRecords);
+  const sorEntries = buildLiveSorEntries(siteRecords, ncrs);
   const workbookOut = workbook ? { ...workbook, sorLog: liveSorLog } : { sorLog: liveSorLog, checklistByDiscipline: [], checklistCatalog: [], source: "portal" };
   const byDay: Record<string, number> = {};
   for (const f of qiFills) {
@@ -1090,6 +1091,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   res.json({
     workbook: workbookOut,
     siteRecords,
+    sorEntries,
     totals: {
       fills: qiFills.length,
       siteExecutionFills: siteFills,
@@ -1432,6 +1434,20 @@ checklistRouter.post(
     if (!req.file?.buffer) return res.status(400).json({ error: "Excel file required" });
     const { importQapWorkbook } = await import("../services/qapImportExport.js");
     const out = await importQapWorkbook(req.params.projectId, req.file.buffer);
+    res.json(out);
+  }
+);
+
+/** Load Week 50 QAP from bundled client template on server (all ~295 rows + daily checks). */
+checklistRouter.post(
+  "/project/:projectId/qap/sync-template",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const { importQapWorkbook, resolveQapWeek50Path } = await import("../services/qapImportExport.js");
+    const file = resolveQapWeek50Path();
+    if (!file) return res.status(404).json({ error: "Quality Assurance Plan Week 50.xlsx not found on server" });
+    const fs = await import("fs");
+    const out = await importQapWorkbook(req.params.projectId, fs.readFileSync(file), true);
     res.json(out);
   }
 );

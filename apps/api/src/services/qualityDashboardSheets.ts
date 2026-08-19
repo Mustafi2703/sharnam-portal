@@ -58,6 +58,17 @@ export type SorLogRow = {
   closureRate: number;
 };
 
+export type SorLogEntry = {
+  id: string;
+  date: string;
+  type: string;
+  reference: string;
+  description: string;
+  location?: string | null;
+  status: string;
+  source?: string;
+};
+
 export type ChecklistDisciplineRow = { discipline: string; filled: number };
 export type ChecklistCatalogRow = { srNo: number; name: string; category: string };
 
@@ -240,6 +251,60 @@ export function buildLiveSorLog(
     }
   }
   return merged;
+}
+
+/** Dated SOR lines for DPR — site observation, instruction, NCR, CAR */
+export function buildLiveSorEntries(
+  siteRecords: {
+    id: string;
+    recordType: string;
+    title: string;
+    description?: string | null;
+    location?: string | null;
+    status: string;
+    occurredAt: Date | string;
+  }[],
+  ncrs: {
+    id: string;
+    number: string | null;
+    description: string;
+    location?: string | null;
+    status: string;
+    issueDate?: Date | string | null;
+    ncrType?: string | null;
+    source?: string | null;
+  }[]
+): SorLogEntry[] {
+  const entries: SorLogEntry[] = [];
+
+  for (const r of siteRecords) {
+    entries.push({
+      id: r.id,
+      date: new Date(r.occurredAt).toISOString().slice(0, 10),
+      type: r.recordType,
+      reference: r.title,
+      description: r.description || r.title,
+      location: r.location,
+      status: r.status,
+      source: "portal",
+    });
+  }
+
+  for (const n of ncrs) {
+    const isCar = /^CAR/i.test(n.number || "") || /CAR/i.test(n.source || "");
+    entries.push({
+      id: n.id,
+      date: n.issueDate ? new Date(n.issueDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+      type: isCar ? "CAR" : "NCR",
+      reference: n.number || n.id,
+      description: n.description,
+      location: n.location,
+      status: n.status,
+      source: n.source || "NCR register",
+    });
+  }
+
+  return entries.sort((a, b) => b.date.localeCompare(a.date) || a.type.localeCompare(b.type));
 }
 
 export function loadQualityDashboardWorkbook(): QualityWorkbookData | null {

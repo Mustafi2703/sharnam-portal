@@ -57,8 +57,8 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
     const stored = getActiveWorkspace();
-    if (stored === "quality" || stored === "drawings" || stored === "safety") return stored;
-    return "comms";
+    if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms") return stored;
+    return "quality";
   }
 
   if (["directory", "vendors"].includes(tail)) return "home";
