@@ -1064,7 +1064,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       where: { projectId, status: "Open", rfiKind: { in: ["QualityInspection", "DrawingChecklist"] } },
     }),
     prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
-    prisma.cubeTest.findMany({ where: { projectId }, orderBy: { castDate: "desc" }, take: 120 }),
+    prisma.cubeTest.findMany({ where: { projectId }, orderBy: [{ srNo: "asc" }, { castDate: "asc" }] }),
     prisma.qualitySiteRecord.findMany({
       where: { projectId },
       orderBy: { occurredAt: "desc" },
@@ -1375,6 +1375,10 @@ checklistRouter.post(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const b = req.body || {};
+    const load7 = b.load7 != null ? Number(b.load7) : null;
+    const load28 = b.load28 != null ? Number(b.load28) : null;
+    const s7 = b.strength7 != null ? Number(b.strength7) : null;
+    const s28 = b.strength28 != null ? Number(b.strength28) : null;
     const row = await prisma.cubeTest.create({
       data: {
         projectId: req.params.projectId,
@@ -1385,11 +1389,11 @@ checklistRouter.post(
         cubeWeight: b.cubeWeight != null ? Number(b.cubeWeight) : null,
         testDate7: b.testDate7 ? new Date(b.testDate7) : null,
         testDate28: b.testDate28 ? new Date(b.testDate28) : null,
-        load7: b.load7 != null ? Number(b.load7) : null,
-        load28: b.load28 != null ? Number(b.load28) : null,
-        strength7: b.strength7 != null ? Number(b.strength7) : null,
-        strength28: b.strength28 != null ? Number(b.strength28) : null,
-        strength: b.strength7 != null ? Number(b.strength7) : b.strength != null ? Number(b.strength) : null,
+        load7,
+        load28,
+        strength7: s7 ?? (load7 && b.strength != null ? Number(b.strength) : null),
+        strength28: s28 ?? (load28 && b.strength != null ? Number(b.strength) : null),
+        strength: s7 ?? s28 ?? (b.strength != null ? Number(b.strength) : null),
         avgStrength: b.avgStrength != null ? Number(b.avgStrength) : null,
         result: b.result ? String(b.result) : "Pending",
         source: "portal",
@@ -1420,9 +1424,27 @@ checklistRouter.patch(
       data.strength = Number(b.strength7);
     }
     if (b.strength28 != null) data.strength28 = Number(b.strength28);
+    if (b.strength != null && !b.strength7 && !b.strength28) {
+      if (b.load28) data.strength28 = Number(b.strength);
+      else if (b.load7) data.strength7 = Number(b.strength);
+      data.strength = Number(b.strength);
+    }
     if (b.avgStrength != null) data.avgStrength = Number(b.avgStrength);
     const row = await prisma.cubeTest.update({ where: { id: req.params.cubeId }, data });
     res.json(row);
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/cubes/sync-template",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const { importCubeRegisterWorkbook, resolveCubeRegisterPath } = await import("../services/cubeRegisterImport.js");
+    const file = resolveCubeRegisterPath();
+    if (!file) return res.status(404).json({ error: "SPDC CUBE REGISTER (1).xlsx not found on server" });
+    const fs = await import("fs");
+    const out = await importCubeRegisterWorkbook(req.params.projectId, fs.readFileSync(file), true);
+    res.json(out);
   }
 );
 

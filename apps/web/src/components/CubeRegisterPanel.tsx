@@ -1,26 +1,11 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { groupCubeRows, fmtCubeDate, type CubeRow } from "../lib/cubeRegister";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { RegisterFilterBar } from "./RegisterFilterBar";
 
-export type CubeRow = {
-  id: string;
-  srNo?: string | null;
-  castDate?: string | null;
-  description: string;
-  grade?: string | null;
-  cubeWeight?: number | null;
-  testDate7?: string | null;
-  testDate28?: string | null;
-  load7?: number | null;
-  load28?: number | null;
-  strength7?: number | null;
-  strength28?: number | null;
-  strength?: number | null;
-  avgStrength?: number | null;
-  result?: string | null;
-};
+export type { CubeRow };
 
 const emptyCube = () => ({
   srNo: "",
@@ -97,15 +82,24 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
     });
   }, [rows, filters]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, CubeRow[]>();
-    for (const row of filtered) {
-      const key = row.srNo || row.description.slice(0, 40) || row.id;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(row);
+  const grouped = useMemo(() => groupCubeRows(filtered), [filtered]);
+
+  async function syncTemplate() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ imported: number; groups: number }>(
+        `/api/checklist/project/${projectId}/cubes/sync-template`,
+        { method: "POST", token }
+      );
+      setMsg(`Loaded ${out.imported} cube specimens in ${out.groups} footing groups from SPDC register.`);
+      await onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setBusy(false);
     }
-    return Array.from(map.entries());
-  }, [filtered]);
+  }
 
   async function submitCube(body: Record<string, unknown>, method: "POST" | "PATCH", id?: string) {
     const url =
@@ -127,8 +121,8 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
           cubeWeight: form.cubeWeight ? Number(form.cubeWeight) : null,
           load7: form.load7 ? Number(form.load7) : null,
           load28: form.load28 ? Number(form.load28) : null,
-          strength7: form.strength7 ? Number(form.strength7) : null,
-          strength28: form.strength28 ? Number(form.strength28) : null,
+          strength7: form.load7 && form.strength7 ? Number(form.strength7) : null,
+          strength28: form.load28 && form.strength28 ? Number(form.strength28) : null,
           avgStrength: form.avgStrength ? Number(form.avgStrength) : null,
         },
         "POST"
@@ -226,10 +220,15 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
       )}
 
       <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem]">
-        <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
+        <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold text-sm text-left">
-            Cube register — SPDC format ({filtered.length} rows · {grouped.length} groups)
+            Cube register — SPDC format ({filtered.length} specimens · {grouped.length} groups)
           </h3>
+          {canEdit && (
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => void syncTemplate()}>
+              Load SPDC cube template
+            </Button>
+          )}
         </div>
 
         <RegisterFilterBar
@@ -246,71 +245,119 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
         />
 
         <div className="sheet-register overflow-auto flex-1 min-h-0">
-          <table className="sheet-register__table min-w-[76rem] w-full text-xs">
+          <table className="sheet-register__table min-w-[80rem] w-full text-[11px] border-collapse">
             <thead className="sticky top-0 z-10 bg-white shadow-sm">
-              <tr>
-                <th className="text-left">Sr</th>
-                <th className="text-left">Cast date</th>
-                <th className="text-left min-w-[10rem]">Description / footing</th>
-                <th className="text-left">Grade</th>
-                <th className="text-left">Weight</th>
-                <th className="text-left">7-day test</th>
-                <th className="text-left">28-day test</th>
-                <th className="text-left">7-day load</th>
-                <th className="text-left">28-day load</th>
-                <th className="text-left">7-day str.</th>
-                <th className="text-left">28-day str.</th>
-                <th className="text-left">Avg str.</th>
-                <th className="text-left">Result</th>
-                {canEdit && <th className="text-left">Action</th>}
+              <tr className="bg-brand text-white text-[10px]">
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Sr. No.
+                </th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Date of Casting
+                </th>
+                <th rowSpan={2} className="text-left min-w-[10rem] border border-brand-dark/30 px-1 py-1">
+                  Description
+                </th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Concrete Grade
+                </th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Weight of Cube
+                </th>
+                <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">
+                  Testing Date
+                </th>
+                <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">
+                  Load
+                </th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Cube Strength
+                </th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Average Strength
+                </th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  Result
+                </th>
+                {canEdit && (
+                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                    Action
+                  </th>
+                )}
+              </tr>
+              <tr className="bg-brand text-white text-[10px]">
+                <th className="border border-brand-dark/30 px-1 py-0.5">7-day</th>
+                <th className="border border-brand-dark/30 px-1 py-0.5">28-day</th>
+                <th className="border border-brand-dark/30 px-1 py-0.5">7-day</th>
+                <th className="border border-brand-dark/30 px-1 py-0.5">28-day</th>
               </tr>
             </thead>
             <tbody>
-              {grouped.map(([groupKey, groupRows]) => {
-                const head = groupRows[0];
-                return (
-                  <Fragment key={groupKey}>
-                    <tr className="bg-brand-soft/50">
-                      <td colSpan={canEdit ? 14 : 13} className="text-left py-1.5 px-2 font-semibold text-brand-dark text-[11px]">
-                        Group {head.srNo || "—"} · {head.description.split(",")[0]} · Grade {head.grade || "—"} · Cast{" "}
-                        {fmtDate(head.castDate)}
-                      </td>
-                    </tr>
-                    {groupRows.map((c) => (
-                      <tr key={c.id}>
-                        <td className="text-left font-mono">{c.srNo || "·"}</td>
-                        <td className="text-left whitespace-nowrap">{fmtDate(c.castDate)}</td>
-                        <td className="text-left max-w-[12rem]">{c.description}</td>
-                        <td className="text-left">{c.grade || "—"}</td>
-                        <td className="text-left tabular-nums">{c.cubeWeight ?? "—"}</td>
-                        <td className="text-left whitespace-nowrap">{fmtDate(c.testDate7)}</td>
-                        <td className="text-left whitespace-nowrap">{fmtDate(c.testDate28)}</td>
-                        <td className="text-left tabular-nums">{c.load7 ?? "—"}</td>
-                        <td className="text-left tabular-nums">{c.load28 ?? "—"}</td>
-                        <td className="text-left tabular-nums">{c.strength7 ?? "—"}</td>
-                        <td className="text-left tabular-nums">{c.strength28 ?? "—"}</td>
-                        <td className="text-left tabular-nums">{c.avgStrength ?? "—"}</td>
-                        <td className="text-left">
-                          <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
-                            {c.result || "—"}
-                          </Badge>
+              {grouped.map((group) => (
+                <Fragment key={group.key}>
+                  {group.specimens.map((c, idx) => {
+                    const strength = c.strength28 ?? c.strength7 ?? c.strength;
+                    const showAvg = c.avgStrength != null;
+                    const showResult = c.result && /pass|fail|pending/i.test(c.result);
+                    return (
+                      <tr key={c.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/15"}>
+                        <td className="text-left font-mono border border-line px-1 py-0.5 align-top">
+                          {idx === 0 ? group.srNo : ""}
+                        </td>
+                        <td className="text-left whitespace-nowrap border border-line px-1 py-0.5 align-top">
+                          {idx === 0 ? fmtCubeDate(group.castDate) : ""}
+                        </td>
+                        <td className="text-left border border-line px-1 py-0.5 align-top max-w-[12rem]">
+                          {idx === 0 ? group.description : ""}
+                        </td>
+                        <td className="text-left border border-line px-1 py-0.5 align-top">
+                          {idx === 0 ? group.grade || "—" : ""}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {c.cubeWeight ?? "—"}
+                        </td>
+                        <td className="text-left whitespace-nowrap border border-line px-1 py-0.5 align-top text-[10px]">
+                          {idx === 0 ? fmtCubeDate(group.testDate7) : ""}
+                        </td>
+                        <td className="text-left whitespace-nowrap border border-line px-1 py-0.5 align-top text-[10px]">
+                          {idx === 0 ? fmtCubeDate(group.testDate28) : ""}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {c.load7 ?? "—"}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {c.load28 ?? "—"}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top font-medium">
+                          {strength ?? "—"}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {showAvg ? c.avgStrength : "—"}
+                        </td>
+                        <td className="text-left border border-line px-1 py-0.5 align-top">
+                          {showResult ? (
+                            <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
+                              {c.result}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         {canEdit && (
-                          <td className="text-left">
-                            <Button type="button" variant="secondary" className="!py-1 !px-2 !text-[10px]" onClick={() => openEdit(c)}>
+                          <td className="text-left border border-line px-1 py-0.5 align-top">
+                            <Button type="button" variant="secondary" className="!py-0.5 !px-1.5 !text-[9px]" onClick={() => openEdit(c)}>
                               Edit
                             </Button>
                           </td>
                         )}
                       </tr>
-                    ))}
-                  </Fragment>
-                );
-              })}
+                    );
+                  })}
+                </Fragment>
+              ))}
               {!grouped.length && (
                 <tr>
-                  <td colSpan={canEdit ? 14 : 13} className="empty text-left p-4">
-                    No cube rows — add above, adjust filters, or re-seed from SPDC CUBE REGISTER.
+                  <td colSpan={canEdit ? 13 : 12} className="empty text-left p-4">
+                    No cube rows — Load SPDC template or add specimens above.
                   </td>
                 </tr>
               )}

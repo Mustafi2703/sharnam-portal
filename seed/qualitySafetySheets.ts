@@ -526,55 +526,13 @@ export async function seedQualitySafetyFromSheets(
     }
   }
 
-  // --- Cube register ---
+  // --- Cube register (SPDC grouped specimens) ---
   {
     const file = path.join(excelRoot, "SPDC CUBE REGISTER (1).xlsx");
     if (fs.existsSync(file)) {
-      const wb = XLSX.readFile(file);
-      const rows = sheet(wb, "Sheet1");
-      let created = 0;
-      let lastDesc = "";
-      let lastGrade = "";
-      let lastCast: Date | null = null;
-      let lastSr = "";
-      for (let i = 10; i < rows.length && created < 400; i++) {
-        const row = rows[i] as unknown[];
-        const sr = s(row[0], 20);
-        const desc = s(row[2], 300);
-        const grade = s(row[3], 40);
-        if (sr && /^\d+$/.test(sr)) {
-          lastSr = sr;
-          lastCast = excelDate(row[1]);
-          lastDesc = desc || lastDesc;
-          lastGrade = grade || lastGrade;
-        }
-        const strength = n(row[9]) || n(row[10]);
-        const result = s(row[11], 40);
-        if (!lastDesc && !desc) continue;
-        if (!strength && !result && !n(row[7]) && !n(row[4])) continue;
-        await prisma.cubeTest.create({
-          data: {
-            projectId,
-            srNo: lastSr || null,
-            castDate: lastCast,
-            description: desc || lastDesc || `Cube ${lastSr || created + 1}`,
-            grade: grade || lastGrade || null,
-            cubeWeight: n(row[4]) || null,
-            testDate7: excelDate(row[5]),
-            testDate28: excelDate(row[6]),
-            load7: n(row[7]) || null,
-            load28: n(row[8]) || null,
-            strength7: n(row[9]) || null,
-            strength28: n(row[9]) && n(row[4]) ? n(row[9]) : null,
-            strength: n(row[9]) || null,
-            avgStrength: n(row[10]) || null,
-            result: result || null,
-            source: "SPDC CUBE REGISTER (1).xlsx",
-          },
-        });
-        created++;
-      }
-      console.log("Cube tests seeded:", created);
+      const { importCubeRegisterWorkbook } = await import("../apps/api/src/services/cubeRegisterImport.ts");
+      const out = await importCubeRegisterWorkbook(projectId, fs.readFileSync(file), false);
+      console.log("Cube tests seeded:", out.imported, "specimens in", out.groups, "groups");
     }
   }
 

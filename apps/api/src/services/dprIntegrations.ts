@@ -169,8 +169,16 @@ export async function buildDprAutoFill(
     prisma.safetyRecord.findMany({ where: { projectId, status: "Open" }, take: 50 }),
     prisma.qualityNcr.findMany({ where: { projectId, status: "Open" }, take: 50 }),
     prisma.cubeTest.findMany({
-      where: { projectId, castDate: { gte: start, lt: end } },
-      take: 20,
+      where: {
+        projectId,
+        OR: [
+          { castDate: { gte: start, lt: end } },
+          { testDate7: { gte: start, lt: end } },
+          { testDate28: { gte: start, lt: end } },
+        ],
+      },
+      orderBy: { castDate: "desc" },
+      take: 40,
     }),
     prisma.progressHindrance.findMany({ where: { projectId, status: "Open" }, take: 15, orderBy: { occurredAt: "desc" } }),
     prisma.rfi.findMany({ where: { projectId, status: "Open" }, take: 15, orderBy: { createdAt: "desc" } }),
@@ -286,20 +294,52 @@ export async function buildDprAutoFill(
     (s) => s.assignment.template.checklistType === "Safety"
   ).length;
 
+  const cubeSummary = (specimens: typeof cubesToday, phase: "7" | "28") => {
+    const hits = specimens.filter((c) => (phase === "7" ? c.load7 || c.strength7 : c.load28 || c.strength28));
+    if (!hits.length) return "—";
+    const byGroup = new Map<string, typeof hits>();
+    for (const c of hits) {
+      const key = `${c.srNo || ""}|${c.description}`;
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key)!.push(c);
+    }
+    return Array.from(byGroup.entries())
+      .map(([key, rows]) => {
+        const desc = rows[0]?.description || key;
+        const strengths = rows
+          .map((r) => (phase === "7" ? r.strength7 : r.strength28) ?? r.strength)
+          .filter((x): x is number => x != null);
+        const avg = rows.find((r) => r.avgStrength)?.avgStrength;
+        const result = rows.find((r) => r.result && /pass|fail/i.test(r.result))?.result;
+        const str =
+          strengths.length > 1
+            ? `${strengths.map((s) => s.toFixed(2)).join(", ")} MPa`
+            : strengths[0] != null
+              ? `${strengths[0].toFixed(2)} MPa`
+              : "—";
+        return `${desc}: ${str}${avg != null ? ` (avg ${avg.toFixed(2)})` : ""}${result ? ` · ${result}` : ""}`;
+      })
+      .join("; ");
+  };
+
   const qualityTests: DprQualityTest[] = [
     {
       parameter: "Pour cards offered / approved",
-      figure: String(cubesToday.length ? cubesToday.length : "—"),
+      figure: String(cubesToday.length ? new Set(cubesToday.map((c) => c.srNo)).size : "—"),
     },
     {
       parameter: "Concrete cube sets cast / slump tests",
-      figure: cubesToday.map((c) => c.description).join("; ") || "—",
+      figure:
+        cubesToday.length
+          ? Array.from(new Set(cubesToday.map((c) => c.description))).join("; ")
+          : "—",
     },
     {
       parameter: "QI / Safety checklists filled today",
       figure: `${qiChecklists} QI · ${safetyChecklists} Safety`,
     },
-    { parameter: "7-day cube result", figure: "—" },
+    { parameter: "7-day cube result", figure: cubeSummary(cubesToday, "7") },
+    { parameter: "28-day cube result", figure: cubeSummary(cubesToday, "28") },
     {
       parameter: "NCRs open / closed today",
       figure: `${ncrsOpen.length} open · ${safetyOpen.filter((s) => /ncr/i.test(s.recordType)).length} safety`,
