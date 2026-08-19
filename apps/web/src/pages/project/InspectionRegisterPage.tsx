@@ -120,7 +120,7 @@ export default function InspectionRegisterPage() {
       <PageHeader
         eyebrow="Inspection module"
         title="Inspection register"
-        subtitle="SPDC Request for Inspection, Safety clearance, and Activity checklists — registers maintained live. Drawing references are text-only; use Comms → Ask (PMC RFI) or Drawings for linked drawing files."
+        subtitle="SPDC Request for Inspection, Safety clearance, and Activity checklists — registers maintained live. Drawing references are text-only; use Drawings → Ask (PMC RFI) for linked drawing files."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -141,7 +141,7 @@ export default function InspectionRegisterPage() {
 
       <div className="flex flex-wrap gap-2 text-xs">
         <Link to={`/projects/${id}/rfis?kind=RequestForInformation`} className="text-brand underline">
-          Ask (PMC RFI) — drawing link
+          Drawings → RFI register
         </Link>
         <span className="text-steel-muted">·</span>
         <Link to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-brand underline">

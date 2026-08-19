@@ -73,7 +73,7 @@ export function InspectionRequestReference({ rfiKind, projectId, onApplyTemplate
       </div>
       <p className="text-[10px] text-steel-muted mt-3">
         Drawing reference is text-only on inspection forms. For linked drawing files use{" "}
-        <span className="font-medium">Ask (PMC RFI)</span> or Drawings coordination.
+        <span className="font-medium">Drawings → Ask (PMC RFI)</span>.
       </p>
       <p className="text-[10px] text-steel-muted mt-1">
         Register export matches{" "}

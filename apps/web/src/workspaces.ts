@@ -82,10 +82,18 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "rfis",
-      label: "Ask (drawing RFI)",
+      label: "RFI register",
       query: "kind=RequestForInformation",
       roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
-      blurb: "Raise clarification on a drawing — information only.",
+      blurb: "Request for Information register — SPDC_RFI_Form_and_Register.xlsx.",
+      sheet: "SPDC_RFI_Form_and_Register.xlsx",
+    },
+    {
+      to: "rfis",
+      label: "Ask (PMC RFI)",
+      query: "kind=RequestForInformation&compose=1",
+      roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
+      blurb: "Raise drawing-linked clarification — PMC request for information.",
     },
   ],
   dms: [
@@ -298,12 +306,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       query: "tab=hse-register",
       blurb: "Safety IRs, inspection findings & observations.",
       sheet: "HSE Register",
-    },
-    {
-      to: "rfis",
-      label: "Ask (PMC RFI)",
-      query: "kind=RequestForInformation",
-      blurb: "Drawing-linked clarification — use Comms / Drawings for file attachment.",
     },
   ],
   progress: [
@@ -558,7 +560,7 @@ export const MODULE_META: Record<
 > = {
   drawings: {
     title: "Drawings",
-    desc: "GFC register, Drawing Check Master on upload, coordination, request fill, and drawing Ask RFIs.",
+    desc: "GFC register, Drawing Check Master on upload, coordination, checklist fill, RFI register, and Ask (PMC RFI).",
     path: "hub/drawings",
     accent: "#2563EB",
     soft: "#DBEAFE",

@@ -43,7 +43,8 @@ export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, str
     case "drawings":
       return [
         ["DrawingChecklist", "Request checklist fill"],
-        ["RequestForInformation", "Ask (drawing RFI)"],
+        ["RequestForInformation", "Ask (PMC RFI)"],
+        ["All", "All RFIs"],
       ];
     case "quality":
       return [["QualityInspection", "Request QI fill"]];
@@ -89,8 +90,15 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
   if (scope === "drawings" && kind === "RequestForInformation") {
     return {
       eyebrow: "Drawings module",
-      title: "Ask (drawing RFI)",
-      subtitle: "Clarification on a drawing — separate from checklist fill requests.",
+      title: "Ask (PMC RFI)",
+      subtitle: "Request for Information — link a drawing revision. Register lives under Drawings → RFI register.",
+    };
+  }
+  if (scope === "drawings" && kind === "All") {
+    return {
+      eyebrow: "Drawings module",
+      title: "RFI register",
+      subtitle: "Drawing checklist fills and PMC requests for information — SPDC_RFI_Form_and_Register.xlsx.",
     };
   }
   if (scope === "drawings" || kind === "DrawingChecklist") {
@@ -111,7 +119,7 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
 export function rfiListKindFilter(scope: RfiModuleScope, kindFilter: RfiKindFilter): RfiKindFilter {
   if (scope === "quality") return "QualityInspection";
   if (scope === "safety") return "SafetyChecklist";
-  if (scope === "drawings" && kindFilter === "RequestForInformation") return "RequestForInformation";
+  if (scope === "drawings" && (kindFilter === "RequestForInformation" || kindFilter === "All")) return kindFilter;
   if (scope === "drawings") return "DrawingChecklist";
   return kindFilter;
 }

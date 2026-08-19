@@ -55,7 +55,7 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
   if (tail === "rfis") {
     const kind = new URLSearchParams(search).get("kind");
     if (kind === "DrawingChecklist") return "drawings";
-    if (kind === "RequestForInformation") return "comms";
+    if (kind === "RequestForInformation") return "drawings";
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
     if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
