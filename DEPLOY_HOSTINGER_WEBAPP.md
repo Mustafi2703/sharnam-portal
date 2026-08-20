@@ -150,6 +150,17 @@ Then verify:
 2. Remove **`RUN_SEED=1`** — seed already ran at build time; redeploys would reset demo data otherwise
 3. Check **Runtime logs** — you should see `शरणम् API listening on http://0.0.0.0:...` and memory **> 50 MB**
 
+### Schema-only releases (no full re-seed)
+
+When a deploy adds Prisma columns (e.g. `CubeTest.testAgency`) without `RUN_SEED=1`:
+
+1. SSH or Hostinger terminal → app folder  
+2. Run **`npx prisma db push`** once against production `DATABASE_URL`  
+3. Confirm **`SHARNAM_EXCEL_ROOT=./seed/data`** so QAP/cube sync-template finds workbooks  
+4. Open **Quality → `/qap`** and **Cube Test** on SPDC-DEMO-01 — templates auto-load if registers are empty/partial  
+
+Push to `main` triggers Hostinger/Render rebuild when Git deploy is connected.
+
 ---
 
 ## Modules to demo tomorrow

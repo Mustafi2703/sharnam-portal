@@ -64,8 +64,8 @@ Password for all demo accounts: **`Demo@1234`**
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| QI dashboard, SOR Log, NCR/CAR, cube register | Live | Workbook tabs from `Quality Dashboard.xlsx`; SOR Log summary feeds DPR Quality |
-| QAP upload | Live | Week-50 style sheet |
+| QI dashboard, SOR Log, NCR/CAR, cube register | Live | Workbook tabs; SOR → DPR; cube/QAP sync-template from seed |
+| QAP Week 50 | Live | **`/qap`** — full register, daily checks, auto sync |
 | Checklist master + filled export (XLSX) | Live | Full line data, not metadata-only |
 | Safety register + Safety RFI | Live | Separate log from QI |
 

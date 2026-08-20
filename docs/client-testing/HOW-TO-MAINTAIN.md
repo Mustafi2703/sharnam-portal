@@ -78,6 +78,8 @@ Client sheets live in `seed/data/` and `Sharnam_modules_docs/`. After workbook u
 npm run db:seed          # or db:seed-quality-safety-demo for demo project only
 ```
 
+**Portal sync (without full re-seed):** On demo project, open **Quality → `/qap`** or **Cube Test** — **Load Week 50 / SPDC template** buttons call `POST .../qap/sync-template` and `POST .../cubes/sync-template`. Requires `SHARNAM_EXCEL_ROOT=./seed/data` on server.
+
 Sync script (if used): `scripts/sync-reference-sheets.mjs`
 
 ---

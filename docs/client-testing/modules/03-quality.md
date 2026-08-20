@@ -24,8 +24,8 @@ Dashboard · SOR Log · **Site observation** · **Site instruction** · Checklis
 | Site instruction | `?sheet=site-instruction` | Raise/edit site instructions — inline form + popup modal; feeds SOR Log |
 | Sheet1 + Sheet2 | `?sheet=checklist-summary` | Checklist catalog + filled-by-discipline |
 | CAR register / NCR 01 | `?sheet=car-register` | Raise / edit / close NCR & CAR — inline form + popup modal |
-| Cube Test / SPDC Cube Register | `?sheet=cube-test` | SPDC-format cube crushing register — inline form + popup modal |
-| QAP Detail + Week 50 | **`/qap`** | Full QAP sheet — daily check columns, import Week 50 Excel, download weekly |
+| Cube Test / SPDC Cube Register | `?sheet=cube-test` | SPDC grouped specimens — **inline edit**, test agency, pass/fail KPIs, auto sync template |
+| QAP Detail + Week 50 | **`/qap`** | Full QAP (~295 rows), daily checks, **Load Week 50 template**, scrollable grid |
 | Procore QI + fills | `?sheet=qi` | Raise QI, assignee/office fill, Pass/Fail/N/A |
 
 Legacy `?sheet=qap-detail` redirects to **`/qap`**.
@@ -145,14 +145,25 @@ Sheet2 discipline counts + Sheet1 catalog (checklist type names). Link to **Qual
 | | |
 |--|--|
 | **Route** | `/projects/:id/inspections?sheet=cube-test` |
+| **Purpose** | SPDC CUBE REGISTER — multiple specimen rows per footing (7-day + 28-day) is **correct layout**. |
 
-Read-only register from seeded cube workbook.
+### Features
+
+| Feature | Notes |
+|---------|-------|
+| Auto sync | `POST .../cubes/sync-template` on first open if register empty/partial (~429 specimens) |
+| Summary KPIs | Specimens, groups, pass, fail, pending, test agencies logged |
+| Inline edit | Sr, cast date, description, grade, **test agency**, weight, loads, strength, result — blur to save |
+| Group edit | First row of each footing group updates all specimens in group (Sr, cast, desc, grade, agency) |
+| DPR feed | Cubes with cast/test date = report day → DPR quality block (sets, 7d/28d results, agency) |
+
+**API:** `GET .../quality-dashboard` (cubes[]) · `PATCH .../cubes/:id` · `POST .../cubes/sync-template`
 
 ### Meeting changes
 
 | # | Raised by | Change / issue | Priority | Dev status | Re-test |
 |---|-----------|----------------|----------|------------|---------|
-| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 1 | | | P1 / P2 / P3 | Done Aug 2026 | ☐ |
 
 ---
 
@@ -168,13 +179,15 @@ Read-only register from seeded cube workbook.
 | Feature | Notes |
 |---------|-------|
 | Activity sections | Grouped rows (Site Survey, Reinforcement, …) like Excel |
-| Editable columns | Description, frequency, code, test agency, contractor performer/checker, PMC, client, records, remarks, status |
+| Editable columns | Description, frequency, code, test agency, contractor performer/checker, PMC, client, records, remarks, daily checks, status |
+| Auto sync | **Load Week 50 template** or auto on open when partial (&lt;250 lines or missing frequency columns) |
 | Done / Reopen | Per line (office/admin) |
-| Week filter | W50, Detail, Monthly, … |
+| Week filter | Week 50 (normalizes W50) |
 | Add QAP line | Week, section, description, frequency, code, test agency |
 | DMS upload | Master QAP Excel/PDF to quality plans folder |
+| Scroll | Wide grid scrolls inside card — sticky header |
 
-**API:** `GET .../quality-dashboard` · `PATCH .../qap/:id` · `POST .../qap`
+**API:** `GET .../quality-dashboard` · `PATCH .../qap/:id` · `POST .../qap/sync-template` · `POST .../qap/import`
 
 ### Meeting changes
 

@@ -17,8 +17,8 @@ Commercial format: `Sharnam_modules_docs/Viatrix_RA BILL_COP.xlsm`
 | **Strongly recommended** | BBS + shape codes | **Cost → BBS** | DPR rebar kg |
 | **Recommended** | MS Project schedule (XML export) | **Progress → MS Project → Import XML** | S-curve, milestones, WPR |
 | **Recommended** | NCR 01.xlsx | `npm run db:seed` or **Quality → raise NCR** | DPR quality, WPR quality |
-| **Recommended** | SPDC Cube Register | Seed or **Quality → Cube** | DPR quality |
-| **Recommended** | QAP weekly sheet | **Quality → QAP** (add rows) | WPR quality / compliance |
+| **Recommended** | SPDC Cube Register | Seed, **sync-template**, or **Quality → Cube Test** | DPR quality (sets, 7d/28d, agency) |
+| **Recommended** | QAP weekly sheet | **Quality → `/qap`** — **Load Week 50 template** (~295 rows) | WPR quality; test agency → DPR |
 | **Recommended** | Safety dashboard | **Safety** module (log records) | DPR HSE, WPR safety |
 | **Daily site** | QI + Safety checklists | **Checklists → fill** (photos + sign) | DPR quality line, audit log |
 | **Optional for DPR** | Cashflow / AC certified | **Cost → Cashflow** | DPR header AC value |
@@ -71,8 +71,9 @@ Checklist master (QI / Safety templates + line items)
     → WPR auto-seed: quality + safety sections
 
 QAP register (weekly activities)
-    → Contractor / PMC / Client OK flags
-    → WPR quality section (not daily DPR block)
+    → Full Week 50 sheet on /qap (sync-template from seed/data)
+    → testAgency → DPR "Testing agency" line when logged
+    → WPR quality section (sign-off flags)
 ```
 
 **Example checklists** are seeded on `db:seed` and assigned to **SPDC-DEMO-01**. Demo fills: `npm run db:seed-quality-safety-demo`.

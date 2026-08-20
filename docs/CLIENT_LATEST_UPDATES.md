@@ -1,9 +1,25 @@
 # Sharnam Portal — Latest updates (shareable)
 
-**For:** SPDC PMC, client stakeholders, site teams  
-**Date:** 10 August 2026  
-**Live demo:** https://sharnam-portal.onrender.com  
+**Date:** 20 August 2026  
+**Live demo:** https://portal.spdc.in (or https://sharnam-portal.onrender.com)  
 **Demo password:** `Demo@1234`
+
+---
+
+## Latest (20 Aug 2026) — Quality · Progress · DPR
+
+| Area | What changed |
+|------|----------------|
+| **QAP** | Dedicated `/qap` page — auto **Load Week 50 template** (~295 rows), daily check columns, scrollable grid |
+| **Cube register** | SPDC sync (~429 specimens), **inline edit**, test agency field, pass/fail summary → **DPR quality block** |
+| **Planned vs Actual** | Progress tab uses Excel-style scrollable tables (cashflow, manpower, activity register) |
+| **DPR** | Auto-fill: SOR date-wise, cube 7d/28d results, testing agency, NCR/CAR today — see [DPR_DATA_CONNECTION_MAP.md](./DPR_DATA_CONNECTION_MAP.md) |
+| **Deploy** | After schema updates: `npx prisma db push` + `SHARNAM_EXCEL_ROOT=./seed/data` |
+
+---
+
+**For:** SPDC PMC, client stakeholders, site teams  
+**Previous update:** 10 August 2026  
 
 Plain-language summary of what was built, what is connected, and how to use it.
 

@@ -11,8 +11,8 @@
 | **Safety observations / TBT** | Safety module | HSE block (toolbox, near miss, obs) | WPR safety |
 | **Quality NCR** | Quality → NCR / CAR | Open NCR count + issues | WPR quality list |
 | **CAR** | Same register (`CAR-` number) | Corrective actions in issues | WPR quality |
-| **Cube register** | Quality → Cube | Cubes cast today | WPR quality |
-| **QAP** | Quality → QAP tab | — | WPR QAP sign-off rows |
+| **Cube register** | Quality → Cube | Cubes cast/test today + 7d/28d results + **test agency** | WPR quality |
+| **QAP** | Quality → **`/qap`** | Test agency names (when logged) | WPR QAP sign-off rows |
 
 **Convention:** QAP = planned weekly sign-off. NCR = defect. CAR = corrective action record. Safety observations stay in **Safety**, not Quality NCR.
 
@@ -30,7 +30,7 @@
 
 4. Raise **NCR** or **CAR** if defect found: **Quality → NCR / CAR** tab → *Raise NCR* or *Raise CAR*.
 5. Log **Safety observation** or **Near miss**: **Safety** module → *Log record*.
-6. Register **cube cast**: **Quality → Cube** (or import from SPDC Cube Register Excel on seed).
+6. Register **cube cast**: **Quality → Cube Test** → sync SPDC template if empty → log **test agency**, cast date, 7D/28D loads/strength on report day (multiple rows per footing is normal).
 
 ### End of day
 
@@ -38,7 +38,7 @@
 
 ### Weekly (office)
 
-8. Update **QAP** sign-off (Contractor / PMC / Client flags).
+8. Update **QAP** sign-off on **`/qap`** — full Week 50 register (~295 lines); use **Load Week 50 template** if partial.
 9. Close NCR/CAR with actual closure date.
 10. **WPR Maker** → week ending → Download PPTX (quality + safety sections auto-seed).
 
@@ -115,7 +115,7 @@ Branded **HTML export** from checklist fill → Print → PDF for archive.
 
 1. Login `office@sharnam.demo` / `Demo@1234`
 2. **SPDC-DEMO-01 → DPR Maker → 2026-08-14 → CIVIL**
-3. Check **Quality control** rows: cubes, NCR count, QI/Safety checklist count
+3. Check **Quality control** rows: cube sets, 7d/28d results, test agency, NCR/SOR counts, QI/Safety checklist count
 4. Check **HSE** block: toolbox talks, observations, safe man-hours
 5. **WPR Maker** → same week → quality + safety slides populated
 

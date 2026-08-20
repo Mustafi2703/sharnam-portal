@@ -120,6 +120,10 @@ Every upload-capable module ultimately calls **`mockOneDrive.upload(projectCode,
 | Logs + branded PDF | `GET /api/checklist/project/:id/submissions` | `ChecklistLogsPage` |
 | **Full schedule XLSX** | `GET …/export-filled.xlsx` | Admin download with all line answers |
 | Quality dashboard | `GET …/quality-dashboard` | `InspectionsPage` |
+| QAP Week 50 sync | `POST …/qap/sync-template` | `QapPage` (auto on partial register) |
+| QAP line edit | `PATCH …/qap/:id` | `QapPage` · `QapDetailRegister` |
+| Cube register sync | `POST …/cubes/sync-template` | `CubeRegisterPanel` (auto on empty) |
+| Cube inline edit | `PATCH …/cubes/:id` | `CubeRegisterPanel` |
 | Safety dashboard | `GET …/safety-dashboard` | `SafetyPage` |
 
 **Families:** `DrawingCheck` · `SiteExecution` · `QualityInspection` · `Safety`  

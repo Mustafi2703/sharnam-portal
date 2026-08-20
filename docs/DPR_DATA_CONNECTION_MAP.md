@@ -1,19 +1,20 @@
 # DPR data connection map
 
-How the **Daily Progress Report (DPR)** pulls live project data — aligned to client packs in `Sharnam_modules_docs/`.
+How the **Daily Progress Report (DPR)** pulls live project data — aligned to client packs in `Sharnam_modules_docs/` and SPDC templates in `apps/api/dpr-templates/`.
 
 ## Reference files
 
 | Client file | Portal equivalent |
 |-------------|-------------------|
 | `DPR-Sharnam PMC- ARVIND LIMITED (3) (1).xlsx` · Summary | DPR Maker · quantity progress (BOQ lines) |
-| Same · Daily Progress Dashboard | SPDC template DASHBOARD sheet (formulas in `apps/api/dpr-templates/`) |
+| SPDC `*_DASHBOARD.xlsx` (7 disciplines) | DPR Maker patches INPUT → DASHBOARD formulas |
 | Same · Manpower, Equipments, Materials | DPR sections 3–5 + Cost BBS → rebar kg |
 | Same · Concern / Hindrance Register | Open hindrances → delays + issues |
 | `Planned Vs. Actual Dashboard.xlsx` | `ProgressActivityLine` → planned qty on BOQ rows |
 | `SPDC_Budget_Arvind 49.xls` | Cost · Monitoring / MB / BBS (per package) |
 | `Safety Dashboard.xlsx` / Safety NCR | `SafetyRecord` → HSE block |
 | `NCR 01.xlsx` / `SPDC CUBE REGISTER` | `QualityNcr` + `CubeTest` → quality block |
+| `Quality Assurance Plan Week 50.xlsx` | QAP test agency names → DPR quality line |
 | `SPDC_Arvind Limited_WPR_50.pptx` | WPR Maker (weekly rollup; shares same DB tables) |
 
 ## Per discipline (7 packages)
@@ -39,27 +40,60 @@ When you open DPR Maker for a **new** date/discipline, the API seeds from:
 5. **Prior DPR snapshots** — cumulative qty, man-days, safe man-hours  
 6. **Manpower register** (`ProgressManpower`) — planned vs available by trade  
 7. **Safety** (`SafetyRecord`) — toolbox, observations, near miss, first aid  
-8. **Quality** (`QualityNcr`, `CubeTest`) — NCR count, cubes cast today  
-9. **Hindrance** (`ProgressHindrance`) — delays + issues  
-10. **Open RFIs** — approvals pending block  
-11. **Cashflow** (`CostCashflowPeriod`) — AC certified to date (header)
+8. **Quality SOR** (`QualitySiteRecord` + `QualityNcr` on report day) — obs/instructions/NCR/CAR lines  
+9. **Cube register** (`CubeTest` where cast/test date = report day) — sets cast, 7d/28d results, pass/fail counts  
+10. **Testing agency** — unique `CubeTest.testAgency` + `QapActivity.testAgency`  
+11. **Checklist fills** — QI + Safety count for report day  
+12. **Hindrance** (`ProgressHindrance`) — delays + issues  
+13. **Open RFIs** — approvals pending block  
+14. **Cashflow** (`CostCashflowPeriod`) — AC certified to date (header)
 
-Implementation: `apps/api/src/services/dprIntegrations.ts`
+Implementation: `apps/api/src/services/dprIntegrations.ts`  
+Template cell map: `apps/api/src/services/dprXlsx.ts` (INPUT rows 66–74 quality, 39–45 manpower, etc.)
 
-## Demo day seed (client walkthrough)
+## DPR INPUT sheet → portal (quality section)
 
-After `npm run db:seed`, publish one full DPR day for **SPDC-DEMO-01** (all 7 disciplines):
+| INPUT row label | Auto-fill source |
+|-----------------|------------------|
+| SOR — site observations today | `QualitySiteRecord` (non-instruction) on report day |
+| SOR — site instructions today | `QualitySiteRecord` (Site Instruction) on report day |
+| Pour cards / cube sets cast | Cube groups with cast date = report day |
+| Concrete cube sets / slump | Specimen count + pass/fail summary |
+| **Testing agency (cube / QAP)** | Logged agencies on cubes + QAP lines |
+| 7-day / 28-day cube result | Matching test dates on report day |
+| NCR / CAR today | NCRs issued/closed on report day |
+| QI / Safety checklists filled | Submissions on report day |
+| Field density tests | Manual (no register yet) |
+
+## Still manual each day (yellow INPUT cells)
+
+| Field | Why |
+|-------|-----|
+| **qtyToday** on each BOQ line | Site engineer enters daily achievement |
+| Equipment utilization | Not wired — template placeholders |
+| Material received/consumed (most rows) | Except BBS rebar kg auto-fill |
+| Highlights / next-day plan / decisions | Narrative |
+| S-curve actual % history | Needs cumulative qty over time |
+| Weather / shift hours | Header fields in DPR editor |
+
+## Minimum setup for a complete DPR day
+
+1. **Cost → BOQ monitoring** — discipline package lines exist  
+2. **Progress → Planned vs Actual** — import Excel once (`Planned Vs. Actual Dashboard.xlsx`)  
+3. **Quality → Cube** — sync SPDC template; set cast/test dates + agency on report day  
+4. **Quality → SOR / NCR** — log site obs/instructions/defects for that date  
+5. **Safety** — toolbox / observations for that date  
+6. **Checklists** — submit QI + Safety fills  
+7. **DPR Maker** — enter **today's qty** → publish  
+
+## Demo day seed
 
 ```bash
 npm run db:seed-dpr-demo
-# optional fixed date:
 DPR_DEMO_DATE=2026-08-14 npm run db:seed-dpr-demo
 ```
 
-This creates **Published** `DprSnapshot` rows and writes XLSX files under  
-`uploads/onedrive/SPDC-DEMO-01/07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/<DISCIPLINE>/`.
-
-**Portal:** login `office@sharnam.demo` → project **SPDC-DEMO-01** → **DPR Maker** → pick demo date → download XLSX (DASHBOARD sheet has live formulas).
+Creates published `DprSnapshot` rows for all 7 disciplines on **SPDC-DEMO-01**.
 
 ## Update rule (single source of truth)
 
@@ -70,20 +104,27 @@ This creates **Published** `DprSnapshot` rows and writes XLSX files under
 | Cost → BBS | Rebar kg in materials |
 | Progress → Planned vs Actual | Planned qty remarks / fallbacks |
 | Safety module | HSE statistics |
-| Quality → NCR / Cube | Quality control figures |
+| Quality → SOR / NCR / Cube / QAP agency | Quality control figures |
 | Hindrance register | Delays + issues |
 | RFIs (open) | Approvals pending |
 | Prior published DPR | Cumulative headers + line history |
 
-Site engineer still enters **today's qty**, weather, photos, and signs off — everything else pre-fills.
-
 ## WPR connection
 
-WPR Maker already seeds weekly sections from the same tables (`wprMaker.ts` · `seedSections`). DPR is the **daily** slice; WPR is the **weekly** rollup to `SPDC_Arvind Limited_WPR_*.pptx` structure.
+WPR Maker seeds weekly sections from the same tables (`wprSeedSections.ts`). DPR is the **daily** slice; WPR is the **weekly** rollup.
+
+## Deploy note
+
+After releases that change Prisma schema (e.g. `CubeTest.testAgency`):
+
+```bash
+npx prisma db push
+```
+
+Ensure `SHARNAM_EXCEL_ROOT=./seed/data` on production so QAP/cube sync-template resolves workbooks.
 
 ## Still to wire (next)
 
-- [ ] Reports `/reports` DPR tab reads `DprSnapshot` when published (not only day-log aggregate)  
-- [ ] Progress UI tab imports `Planned Vs. Actual Dashboard.xlsx` charts verbatim  
-- [ ] Publish DPR → push Summary row into cumulative register (like client Summary sheet columns)  
 - [ ] Equipment list auto-fill from site diary / fixed register per project  
+- [ ] Field density test register → DPR quality line  
+- [ ] Material received/consumed from site store ledger  

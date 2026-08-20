@@ -19,7 +19,7 @@ Client civil tools (**S-curve**, **Summary schedule**, **MS Project**, **Procure
 |------|-------------|--------|--------------|
 | Overview | `/progress` | Built | Progress Overview.xlsx |
 | Milestones | `/progress?tab=milestones` | Built | Milestone tracking.xlsx |
-| Planned vs Actual | `/progress?tab=planned` | Built | Planned Vs. Actual Dashboard |
+| Planned vs Actual | `/progress?tab=planned` | Built | Planned Vs. Actual Dashboard — **scrollable Excel-style tables** |
 | Monthly | `/progress?tab=monthly` | Built | Monthly Progress Dashboard |
 | Hindrance | `/progress?tab=hindrance` | Built | Hindrance Register Dashboard |
 | Risk | `/progress?tab=risk` | Built | Progress Overview · Risk |

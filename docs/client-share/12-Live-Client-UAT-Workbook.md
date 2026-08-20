@@ -278,8 +278,8 @@ For each module session: run the tests, then fill **Meeting changes** rows (do n
 | **Site instruction** | ☐ | `?sheet=site-instruction` — inline form + Edit popup |
 | Checklist summary (Sheet1 catalog) | ☐ | `?sheet=checklist-summary` |
 | CAR / NCR register | ☐ | Raise inline + **Edit popup** + close |
-| Cube Test register (SPDC format) | ☐ | `?sheet=cube-test` — inline form + Edit popup |
-| **Quality Assurance Plan** | ☐ | **`/qap`** — Week 50 columns, daily checks, **Import Excel**, **Download Excel/PDF** |
+| Cube Test register (SPDC format) | ☐ | `?sheet=cube-test` — **inline edit**, test agency, auto **Load SPDC template**, pass/fail KPIs |
+| **Quality Assurance Plan** | ☐ | **`/qap`** — ~295 Week 50 lines, daily checks, **Load Week 50 template**, scrollable grid |
 | RFI branded export | ☐ | Reports → RFI register — full columns + linked drawing |
 | QI raise + assignee fill | ☐ | `?sheet=qi` — **no drawing required** |
 | Quality checklist master | ☐ | `/quality/checklist-master` — QI family only |

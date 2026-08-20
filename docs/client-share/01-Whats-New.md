@@ -17,8 +17,8 @@ One online workspace for your construction project — drawings, quality, safety
 | **Login** | Four portals — Office, Site, Contractor, Client — professional sign-in on construction imagery |
 | **Documents** | Full document manager (DMS) — **SharePoint is the store**, portal is the viewer |
 | **Site** | HRMS attendance with selfie + GPS + **IST time** → SharePoint |
-| **Quality & Safety** | Separate tools — QI, **SOR Log**, NCR, cube register, safety observations |
-| **Progress** | S-curve, summary schedule, procurement plan for client view |
+| **Quality & Safety** | Separate tools — QI, **SOR Log**, NCR/CAR forms, **QAP Week 50** (`/qap`), **SPDC cube register** (inline edit) |
+| **Progress** | S-curve, summary schedule, procurement plan; **Planned vs Actual** scrollable Excel-style tables |
 | **Cost** | BOQ monitoring, MB, BBS, and **three cashflow views** (Chart · Forecast · Tracking) |
 | **Reports** | DPR / WPR from live data; branded PDF print |
 | **HRMS** | Recruitment through attendance (geofence + selfie), leave, payslips |

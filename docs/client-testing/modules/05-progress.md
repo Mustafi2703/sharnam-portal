@@ -87,6 +87,8 @@ Weekly columns on the qty sheet are **two numbers per activity** (this week’s 
 | Manpower table | Trade · Required · Available · Shortage · % |
 | Qty register | Tower · Activity · BOQ · GFC · Executed · Balance · **Wk plan** · **Wk act** · Status |
 | DPR link | Matching activity names hint DPR planned/actual qty |
+| UI (Aug 2026) | Excel-style **scrollable** tables — cashflow, manpower, activity register (`sheet-register` layout) |
+| Import / export | Progress → Planned vs Actual → Import Excel · Export Excel/PDF |
 
 ### What is **not** on this page (confirm tomorrow)
 
