@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, Fragment } from "react";
 import { api } from "../api";
-import { QAP_LEGENDS, remarksCellClass } from "../lib/inspectionRequestForms";
+import { QAP_LEGENDS, qapRoleCellClass, qapStatusRowClass, remarksCellClass } from "../lib/inspectionRequestForms";
 import { preferWeekLabel, weekMatchesFilter } from "../lib/qapWeek";
 
 function formatDayLabel(raw: string): string {
@@ -85,7 +85,7 @@ export function QapDetailRegister({
 
   const dayLabels = useMemo(() => {
     const set = new Set<string>();
-    for (const r of rows) {
+    for (const r of filtered) {
       if (!r.dailyChecks) continue;
       try {
         Object.keys(JSON.parse(r.dailyChecks)).forEach((k) => set.add(k));
@@ -94,17 +94,19 @@ export function QapDetailRegister({
       }
     }
     return Array.from(set).sort();
-  }, [rows]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, QapRow[]>();
-    for (const row of filtered) {
-      const key = `${row.srNo || ""}|${row.section || row.activity || "General"}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(row);
-    }
-    return Array.from(map.entries());
   }, [filtered]);
+
+  function sectionLabel(row: QapRow): string {
+    return (row.section || row.activity || "General").trim();
+  }
+
+  function renderRoleChip(role?: string | null, fallbackOk?: boolean) {
+    const text = (role || "").trim();
+    if (text) {
+      return <span className={qapRoleCellClass(text)}>{text}</span>;
+    }
+    return fallbackOk ? <span className="qap-role-approve">✓</span> : <span className="qap-role-empty">·</span>;
+  }
 
   function parseDaily(q: QapRow): Record<string, boolean> {
     if (!q.dailyChecks) return {};
@@ -152,19 +154,22 @@ export function QapDetailRegister({
             </div>
           </div>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 text-xs border-b border-line">
-          {[
-            ["Project", project?.name || "—"],
-            ["Client", project?.clientName || "—"],
-            ["Design Consultant", project?.designConsultant || "—"],
-            ["PM Consultant", pmConsultant],
-            ["Contractor", project?.contractorName || "—"],
-          ].map(([label, value]) => (
-            <div key={label} className="flex border-r border-line last:border-r-0">
-              <span className="shrink-0 px-2 py-1.5 bg-sand/60 font-semibold text-steel-muted min-w-[7rem] border-r border-line">
-                {label}
-              </span>
-              <span className="px-2 py-1.5 text-ink truncate" title={String(value)}>
+        <div className="spdc-register-meta">
+          {(
+            [
+              ["Project", project?.name || "—", false],
+              ["Client", project?.clientName || "—", true],
+              ["Design Consultant", project?.designConsultant || "—", false],
+              ["PM Consultant", pmConsultant, false],
+              ["Contractor", project?.contractorName || "—", false],
+            ] as const
+          ).map(([label, value, highlightClient]) => (
+            <div
+              key={label}
+              className={`spdc-register-meta__cell${highlightClient ? " spdc-register-meta__cell--client" : ""}`}
+            >
+              <span className="spdc-register-meta__label">{label}</span>
+              <span className="spdc-register-meta__value" title={String(value)}>
                 {value}
               </span>
             </div>
@@ -188,13 +193,13 @@ export function QapDetailRegister({
       </div>
 
       <div className="sheet-register overflow-auto flex-1 min-h-[20rem] overscroll-contain">
-        <table className="sheet-register__table min-w-[88rem] w-full text-[11px] border-collapse">
-          <thead className="sticky top-0 z-10">
+        <table className="qap-register__table min-w-[88rem] w-full">
+          <thead>
             <tr className="bg-brand text-white">
-              <th rowSpan={2} className="text-left w-10 border border-brand-dark/30 px-1 py-1">
+              <th rowSpan={2} className="text-left qap-sticky-sr">
                 Sr.No.
               </th>
-              <th rowSpan={2} className="text-left min-w-[8rem] border border-brand-dark/30 px-1 py-1">
+              <th rowSpan={2} className="text-left qap-sticky-activity">
                 Activity
               </th>
               <th rowSpan={2} className="text-left min-w-[12rem] border border-brand-dark/30 px-1 py-1">
@@ -246,20 +251,28 @@ export function QapDetailRegister({
             </tr>
           </thead>
           <tbody>
-            {grouped.map(([groupKey, sectionRows]) => {
-              const first = sectionRows[0];
-              const activityLabel = first.section || first.activity || groupKey.split("|")[1] || "General";
-              const srNo = first.srNo || "";
+            {filtered.map((q, rowIdx) => {
+              const section = sectionLabel(q);
+              const prevSection = rowIdx > 0 ? sectionLabel(filtered[rowIdx - 1]) : "";
+              const showSectionBand = section !== prevSection;
+              const isFirstInSection = showSectionBand;
+              const showActivity = isFirstInSection || !!q.srNo;
+              const srDisplay = q.srNo || (isFirstInSection ? "·" : "");
               return (
-                <Fragment key={groupKey}>
-                  {sectionRows.map((q, idx) => (
-                    <tr key={q.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/20"}>
-                      <td className="text-left font-mono tabular-nums border border-line px-1 py-0.5 align-top">
-                        {idx === 0 ? srNo || "·" : ""}
+                <Fragment key={q.id}>
+                  {showSectionBand && (
+                    <tr className="qap-section-band">
+                      <td colSpan={colSpan}>
+                        {section}
+                        {q.srNo ? ` · Sr ${q.srNo}` : ""}
                       </td>
-                      <td className="text-left align-top border border-line px-1 py-0.5 font-semibold text-brand-dark">
-                        {idx === 0 ? activityLabel : ""}
-                      </td>
+                    </tr>
+                  )}
+                  <tr className={qapStatusRowClass(q.status)}>
+                    <td className="text-left font-mono tabular-nums qap-sticky-sr align-top">{srDisplay}</td>
+                    <td className="text-left align-top qap-sticky-activity font-semibold text-brand-dark">
+                      {showActivity ? section : ""}
+                    </td>
                       <td className="text-left align-top border border-line px-1 py-0.5">
                         {canEdit ? (
                           <Input
@@ -317,7 +330,7 @@ export function QapDetailRegister({
                           q.testAgency || "—"
                         )}
                       </td>
-                      <td className="text-left align-top border border-line px-1 py-0.5 bg-blue-50/50">
+                      <td className="text-left align-top qap-col-contractor">
                         {canEdit ? (
                           <Input
                             className="!py-0.5 !text-[11px] min-w-[4.5rem] bg-white"
@@ -334,7 +347,7 @@ export function QapDetailRegister({
                           q.contractorPerformer || "—"
                         )}
                       </td>
-                      <td className="text-left align-top border border-line px-1 py-0.5 bg-blue-50/50">
+                      <td className="text-left align-top qap-col-contractor">
                         {canEdit ? (
                           <Input
                             className="!py-0.5 !text-[11px] min-w-[4.5rem] bg-white"
@@ -351,7 +364,7 @@ export function QapDetailRegister({
                           q.contractorChecker || "—"
                         )}
                       </td>
-                      <td className="text-left align-top border border-line px-1 py-0.5 bg-emerald-50/60">
+                      <td className="text-left align-top qap-col-pmc">
                         {canEdit ? (
                           <Input
                             className="!py-0.5 !text-[11px] min-w-[4.5rem] bg-white"
@@ -365,10 +378,10 @@ export function QapDetailRegister({
                             }}
                           />
                         ) : (
-                          q.pmcRole || (q.pmcOk ? "✓" : "·")
+                          renderRoleChip(q.pmcRole, q.pmcOk)
                         )}
                       </td>
-                      <td className="text-left align-top border border-line px-1 py-0.5 bg-amber-50/60">
+                      <td className="text-left align-top qap-col-client">
                         {canEdit ? (
                           <Input
                             className="!py-0.5 !text-[11px] min-w-[4.5rem] bg-white"
@@ -382,7 +395,7 @@ export function QapDetailRegister({
                             }}
                           />
                         ) : (
-                          q.clientRole || (q.clientOk ? "✓" : "·")
+                          renderRoleChip(q.clientRole, q.clientOk)
                         )}
                       </td>
                       <td className="text-left align-top border border-line px-1 py-0.5">
@@ -417,7 +430,7 @@ export function QapDetailRegister({
                         const daily = parseDaily(q);
                         const checked = !!daily[d];
                         return (
-                          <td key={d} className="text-center align-top border border-line px-0.5 py-0.5">
+                          <td key={d} className={`text-center align-top ${checked ? "qap-daily-done" : ""}`}>
                             {canEdit ? (
                               <input
                                 type="checkbox"
@@ -449,11 +462,10 @@ export function QapDetailRegister({
                         )}
                       </td>
                     </tr>
-                  ))}
                 </Fragment>
               );
             })}
-            {!grouped.length && (
+            {!filtered.length && (
               <tr>
                 <td colSpan={colSpan} className="empty text-left border border-line p-4">
                   No QAP detail rows — re-run <code>npm run db:seed</code> with Quality Assurance Plan Week 50 workbook.

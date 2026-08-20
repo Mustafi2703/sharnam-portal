@@ -42,7 +42,7 @@ progressRouter.get("/:projectId/verify", requireRoles("admin", "office", "employ
 
 progressRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats] =
+  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLines] =
     await Promise.all([
       prisma.progressMilestone.findMany({ where: { projectId }, orderBy: { code: "asc" } }),
       prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" } }),
@@ -52,6 +52,11 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" } }),
       prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
       prisma.progressSorStat.findMany({ where: { projectId } }),
+      prisma.costMonitoringLine.findMany({
+        where: { projectId },
+        orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
+        take: 4000,
+      }),
     ]);
 
   const openHindrance = hindrances.filter((h) => h.status === "Open").length;
@@ -70,6 +75,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       legal: legalApprovals.length,
       legalApproved: legalApprovals.filter((l) => /approved/i.test(l.status)).length,
       activityLines: activityLines.length,
+      boqLines: boqLines.length,
       projectProgressPct: weightedPct || 0,
       avgActualPct:
         plannedActual.length > 0
@@ -116,6 +122,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     legalApprovals,
     manpower,
     activityLines,
+    boqLines,
     sorStats,
   });
 });

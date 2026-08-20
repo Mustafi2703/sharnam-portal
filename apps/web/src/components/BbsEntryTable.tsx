@@ -1,7 +1,7 @@
 /**
  * BBS register — column order matches SPDC * BBS sheets (diagram in SHAPE OF BAR col).
  */
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { api, apiBase } from "../api";
 import { FilePickButton } from "./FilePickButton";
 import { Button, Select } from "./ui";
@@ -75,27 +75,6 @@ type Props = {
   canSiteEdit: boolean;
   onChanged: () => void;
 };
-
-const HEADERS = [
-  "Package",
-  "Bar mark",
-  "Item code",
-  "Section",
-  "Shape of bar",
-  "DIA",
-  "No/member",
-  "No of member",
-  "Total nos",
-  "A",
-  "B",
-  "C",
-  "D",
-  "E",
-  "Cutting L",
-  "Total L",
-  "Weight kg",
-  "",
-] as const;
 
 function fileHref(path?: string | null, shareUrl?: string | null) {
   if (shareUrl?.startsWith("http")) return shareUrl;
@@ -202,6 +181,15 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
   }
 
   const uploaded = rows.filter((r) => r.shapeDiagramPath || r.shapeDiagramUrl).length;
+  const grouped = useMemo(() => {
+    const map = new Map<string, BbsRow[]>();
+    for (const r of rows) {
+      const key = r.sectionMark || r.packageName || "General";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(r);
+    }
+    return [...map.entries()];
+  }, [rows]);
 
   return (
     <div className="sheet-register w-full space-y-2">
@@ -218,20 +206,42 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
         <table className="sheet-register__table">
           <thead>
             <tr>
-              {HEADERS.map((h, i) => (
-                <th key={h} className={i === 0 ? "sticky-col" : i === 3 ? "min-w-[140px]" : undefined}>
-                  {h}
-                </th>
-              ))}
+              <th className="sticky-col" rowSpan={2}>Package</th>
+              <th rowSpan={2}>SR. NO</th>
+              <th rowSpan={2}>DESCRIPTION</th>
+              <th rowSpan={2} className="min-w-[140px]">SHAPE OF BAR</th>
+              <th rowSpan={2}>DIA</th>
+              <th rowSpan={2}>NO PER MEMBER</th>
+              <th rowSpan={2}>NO OF MEMBER</th>
+              <th rowSpan={2}>TOTAL NOS OF BARS</th>
+              <th colSpan={5}>SHAPE LENGTH</th>
+              <th rowSpan={2}>Cutting Length</th>
+              <th rowSpan={2}>Total LENGTH</th>
+              <th rowSpan={2}>Weight kg</th>
+              <th rowSpan={2} />
+            </tr>
+            <tr>
+              <th>A</th>
+              <th>B</th>
+              <th>C</th>
+              <th>D</th>
+              <th>E</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((b) => {
+            {grouped.map(([heading, items]) => (
+              <Fragment key={heading}>
+                <tr className="boq-section-row">
+                  <td colSpan={17} className="sticky-col">
+                    <span className="boq-section-label">{heading}</span>
+                  </td>
+                </tr>
+                {items.map((b) => {
               const href = fileHref(b.shapeDiagramPath, b.shapeDiagramUrl);
               const hasDiagram = Boolean(href);
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
-                <tr key={b.id} className={busyId === b.id ? "opacity-60" : undefined}>
+                <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
                   <td className="sticky-col wrap">
                     {canFullEdit ? (
                       <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
@@ -246,18 +256,14 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
                       b.barMark || "—"
                     )}
                   </td>
-                  <td className="wrap font-mono text-xs">
+                  <td className="wrap min-w-[140px]">
                     {canEditDims ? (
-                      <CellInput value={b.itemCode} onCommit={(v) => void patchLine(b.id, { itemCode: v })} />
+                      <CellInput
+                        value={b.location || b.sectionMark || ""}
+                        onCommit={(v) => void patchLine(b.id, { location: v })}
+                      />
                     ) : (
-                      b.itemCode || "—"
-                    )}
-                  </td>
-                  <td className="wrap">
-                    {canEditDims ? (
-                      <CellInput value={b.sectionMark} onCommit={(v) => void patchLine(b.id, { sectionMark: v })} />
-                    ) : (
-                      b.sectionMark || "—"
+                      b.location || b.sectionMark || "—"
                     )}
                   </td>
                   <td className="align-top">
@@ -480,9 +486,11 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
                 </tr>
               );
             })}
+              </Fragment>
+            ))}
             {!rows.length && (
               <tr>
-                <td colSpan={HEADERS.length} className="empty">
+                <td colSpan={17} className="empty">
                   No BBS rows — import Excel above or run seed.
                 </td>
               </tr>

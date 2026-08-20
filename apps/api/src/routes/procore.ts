@@ -115,9 +115,14 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       (req.body.linkedChecklistItemId || req.body.linkedAssignmentId
         ? "DrawingChecklist"
         : "RequestForInformation");
-  const noDrawingLink = ["QualityIR", "SafetyIR", "ActivityInspection", "QualityInspection", "SafetyChecklist"].includes(
-    rfiKind,
-  );
+  const noDrawingLink = [
+    "QualityIR",
+    "SafetyIR",
+    "ActivityInspection",
+    "QualityInspection",
+    "SafetyChecklist",
+    "SiteExecution",
+  ].includes(rfiKind);
   const prefix =
     rfiKind === "QualityIR"
       ? "IR-QA"
@@ -131,7 +136,9 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
               ? "DWG-RFI"
               : rfiKind === "SafetyChecklist"
                 ? "SAF-RFI"
-                : rfiKind === "RequestForInformation"
+                : rfiKind === "SiteExecution"
+                  ? "SITE-CL"
+                  : rfiKind === "RequestForInformation"
                   ? "RFI"
                   : isClient
                     ? "CON"

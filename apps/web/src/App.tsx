@@ -168,8 +168,12 @@ export default function App() {
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="quality/checklist-master" element={<ChecklistMasterPage lockedFamily="QualityInspection" />} />
                   <Route path="safety/checklist-master" element={<ChecklistMasterPage lockedFamily="Safety" />} />
+                  <Route path="inspection/checklist-master" element={<ChecklistMasterPage lockedFamily="ActivityInspection" />} />
+                  <Route path="field/checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
                   <Route path="quality/checklist-logs" element={<ChecklistLogsPage lockedFamily="QualityInspection" />} />
                   <Route path="safety/checklist-logs" element={<ChecklistLogsPage lockedFamily="Safety" />} />
+                  <Route path="inspection/checklist-logs" element={<ChecklistLogsPage lockedFamily="ActivityInspection" />} />
+                  <Route path="field/checklist-logs" element={<ChecklistLogsPage lockedFamily="SiteExecution" />} />
                   <Route path="checklist-master" element={<ChecklistMasterPage />} />
                   <Route path="checklist-logs" element={<ChecklistLogsPage />} />
                   <Route path="rfis" element={<RfisPage />} />

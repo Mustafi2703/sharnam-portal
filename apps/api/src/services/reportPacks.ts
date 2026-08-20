@@ -521,7 +521,17 @@ export async function canFillChecklistAssignment(opts: {
     where: {
       projectId,
       status: { in: ["Open", "Answered"] },
-      rfiKind: { in: ["DrawingChecklist", "QualityInspection", "SafetyChecklist"] },
+      rfiKind: {
+        in: [
+          "DrawingChecklist",
+          "QualityInspection",
+          "SafetyChecklist",
+          "QualityIR",
+          "SafetyIR",
+          "ActivityInspection",
+          "SiteExecution",
+        ],
+      },
       OR: [{ linkedAssignmentId: assignmentId }, { linkedChecklistItemId: templateId }],
     },
     include: { vendor: { select: { id: true, email: true } } },

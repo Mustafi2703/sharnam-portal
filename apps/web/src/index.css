@@ -557,6 +557,208 @@ body.is-auth-route #root {
   padding: 2rem 1rem;
 }
 
+/* ——— QAP + Cube registers (client Excel parity) ——— */
+.spdc-register-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid var(--color-line);
+}
+@media (min-width: 1024px) {
+  .spdc-register-meta {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+.spdc-register-meta__cell {
+  display: flex;
+  border-right: 1px solid var(--color-line);
+  font-size: 0.75rem;
+}
+.spdc-register-meta__cell:last-child {
+  border-right: 0;
+}
+.spdc-register-meta__label {
+  flex-shrink: 0;
+  min-width: 7rem;
+  padding: 0.45rem 0.55rem;
+  border-right: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-sand) 72%, white);
+  font-weight: 600;
+  color: var(--color-steel-muted);
+}
+.spdc-register-meta__value {
+  padding: 0.45rem 0.55rem;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.spdc-register-meta__cell--client .spdc-register-meta__label {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 700;
+}
+.spdc-register-meta__cell--client .spdc-register-meta__value {
+  background: linear-gradient(90deg, #fffbeb 0%, #fef3c7 100%);
+  color: #78350f;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+}
+
+.qap-register__table,
+.cube-register__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.6875rem;
+}
+.qap-register__table thead th,
+.cube-register__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--color-brand-dark) 35%, #0f766e);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.qap-register__table tbody td,
+.cube-register__table tbody td {
+  padding: 0.28rem 0.4rem;
+  border: 1px solid #d1e7e2;
+  vertical-align: top;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.qap-register__table tbody tr:hover td,
+.cube-register__table tbody tr:hover td {
+  filter: brightness(0.985);
+}
+.qap-register__table .qap-sticky-sr,
+.qap-register__table .qap-sticky-activity {
+  position: sticky;
+  z-index: 1;
+  background: inherit;
+}
+.qap-register__table .qap-sticky-sr {
+  left: 0;
+  min-width: 2.5rem;
+  width: 2.5rem;
+}
+.qap-register__table .qap-sticky-activity {
+  left: 2.5rem;
+  min-width: 8.5rem;
+  width: 8.5rem;
+}
+.qap-register__table thead .qap-sticky-sr,
+.qap-register__table thead .qap-sticky-activity {
+  z-index: 4;
+}
+.qap-section-band td {
+  background: linear-gradient(90deg, #ecfdf5 0%, #d1fae5 100%) !important;
+  border-top: 2px solid var(--color-brand);
+  border-bottom: 1px solid #6ee7b7;
+  padding: 0.4rem 0.55rem !important;
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #065f46;
+}
+.qap-role-empty {
+  color: var(--color-steel-muted);
+}
+.qap-role-review {
+  background: #ede9fe;
+  color: #5b21b6;
+  font-weight: 600;
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.25rem;
+  display: inline-block;
+}
+.qap-role-witness {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 600;
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.25rem;
+  display: inline-block;
+}
+.qap-role-random {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.25rem;
+  display: inline-block;
+}
+.qap-role-approve {
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 700;
+  border-radius: 0.2rem;
+  padding: 0.1rem 0.25rem;
+  display: inline-block;
+}
+.qap-role-neutral {
+  font-weight: 500;
+}
+.qap-col-contractor {
+  background: #eff6ff !important;
+}
+.qap-col-pmc {
+  background: #ecfdf5 !important;
+}
+.qap-col-client {
+  background: #fffbeb !important;
+  box-shadow: inset 0 0 0 1px #fcd34d;
+}
+.qap-row-done td {
+  background: color-mix(in srgb, #ecfdf5 55%, white);
+}
+.qap-row-open td {
+  background: color-mix(in srgb, #fffbeb 35%, white);
+}
+.qap-daily-done {
+  background: #bbf7d0;
+  color: #14532d;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cube-group-start td {
+  border-top: 2px solid var(--color-brand) !important;
+}
+.cube-group-start td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-brand);
+}
+.cube-row-pass td {
+  background: color-mix(in srgb, #ecfdf5 70%, white) !important;
+}
+.cube-row-fail td {
+  background: color-mix(in srgb, #fef2f2 75%, white) !important;
+}
+.cube-row-pending td {
+  background: color-mix(in srgb, #fffbeb 55%, white) !important;
+}
+.cube-phase-7d {
+  background: #e0f2fe !important;
+  color: #0369a1;
+  font-weight: 700;
+  text-align: center;
+}
+.cube-phase-28d {
+  background: #f3e8ff !important;
+  color: #7e22ce;
+  font-weight: 700;
+  text-align: center;
+}
+.cube-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* ——— Drawing register tables (Master + Site) — theme-aware light/dark ——— */
 .sheet-register__filter-bar {
   background: color-mix(in srgb, var(--color-brand) 5%, var(--color-paper));
@@ -1841,13 +2043,18 @@ body {
   display: inline-block;
   padding: 0.15rem 0;
 }
-.boq-editor__table th.num,
-.boq-editor__table td.num {
-  text-align: right;
+.boq-editor__table td.rupee {
+  color: var(--color-brand-dark, #0f766e);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+}
+.boq-editor__table tbody tr.boq-line-row td {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 80%, transparent);
+}
+.boq-editor__table tbody tr.boq-line-row:nth-child(even) td,
+.sheet-register__table tbody tr.boq-line-row:nth-child(even) td {
+  background: color-mix(in srgb, var(--color-sand) 35%, var(--color-paper));
 }
 .boq-editor__table .boq-desc-col {
   min-width: 18rem;

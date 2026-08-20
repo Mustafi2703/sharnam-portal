@@ -8,8 +8,7 @@
 
 ## 1. Purpose
 
-Schedule / milestone / planned-vs-actual / hindrance / risk / legal registers.  
-Client civil tools (**S-curve**, **Summary schedule**, **MS Project**, **Procurement**) are **Ready** hub cards awaiting sheets.
+Schedule / milestone / planned-vs-actual / hindrance / risk / legal registers plus **S-curve** and **MS Project XML** for DPR/WPR. Extra placeholder tools (summary schedule PDF, procurement pack) were removed.
 
 ---
 
@@ -22,14 +21,12 @@ Client civil tools (**S-curve**, **Summary schedule**, **MS Project**, **Procure
 | Planned vs Actual | `/progress?tab=planned` | Built | Planned Vs. Actual Dashboard — **scrollable Excel-style tables** |
 | Monthly | `/progress?tab=monthly` | Built | Monthly Progress Dashboard |
 | Hindrance | `/progress?tab=hindrance` | Built | Hindrance Register Dashboard |
-| Risk | `/progress?tab=risk` | Built | Progress Overview · Risk |
-| Legal | `/progress?tab=legal` | Built | Progress Overview · Legal Approval |
-| **S-curve** | `/progress?tab=scurve` | **Ready** | MS Project / S-curve pack |
-| **Summary schedule** | `/progress?tab=schedule` | **Ready** | Project summary schedule + PDF |
-| **MS Project progress** | `/progress?tab=msproject` | **Ready** | MS Project export |
-| **Procurement plan** | `/progress?tab=procurement` | **Ready** | Procurement plan + PDF |
+| Risk | `/progress?tab=risk` | Built | Risk Register - Dashboard 1.xlsx |
+| Legal | `/progress?tab=legal` | Built | Legal Approvals - Dashboard.xlsx |
+| **S-curve** | `/progress?tab=scurve` | Built | MS Project XML weekly % |
+| **MS Project** | `/progress?tab=msproject` | Built | MS Project XML task register |
 
-Ready tools open a placeholder that matches hub IA — drop the sheet and wire fields without new navigation.
+Removed: Summary schedule placeholder, Procurement plan placeholder.
 
 ---
 

@@ -7,6 +7,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip
 import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams } from "../../lib/qualitySheetViews";
 import { QualitySiteRegister } from "../../components/QualitySiteRegister";
 import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
+import type { QapProjectMeta } from "../../components/QapDetailRegister";
 import { SorLogPanel } from "../../components/SorLogPanel";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
@@ -21,6 +22,7 @@ export default function InspectionsPage() {
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [dash, setDash] = useState<any>(null);
+  const [project, setProject] = useState<QapProjectMeta | null>(null);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
@@ -59,7 +61,7 @@ export default function InspectionsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
 
   const load = async () => {
-    const [insp, d, u, t, dashRes] = await Promise.all([
+    const [insp, d, u, t, dashRes, projRes] = await Promise.all([
       api<{ inspections: any[]; canInspect: boolean; publishedDrawings: number }>(`/api/inspections/project/${id}`, {
         token,
       }),
@@ -67,9 +69,19 @@ export default function InspectionsPage() {
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>("/api/checklist/templates?type=QualityInspection", { token }).catch(() => []),
       api(`/api/checklist/project/${id}/quality-dashboard`, { token }).catch(() => null),
+      api<QapProjectMeta>(`/api/projects/${id}`, { token }).catch(() => null),
     ]);
     setData(insp);
     setDash(dashRes);
+    if (projRes) {
+      setProject({
+        name: projRes.name,
+        code: projRes.code,
+        clientName: projRes.clientName,
+        designConsultant: projRes.designConsultant,
+        contractorName: projRes.contractorName,
+      });
+    }
     setDrawings(d.filter((x) => x.isPublished));
     setUsers(u);
     const list = Array.isArray(t) ? t : [];
@@ -478,6 +490,7 @@ export default function InspectionsPage() {
           rows={dash?.cubes || []}
           canEdit={canManage}
           onChanged={load}
+          project={project}
         />
       )}
 

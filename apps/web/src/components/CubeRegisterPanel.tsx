@@ -1,8 +1,10 @@
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { groupCubeRows, fmtCubeDate, type CubeGroup, type CubeRow } from "../lib/cubeRegister";
+import { cubeResultRowClass, fmtRegisterNum } from "../lib/inspectionRequestForms";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { RegisterFilterBar } from "./RegisterFilterBar";
+import type { QapProjectMeta } from "./QapDetailRegister";
 
 export type { CubeRow };
 
@@ -44,10 +46,11 @@ type Props = {
   rows: CubeRow[];
   canEdit: boolean;
   onChanged: () => void | Promise<void>;
+  project?: QapProjectMeta | null;
 };
 
 /** SPDC CUBE REGISTER — grouped specimens with inline edit + DPR summary stats. */
-export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }: Props) {
+export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, project }: Props) {
   const [form, setForm] = useState(emptyCube());
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -209,9 +212,16 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
   function cellInput(
     defaultValue: string,
     onSave: (v: string) => void,
-    opts?: { type?: string; className?: string; placeholder?: string }
+    opts?: { type?: string; className?: string; placeholder?: string; numeric?: boolean }
   ) {
-    if (!canEdit) return defaultValue || "—";
+    if (!canEdit) {
+      if (opts?.type === "date" && defaultValue) return fmtCubeDate(defaultValue);
+      if (opts?.numeric && defaultValue && defaultValue !== "—") {
+        const n = Number(defaultValue);
+        if (!Number.isNaN(n)) return <span className="cube-num">{fmtRegisterNum(n)}</span>;
+      }
+      return defaultValue || "—";
+    }
     return (
       <Input
         type={opts?.type || "text"}
@@ -279,7 +289,47 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
         </Card>
       )}
 
-      <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem]">
+      <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem] overflow-hidden">
+        <div className="border-b border-line bg-white shrink-0">
+          <div className="grid lg:grid-cols-[8rem_1fr_14rem] gap-0 border-b border-line">
+            <div className="p-3 border-r border-line bg-sand/50 flex items-center justify-center text-[10px] font-semibold text-steel-muted uppercase tracking-wide">
+              Client LOGO
+            </div>
+            <div className="p-4 flex items-center justify-center border-r border-line">
+              <h2 className="font-display text-lg sm:text-xl font-bold text-brand-dark tracking-tight">
+                SPDC Cube Register
+              </h2>
+            </div>
+            <div className="p-3 bg-brand-soft/30 text-[10px] text-steel-muted leading-snug">
+              <span className="font-bold text-brand-dark uppercase block mb-1">Legend</span>
+              <span className="inline-block mr-2"><span className="cube-phase-7d px-1 rounded">7D</span> 7-day</span>
+              <span className="inline-block mr-2"><span className="cube-phase-28d px-1 rounded">28D</span> 28-day</span>
+              <span className="inline-block text-ok">Pass</span> · <span className="text-danger">Fail</span> · Pending
+            </div>
+          </div>
+          <div className="spdc-register-meta">
+            {(
+              [
+                ["Project", project?.name || "—", false],
+                ["Client", project?.clientName || "—", true],
+                ["Design Consultant", project?.designConsultant || "—", false],
+                ["PM Consultant", "Sharnam Project Management Consultants", false],
+                ["Contractor", project?.contractorName || "—", false],
+              ] as const
+            ).map(([label, value, highlightClient]) => (
+              <div
+                key={label}
+                className={`spdc-register-meta__cell${highlightClient ? " spdc-register-meta__cell--client" : ""}`}
+              >
+                <span className="spdc-register-meta__label">{label}</span>
+                <span className="spdc-register-meta__value" title={String(value)}>
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold text-sm text-left">
             Cube register — SPDC format ({filtered.length} specimens · {grouped.length} groups)
@@ -305,8 +355,8 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
         />
 
         <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
-          <table className="sheet-register__table min-w-[92rem] w-full text-[11px] border-collapse">
-            <thead className="sticky top-0 z-10 bg-white shadow-sm">
+          <table className="cube-register__table min-w-[92rem] w-full">
+            <thead>
               <tr className="bg-brand text-white text-[10px]">
                 <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Sr. No.</th>
                 <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Date of Casting</th>
@@ -335,9 +385,10 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
                     const phase = specimenPhase(c);
                     const strength = rowStrength(c);
                     const isFirst = idx === 0;
+                    const rowClass = `${cubeResultRowClass(c.result)}${isFirst ? " cube-group-start" : ""}`;
                     return (
-                      <tr key={c.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/15"}>
-                        <td className="text-left font-mono border border-line px-1 py-0.5 align-top">
+                      <tr key={c.id} className={rowClass}>
+                        <td className="text-left font-mono align-top">
                           {isFirst
                             ? cellInput(group.srNo, (v) => void patchGroupField(group, { srNo: v }))
                             : ""}
@@ -370,10 +421,13 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
                               )
                             : ""}
                         </td>
-                        <td className="text-left font-mono border border-line px-1 py-0.5 align-top">{phase}</td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                        <td className={`text-left font-mono align-top ${phase === "7D" ? "cube-phase-7d" : phase === "28D" ? "cube-phase-28d" : ""}`}>
+                          {phase}
+                        </td>
+                        <td className="text-left align-top">
                           {cellInput(c.cubeWeight != null ? String(c.cubeWeight) : "", (v) =>
-                            void patchRow(c.id, { cubeWeight: v ? Number(v) : null })
+                            void patchRow(c.id, { cubeWeight: v ? Number(v) : null }),
+                            { numeric: true }
                           )}
                         </td>
                         <td className="text-left border border-line px-1 py-0.5 align-top">
@@ -394,36 +448,40 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
                               )
                             : "—"}
                         </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                        <td className="text-left align-top">
                           {phase !== "28D"
                             ? cellInput(c.load7 != null ? String(c.load7) : "", (v) =>
-                                void patchRow(c.id, { load7: v ? Number(v) : null })
+                                void patchRow(c.id, { load7: v ? Number(v) : null }),
+                                { numeric: true }
                               )
                             : "—"}
                         </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                        <td className="text-left align-top">
                           {phase !== "7D"
                             ? cellInput(c.load28 != null ? String(c.load28) : "", (v) =>
-                                void patchRow(c.id, { load28: v ? Number(v) : null })
+                                void patchRow(c.id, { load28: v ? Number(v) : null }),
+                                { numeric: true }
                               )
                             : "—"}
                         </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top font-medium">
+                        <td className="text-left align-top font-medium">
                           {cellInput(strength != null ? String(strength) : "", (v) => {
                             const n = v ? Number(v) : null;
                             if (phase === "7D") void patchRow(c.id, { strength7: n, strength: n });
                             else if (phase === "28D") void patchRow(c.id, { strength28: n, strength: n });
                             else void patchRow(c.id, { strength: n });
-                          })}
+                          }, { numeric: true })}
                         </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                        <td className="text-left align-top">
                           {isFirst && group.avgStrength != null
                             ? cellInput(String(group.avgStrength), (v) =>
-                                void patchGroupField(group, { avgStrength: v ? Number(v) : null })
+                                void patchGroupField(group, { avgStrength: v ? Number(v) : null }),
+                                { numeric: true }
                               )
                             : isFirst
                               ? cellInput(c.avgStrength != null ? String(c.avgStrength) : "", (v) =>
-                                  void patchGroupField(group, { avgStrength: v ? Number(v) : null })
+                                  void patchGroupField(group, { avgStrength: v ? Number(v) : null }),
+                                  { numeric: true }
                                 )
                               : "—"}
                         </td>

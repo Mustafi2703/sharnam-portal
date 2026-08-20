@@ -92,7 +92,11 @@ export async function buildWprClientWorkbook(
     }),
     prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
     prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 20 }),
-    prisma.costCashflowPeriod.findMany({ where: { projectId }, take: 40 }),
+    prisma.costCashflowPeriod.findMany({
+      where: { projectId, NOT: { packageName: "COP-day" } },
+      orderBy: { periodDate: "asc" },
+      take: 60,
+    }),
     prisma.progressPlannedActual.findMany({ where: { projectId }, take: 40 }),
     prisma.progressRisk.findMany({ where: { projectId }, take: 40 }),
     prisma.safetyRecord.findMany({

@@ -431,3 +431,34 @@ export function remarksCellClass(remarks?: string | null): string {
   if (tone === "warn") return "bg-amber-50 text-amber-900 font-medium";
   return "";
 }
+
+/** PMC / CLIENT checker role chips — matches client QAP colour language. */
+export function qapRoleCellClass(role?: string | null): string {
+  const r = (role || "").trim().toLowerCase();
+  if (!r || r === "·" || r === "—") return "qap-role-empty";
+  if (/approve/.test(r)) return "qap-role-approve";
+  if (/review/.test(r)) return "qap-role-review";
+  if (/witness/.test(r)) return "qap-role-witness";
+  if (/random/.test(r)) return "qap-role-random";
+  return "qap-role-neutral";
+}
+
+export function qapStatusRowClass(status?: string | null): string {
+  if (status === "Done") return "qap-row-done";
+  return "qap-row-open";
+}
+
+export function cubeResultRowClass(result?: string | null): string {
+  const r = (result || "Pending").toLowerCase();
+  if (/pass/.test(r)) return "cube-row-pass";
+  if (/fail/.test(r)) return "cube-row-fail";
+  return "cube-row-pending";
+}
+
+export function fmtRegisterNum(value?: number | null, decimals = 2): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return Number(value).toLocaleString("en-IN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}

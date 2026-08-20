@@ -133,21 +133,29 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
     const data: Record<string, unknown>[] = [];
     for (const [sheetName, packageName] of MONITORING_SHEETS) {
       const rows = sheet(wb, sheetName);
+      let section: string | null = null;
       for (let i = 2; i < rows.length; i++) {
         const row = rows[i] as unknown[];
         const description = s(row[1], 500);
         const itemNo = s(row[0], 40);
         if (!description || /total amount|^electric work$|^plumbing work$/i.test(description)) continue;
-        if (!itemNo && n(row[3]) === 0 && n(row[4]) === 0) continue;
+        const uom = s(row[2], 20);
+        const rate = n(row[3]);
         const boqQty = n(row[4]);
+        const heading = !itemNo && !uom && rate === 0 && boqQty === 0;
+        if (heading) {
+          section = description;
+          continue;
+        }
         const gfcQty = n(row[6]);
         data.push({
           projectId,
           packageName,
+          section,
           itemNo: itemNo || null,
           description,
-          uom: s(row[2], 20) || null,
-          rate: n(row[3]),
+          uom: uom || null,
+          rate,
           boqQty,
           extraQty: n(row[5]),
           gfcQty,
@@ -155,7 +163,7 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           excessQty: Math.max(0, gfcQty - boqQty),
           savingQty: Math.max(0, boqQty - gfcQty),
           certifiedQty: n(row[10]),
-          boqCost: n(row[11]) || n(row[3]) * boqQty,
+          boqCost: n(row[11]) || rate * boqQty,
         });
       }
     }

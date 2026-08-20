@@ -38,17 +38,27 @@ Multiple BOQs/structures per project → each **package** is a tool chip / filte
 
 ## 4. Monitoring / BOQ line fields
 
-| Field | Type | Required | Notes / review |
-|-------|------|----------|----------------|
-| package | text | Y | |
-| srNo / itemCode | text | N | |
-| description | text | Y | |
-| unit | text | Y | |
-| boqQty | number | N | |
-| gfcQty | number | N | Fill on monitoring |
-| rate | money | N | |
-| amount | money | N | |
-| excess / saving | number | N | Computed vs BOQ |
+Matches `Monitoring *` tabs in `SPDC_Budget_Arvind 49.xls`.
+
+| Excel header | Portal field | Notes |
+|--------------|--------------|-------|
+| ITEM NO. | itemNo | |
+| Item of Work | description | Section heading rows group the table |
+| UOM | uom | |
+| RATE ₹ | rate | Shown with ₹ |
+| BOQ Qty | boqQty | |
+| Extra Items Qty | extraQty | Variation |
+| GFC Qty | gfcQty | Drawing qty |
+| Achieved Qty | achievedQty | Site / MB rollup (`sync-from-sheets`) |
+| Excess Qty (BOQ vs GFC) | excessQty | Computed |
+| Saving Qty (BOQ vs GFC) | savingQty | Computed |
+| Certified Qty (Invoice) | certifiedQty | RA / invoice qty |
+| Extra Item Cost ₹ | computed | Extra qty × RATE |
+| GFC Cost ₹ | computed | GFC qty × RATE |
+| BOQ Cost ₹ | boqCost | BOQ × RATE |
+| Achieved Cost ₹ | computed | Achieved × RATE |
+
+**DPR:** monitoring lines are the primary quantity progress rows. **Finance COP** does not overwrite achieved qty; COP updates cashflow **actual ₹**.
 
 ---
 
@@ -102,14 +112,15 @@ Multiple BOQs/structures per project → each **package** is a tool chip / filte
 
 ---
 
-## 8. Cashflow period
+## 8. Cashflow period + COP
 
-| Field | Notes |
-|-------|-------|
-| period (month) | |
-| plannedInflow / plannedOutflow | |
-| actualInflow / actualOutflow | |
-| forecast | |
+| Grain | Source | Feeds |
+|-------|--------|-------|
+| **Day** | COP certificate date → `COP-day` | DPR AC certified |
+| **Week** | COP Mon–Sun rollup → `COP-week` | WPR cashflow |
+| **Month** | Excel Chart planned + COP overlay on Chart actual | Monthly dashboard |
+
+Certified / Approved / Paid COP amounts write cashflow actual. Planned stays from `Cashflow - Dashboard.xlsx`.
 
 ---
 

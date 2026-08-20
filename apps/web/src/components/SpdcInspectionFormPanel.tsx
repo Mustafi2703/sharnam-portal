@@ -13,6 +13,8 @@ type Props = {
   formKind: InspectionRfiKind;
   users: { id: string; fullName: string; role?: string }[];
   qualityIrOptions?: { number: string; label: string }[];
+  checklistAssignments?: { id: string; template?: { name?: string } }[];
+  masterHref?: string;
   onSubmit: (payload: {
     subject: string;
     question: string;
@@ -20,6 +22,7 @@ type Props = {
     irNumber: string;
     formDataJson: Record<string, string>;
     assignedToId: string;
+    linkedAssignmentId: string;
   }) => Promise<void>;
   busy?: boolean;
 };
@@ -39,10 +42,19 @@ function fieldsBySection(ref: InspectionFormRef) {
 }
 
 /** SPDC-branded raise panel — quality IR, safety IR, activity checklist. */
-export function SpdcInspectionFormPanel({ formKind, users, qualityIrOptions = [], onSubmit, busy }: Props) {
+export function SpdcInspectionFormPanel({
+  formKind,
+  users,
+  qualityIrOptions = [],
+  checklistAssignments = [],
+  masterHref,
+  onSubmit,
+  busy,
+}: Props) {
   const ref = inspectionFormForKind(formKind);
   const [draft, setDraft] = useState<Record<string, string>>({ ...SPDC_FORM_DEFAULTS });
   const [assignedToId, setAssignedToId] = useState("");
+  const [linkedAssignmentId, setLinkedAssignmentId] = useState("");
   const [subject, setSubject] = useState("");
   const [question, setQuestion] = useState("");
 
@@ -105,6 +117,41 @@ export function SpdcInspectionFormPanel({ formKind, users, qualityIrOptions = []
 
       <div className="grid sm:grid-cols-2 gap-2 mb-3">
         <div>
+          <label className="text-[10px] uppercase text-steel-muted font-semibold">Checklist to fill *</label>
+          <Select
+            className="mt-0.5"
+            value={linkedAssignmentId}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setLinkedAssignmentId(nextId);
+              const picked = checklistAssignments.find((a) => a.id === nextId);
+              const templateName = picked?.template?.name || "";
+              if (templateName) {
+                setDraft((d) => ({
+                  ...d,
+                  checklistNo: d.checklistNo || templateName,
+                  checklistRef: templateName,
+                }));
+              }
+            }}
+          >
+            <option value="">Select from checklist master</option>
+            {checklistAssignments.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.template?.name || a.id}
+              </option>
+            ))}
+          </Select>
+          {masterHref && (
+            <a href={masterHref} className="text-[11px] text-brand font-medium mt-1 inline-block">
+              Open checklist master →
+            </a>
+          )}
+          {!checklistAssignments.length && (
+            <p className="text-[11px] text-amber-800 mt-1">Assign a checklist in master first, then raise this IR.</p>
+          )}
+        </div>
+        <div>
           <label className="text-[10px] uppercase text-steel-muted font-semibold">Assignee</label>
           <Select className="mt-0.5" value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)}>
             <option value="">PMC / matrix assignee</option>
@@ -143,6 +190,10 @@ export function SpdcInspectionFormPanel({ formKind, users, qualityIrOptions = []
           const subj = subject.trim() || buildSpdcSubject(ref, draft);
           const body = question.trim() || buildSpdcBody(ref, draft);
           const irNumber = draft.irNumber || draft.checklistNo || "";
+          if (!linkedAssignmentId) {
+            window.alert("Select which checklist from master this inspection should fill.");
+            return;
+          }
           await onSubmit({
             subject: subj,
             question: body,
@@ -150,11 +201,13 @@ export function SpdcInspectionFormPanel({ formKind, users, qualityIrOptions = []
             irNumber,
             formDataJson: draft,
             assignedToId,
+            linkedAssignmentId,
           });
           setDraft({ ...SPDC_FORM_DEFAULTS });
           setSubject("");
           setQuestion("");
           setAssignedToId("");
+          setLinkedAssignmentId("");
         }}
       >
         <Button type="submit" disabled={busy}>

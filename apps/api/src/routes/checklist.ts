@@ -134,7 +134,17 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
     where: {
       projectId: req.params.projectId,
       status: { in: ["Open", "Answered"] },
-      rfiKind: { in: ["DrawingChecklist", "QualityInspection", "SafetyChecklist"] },
+      rfiKind: {
+        in: [
+          "DrawingChecklist",
+          "QualityInspection",
+          "SafetyChecklist",
+          "QualityIR",
+          "SafetyIR",
+          "ActivityInspection",
+          "SiteExecution",
+        ],
+      },
     },
     select: {
       id: true,
@@ -334,6 +344,15 @@ checklistRouter.post(
         createdById: req.user!.id,
       });
     }
+
+    await prisma.rfi.updateMany({
+      where: {
+        projectId: assignment.projectId,
+        status: { in: ["Open", "Answered"] },
+        OR: [{ linkedAssignmentId: assignment.id }, { linkedChecklistItemId: assignment.templateId }],
+      },
+      data: { status: "Closed", closedAt: new Date(), ballInCourt: "Closed" },
+    });
 
     const itemCount = assignment.template._count.items;
     const withPhotos = await prisma.checklistSubmission.findUnique({
@@ -727,7 +746,7 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
   res.send(buf);
 });
 
-const TEMPLATE_TYPES = ["DrawingCheck", "SiteExecution", "QualityInspection", "Safety"] as const;
+const TEMPLATE_TYPES = ["DrawingCheck", "SiteExecution", "QualityInspection", "Safety", "ActivityInspection"] as const;
 
 /** Master: create checklist template (office + client for QI/Safety) */
 checklistRouter.post(

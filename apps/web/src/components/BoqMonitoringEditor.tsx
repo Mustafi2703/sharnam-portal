@@ -17,6 +17,7 @@ export type MonLine = {
   certifiedQty: number;
   excessQty: number;
   savingQty: number;
+  boqCost?: number;
 };
 
 type Props = {
@@ -50,6 +51,13 @@ export function formatQty(n: number | null | undefined, digits = 3): string {
   if (!Number.isFinite(v)) return "0";
   const fixed = Number(v.toFixed(digits));
   return String(fixed);
+}
+
+/** Rupee amount with ₹ icon — Cost monitoring money columns. */
+export function formatInr(n: number | null | undefined): string {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v === 0) return "₹0";
+  return `₹${Math.round(v).toLocaleString("en-IN")}`;
 }
 
 function CellInput({
@@ -456,7 +464,7 @@ export function BoqMonitoringEditor({
     }
   }
 
-  const colSpan = canTouch ? 12 : 11;
+  const colSpan = canTouch ? 17 : 16;
 
   return (
     <div className="space-y-4">
@@ -540,7 +548,7 @@ export function BoqMonitoringEditor({
         <div className="sheet-register__head">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
-            {rows.length} lines · {grouped.length} sections · click GFC / Achieved to edit inline
+            {rows.length} lines · {grouped.length} sections · SPDC Monitoring columns · ₹ on cost cols
           </span>
         </div>
         <div className="sheet-register__scroll">
@@ -548,16 +556,21 @@ export function BoqMonitoringEditor({
             <thead>
               <tr>
                 <th className="sticky-col">Package</th>
-                <th>Item</th>
-                <th className="boq-desc-col">Description</th>
+                <th>ITEM NO.</th>
+                <th className="boq-desc-col">Item of Work</th>
                 <th>UOM</th>
-                <th className="num">Rate</th>
-                <th className="num">BOQ</th>
-                <th className="num">Extra</th>
-                <th className="num">GFC</th>
-                <th className="num">Achieved</th>
-                <th className="num">Excess</th>
-                <th className="num">Saving</th>
+                <th className="num">RATE ₹</th>
+                <th className="num">BOQ Qty</th>
+                <th className="num">Extra Items Qty</th>
+                <th className="num">GFC Qty</th>
+                <th className="num">Achieved Qty</th>
+                <th className="num">Excess Qty<br />(BOQ vs GFC)</th>
+                <th className="num">Saving Qty<br />(BOQ vs GFC)</th>
+                <th className="num">Certified Qty<br />(Invoice)</th>
+                <th className="num">Extra Item Cost ₹</th>
+                <th className="num">GFC Cost ₹</th>
+                <th className="num">BOQ Cost ₹</th>
+                <th className="num">Achieved Cost ₹</th>
                 {canTouch && <th className="boq-actions-col">Actions</th>}
               </tr>
             </thead>
@@ -581,7 +594,7 @@ export function BoqMonitoringEditor({
                   {items.map((b) => {
                     const busy = savingId === b.id;
                     return (
-                      <tr key={b.id} className={busy ? "opacity-60" : undefined}>
+                      <tr key={b.id} className={`boq-line-row ${busy ? "opacity-60" : ""}`}>
                         <td className="sticky-col">{b.packageName}</td>
                         <td className="whitespace-nowrap">{b.itemNo ?? "—"}</td>
                         <td className="boq-desc-col">
@@ -590,7 +603,7 @@ export function BoqMonitoringEditor({
                           </div>
                         </td>
                         <td>{b.uom ?? "—"}</td>
-                        <td className="num">{formatQty(b.rate)}</td>
+                        <td className="num rupee">{formatInr(b.rate)}</td>
                         <td className="num">
                           {canFullEdit ? (
                             <CellInput
@@ -637,6 +650,21 @@ export function BoqMonitoringEditor({
                         </td>
                         <td className="num">{formatQty(b.excessQty)}</td>
                         <td className="num">{formatQty(b.savingQty)}</td>
+                        <td className="num">
+                          {canFullEdit ? (
+                            <CellInput
+                              type="number"
+                              value={b.certifiedQty}
+                              onCommit={(v) => void patchLine(b.id, { certifiedQty: Number(v) || 0 })}
+                            />
+                          ) : (
+                            formatQty(b.certifiedQty)
+                          )}
+                        </td>
+                        <td className="num rupee">{formatInr(b.extraQty * b.rate)}</td>
+                        <td className="num rupee">{formatInr(b.gfcQty * b.rate)}</td>
+                        <td className="num rupee">{formatInr(b.boqCost || b.boqQty * b.rate)}</td>
+                        <td className="num rupee">{formatInr(b.achievedQty * b.rate)}</td>
                         {canTouch && (
                           <td className="boq-actions-col">
                             <div className="flex items-center gap-2">

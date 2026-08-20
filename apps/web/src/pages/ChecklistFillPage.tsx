@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
 import { SignaturePad } from "../components/SignaturePad";
+import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string };
 type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[]; evidenceLinks: string[] };
@@ -173,7 +174,7 @@ export default function ChecklistFillPage() {
     }
     try {
       const fd = buildFormData("Submitted");
-      await api(`/api/checklist/assignments/${assignmentId}/submit`, {
+      const saved = await api<any>(`/api/checklist/assignments/${assignmentId}/submit`, {
         method: "POST",
         token,
         body: fd,
@@ -182,9 +183,18 @@ export default function ChecklistFillPage() {
       const overall = photos?.length || 0;
       setMsg(
         overall + lineFiles + linkEvidence
-          ? `Submitted — ${answered}/${items.length} answered · evidence saved to SharePoint links / uploads.`
-          : "Submitted — audit log updated."
+          ? `Submitted — sheet report generated. ${answered}/${items.length} answered.`
+          : "Submitted — sheet report generated."
       );
+      const submissionId = saved?.id;
+      if (submissionId) {
+        try {
+          await downloadBrandedChecklistXlsx(submissionId, token);
+          await downloadBrandedChecklistPrint(submissionId, token);
+        } catch {
+          /* user can download from fill log */
+        }
+      }
       setPhotos(null);
       setDraftId(null);
       await load();
@@ -226,7 +236,11 @@ export default function ChecklistFillPage() {
                 ? "Quality inspection"
                 : family === "Safety"
                   ? "Safety checklist"
-                  : "Final Index"}
+                  : family === "ActivityInspection"
+                    ? "Activity inspection"
+                    : family === "DrawingCheck"
+                      ? "Drawing check"
+                      : "Site / field checklist"}
             </Badge>
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => void downloadAuditCsv()}>
               CSV audit log
@@ -234,14 +248,18 @@ export default function ChecklistFillPage() {
             <Link
               to={`/projects/${projectId}/${
                 family === "QualityInspection"
-                  ? "quality-inspections"
+                  ? "quality/checklist-logs"
                   : family === "Safety"
-                    ? "safety"
-                    : "checklist"
+                    ? "safety/checklist-logs"
+                    : family === "ActivityInspection"
+                      ? "inspection/checklist-logs"
+                      : family === "DrawingCheck"
+                        ? "drawings/checklist-logs"
+                        : "field/checklist-logs"
               }`}
               className="text-xs font-semibold text-brand"
             >
-              Close
+              Fill log
             </Link>
           </div>
         </div>

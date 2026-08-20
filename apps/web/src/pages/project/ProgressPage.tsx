@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { formatQty } from "../../components/BoqMonitoringEditor";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
@@ -16,25 +17,7 @@ type Tab =
   | "risk"
   | "legal"
   | "scurve"
-  | "schedule"
-  | "msproject"
-  | "procurement";
-
-const READY_TABS: Record<
-  "schedule" | "procurement",
-  { title: string; sheet: string; blurb: string }
-> = {
-  schedule: {
-    title: "Summary schedule",
-    sheet: "Project summary schedule",
-    blurb: "Upload + in-app PDF viewer will land here when the client schedule pack is shared.",
-  },
-  procurement: {
-    title: "Procurement plan",
-    sheet: "Procurement plan",
-    blurb: "Line items + PDF viewer reserved for the client procurement pack.",
-  },
-};
+  | "msproject";
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
@@ -611,8 +594,7 @@ export default function ProgressPage() {
             <div>
               <div className="text-sm font-semibold">Planned Vs. Actual Dashboard</div>
               <p className="text-xs text-steel-muted mt-1 max-w-xl">
-                Import the client Excel pack to refresh cashflow, manpower, and the activity register. Export generates
-                the same three sheets from live portal data — feeds DPR auto-fill on matching BOQ lines.
+                BOQ monitoring from SPDC Budget is the quantity register you fill here (GFC / achieved). Cashflow and manpower come from the Planned vs Actual workbook. Fills feed DPR auto-qty.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
@@ -728,41 +710,82 @@ export default function ProgressPage() {
             </div>
           </Card>
           <Card padding={false} className="flex flex-col max-h-[calc(100vh-14rem)] min-h-[24rem] overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
-              Planned vs Actual quantity register ({data.activityLines.length} lines)
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
+              <span>
+                BOQ / monitoring register ({(data.boqLines || []).length} lines from SPDC Budget)
+              </span>
+              <Link to={`/projects/${id}/cost?tab=monitoring`} className="text-xs font-semibold text-brand">
+                Open full Cost BOQ →
+              </Link>
             </div>
             <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
-            <table className="sheet-register__table w-full text-[11px] min-w-[1100px] border-collapse">
+            <table className="sheet-register__table w-full text-[11px] min-w-[960px] border-collapse">
               <thead className="sticky top-0 z-10 bg-brand text-white">
                 <tr className="text-left text-[10px] uppercase">
-                  <th className="py-2 px-2 border border-brand-dark/30">#</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30">Tower</th>
+                  <th className="py-2 px-2 border border-brand-dark/30">Package</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">Section</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">Item</th>
                   <th className="py-2 pr-2 border border-brand-dark/30 min-w-[12rem]">Activity</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30">Unit</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30">Plan start</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30">Plan end</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">UOM</th>
                   <th className="py-2 pr-2 border border-brand-dark/30 text-right">BOQ</th>
                   <th className="py-2 pr-2 border border-brand-dark/30 text-right">GFC</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Executed</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Achieved</th>
                   <th className="py-2 pr-2 border border-brand-dark/30 text-right">Balance</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Wk plan</th>
-                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Wk act</th>
-                  <th className="py-2 px-2 border border-brand-dark/30">Status</th>
+                  <th className="py-2 px-2 border border-brand-dark/30 text-right">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.boqLines || []).map((b: any, idx: number) => {
+                  const base = b.gfcQty || b.boqQty || 0;
+                  const bal = Math.max(0, base - (b.achievedQty || 0));
+                  const pctDone = base > 0 ? Math.min(1.2, (b.achievedQty || 0) / base) : 0;
+                  return (
+                    <tr key={b.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/20"}>
+                      <td className="py-1.5 px-2 border border-line">{b.packageName}</td>
+                      <td className="py-1.5 pr-2 border border-line text-[10px] uppercase">{b.section || "—"}</td>
+                      <td className="py-1.5 pr-2 border border-line font-mono">{b.itemNo || "—"}</td>
+                      <td className="py-1.5 pr-2 border border-line font-medium">{b.description}</td>
+                      <td className="py-1.5 pr-2 border border-line">{b.uom || "—"}</td>
+                      <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{formatQty(b.boqQty)}</td>
+                      <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{formatQty(b.gfcQty)}</td>
+                      <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{formatQty(b.achievedQty)}</td>
+                      <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{formatQty(bal)}</td>
+                      <td className="py-1.5 px-2 border border-line text-right tabular-nums">{pct(pctDone)}</td>
+                    </tr>
+                  );
+                })}
+                {!(data.boqLines || []).length && (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-steel-muted">
+                      No BOQ lines — seed SPDC_Budget or import monitoring on Cost → BOQ.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            </div>
+          </Card>
+          {(data.activityLines || []).length > 0 && (
+          <Card padding={false} className="flex flex-col max-h-[min(40vh,24rem)] min-h-[12rem] overflow-hidden opacity-90">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
+              Weekly activity register ({data.activityLines.length} lines from Excel import)
+            </div>
+            <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
+            <table className="sheet-register__table w-full text-[11px] min-w-[900px] border-collapse">
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className="text-left text-[10px] uppercase text-steel-muted">
+                  <th className="py-2 px-2">#</th>
+                  <th className="py-2 pr-2">Activity</th>
+                  <th className="py-2 pr-2 text-right">Wk plan</th>
+                  <th className="py-2 pr-2 text-right">Wk act</th>
+                  <th className="py-2 px-2">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {data.activityLines.map((a: any, idx: number) => (
                   <tr key={a.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/20"}>
                     <td className="py-1.5 px-2 border border-line font-mono">{a.srNo}</td>
-                    <td className="py-1.5 pr-2 border border-line">{a.tower || "—"}</td>
                     <td className="py-1.5 pr-2 border border-line font-medium">{a.activity}</td>
-                    <td className="py-1.5 pr-2 border border-line">{a.unit || "—"}</td>
-                    <td className="py-1.5 pr-2 border border-line whitespace-nowrap">{fmtDate(a.plannedStart)}</td>
-                    <td className="py-1.5 pr-2 border border-line whitespace-nowrap">{fmtDate(a.plannedEnd)}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.boqQty}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.gfcQty}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{Number(a.executedQty).toFixed(2)}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{Number(a.balanceQty).toFixed(2)}</td>
                     <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyPlanned}</td>
                     <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyActual}</td>
                     <td className="py-1.5 px-2 border border-line">{a.status || "—"}</td>
@@ -772,6 +795,7 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          )}
         </div>
       )}
 
@@ -1185,21 +1209,6 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {tab in READY_TABS && (
-        <Card className="!p-6 max-w-2xl">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-2">Awaiting client sheet</p>
-          <h3 className="font-display text-xl text-ink">{READY_TABS[tab as keyof typeof READY_TABS].title}</h3>
-          <p className="text-sm text-steel-muted mt-2 leading-relaxed">
-            {READY_TABS[tab as keyof typeof READY_TABS].blurb}
-          </p>
-          <p className="mt-4 text-xs font-mono text-steel-muted">
-            Sheet → {READY_TABS[tab as keyof typeof READY_TABS].sheet}
-          </p>
-          <Link to={`/projects/${id}/hub/progress`} className="inline-block mt-5 text-sm font-semibold text-brand">
-            ← Progress hub
-          </Link>
-        </Card>
-      )}
     </div>
   );
 }

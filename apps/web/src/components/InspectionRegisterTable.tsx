@@ -16,6 +16,7 @@ type Row = {
   rfiKind: string;
   createdAt: string;
   formDataJson?: string | null;
+  linkedAssignmentId?: string | null;
   assignedTo?: { fullName: string } | null;
   drawing?: { drawingNumber: string; title?: string } | null;
 };
@@ -26,6 +27,7 @@ type Props = {
   variant?: "register" | "hse";
   onSelect?: (id: string) => void;
   activeId?: string | null;
+  checklistByRowId?: Record<string, string>;
 };
 
 function fmtDate(iso: string) {
@@ -81,11 +83,12 @@ function cell(row: Row, key: string, form: Record<string, string>) {
   }
 }
 
-export function InspectionRegisterTable({ rows, formRef, variant = "register", onSelect, activeId }: Props) {
+export function InspectionRegisterTable({ rows, formRef, variant = "register", onSelect, activeId, checklistByRowId }: Props) {
   const columns =
     variant === "hse"
       ? HSE_REGISTER_REF.columns.filter((c) => c !== "Sr.")
       : formRef.registerColumns;
+  const showChecklistCol = !!checklistByRowId;
 
   if (rows.length === 0) {
     return (
@@ -106,6 +109,7 @@ export function InspectionRegisterTable({ rows, formRef, variant = "register", o
                 {c}
               </th>
             ))}
+            {showChecklistCol && <th className="p-2 font-semibold whitespace-nowrap">Checklist (master)</th>}
             {variant === "register" && <th className="p-2 font-semibold">Portal ref</th>}
           </tr>
         </thead>
@@ -132,6 +136,11 @@ export function InspectionRegisterTable({ rows, formRef, variant = "register", o
                     </td>
                   );
                 })}
+                {showChecklistCol && (
+                  <td className="p-2 align-top text-brand-dark font-medium">
+                    {checklistByRowId[row.id] || "—"}
+                  </td>
+                )}
                 {variant === "register" && (
                   <td className="p-2 font-mono text-[10px] text-steel-muted">{row.number}</td>
                 )}

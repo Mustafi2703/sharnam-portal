@@ -38,6 +38,9 @@ export default function InspectionRegisterPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
+  const [qiAssignments, setQiAssignments] = useState<any[]>([]);
+  const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
+  const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
 
   const canCreate = !!user && user.role !== "client";
@@ -46,13 +49,23 @@ export default function InspectionRegisterPage() {
 
   const load = async () => {
     const kinds = INSPECTION_KINDS.join(",");
-    const [payload, u] = await Promise.all([
+    const [payload, u, qi, saf, act] = await Promise.all([
       api<any>(`/api/rfis/project/${id}?kind=${kinds}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=QualityInspection`, { token }).catch(() => ({
+        assignments: [],
+      })),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=Safety`, { token }).catch(() => ({ assignments: [] })),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=ActivityInspection`, { token }).catch(() => ({
+        assignments: [],
+      })),
     ]);
     const list = Array.isArray(payload) ? payload : payload.rfis || [];
     setRows(list);
     setUsers(u);
+    setQiAssignments(qi.assignments || []);
+    setSafetyAssignments(saf.assignments || []);
+    setActivityAssignments(act.assignments || []);
     if (!active && list[0]) setActive(list[0].id);
   };
 
@@ -80,7 +93,46 @@ export default function InspectionRegisterPage() {
     [rows],
   );
 
+  const tabChecklist = useMemo(() => {
+    if (tab === "safety-ir" || tab === "hse-register") {
+      return {
+        assignments: safetyAssignments,
+        family: "Safety",
+        master: `/projects/${id}/safety/checklist-master`,
+        logs: `/projects/${id}/safety/checklist-logs`,
+      };
+    }
+    if (tab === "activity-checklist") {
+      return {
+        assignments: activityAssignments,
+        family: "ActivityInspection",
+        master: `/projects/${id}/inspection/checklist-master`,
+        logs: `/projects/${id}/inspection/checklist-logs`,
+      };
+    }
+    return {
+      assignments: qiAssignments,
+      family: "QualityInspection",
+      master: `/projects/${id}/quality/checklist-master`,
+      logs: `/projects/${id}/quality/checklist-logs`,
+    };
+  }, [tab, qiAssignments, safetyAssignments, activityAssignments, id]);
+
   const selected = rows.find((r) => r.id === active);
+
+  const checklistByRowId = useMemo(() => {
+    const nameByAssignment = new Map<string, string>();
+    for (const a of [...qiAssignments, ...safetyAssignments, ...activityAssignments]) {
+      nameByAssignment.set(a.id, a.template?.name || a.id);
+    }
+    const out: Record<string, string> = {};
+    for (const r of filtered) {
+      if (r.linkedAssignmentId) {
+        out[r.id] = nameByAssignment.get(r.linkedAssignmentId) || "Linked checklist";
+      }
+    }
+    return out;
+  }, [filtered, qiAssignments, safetyAssignments, activityAssignments]);
 
   function setTab(next: InspectionRegisterTab) {
     setSearchParams({ tab: next }, { replace: true });
@@ -93,6 +145,7 @@ export default function InspectionRegisterPage() {
     irNumber: string;
     formDataJson: Record<string, string>;
     assignedToId: string;
+    linkedAssignmentId: string;
   }) {
     setBusy(true);
     try {
@@ -106,6 +159,9 @@ export default function InspectionRegisterPage() {
           irNumber: payload.irNumber || null,
           formDataJson: payload.formDataJson,
           assignedToId: payload.assignedToId || null,
+          linkedAssignmentId: payload.linkedAssignmentId || null,
+          linkedChecklistItemId:
+            tabChecklist.assignments.find((a) => a.id === payload.linkedAssignmentId)?.template?.id || null,
           linkedDrawingId: null,
         }),
       });
@@ -120,7 +176,7 @@ export default function InspectionRegisterPage() {
       <PageHeader
         eyebrow="Inspection module"
         title="Inspection register"
-        subtitle="SPDC Request for Inspection, Safety clearance, and Activity checklists — registers maintained live. Drawing references are text-only; use Drawings → Ask (PMC RFI) for linked drawing files."
+        subtitle="Quality, Safety, and Activity inspections — pick the checklist from master, fill it, then the sheet-style report downloads when the fill is submitted."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -140,17 +196,33 @@ export default function InspectionRegisterPage() {
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
-        <Link to={`/projects/${id}/rfis?kind=RequestForInformation`} className="text-brand underline">
-          Drawings → RFI register
+        <Link to={tabChecklist.master} className="text-brand underline">
+          Checklist master
+        </Link>
+        <span className="text-steel-muted">·</span>
+        <Link to={tabChecklist.logs} className="text-brand underline">
+          Fill log / reports
         </Link>
         <span className="text-steel-muted">·</span>
         <Link to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-brand underline">
-          Request QI checklist fill
+          Request QI fill
         </Link>
         <span className="text-steel-muted">·</span>
         <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-brand underline">
           Safety checklist fill
         </Link>
+        <span className="text-steel-muted">·</span>
+        <Link to={`/projects/${id}/rfis?kind=SiteExecution`} className="text-brand underline">
+          Field checklist fill
+        </Link>
+        {tab === "activity-checklist" && (
+          <>
+            <span className="text-steel-muted">·</span>
+            <Link to={`/projects/${id}/rfis?kind=ActivityInspection&compose=1`} className="text-brand underline">
+              Request activity checklist fill
+            </Link>
+          </>
+        )}
       </div>
 
       {tab !== "hse-register" && canCreate && (
@@ -158,6 +230,8 @@ export default function InspectionRegisterPage() {
           formKind={formKind}
           users={users}
           qualityIrOptions={tab === "safety-ir" ? qualityIrOptions : []}
+          checklistAssignments={tabChecklist.assignments}
+          masterHref={tabChecklist.master}
           onSubmit={raiseEntry}
           busy={busy}
         />
@@ -185,6 +259,7 @@ export default function InspectionRegisterPage() {
           variant={tab === "hse-register" ? "hse" : "register"}
           activeId={active}
           onSelect={setActive}
+          checklistByRowId={tab === "hse-register" ? undefined : checklistByRowId}
         />
       </Card>
 
@@ -201,6 +276,14 @@ export default function InspectionRegisterPage() {
             <p className="text-[10px] text-steel-muted mt-2">
               Drawing ref (text): {parseFormDataJson(selected.formDataJson).drawingRef || "—"}
             </p>
+          )}
+          {selected.linkedAssignmentId && (
+            <Link
+              className="inline-block mt-3 text-sm font-semibold text-brand"
+              to={`/projects/${id}/checklist/fill/${selected.linkedAssignmentId}?family=${tabChecklist.family}`}
+            >
+              Fill linked checklist →
+            </Link>
           )}
         </Card>
       )}

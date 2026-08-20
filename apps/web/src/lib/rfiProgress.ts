@@ -40,6 +40,7 @@ export function rfiProgress(rfi: {
 
   if (kind === "RequestForInformation" || kind === "Manual" || kind === "ClientConcern") {
     fields.push(
+      { key: "checklist", label: "Drawing checklist linked", done: !!rfi.linkedAssignmentId },
       { key: "assignee", label: "Assignee", done: !!rfi.assignedToId, optional: true },
       { key: "drawing", label: "Linked drawing", done: !!rfi.linkedDrawingId, optional: true },
       {
@@ -54,7 +55,15 @@ export function rfiProgress(rfi: {
     );
   }
 
-  if (kind === "DrawingChecklist" || kind === "QualityInspection" || kind === "SafetyChecklist") {
+  if (
+    kind === "DrawingChecklist" ||
+    kind === "QualityInspection" ||
+    kind === "SafetyChecklist" ||
+    kind === "QualityIR" ||
+    kind === "SafetyIR" ||
+    kind === "ActivityInspection" ||
+    kind === "SiteExecution"
+  ) {
     fields.push(
       { key: "checklist", label: "Checklist linked", done: !!rfi.linkedAssignmentId },
       { key: "vendor", label: "Responsible vendor", done: !!rfi.responsibleVendorId, optional: true }

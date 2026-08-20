@@ -219,7 +219,9 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     budget,
     monitoring,
     cashflow,
-    cashflowChart: cashflow.filter((c) => /chart|project cashflow \(chart\)/i.test(c.packageName || "")),
+    cashflowChart: cashflow.filter(
+      (c) => /chart|project cashflow \(chart\)|^COP/i.test(c.packageName || "")
+    ),
     cashflowForecast: cashflow.filter((c) => /^Forecast/i.test(c.packageName || "")),
     cashflowTracking: cashflow.filter((c) => /^Tracking/i.test(c.packageName || "")),
     rateDiffs,
@@ -934,6 +936,18 @@ costRouter.patch(
       entity: "CostMonitoringLine",
       entityId: row.id,
       meta: { projectId: row.projectId },
+    });
+    const achieved = row.achievedQty;
+    const gfc = row.gfcQty;
+    await prisma.progressActivityLine.updateMany({
+      where: { projectId: row.projectId, activity: row.description },
+      data: {
+        executedQty: achieved,
+        gfcQty: gfc,
+        boqQty: row.boqQty,
+        balanceQty: Math.max(0, (gfc || row.boqQty) - achieved),
+        pctComplete: gfc > 0 ? Math.min(1.2, achieved / gfc) : 0,
+      },
     });
     res.json(row);
   }

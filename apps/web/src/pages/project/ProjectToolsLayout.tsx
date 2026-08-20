@@ -214,7 +214,7 @@ export default function ProjectToolsLayout() {
                     : activeMod === "safety"
                       ? "?kind=SafetyChecklist"
                       : activeMod === "drawings"
-                        ? "?kind=DrawingChecklist"
+                        ? "?view=register"
                         : activeMod === "comms"
                           ? "?kind=RequestForInformation"
                           : ""

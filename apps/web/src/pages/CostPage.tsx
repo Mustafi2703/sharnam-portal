@@ -83,6 +83,7 @@ export default function CostPage() {
       ? (searchParams.get("cf") as "chart" | "forecast" | "tracking" | "all")
       : "chart")
   );
+  const [cfGrain, setCfGrain] = useState<"day" | "week" | "month">("month");
   const rawTab = searchParams.get("tab") || "monitoring";
   const tab: CostTab = COST_TABS.includes(rawTab as CostTab) ? (rawTab as CostTab) : "monitoring";
   const pkgFilter = searchParams.get("pkg") || "All";
@@ -192,11 +193,20 @@ export default function CostPage() {
   );
 
   const cashflowRows = useMemo(() => {
-    if (cfView === "chart") return summary?.cashflowChart?.length ? summary.cashflowChart : summary?.cashflow || [];
-    if (cfView === "forecast") return summary?.cashflowForecast || [];
-    if (cfView === "tracking") return summary?.cashflowTracking || [];
-    return summary?.cashflow || [];
-  }, [summary, cfView]);
+    let rows: any[] = [];
+    if (cfView === "chart") rows = summary?.cashflowChart?.length ? summary.cashflowChart : summary?.cashflow || [];
+    else if (cfView === "forecast") rows = summary?.cashflowForecast || [];
+    else if (cfView === "tracking") rows = summary?.cashflowTracking || [];
+    else rows = summary?.cashflow || [];
+    if (cfView === "all" || cfView === "chart") {
+      if (cfGrain === "day") rows = rows.filter((r: any) => /COP-day/i.test(r.packageName || ""));
+      else if (cfGrain === "week") rows = rows.filter((r: any) => /COP-week/i.test(r.packageName || ""));
+      else {
+        rows = rows.filter((r: any) => !/COP-day|COP-week/i.test(r.packageName || ""));
+      }
+    }
+    return rows;
+  }, [summary, cfView, cfGrain]);
 
   if (clientBlocked) {
     return (
@@ -708,8 +718,29 @@ export default function CostPage() {
               </button>
             ))}
           </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ["month", "Month (DPR / WPR / monthly)"],
+                ["week", "Week (WPR)"],
+                ["day", "Day (DPR)"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setCfGrain(k)}
+                className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
+                  cfGrain === k ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-steel-muted">
-            From <code className="font-mono">Cashflow - Dashboard.xlsx</code> — Chart / Forecast / Tracking sheets.
+            From <code className="font-mono">Cashflow - Dashboard.xlsx</code> plus Finance COP (Certified/Approved/Paid).
+            Day / week / month grains feed DPR, WPR, and monthly dashboards. Planned from Excel; actual overlays COP.
           </p>
           <div className="grid lg:grid-cols-2 gap-3">
             <BarChart

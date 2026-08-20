@@ -18,7 +18,7 @@
  *   QualityNcr + CubeTest        → quality control figures
  *   ProgressHindrance (open)     → delays + issues
  *   Rfi (open)                   → approvals pending
- *   CostCashflowPeriod           → AC certified to date (header)
+ *   CostCashflowPeriod           → AC certified to date (COP month, else Chart actual)
  */
 import { prisma } from "../prisma.js";
 import type {
@@ -197,8 +197,15 @@ export async function buildDprAutoFill(
     prisma.progressHindrance.findMany({ where: { projectId, status: "Open" }, take: 15, orderBy: { occurredAt: "desc" } }),
     prisma.rfi.findMany({ where: { projectId, status: "Open" }, take: 15, orderBy: { createdAt: "desc" } }),
     prisma.costCashflowPeriod.findMany({
-      where: { projectId, OR: [{ packageName: { in: pkgs } }, { packageName: "Project cashflow" }] },
-      take: 40,
+      where: {
+        projectId,
+        OR: [
+          { packageName: "COP" },
+          { packageName: "Project cashflow" },
+          { packageName: { contains: "Chart" } },
+        ],
+      },
+      take: 80,
     }),
     previousDprCumulative(projectId, logDate, discipline),
     prisma.checklistSubmission.findMany({
@@ -455,8 +462,11 @@ export async function buildDprAutoFill(
     })),
   ];
 
-  const acCertifiedToDate = cashflow.reduce((s, c) => s + (c.actualAmount || 0), 0)
-    || monitoring.reduce((s, m) => s + (m.certifiedQty || 0) * (m.rate || 0), 0);
+  const copMonth = cashflow.filter((c) => c.packageName === "COP");
+  const chartCf = cashflow.filter((c) => c.packageName !== "COP");
+  const acCertifiedToDate =
+    (copMonth.length ? copMonth : chartCf).reduce((s, c) => s + (c.actualAmount || 0), 0) ||
+    monitoring.reduce((s, m) => s + (m.certifiedQty || 0) * (m.rate || 0), 0);
 
   const header: Partial<DprHeader> = {
     acCertifiedToDate,

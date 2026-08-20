@@ -8,9 +8,9 @@
 
 ## Tool nav tabs
 
-Overview · Milestones · **Planned vs Actual** · Monthly progress · Hindrance · Risk · Legal approvals · S-curve *(ready)* · Summary schedule *(ready)* · MS Project *(ready)* · Procurement *(ready)*
+Overview · Milestones · **Planned vs Actual** · Monthly progress · Hindrance · Risk · Legal approvals · S-curve · MS Project
 
-Query: `?tab=overview|milestones|planned|monthly|hindrance|risk|legal|scurve|schedule|msproject|procurement`
+Query: `?tab=overview|milestones|planned|monthly|hindrance|risk|legal|scurve|msproject`
 
 > **Not Cost.** Cost cashflow is **money by month** (`/cost?tab=cashflow`). This Planned vs Actual tool is **weekly site qty + weekly manpower + RA-month billing** from `Planned Vs. Actual Dashboard.xlsx`.
 

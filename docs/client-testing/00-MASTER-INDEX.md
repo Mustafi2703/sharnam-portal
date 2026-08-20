@@ -71,7 +71,7 @@ Legacy `?sheet=client` redirects to **master** (client columns merged).
 | SiteExecution | `checklist-master?family=SiteExecution` | field logs | `?family=SiteExecution` |
 
 ### Progress
-`progress?tab=overview|milestones|planned|monthly|hindrance|risk|legal` · Ready: `scurve|schedule|msproject|procurement`
+`progress?tab=overview|milestones|planned|monthly|hindrance|risk|legal|scurve|msproject`
 
 **Planned vs Actual** (`?tab=planned`) = weekly qty + weekly manpower + RA-month billing from `Planned Vs. Actual Dashboard.xlsx`. **Not** Cost cashflow.
 

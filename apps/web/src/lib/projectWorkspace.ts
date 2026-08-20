@@ -12,7 +12,8 @@ function checklistFamilyModule(search: string, tool: "master" | "logs"): Workspa
   const family = new URLSearchParams(search).get("family");
   if (family === "Safety") return "safety";
   if (family === "DrawingCheck") return "drawings";
-  if (tool === "logs" && family === "SiteExecution") return "field";
+  if (family === "ActivityInspection") return "inspection";
+  if (family === "SiteExecution" || (tool === "logs" && family === "SiteExecution")) return "field";
   return "quality";
 }
 
@@ -38,13 +39,13 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
 
   if (tail === "safety" || tail.startsWith("safety/")) return "safety";
 
-  if (tail === "inspection-register" || tail.startsWith("inspection-register")) return "inspection";
+  if (tail === "inspection-register" || tail.startsWith("inspection-register") || tail.startsWith("inspection/")) return "inspection";
 
   if (tail === "checklist-master") return checklistFamilyModule(search, "master");
   if (tail === "checklist-logs") return checklistFamilyModule(search, "logs");
 
   if (tail === "progress" || tail.startsWith("progress/")) return "progress";
-  if (["diary", "photos", "site-pilot"].includes(tail)) return "field";
+  if (["diary", "photos", "site-pilot"].includes(tail) || tail.startsWith("field/")) return "field";
   if (["dpr-maker", "wpr-maker"].includes(tail)) return "reports";
   if (["comms", "email", "submittals"].includes(tail)) return "comms";
   if (tail === "cost" || tail.startsWith("cost/")) return "cost";
@@ -59,6 +60,7 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
     if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
+    if (kind === "SiteExecution") return "field";
     const stored = getActiveWorkspace();
     if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms" || stored === "inspection") return stored;
     return "quality";

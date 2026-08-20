@@ -128,3 +128,5 @@ Ensure `SHARNAM_EXCEL_ROOT=./seed/data` on production so QAP/cube sync-template 
 - [ ] Equipment list auto-fill from site diary / fixed register per project  
 - [ ] Field density test register → DPR quality line  
 - [ ] Material received/consumed from site store ledger  
+
+COP Certified/Approved/Paid now writes Cost cashflow actual (day / week / month). MB sync still drives monitoring achieved qty. 

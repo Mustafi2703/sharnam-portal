@@ -9,9 +9,9 @@
 
 BOQ / Monitoring · MB sheets · BBS · Budget WBS · Cash Flow Chart · Cash Flow Forecast · Cashflow Tracking · Rate difference · COP / Bills · Structure upload
 
-Query: `?tab=` · `?pkg=` (package filter on monitoring/MB/BBS) · `?cf=` (chart/forecast/tracking on cashflow)
+Query: `?tab=` · `?pkg=` (package filter on monitoring/MB/BBS) · `?cf=` (chart/forecast/tracking) · cashflow **Day / Week / Month** grain chips (COP actuals)
 
-> **Not Progress Planned vs Actual.** Cost cashflow is **INR by month** from `Cashflow - Dashboard.xlsx`. Weekly qty / manpower planned vs actual lives in **Progress → Planned vs Actual** (`/progress?tab=planned`). Do not test weekly site quantities on Cost.
+> **COP:** Finance → COP (Certified/Approved/Paid) writes Cost cashflow actual. **MB → Monitoring achieved** via sync. **Not** Progress Planned vs Actual (weekly qty).
 
 ---
 

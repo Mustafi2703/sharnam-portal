@@ -79,7 +79,7 @@ export async function getFinanceCostBridge(projectId: string): Promise<FinanceCo
     },
     links: {
       copToCashflowNote:
-        "Finance COP (certified payable) feeds Cashflow Chart actual outflow — compare COP payable total with Cashflow actual column.",
+        "Certified / Approved / Paid COP rolls into Cost cashflow as COP-day, COP-week, and COP (month) rows, and overlays Chart actual for the same month. DPR AC certified uses cashflow actual.",
       budgetToFinanceNote:
         "Cost Budget WBS certified amount aligns with Finance PO/CAPEX certified roll-up for the same project.",
       billsModuleNote:

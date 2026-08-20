@@ -9,15 +9,18 @@ import { projectRouteTail } from "../../lib/projectWorkspace";
 const FAMILIES = [
   { value: "", label: "All families" },
   { value: "DrawingCheck", label: "Drawing check" },
-  { value: "SiteExecution", label: "Site execution" },
+  { value: "SiteExecution", label: "Site / field" },
   { value: "QualityInspection", label: "Quality" },
   { value: "Safety", label: "Safety" },
+  { value: "ActivityInspection", label: "Activity inspection" },
 ];
 
 const MODULE_LOG_ROUTES: Record<string, string> = {
   DrawingCheck: "drawings/checklist-logs",
   QualityInspection: "quality/checklist-logs",
   Safety: "safety/checklist-logs",
+  ActivityInspection: "inspection/checklist-logs",
+  SiteExecution: "field/checklist-logs",
 };
 
 function familyLockFromPath(pathname: string): string | undefined {
@@ -25,6 +28,8 @@ function familyLockFromPath(pathname: string): string | undefined {
   if (tail === "drawings/checklist-logs") return "DrawingCheck";
   if (tail === "quality/checklist-logs") return "QualityInspection";
   if (tail === "safety/checklist-logs") return "Safety";
+  if (tail === "inspection/checklist-logs") return "ActivityInspection";
+  if (tail === "field/checklist-logs") return "SiteExecution";
   return undefined;
 }
 

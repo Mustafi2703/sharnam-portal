@@ -10,7 +10,11 @@
 | Monthly progress | `/progress?tab=monthly` | `Monthly Progress Dashboard` · SOR |
 | Hindrance | `/progress?tab=hindrance` | `Hindrance Register Dashboard` |
 | Risk | `/progress?tab=risk` | Progress Overview · Risk |
-| Legal approvals | `/progress?tab=legal` | Progress Overview · Legal Approval |
+| Legal approvals | `/progress?tab=legal` | `Legal Approvals - Dashboard.xlsx` |
+| S-curve | `/progress?tab=scurve` | MS Project XML weekly % |
+| MS Project | `/progress?tab=msproject` | MS Project XML task register |
+
+Removed: Summary schedule and Procurement placeholders (no client sheet).
 
 ## Portal behaviour
 
@@ -35,13 +39,4 @@
 
 Seed refreshes sheet-backed registers on `npm run db:seed` so Excel edits stay maintained.
 
-## Future civil tools (PRODUCT_IA) — Ready hub cards
-
-| Tool | Route | Status |
-|------|-------|--------|
-| S-curve | `/progress?tab=scurve` | Ready — awaits sheet |
-| Summary schedule | `/progress?tab=schedule` | Ready — awaits sheet |
-| MS Project progress | `/progress?tab=msproject` | Ready — awaits sheet |
-| Procurement plan | `/progress?tab=procurement` | Ready — awaits sheet |
-
-Do not fold into Overview. Drop the sheet → fill placeholder → keep hub card.
+S-curve and MS Project XML import feed DPR dashboard charts and WPR progress slides.

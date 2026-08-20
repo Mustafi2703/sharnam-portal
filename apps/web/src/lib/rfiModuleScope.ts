@@ -10,6 +10,7 @@ export type RfiKindFilter =
   | "QualityIR"
   | "SafetyIR"
   | "ActivityInspection"
+  | "SiteExecution"
   | "Manual"
   | "ClientConcern";
 
@@ -28,6 +29,7 @@ export function defaultRfiKindForModule(scope: RfiModuleScope): RfiKindFilter | 
   if (scope === "quality") return "QualityInspection";
   if (scope === "safety") return "SafetyChecklist";
   if (scope === "drawings") return "DrawingChecklist";
+  if (scope === "field") return "SiteExecution";
   return null;
 }
 
@@ -35,6 +37,16 @@ export function rfiKindFromSearch(search: URLSearchParams): RfiKindFilter | null
   const q = search.get("kind");
   if (!q) return null;
   return q as RfiKindFilter;
+}
+
+/** Drawings → Ask (PMC RFI) compose page — separate from the read-only register. */
+export function isRfiComposeMode(search: URLSearchParams): boolean {
+  return search.get("compose") === "1";
+}
+
+/** Drawings → RFI register (SPDC log) — list only, no compose form on the same screen. */
+export function isDrawingRfiRegisterMode(scope: RfiModuleScope, search: URLSearchParams): boolean {
+  return scope === "drawings" && search.get("view") === "register" && !isRfiComposeMode(search);
 }
 
 /** Kind pills shown per module — never mix Drawing check with QI or Safety on module pages. */
@@ -50,6 +62,14 @@ export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, str
       return [["QualityInspection", "Request QI fill"]];
     case "safety":
       return [["SafetyChecklist", "Safety checklist fill"]];
+    case "field":
+      return [["SiteExecution", "Field checklist fill"]];
+    case "inspection":
+      return [
+        ["QualityIR", "Quality IR"],
+        ["SafetyIR", "Safety IR"],
+        ["ActivityInspection", "Activity checklist"],
+      ];
     case "comms":
       return [
         ["All", "All"],
@@ -91,14 +111,16 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
     return {
       eyebrow: "Drawings module",
       title: "Ask (PMC RFI)",
-      subtitle: "Request for Information — link a drawing revision. Register lives under Drawings → RFI register.",
+      subtitle:
+        "Request for Information — link a drawing revision and attach the Drawing Check checklist for this RFI. View the log under Drawings → RFI register.",
     };
   }
-  if (scope === "drawings" && kind === "All") {
+  if (scope === "drawings" && (kind === "All" || kind === "Manual")) {
     return {
       eyebrow: "Drawings module",
       title: "RFI register",
-      subtitle: "Drawing checklist fills and PMC requests for information — SPDC_RFI_Form_and_Register.xlsx.",
+      subtitle:
+        "Live SPDC RFI register — drawing checklist fills and PMC requests for information. Use Ask (PMC RFI) to raise a new entry.",
     };
   }
   if (scope === "drawings" || kind === "DrawingChecklist") {
@@ -107,6 +129,20 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
       title: "Request drawing checklist fill",
       subtitle:
         "Drawing Check Master templates only — link a drawing revision when relevant. Quality and Safety checklists live in their own modules.",
+    };
+  }
+  if (scope === "field" || kind === "SiteExecution") {
+    return {
+      eyebrow: "Field module",
+      title: "Field checklist fill",
+      subtitle: "Site execution checklists from Field checklist master — fill, then the sheet report is generated.",
+    };
+  }
+  if (scope === "inspection" || kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") {
+    return {
+      eyebrow: "Inspection module",
+      title: "Inspection request",
+      subtitle: "Quality, Safety, or Activity — select the checklist from master for this fill.",
     };
   }
   return {
@@ -119,20 +155,25 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
 export function rfiListKindFilter(scope: RfiModuleScope, kindFilter: RfiKindFilter): RfiKindFilter {
   if (scope === "quality") return "QualityInspection";
   if (scope === "safety") return "SafetyChecklist";
-  if (scope === "drawings" && (kindFilter === "RequestForInformation" || kindFilter === "All")) return kindFilter;
+  if (scope === "field") return "SiteExecution";
+  if (scope === "drawings" && kindFilter === "All") return "All";
+  if (scope === "drawings" && kindFilter === "RequestForInformation") return "RequestForInformation";
   if (scope === "drawings") return "DrawingChecklist";
   return kindFilter;
 }
 
-export function checklistFamilyForRfiKind(rfiKind: string | undefined): "DrawingCheck" | "QualityInspection" | "Safety" | "SiteExecution" {
-  if (rfiKind === "QualityInspection") return "QualityInspection";
-  if (rfiKind === "SafetyChecklist") return "Safety";
-  if (rfiKind === "DrawingChecklist") return "DrawingCheck";
+export function checklistFamilyForRfiKind(
+  rfiKind: string | undefined
+): "DrawingCheck" | "QualityInspection" | "Safety" | "SiteExecution" | "ActivityInspection" {
+  if (rfiKind === "QualityInspection" || rfiKind === "QualityIR") return "QualityInspection";
+  if (rfiKind === "SafetyChecklist" || rfiKind === "SafetyIR") return "Safety";
+  if (rfiKind === "DrawingChecklist" || rfiKind === "RequestForInformation" || rfiKind === "Manual") return "DrawingCheck";
+  if (rfiKind === "ActivityInspection") return "ActivityInspection";
   return "SiteExecution";
 }
 
 export function isModuleScopedRfi(scope: RfiModuleScope): boolean {
-  return scope === "drawings" || scope === "quality" || scope === "safety";
+  return scope === "drawings" || scope === "quality" || scope === "safety" || scope === "field";
 }
 
 export function moduleForChecklistFamily(family: string): WorkspaceKey | "field" {

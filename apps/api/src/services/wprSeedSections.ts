@@ -62,7 +62,14 @@ export async function seedWprSections(
     prisma.submittal.findMany({ where: { projectId }, take: 40 }),
     prisma.progressMilestone.findMany({ where: { projectId }, take: 60 }),
     prisma.progressPlannedActual.findMany({ where: { projectId }, take: 40 }),
-    prisma.costCashflowPeriod.findMany({ where: { projectId }, take: 40 }),
+    prisma.costCashflowPeriod.findMany({
+      where: {
+        projectId,
+        NOT: { packageName: "COP-day" },
+      },
+      orderBy: { periodDate: "asc" },
+      take: 60,
+    }),
     prisma.qapActivity.findMany({
       where: { projectId },
       orderBy: { weekLabel: "desc" },

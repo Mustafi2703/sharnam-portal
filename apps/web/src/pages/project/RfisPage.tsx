@@ -12,6 +12,8 @@ import {
   checklistFamilyForRfiKind,
   defaultRfiKindForModule,
   isModuleScopedRfi,
+  isDrawingRfiRegisterMode,
+  isRfiComposeMode,
   rfiKindFromSearch,
   rfiKindPillsForScope,
   rfiListKindFilter,
@@ -62,6 +64,7 @@ export default function RfisPage() {
   const [drawingAssignments, setDrawingAssignments] = useState<any[]>([]);
   const [qiAssignments, setQiAssignments] = useState<any[]>([]);
   const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
+  const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
   const createFormRef = useRef<HTMLDivElement>(null);
 
   const isClient = user?.role === "client";
@@ -71,11 +74,13 @@ export default function RfisPage() {
 
   const moduleScope = rfiModuleScope(location.pathname, location.search);
   const moduleScoped = isModuleScopedRfi(moduleScope);
-  const pageCopy = rfiPageCopy(moduleScope, kindFilter);
+  const composeMode = isRfiComposeMode(search);
+  const registerMode = isDrawingRfiRegisterMode(moduleScope, search);
+  const pageCopy = rfiPageCopy(moduleScope, registerMode ? "All" : kindFilter);
   const kindPills = rfiKindPillsForScope(moduleScope);
 
   const load = async () => {
-    const [rPayload, u, d, aSite, aDraw, aQi, aSaf, v] = await Promise.all([
+    const [rPayload, u, d, aSite, aDraw, aQi, aSaf, aAct, v] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
@@ -91,6 +96,9 @@ export default function RfisPage() {
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=Safety`, { token }).catch(() => ({
         assignments: [],
       })),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=ActivityInspection`, { token }).catch(() => ({
+        assignments: [],
+      })),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
     ]);
     const list = Array.isArray(rPayload) ? rPayload : rPayload.rfis || [];
@@ -102,6 +110,7 @@ export default function RfisPage() {
     setDrawingAssignments(aDraw.assignments || []);
     setQiAssignments(aQi.assignments || []);
     setSafetyAssignments(aSaf.assignments || []);
+    setActivityAssignments(aAct.assignments || []);
     setVendors(Array.isArray(v) ? v.map((row: any) => row.vendor || row) : []);
     if (!active && list[0]) setActive(list[0].id);
   };
@@ -111,6 +120,10 @@ export default function RfisPage() {
   }, [id, token]);
 
   useEffect(() => {
+    if (search.get("view") === "register") {
+      setKindFilter("All");
+      return;
+    }
     const q = rfiKindFromSearch(search);
     if (q) {
       setKindFilter(q);
@@ -121,22 +134,26 @@ export default function RfisPage() {
   }, [search, moduleScope]);
 
   useEffect(() => {
-    if (!moduleScoped) return;
+    if (!moduleScoped || registerMode) return;
     const locked =
       moduleScope === "quality"
         ? "QualityInspection"
         : moduleScope === "safety"
           ? "SafetyChecklist"
-          : kindFilter === "RequestForInformation"
-            ? "RequestForInformation"
-            : "DrawingChecklist";
+          : moduleScope === "field"
+            ? "SiteExecution"
+            : composeMode && kindFilter === "RequestForInformation"
+              ? "RequestForInformation"
+              : composeMode && kindFilter === "DrawingChecklist"
+                ? "DrawingChecklist"
+                : "DrawingChecklist";
     setForm((f) => ({
       ...f,
       rfiKind: locked,
       linkedDrawingId: locked === "QualityInspection" ? "" : f.linkedDrawingId,
     }));
-    if (locked !== "RequestForInformation") setKindFilter(locked as RfiKind);
-  }, [moduleScoped, moduleScope, kindFilter]);
+    if (locked !== "RequestForInformation" && !registerMode) setKindFilter(locked as RfiKind);
+  }, [moduleScoped, moduleScope, kindFilter, composeMode, registerMode]);
 
   useEffect(() => {
     const subject = search.get("subject");
@@ -165,7 +182,7 @@ export default function RfisPage() {
       setForm((f) => ({ ...f, rfiKind: "DrawingChecklist" }));
     } else if (kindFilter === "SafetyChecklist") {
       setForm((f) => ({ ...f, rfiKind: "SafetyChecklist" }));
-    } else if (kindFilter === "QualityIR" || kindFilter === "SafetyIR" || kindFilter === "ActivityInspection") {
+    } else if (kindFilter === "QualityIR" || kindFilter === "SafetyIR" || kindFilter === "ActivityInspection" || kindFilter === "SiteExecution") {
       setForm((f) => ({ ...f, rfiKind: kindFilter, linkedDrawingId: "" }));
     } else if (kindFilter === "RequestForInformation" || kindFilter === "All") {
       setForm((f) => ({ ...f, rfiKind: "RequestForInformation" }));
@@ -175,15 +192,22 @@ export default function RfisPage() {
   const needsChecklist =
     form.rfiKind === "DrawingChecklist" ||
     form.rfiKind === "QualityInspection" ||
-    form.rfiKind === "SafetyChecklist";
+    form.rfiKind === "SafetyChecklist" ||
+    form.rfiKind === "QualityIR" ||
+    form.rfiKind === "SafetyIR" ||
+    form.rfiKind === "ActivityInspection" ||
+    form.rfiKind === "SiteExecution" ||
+    (form.rfiKind === "RequestForInformation" && moduleScope === "drawings");
   const checklistOptions =
-    form.rfiKind === "QualityInspection"
+    form.rfiKind === "QualityInspection" || form.rfiKind === "QualityIR"
       ? qiAssignments
-      : form.rfiKind === "SafetyChecklist"
+      : form.rfiKind === "SafetyChecklist" || form.rfiKind === "SafetyIR"
         ? safetyAssignments
-        : form.rfiKind === "DrawingChecklist"
+        : form.rfiKind === "DrawingChecklist" || form.rfiKind === "RequestForInformation"
           ? drawingAssignments
-          : siteAssignments;
+          : form.rfiKind === "ActivityInspection"
+            ? activityAssignments
+            : siteAssignments;
 
   const filtered = useMemo(() => {
     return rfis.filter((r) => {
@@ -215,9 +239,13 @@ export default function RfisPage() {
       ? `/projects/${id}/inspections?sheet=qi`
       : selected?.rfiKind === "DrawingChecklist"
         ? `/projects/${id}/drawings/checklist-master`
-        : selected?.rfiKind === "SafetyChecklist"
+        : selected?.rfiKind === "SafetyChecklist" || selected?.rfiKind === "SafetyIR"
           ? `/projects/${id}/safety/checklist-master`
-          : `/projects/${id}/checklist`;
+          : selected?.rfiKind === "ActivityInspection"
+            ? `/projects/${id}/inspection/checklist-master`
+            : selected?.rfiKind === "SiteExecution"
+              ? `/projects/${id}/field/checklist-master`
+              : `/projects/${id}/checklist`;
 
   return (
     <div className="space-y-6 min-w-0">
@@ -227,7 +255,38 @@ export default function RfisPage() {
         subtitle={isClient ? "Raise a concern anytime. Matrix parties or office respond and close." : pageCopy.subtitle}
       />
 
-      {!isClient && (moduleScoped ? kindPills.length > 1 : true) && (
+      {!isClient && registerMode && (
+        <Card className="!p-4 bg-sand/30 border-brand/20">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Drawing RFI register</h3>
+              <p className="text-xs text-steel-muted mt-1">
+                Live log — select a row to view. Raise new entries on separate compose pages.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/projects/${id}/rfis?kind=RequestForInformation&compose=1`}>
+                <Button type="button">Ask (PMC RFI)</Button>
+              </Link>
+              <Link to={`/projects/${id}/rfis?kind=DrawingChecklist&compose=1`}>
+                <Button type="button" variant="secondary">
+                  Request checklist fill
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {!isClient && composeMode && moduleScope === "drawings" && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Link to={`/projects/${id}/rfis?view=register`} className="text-brand underline font-medium">
+            ← Back to RFI register
+          </Link>
+        </div>
+      )}
+
+      {!isClient && (moduleScoped && !registerMode ? kindPills.length > 1 : !registerMode && true) && (
       <div className="flex flex-wrap gap-2">
         {(moduleScoped ? kindPills : [
           ["All", "All"],
@@ -235,6 +294,8 @@ export default function RfisPage() {
           ["DrawingChecklist", "Request checklist fill"],
           ["QualityInspection", "Request QI fill"],
           ["SafetyChecklist", "Safety checklist fill"],
+          ["ActivityInspection", "Activity checklist"],
+          ["SiteExecution", "Field checklist fill"],
           ["ClientConcern", "Client"],
         ] as [RfiKind, string][]).map(([k, label]) => (
           <button
@@ -251,11 +312,19 @@ export default function RfisPage() {
       </div>
       )}
 
-      {canCreate && (
+      {canCreate && !registerMode && (
         <div ref={createFormRef}>
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h3 className="font-semibold">{isClient ? "Raise concern" : "Create request"}</h3>
+            <h3 className="font-semibold">
+              {isClient
+                ? "Raise concern"
+                : composeMode && form.rfiKind === "RequestForInformation"
+                  ? "Ask (PMC RFI)"
+                  : composeMode && form.rfiKind === "DrawingChecklist"
+                    ? "Request drawing checklist fill"
+                    : "Create request"}
+            </h3>
             {!isClient && form.rfiKind === "RequestForInformation" && (
               <span className="text-[11px] text-steel-muted">{composeProgress}% complete</span>
             )}
@@ -279,7 +348,11 @@ export default function RfisPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               if (needsChecklist && !form.linkedAssignmentId) {
-                alert("Select the checklist this fill request is for.");
+                alert(
+                  form.rfiKind === "RequestForInformation"
+                    ? "Select the Drawing Check checklist to attach to this information request."
+                    : "Select the checklist this fill request is for."
+                );
                 return;
               }
               const assignment = checklistOptions.find((a) => a.id === form.linkedAssignmentId);
@@ -311,6 +384,8 @@ export default function RfisPage() {
                 <option value="DrawingChecklist">Request drawing checklist fill</option>
                 <option value="QualityInspection">Request QI fill (Quality module)</option>
                 <option value="SafetyChecklist">Safety checklist fill (Safety module)</option>
+                <option value="ActivityInspection">Activity inspection checklist</option>
+                <option value="SiteExecution">Field / site checklist fill</option>
               </Select>
             )}
             <Input required placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
@@ -327,7 +402,7 @@ export default function RfisPage() {
                       : form.rfiKind === "SafetyChecklist"
                         ? "Describe the safety checklist fill required on site."
                         : form.rfiKind === "RequestForInformation"
-                          ? "What information do you need?"
+                          ? "What information do you need from the consultant / client?"
                           : "Ask matrix parties / vendor to open and fill the linked checklist."
               }
               value={form.question}
@@ -337,10 +412,15 @@ export default function RfisPage() {
               <div className="grid sm:grid-cols-2 gap-2">
                 {needsChecklist && (
                   <Select
+                    required
                     value={form.linkedAssignmentId}
                     onChange={(e) => setForm({ ...form, linkedAssignmentId: e.target.value })}
                   >
-                    <option value="">Checklist to fill *</option>
+                    <option value="">
+                      {form.rfiKind === "RequestForInformation"
+                        ? "Drawing Check checklist to attach *"
+                        : "Checklist to fill *"}
+                    </option>
                     {checklistOptions.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.template?.name || a.id}
@@ -398,7 +478,7 @@ export default function RfisPage() {
                   : form.rfiKind === "SafetyChecklist"
                     ? "Safety checklists only — use Safety → Checklist master. No drawing file attachment."
                     : form.rfiKind === "RequestForInformation"
-                      ? "PMC / drawing clarification — link drawing revision here. Matrix parties respond / close."
+                      ? "PMC / drawing clarification — link drawing revision and attach one Drawing Check checklist per RFI."
                       : "Fillers: Communication Matrix parties, assignee, and responsible vendor."}
             </p>
             <Button type="submit">
@@ -482,7 +562,12 @@ export default function RfisPage() {
               )}
               <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
               {(selected.linkedAssignmentId || selected.linkedChecklistItemId) &&
-                (selected.rfiKind === "DrawingChecklist" || selected.rfiKind === "QualityInspection") && (
+                (selected.rfiKind === "DrawingChecklist" ||
+                  selected.rfiKind === "QualityInspection" ||
+                  selected.rfiKind === "RequestForInformation" ||
+                  selected.rfiKind === "SafetyChecklist" ||
+                  selected.rfiKind === "ActivityInspection" ||
+                  selected.rfiKind === "SiteExecution") && (
                 <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
                   <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill this checklist</div>
                   <p className="text-steel-muted text-xs leading-relaxed">

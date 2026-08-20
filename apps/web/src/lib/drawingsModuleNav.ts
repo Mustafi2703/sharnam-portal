@@ -27,16 +27,22 @@ export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
     to: "drawings/checklist-logs",
   },
   {
+    key: "rfi-register",
+    label: "RFI register",
+    to: "rfis",
+    query: "view=register",
+  },
+  {
     key: "rfi-fill",
     label: "Request fill",
     to: "rfis",
-    query: "kind=DrawingChecklist",
+    query: "kind=DrawingChecklist&compose=1",
   },
   {
     key: "rfi-ask",
     label: "Ask RFI",
     to: "rfis",
-    query: "kind=RequestForInformation",
+    query: "kind=RequestForInformation&compose=1",
   },
 ];
 
@@ -62,10 +68,12 @@ export function drawingsNavActive(key: string, pathname: string, search: string)
       return rest === "drawings/checklist-master";
     case "fill-log":
       return rest === "drawings/checklist-logs";
+    case "rfi-register":
+      return rest === "rfis" && search.includes("view=register");
     case "rfi-fill":
-      return rest === "rfis" && search.includes("kind=DrawingChecklist");
+      return rest === "rfis" && search.includes("kind=DrawingChecklist") && search.includes("compose=1");
     case "rfi-ask":
-      return rest === "rfis" && search.includes("kind=RequestForInformation");
+      return rest === "rfis" && search.includes("kind=RequestForInformation") && search.includes("compose=1");
     default:
       return false;
   }

@@ -426,6 +426,9 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
     await prisma.raBill.update({ where: { id: created.raBillId }, data: { copNo: created.certificateNumber } });
   }
 
+  const { syncCopToCashflow } = await import("../services/cashflowCopSync.js");
+  await syncCopToCashflow(req.params.projectId);
+
   await audit("finance.cop.create", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: created.id, meta: { certificateNumber: created.certificateNumber } });
   res.status(201).json(created);
 });
@@ -446,11 +449,18 @@ financeRouter.put("/cop/:id", requireRoles("admin", "office"), async (req: Authe
       approvedById: req.body.approved ? req.user!.id : before.approvedById,
     },
   });
+  const { syncCopToCashflow } = await import("../services/cashflowCopSync.js");
+  await syncCopToCashflow(row.projectId);
   res.json(row);
 });
 
 financeRouter.delete("/cop/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const before = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id } });
   await prisma.certificateOfPayment.delete({ where: { id: req.params.id } });
+  if (before) {
+    const { syncCopToCashflow } = await import("../services/cashflowCopSync.js");
+    await syncCopToCashflow(before.projectId);
+  }
   await audit("finance.cop.delete", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: req.params.id });
   res.json({ ok: true });
 });
