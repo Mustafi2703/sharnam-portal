@@ -109,13 +109,13 @@ Same UX as site observation; record type **Site Instruction**. Feeds SOR Log.
 |--|--|
 | **Route** | `/projects/:id/inspections?sheet=checklist-summary` |
 
-Sheet2 discipline counts + Sheet1 catalog (checklist type names). Link to **Quality checklist master** to add line items.
+Sheet2 live fill counts by discipline + Sheet1 catalog with **onboarded / filled status**. Daily / weekly / monthly fill graphs for DPR. **Onboard all Sheet1 types** creates missing templates in Quality (and Safety / Workpermits in Safety master) and assigns them to the project. Fill log stays at **QI fill log**.
 
 ### Meeting changes
 
 | # | Raised by | Change / issue | Priority | Dev status | Re-test |
 |---|-----------|----------------|----------|------------|---------|
-| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 1 | Client | Catalog must onboard all Sheet1 types; summary shows fill status + daily/weekly/monthly graphs for DPR | P1 | Done | ☐ |
 
 ---
 
@@ -259,6 +259,14 @@ Create template · Add line items · Excel import · Assign to project · `requi
 | **Route** | `/projects/:id/quality/checklist-logs` |
 
 Branded download of quality checklist submissions — no create forms.
+
+**Branded Excel** fills the real SPDC forms (navy/grey/yellow cells, OK=green, Not OK=red, NA=amber):
+
+- Quality / Activity / Drawing / Site → `SPDC_Request_for_Inspection_Form.xlsx` + `SPDC_Activity_Inspection_Checklist_Format.xlsx`
+- Safety → `SPDC_Safety_Inspection_Request_and_Checklists.xlsx`
+- Drawing RFI-style → `SPDC_RFI_Form_and_Register.xlsx`
+
+Same colour language as DPR / WPR template fills.
 
 ---
 

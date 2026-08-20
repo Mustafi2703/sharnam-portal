@@ -181,28 +181,79 @@ function parseSafetyRegisterTable(rows: unknown[][], recordType: string, source:
 }
 
 function parseHiraRegisterTable(rows: unknown[][], reportedById: string, projectId: string, source: string) {
+  const headerIdx = rows.findIndex(
+    (r) => /sr\.?\s*no/i.test(String(r[0] ?? "")) && /activity/i.test(String(r[1] ?? ""))
+  );
+  const start = headerIdx >= 0 ? headerIdx + 2 : 6;
   const out: Array<Record<string, unknown>> = [];
   let activity = "";
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const sr = s(r[0], 20);
-    const act = s(r[1], 200);
+  let srNo = "";
+  const headerish = (text: string) =>
+    /^(sr\.?\s*no\.?|activity|risk id|hazard identification|name of project|sharnam project|id no|revision)$/i.test(
+      text.trim()
+    );
+  const band = (score: number | null) => {
+    if (score == null) return "Medium";
+    if (score >= 15) return "Critical";
+    if (score >= 8) return "High";
+    if (score >= 4) return "Medium";
+    return "Low";
+  };
+
+  for (let i = start; i < rows.length; i++) {
+    const r = rows[i] as unknown[];
+    const srRaw = s(r[0], 20);
+    const act = s(r[1], 240);
     const riskId = s(r[2], 40);
     const hazard = s(r[3], 400);
-    const consequence = s(r[4], 200);
+    const consequence = s(r[4], 400);
     if (act) activity = act;
+    if (srRaw && !headerish(srRaw)) srNo = srRaw;
+    if (!riskId || headerish(riskId) || headerish(hazard)) continue;
     if (!hazard && !consequence) continue;
-    if (/^sr\.?\s*no/i.test(sr) || /^name of project/i.test(sr)) continue;
-    const title = `${riskId || sr || "Risk"} — ${activity || hazard}`.slice(0, 200);
+    const probability = Number.isFinite(Number(r[6])) && String(r[6] ?? "").trim() !== "" ? Number(r[6]) : null;
+    const impact = Number.isFinite(Number(r[7])) && String(r[7] ?? "").trim() !== "" ? Number(r[7]) : null;
+    const severityScore =
+      Number.isFinite(Number(r[8])) && String(r[8] ?? "").trim() !== ""
+        ? Number(r[8])
+        : probability != null && impact != null
+          ? probability * impact
+          : null;
+    const residualP = Number.isFinite(Number(r[10])) && String(r[10] ?? "").trim() !== "" ? Number(r[10]) : null;
+    const residualI = Number.isFinite(Number(r[11])) && String(r[11] ?? "").trim() !== "" ? Number(r[11]) : null;
+    const residualSev =
+      Number.isFinite(Number(r[12])) && String(r[12] ?? "").trim() !== ""
+        ? Number(r[12])
+        : residualP != null && residualI != null
+          ? residualP * residualI
+          : null;
+    const control = s(r[9], 800);
     out.push({
       projectId,
       recordType: "JHA",
-      title,
+      ncrNumber: riskId,
+      title: `${riskId} — ${hazard}`.slice(0, 200),
+      activityTask: activity || act || "General",
+      category: srNo || null,
       description: [hazard, consequence].filter(Boolean).join(" · "),
-      category: activity || sr || null,
-      severity: /major|fatality|fire|electrical/i.test(`${hazard} ${consequence}`) ? "High" : "Medium",
+      location: consequence || null,
+      contributingFactors: s(r[5], 20) || null,
+      rootCause:
+        probability != null && impact != null && severityScore != null
+          ? `P ${probability} × I ${impact} = ${severityScore}`
+          : null,
+      correctiveAction: control || null,
+      actionTaken: control || null,
+      immediateAction: control || null,
+      longTermAction:
+        residualP != null && residualI != null && residualSev != null
+          ? `Residual P ${residualP} × I ${residualI} = ${residualSev}`
+          : null,
+      timeImpact: severityScore != null ? String(severityScore) : null,
+      costImpact: residualSev != null ? String(residualSev) : null,
+      issuedTo: s(r[13], 400) || null,
+      severity: band(severityScore),
       status: "Open",
-      location: "Site",
       reportedById,
       source,
     });

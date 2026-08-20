@@ -10,7 +10,10 @@
 
 Overview · Milestones · **Planned vs Actual** · Monthly progress · Hindrance · Risk · Legal approvals · S-curve · MS Project
 
-Query: `?tab=overview|milestones|planned|monthly|hindrance|risk|legal|scurve|msproject`
+Query: `?tab=overview|milestones|planned|monthly|hindrance|risk|legal|scurve|msproject`  
+PvsA sub-tools: `?tab=planned&pva=all|cashflow|manpower|activity`
+
+> **Cashflow bridge:** Progress PvsA RA-month ₹ → **Sync cashflow → Cost** (`POST …/planned-actual/sync-cashflow`, also runs on Excel import). Cost chart / COP rows stay separate. WPR cashflow prefers Cost periods, falls back to Progress amounts.
 
 > **Not Cost.** Cost cashflow is **money by month** (`/cost?tab=cashflow`). This Planned vs Actual tool is **weekly site qty + weekly manpower + RA-month billing** from `Planned Vs. Actual Dashboard.xlsx`.
 
@@ -81,8 +84,10 @@ Weekly columns on the qty sheet are **two numbers per activity** (this week’s 
 
 | Feature | Notes |
 |---------|-------|
-| Import Excel | Replaces cashflow + manpower + activity rows for the project |
+| Import Excel | Replaces cashflow + manpower + activity rows; **auto-syncs** cashflow → Cost |
+| Sync cashflow → Cost | Manual push of PVA periods into `CostCashflowPeriod` (package `PVA · …`) |
 | Export Excel / PDF | Same three sheets from live data |
+| Sub-tools | Hub cards + page chips: Cashflow · Manpower · Activity qty |
 | Cashflow table | Month · RA · Planned INR · Actual INR · % |
 | Manpower table | Trade · Required · Available · Shortage · % |
 | Qty register | Tower · Activity · BOQ · GFC · Executed · Balance · **Wk plan** · **Wk act** · Status |

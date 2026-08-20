@@ -121,7 +121,16 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
         workOrderAmount: n(row[4]),
         certifiedAmount: n(row[5]),
         forecastedAmount: n(row[6]),
+        forecastReduction: n(row[7]),
         nonTendered: n(row[8]),
+        steelExcess: n(row[9]),
+        steelSaving: n(row[10]),
+        cementExcess: n(row[11]),
+        cementSaving: n(row[12]),
+        tilesExcess: n(row[13]),
+        tilesSaving: n(row[14]),
+        grossTotal: n(row[15]),
+        remarks: s(row[16], 2000) || null,
       });
     }
     await createManyChunks(prisma, "costBudgetLine", data);
@@ -148,6 +157,18 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           continue;
         }
         const gfcQty = n(row[6]);
+        const extraQty = n(row[5]);
+        const achievedQty = n(row[7]);
+        const certifiedQty = n(row[10]);
+        const boqCost = n(row[11]) || rate * boqQty;
+        const extraItemCost = n(row[12]) || extraQty * rate;
+        const gfcCost = n(row[13]) || gfcQty * rate;
+        const achievedCost = n(row[14]) || achievedQty * rate;
+        const excessCost = n(row[15]);
+        const savingCost = n(row[16]);
+        const certifiedInvoiceCost = n(row[17]) || certifiedQty * rate;
+        const actualCost = n(row[25]) || achievedCost;
+        const cpi = n(row[26]);
         data.push({
           projectId,
           packageName,
@@ -157,13 +178,40 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           uom: uom || null,
           rate,
           boqQty,
-          extraQty: n(row[5]),
+          extraQty,
           gfcQty,
-          achievedQty: n(row[7]),
+          achievedQty,
           excessQty: Math.max(0, gfcQty - boqQty),
           savingQty: Math.max(0, boqQty - gfcQty),
-          certifiedQty: n(row[10]),
-          boqCost: n(row[11]) || rate * boqQty,
+          certifiedQty,
+          boqCost,
+          extraItemCost,
+          gfcCost,
+          achievedCost,
+          excessCost: excessCost || Math.max(0, gfcCost - boqCost),
+          savingCost: savingCost || Math.max(0, boqCost - gfcCost),
+          certifiedInvoiceCost,
+          pctBoq: n(row[18]),
+          pctGfc: n(row[19]),
+          pctAchieved: n(row[20]),
+          pctCertified: n(row[21]),
+          evBoq: n(row[22]) || achievedCost,
+          evGfc: n(row[23]) || achievedCost,
+          evCertified: n(row[24]),
+          actualCost,
+          cpi,
+          cpiStatus: s(row[27], 40) || null,
+          etcBoq: n(row[28]),
+          etcGfc: n(row[29]),
+          etcCertified: n(row[30]),
+          eac: n(row[31]) || boqCost,
+          vac: n(row[32]),
+          varBoqGfc: n(row[33]),
+          varGfcAchieved: n(row[34]),
+          varGfcCertified: n(row[35]),
+          overrunBoq: n(row[36]),
+          overrunGfc: n(row[37]),
+          overrunCertified: n(row[38]),
         });
       }
     }

@@ -262,7 +262,49 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
       orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
     });
     const csv = toCsv(
-      ["Package", "Section", "Item", "Description", "UOM", "Rate", "BOQ Qty", "Extra", "GFC", "Achieved", "Excess", "Saving", "BOQ Cost"],
+      [
+        "Package",
+        "Section",
+        "ITEM NO.",
+        "Item of Work",
+        "UOM",
+        "RATE",
+        "BOQ Qty",
+        "Extra Items Qty",
+        "GFC Qty",
+        "Achieved Qty",
+        "Excess Qty",
+        "Saving Qty",
+        "Certified Qty",
+        "BOQ Cost",
+        "Extra Item Cost",
+        "GFC Cost",
+        "Achieved Cost",
+        "Excess Cost",
+        "Saving Cost",
+        "Certified Invoice Cost",
+        "% Progress BOQ",
+        "% Progress GFC",
+        "% Progress Achieved",
+        "% Progress Certified",
+        "EV BOQ",
+        "EV GFC",
+        "EV Certified",
+        "AC",
+        "CPI",
+        "CPI Status",
+        "ETC BOQ",
+        "ETC GFC",
+        "ETC Certified",
+        "EAC",
+        "VAC",
+        "Var BOQ vs GFC",
+        "Var GFC vs Achieved",
+        "Var GFC vs Certified",
+        "Overrun BOQ",
+        "Overrun GFC",
+        "Overrun Certified",
+      ],
       rows.map((r) => [
         r.packageName,
         r.section,
@@ -276,7 +318,35 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
         r.achievedQty,
         r.excessQty,
         r.savingQty,
+        r.certifiedQty,
         r.boqCost,
+        r.extraItemCost,
+        r.gfcCost,
+        r.achievedCost,
+        r.excessCost,
+        r.savingCost,
+        r.certifiedInvoiceCost,
+        r.pctBoq,
+        r.pctGfc,
+        r.pctAchieved,
+        r.pctCertified,
+        r.evBoq,
+        r.evGfc,
+        r.evCertified,
+        r.actualCost,
+        r.cpi,
+        r.cpiStatus,
+        r.etcBoq,
+        r.etcGfc,
+        r.etcCertified,
+        r.eac,
+        r.vac,
+        r.varBoqGfc,
+        r.varGfcAchieved,
+        r.varGfcCertified,
+        r.overrunBoq,
+        r.overrunGfc,
+        r.overrunCertified,
       ])
     );
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -356,7 +426,25 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
   if (kind === "budget") {
     const rows = await prisma.costBudgetLine.findMany({ where: { projectId } });
     const csv = toCsv(
-      ["Sr", "Description", "Stakeholder", "Budgeted", "WO", "Certified", "Forecast", "Non-tendered"],
+      [
+        "Sr",
+        "Description",
+        "Stakeholder",
+        "Budgeted",
+        "WO",
+        "Certified",
+        "Forecast Addition",
+        "Forecast Reduction",
+        "Non-tendered",
+        "Steel Excess",
+        "Steel Saving",
+        "Cement Excess",
+        "Cement Saving",
+        "Tiles Excess",
+        "Tiles Saving",
+        "Gross Total",
+        "Remarks",
+      ],
       rows.map((r) => [
         r.srNo,
         r.description,
@@ -365,7 +453,16 @@ costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
         r.workOrderAmount,
         r.certifiedAmount,
         r.forecastedAmount,
+        r.forecastReduction,
         r.nonTendered,
+        r.steelExcess,
+        r.steelSaving,
+        r.cementExcess,
+        r.cementSaving,
+        r.tilesExcess,
+        r.tilesSaving,
+        r.grossTotal,
+        r.remarks,
       ])
     );
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -478,21 +575,83 @@ costRouter.get("/:projectId/boq/:batchId", async (req, res) => {
 });
 
 costRouter.post("/:projectId/budget", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const body = req.body || {};
   const line = await prisma.costBudgetLine.create({
     data: {
       projectId: req.params.projectId,
-      srNo: req.body.srNo,
-      description: req.body.description,
-      stakeholder: req.body.stakeholder,
-      budgetedAmount: Number(req.body.budgetedAmount || 0),
-      workOrderAmount: Number(req.body.workOrderAmount || 0),
-      certifiedAmount: Number(req.body.certifiedAmount || 0),
-      forecastedAmount: Number(req.body.forecastedAmount || 0),
-      nonTendered: Number(req.body.nonTendered || 0),
+      srNo: body.srNo ? String(body.srNo) : null,
+      description: String(body.description || "New budget line"),
+      stakeholder: body.stakeholder ? String(body.stakeholder) : null,
+      budgetedAmount: Number(body.budgetedAmount || 0),
+      workOrderAmount: Number(body.workOrderAmount || 0),
+      certifiedAmount: Number(body.certifiedAmount || 0),
+      forecastedAmount: Number(body.forecastedAmount || 0),
+      forecastReduction: Number(body.forecastReduction || 0),
+      nonTendered: Number(body.nonTendered || 0),
+      steelExcess: Number(body.steelExcess || 0),
+      steelSaving: Number(body.steelSaving || 0),
+      cementExcess: Number(body.cementExcess || 0),
+      cementSaving: Number(body.cementSaving || 0),
+      tilesExcess: Number(body.tilesExcess || 0),
+      tilesSaving: Number(body.tilesSaving || 0),
+      grossTotal: Number(body.grossTotal || 0),
+      remarks: body.remarks ? String(body.remarks) : null,
     },
   });
   res.status(201).json(line);
 });
+
+costRouter.patch("/budget/:lineId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costBudgetLine.findUnique({ where: { id: req.params.lineId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const num = (k: string) => (body[k] != null ? Number(body[k]) : undefined);
+  const line = await prisma.costBudgetLine.update({
+    where: { id: req.params.lineId },
+    data: {
+      ...(body.srNo !== undefined ? { srNo: body.srNo ? String(body.srNo) : null } : {}),
+      ...(body.description != null ? { description: String(body.description) } : {}),
+      ...(body.stakeholder !== undefined ? { stakeholder: body.stakeholder ? String(body.stakeholder) : null } : {}),
+      ...(num("budgetedAmount") != null ? { budgetedAmount: num("budgetedAmount")! } : {}),
+      ...(num("workOrderAmount") != null ? { workOrderAmount: num("workOrderAmount")! } : {}),
+      ...(num("certifiedAmount") != null ? { certifiedAmount: num("certifiedAmount")! } : {}),
+      ...(num("forecastedAmount") != null ? { forecastedAmount: num("forecastedAmount")! } : {}),
+      ...(num("forecastReduction") != null ? { forecastReduction: num("forecastReduction")! } : {}),
+      ...(num("nonTendered") != null ? { nonTendered: num("nonTendered")! } : {}),
+      ...(num("steelExcess") != null ? { steelExcess: num("steelExcess")! } : {}),
+      ...(num("steelSaving") != null ? { steelSaving: num("steelSaving")! } : {}),
+      ...(num("cementExcess") != null ? { cementExcess: num("cementExcess")! } : {}),
+      ...(num("cementSaving") != null ? { cementSaving: num("cementSaving")! } : {}),
+      ...(num("tilesExcess") != null ? { tilesExcess: num("tilesExcess")! } : {}),
+      ...(num("tilesSaving") != null ? { tilesSaving: num("tilesSaving")! } : {}),
+      ...(num("grossTotal") != null ? { grossTotal: num("grossTotal")! } : {}),
+      ...(body.remarks !== undefined ? { remarks: body.remarks ? String(body.remarks) : null } : {}),
+    },
+  });
+  res.json(line);
+});
+
+costRouter.delete("/budget/:lineId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costBudgetLine.findUnique({ where: { id: req.params.lineId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.costBudgetLine.delete({ where: { id: req.params.lineId } });
+  res.json({ ok: true });
+});
+
+/** Load full SPDC_Budget_Arvind workbook (Budget + Monitoring + MB + BBS + rates) like QAP/Cube sync-template. */
+costRouter.post(
+  "/:projectId/sync-template",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { syncBudgetWorkbookTemplate } = await import("../services/budgetWorkbookImport.js");
+      const out = await syncBudgetWorkbookTemplate(req.params.projectId);
+      res.json(out);
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : "Budget sync failed" });
+    }
+  }
+);
 
 costRouter.post("/:projectId/cashflow", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const row = await prisma.costCashflowPeriod.create({
@@ -908,9 +1067,18 @@ costRouter.patch(
     const nextBoq = body.boqQty != null ? Number(body.boqQty) : existing.boqQty;
     const nextGfc = body.gfcQty != null ? Number(body.gfcQty) : existing.gfcQty;
     const nextRate = body.rate != null ? Number(body.rate) : existing.rate;
-    const excessQty = Math.max(0, nextGfc - nextBoq);
-    const savingQty = Math.max(0, nextBoq - nextGfc);
-    const boqCost = nextBoq * nextRate;
+    const nextExtra = body.extraQty != null ? Number(body.extraQty) : existing.extraQty;
+    const nextAchieved = body.achievedQty != null ? Number(body.achievedQty) : existing.achievedQty;
+    const nextCertified = body.certifiedQty != null ? Number(body.certifiedQty) : existing.certifiedQty;
+    const { deriveMonitoringMetrics } = await import("../services/monitoringMetrics.js");
+    const metrics = deriveMonitoringMetrics({
+      rate: nextRate,
+      boqQty: nextBoq,
+      extraQty: nextExtra,
+      gfcQty: nextGfc,
+      achievedQty: nextAchieved,
+      certifiedQty: nextCertified,
+    });
 
     const row = await prisma.costMonitoringLine.update({
       where: { id: req.params.lineId },
@@ -922,13 +1090,11 @@ costRouter.patch(
         ...(body.uom !== undefined ? { uom: body.uom ? String(body.uom) : null } : {}),
         ...(body.rate != null ? { rate: nextRate } : {}),
         ...(body.boqQty != null ? { boqQty: nextBoq } : {}),
-        ...(body.extraQty != null ? { extraQty: Number(body.extraQty) } : {}),
+        ...(body.extraQty != null ? { extraQty: nextExtra } : {}),
         ...(body.gfcQty != null ? { gfcQty: nextGfc } : {}),
-        ...(body.achievedQty != null ? { achievedQty: Number(body.achievedQty) } : {}),
-        ...(body.certifiedQty != null ? { certifiedQty: Number(body.certifiedQty) } : {}),
-        excessQty,
-        savingQty,
-        boqCost,
+        ...(body.achievedQty != null ? { achievedQty: nextAchieved } : {}),
+        ...(body.certifiedQty != null ? { certifiedQty: nextCertified } : {}),
+        ...metrics,
       },
     });
     await audit("cost.monitoring.update", {
@@ -961,6 +1127,11 @@ costRouter.post(
     const boqQty = Number(body.boqQty || 0);
     const rate = Number(body.rate || 0);
     const gfcQty = Number(body.gfcQty || 0);
+    const extraQty = Number(body.extraQty || 0);
+    const achievedQty = Number(body.achievedQty || 0);
+    const certifiedQty = Number(body.certifiedQty || 0);
+    const { deriveMonitoringMetrics } = await import("../services/monitoringMetrics.js");
+    const metrics = deriveMonitoringMetrics({ rate, boqQty, extraQty, gfcQty, achievedQty, certifiedQty });
     const row = await prisma.costMonitoringLine.create({
       data: {
         projectId: req.params.projectId,
@@ -971,13 +1142,11 @@ costRouter.post(
         uom: body.uom ? String(body.uom) : null,
         rate,
         boqQty,
-        extraQty: Number(body.extraQty || 0),
+        extraQty,
         gfcQty,
-        achievedQty: Number(body.achievedQty || 0),
-        certifiedQty: Number(body.certifiedQty || 0),
-        excessQty: Math.max(0, gfcQty - boqQty),
-        savingQty: Math.max(0, boqQty - gfcQty),
-        boqCost: boqQty * rate,
+        achievedQty,
+        certifiedQty,
+        ...metrics,
       },
     });
     await audit("cost.monitoring.create", {

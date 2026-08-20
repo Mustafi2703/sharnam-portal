@@ -17,7 +17,7 @@ Generate Daily / Weekly packs from **live registers**. DPR and WPR are **separat
 | Tool | Hub / route | Status | Source |
 |------|-------------|--------|--------|
 | **DPR pack** | `/reports` or `?kind=dpr` | Built | DPR-Sharnam PMC |
-| **WPR pack** | `/reports?kind=wpr` | Built | WPR File |
+| **WPR pack** | `/reports?kind=wpr` · WPR Maker | Built | Excel + **~61-slide PPTX** aligned to `SPDC_Arvind Limited_WPR_50.pptx` (cover, dividers, multi-slide milestones/quality/PvsA/photos) |
 | Pack viewer | Partial | In-app HTML/PDF for Client |
 
 ### Awaiting next sheets
@@ -43,8 +43,10 @@ DPR / WPR section maps and checklist → report mapping — see prior content / 
 
 ## 6. Rules
 
-1. Packs pull live data at generate time.  
-2. Client civil must see generated report PDFs.  
+1. Packs pull live data at generate time (`wprSeedSections` → Excel + `buildWprPptx`).  
+2. WPR PPT is regenerated from portal data (not OpenXML fill of the client PPTX binary) but follows the Arvind **61-slide** narrative.  
+3. Client civil must see generated report PDFs.  
+4. Cashflow on WPR prefers **Cost** periods (incl. PVA sync + COP); Progress PvsA is the fallback.  
 
 ---
 

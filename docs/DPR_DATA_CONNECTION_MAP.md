@@ -2,6 +2,9 @@
 
 How the **Daily Progress Report (DPR)** pulls live project data — aligned to client packs in `Sharnam_modules_docs/` and SPDC templates in `apps/api/dpr-templates/`.
 
+> **Master one-layer flow (all modules + SharePoint + RFI archive + verify-pack):**  
+> [MASTER_DATA_FLOW.md](./MASTER_DATA_FLOW.md)
+
 ## Reference files
 
 | Client file | Portal equivalent |
@@ -125,8 +128,11 @@ Ensure `SHARNAM_EXCEL_ROOT=./seed/data` on production so QAP/cube sync-template 
 
 ## Still to wire (next)
 
-- [ ] Equipment list auto-fill from site diary / fixed register per project  
-- [ ] Field density test register → DPR quality line  
-- [ ] Material received/consumed from site store ledger  
+- [x] Day log manpower → DPR autofill fallback (when Progress manpower empty)
+- [x] Closed RFI → branded checklist XLSX + register CSV to SharePoint
+- [x] Pack completeness verify (`GET …/verify-pack`)
+- [ ] Equipment list auto-fill from day log equipment rows
+- [ ] Field density test register → DPR quality line
+- [ ] Material received/consumed from site store ledger
 
-COP Certified/Approved/Paid now writes Cost cashflow actual (day / week / month). MB sync still drives monitoring achieved qty. 
+COP Certified/Approved/Paid now writes Cost cashflow actual (day / week / month). MB sync still drives monitoring achieved qty. PVA cashflow auto-syncs from Progress on import + Sync button.

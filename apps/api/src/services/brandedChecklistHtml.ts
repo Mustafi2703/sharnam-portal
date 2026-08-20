@@ -1,4 +1,4 @@
-/** Branded checklist fill HTML — shared by API download and print view */
+/** Branded checklist fill HTML — SPDC form colours (navy bands, yellow inputs, OK/Fail/NA coding) */
 
 function escapeHtml(s: string) {
   return String(s)
@@ -8,26 +8,53 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-export function buildBrandedChecklistHtml(submission: {
-  status?: string | null;
-  remarks?: string | null;
-  createdAt?: Date | string | null;
-  responsesJson?: string;
-  submittedBy?: { fullName?: string | null } | null;
-  drawing?: { drawingNumber?: string | null; title?: string | null } | null;
-  assignment?: {
-    template?: {
-      name?: string | null;
-      checklistType?: string | null;
-      items?: Array<{
-        id: string;
-        itemCode?: string | null;
-        description?: string | null;
-        instruction?: string | null;
-      }>;
+function classifyAnswer(answer: string): "ok" | "fail" | "na" | "pending" | "other" {
+  const a = String(answer || "")
+    .trim()
+    .toLowerCase();
+  if (!a || a === "—" || a === "-") return "pending";
+  if (/^(n\/?a|na|not applicable)$/i.test(a)) return "na";
+  if (/^(ok|yes|y|pass|passed|compliant|satisfactory|cleared|s1|good|true|✓|✔)$/i.test(a)) return "ok";
+  if (/^(not\s*ok|nok|no|n|fail|failed|non[- ]?compliant|unsatisfactory|reject|rejected|s3|s4|false|✗|✘)$/i.test(a))
+    return "fail";
+  if (/pending|open|partial|hold|s2|conditional/i.test(a)) return "pending";
+  return "other";
+}
+
+function familyOf(type?: string | null) {
+  const t = String(type || "").toLowerCase();
+  if (t.includes("safety")) return { title: "SITE SAFETY INSPECTION CHECKLIST", doc: "SPDC/HSE/F-02  Rev. 0" };
+  if (t.includes("rfi") || t.includes("information"))
+    return { title: "REQUEST FOR INFORMATION (RFI)", doc: "SPDC/QMS/F-RFI-01" };
+  return { title: "ACTIVITY INSPECTION CHECKLIST", doc: "SPDC/QA/F-02  Rev. 0" };
+}
+
+export function buildBrandedChecklistHtml(
+  submission: {
+    status?: string | null;
+    remarks?: string | null;
+    createdAt?: Date | string | null;
+    responsesJson?: string;
+    revisionNumber?: string | null;
+    submittedBy?: { fullName?: string | null } | null;
+    drawing?: { drawingNumber?: string | null; title?: string | null } | null;
+    assignment?: {
+      project?: { name?: string | null; code?: string | null; clientName?: string | null } | null;
+      template?: {
+        name?: string | null;
+        checklistType?: string | null;
+        category?: string | null;
+        items?: Array<{
+          id: string;
+          itemCode?: string | null;
+          description?: string | null;
+          instruction?: string | null;
+        }>;
+      } | null;
     } | null;
-  } | null;
-}, logoUrl = "/logo.png") {
+  },
+  logoUrl = "/logo.png"
+) {
   const template = submission?.assignment?.template;
   const items = template?.items || [];
   let responses: Record<string, { answer?: string; remarks?: string; remark?: string; value?: string }> = {};
@@ -40,75 +67,125 @@ export function buildBrandedChecklistHtml(submission: {
     responses = {};
   }
 
+  let ok = 0;
+  let fail = 0;
+  let na = 0;
+  let pending = 0;
+
   const rows = items
-    .map((it) => {
+    .map((it, i) => {
       const ans = responses[it.id] || responses[it.itemCode || ""] || {};
-      const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "—";
+      const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "";
       const remark = typeof ans === "object" ? ans.remarks || ans.remark || "" : "";
+      const kind = classifyAnswer(String(answer));
+      if (kind === "ok") ok += 1;
+      else if (kind === "fail") fail += 1;
+      else if (kind === "na") na += 1;
+      else pending += 1;
       return `<tr>
-        <td>${escapeHtml(it.itemCode || "")}</td>
-        <td><div class="item">${escapeHtml(it.description || "")}</div>${it.instruction ? `<div class="hint">${escapeHtml(it.instruction)}</div>` : ""}</td>
-        <td class="ans">${escapeHtml(String(answer))}</td>
+        <td class="sr">${i + 1}</td>
+        <td><div class="item">${escapeHtml(it.description || it.itemCode || "")}</div>${
+          it.instruction ? `<div class="hint">${escapeHtml(it.instruction)}</div>` : ""
+        }</td>
+        <td class="ans ${kind}">${escapeHtml(String(answer || "—"))}</td>
         <td>${escapeHtml(String(remark))}</td>
       </tr>`;
     })
     .join("");
 
-  const when = submission.createdAt ? new Date(submission.createdAt).toLocaleString() : "—";
+  const when = submission.createdAt ? new Date(submission.createdAt).toLocaleString("en-GB") : "—";
   const filledBy = submission.submittedBy?.fullName || "—";
   const drawing = submission.drawing
     ? `${submission.drawing.drawingNumber || ""} ${submission.drawing.title || ""}`.trim()
     : "—";
   const name = template?.name || "Checklist fill";
-  const family = template?.checklistType || "Checklist";
+  const family = familyOf(template?.checklistType);
+  const project = submission.assignment?.project;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(name)} — Sharnam</title>
+  <title>${escapeHtml(name)} — SPDC</title>
   <style>
-    @page { margin: 14mm; }
-    body { font-family: "Segoe UI", system-ui, sans-serif; color: #0f172a; margin: 0; background: #fff; }
-    .sheet { max-width: 920px; margin: 0 auto; }
-    .hero { background: linear-gradient(135deg,#0f1b2d,#1e3a5f 55%,#254a73); color: white; padding: 24px 28px; display:flex; gap:16px; align-items:center; }
-    .hero img { height: 52px; background: white; border-radius: 8px; padding: 6px 10px; }
-    h1 { margin: 0; font-size: 20px; }
-    .meta { padding: 16px 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; font-size: 12px; border-bottom: 1px solid #e2e8f0; }
-    .meta strong { display:block; color:#64748b; font-size:9px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:3px; }
+    @page { margin: 12mm; }
+    body { font-family: Calibri, "Segoe UI", sans-serif; color: #111; margin: 0; background: #fff; }
+    .sheet { max-width: 960px; margin: 0 auto; border: 1px solid #000; }
+    .hero { display: grid; grid-template-columns: 220px 1fr 160px; border-bottom: 1px solid #000; }
+    .brand { background: #f2f2f2; padding: 14px 16px; font-weight: 700; font-size: 12px; display:flex; gap:10px; align-items:center; }
+    .brand img { height: 40px; background: #fff; padding: 3px 6px; }
+    .title { padding: 14px 16px; font-size: 16px; font-weight: 700; }
+    .doc { background: #d9d9d9; padding: 10px 12px; font-size: 11px; }
+    .doc strong { display:block; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+    .band { background: #1f3864; color: #fff; font-size: 11px; font-weight: 700; padding: 6px 12px; letter-spacing: .04em; }
+    .meta { display: grid; grid-template-columns: 160px 1fr 140px 1fr; font-size: 12px; }
+    .meta div { border-bottom: 1px solid #000; border-right: 1px solid #000; padding: 6px 8px; }
+    .lbl { background: #d9d9d9; font-weight: 600; }
+    .val { background: #fff2cc; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th { text-align:left; background:#f8fafc; font-size:10px; text-transform:uppercase; color:#64748b; padding:8px 10px; border-bottom:1px solid #e2e8f0; }
-    td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+    th { text-align: left; background: #d9d9d9; font-size: 11px; padding: 7px 8px; border: 1px solid #000; }
+    td { padding: 7px 8px; border: 1px solid #000; vertical-align: top; }
+    .sr { width: 36px; text-align: center; }
     .item { font-weight: 600; }
-    .hint { font-size: 11px; color: #64748b; margin-top: 3px; }
-    .ans { font-weight: 600; color: #1e3a5f; }
-    .foot { padding: 12px 28px 20px; font-size: 10px; color: #64748b; display:flex; justify-content:space-between; }
+    .hint { font-size: 11px; color: #555; margin-top: 3px; }
+    .ans { font-weight: 700; text-align: center; width: 110px; }
+    .ans.ok { background: #c6efce; color: #006100; }
+    .ans.fail { background: #ffc7ce; color: #9c0006; }
+    .ans.na { background: #ffeb9c; color: #9c5700; }
+    .ans.pending, .ans.other { background: #ddebf7; color: #1f4e79; }
+    .legend { display:flex; gap: 14px; padding: 8px 12px; font-size: 11px; border-top: 1px solid #000; }
+    .sw { display:inline-block; width: 12px; height: 12px; border: 1px solid #000; margin-right: 5px; vertical-align: -2px; }
+    .foot { padding: 8px 12px; font-size: 10px; color: #444; display:flex; justify-content:space-between; }
   </style>
 </head>
 <body>
   <div class="sheet">
     <div class="hero">
-      <img src="${escapeHtml(logoUrl)}" alt="Sharnam" />
-      <div>
-        <div style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#fbbf24;margin-bottom:4px;">शरणम् · Sharnam PMC</div>
-        <h1>${escapeHtml(name)}</h1>
-        <div style="opacity:.85;margin-top:4px;font-size:12px;">${escapeHtml(family)} · filled record</div>
+      <div class="brand">
+        <img src="${escapeHtml(logoUrl)}" alt="Sharnam" />
+        <div>SHARNAM PROJECT DEVELOPMENT CONSULTANTS &amp; CO. (SPDC)</div>
       </div>
+      <div class="title">${escapeHtml(family.title)}<div style="font-size:12px;font-weight:600;margin-top:4px;">${escapeHtml(name)}</div></div>
+      <div class="doc"><strong>Doc. No.</strong>${escapeHtml(family.doc)}</div>
     </div>
+    <div class="band">PARTICULARS</div>
     <div class="meta">
-      <div><strong>Filled by</strong>${escapeHtml(filledBy)}</div>
-      <div><strong>Submitted</strong>${escapeHtml(when)}</div>
-      <div><strong>Drawing</strong>${escapeHtml(drawing)}</div>
-      <div><strong>Status</strong>${escapeHtml(submission.status || "—")}</div>
-      ${submission.remarks ? `<div style="grid-column:1/-1"><strong>Remarks</strong>${escapeHtml(submission.remarks)}</div>` : ""}
+      <div class="lbl">Project / Facility</div>
+      <div class="val">${escapeHtml(project?.name || project?.code || "—")}</div>
+      <div class="lbl">Checklist / IR No.</div>
+      <div class="val">${escapeHtml(template?.checklistType || "—")}</div>
+      <div class="lbl">Employer / Client</div>
+      <div class="val">${escapeHtml(project?.clientName || "—")}</div>
+      <div class="lbl">Date of check</div>
+      <div class="val">${escapeHtml(when)}</div>
+      <div class="lbl">Drawing</div>
+      <div class="val">${escapeHtml(drawing)}</div>
+      <div class="lbl">Filled by</div>
+      <div class="val">${escapeHtml(filledBy)}</div>
+      <div class="lbl">Status</div>
+      <div class="val">${escapeHtml(submission.status || "—")}</div>
+      <div class="lbl">OK / Not OK / NA</div>
+      <div class="val">${ok} / ${fail} / ${na}${pending ? ` · ${pending} pending` : ""}</div>
+      ${
+        submission.remarks
+          ? `<div class="lbl">Overall remarks</div><div class="val" style="grid-column:2/-1">${escapeHtml(submission.remarks)}</div>`
+          : ""
+      }
     </div>
     <table>
-      <thead><tr><th>#</th><th>Item</th><th>Answer</th><th>Notes</th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;padding:20px;color:#64748b;">No line items</td></tr>`}</tbody>
+      <thead><tr><th>#</th><th>Check description</th><th>Status</th><th>Actual observation / remarks</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;padding:20px;">No line items</td></tr>`}</tbody>
     </table>
+    <div class="legend">
+      <span><i class="sw" style="background:#c6efce"></i>OK / Yes / Pass</span>
+      <span><i class="sw" style="background:#ffc7ce"></i>Not OK / No / Fail</span>
+      <span><i class="sw" style="background:#ffeb9c"></i>NA</span>
+      <span><i class="sw" style="background:#ddebf7"></i>Pending / other</span>
+      <span><i class="sw" style="background:#fff2cc"></i>Fill-in cell</span>
+    </div>
     <div class="foot">
-      <span>Sharnam Portal · confidential project record</span>
-      <span>${escapeHtml(new Date().toLocaleString())}</span>
+      <span>Enclosure to IR (SPDC/QA/F-01) · Sharnam Portal project record</span>
+      <span>${escapeHtml(new Date().toLocaleString("en-GB"))}</span>
     </div>
   </div>
 </body>

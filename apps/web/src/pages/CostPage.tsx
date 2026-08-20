@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
+import { BudgetWbsRegister } from "../components/BudgetWbsRegister";
 import { CostSheetUploadPanel } from "../components/CostSheetUploadPanel";
 import { BbsEntryTable } from "../components/BbsEntryTable";
 import { MbEntryTable } from "../components/MbEntryTable";
@@ -427,6 +428,37 @@ export default function CostPage() {
           {canEdit && (
             <Card className="!p-4 flex flex-wrap items-center justify-between gap-3">
               <div>
+                <div className="font-semibold text-sm">Load SPDC budget workbook</div>
+                <p className="text-xs text-steel-muted mt-0.5">
+                  Reloads Budget WBS + all Monitoring packages + MB + BBS from{" "}
+                  <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> (same as QAP / Cube template sync).
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  try {
+                    const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number }>(
+                      `/api/cost/${id}/sync-template`,
+                      { method: "POST", token }
+                    );
+                    setMsg(
+                      `Template loaded — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}`
+                    );
+                    await load();
+                  } catch (e: any) {
+                    setMsg(e?.message || "Sync failed");
+                  }
+                }}
+              >
+                Load budget template
+              </Button>
+            </Card>
+          )}
+          {canEdit && (
+            <Card className="!p-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
                 <div className="font-semibold text-sm">MB → BOQ achieved sync</div>
                 <p className="text-xs text-steel-muted mt-0.5">
                   Matches MB item code to monitoring item no (e.g. Dormitory Civil → Civil Dormitory). GFC qty is never overwritten.
@@ -594,9 +626,10 @@ export default function CostPage() {
         <div className="space-y-4">
           {canEdit && (
             <Card className="!p-4">
-              <h3 className="font-semibold text-sm mb-2">Upload Budget WBS</h3>
+              <h3 className="font-semibold text-sm mb-2">Upload Budget WBS (optional)</h3>
               <p className="text-xs text-steel-muted mb-3">
-                From <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> Budget tab — connects to Cashflow Dashboard forecast structures.
+                Or use <strong>Load budget template</strong> below to pull the full{" "}
+                <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> (Budget + Monitoring + MB + BBS).
               </p>
               <form
                 className="flex flex-wrap gap-3 items-center"
@@ -632,19 +665,13 @@ export default function CostPage() {
               <div className="font-display text-lg">{formatINR(summary.totals.planned)}</div>
             </div>
           </div>
-          <SheetTable
-          title="Budget WBS"
-          headers={["Sr", "Description", "Stakeholder", "Budgeted", "WO", "Certified", "Forecast"]}
-          rows={summary.budget.map((b: any) => [
-            b.srNo,
-            b.description,
-            b.stakeholder,
-            formatINR(b.budgetedAmount),
-            formatINR(b.workOrderAmount),
-            formatINR(b.certifiedAmount),
-            formatINR(b.forecastedAmount),
-          ])}
-        />
+          <BudgetWbsRegister
+            projectId={id!}
+            token={token}
+            rows={summary.budget || []}
+            canEdit={!!canEdit}
+            onChanged={load}
+          />
         </div>
       )}
 

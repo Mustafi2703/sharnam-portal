@@ -185,12 +185,16 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   });
   await audit("rfi.create", { userId: req.user!.id, entity: "Rfi", entityId: rfi.id });
   try {
-    const { queueProjectEmail } = await import("../services/email.js");
-    await queueProjectEmail({
+    const { notifyRfiRaised } = await import("../services/rfiFlowNotify.js");
+    await notifyRfiRaised({
       projectId: req.params.projectId,
-      subject: `New ${prefix} ${number} — ${rfi.subject}`,
-      body: `A new request was raised on the project.\n\n${number}: ${rfi.subject}\nKind: ${rfiKind}\nBall in court: ${rfi.ballInCourt}\n\n${rfi.question}`,
-      context: "rfi.create",
+      number: rfi.number,
+      subject: rfi.subject,
+      question: rfi.question,
+      rfiKind,
+      rfiId: rfi.id,
+      linkedAssignmentId: rfi.linkedAssignmentId,
+      createdByName: req.user!.fullName || undefined,
       createdById: req.user!.id,
     });
   } catch {
@@ -261,14 +265,32 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
     },
   });
   if (req.body.status && req.body.status !== existing.status) {
-    const { notifyRfiStatus } = await import("../services/ncrNotify.js");
-    await notifyRfiStatus({
-      projectId: existing.projectId,
-      number: rfi.number,
-      subject: rfi.subject,
-      status: rfi.status,
-      createdById: req.user!.id,
-    });
+    if (req.body.status === "Closed") {
+      try {
+        const { archiveClosedRfiReport } = await import("../services/archiveClosedRfiReport.js");
+        await archiveClosedRfiReport({ projectId: existing.projectId, rfiId: rfi.id });
+      } catch (err) {
+        console.warn("[RFI] SharePoint archive failed:", err instanceof Error ? err.message : err);
+      }
+      const { notifyRfiClosed } = await import("../services/rfiFlowNotify.js");
+      await notifyRfiClosed({
+        projectId: existing.projectId,
+        number: rfi.number,
+        subject: rfi.subject,
+        rfiKind: existing.rfiKind,
+        rfiId: rfi.id,
+        createdById: req.user!.id,
+      });
+    } else {
+      const { notifyRfiStatus } = await import("../services/ncrNotify.js");
+      await notifyRfiStatus({
+        projectId: existing.projectId,
+        number: rfi.number,
+        subject: rfi.subject,
+        status: rfi.status,
+        createdById: req.user!.id,
+      });
+    }
   }
   res.json(rfi);
 });
@@ -821,7 +843,7 @@ safetyRouter.get("/project/:projectId", async (req, res) => {
       reportedBy: { select: { id: true, fullName: true } },
       assignedTo: { select: { id: true, fullName: true } },
     },
-    orderBy: { occurredAt: "desc" },
+    orderBy: [{ category: "asc" }, { ncrNumber: "asc" }, { occurredAt: "desc" }],
   });
   const open = records.filter((r) => r.status === "Open").length;
   const incidents = records.filter((r) => r.recordType === "Incident" || r.recordType === "Near Miss").length;
@@ -892,6 +914,20 @@ function safetyRecordPatch(body: Record<string, unknown>) {
   set("occurredAt", body.occurredAt, date);
   return patch;
 }
+
+safetyRouter.post(
+  "/project/:projectId/hira/sync-template",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const { syncHiraFromTemplate } = await import("../services/hiraRegister.js");
+    try {
+      const out = await syncHiraFromTemplate(req.params.projectId, req.user!.id);
+      res.json(out);
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : "HIRA sync failed" });
+    }
+  }
+);
 
 safetyRouter.post(
   "/project/:projectId",

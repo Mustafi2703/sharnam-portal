@@ -18,6 +18,33 @@ export type MonLine = {
   excessQty: number;
   savingQty: number;
   boqCost?: number;
+  extraItemCost?: number;
+  gfcCost?: number;
+  achievedCost?: number;
+  excessCost?: number;
+  savingCost?: number;
+  certifiedInvoiceCost?: number;
+  pctBoq?: number;
+  pctGfc?: number;
+  pctAchieved?: number;
+  pctCertified?: number;
+  evBoq?: number;
+  evGfc?: number;
+  evCertified?: number;
+  actualCost?: number;
+  cpi?: number;
+  cpiStatus?: string | null;
+  etcBoq?: number;
+  etcGfc?: number;
+  etcCertified?: number;
+  eac?: number;
+  vac?: number;
+  varBoqGfc?: number;
+  varGfcAchieved?: number;
+  varGfcCertified?: number;
+  overrunBoq?: number;
+  overrunGfc?: number;
+  overrunCertified?: number;
 };
 
 type Props = {
@@ -44,6 +71,61 @@ const emptyDraft = (pkg: string) => ({
   gfcQty: 0,
   achievedQty: 0,
 });
+
+function formatPct(n: number | null | undefined) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v === 0) return "—";
+  return `${v.toFixed(1)}%`;
+}
+
+function formatIdx(n: number | null | undefined) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v === 0) return "—";
+  return v.toFixed(3);
+}
+
+const MON_HEADERS = [
+  "Package",
+  "ITEM NO.",
+  "Item of Work",
+  "UOM",
+  "RATE ₹",
+  "BOQ Qty",
+  "Extra Items Qty",
+  "GFC Qty",
+  "Achieved Qty",
+  "Excess Qty (BOQ vs GFC)",
+  "Saving Qty (BOQ vs GFC)",
+  "Certified Qty (Invoice)",
+  "BOQ Cost ₹",
+  "Extra Item Cost ₹",
+  "GFC Cost ₹",
+  "Achieved Cost ₹",
+  "Excess Cost ₹",
+  "Saving Cost ₹",
+  "Certified Invoice Cost ₹",
+  "% Progress BOQ",
+  "% Progress GFC",
+  "% Progress Achieved",
+  "% Progress Certified",
+  "EV vs BOQ ₹",
+  "EV vs GFC ₹",
+  "EV vs Certified ₹",
+  "AC ₹",
+  "CPI",
+  "CPI Status",
+  "ETC BOQ ₹",
+  "ETC GFC ₹",
+  "ETC Certified ₹",
+  "EAC ₹",
+  "VAC ₹",
+  "Var BOQ vs GFC ₹",
+  "Var GFC vs Achieved ₹",
+  "Var GFC vs Certified ₹",
+  "Overrun BOQ",
+  "Overrun GFC",
+  "Overrun Certified",
+] as const;
 
 /** Keep BOQ numbers readable — trim long float tails. */
 export function formatQty(n: number | null | undefined, digits = 3): string {
@@ -464,7 +546,7 @@ export function BoqMonitoringEditor({
     }
   }
 
-  const colSpan = canTouch ? 17 : 16;
+  const colSpan = (canTouch ? MON_HEADERS.length + 1 : MON_HEADERS.length);
 
   return (
     <div className="space-y-4">
@@ -474,7 +556,7 @@ export function BoqMonitoringEditor({
         <div className="boq-add-panel rounded-[var(--ui-radius,14px)] border border-line bg-paper p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
             <h3 className="font-semibold text-sm">Add BOQ line</h3>
-            <span className="text-[11px] text-steel-muted uppercase tracking-wider">Section · item · quantities</span>
+            <span className="text-[11px] text-steel-muted uppercase tracking-wider">Section · item · quantities · all SPDC columns on save</span>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Select
@@ -548,29 +630,26 @@ export function BoqMonitoringEditor({
         <div className="sheet-register__head">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
-            {rows.length} lines · {grouped.length} sections · SPDC Monitoring columns · ₹ on cost cols
+            {rows.length} lines · {grouped.length} sections · all SPDC Monitoring columns (qty · cost · progress · EV · CPI · ETC)
           </span>
         </div>
         <div className="sheet-register__scroll">
           <table className="sheet-register__table boq-editor__table">
             <thead>
               <tr>
-                <th className="sticky-col">Package</th>
-                <th>ITEM NO.</th>
-                <th className="boq-desc-col">Item of Work</th>
-                <th>UOM</th>
-                <th className="num">RATE ₹</th>
-                <th className="num">BOQ Qty</th>
-                <th className="num">Extra Items Qty</th>
-                <th className="num">GFC Qty</th>
-                <th className="num">Achieved Qty</th>
-                <th className="num">Excess Qty<br />(BOQ vs GFC)</th>
-                <th className="num">Saving Qty<br />(BOQ vs GFC)</th>
-                <th className="num">Certified Qty<br />(Invoice)</th>
-                <th className="num">Extra Item Cost ₹</th>
-                <th className="num">GFC Cost ₹</th>
-                <th className="num">BOQ Cost ₹</th>
-                <th className="num">Achieved Cost ₹</th>
+                {MON_HEADERS.map((h, i) => (
+                  <th key={h} className={i === 0 ? "sticky-col" : i >= 4 ? "num" : i === 2 ? "boq-desc-col" : undefined}>
+                    {h.includes("(") ? (
+                      <>
+                        {h.split("(")[0].trim()}
+                        <br />
+                        <span className="font-normal">({h.split("(")[1]}</span>
+                      </>
+                    ) : (
+                      h
+                    )}
+                  </th>
+                ))}
                 {canTouch && <th className="boq-actions-col">Actions</th>}
               </tr>
             </thead>
@@ -593,6 +672,12 @@ export function BoqMonitoringEditor({
                   </tr>
                   {items.map((b) => {
                     const busy = savingId === b.id;
+                    const rate = Number(b.rate) || 0;
+                    const boqCost = b.boqCost ?? b.boqQty * rate;
+                    const extraCost = b.extraItemCost ?? b.extraQty * rate;
+                    const gfcCost = b.gfcCost ?? b.gfcQty * rate;
+                    const achCost = b.achievedCost ?? b.achievedQty * rate;
+                    const certCost = b.certifiedInvoiceCost ?? b.certifiedQty * rate;
                     return (
                       <tr key={b.id} className={`boq-line-row ${busy ? "opacity-60" : ""}`}>
                         <td className="sticky-col">{b.packageName}</td>
@@ -661,10 +746,34 @@ export function BoqMonitoringEditor({
                             formatQty(b.certifiedQty)
                           )}
                         </td>
-                        <td className="num rupee">{formatInr(b.extraQty * b.rate)}</td>
-                        <td className="num rupee">{formatInr(b.gfcQty * b.rate)}</td>
-                        <td className="num rupee">{formatInr(b.boqCost || b.boqQty * b.rate)}</td>
-                        <td className="num rupee">{formatInr(b.achievedQty * b.rate)}</td>
+                        <td className="num rupee">{formatInr(boqCost)}</td>
+                        <td className="num rupee">{formatInr(extraCost)}</td>
+                        <td className="num rupee">{formatInr(gfcCost)}</td>
+                        <td className="num rupee">{formatInr(achCost)}</td>
+                        <td className="num rupee">{formatInr(b.excessCost ?? Math.max(0, gfcCost - boqCost))}</td>
+                        <td className="num rupee">{formatInr(b.savingCost ?? Math.max(0, boqCost - gfcCost))}</td>
+                        <td className="num rupee">{formatInr(certCost)}</td>
+                        <td className="num">{formatPct(b.pctBoq)}</td>
+                        <td className="num">{formatPct(b.pctGfc)}</td>
+                        <td className="num">{formatPct((b.pctAchieved || 0) * 100)}</td>
+                        <td className="num">{formatPct(b.pctCertified)}</td>
+                        <td className="num rupee">{formatInr(b.evBoq ?? achCost)}</td>
+                        <td className="num rupee">{formatInr(b.evGfc ?? achCost)}</td>
+                        <td className="num rupee">{formatInr(b.evCertified ?? certCost)}</td>
+                        <td className="num rupee">{formatInr(b.actualCost ?? achCost)}</td>
+                        <td className="num">{formatIdx(b.cpi)}</td>
+                        <td>{b.cpiStatus || "—"}</td>
+                        <td className="num rupee">{formatInr(b.etcBoq)}</td>
+                        <td className="num rupee">{formatInr(b.etcGfc)}</td>
+                        <td className="num rupee">{formatInr(b.etcCertified)}</td>
+                        <td className="num rupee">{formatInr(b.eac ?? boqCost)}</td>
+                        <td className="num rupee">{formatInr(b.vac)}</td>
+                        <td className="num rupee">{formatInr(b.varBoqGfc)}</td>
+                        <td className="num rupee">{formatInr(b.varGfcAchieved)}</td>
+                        <td className="num rupee">{formatInr(b.varGfcCertified)}</td>
+                        <td className="num">{formatIdx(b.overrunBoq)}</td>
+                        <td className="num">{formatIdx(b.overrunGfc)}</td>
+                        <td className="num">{formatIdx(b.overrunCertified)}</td>
                         {canTouch && (
                           <td className="boq-actions-col">
                             <div className="flex items-center gap-2">
@@ -697,7 +806,7 @@ export function BoqMonitoringEditor({
               {!rows.length && (
                 <tr>
                   <td colSpan={colSpan} className="empty">
-                    No BOQ lines yet — add a line or upload a structure sheet.
+                    No BOQ lines yet — add a line or Load budget template (Budget tab / Monitoring).
                   </td>
                 </tr>
               )}

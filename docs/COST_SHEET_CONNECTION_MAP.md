@@ -87,7 +87,19 @@ Header row (rows 0 / 6 in workbook):
 | 7 | Achieved QTY | `achievedQty` |
 | 8–9 | Excess / Saving Qty | `excessQty` / `savingQty` *(computed)* |
 | 10 | Certified Qty | `certifiedQty` |
-| 11+ | Cost / EV / CPI columns | `boqCost` + UI computed KPIs |
+| 11 | BOQ Cost | `boqCost` |
+| 12 | Extra Item Cost | `extraItemCost` |
+| 13 | GFC Cost | `gfcCost` |
+| 14 | Achieved Cost | `achievedCost` |
+| 15–16 | Excess / Saving Cost | `excessCost` / `savingCost` |
+| 17 | Certified Invoice Cost | `certifiedInvoiceCost` |
+| 18–21 | % Progress (BOQ/GFC/Achieved/Certified) | `pctBoq` … `pctCertified` |
+| 22–24 | Earned Value | `evBoq` / `evGfc` / `evCertified` |
+| 25–27 | AC / CPI / CPI Status | `actualCost` / `cpi` / `cpiStatus` |
+| 28–32 | ETC / EAC / VAC | `etcBoq` … `vac` |
+| 33–38 | Variances & overrun | `varBoqGfc` … `overrunCertified` |
+
+**Load:** Cost → **Load budget template** (`POST /api/cost/:projectId/sync-template`) — same pattern as QAP / Cube.
 
 **DPR link:** primary source for quantity progress rows in DPR Maker.
 
@@ -103,8 +115,16 @@ Header row (rows 0 / 6 in workbook):
 | 3 | Budgeted Amount | `budgetedAmount` |
 | 4 | Work Order Amount | `workOrderAmount` |
 | 5 | Certified Amount | `certifiedAmount` |
-| 6 | Forecasted | `forecastedAmount` |
+| 6 | Forecast Addition | `forecastedAmount` |
+| 7 | Forecast Reduction | `forecastReduction` |
 | 8 | Non-tendered | `nonTendered` |
+| 9–10 | Steel Excess / Saving | `steelExcess` / `steelSaving` |
+| 11–12 | Cement Excess / Saving | `cementExcess` / `cementSaving` |
+| 13–14 | Tiles Excess / Saving | `tilesExcess` / `tilesSaving` |
+| 15 | Gross Total Amount (Projected) | `grossTotal` |
+| 16 | Remarks | `remarks` |
+
+UI: `BudgetWbsRegister` — add line, inline edit, delete, **Load budget template**.
 
 ---
 

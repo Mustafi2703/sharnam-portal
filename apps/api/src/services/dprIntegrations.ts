@@ -158,6 +158,7 @@ export async function buildDprAutoFill(
     checklistFillsToday,
     siteRecordsToday,
     qapAgencies,
+    diaryToday,
   ] = await Promise.all([
     prisma.costMonitoringLine.findMany({
       where: { projectId, packageName: { in: pkgs } },
@@ -203,6 +204,7 @@ export async function buildDprAutoFill(
           { packageName: "COP" },
           { packageName: "Project cashflow" },
           { packageName: { contains: "Chart" } },
+          { packageName: { startsWith: "PVA" } },
         ],
       },
       take: 80,
@@ -228,6 +230,10 @@ export async function buildDprAutoFill(
       distinct: ["testAgency"],
       take: 10,
     }),
+    prisma.dailyLog.findFirst({
+      where: { projectId, logDate: { gte: start, lt: end } },
+      include: { manpower: true, equipment: true },
+    }),
   ]);
 
   if (monitoring.length) sources.push(`BOQ monitoring (${pkgs.slice(0, 2).join(", ")})`);
@@ -236,6 +242,7 @@ export async function buildDprAutoFill(
   if (bbsLines.length) sources.push(`BBS (${pkg})`);
   if (prev.priorCount) sources.push(`${prev.priorCount} prior DPR(s)`);
   if (manpowerRegs.length) sources.push("Progress manpower register");
+  if (diaryToday?.manpower?.length) sources.push("Day log manpower");
   if (safetyToday.length || safetyOpen.length) sources.push("Safety records / NCR");
   if (ncrsOpen.length || cubesToday.length) sources.push("Quality NCR / cube tests");
   if (checklistFillsToday.length) sources.push("QI / Safety checklist fills");
@@ -300,7 +307,12 @@ export async function buildDprAutoFill(
         actual: m.available,
         hoursWorked: 8,
       }))
-    : [];
+    : (diaryToday?.manpower || []).map((m) => ({
+        trade: m.companyName || "Labour",
+        planned: m.workerCount || 0,
+        actual: m.workerCount || 0,
+        hoursWorked: m.hoursWorked || 8,
+      }));
 
   const nearMiss = safetyToday.filter((s) => /near/i.test(s.recordType)).length;
   const firstAid = safetyToday.filter((s) => /first aid/i.test(s.recordType)).length;

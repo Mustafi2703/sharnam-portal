@@ -122,7 +122,16 @@ export type ParsedBudgetLine = {
   workOrderAmount: number;
   certifiedAmount: number;
   forecastedAmount: number;
+  forecastReduction: number;
   nonTendered: number;
+  steelExcess: number;
+  steelSaving: number;
+  cementExcess: number;
+  cementSaving: number;
+  tilesExcess: number;
+  tilesSaving: number;
+  grossTotal: number;
+  remarks: string | null;
 };
 
 export function parseBudgetBuffer(buffer: Buffer): ParsedBudgetLine[] {
@@ -143,7 +152,16 @@ export function parseBudgetBuffer(buffer: Buffer): ParsedBudgetLine[] {
       workOrderAmount: n(row[4]),
       certifiedAmount: n(row[5]),
       forecastedAmount: n(row[6]),
+      forecastReduction: n(row[7]),
       nonTendered: n(row[8]),
+      steelExcess: n(row[9]),
+      steelSaving: n(row[10]),
+      cementExcess: n(row[11]),
+      cementSaving: n(row[12]),
+      tilesExcess: n(row[13]),
+      tilesSaving: n(row[14]),
+      grossTotal: n(row[15]),
+      remarks: s(row[16], 2000) || null,
     });
   }
   return data;

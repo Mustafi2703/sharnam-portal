@@ -29,6 +29,9 @@ export async function seedWprSections(
     milestones,
     plannedActual,
     cashflow,
+    progressManpower,
+    activityLines,
+    photos,
     qap,
     cubes,
     safety,
@@ -60,20 +63,27 @@ export async function seedWprSections(
       include: { drawing: { select: { isPublished: true, currentRev: true } } },
     }),
     prisma.submittal.findMany({ where: { projectId }, take: 40 }),
-    prisma.progressMilestone.findMany({ where: { projectId }, take: 60 }),
-    prisma.progressPlannedActual.findMany({ where: { projectId }, take: 40 }),
+    prisma.progressMilestone.findMany({ where: { projectId }, take: 130 }),
+    prisma.progressPlannedActual.findMany({ where: { projectId }, take: 80 }),
     prisma.costCashflowPeriod.findMany({
       where: {
         projectId,
         NOT: { packageName: "COP-day" },
       },
       orderBy: { periodDate: "asc" },
-      take: 60,
+      take: 80,
+    }),
+    prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 40 }),
+    prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
+    prisma.projectPhoto.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      take: 24,
     }),
     prisma.qapActivity.findMany({
       where: { projectId },
       orderBy: { weekLabel: "desc" },
-      take: 40,
+      take: 100,
     }),
     prisma.cubeTest.findMany({
       where: {
@@ -262,23 +272,38 @@ export async function seedWprSections(
     ]),
   };
 
-  const manpowerRows =
+  const diaryManpowerRows =
     weeklyDiaries.length > 0
       ? weeklyDiaries.map((d: any) => [
           isoDate(d.logDate),
           d.manpower.reduce((s: number, m: any) => s + (m.workerCount || 0), 0),
+          "",
+          "",
+          "",
         ])
       : dprSnaps.map((snap: any) => {
           const extras = JSON.parse(snap.headerJson || "{}")._extras || {};
           const mp = extras.manpower || [];
           const total = mp.reduce((s: number, m: any) => s + Number(m.actual || 0), 0);
-          return [isoDate(snap.logDate), total];
+          return [isoDate(snap.logDate), total, "", "", ""];
         });
+
+  const tradeManpowerRows = progressManpower.map((m: any) => [
+    m.trade || "",
+    m.required || 0,
+    m.available || 0,
+    m.shortage || 0,
+    m.shortagePct != null ? `${Math.round((m.shortagePct || 0) * 100)}%` : "",
+  ]);
 
   const manpower: WprSection = {
     title: DEFAULT_WPR_TITLES.manpowerHistogram,
-    headers: ["Date", "Total workers"],
-    rows: manpowerRows,
+    notes:
+      tradeManpowerRows.length > 0
+        ? "Trade shortage from Planned Vs Actual Dashboard; daily totals from day log / DPR."
+        : "Fill Weekly manpower on Progress → Planned vs Actual (manpower sub-tool).",
+    headers: ["Trade / Date", "Required / Total", "Available", "Shortage", "% shortage"],
+    rows: tradeManpowerRows.length > 0 ? tradeManpowerRows : diaryManpowerRows,
   };
 
   const executedRows: (string | number | null)[][] = [];
@@ -308,16 +333,32 @@ export async function seedWprSections(
     rows: executedRows,
   };
 
+  /** Prefer Cost cashflow; fall back / merge Progress PlannedActual amounts for WPR cashflow slides. */
+  const cashflowRows =
+    cashflow.length > 0
+      ? cashflow.map((c: any) => [
+          c.periodLabel || "",
+          c.packageName || "",
+          c.plannedAmount || 0,
+          c.actualAmount || 0,
+          (c.actualAmount || 0) - (c.plannedAmount || 0),
+        ])
+      : plannedActual.map((r: any) => [
+          r.periodLabel || "",
+          r.packageName || "Overall",
+          r.plannedAmount || 0,
+          r.actualAmount || 0,
+          (r.actualAmount || 0) - (r.plannedAmount || 0),
+        ]);
+
   const cashflowSec: WprSection = {
     title: DEFAULT_WPR_TITLES.cashflow,
+    notes:
+      cashflow.length > 0
+        ? "From Cost cashflow (Excel / COP sync). Keep Progress Planned vs Actual cashflow in sync via Progress → Sync to Cost."
+        : "No Cost cashflow rows — showing Progress Planned vs Actual amounts. Import cashflow or sync from Progress.",
     headers: ["Period", "Package", "Planned", "Actual", "Variance"],
-    rows: cashflow.map((c: any) => [
-      c.periodLabel || "",
-      c.packageName || "",
-      c.plannedAmount || 0,
-      c.actualAmount || 0,
-      (c.actualAmount || 0) - (c.plannedAmount || 0),
-    ]),
+    rows: cashflowRows,
   };
 
   const quality: WprSection = {
@@ -365,16 +406,39 @@ export async function seedWprSections(
     notes: ncrs.length ? `${ncrs.length} NCR/CAR items open — please review.` : "No open NCRs recorded.",
   };
 
+  const pvaCashRows = plannedActual.map((r: any) => [
+    r.periodLabel || "",
+    r.packageName || "",
+    r.plannedPct ?? "",
+    r.actualPct ?? "",
+    (r.actualPct || 0) - (r.plannedPct || 0),
+    r.plannedAmount || 0,
+    r.actualAmount || 0,
+  ]);
+  const pvaActivityRows = activityLines.map((a: any) => [
+    a.srNo || "",
+    a.tower || "",
+    a.activity || "",
+    a.unit || "",
+    a.boqQty || 0,
+    a.gfcQty || 0,
+    a.executedQty || 0,
+    a.weeklyPlanned || 0,
+    a.weeklyActual || 0,
+    a.pctComplete != null ? `${Math.round((a.pctComplete || 0) * 100)}%` : a.status || "",
+  ]);
+
   const plannedVsActualSec: WprSection = {
     title: DEFAULT_WPR_TITLES.plannedVsActual,
-    headers: ["Period", "Package", "Planned %", "Actual %", "Variance %"],
-    rows: plannedActual.map((r: any) => [
-      r.periodLabel || "",
-      r.packageName || "",
-      r.plannedPct ?? "",
-      r.actualPct ?? "",
-      (r.actualPct || 0) - (r.plannedPct || 0),
-    ]),
+    notes:
+      pvaActivityRows.length > 0
+        ? "Cashflow % from Progress Planned vs Actual; activity qty register below continues across slides."
+        : "Import Planned Vs. Actual Dashboard.xlsx under Progress → Planned vs Actual.",
+    headers:
+      pvaActivityRows.length > 0
+        ? ["Sr", "Tower", "Activity", "Unit", "BOQ", "GFC", "Executed", "Wk plan", "Wk act", "% / Status"]
+        : ["Period", "Package", "Planned %", "Actual %", "Variance %", "Planned ₹", "Actual ₹"],
+    rows: pvaActivityRows.length > 0 ? pvaActivityRows : pvaCashRows,
   };
 
   const materialStock: WprSection = {
@@ -384,11 +448,21 @@ export async function seedWprSections(
     notes: "Fill in from site stock register for this week.",
   };
 
+  const photoPaths = photos
+    .map((p: any) => {
+      const label = [p.album, p.description, p.location, p.trade].filter(Boolean).join(" · ");
+      return label ? `${label} — ${p.fileUrl || ""}` : p.fileUrl || "";
+    })
+    .filter(Boolean);
   const progressPictures: WprSection = {
     title: DEFAULT_WPR_TITLES.progressPictures,
     notes:
-      "Attach 6–10 photos captured this week. Photos uploaded via the Site Pilot are already saved to the SharePoint DPR folder — paste those SharePoint paths here.",
-    photos: [],
+      photoPaths.length > 0
+        ? `${photoPaths.length} photo path(s) from Project Photos / Site Pilot this project.`
+        : "Attach 6–10 photos captured this week. Upload via Photos / Site Pilot — paths appear here on next WPR sync.",
+    headers: ["#", "Photo / SharePoint path"],
+    rows: photoPaths.map((p: string, i: number) => [i + 1, p]),
+    photos: photoPaths,
   };
 
   const cover: WprSection = {

@@ -17,7 +17,7 @@ Quality inspections, QAP Week 50 register, NCR/CAR, SPDC cube crushing register,
 |------|--------|-------|
 | QI dashboard | Built | Procore-style inspections + **Quality Dashboard workbook tabs** |
 | Checklist master | Built | Create; **upload Excel**; choose template; **global master at `/master/checklists`** |
-| Branded fill export | Built | Checklist log → Download branded HTML (Print → PDF) |
+| Branded fill export | Built | Fill log → **Branded Excel** (real SPDC forms, colour-coded like DPR/WPR) + HTML print |
 | **QAP (Week 50)** | Built | **`/qap`** — full Excel layout, ~295 rows, daily check columns, auto sync from seed |
 | Site checklists | Built | Assign / fill (Final Index family) |
 | **Cube register** | Built | SPDC grouped specimens — inline edit, test agency, DPR stats |
@@ -102,7 +102,7 @@ UI route: `/projects/:id/inspections` with `?sheet=` query. **QAP** is a dedicat
 | Dashboard | Dashboard | KPI tiles — open QI, QAP open/done, concreting week |
 | **SOR Log** | SOR Log | Live totals from site obs/instruction + NCR/CAR |
 | Site observation / instruction | — | Inline + modal; feeds SOR + DPR |
-| Checklist summary | Sheet1 + Sheet2 | Catalog + filled counts by discipline |
+| Checklist summary | Sheet1 + Sheet2 | Catalog status + daily/weekly/monthly fill graphs (DPR) |
 | CAR / NCR register | CAR register · NCR 01 | Form window, Excel export |
 | Cube Test | SPDC Cube Register | Full register — scrollable grid |
 | QI & checklist fills | — | Active inspection assignments |

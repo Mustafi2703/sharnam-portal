@@ -252,12 +252,39 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           <p className="text-sm">
             <span className="font-semibold text-ink">{catalog.length}</span> checklist types from{" "}
             <span className="font-semibold">Quality Dashboard · Sheet1</span> —{" "}
-            <span className="font-semibold text-ink">{templates.length}</span> templates in master. Create or upload line
-            items for each type; set minimum photos (default 3) before raising QI.
+            <span className="font-semibold text-ink">{templates.length}</span> templates in master. This page is the
+            type library (line items & min. photos). Fill history lives in the{" "}
+            <Link to={`/projects/${id}/quality/checklist-logs`} className="text-brand font-semibold">
+              QI fill log
+            </Link>
+            .
           </p>
-          <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="inline-block mt-2 text-sm font-semibold text-brand">
-            View full catalog →
-          </Link>
+          <div className="flex flex-wrap gap-3 mt-2">
+            <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="text-sm font-semibold text-brand">
+              Catalog + fill graphs →
+            </Link>
+            {id && canEdit && (
+              <button
+                type="button"
+                className="text-sm font-semibold text-brand underline"
+                onClick={async () => {
+                  setMsg("");
+                  try {
+                    const out = await api<{ catalog: number; created: number }>(
+                      `/api/checklist/project/${id}/quality-catalog/sync`,
+                      { method: "POST", token }
+                    );
+                    setMsg(`Onboarded ${out.catalog} Sheet1 types (${out.created} new).`);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Onboard failed");
+                  }
+                }}
+              >
+                Onboard all Sheet1 types
+              </button>
+            )}
+          </div>
         </Card>
       )}
 

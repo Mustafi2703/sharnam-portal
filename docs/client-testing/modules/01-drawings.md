@@ -46,7 +46,7 @@ Module hub · **GFC register** (upload) · Register dashboard · **Master regist
 | Action | Route |
 |--------|-------|
 | Branded HTML (print PDF) | Checklist fill log → **Branded PDF** |
-| Branded Excel table | Checklist fill log → **Branded Excel** (`GET …/submissions/:id/branded.xlsx`) |
+| Branded Excel | Checklist fill log → **Branded Excel** — SPDC Activity Checklist + IR Form, colour-coded status |
 
 ### Register columns (R0–Rn)
 | Rule | Notes |

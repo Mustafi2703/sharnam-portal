@@ -19,7 +19,7 @@ Safety dashboard, **Safety NCR** as its own tool, Excel checklists, and **Reques
 | Safety dashboard | `/safety` | Built | Observations / incidents |
 | **Safety NCR** | `/safety?view=ncr` | Built | `Safety NCR.xlsx` |
 | Safety checklists | `/checklist-master?family=Safety` | Built | Excel safety templates |
-| Safety fill log | `/checklist-logs?family=Safety` | Built | Fill audit |
+| Safety fill log | `/checklist-logs?family=Safety` | Built | Fill audit · branded SPDC HSE Excel |
 | Request for Inspection | `/rfis?kind=SafetyChecklist` | Built | Inspection fill |
 
 ### Awaiting next sheets
@@ -73,7 +73,7 @@ Safety dashboard, **Safety NCR** as its own tool, Excel checklists, and **Reques
 
 ## 6. Sheet sources
 
-- Safety Dashboard sheet  
+- Safety Dashboard sheet (`HIRA` tab — all risk IDs A1–O5)
 - `Safety NCR.xlsx`
 
 ---

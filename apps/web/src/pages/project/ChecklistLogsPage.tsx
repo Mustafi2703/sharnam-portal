@@ -43,10 +43,33 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
   const effectiveLock = lockedFamily || pathLock;
   const family = effectiveLock || searchParams.get("family") || "";
   const showFamilyPicker = !effectiveLock && projectRouteTail(location.pathname) === "checklist-logs";
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [busy, setBusy] = useState(true);
   const [msg, setMsg] = useState("");
+  const canReview = user?.role === "admin" || user?.role === "office";
+
+  async function reviewSubmission(submissionId: string, status: "Approved" | "Rejected", closeRfi: boolean) {
+    try {
+      await api(`/api/checklist/submissions/${submissionId}/review`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          status,
+          remarks: status === "Approved" ? "Approved after branded file review" : "Rejected — re-fill required",
+          closeRfi,
+        }),
+      });
+      setMsg(
+        closeRfi && status === "Approved"
+          ? "Approved · linked RFI closed · emails sent"
+          : `${status} · review email sent`
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Review failed");
+    }
+  }
 
   const load = async () => {
     if (!id) return;
@@ -277,6 +300,25 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                         >
                           Branded Excel
                         </Button>
+                        {canReview && (s.status === "Submitted" || s.status === "Reviewed") && (
+                          <>
+                            <Button
+                              type="button"
+                              className="!text-xs !py-1.5"
+                              onClick={() => void reviewSubmission(s.id, "Approved", true)}
+                            >
+                              Approve + close RFI
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!text-xs !py-1.5"
+                              onClick={() => void reviewSubmission(s.id, "Rejected", false)}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
                   </td>
@@ -295,7 +337,8 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
       </Card>
 
       <p className="text-xs text-steel-muted">
-        Tip: “Download branded” saves an HTML file and opens a print-ready tab with the Sharnam logo — use Print → Save as PDF for archive.
+        Tip: open <strong>Branded PDF / Excel</strong> to review the fill, then <strong>Approve + close RFI</strong> (office) —
+        that emails the decision and closes linked RFIs. Reject sends a re-fill notice.
       </p>
     </div>
   );

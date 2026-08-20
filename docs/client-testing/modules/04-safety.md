@@ -39,7 +39,7 @@ All / Open / Closed / record types — list filter only.
 
 | # | Raised by | Change / issue | Priority | Dev status | Re-test |
 |---|-----------|----------------|----------|------------|---------|
-| 1 | | | P1 / P2 / P3 | Open | ☐ |
+| 1 | Client | HIRA register must list every Safety Dashboard.xlsx risk line (A1–O5), not a summary | P1 | Done | ☐ |
 | 2 | | | | Open | ☐ |
 | 3 | | | | Open | ☐ |
 
@@ -52,5 +52,5 @@ All / Open / Closed / record types — list filter only.
 ## Related pages
 
 - Safety checklist master → `/safety/checklist-master`
-- Safety fill log → `/safety/checklist-logs`
+- Safety fill log → `/safety/checklist-logs` — **Branded Excel** uses `SPDC_Safety_Inspection_Request_and_Checklists.xlsx` (F-02 walkthrough + F-01 IR), with Yes/No/NA colour coding and compliance score.
 - Safety RFI → `/rfis?kind=SafetyChecklist`

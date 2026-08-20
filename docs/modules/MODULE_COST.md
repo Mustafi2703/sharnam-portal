@@ -20,7 +20,7 @@ Engineering cost control: BOQ monitoring, MB, BBS, budget WBS, cashflow, rate va
 | Monitoring / BOQ | Monitoring * packages + Cashflow Monitoring | Built |
 | MB sheets | Dormitory, Electric, Plumbing, UGWT, … | Built |
 | BBS | Dormitory / Compound Wall / Septic / Road / UGWT | Built |
-| Budget WBS | SPDC_Budget + Cashflow Budget | Built |
+| Budget WBS | SPDC_Budget + Cashflow Budget | Built | Full Budget tab columns + add/edit + sync-template |
 | Cashflow chart | Cashflow Dashboard — Chart INR | Built |
 | Cashflow forecast | Cash Flow - Forecast | Built |
 | Tracking | Cashflow Tracking | Built |

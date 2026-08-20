@@ -18,7 +18,10 @@ Schedule / milestone / planned-vs-actual / hindrance / risk / legal registers pl
 |------|-------------|--------|--------------|
 | Overview | `/progress` | Built | Progress Overview.xlsx |
 | Milestones | `/progress?tab=milestones` | Built | Milestone tracking.xlsx |
-| Planned vs Actual | `/progress?tab=planned` | Built | Planned Vs. Actual Dashboard — **scrollable Excel-style tables** |
+| Planned vs Actual | `/progress?tab=planned` | Built | Planned Vs. Actual Dashboard — cashflow · manpower · activity qty sub-tools (`?pva=`) |
+| PvsA · Cashflow | `?tab=planned&pva=cashflow` | Built | Sync → Cost cashflow / WPR |
+| PvsA · Manpower | `?tab=planned&pva=manpower` | Built | Trade shortage |
+| PvsA · Activity qty | `?tab=planned&pva=activity` | Built | Qty register + BOQ monitoring link |
 | Monthly | `/progress?tab=monthly` | Built | Monthly Progress Dashboard |
 | Hindrance | `/progress?tab=hindrance` | Built | Hindrance Register Dashboard |
 | Risk | `/progress?tab=risk` | Built | Risk Register - Dashboard 1.xlsx |

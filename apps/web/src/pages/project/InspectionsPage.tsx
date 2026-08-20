@@ -11,6 +11,7 @@ import type { QapProjectMeta } from "../../components/QapDetailRegister";
 import { SorLogPanel } from "../../components/SorLogPanel";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
+import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
@@ -212,40 +213,14 @@ export default function InspectionsPage() {
         />
       )}
 
-      {sheetKey === "checklist-summary" && dash?.workbook && (
-        <div className="grid lg:grid-cols-2 gap-4">
-          <Card>
-            <h3 className="font-semibold mb-3 text-left">Checklists filled by discipline (Sheet2)</h3>
-            <ul className="space-y-2 text-sm">
-              {(dash.workbook.checklistByDiscipline || []).map((r: any) => (
-                <li key={r.discipline} className="flex justify-between border-b border-line/60 pb-1">
-                  <span>{r.discipline}</span>
-                  <span className="font-mono font-semibold">{r.filled}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-          <Card>
-            <h3 className="font-semibold mb-3 text-left">Checklist catalog (Sheet1 — quality types)</h3>
-            <p className="text-xs text-steel-muted mb-2">
-              All checklist file names from Quality Dashboard — seed into Checklist master to add line items & min. photos per type.
-            </p>
-            <div className="max-h-[24rem] overflow-y-auto text-sm space-y-1">
-              {(dash.workbook.checklistCatalog || []).map((r: any) => (
-                <div key={r.srNo} className="border-b border-line/40 pb-1 flex justify-between gap-2">
-                  <span>
-                    <span className="font-mono text-xs text-brand mr-2">{r.srNo}</span>
-                    {r.name}
-                    <span className="text-steel-muted text-xs ml-2">· {r.category}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Link to={`/projects/${id}/quality/checklist-master`} className="inline-block mt-3 text-sm font-semibold text-brand">
-              Open checklist master — create / upload line items →
-            </Link>
-          </Card>
-        </div>
+      {sheetKey === "checklist-summary" && dash && (
+        <QualityChecklistSummaryPanel
+          projectId={id!}
+          token={token}
+          dash={dash}
+          canManage={canManage}
+          onChanged={load}
+        />
       )}
 
       {sheetKey === "car-register" && (

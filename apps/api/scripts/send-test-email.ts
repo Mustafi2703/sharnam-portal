@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
-const to = (process.argv[2] || "baibahbmustafi@gmail.com").trim();
+const to = (process.argv[2] || "baibhabmustafi@gmail.com").trim();
 
 async function main() {
   const { graphFetch, graphConfig } = await import("../src/services/graph.js");

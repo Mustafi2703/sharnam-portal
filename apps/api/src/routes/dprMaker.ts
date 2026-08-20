@@ -50,6 +50,16 @@ import { seedDprDemoDay } from "../services/dprDemoDaySeed.js";
 export const dprMakerRouter = Router();
 dprMakerRouter.use(requireAuth);
 
+/** Completeness of sheet-backed registers for DPR/WPR generation */
+dprMakerRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "employee"), async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const logDate = req.query.date ? new Date(String(req.query.date)) : new Date();
+  const { verifyPackCompleteness } = await import("../services/packCompleteness.js");
+  const report = await verifyPackCompleteness(project.id, { logDate });
+  res.json({ project: { id: project.id, code: project.code, name: project.name }, ...report });
+});
+
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const VALID_DISCIPLINES = [

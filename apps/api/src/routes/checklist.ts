@@ -335,24 +335,43 @@ checklistRouter.post(
     });
 
     if (assignment.project.notifyOnChecklistSubmit) {
-      const { queueProjectEmail } = await import("../services/email.js");
-      await queueProjectEmail({
+      const linkedRfis = await prisma.rfi.findMany({
+        where: {
+          projectId: assignment.projectId,
+          status: { in: ["Open", "Answered"] },
+          OR: [{ linkedAssignmentId: assignment.id }, { linkedChecklistItemId: assignment.templateId }],
+        },
+        select: { id: true, number: true },
+      });
+      // Hand to office for review — do NOT auto-close the RFI
+      if (linkedRfis.length) {
+        await prisma.rfi.updateMany({
+          where: { id: { in: linkedRfis.map((r) => r.id) } },
+          data: { status: "Answered", ballInCourt: "Office", closedAt: null },
+        });
+      }
+      const { notifyChecklistSubmittedForReview } = await import("../services/rfiFlowNotify.js");
+      await notifyChecklistSubmittedForReview({
         projectId: assignment.projectId,
-        subject: `Checklist submitted — ${assignment.template.name}`,
-        body: `${req.user!.fullName || "User"} submitted "${assignment.template.name}" (${assignment.template.checklistType}).\nStatus: ${submission.status}`,
-        context: "checklist.submit",
+        templateName: assignment.template.name,
+        checklistType: assignment.template.checklistType,
+        submissionId: submission.id,
+        assignmentId: assignment.id,
+        submittedByName: req.user!.fullName || undefined,
+        rfiNumbers: linkedRfis.map((r) => r.number),
         createdById: req.user!.id,
       });
+    } else {
+      // Still move linked RFIs to Answered / Office without closing
+      await prisma.rfi.updateMany({
+        where: {
+          projectId: assignment.projectId,
+          status: { in: ["Open", "Answered"] },
+          OR: [{ linkedAssignmentId: assignment.id }, { linkedChecklistItemId: assignment.templateId }],
+        },
+        data: { status: "Answered", ballInCourt: "Office", closedAt: null },
+      });
     }
-
-    await prisma.rfi.updateMany({
-      where: {
-        projectId: assignment.projectId,
-        status: { in: ["Open", "Answered"] },
-        OR: [{ linkedAssignmentId: assignment.id }, { linkedChecklistItemId: assignment.templateId }],
-      },
-      data: { status: "Closed", closedAt: new Date(), ballInCourt: "Closed" },
-    });
 
     const itemCount = assignment.template._count.items;
     const withPhotos = await prisma.checklistSubmission.findUnique({
@@ -490,15 +509,73 @@ checklistRouter.post(
   "/submissions/:id/review",
   requireRoles("admin", "office"),
   async (req: AuthedRequest, res) => {
-    const { status, remarks } = req.body;
+    const { status, remarks, closeRfi } = req.body;
     if (!["Approved", "Rejected", "Reviewed"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
+    const existing = await prisma.checklistSubmission.findUnique({
+      where: { id: req.params.id },
+      include: {
+        assignment: { include: { template: true, project: true } },
+      },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+
     const submission = await prisma.checklistSubmission.update({
       where: { id: req.params.id },
       data: { status, remarks, reviewedAt: new Date() },
     });
     await audit("checklist.review", { userId: req.user!.id, entity: "ChecklistSubmission", entityId: submission.id });
+
+    const linkedRfis = await prisma.rfi.findMany({
+      where: {
+        projectId: existing.assignment.projectId,
+        OR: [
+          { linkedAssignmentId: existing.assignmentId },
+          { linkedChecklistItemId: existing.assignment.templateId },
+        ],
+      },
+      select: { id: true, number: true, subject: true, rfiKind: true, status: true },
+    });
+
+    try {
+      const { notifyChecklistReviewed, notifyRfiClosed } = await import("../services/rfiFlowNotify.js");
+      await notifyChecklistReviewed({
+        projectId: existing.assignment.projectId,
+        templateName: existing.assignment.template.name,
+        status,
+        submissionId: submission.id,
+        remarks: remarks || null,
+        rfiNumbers: linkedRfis.map((r) => r.number),
+        createdById: req.user!.id,
+      });
+
+      if (closeRfi && status === "Approved" && linkedRfis.length) {
+        const { archiveClosedRfiReport } = await import("../services/archiveClosedRfiReport.js");
+        for (const r of linkedRfis.filter((x) => x.status !== "Closed")) {
+          await prisma.rfi.update({
+            where: { id: r.id },
+            data: { status: "Closed", closedAt: new Date(), ballInCourt: "Closed" },
+          });
+          try {
+            await archiveClosedRfiReport({ projectId: existing.assignment.projectId, rfiId: r.id });
+          } catch {
+            /* SharePoint optional */
+          }
+          await notifyRfiClosed({
+            projectId: existing.assignment.projectId,
+            number: r.number,
+            subject: r.subject,
+            rfiKind: r.rfiKind,
+            rfiId: r.id,
+            createdById: req.user!.id,
+          });
+        }
+      }
+    } catch {
+      /* email optional */
+    }
+
     res.json(submission);
   }
 );
@@ -522,7 +599,12 @@ checklistRouter.get("/submissions/:id/branded.html", async (req, res) => {
   const submission = await prisma.checklistSubmission.findUnique({
     where: { id: req.params.id },
     include: {
-      assignment: { include: { template: { include: { items: { orderBy: { sortOrder: "asc" } } } } } },
+      assignment: {
+        include: {
+          project: { select: { name: true, code: true, clientName: true } },
+          template: { include: { items: { orderBy: { sortOrder: "asc" } } } },
+        },
+      },
       submittedBy: { select: { fullName: true, email: true } },
       drawing: true,
     },
@@ -542,14 +624,16 @@ checklistRouter.get("/submissions/:id/branded.html", async (req, res) => {
   res.send(html);
 });
 
-/** Branded checklist fill — Excel table (Sharnam header + item grid). */
+/** Branded checklist fill — SPDC Excel forms (colour-coded, DPR/WPR-style template fill). */
 checklistRouter.get("/submissions/:id/branded.xlsx", async (req, res) => {
   const submission = await prisma.checklistSubmission.findUnique({
     where: { id: req.params.id },
     include: {
       assignment: {
         include: {
-          project: { select: { name: true, code: true } },
+          project: {
+            select: { name: true, code: true, clientName: true, contractorName: true, location: true },
+          },
           template: { include: { items: { orderBy: { sortOrder: "asc" } } } },
         },
       },
@@ -558,17 +642,22 @@ checklistRouter.get("/submissions/:id/branded.xlsx", async (req, res) => {
     },
   });
   if (!submission) return res.status(404).json({ error: "Not found" });
-  const buf = buildBrandedChecklistXlsxBuffer(submission, submission.assignment.project);
-  const safeName = (submission.assignment?.template?.name || "checklist")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .slice(0, 40);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="${safeName || "checklist"}-${req.params.id.slice(0, 8)}.xlsx"`
-  );
-  res.send(buf);
+  try {
+    const buf = await buildBrandedChecklistXlsxBuffer(submission, submission.assignment.project);
+    const safeName = (submission.assignment?.template?.name || "checklist")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .slice(0, 40);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${safeName || "checklist"}-${req.params.id.slice(0, 8)}.xlsx"`
+    );
+    res.send(buf);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Branded Excel failed";
+    res.status(500).json({ error: message });
+  }
 });
 
 /** Export project checklist fills for site engineers (shared dual-fill audit) */
@@ -1063,7 +1152,8 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req, re
 checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
   const { loadQualityDashboardWorkbook, buildLiveSorLog, buildLiveSorEntries } = await import("../services/qualityDashboardSheets.js");
-  const [qiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, siteRecords, workbook] = await Promise.all([
+  const { buildQualityCatalogStatus, fillBuckets } = await import("../services/qualityChecklistCatalog.js");
+  const [qiFills, allQiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, siteRecords, workbook] = await Promise.all([
     prisma.checklistSubmission.findMany({
       where: { assignment: { projectId, template: { checklistType: "QualityInspection" } } },
       include: {
@@ -1073,6 +1163,14 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       },
       orderBy: { createdAt: "desc" },
       take: 30,
+    }),
+    prisma.checklistSubmission.findMany({
+      where: { assignment: { projectId, template: { checklistType: { in: ["QualityInspection", "Safety"] } } } },
+      select: {
+        createdAt: true,
+        status: true,
+        assignment: { select: { template: { select: { name: true, category: true, checklistType: true } } } },
+      },
     }),
     prisma.checklistSubmission.count({
       where: { assignment: { projectId, template: { checklistType: "SiteExecution" } } },
@@ -1093,9 +1191,22 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   ]);
   const liveSorLog = buildLiveSorLog(workbook?.sorLog || [], siteRecords, ncrs);
   const sorEntries = buildLiveSorEntries(siteRecords, ncrs);
-  const workbookOut = workbook ? { ...workbook, sorLog: liveSorLog } : { sorLog: liveSorLog, checklistByDiscipline: [], checklistCatalog: [], source: "portal" };
+  const catalog = workbook?.checklistCatalog || [];
+  const catalogStatus = await buildQualityCatalogStatus(projectId, catalog);
+  const fillDates = allQiFills.map((f) => f.createdAt);
+  const buckets = fillBuckets(fillDates);
+  const liveDiscipline = Object.entries(
+    allQiFills.reduce((acc: Record<string, number>, f) => {
+      const cat = f.assignment.template.category || f.assignment.template.checklistType || "Other";
+      acc[cat] = (acc[cat] || 0) + 1;
+      return acc;
+    }, {})
+  ).map(([discipline, filled]) => ({ discipline, filled }));
+  const workbookOut = workbook
+    ? { ...workbook, sorLog: liveSorLog, checklistByDiscipline: liveDiscipline.length ? liveDiscipline : workbook.checklistByDiscipline }
+    : { sorLog: liveSorLog, checklistByDiscipline: liveDiscipline, checklistCatalog: [], source: "portal" };
   const byDay: Record<string, number> = {};
-  for (const f of qiFills) {
+  for (const f of allQiFills) {
     const d = new Date(f.createdAt).toISOString().slice(0, 10);
     byDay[d] = (byDay[d] || 0) + 1;
   }
@@ -1112,7 +1223,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     siteRecords,
     sorEntries,
     totals: {
-      fills: qiFills.length,
+      fills: allQiFills.filter((f) => f.assignment.template.checklistType === "QualityInspection").length,
       siteExecutionFills: siteFills,
       openInspections: openQi,
       openFillRfis: openRfis,
@@ -1121,8 +1232,13 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       openNcrs: ncrs.filter((n) => n.status === "Open").length,
       cubes: cubes.length,
       cubesPass: cubes.filter((c) => /pass/i.test(c.result || "")).length,
+      catalogTypes: catalog.length,
+      catalogOnboarded: catalogStatus.filter((c) => c.onboarded).length,
+      catalogFilled: catalogStatus.filter((c) => c.fillCount > 0).length,
     },
     fillsByDay: byDay,
+    catalogStatus,
+    fillTrends: buckets,
     recentFills: qiFills.map((f) =>
       attachProgress(
         { ...f, photos: f.photos || [] },
@@ -1136,14 +1252,13 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       byNcrStatus: groupCount(ncrs, "status"),
       byCubeResult: groupCount(cubes, "result"),
       byQapStatus: groupCount(qap, "status"),
-      fillsByDiscipline: (workbook?.checklistByDiscipline || []).map((d) => ({
+      fillsByDiscipline: (workbookOut.checklistByDiscipline || []).map((d) => ({
         label: d.discipline,
         value: d.filled,
       })),
-      fillsByDay: Object.entries(byDay)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .slice(-14)
-        .map(([label, value]) => ({ label, value })),
+      fillsByDay: buckets.fillsByDay,
+      fillsByWeek: buckets.fillsByWeek,
+      fillsByMonth: buckets.fillsByMonth,
       sorByType: Object.entries(
         sorEntries.reduce((acc: Record<string, number>, e) => {
           acc[e.type] = (acc[e.type] || 0) + 1;
@@ -1580,6 +1695,20 @@ checklistRouter.post(
     const fs = await import("fs");
     const out = await importQapWorkbook(req.params.projectId, fs.readFileSync(file), true);
     res.json(out);
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/quality-catalog/sync",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const { syncQualityChecklistCatalog } = await import("../services/qualityChecklistCatalog.js");
+    try {
+      const out = await syncQualityChecklistCatalog(req.params.projectId);
+      res.json(out);
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : "Catalog sync failed" });
+    }
   }
 );
 

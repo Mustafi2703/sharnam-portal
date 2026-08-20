@@ -40,6 +40,17 @@ progressRouter.get("/:projectId/verify", requireRoles("admin", "office", "employ
   res.json({ project: { id: project.id, code: project.code, name: project.name }, ...report });
 });
 
+/** Full DPR/WPR pack readiness (all modules / sheet sources) */
+progressRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "employee"), async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const { verifyPackCompleteness } = await import("../services/packCompleteness.js");
+  const report = await verifyPackCompleteness(project.id, {
+    logDate: req.query.date ? new Date(String(req.query.date)) : undefined,
+  });
+  res.json({ project: { id: project.id, code: project.code, name: project.name }, ...report });
+});
+
 progressRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
   const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLines] =
@@ -288,16 +299,37 @@ progressRouter.post(
     if (!file?.buffer?.length) return res.status(400).json({ error: "Excel file required (field: file)" });
     try {
       const counts = await importPlannedActualDashboard(project.id, file.buffer);
+      const { syncProgressCashflowToCost } = await import("../services/cashflowPvaSync.js");
+      const sync = await syncProgressCashflowToCost(project.id);
       await audit("progress.plannedActual.import", {
         userId: req.user!.id,
         entity: "ProgressActivityLine",
         entityId: project.id,
-        meta: { file: file.originalname, ...counts },
+        meta: { file: file.originalname, ...counts, cashflowSync: sync },
       });
-      res.json({ ok: true, ...counts });
+      res.json({ ok: true, ...counts, cashflowSync: sync });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
     }
+  }
+);
+
+/** Push Progress Planned vs Actual cashflow → Cost cashflow (WPR / Cost tabs stay aligned) */
+progressRouter.post(
+  "/:projectId/planned-actual/sync-cashflow",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const { syncProgressCashflowToCost } = await import("../services/cashflowPvaSync.js");
+    const sync = await syncProgressCashflowToCost(project.id);
+    await audit("progress.plannedActual.syncCashflow", {
+      userId: req.user!.id,
+      entity: "CostCashflowPeriod",
+      entityId: project.id,
+      meta: sync,
+    });
+    res.json({ ok: true, ...sync });
   }
 );
 

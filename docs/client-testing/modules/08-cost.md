@@ -31,7 +31,10 @@ vendorId, billNo, amount, gstAmount, copNo, description, pmcPartyId, status
 File upload to respective import endpoints
 
 ### Inline editors
-BoqMonitoringEditor · BbsEntryTable · MbEntryTable · CostSheetUploadPanel
+BoqMonitoringEditor (full SPDC Monitoring columns) · BudgetWbsRegister · BbsEntryTable · MbEntryTable · CostSheetUploadPanel
+
+### Load template
+**Load budget template** on Budget or Monitoring → `POST /api/cost/:id/sync-template` pulls `SPDC_Budget_Arvind 49.xls` (Budget + all Monitoring + MB + BBS + rates), same idea as QAP / Cube sync.
 
 ### Modals
 None (upload panels inline).

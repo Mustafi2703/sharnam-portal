@@ -27,6 +27,7 @@ function resolveQualityDashboardPath(): string | null {
       : "",
     path.join(process.cwd(), "seed", "data", "Quality Dashboard.xlsx"),
     path.join(process.cwd(), "Sharnam_modules_docs", "Quality Dashboard.xlsx"),
+    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Quality Dashboard.xlsx"),
   ].filter(Boolean);
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
@@ -158,10 +159,10 @@ export function parseChecklistCatalog(rows: unknown[][]): ChecklistCatalogRow[] 
     const sr = n(r[0]);
     const name = s(r[1], 200);
     const category = s(r[2], 80);
-    if (!sr || !name || /sr no|file name/i.test(String(r[0]))) continue;
+    if (!sr || !name || /sr no|file name/i.test(String(r[0])) || /sr no|file name/i.test(name)) continue;
     out.push({ srNo: sr, name, category: category || "General" });
   }
-  return out.slice(0, 200);
+  return out;
 }
 
 /** Quality Assurance Plan - Detail / Week 50 Sheet1 layout (header row 7–8, data from row 9). */

@@ -571,7 +571,8 @@ export default function RfisPage() {
                 <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
                   <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill this checklist</div>
                   <p className="text-steel-muted text-xs leading-relaxed">
-                    Open the fill form to answer Yes/No/N.A., upload photos & docs, and attach or upload a drawing / revision if needed.
+                    Same link is emailed when the RFI is raised. Answer Yes/No/N.A., add photos, Submit for review.
+                    Office opens Branded PDF/Excel on the fill log, then Approve + close RFI (or Reject).
                   </p>
                   <Link to={fillLink}>
                     <Button type="button" className="!text-sm">

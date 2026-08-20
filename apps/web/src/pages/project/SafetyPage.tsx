@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -7,6 +7,7 @@ import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
+import { HiraRegisterTable } from "../../components/HiraRegisterTable";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
@@ -87,6 +88,8 @@ export default function SafetyPage() {
   const [form, setForm] = useState(emptyForm(ncrView));
   const [editForm, setEditForm] = useState<SafetyForm | null>(null);
   const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const hiraAutoSyncRef = useRef(false);
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canEdit = canCreate;
 
@@ -118,6 +121,34 @@ export default function SafetyPage() {
   useEffect(() => {
     void load();
   }, [id, token]);
+
+  const hiraRows = useMemo(
+    () => (data?.records || []).filter((r) => r.recordType === "JHA"),
+    [data]
+  );
+
+  useEffect(() => {
+    if (sheetKey !== "hira" || !canCreate || !id) return;
+    if (hiraRows.length >= 20) return;
+    if (hiraAutoSyncRef.current) return;
+    hiraAutoSyncRef.current = true;
+    void (async () => {
+      setBusy(true);
+      try {
+        const out = await api<{ imported: number }>(`/api/safety/project/${id}/hira/sync-template`, {
+          method: "POST",
+          token,
+        });
+        setMsg(`Loaded ${out.imported} HIRA risk lines from Safety Dashboard.xlsx`);
+        await load();
+      } catch (err) {
+        hiraAutoSyncRef.current = false;
+        setMsg(err instanceof Error ? err.message : "HIRA template load failed");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [sheetKey, hiraRows.length, canCreate, id, token]);
 
   const filtered = useMemo(() => {
     const rows = data?.records || [];
@@ -206,7 +237,7 @@ export default function SafetyPage() {
         <div className="flex flex-wrap gap-1.5 items-center">
           <Badge tone="warn">{dash?.totals?.open ?? data?.stats.open ?? 0} open</Badge>
           <Badge tone="danger">{dash?.totals?.incidents ?? data?.stats.incidents ?? 0} incidents</Badge>
-          <Badge tone="brand">{filtered.length} in this sheet</Badge>
+          <Badge tone="brand">{sheetKey === "hira" ? hiraRows.length : filtered.length} in this sheet</Badge>
           <Badge tone="neutral">{dash?.totals?.checklistFills ?? 0} safety checklist fills</Badge>
           <ReportExportButtons projectId={id} kind="safety" compact />
         </div>
@@ -285,7 +316,34 @@ export default function SafetyPage() {
 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 
-      {sheetHasRegister && canCreate && (
+      {sheetKey === "hira" && (
+        <HiraRegisterTable
+          rows={hiraRows}
+          activeId={active}
+          onSelect={setActive}
+          canEdit={canCreate}
+          busy={busy}
+          onLoadTemplate={async () => {
+            if (!id) return;
+            setBusy(true);
+            setMsg("");
+            try {
+              const out = await api<{ imported: number }>(`/api/safety/project/${id}/hira/sync-template`, {
+                method: "POST",
+                token,
+              });
+              setMsg(`Loaded ${out.imported} HIRA risk lines from Safety Dashboard.xlsx`);
+              await load();
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : "HIRA template load failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      )}
+
+      {sheetHasRegister && canCreate && sheetKey !== "hira" && (
         <Card>
           <h3 className="font-semibold mb-1">
             {showNcrFields ? "Raise Safety NCR (Safety NCR.xlsx form)" : `Log ${sheetView.label.toLowerCase()} record`}
@@ -414,7 +472,7 @@ export default function SafetyPage() {
         </Card>
       )}
 
-      {sheetHasRegister && (
+      {sheetHasRegister && sheetKey !== "hira" && (
         <Card padding={false}>
           <div className="px-4 py-3 border-b border-line bg-sand/40">
             <h3 className="font-semibold text-sm text-left">
@@ -506,7 +564,7 @@ export default function SafetyPage() {
         </Card>
       )}
 
-      {sheetHasRegister && (
+      {sheetHasRegister && sheetKey !== "hira" && (
         <>
       <div className="flex flex-wrap gap-1">
         {["All", "Open", "Closed", ...TYPES].map((f) => (

@@ -35,18 +35,19 @@ function inr(n: number) {
 
 export default function ProgressPage() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
   const [verify, setVerify] = useState<any>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
-  const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | null>(null);
+  const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
   const [msProject, setMsProject] = useState<any>(null);
   const [msBusy, setMsBusy] = useState<"seed" | "import" | "xml" | null>(null);
   const msImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
   const tab = (searchParams.get("tab") as Tab) || "overview";
+  const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
   const canEdit =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
   const canVerify = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
@@ -228,6 +229,25 @@ export default function ProgressPage() {
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setPaBusy(null);
+    }
+  }
+
+  async function syncPvaCashflowToCost() {
+    if (!id) return;
+    setPaBusy("sync");
+    setMsg("");
+    try {
+      const out = await api<{ synced: number; overlaid: number }>(
+        `/api/progress/${id}/planned-actual/sync-cashflow`,
+        { method: "POST", token }
+      );
+      setMsg(
+        `Cashflow synced to Cost — ${out.synced} PVA period(s)${out.overlaid ? ` · ${out.overlaid} chart row(s) overlaid` : ""}. WPR will pick these up on next pack sync.`
+      );
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setPaBusy(null);
     }
@@ -594,8 +614,37 @@ export default function ProgressPage() {
             <div>
               <div className="text-sm font-semibold">Planned Vs. Actual Dashboard</div>
               <p className="text-xs text-steel-muted mt-1 max-w-xl">
-                BOQ monitoring from SPDC Budget is the quantity register you fill here (GFC / achieved). Cashflow and manpower come from the Planned vs Actual workbook. Fills feed DPR auto-qty.
+                Sub-tools match the client workbook: cashflow, manpower shortage, and activity qty. Sync cashflow to Cost so WPR stays aligned. BOQ monitoring still lives under Cost.
               </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {(
+                  [
+                    ["all", "All"],
+                    ["cashflow", "Cashflow"],
+                    ["manpower", "Manpower"],
+                    ["activity", "Activity qty"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`text-xs px-2.5 py-1 rounded border ${
+                      pva === key
+                        ? "bg-brand text-white border-brand"
+                        : "bg-white text-steel border-line hover:border-brand/40"
+                    }`}
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams);
+                      next.set("tab", "planned");
+                      if (key === "all") next.delete("pva");
+                      else next.set("pva", key);
+                      setSearchParams(next, { replace: true });
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
               <input
@@ -623,6 +672,15 @@ export default function ProgressPage() {
                 type="button"
                 variant="secondary"
                 className="!text-xs"
+                disabled={!!paBusy || !canEdit}
+                onClick={() => void syncPvaCashflowToCost()}
+              >
+                {paBusy === "sync" ? "Syncing…" : "Sync cashflow → Cost"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
                 disabled={!!paBusy}
                 onClick={() => void downloadPlannedActual("xlsx")}
               >
@@ -636,8 +694,12 @@ export default function ProgressPage() {
               >
                 {paBusy === "pdf" ? "…" : "Export PDF"}
               </Button>
+              <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs font-semibold text-brand px-1">
+                Open Cost cashflow →
+              </Link>
             </div>
           </Card>
+          {(pva === "all" || pva === "cashflow" || pva === "manpower") && (
           <div className="grid lg:grid-cols-2 gap-4 w-full">
             <BarChart
               title="Cashflow planned vs actual"
@@ -653,6 +715,8 @@ export default function ProgressPage() {
               }))}
             />
           </div>
+          )}
+          {(pva === "all" || pva === "cashflow") && (
           <Card padding={false} className="flex flex-col max-h-[min(50vh,28rem)] min-h-[16rem] overflow-hidden w-full">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Project cashflow · Planned Vs Actual
@@ -682,6 +746,8 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          )}
+          {(pva === "all" || pva === "manpower") && (
           <Card padding={false} className="flex flex-col max-h-[min(50vh,28rem)] min-h-[16rem] overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
             <div className="sheet-register overflow-auto flex-1 min-h-0">
@@ -709,6 +775,9 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          )}
+          {(pva === "all" || pva === "activity") && (
+          <>
           <Card padding={false} className="flex flex-col max-h-[calc(100vh-14rem)] min-h-[24rem] overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
               <span>
@@ -795,6 +864,8 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          )}
+          </>
           )}
         </div>
       )}

@@ -759,6 +759,56 @@ body.is-auth-route #root {
   white-space: nowrap;
 }
 
+.hira-register__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.6875rem;
+}
+.hira-register__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--color-brand-dark) 35%, #0f766e);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.hira-register__table tbody td {
+  padding: 0.28rem 0.4rem;
+  border: 1px solid #d1e7e2;
+  vertical-align: top;
+  line-height: 1.35;
+}
+.hira-register__table tbody tr {
+  cursor: pointer;
+}
+.hira-register__table tbody tr:hover td {
+  filter: brightness(0.985);
+}
+.hira-row-active td {
+  outline: 2px solid var(--color-brand);
+}
+.hira-score-low td:nth-child(9),
+.hira-score-low {
+  background: #ecfdf5;
+  color: #166534;
+}
+.hira-score-medium td:nth-child(9),
+.hira-score-medium {
+  background: #fffbeb;
+  color: #92400e;
+}
+.hira-score-high td:nth-child(9),
+.hira-score-high {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.hira-score-critical td:nth-child(9),
+.hira-score-critical {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 /* ——— Drawing register tables (Master + Site) — theme-aware light/dark ——— */
 .sheet-register__filter-bar {
   background: color-mix(in srgb, var(--color-brand) 5%, var(--color-paper));
