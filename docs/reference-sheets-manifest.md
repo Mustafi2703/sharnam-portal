@@ -25,8 +25,8 @@ This copies canonical files into:
 | Safety NCR.xlsx | Safety NCR form + Observation sheet |
 | Comparative Statement - R2.xlsx | CRM bid management comparative + vendor BOQs |
 | NCR 01 .xlsx | Quality NCR / CAR register |
-| SPDC CUBE REGISTER (1).xlsx | Cube register |
-| Quality Assurance Plan Week 50.xlsx | QAP activities |
+| SPDC CUBE REGISTER (1).xlsx | Cube register — `POST .../cubes/sync-template` |
+| Quality Assurance Plan Week 50.xlsx | QAP activities — `POST .../qap/sync-template` |
 | DRAWING REGISTER - 01.xlsx | Drawing register |
 | HInderance Register Dashboard.xlsx | Hindrance register |
 | Legal Approvals - Dashboard.xlsx | Legal approvals |
