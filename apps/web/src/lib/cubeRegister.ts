@@ -14,6 +14,7 @@ export type CubeRow = {
   strength?: number | null;
   avgStrength?: number | null;
   result?: string | null;
+  testAgency?: string | null;
 };
 
 export type CubeGroup = {
@@ -24,6 +25,7 @@ export type CubeGroup = {
   grade?: string | null;
   testDate7?: string | null;
   testDate28?: string | null;
+  testAgency?: string | null;
   specimens: CubeRow[];
   avgStrength?: number | null;
   result?: string | null;
@@ -50,6 +52,7 @@ export function groupCubeRows(rows: CubeRow[]): CubeGroup[] {
         grade: row.grade,
         testDate7: row.testDate7,
         testDate28: row.testDate28,
+        testAgency: row.testAgency,
         specimens: [],
         avgStrength: null,
         result: null,
@@ -59,6 +62,7 @@ export function groupCubeRows(rows: CubeRow[]): CubeGroup[] {
     g.specimens.push(row);
     if (row.testDate7) g.testDate7 = row.testDate7;
     if (row.testDate28) g.testDate28 = row.testDate28;
+    if (row.testAgency) g.testAgency = row.testAgency;
     if (row.avgStrength != null) g.avgStrength = row.avgStrength;
     if (row.result && /pass|fail/i.test(row.result)) g.result = row.result;
   }

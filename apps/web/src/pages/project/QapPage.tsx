@@ -5,6 +5,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
+import { normalizeWeekLabel, preferWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
 
 /** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
 const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans";
@@ -33,6 +34,7 @@ export default function QapPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const autoSyncRef = useRef(false);
   const canManage = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
   const canUpload = ["admin", "office", "site_employee"].includes(user?.role || "");
 
@@ -72,12 +74,8 @@ export default function QapPage() {
         });
       }
       if (!weekFilter && dashRes?.qap?.length) {
-        const qapList = dashRes.qap as { weekLabel?: string }[];
-        const preferred =
-          qapList.find((q) => /week\s*50/i.test(String(q.weekLabel || ""))) ||
-          qapList.find((q) => q.weekLabel === "W50") ||
-          qapList[0];
-        if (preferred?.weekLabel) setWeekFilter(String(preferred.weekLabel));
+        const labels = (dashRes.qap as { weekLabel?: string }[]).map((q) => q.weekLabel).filter(Boolean) as string[];
+        setWeekFilter(preferWeekLabel(labels));
       }
     } catch {
       setDocs([]);
@@ -88,19 +86,48 @@ export default function QapPage() {
     void load();
   }, [id, token]);
 
+  /** Auto-load full Week 50 template when register is empty, partial, or legacy (missing detail columns). */
+  useEffect(() => {
+    if (!id || !canManage || !dash) return;
+    const rows = (dash.qap || []) as Parameters<typeof qapNeedsFullResync>[0];
+    if (!qapNeedsFullResync(rows)) return;
+    if (autoSyncRef.current) return;
+    autoSyncRef.current = true;
+    void (async () => {
+      setBusy(true);
+      try {
+        const out = await api<{ imported: number; weekLabel: string }>(
+          `/api/checklist/project/${id}/qap/sync-template`,
+          { method: "POST", token }
+        );
+        setMsg(`Loaded ${out.imported} QAP lines from Week 50 template (${out.weekLabel})`);
+        setWeekFilter(out.weekLabel);
+        await load();
+      } catch (err) {
+        autoSyncRef.current = false;
+        setMsg(err instanceof Error ? err.message : "Load Week 50 template failed — use button below");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [dash, id, canManage, token]);
+
   const weeks = useMemo(() => {
     const set = new Set<string>();
     (dash?.qap || []).forEach((q: any) => q.weekLabel && set.add(q.weekLabel));
     return Array.from(set).sort((a, b) => {
-      const prefer = (w: string) => (/week\s*50/i.test(w) ? 0 : w === "W50" ? 1 : 2);
-      return prefer(a) - prefer(b) || b.localeCompare(a);
+      const na = normalizeWeekLabel(a);
+      const nb = normalizeWeekLabel(b);
+      if (na === "Week 50") return -1;
+      if (nb === "Week 50") return 1;
+      return b.localeCompare(a);
     });
   }, [dash?.qap]);
 
   const qapRows = useMemo(() => {
     const rows = dash?.qap || [];
-    if (!weekFilter) return rows.filter((q: any) => /week\s*50|^w50$/i.test(q.weekLabel || ""));
-    return rows.filter((q: any) => q.weekLabel === weekFilter);
+    if (!weekFilter) return rows.filter((q: any) => weekMatchesFilter(q.weekLabel, "Week 50"));
+    return rows.filter((q: any) => weekMatchesFilter(q.weekLabel, weekFilter));
   }, [dash?.qap, weekFilter]);
 
   async function onUpload(e: FormEvent) {
@@ -124,7 +151,7 @@ export default function QapPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-0 flex flex-col">
       <PageHeader
         eyebrow="Quality module"
         title="Quality Assurance Plan"
@@ -145,7 +172,17 @@ export default function QapPage() {
 
       {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {weeks.length > 0 && (
+      {(qapRows.length === 0 || qapNeedsFullResync(dash?.qap || [])) && !busy && (
+        <Card className="!p-4 border-amber-200 bg-amber-50">
+          <p className="text-sm text-amber-900">
+            {qapRows.length === 0
+              ? "No QAP lines for this week — click Load Week 50 template to import all ~295 rows with daily check columns from the client Excel."
+              : "QAP register is partial or missing detail columns (frequency, conformance, sign-offs). Click Load Week 50 template to reload the full Week 50 sheet (~295 lines)."}
+          </p>
+        </Card>
+      )}
+
+      {(weeks.length > 0 || canManage) && (
         <div className="flex flex-wrap gap-2 items-center text-sm">
           <span className="text-steel-muted font-semibold">Week / plan:</span>
           <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]">
@@ -243,6 +280,7 @@ export default function QapPage() {
         </div>
       )}
 
+      <div className="min-h-0 flex-1 flex flex-col">
       <QapDetailRegister
         projectId={id!}
         token={token}
@@ -252,6 +290,7 @@ export default function QapPage() {
         showWeekFilter={false}
         project={project}
       />
+      </div>
 
       {canManage && (
         <Card>
@@ -284,7 +323,7 @@ export default function QapPage() {
             }}
           >
             <Input
-              placeholder="Week (e.g. W50)"
+              placeholder="Week (e.g. Week 50)"
               value={addForm.weekLabel}
               onChange={(e) => setAddForm({ ...addForm, weekLabel: e.target.value })}
               required

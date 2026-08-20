@@ -157,6 +157,7 @@ export async function buildDprAutoFill(
     prev,
     checklistFillsToday,
     siteRecordsToday,
+    qapAgencies,
   ] = await Promise.all([
     prisma.costMonitoringLine.findMany({
       where: { projectId, packageName: { in: pkgs } },
@@ -213,6 +214,12 @@ export async function buildDprAutoFill(
       where: { projectId, occurredAt: { gte: start, lt: end } },
       orderBy: { occurredAt: "desc" },
       take: 40,
+    }),
+    prisma.qapActivity.findMany({
+      where: { projectId, testAgency: { not: null } },
+      select: { testAgency: true },
+      distinct: ["testAgency"],
+      take: 10,
     }),
   ]);
 
@@ -350,6 +357,18 @@ export async function buildDprAutoFill(
     ...ncrsToday.map((n) => `${/^CAR/i.test(n.number || "") ? "CAR" : "NCR"} ${n.number}: ${n.description.slice(0, 80)}`),
   ];
 
+  const cubeAgencies = [
+    ...new Set(
+      cubesToday.map((c) => c.testAgency).filter(Boolean) as string[]
+    ),
+  ];
+  const qapAgencyList = qapAgencies.map((a) => a.testAgency).filter(Boolean) as string[];
+  const testingAgencyLog = [...new Set([...cubeAgencies, ...qapAgencyList])].join(", ") || "—";
+
+  const cubeCastGroups = cubesToday.length ? new Set(cubesToday.map((c) => `${c.srNo}|${c.description}`)).size : 0;
+  const cubePass = cubesToday.filter((c) => /pass/i.test(c.result || "")).length;
+  const cubeFail = cubesToday.filter((c) => /fail/i.test(c.result || "")).length;
+
   const qualityTests: DprQualityTest[] = [
     {
       parameter: "SOR — site observations today",
@@ -365,14 +384,17 @@ export async function buildDprAutoFill(
     },
     {
       parameter: "Pour cards offered / approved",
-      figure: String(cubesToday.length ? new Set(cubesToday.map((c) => c.srNo)).size : "—"),
+      figure: cubeCastGroups ? String(cubeCastGroups) : "—",
     },
     {
       parameter: "Concrete cube sets cast / slump tests",
-      figure:
-        cubesToday.length
-          ? Array.from(new Set(cubesToday.map((c) => c.description))).join("; ")
-          : "—",
+      figure: cubesToday.length
+        ? `${cubeCastGroups} set(s) · ${cubesToday.length} specimen(s) · ${cubePass} pass · ${cubeFail} fail`
+        : "—",
+    },
+    {
+      parameter: "Testing agency (cube / QAP)",
+      figure: testingAgencyLog,
     },
     {
       parameter: "QI / Safety checklists filled today",

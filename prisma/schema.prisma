@@ -1607,6 +1607,8 @@ model CubeTest {
   strength    Float?
   avgStrength Float?
   result      String?
+  /// NABL / site lab (SPDC register + DPR quality block)
+  testAgency  String?
   source      String?
   createdAt   DateTime  @default(now())
 

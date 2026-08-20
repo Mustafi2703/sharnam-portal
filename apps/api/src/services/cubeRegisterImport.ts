@@ -136,9 +136,7 @@ export async function importCubeRegisterWorkbook(projectId: string, buffer: Buff
 
   await prisma.$transaction(async (tx) => {
     if (replace) {
-      await tx.cubeTest.deleteMany({
-        where: { projectId, source: { in: ["SPDC CUBE REGISTER (1).xlsx", "portal-cube-template"] } },
-      });
+      await tx.cubeTest.deleteMany({ where: { projectId } });
     }
     for (const row of parsed) {
       await tx.cubeTest.create({

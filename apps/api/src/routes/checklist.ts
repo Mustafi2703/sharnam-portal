@@ -1484,6 +1484,7 @@ checklistRouter.post(
         strength: s7 ?? s28 ?? (b.strength != null ? Number(b.strength) : null),
         avgStrength: b.avgStrength != null ? Number(b.avgStrength) : null,
         result: b.result ? String(b.result) : "Pending",
+        testAgency: b.testAgency ? String(b.testAgency) : null,
         source: "portal",
       },
     });
@@ -1501,6 +1502,7 @@ checklistRouter.patch(
     if (b.description != null) data.description = String(b.description);
     if (b.grade != null) data.grade = String(b.grade);
     if (b.result != null) data.result = String(b.result);
+    if (b.testAgency !== undefined) data.testAgency = b.testAgency ? String(b.testAgency) : null;
     if (b.castDate !== undefined) data.castDate = b.castDate ? new Date(b.castDate) : null;
     if (b.testDate7 !== undefined) data.testDate7 = b.testDate7 ? new Date(b.testDate7) : null;
     if (b.testDate28 !== undefined) data.testDate28 = b.testDate28 ? new Date(b.testDate28) : null;

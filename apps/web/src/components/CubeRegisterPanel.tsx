@@ -1,8 +1,7 @@
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { groupCubeRows, fmtCubeDate, type CubeRow } from "../lib/cubeRegister";
+import { groupCubeRows, fmtCubeDate, type CubeGroup, type CubeRow } from "../lib/cubeRegister";
 import { Badge, Button, Card, Input, Select } from "./ui";
-import { RegisterEntryModal } from "./RegisterEntryModal";
 import { RegisterFilterBar } from "./RegisterFilterBar";
 
 export type { CubeRow };
@@ -12,6 +11,7 @@ const emptyCube = () => ({
   castDate: "",
   description: "",
   grade: "",
+  testAgency: "",
   cubeWeight: "",
   testDate7: "",
   testDate28: "",
@@ -23,9 +23,19 @@ const emptyCube = () => ({
   result: "Pending",
 });
 
-function fmtDate(v?: string | null) {
-  if (!v) return "—";
-  return new Date(v).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+function specimenPhase(c: CubeRow): "7D" | "28D" | "—" {
+  if (c.load7) return "7D";
+  if (c.load28) return "28D";
+  if (c.strength7 != null) return "7D";
+  if (c.strength28 != null) return "28D";
+  return "—";
+}
+
+function rowStrength(c: CubeRow): number | null {
+  const phase = specimenPhase(c);
+  if (phase === "7D") return c.strength7 ?? (c.load7 ? c.strength : null) ?? null;
+  if (phase === "28D") return c.strength28 ?? (c.load28 ? c.strength : null) ?? null;
+  return c.strength ?? null;
 }
 
 type Props = {
@@ -36,12 +46,9 @@ type Props = {
   onChanged: () => void | Promise<void>;
 };
 
-/** SPDC CUBE REGISTER — grouped by Sr. No. / footing description with filters. */
+/** SPDC CUBE REGISTER — grouped specimens with inline edit + DPR summary stats. */
 export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }: Props) {
   const [form, setForm] = useState(emptyCube());
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState(emptyCube());
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [filters, setFilters] = useState<Record<string, string>>({
@@ -51,10 +58,15 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
     to: "",
     q: "",
   });
+  const autoSyncRef = useRef(false);
 
   useEffect(() => {
-    if (!modalOpen) setEditForm(emptyCube());
-  }, [modalOpen]);
+    if (!canEdit || autoSyncRef.current || !projectId) return;
+    const spdcLike = rows.filter((r) => r.castDate && r.grade).length;
+    if (rows.length >= 100 && spdcLike >= 80) return;
+    autoSyncRef.current = true;
+    void syncTemplate(true);
+  }, [canEdit, rows, projectId]);
 
   const grades = useMemo(() => {
     const set = new Set<string>();
@@ -75,7 +87,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
       if (filters.from && castDay && castDay < filters.from) return false;
       if (filters.to && castDay && castDay > filters.to) return false;
       if (filters.q) {
-        const hay = `${c.srNo} ${c.description} ${c.grade}`.toLowerCase();
+        const hay = `${c.srNo} ${c.description} ${c.grade} ${c.testAgency || ""}`.toLowerCase();
         if (!hay.includes(filters.q.toLowerCase())) return false;
       }
       return true;
@@ -84,21 +96,55 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
 
   const grouped = useMemo(() => groupCubeRows(filtered), [filtered]);
 
-  async function syncTemplate() {
-    setBusy(true);
-    setMsg("");
+  const stats = useMemo(() => {
+    const pass = rows.filter((r) => /pass/i.test(r.result || "")).length;
+    const fail = rows.filter((r) => /fail/i.test(r.result || "")).length;
+    const pending = rows.length - pass - fail;
+    const groups = groupCubeRows(rows).length;
+    const agencies = new Set(rows.map((r) => r.testAgency).filter(Boolean));
+    return { pass, fail, pending, groups, agencies: agencies.size };
+  }, [rows]);
+
+  async function syncTemplate(silent = false) {
+    if (!silent) {
+      setBusy(true);
+      setMsg("");
+    }
     try {
       const out = await api<{ imported: number; groups: number }>(
         `/api/checklist/project/${projectId}/cubes/sync-template`,
         { method: "POST", token }
       );
-      setMsg(`Loaded ${out.imported} cube specimens in ${out.groups} footing groups from SPDC register.`);
+      if (!silent) {
+        setMsg(`Loaded ${out.imported} cube specimens in ${out.groups} footing groups from SPDC register.`);
+      }
       await onChanged();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Sync failed");
+      autoSyncRef.current = false;
+      if (!silent) setMsg(err instanceof Error ? err.message : "Sync failed");
     } finally {
-      setBusy(false);
+      if (!silent) setBusy(false);
     }
+  }
+
+  async function patchCube(id: string, body: Record<string, unknown>) {
+    await api(`/api/checklist/project/${projectId}/cubes/${id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function patchGroupField(group: CubeGroup, body: Record<string, unknown>) {
+    for (const s of group.specimens) {
+      await patchCube(s.id, body);
+    }
+    await onChanged();
+  }
+
+  async function patchRow(id: string, body: Record<string, unknown>) {
+    await patchCube(id, body);
+    await onChanged();
   }
 
   async function submitCube(body: Record<string, unknown>, method: "POST" | "PATCH", id?: string) {
@@ -121,9 +167,10 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
           cubeWeight: form.cubeWeight ? Number(form.cubeWeight) : null,
           load7: form.load7 ? Number(form.load7) : null,
           load28: form.load28 ? Number(form.load28) : null,
-          strength7: form.load7 && form.strength7 ? Number(form.strength7) : null,
-          strength28: form.load28 && form.strength28 ? Number(form.strength28) : null,
+          strength7: form.strength7 ? Number(form.strength7) : null,
+          strength28: form.strength28 ? Number(form.strength28) : null,
           avgStrength: form.avgStrength ? Number(form.avgStrength) : null,
+          testAgency: form.testAgency || null,
         },
         "POST"
       );
@@ -136,63 +183,20 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
     }
   }
 
-  function openEdit(c: CubeRow) {
-    setEditId(c.id);
-    setEditForm({
-      srNo: c.srNo || "",
-      castDate: c.castDate ? c.castDate.slice(0, 10) : "",
-      description: c.description,
-      grade: c.grade || "",
-      cubeWeight: c.cubeWeight != null ? String(c.cubeWeight) : "",
-      testDate7: c.testDate7 ? c.testDate7.slice(0, 10) : "",
-      testDate28: c.testDate28 ? c.testDate28.slice(0, 10) : "",
-      load7: c.load7 != null ? String(c.load7) : "",
-      load28: c.load28 != null ? String(c.load28) : "",
-      strength7: c.strength7 != null ? String(c.strength7) : c.strength != null ? String(c.strength) : "",
-      strength28: c.strength28 != null ? String(c.strength28) : "",
-      avgStrength: c.avgStrength != null ? String(c.avgStrength) : "",
-      result: c.result || "Pending",
-    });
-    setModalOpen(true);
-  }
-
-  async function saveModal() {
-    if (!editId) return;
-    setBusy(true);
-    try {
-      await submitCube(
-        {
-          ...editForm,
-          cubeWeight: editForm.cubeWeight ? Number(editForm.cubeWeight) : null,
-          load7: editForm.load7 ? Number(editForm.load7) : null,
-          load28: editForm.load28 ? Number(editForm.load28) : null,
-          strength7: editForm.strength7 ? Number(editForm.strength7) : null,
-          strength28: editForm.strength28 ? Number(editForm.strength28) : null,
-          avgStrength: editForm.avgStrength ? Number(editForm.avgStrength) : null,
-        },
-        "PATCH",
-        editId
-      );
-      setModalOpen(false);
-      setEditId(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const formFields = (
     <>
       <Input placeholder="Sr. No." value={form.srNo} onChange={(e) => setForm({ ...form, srNo: e.target.value })} />
       <Input type="date" value={form.castDate} onChange={(e) => setForm({ ...form, castDate: e.target.value })} />
       <Input className="sm:col-span-2" placeholder="Description / footing" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
       <Input placeholder="Concrete grade (e.g. M:25)" value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} />
+      <Input placeholder="Testing agency (NABL / site lab)" value={form.testAgency} onChange={(e) => setForm({ ...form, testAgency: e.target.value })} />
       <Input placeholder="Weight of cube (kg)" value={form.cubeWeight} onChange={(e) => setForm({ ...form, cubeWeight: e.target.value })} />
       <Input type="date" value={form.testDate7} onChange={(e) => setForm({ ...form, testDate7: e.target.value })} title="7-day testing date" />
       <Input type="date" value={form.testDate28} onChange={(e) => setForm({ ...form, testDate28: e.target.value })} title="28-day testing date" />
       <Input placeholder="7-day load (kN)" value={form.load7} onChange={(e) => setForm({ ...form, load7: e.target.value })} />
       <Input placeholder="28-day load (kN)" value={form.load28} onChange={(e) => setForm({ ...form, load28: e.target.value })} />
-      <Input placeholder="7-day cube strength" value={form.strength7} onChange={(e) => setForm({ ...form, strength7: e.target.value })} />
-      <Input placeholder="28-day cube strength" value={form.strength28} onChange={(e) => setForm({ ...form, strength28: e.target.value })} />
+      <Input placeholder="7-day cube strength (MPa)" value={form.strength7} onChange={(e) => setForm({ ...form, strength7: e.target.value })} />
+      <Input placeholder="28-day cube strength (MPa)" value={form.strength28} onChange={(e) => setForm({ ...form, strength28: e.target.value })} />
       <Input placeholder="Average strength" value={form.avgStrength} onChange={(e) => setForm({ ...form, avgStrength: e.target.value })} />
       <Select value={form.result} onChange={(e) => setForm({ ...form, result: e.target.value })}>
         {["Pending", "PASS", "FAIL"].map((r) => (
@@ -202,14 +206,64 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
     </>
   );
 
+  function cellInput(
+    defaultValue: string,
+    onSave: (v: string) => void,
+    opts?: { type?: string; className?: string; placeholder?: string }
+  ) {
+    if (!canEdit) return defaultValue || "—";
+    return (
+      <Input
+        type={opts?.type || "text"}
+        className={`!py-0.5 !text-[11px] min-w-[4rem] ${opts?.className || ""}`}
+        defaultValue={defaultValue}
+        placeholder={opts?.placeholder}
+        onBlur={(e) => {
+          const v = e.target.value;
+          if (v === defaultValue) return;
+          onSave(v);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <Card className="!p-3">
+          <div className="text-[10px] uppercase text-steel-muted">Specimens</div>
+          <div className="text-xl font-display">{filtered.length}</div>
+        </Card>
+        <Card className="!p-3">
+          <div className="text-[10px] uppercase text-steel-muted">Footing groups</div>
+          <div className="text-xl font-display">{grouped.length}</div>
+        </Card>
+        <Card className="!p-3">
+          <div className="text-[10px] uppercase text-steel-muted">Pass</div>
+          <div className="text-xl font-display text-ok">{stats.pass}</div>
+        </Card>
+        <Card className="!p-3">
+          <div className="text-[10px] uppercase text-steel-muted">Fail</div>
+          <div className="text-xl font-display text-danger">{stats.fail}</div>
+        </Card>
+        <Card className="!p-3">
+          <div className="text-[10px] uppercase text-steel-muted">Pending</div>
+          <div className="text-xl font-display">{stats.pending}</div>
+        </Card>
+        <Card className="!p-3">
+          <div className="text-[10px] uppercase text-steel-muted">Test agencies logged</div>
+          <div className="text-xl font-display">{stats.agencies}</div>
+        </Card>
+      </div>
+
       {canEdit && (
         <Card>
           <h3 className="font-semibold mb-1">Add cube test entry</h3>
-          <p className="text-xs text-steel-muted mb-3">SPDC CUBE REGISTER — group by Sr. No. / footing; multiple test rows per group.</p>
+          <p className="text-xs text-steel-muted mb-3">
+            SPDC format — each footing group has multiple specimens (typically 7-day + 28-day rows). Feeds DPR quality block.
+          </p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={onCreate}>
             {formFields}
             <Button type="submit" disabled={busy} className="sm:col-span-2 lg:col-span-4 sm:w-auto">
@@ -219,13 +273,19 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
         </Card>
       )}
 
+      {rows.length === 0 && !busy && (
+        <Card className="!p-3 border-amber-200 bg-amber-50 text-sm text-amber-900">
+          Cube register is empty — loading SPDC template automatically, or click <strong>Load SPDC cube template</strong>.
+        </Card>
+      )}
+
       <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem]">
         <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold text-sm text-left">
             Cube register — SPDC format ({filtered.length} specimens · {grouped.length} groups)
           </h3>
           {canEdit && (
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => void syncTemplate()}>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => void syncTemplate(false)}>
               Load SPDC cube template
             </Button>
           )}
@@ -237,52 +297,29 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
             { key: "result", label: "Result", type: "select", options: ["PASS", "FAIL", "Pending"] },
             { key: "from", label: "Cast from", type: "date" },
             { key: "to", label: "Cast to", type: "date" },
-            { key: "q", label: "Search", type: "text", placeholder: "Sr, footing, grade…" },
+            { key: "q", label: "Search", type: "text", placeholder: "Sr, footing, agency…" },
           ]}
           values={filters}
           onChange={(k, v) => setFilters({ ...filters, [k]: v })}
           onClear={() => setFilters({ grade: "All", result: "All", from: "", to: "", q: "" })}
         />
 
-        <div className="sheet-register overflow-auto flex-1 min-h-0">
-          <table className="sheet-register__table min-w-[80rem] w-full text-[11px] border-collapse">
+        <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
+          <table className="sheet-register__table min-w-[92rem] w-full text-[11px] border-collapse">
             <thead className="sticky top-0 z-10 bg-white shadow-sm">
               <tr className="bg-brand text-white text-[10px]">
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Sr. No.
-                </th>
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Date of Casting
-                </th>
-                <th rowSpan={2} className="text-left min-w-[10rem] border border-brand-dark/30 px-1 py-1">
-                  Description
-                </th>
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Concrete Grade
-                </th>
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Weight of Cube
-                </th>
-                <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">
-                  Testing Date
-                </th>
-                <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">
-                  Load
-                </th>
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Cube Strength
-                </th>
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Average Strength
-                </th>
-                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                  Result
-                </th>
-                {canEdit && (
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
-                    Action
-                  </th>
-                )}
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Sr. No.</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Date of Casting</th>
+                <th rowSpan={2} className="text-left min-w-[10rem] border border-brand-dark/30 px-1 py-1">Description</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Grade</th>
+                <th rowSpan={2} className="text-left min-w-[7rem] border border-brand-dark/30 px-1 py-1">Test agency</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Phase</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Weight</th>
+                <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">Testing Date</th>
+                <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">Load (kN)</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Strength MPa</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Avg</th>
+                <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Result</th>
               </tr>
               <tr className="bg-brand text-white text-[10px]">
                 <th className="border border-brand-dark/30 px-1 py-0.5">7-day</th>
@@ -295,60 +332,118 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
               {grouped.map((group) => (
                 <Fragment key={group.key}>
                   {group.specimens.map((c, idx) => {
-                    const strength = c.strength28 ?? c.strength7 ?? c.strength;
-                    const showAvg = c.avgStrength != null;
-                    const showResult = c.result && /pass|fail|pending/i.test(c.result);
+                    const phase = specimenPhase(c);
+                    const strength = rowStrength(c);
+                    const isFirst = idx === 0;
                     return (
                       <tr key={c.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/15"}>
                         <td className="text-left font-mono border border-line px-1 py-0.5 align-top">
-                          {idx === 0 ? group.srNo : ""}
-                        </td>
-                        <td className="text-left whitespace-nowrap border border-line px-1 py-0.5 align-top">
-                          {idx === 0 ? fmtCubeDate(group.castDate) : ""}
-                        </td>
-                        <td className="text-left border border-line px-1 py-0.5 align-top max-w-[12rem]">
-                          {idx === 0 ? group.description : ""}
+                          {isFirst
+                            ? cellInput(group.srNo, (v) => void patchGroupField(group, { srNo: v }))
+                            : ""}
                         </td>
                         <td className="text-left border border-line px-1 py-0.5 align-top">
-                          {idx === 0 ? group.grade || "—" : ""}
+                          {isFirst
+                            ? cellInput(
+                                group.castDate ? group.castDate.slice(0, 10) : "",
+                                (v) => void patchGroupField(group, { castDate: v || null }),
+                                { type: "date" }
+                              )
+                            : ""}
                         </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
-                          {c.cubeWeight ?? "—"}
-                        </td>
-                        <td className="text-left whitespace-nowrap border border-line px-1 py-0.5 align-top text-[10px]">
-                          {idx === 0 ? fmtCubeDate(group.testDate7) : ""}
-                        </td>
-                        <td className="text-left whitespace-nowrap border border-line px-1 py-0.5 align-top text-[10px]">
-                          {idx === 0 ? fmtCubeDate(group.testDate28) : ""}
-                        </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
-                          {c.load7 ?? "—"}
-                        </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
-                          {c.load28 ?? "—"}
-                        </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top font-medium">
-                          {strength ?? "—"}
-                        </td>
-                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
-                          {showAvg ? c.avgStrength : "—"}
+                        <td className="text-left border border-line px-1 py-0.5 align-top max-w-[14rem]">
+                          {isFirst
+                            ? cellInput(group.description, (v) => void patchGroupField(group, { description: v }), {
+                                className: "min-w-[10rem]",
+                              })
+                            : ""}
                         </td>
                         <td className="text-left border border-line px-1 py-0.5 align-top">
-                          {showResult ? (
-                            <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
-                              {c.result}
-                            </Badge>
-                          ) : (
-                            "—"
+                          {isFirst
+                            ? cellInput(group.grade || "", (v) => void patchGroupField(group, { grade: v }))
+                            : ""}
+                        </td>
+                        <td className="text-left border border-line px-1 py-0.5 align-top">
+                          {isFirst
+                            ? cellInput(group.testAgency || c.testAgency || "", (v) =>
+                                void patchGroupField(group, { testAgency: v || null })
+                              )
+                            : ""}
+                        </td>
+                        <td className="text-left font-mono border border-line px-1 py-0.5 align-top">{phase}</td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {cellInput(c.cubeWeight != null ? String(c.cubeWeight) : "", (v) =>
+                            void patchRow(c.id, { cubeWeight: v ? Number(v) : null })
                           )}
                         </td>
-                        {canEdit && (
-                          <td className="text-left border border-line px-1 py-0.5 align-top">
-                            <Button type="button" variant="secondary" className="!py-0.5 !px-1.5 !text-[9px]" onClick={() => openEdit(c)}>
-                              Edit
-                            </Button>
-                          </td>
-                        )}
+                        <td className="text-left border border-line px-1 py-0.5 align-top">
+                          {phase === "7D" || isFirst
+                            ? cellInput(
+                                (c.testDate7 || group.testDate7 || "").slice(0, 10),
+                                (v) => void patchRow(c.id, { testDate7: v || null }),
+                                { type: "date" }
+                              )
+                            : "—"}
+                        </td>
+                        <td className="text-left border border-line px-1 py-0.5 align-top">
+                          {phase === "28D" || isFirst
+                            ? cellInput(
+                                (c.testDate28 || group.testDate28 || "").slice(0, 10),
+                                (v) => void patchRow(c.id, { testDate28: v || null }),
+                                { type: "date" }
+                              )
+                            : "—"}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {phase !== "28D"
+                            ? cellInput(c.load7 != null ? String(c.load7) : "", (v) =>
+                                void patchRow(c.id, { load7: v ? Number(v) : null })
+                              )
+                            : "—"}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {phase !== "7D"
+                            ? cellInput(c.load28 != null ? String(c.load28) : "", (v) =>
+                                void patchRow(c.id, { load28: v ? Number(v) : null })
+                              )
+                            : "—"}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top font-medium">
+                          {cellInput(strength != null ? String(strength) : "", (v) => {
+                            const n = v ? Number(v) : null;
+                            if (phase === "7D") void patchRow(c.id, { strength7: n, strength: n });
+                            else if (phase === "28D") void patchRow(c.id, { strength28: n, strength: n });
+                            else void patchRow(c.id, { strength: n });
+                          })}
+                        </td>
+                        <td className="text-left tabular-nums border border-line px-1 py-0.5 align-top">
+                          {isFirst && group.avgStrength != null
+                            ? cellInput(String(group.avgStrength), (v) =>
+                                void patchGroupField(group, { avgStrength: v ? Number(v) : null })
+                              )
+                            : isFirst
+                              ? cellInput(c.avgStrength != null ? String(c.avgStrength) : "", (v) =>
+                                  void patchGroupField(group, { avgStrength: v ? Number(v) : null })
+                                )
+                              : "—"}
+                        </td>
+                        <td className="text-left border border-line px-1 py-0.5 align-top">
+                          {canEdit ? (
+                            <Select
+                              className="!py-0.5 !text-[10px] !min-w-[5rem]"
+                              value={c.result || "Pending"}
+                              onChange={(e) => void patchRow(c.id, { result: e.target.value })}
+                            >
+                              {["Pending", "PASS", "FAIL"].map((r) => (
+                                <option key={r}>{r}</option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
+                              {c.result || "Pending"}
+                            </Badge>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -356,7 +451,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
               ))}
               {!grouped.length && (
                 <tr>
-                  <td colSpan={canEdit ? 13 : 12} className="empty text-left p-4">
+                  <td colSpan={14} className="empty text-left p-4">
                     No cube rows — Load SPDC template or add specimens above.
                   </td>
                 </tr>
@@ -365,28 +460,6 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged }
           </table>
         </div>
       </Card>
-
-      <RegisterEntryModal open={modalOpen} title="Edit cube entry" onClose={() => setModalOpen(false)} onSave={saveModal} saving={busy}>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Input value={editForm.srNo} onChange={(e) => setEditForm({ ...editForm, srNo: e.target.value })} placeholder="Sr. No." />
-          <Input type="date" value={editForm.castDate} onChange={(e) => setEditForm({ ...editForm, castDate: e.target.value })} />
-          <Input className="sm:col-span-2" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Description" />
-          <Input value={editForm.grade} onChange={(e) => setEditForm({ ...editForm, grade: e.target.value })} placeholder="Grade" />
-          <Input value={editForm.cubeWeight} onChange={(e) => setEditForm({ ...editForm, cubeWeight: e.target.value })} placeholder="Weight" />
-          <Input type="date" value={editForm.testDate7} onChange={(e) => setEditForm({ ...editForm, testDate7: e.target.value })} />
-          <Input type="date" value={editForm.testDate28} onChange={(e) => setEditForm({ ...editForm, testDate28: e.target.value })} />
-          <Input value={editForm.load7} onChange={(e) => setEditForm({ ...editForm, load7: e.target.value })} placeholder="7-day load" />
-          <Input value={editForm.load28} onChange={(e) => setEditForm({ ...editForm, load28: e.target.value })} placeholder="28-day load" />
-          <Input value={editForm.strength7} onChange={(e) => setEditForm({ ...editForm, strength7: e.target.value })} placeholder="7-day strength" />
-          <Input value={editForm.strength28} onChange={(e) => setEditForm({ ...editForm, strength28: e.target.value })} placeholder="28-day strength" />
-          <Input value={editForm.avgStrength} onChange={(e) => setEditForm({ ...editForm, avgStrength: e.target.value })} placeholder="Average" />
-          <Select value={editForm.result} onChange={(e) => setEditForm({ ...editForm, result: e.target.value })}>
-            {["Pending", "PASS", "FAIL"].map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </Select>
-        </div>
-      </RegisterEntryModal>
     </div>
   );
 }

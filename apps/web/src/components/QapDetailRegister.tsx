@@ -1,6 +1,7 @@
-import { useMemo, useState, Fragment } from "react";
+import { useMemo, useState, useEffect, Fragment } from "react";
 import { api } from "../api";
 import { QAP_LEGENDS, remarksCellClass } from "../lib/inspectionRequestForms";
+import { preferWeekLabel, weekMatchesFilter } from "../lib/qapWeek";
 
 function formatDayLabel(raw: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
@@ -73,9 +74,13 @@ export function QapDetailRegister({
   }, [rows]);
   const [weekFilter, setWeekFilter] = useState(weeks[0] || "");
 
+  useEffect(() => {
+    if (weeks.length && !weekFilter) setWeekFilter(preferWeekLabel(weeks));
+  }, [weeks, weekFilter]);
+
   const filtered = useMemo(() => {
-    if (!showWeekFilter || !weekFilter) return rows;
-    return rows.filter((r) => r.weekLabel === weekFilter);
+    if (!showWeekFilter || !weekFilter) return rows.filter((r) => weekMatchesFilter(r.weekLabel, "Week 50"));
+    return rows.filter((r) => weekMatchesFilter(r.weekLabel, weekFilter));
   }, [rows, weekFilter, showWeekFilter]);
 
   const dayLabels = useMemo(() => {
@@ -123,7 +128,7 @@ export function QapDetailRegister({
   const colSpan = 11 + dayLabels.length + 1;
 
   return (
-    <Card padding={false} className="overflow-hidden flex flex-col max-h-[calc(100vh-8rem)]">
+    <Card padding={false} className="overflow-hidden flex flex-col min-h-[28rem] max-h-[min(72vh,56rem)]">
       {/* Excel-style header block */}
       <div className="border-b border-line bg-white">
         <div className="grid lg:grid-cols-[8rem_1fr_14rem] gap-0 border-b border-line">
@@ -182,7 +187,7 @@ export function QapDetailRegister({
         )}
       </div>
 
-      <div className="sheet-register overflow-auto flex-1 min-h-0 max-h-[calc(100vh-18rem)]">
+      <div className="sheet-register overflow-auto flex-1 min-h-[20rem] overscroll-contain">
         <table className="sheet-register__table min-w-[88rem] w-full text-[11px] border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-brand text-white">

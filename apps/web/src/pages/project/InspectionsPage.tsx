@@ -237,7 +237,8 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "car-register" && (
-        <Card>
+        <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem] overflow-hidden">
+          <div className="px-4 py-3 border-b border-line shrink-0">
           <h3 className="font-semibold mb-3">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
           {canManage && (
             <form
@@ -302,9 +303,10 @@ export default function InspectionsPage() {
               <Button type="submit">Raise {ncrForm.kind}</Button>
             </form>
           )}
-          <div className="overflow-x-auto max-h-[28rem] sheet-register">
+          </div>
+          <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
             <table className="sheet-register__table min-w-[40rem] w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr>
                   <th className="text-left">No</th>
                   <th className="text-left">Type</th>
@@ -381,6 +383,7 @@ export default function InspectionsPage() {
               </tbody>
             </table>
           </div>
+          <div className="shrink-0">
           <RegisterEntryModal
             open={!!ncrEdit}
             title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
@@ -444,6 +447,7 @@ export default function InspectionsPage() {
               onChange={(e) => setNcrEditForm({ ...ncrEditForm, actualClosure: e.target.value })}
             />
           </RegisterEntryModal>
+          </div>
         </Card>
       )}
 

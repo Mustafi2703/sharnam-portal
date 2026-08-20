@@ -72,6 +72,7 @@ export function parseQapWeek50Workbook(buffer: Buffer): {
       if (m) weekLabel = `Week ${m[1]}`;
     }
   }
+  weekLabel = `Week ${parseInt(String(weekLabel).replace(/\D/g, "") || "50", 10)}`;
 
   const headerRow = rows[7] || [];
   const dayLabels: string[] = [];
@@ -99,7 +100,17 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
 
   await prisma.$transaction(async (tx) => {
     if (replaceWeek) {
-      await tx.qapActivity.deleteMany({ where: { projectId, weekLabel: parsed.weekLabel } });
+      await tx.qapActivity.deleteMany({
+        where: {
+          projectId,
+          OR: [
+            { weekLabel: parsed.weekLabel },
+            { weekLabel: "W50" },
+            { weekLabel: "Week 50" },
+            { weekLabel: { startsWith: "Week 50" } },
+          ],
+        },
+      });
     }
     for (const row of parsed.rows) {
       const flags = qapStatusFromRow(row);
@@ -132,6 +143,33 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
   });
 
   return { weekLabel: parsed.weekLabel, imported: parsed.rows.length, dayLabels: parsed.dayLabels };
+}
+
+type QapRowProbe = {
+  weekLabel?: string | null;
+  frequency?: string | null;
+  description?: string | null;
+  contractorPerformer?: string | null;
+  codeOfConformance?: string | null;
+  activity?: string | null;
+  section?: string | null;
+};
+
+function weekNumber(wl?: string | null): number | null {
+  const m = String(wl || "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** True when Week 50 register is missing or still legacy/partial (no frequency / sign-off columns). */
+export function qapRowsNeedFullResync(rows: QapRowProbe[]): boolean {
+  if (!rows.length) return true;
+  const pool = rows.filter((r) => weekNumber(r.weekLabel) === 50);
+  const set = pool.length ? pool : rows;
+  if (set.length < 250) return true;
+  const rich = set.filter((r) => r.frequency || r.contractorPerformer || r.codeOfConformance).length;
+  if (rich / set.length < 0.35) return true;
+  const legacy = set.filter((r) => !r.section && / — /.test(String(r.activity || ""))).length;
+  return legacy / set.length > 0.25;
 }
 
 export async function exportQapWorkbook(projectId: string, weekLabel?: string) {

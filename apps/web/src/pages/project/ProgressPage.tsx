@@ -671,98 +671,106 @@ export default function ProgressPage() {
               }))}
             />
           </div>
-          <Card className="overflow-x-auto !p-0 w-full">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Project cashflow · Planned Vs Actual</div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
+          <Card padding={false} className="flex flex-col max-h-[min(50vh,28rem)] min-h-[16rem] overflow-hidden w-full">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
+              Project cashflow · Planned Vs Actual
+            </div>
+            <div className="sheet-register overflow-auto flex-1 min-h-0">
+            <table className="sheet-register__table min-w-[36rem] w-full text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
                   <th className="py-2.5 px-3">Month</th>
                   <th className="py-2.5 pr-3">RA</th>
-                  <th className="py-2.5 pr-3">Planned</th>
-                  <th className="py-2.5 pr-3">Actual</th>
-                  <th className="py-2.5 px-3">%</th>
+                  <th className="py-2.5 pr-3 text-right">Planned</th>
+                  <th className="py-2.5 pr-3 text-right">Actual</th>
+                  <th className="py-2.5 px-3 text-right">%</th>
                 </tr>
               </thead>
               <tbody>
                 {data.plannedActual.map((p: any) => (
                   <tr key={p.id} className="border-b border-line/70">
-                    <td className="py-2 px-3 font-medium">{p.periodLabel}</td>
+                    <td className="py-2 px-3 font-medium whitespace-nowrap">{p.periodLabel}</td>
                     <td className="py-2 pr-3 font-mono text-xs">{p.packageName}</td>
-                    <td className="py-2 pr-3">{inr(p.plannedAmount)}</td>
-                    <td className="py-2 pr-3">{inr(p.actualAmount)}</td>
-                    <td className="py-2 px-3">{pct(p.actualPct)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{inr(p.plannedAmount)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{inr(p.actualAmount)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">{pct(p.actualPct)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Weekly manpower</div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
+          <Card padding={false} className="flex flex-col max-h-[min(50vh,28rem)] min-h-[16rem] overflow-hidden">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
+            <div className="sheet-register overflow-auto flex-1 min-h-0">
+            <table className="sheet-register__table w-full text-sm min-w-[32rem]">
+              <thead className="sticky top-0 z-10">
+                <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
                   <th className="py-2.5 px-3">Trade</th>
-                  <th className="py-2.5 pr-3">Required</th>
-                  <th className="py-2.5 pr-3">Available</th>
-                  <th className="py-2.5 pr-3">Shortage</th>
-                  <th className="py-2.5 px-3">% shortage</th>
+                  <th className="py-2.5 pr-3 text-right">Required</th>
+                  <th className="py-2.5 pr-3 text-right">Available</th>
+                  <th className="py-2.5 pr-3 text-right">Shortage</th>
+                  <th className="py-2.5 px-3 text-right">% shortage</th>
                 </tr>
               </thead>
               <tbody>
                 {data.manpower.map((m: any) => (
                   <tr key={m.id} className="border-b border-line/70">
                     <td className="py-2 px-3">{m.trade}</td>
-                    <td className="py-2 pr-3">{m.required}</td>
-                    <td className="py-2 pr-3">{m.available}</td>
-                    <td className="py-2 pr-3">{m.shortage}</td>
-                    <td className="py-2 px-3">{pct(m.shortagePct)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{m.required}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{m.available}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{m.shortage}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">{pct(m.shortagePct)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">
+          <Card padding={false} className="flex flex-col max-h-[calc(100vh-14rem)] min-h-[24rem] overflow-hidden">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Planned vs Actual quantity register ({data.activityLines.length} lines)
             </div>
-            <table className="w-full text-sm min-w-[1100px]">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
-                  <th className="py-2.5 px-3">#</th>
-                  <th className="py-2.5 pr-3">Tower</th>
-                  <th className="py-2.5 pr-3">Activity</th>
-                  <th className="py-2.5 pr-3">Unit</th>
-                  <th className="py-2.5 pr-3">Plan start</th>
-                  <th className="py-2.5 pr-3">Plan end</th>
-                  <th className="py-2.5 pr-3">BOQ</th>
-                  <th className="py-2.5 pr-3">GFC</th>
-                  <th className="py-2.5 pr-3">Executed</th>
-                  <th className="py-2.5 pr-3">Balance</th>
-                  <th className="py-2.5 pr-3">Wk plan</th>
-                  <th className="py-2.5 pr-3">Wk act</th>
-                  <th className="py-2.5 px-3">Status</th>
+            <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
+            <table className="sheet-register__table w-full text-[11px] min-w-[1100px] border-collapse">
+              <thead className="sticky top-0 z-10 bg-brand text-white">
+                <tr className="text-left text-[10px] uppercase">
+                  <th className="py-2 px-2 border border-brand-dark/30">#</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">Tower</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 min-w-[12rem]">Activity</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">Unit</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">Plan start</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30">Plan end</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">BOQ</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">GFC</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Executed</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Balance</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Wk plan</th>
+                  <th className="py-2 pr-2 border border-brand-dark/30 text-right">Wk act</th>
+                  <th className="py-2 px-2 border border-brand-dark/30">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {data.activityLines.map((a: any) => (
-                  <tr key={a.id} className="border-b border-line/70">
-                    <td className="py-2 px-3 font-mono text-xs">{a.srNo}</td>
-                    <td className="py-2 pr-3">{a.tower || "—"}</td>
-                    <td className="py-2 pr-3">{a.activity}</td>
-                    <td className="py-2 pr-3">{a.unit || "—"}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(a.plannedStart)}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(a.plannedEnd)}</td>
-                    <td className="py-2 pr-3">{a.boqQty}</td>
-                    <td className="py-2 pr-3">{a.gfcQty}</td>
-                    <td className="py-2 pr-3">{Number(a.executedQty).toFixed(2)}</td>
-                    <td className="py-2 pr-3">{Number(a.balanceQty).toFixed(2)}</td>
-                    <td className="py-2 pr-3">{a.weeklyPlanned}</td>
-                    <td className="py-2 pr-3">{a.weeklyActual}</td>
-                    <td className="py-2 px-3">{a.status || "—"}</td>
+                {data.activityLines.map((a: any, idx: number) => (
+                  <tr key={a.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/20"}>
+                    <td className="py-1.5 px-2 border border-line font-mono">{a.srNo}</td>
+                    <td className="py-1.5 pr-2 border border-line">{a.tower || "—"}</td>
+                    <td className="py-1.5 pr-2 border border-line font-medium">{a.activity}</td>
+                    <td className="py-1.5 pr-2 border border-line">{a.unit || "—"}</td>
+                    <td className="py-1.5 pr-2 border border-line whitespace-nowrap">{fmtDate(a.plannedStart)}</td>
+                    <td className="py-1.5 pr-2 border border-line whitespace-nowrap">{fmtDate(a.plannedEnd)}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.boqQty}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.gfcQty}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{Number(a.executedQty).toFixed(2)}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{Number(a.balanceQty).toFixed(2)}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyPlanned}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyActual}</td>
+                    <td className="py-1.5 px-2 border border-line">{a.status || "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
       )}

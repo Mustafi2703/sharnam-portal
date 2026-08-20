@@ -191,9 +191,15 @@ export default function RfisPage() {
       const kind = r.rfiKind || "RequestForInformation";
       const effectiveKind = rfiListKindFilter(moduleScope, kindFilter);
       const kindOk =
-        effectiveKind === "All" ||
-        kind === effectiveKind ||
-        (effectiveKind === "RequestForInformation" && (kind === "Manual" || kind === "RequestForInformation"));
+        effectiveKind === "All"
+          ? moduleScope === "drawings"
+            ? kind === "DrawingChecklist" ||
+              kind === "RequestForInformation" ||
+              kind === "Manual" ||
+              kind === "RequestForInformation"
+            : true
+          : kind === effectiveKind ||
+            (effectiveKind === "RequestForInformation" && (kind === "Manual" || kind === "RequestForInformation"));
       return statusOk && kindOk;
     });
   }, [rfis, statusFilter, kindFilter, moduleScope]);
