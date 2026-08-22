@@ -3,6 +3,14 @@
  * raise (+ fill link) → submit for review → office review → close.
  */
 import { queueProjectEmail } from "./email.js";
+import {
+  buildChecklistDecisionEmail,
+  buildChecklistReviewEmail,
+  buildRfiClosedEmail,
+  buildRfiRaisedEmail,
+  buildRfiResponseEmail,
+  type RfiEmailContext,
+} from "./rfiEmailFormat.js";
 
 export const RFI_FLOW_KINDS = [
   "RequestForInformation",
@@ -17,6 +25,8 @@ export const RFI_FLOW_KINDS = [
 ] as const;
 
 export type RfiFlowKind = (typeof RFI_FLOW_KINDS)[number];
+
+export type { RfiEmailContext };
 
 export function portalOrigin() {
   return (process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in").replace(/\/$/, "");
@@ -74,83 +84,103 @@ export function reviewLogsUrl(projectId: string, kind?: string | null, submissio
   return `${portalOrigin()}${path}${q}`;
 }
 
-function kindLabel(kind: string) {
-  switch (kind) {
-    case "RequestForInformation":
-      return "Ask (PMC RFI)";
-    case "DrawingChecklist":
-      return "Drawing checklist fill request";
-    case "QualityInspection":
-      return "Quality inspection fill request";
-    case "SafetyChecklist":
-      return "Safety checklist fill request";
-    case "QualityIR":
-      return "Quality IR (Request for Inspection)";
-    case "SafetyIR":
-      return "Safety IR";
-    case "ActivityInspection":
-      return "Activity inspection checklist";
-    case "SiteExecution":
-      return "Field / site checklist fill";
-    case "ClientConcern":
-      return "Client concern";
-    default:
-      return kind;
-  }
+/** Map Prisma RFI + project into email detail rows */
+export function rfiEmailContextFromRecord(
+  rfi: {
+    number: string;
+    subject: string;
+    question: string;
+    rfiKind: string;
+    status?: string;
+    ballInCourt?: string;
+    irNumber?: string | null;
+    dueDate?: Date | null;
+    createdAt?: Date;
+    formDataJson?: string | null;
+    scheduleImpact?: string | null;
+    costImpact?: string | null;
+    specSectionLink?: string | null;
+    questionReceivedFrom?: string | null;
+    assignedTo?: { fullName: string } | null;
+    createdBy?: { fullName: string } | null;
+    drawing?: { drawingNumber: string; title: string } | null;
+    vendor?: { name: string } | null;
+  },
+  project?: { code: string; name: string } | null,
+  linkedChecklistName?: string | null
+): RfiEmailContext {
+  return {
+    projectCode: project?.code,
+    projectName: project?.name,
+    number: rfi.number,
+    subject: rfi.subject,
+    question: rfi.question,
+    rfiKind: rfi.rfiKind,
+    status: rfi.status,
+    ballInCourt: rfi.ballInCourt,
+    irNumber: rfi.irNumber,
+    dueDate: rfi.dueDate,
+    createdAt: rfi.createdAt,
+    createdByName: rfi.createdBy?.fullName || null,
+    assignedToName: rfi.assignedTo?.fullName || null,
+    linkedDrawingNumber: rfi.drawing?.drawingNumber || null,
+    linkedDrawingTitle: rfi.drawing?.title || null,
+    linkedChecklistName: linkedChecklistName || null,
+    vendorName: rfi.vendor?.name || null,
+    scheduleImpact: rfi.scheduleImpact,
+    costImpact: rfi.costImpact,
+    specSectionLink: rfi.specSectionLink,
+    questionReceivedFrom: rfi.questionReceivedFrom,
+    formDataJson: rfi.formDataJson,
+  };
 }
 
-export async function notifyRfiRaised(opts: {
-  projectId: string;
-  number: string;
-  subject: string;
-  question: string;
-  rfiKind: string;
-  rfiId: string;
-  linkedAssignmentId?: string | null;
-  createdByName?: string;
-  createdById?: string;
-  toOverride?: string;
-}) {
+export async function notifyRfiRaised(
+  opts: {
+    projectId: string;
+    rfiId: string;
+    linkedAssignmentId?: string | null;
+    createdById?: string;
+    toOverride?: string;
+  } & RfiEmailContext
+) {
   const fill =
     opts.linkedAssignmentId != null
       ? checklistFillUrl(opts.projectId, opts.linkedAssignmentId, opts.rfiKind)
       : null;
   const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
-  const lines = [
-    `${kindLabel(opts.rfiKind)} raised on the portal.`,
-    "",
-    `Number: ${opts.number}`,
-    `Subject: ${opts.subject}`,
-    `Kind: ${opts.rfiKind}`,
-    opts.createdByName ? `Raised by: ${opts.createdByName}` : "",
-    "",
-    "Question / instruction:",
-    opts.question || "(none)",
-    "",
-  ].filter(Boolean);
+  const ctx: RfiEmailContext = {
+    projectCode: opts.projectCode,
+    projectName: opts.projectName,
+    number: opts.number,
+    subject: opts.subject,
+    question: opts.question,
+    rfiKind: opts.rfiKind,
+    status: opts.status || "Open",
+    ballInCourt: opts.ballInCourt || "Assignee",
+    irNumber: opts.irNumber,
+    dueDate: opts.dueDate,
+    createdByName: opts.createdByName,
+    createdAt: opts.createdAt,
+    assignedToName: opts.assignedToName,
+    linkedDrawingNumber: opts.linkedDrawingNumber,
+    linkedDrawingTitle: opts.linkedDrawingTitle,
+    linkedChecklistName: opts.linkedChecklistName,
+    vendorName: opts.vendorName,
+    scheduleImpact: opts.scheduleImpact,
+    costImpact: opts.costImpact,
+    specSectionLink: opts.specSectionLink,
+    questionReceivedFrom: opts.questionReceivedFrom,
+    formDataJson: opts.formDataJson,
+  };
 
-  if (fill) {
-    lines.push(
-      "── FILL CHECKLIST (required) ──",
-      "Open this link (sign in to the portal), complete the attached checklist, then Submit for review:",
-      fill,
-      ""
-    );
-  } else {
-    lines.push(
-      "── RESPOND IN PORTAL ──",
-      "This RFI has no checklist attached. Open the register and post an official response:",
-      register,
-      ""
-    );
-  }
-
-  lines.push("RFI register / status:", register, "", "— Sharnam Portal · RFI workflow");
+  const { bodyHtml, bodyText } = buildRfiRaisedEmail({ ctx, fillUrl: fill, registerUrl: register });
 
   return queueProjectEmail({
     projectId: opts.projectId,
     subject: `Action required — ${opts.number}: ${opts.subject}`,
-    body: lines.join("\n"),
+    body: bodyText,
+    bodyHtml,
     context: "rfi.create",
     createdById: opts.createdById,
     toOverride: opts.toOverride,
@@ -167,36 +197,40 @@ export async function notifyChecklistSubmittedForReview(opts: {
   rfiNumbers?: string[];
   createdById?: string;
   toOverride?: string;
+  projectCode?: string;
+  projectName?: string;
 }) {
-  const branded = `${portalOrigin()}/api/checklist/submissions/${opts.submissionId}/branded.html`;
-  const brandedXlsx = `${portalOrigin()}/api/checklist/submissions/${opts.submissionId}/branded.xlsx`;
+  const brandedHtmlUrl = `${portalOrigin()}/api/checklist/submissions/${opts.submissionId}/branded.html`;
+  const brandedXlsxUrl = `${portalOrigin()}/api/checklist/submissions/${opts.submissionId}/branded.xlsx`;
   const logs = reviewLogsUrl(opts.projectId, opts.checklistType, opts.submissionId);
-  const fill = checklistFillUrl(opts.projectId, opts.assignmentId, opts.checklistType);
-  const lines = [
-    "Checklist fill submitted for office review.",
-    "",
-    `Checklist: ${opts.templateName}`,
-    `Family: ${opts.checklistType}`,
-    opts.submittedByName ? `Submitted by: ${opts.submittedByName}` : "",
-    opts.rfiNumbers?.length ? `Linked RFI(s): ${opts.rfiNumbers.join(", ")}` : "",
-    "",
-    "── OPEN FILLED RECORD ──",
-    `Branded HTML (print / PDF): ${branded}`,
-    `Branded Excel (SPDC format): ${brandedXlsx}`,
-    "",
-    "── REVIEW IN PORTAL ──",
-    `Fill log / review: ${logs}`,
-    `Assignment: ${fill}`,
-    "",
-    "Office: open the branded file, Approve or Reject the submission, then Close the linked RFI when satisfied.",
-    "",
-    "— Sharnam Portal · RFI / checklist review",
-  ].filter(Boolean);
+
+  const ctx: RfiEmailContext = {
+    projectCode: opts.projectCode,
+    projectName: opts.projectName,
+    number: opts.rfiNumbers?.[0] || "—",
+    subject: opts.templateName,
+    question: "Checklist submitted — pending office review.",
+    rfiKind: opts.checklistType,
+    status: "Answered",
+    ballInCourt: "Office",
+  };
+
+  const { bodyHtml, bodyText } = buildChecklistReviewEmail({
+    ctx,
+    templateName: opts.templateName,
+    checklistType: opts.checklistType,
+    submittedByName: opts.submittedByName,
+    rfiNumbers: opts.rfiNumbers,
+    brandedHtmlUrl,
+    brandedXlsxUrl,
+    reviewLogsUrl: logs,
+  });
 
   return queueProjectEmail({
     projectId: opts.projectId,
     subject: `For review — ${opts.templateName}${opts.rfiNumbers?.length ? ` (${opts.rfiNumbers.join(", ")})` : ""}`,
-    body: lines.join("\n"),
+    body: bodyText,
+    bodyHtml,
     context: "checklist.submit.review",
     createdById: opts.createdById,
     toOverride: opts.toOverride,
@@ -212,60 +246,128 @@ export async function notifyChecklistReviewed(opts: {
   rfiNumbers?: string[];
   createdById?: string;
   toOverride?: string;
+  projectCode?: string;
+  projectName?: string;
 }) {
-  const branded = `${portalOrigin()}/api/checklist/submissions/${opts.submissionId}/branded.html`;
-  const lines = [
-    `Checklist review decision: ${opts.status}.`,
-    "",
-    `Checklist: ${opts.templateName}`,
-    opts.rfiNumbers?.length ? `Linked RFI(s): ${opts.rfiNumbers.join(", ")}` : "",
-    opts.remarks ? `Remarks: ${opts.remarks}` : "",
-    "",
-    `Open filled record: ${branded}`,
-    "",
-    opts.status === "Approved"
-      ? "If an RFI is still open, office can Close it from the RFI register."
-      : "Site may re-fill or re-offer after corrections.",
-    "",
-    "— Sharnam Portal · checklist review",
-  ].filter(Boolean);
+  const brandedHtmlUrl = brandedFillUrl(opts.submissionId);
+  const ctx: RfiEmailContext = {
+    projectCode: opts.projectCode,
+    projectName: opts.projectName,
+    number: opts.rfiNumbers?.[0] || "—",
+    subject: opts.templateName,
+    question: opts.remarks || "",
+    rfiKind: "Checklist",
+    status: opts.status,
+  };
+
+  const { bodyHtml, bodyText } = buildChecklistDecisionEmail({
+    ctx,
+    templateName: opts.templateName,
+    status: opts.status,
+    remarks: opts.remarks,
+    rfiNumbers: opts.rfiNumbers,
+    brandedHtmlUrl,
+  });
 
   return queueProjectEmail({
     projectId: opts.projectId,
     subject: `Checklist ${opts.status} — ${opts.templateName}`,
-    body: lines.join("\n"),
+    body: bodyText,
+    bodyHtml,
     context: "checklist.review",
     createdById: opts.createdById,
     toOverride: opts.toOverride,
   });
 }
 
-export async function notifyRfiClosed(opts: {
-  projectId: string;
-  number: string;
-  subject: string;
-  rfiKind?: string | null;
-  rfiId: string;
-  createdById?: string;
-  toOverride?: string;
-}) {
+export async function notifyRfiClosed(
+  opts: {
+    projectId: string;
+    rfiId: string;
+    createdById?: string;
+    toOverride?: string;
+  } & RfiEmailContext
+) {
   const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
+  const ctx: RfiEmailContext = {
+    projectCode: opts.projectCode,
+    projectName: opts.projectName,
+    number: opts.number,
+    subject: opts.subject,
+    question: opts.question,
+    rfiKind: opts.rfiKind || "RequestForInformation",
+    status: "Closed",
+    irNumber: opts.irNumber,
+    dueDate: opts.dueDate,
+    createdByName: opts.createdByName,
+    assignedToName: opts.assignedToName,
+    linkedDrawingNumber: opts.linkedDrawingNumber,
+    linkedDrawingTitle: opts.linkedDrawingTitle,
+    linkedChecklistName: opts.linkedChecklistName,
+    vendorName: opts.vendorName,
+    scheduleImpact: opts.scheduleImpact,
+    costImpact: opts.costImpact,
+    formDataJson: opts.formDataJson,
+  };
+
+  const { bodyHtml, bodyText } = buildRfiClosedEmail({ ctx, registerUrl: register });
+
   return queueProjectEmail({
     projectId: opts.projectId,
     subject: `Closed — ${opts.number}: ${opts.subject}`,
-    body: [
-      `${opts.number} has been closed on the portal.`,
-      "",
-      `Subject: ${opts.subject}`,
-      opts.rfiKind ? `Kind: ${opts.rfiKind}` : "",
-      "",
-      `View register: ${register}`,
-      "",
-      "— Sharnam Portal · RFI closed",
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    body: bodyText,
+    bodyHtml,
     context: "rfi.status.closed",
+    createdById: opts.createdById,
+    toOverride: opts.toOverride,
+  });
+}
+
+export async function notifyRfiResponse(opts: {
+  projectId: string;
+  rfiId: string;
+  responseText: string;
+  respondedByName?: string;
+  isOfficial?: boolean;
+  createdById?: string;
+  toOverride?: string;
+} & RfiEmailContext) {
+  const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
+  const ctx: RfiEmailContext = {
+    projectCode: opts.projectCode,
+    projectName: opts.projectName,
+    number: opts.number,
+    subject: opts.subject,
+    question: opts.question,
+    rfiKind: opts.rfiKind,
+    status: opts.status,
+    ballInCourt: opts.ballInCourt,
+    irNumber: opts.irNumber,
+    dueDate: opts.dueDate,
+    createdByName: opts.createdByName,
+    assignedToName: opts.assignedToName,
+    linkedDrawingNumber: opts.linkedDrawingNumber,
+    linkedDrawingTitle: opts.linkedDrawingTitle,
+    vendorName: opts.vendorName,
+    scheduleImpact: opts.scheduleImpact,
+    costImpact: opts.costImpact,
+    formDataJson: opts.formDataJson,
+  };
+
+  const { bodyHtml, bodyText } = buildRfiResponseEmail({
+    ctx,
+    responseText: opts.responseText,
+    respondedByName: opts.respondedByName,
+    registerUrl: register,
+    isOfficial: opts.isOfficial,
+  });
+
+  return queueProjectEmail({
+    projectId: opts.projectId,
+    subject: `Response on ${opts.number} — ${opts.subject}`,
+    body: bodyText,
+    bodyHtml,
+    context: "rfi.respond",
     createdById: opts.createdById,
     toOverride: opts.toOverride,
   });

@@ -14,17 +14,21 @@ function graphMailEnabled() {
   return cfg.configured && Boolean(cfg.mailbox);
 }
 
-async function sendViaGraph(opts: { to: string[]; subject: string; body: string }) {
+async function sendViaGraph(opts: { to: string[]; subject: string; body: string; bodyHtml?: string }) {
   const cfg = graphConfig();
   if (!cfg.mailbox) throw new Error("GRAPH_MAIL_FROM not configured");
 
+  const useHtml = Boolean(opts.bodyHtml?.trim());
   await graphFetch(`/users/${encodeURIComponent(cfg.mailbox)}/sendMail`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: {
         subject: opts.subject,
-        body: { contentType: "Text", content: opts.body },
+        body: {
+          contentType: useHtml ? "HTML" : "Text",
+          content: useHtml ? opts.bodyHtml! : opts.body,
+        },
         toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
       },
       saveToSentItems: true,
@@ -36,6 +40,8 @@ export async function queueProjectEmail(opts: {
   projectId: string;
   subject: string;
   body: string;
+  /** When set, Graph sends HTML; outbox stores plain text + HTML marker */
+  bodyHtml?: string;
   context?: string;
   createdById?: string;
   toOverride?: string;
@@ -49,7 +55,10 @@ export async function queueProjectEmail(opts: {
 
   const fromName = project.emailFromName || "शरणम् Portal";
   const subject = `[${project.code}] ${opts.subject}`;
-  const body = `${opts.body}\n\n— ${fromName}`;
+  const bodyPlain = `${opts.body}\n\n— ${fromName}`;
+  const bodyStore = opts.bodyHtml
+    ? `${bodyPlain}\n\n[HTML version sent via Graph]`
+    : bodyPlain;
   const recipients = parseRecipients(toRaw);
   if (!recipients.length) return { skipped: true as const, reason: "no_valid_recipients" };
 
@@ -58,7 +67,7 @@ export async function queueProjectEmail(opts: {
       projectId: project.id,
       toEmails: recipients.join(", "),
       subject,
-      body,
+      body: bodyStore,
       context: opts.context || null,
       status: "Queued",
       createdById: opts.createdById || null,
@@ -67,7 +76,12 @@ export async function queueProjectEmail(opts: {
 
   if (graphMailEnabled()) {
     try {
-      await sendViaGraph({ to: recipients, subject, body });
+      await sendViaGraph({
+        to: recipients,
+        subject,
+        body: bodyPlain,
+        bodyHtml: opts.bodyHtml ? `${opts.bodyHtml}` : undefined,
+      });
       const sent = await prisma.emailOutbox.update({
         where: { id: row.id },
         data: { status: "Sent", sentAt: new Date() },

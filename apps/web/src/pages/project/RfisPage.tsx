@@ -6,7 +6,9 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
 import { InspectionRequestReference } from "../../components/InspectionRequestReference";
+import { DrawingRfiRegisterTable } from "../../components/DrawingRfiRegisterTable";
 import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
+import { spdcFormDataFromCompose, spdcRegisterDashboard } from "../../lib/rfiRegisterColumns";
 import { rfiUsesDrawingLink } from "../../lib/inspectionRequestForms";
 import {
   checklistFamilyForRfiKind,
@@ -58,6 +60,13 @@ export default function RfisPage() {
     attachmentNote: "",
     scheduleImpact: "None",
     costImpact: "None",
+    package: "P1-CIVIL",
+    discipline: "Structural",
+    category: "",
+    location: "",
+    priority: "NORMAL",
+    specClause: "",
+    contractorSolution: "",
   });
   const [answer, setAnswer] = useState("");
   const [siteAssignments, setSiteAssignments] = useState<any[]>([]);
@@ -231,6 +240,7 @@ export default function RfisPage() {
   const selected = rfis.find((r) => r.id === active);
   const selectedProgress = selected ? rfiProgress(selected) : null;
   const composeProgress = rfiComposeProgress(form);
+  const registerDashboard = useMemo(() => spdcRegisterDashboard(filtered), [filtered]);
 
   const fillFamily = checklistFamilyForRfiKind(selected?.rfiKind);
   const fillLink = selected?.linkedAssignmentId
@@ -356,11 +366,28 @@ export default function RfisPage() {
                 return;
               }
               const assignment = checklistOptions.find((a) => a.id === form.linkedAssignmentId);
+              const linkedDrawing = drawings.find((d) => d.id === form.linkedDrawingId);
+              const formDataJson =
+                moduleScope === "drawings" || form.rfiKind === "RequestForInformation" || form.rfiKind === "DrawingChecklist"
+                  ? spdcFormDataFromCompose({
+                      package: form.package,
+                      discipline: form.discipline,
+                      category: form.category,
+                      location: form.location,
+                      drawingRef: linkedDrawing?.drawingNumber,
+                      drawingRev: linkedDrawing?.currentRev,
+                      specClause: form.specClause,
+                      priority: form.priority,
+                      contractorSolution: form.contractorSolution,
+                      queryRaised: form.question,
+                    })
+                  : undefined;
               await api(`/api/rfis/project/${id}`, {
                 method: "POST",
                 token,
                 body: JSON.stringify({
                   ...form,
+                  formDataJson,
                   linkedChecklistItemId: assignment?.template?.id || form.linkedChecklistItemId || null,
                   linkedAssignmentId: form.linkedAssignmentId || null,
                   linkedDrawingId: rfiUsesDrawingLink(form.rfiKind) ? form.linkedDrawingId || null : null,
@@ -408,6 +435,49 @@ export default function RfisPage() {
               value={form.question}
               onChange={(e) => setForm({ ...form, question: e.target.value })}
             />
+            {!isClient && moduleScope === "drawings" && (form.rfiKind === "RequestForInformation" || form.rfiKind === "DrawingChecklist") && (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 rounded-lg border border-line bg-sand/30 p-3">
+                <p className="sm:col-span-2 lg:col-span-4 text-[10px] font-mono uppercase tracking-wider text-steel-muted">
+                  SPDC register fields (04_RFI_REGISTER)
+                </p>
+                <Select value={form.package} onChange={(e) => setForm({ ...form, package: e.target.value })}>
+                  {["P1-CIVIL", "P2-PEB", "Package A", "Package B"].map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </Select>
+                <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
+                  {["Structural", "Architectural", "Civil", "MEP", "PEB"].map((d) => (
+                    <option key={d}>{d}</option>
+                  ))}
+                </Select>
+                <Input
+                  placeholder="Category (e.g. Drawing discrepancy)"
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                />
+                <Input
+                  placeholder="Location / grid"
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                />
+                <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+                  {["CRITICAL", "HIGH", "NORMAL"].map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </Select>
+                <Input
+                  placeholder="Spec clause"
+                  value={form.specClause}
+                  onChange={(e) => setForm({ ...form, specClause: e.target.value })}
+                />
+                <Input
+                  placeholder="Contractor proposed solution (optional)"
+                  value={form.contractorSolution}
+                  onChange={(e) => setForm({ ...form, contractorSolution: e.target.value })}
+                  className="sm:col-span-2"
+                />
+              </div>
+            )}
             {!isClient && (
               <div className="grid sm:grid-cols-2 gap-2">
                 {needsChecklist && (
@@ -502,6 +572,111 @@ export default function RfisPage() {
         ))}
       </div>
 
+      {registerMode && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {[
+            ["Total RFIs", registerDashboard.total],
+            ["Awaiting response", registerDashboard.awaiting],
+            ["OVERDUE (SLA)", registerDashboard.overdue],
+            ["Answered — open", registerDashboard.answeredOpen],
+            ["Closed", registerDashboard.closed],
+          ].map(([label, val]) => (
+            <Card key={label as string} className="!p-4">
+              <div className="text-[10px] uppercase text-steel-muted font-mono">{label}</div>
+              <div className="text-2xl font-display mt-1">{val as number}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {registerMode ? (
+        <div className="space-y-4">
+          <DrawingRfiRegisterTable rows={filtered} activeId={active} onSelect={setActive} />
+          {selected && (
+            <Card>
+              <div className="space-y-4">
+                <div>
+                  <div className="font-mono text-xs text-brand">{selected.number}</div>
+                  <h2 className="font-display text-xl mt-1">{selected.subject}</h2>
+                  {selectedProgress && (
+                    <div className="mt-3 space-y-2">
+                      <RfiStageStepper progress={selectedProgress} />
+                      <RfiProgressBar progress={selectedProgress} />
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Badge tone="brand">{selected.rfiKind || "RequestForInformation"}</Badge>
+                    <Badge tone="brand">Ball: {selected.ballInCourt}</Badge>
+                    <Badge>{selected.status}</Badge>
+                    {selected.drawing && <Badge tone="neutral">{selected.drawing.drawingNumber}</Badge>}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
+                {(selected.linkedAssignmentId || selected.linkedChecklistItemId) && (
+                  <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
+                    <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill checklist</div>
+                    <Link to={fillLink}>
+                      <Button type="button" className="!text-sm">
+                        Open checklist form →
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-semibold text-sm mb-2">Responses</h3>
+                  <ul className="space-y-2">
+                    {selected.responses?.map((resp: any) => (
+                      <li key={resp.id} className="rounded-xl border border-line p-3 text-sm">
+                        <div className="text-xs text-steel-muted">
+                          {resp.respondedBy.fullName} · {new Date(resp.createdAt).toLocaleString()}
+                        </div>
+                        <div className="mt-1">{resp.responseText}</div>
+                      </li>
+                    ))}
+                    {!selected.responses?.length && <li className="text-sm text-steel-muted">No responses yet.</li>}
+                  </ul>
+                </div>
+                {canRespond && selected.status !== "Closed" && (
+                  <form
+                    className="space-y-2"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      await api(`/api/rfis/${selected.id}/respond`, {
+                        method: "POST",
+                        token,
+                        body: JSON.stringify({ responseText: answer, isOfficialResponse: true }),
+                      });
+                      setAnswer("");
+                      await load();
+                    }}
+                  >
+                    <TextArea rows={3} placeholder="Official response" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
+                    <div className="flex gap-2">
+                      <Button type="submit">Submit response</Button>
+                      {canClose && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => {
+                            await api(`/api/rfis/${selected.id}`, {
+                              method: "PATCH",
+                              token,
+                              body: JSON.stringify({ status: "Closed", ballInCourt: "Creator" }),
+                            });
+                            await load();
+                          }}
+                        >
+                          Close RFI
+                        </Button>
+                      )}
+                    </div>
+                  </form>
+                )}
+              </div>
+            </Card>
+          )}
+        </div>
+      ) : (
       <div className="grid lg:grid-cols-[340px_1fr] gap-4">
         <Card padding={false}>
           <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">Log</div>
@@ -639,6 +814,7 @@ export default function RfisPage() {
           )}
         </Card>
       </div>
+      )}
     </div>
   );
 }

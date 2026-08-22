@@ -97,7 +97,7 @@ rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
     include: {
       assignedTo: { select: { id: true, fullName: true } },
       createdBy: { select: { id: true, fullName: true } },
-      drawing: { select: { id: true, drawingNumber: true, title: true } },
+      drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
       vendor: { select: { id: true, name: true } },
       responses: { include: { respondedBy: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
     },
@@ -179,23 +179,36 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
     },
     include: {
       assignedTo: { select: { fullName: true } },
-      drawing: true,
+      createdBy: { select: { fullName: true } },
+      drawing: { select: { drawingNumber: true, title: true } },
       vendor: { select: { id: true, name: true } },
     },
   });
   await audit("rfi.create", { userId: req.user!.id, entity: "Rfi", entityId: rfi.id });
   try {
-    const { notifyRfiRaised } = await import("../services/rfiFlowNotify.js");
+    const [project, assignment] = await Promise.all([
+      prisma.project.findUnique({
+        where: { id: req.params.projectId },
+        select: { code: true, name: true },
+      }),
+      rfi.linkedAssignmentId
+        ? prisma.checklistAssignment.findUnique({
+            where: { id: rfi.linkedAssignmentId },
+            include: { template: { select: { name: true } } },
+          })
+        : Promise.resolve(null),
+    ]);
+    const { notifyRfiRaised, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
     await notifyRfiRaised({
       projectId: req.params.projectId,
-      number: rfi.number,
-      subject: rfi.subject,
-      question: rfi.question,
-      rfiKind,
       rfiId: rfi.id,
       linkedAssignmentId: rfi.linkedAssignmentId,
-      createdByName: req.user!.fullName || undefined,
       createdById: req.user!.id,
+      ...rfiEmailContextFromRecord(
+        rfi,
+        project,
+        assignment?.template?.name || null
+      ),
     });
   } catch {
     /* email optional */
@@ -231,14 +244,33 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
     },
   });
   try {
-    const { queueProjectEmail } = await import("../services/email.js");
-    await queueProjectEmail({
-      projectId: existing.projectId,
-      subject: `Response on ${existing.number} — ${existing.subject}`,
-      body: `A response was posted on ${existing.number}.\n\n${req.body.responseText || ""}`,
-      context: "rfi.respond",
-      createdById: req.user!.id,
-    });
+    const [project, fullRfi] = await Promise.all([
+      prisma.project.findUnique({
+        where: { id: existing.projectId },
+        select: { code: true, name: true },
+      }),
+      prisma.rfi.findUnique({
+        where: { id: existing.id },
+        include: {
+          assignedTo: { select: { fullName: true } },
+          createdBy: { select: { fullName: true } },
+          drawing: { select: { drawingNumber: true, title: true } },
+          vendor: { select: { name: true } },
+        },
+      }),
+    ]);
+    const { notifyRfiResponse, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
+    if (fullRfi) {
+      await notifyRfiResponse({
+        projectId: existing.projectId,
+        rfiId: existing.id,
+        responseText: req.body.responseText || "",
+        respondedByName: req.user!.fullName || undefined,
+        isOfficial: !!req.body.isOfficialResponse,
+        createdById: req.user!.id,
+        ...rfiEmailContextFromRecord(fullRfi, project),
+      });
+    }
   } catch {
     /* email optional */
   }
@@ -272,15 +304,36 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       } catch (err) {
         console.warn("[RFI] SharePoint archive failed:", err instanceof Error ? err.message : err);
       }
-      const { notifyRfiClosed } = await import("../services/rfiFlowNotify.js");
-      await notifyRfiClosed({
-        projectId: existing.projectId,
-        number: rfi.number,
-        subject: rfi.subject,
-        rfiKind: existing.rfiKind,
-        rfiId: rfi.id,
-        createdById: req.user!.id,
-      });
+      const [project, closedRfi, assignment] = await Promise.all([
+        prisma.project.findUnique({
+          where: { id: existing.projectId },
+          select: { code: true, name: true },
+        }),
+        prisma.rfi.findUnique({
+          where: { id: rfi.id },
+          include: {
+            assignedTo: { select: { fullName: true } },
+            createdBy: { select: { fullName: true } },
+            drawing: { select: { drawingNumber: true, title: true } },
+            vendor: { select: { name: true } },
+          },
+        }),
+        existing.linkedAssignmentId
+          ? prisma.checklistAssignment.findUnique({
+              where: { id: existing.linkedAssignmentId },
+              include: { template: { select: { name: true } } },
+            })
+          : Promise.resolve(null),
+      ]);
+      const { notifyRfiClosed, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
+      if (closedRfi) {
+        await notifyRfiClosed({
+          projectId: existing.projectId,
+          rfiId: rfi.id,
+          createdById: req.user!.id,
+          ...rfiEmailContextFromRecord(closedRfi, project, assignment?.template?.name || null),
+        });
+      }
     } else {
       const { notifyRfiStatus } = await import("../services/ncrNotify.js");
       await notifyRfiStatus({

@@ -610,3 +610,127 @@ export async function listProjectLibrary(projectCode: string, relFolder = "") {
   }
 }
 
+let mailboxUserIdCache: string | null = null;
+
+/** Resolve shared mailbox SMTP address → Graph user GUID (required for calendar / Teams APIs). */
+export async function resolveMailboxUserId(): Promise<string> {
+  const cfg = graphConfig();
+  if (!cfg.mailbox) throw new Error("GRAPH_MAIL_FROM not configured");
+  if (mailboxUserIdCache) return mailboxUserIdCache;
+  const user = await graphFetch<{ id: string }>(`/users/${encodeURIComponent(cfg.mailbox)}?$select=id`);
+  mailboxUserIdCache = user.id;
+  return user.id;
+}
+
+export type TeamsScheduleResult = {
+  teamsJoinUrl: string | null;
+  graphEventId: string | null;
+  calendarWebLink: string | null;
+  provider: "onlineMeeting" | "calendar" | "none";
+  note: string | null;
+};
+
+/**
+ * Schedule a Teams-linked meeting on the PMC shared mailbox calendar.
+ * Does NOT add Graph attendees (avoids duplicate Outlook invites) — portal sends one formatted email.
+ */
+export async function createTeamsSchedule(opts: {
+  subject: string;
+  start: Date;
+  end: Date;
+  bodyHtml?: string;
+  location?: string;
+}): Promise<TeamsScheduleResult> {
+  const cfg = graphConfig();
+  if (!cfg.configured || !cfg.mailbox) {
+    return { teamsJoinUrl: null, graphEventId: null, calendarWebLink: null, provider: "none", note: "Graph not configured" };
+  }
+
+  const userId = await resolveMailboxUserId();
+
+  // Prefer onlineMeetings when OnlineMeetings.ReadWrite.All + app access policy are granted
+  try {
+    const meeting = await graphFetch<{
+      id?: string;
+      joinUrl?: string;
+      joinWebUrl?: string;
+    }>(`/users/${userId}/onlineMeetings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        startDateTime: opts.start.toISOString(),
+        endDateTime: opts.end.toISOString(),
+        subject: opts.subject,
+      }),
+    });
+    const join = meeting.joinWebUrl || meeting.joinUrl || null;
+    if (join) {
+      return {
+        teamsJoinUrl: join,
+        graphEventId: meeting.id || null,
+        calendarWebLink: null,
+        provider: "onlineMeeting",
+        note: null,
+      };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/access policy|OnlineMeetings|403|404/i.test(msg)) {
+      console.warn("[graph] onlineMeetings failed:", msg);
+    }
+  }
+
+  // Fallback: calendar event on shared mailbox (Calendars.ReadWrite)
+  try {
+    const event = await graphFetch<{
+      id: string;
+      webLink?: string;
+      onlineMeeting?: { joinUrl?: string };
+      isOnlineMeeting?: boolean;
+    }>(`/users/${userId}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject: opts.subject,
+        body: opts.bodyHtml
+          ? { contentType: "HTML", content: opts.bodyHtml }
+          : { contentType: "Text", content: opts.subject },
+        start: {
+          dateTime: opts.start.toISOString().slice(0, 19),
+          timeZone: "India Standard Time",
+        },
+        end: {
+          dateTime: opts.end.toISOString().slice(0, 19),
+          timeZone: "India Standard Time",
+        },
+        location: opts.location ? { displayName: opts.location } : { displayName: "Microsoft Teams" },
+        isOnlineMeeting: true,
+        onlineMeetingProvider: "teamsForBusiness",
+        allowNewTimeProposals: false,
+      }),
+    });
+
+    let joinUrl = event.onlineMeeting?.joinUrl || null;
+    if (!joinUrl && event.id) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const polled = await graphFetch<{ onlineMeeting?: { joinUrl?: string } }>(
+        `/users/${userId}/events/${encodeURIComponent(event.id)}?$select=onlineMeeting`
+      ).catch(() => null);
+      joinUrl = polled?.onlineMeeting?.joinUrl || null;
+    }
+
+    return {
+      teamsJoinUrl: joinUrl,
+      graphEventId: event.id,
+      calendarWebLink: event.webLink || null,
+      provider: "calendar",
+      note: joinUrl
+        ? null
+        : "Calendar event created; Teams join link pending OnlineMeetings.ReadWrite.All on shared mailbox.",
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { teamsJoinUrl: null, graphEventId: null, calendarWebLink: null, provider: "none", note: msg };
+  }
+}
+

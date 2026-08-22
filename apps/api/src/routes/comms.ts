@@ -228,17 +228,77 @@ commsRouter.get("/meetings/:projectId", async (req, res) => {
 });
 
 commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.projectId },
+    select: { id: true, code: true, name: true, notificationEmails: true },
+  });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  const durationMins = Math.max(15, Math.min(480, Number(req.body.durationMins) || 60));
+  const meetingDate = new Date(req.body.meetingDate || Date.now());
+
   const meeting = await prisma.meeting.create({
     data: {
       projectId: req.params.projectId,
       title: req.body.title,
-      meetingDate: new Date(req.body.meetingDate || Date.now()),
+      meetingDate,
       location: req.body.location,
-      status: req.body.status || "Scheduled",
+      status: req.body.status || "Agenda",
+      durationMins,
     },
   });
   await audit("meeting.schedule", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
-  res.status(201).json(meeting);
+
+  const attendeeRaw =
+    typeof req.body.attendeeEmails === "string" && req.body.attendeeEmails.trim()
+      ? req.body.attendeeEmails.trim()
+      : (project.notificationEmails || "").trim();
+
+  let invite: Record<string, unknown> | null = null;
+  if (attendeeRaw) {
+    try {
+      const { scheduleMeetingWithInvite } = await import("../services/meetingNotify.js");
+      const result = await scheduleMeetingWithInvite({
+        projectId: project.id,
+        projectCode: project.code,
+        projectName: project.name,
+        meetingId: meeting.id,
+        title: meeting.title,
+        meetingDate: meeting.meetingDate,
+        durationMins,
+        location: meeting.location,
+        status: meeting.status,
+        createdByName: req.user!.fullName || undefined,
+        createdById: req.user!.id,
+        attendeeEmails: attendeeRaw,
+        createTeams: req.body.createTeams !== false,
+      });
+
+      const updated = await prisma.meeting.update({
+        where: { id: meeting.id },
+        data: {
+          teamsJoinUrl: result.teamsJoinUrl,
+          graphEventId: result.graphEventId,
+          calendarWebLink: result.calendarWebLink,
+        },
+      });
+
+      invite = {
+        teamsJoinUrl: result.teamsJoinUrl,
+        graphEventId: result.graphEventId,
+        calendarWebLink: result.calendarWebLink,
+        teamsProvider: result.teamsProvider,
+        teamsNote: result.teamsNote,
+        email: result.email,
+      };
+
+      return res.status(201).json({ ...updated, invite });
+    } catch (err) {
+      invite = { error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  res.status(201).json({ ...meeting, invite });
 });
 
 commsRouter.post("/meetings/:id/items", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {

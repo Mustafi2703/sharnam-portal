@@ -17,6 +17,7 @@ function resolveDrawingRegisterPath(): string | null {
       : "",
     path.join(process.cwd(), "seed", "data", "DRAWING REGISTER - 01.xlsx"),
     path.join(process.cwd(), "Sharnam_modules_docs", "DRAWING REGISTER - 01.xlsx"),
+    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "DRAWING REGISTER - 01.xlsx"),
   ].filter(Boolean);
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;

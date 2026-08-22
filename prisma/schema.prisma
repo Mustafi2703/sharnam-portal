@@ -492,6 +492,12 @@ model Meeting {
   /// Optional link to parent MoM when this is a follow-up
   parentMeetingId String?
   agendaNotes     String?
+  durationMins    Int      @default(60)
+  /// Microsoft Teams join URL (Graph onlineMeeting or calendar event)
+  teamsJoinUrl    String?
+  /// Graph calendar event id or onlineMeeting id
+  graphEventId    String?
+  calendarWebLink String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

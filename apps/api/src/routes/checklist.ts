@@ -353,6 +353,8 @@ checklistRouter.post(
       const { notifyChecklistSubmittedForReview } = await import("../services/rfiFlowNotify.js");
       await notifyChecklistSubmittedForReview({
         projectId: assignment.projectId,
+        projectCode: assignment.project.code,
+        projectName: assignment.project.name,
         templateName: assignment.template.name,
         checklistType: assignment.template.checklistType,
         submissionId: submission.id,
@@ -539,9 +541,14 @@ checklistRouter.post(
     });
 
     try {
-      const { notifyChecklistReviewed, notifyRfiClosed } = await import("../services/rfiFlowNotify.js");
+      const project = existing.assignment.project;
+      const { notifyChecklistReviewed, notifyRfiClosed, rfiEmailContextFromRecord } = await import(
+        "../services/rfiFlowNotify.js"
+      );
       await notifyChecklistReviewed({
         projectId: existing.assignment.projectId,
+        projectCode: project.code,
+        projectName: project.name,
         templateName: existing.assignment.template.name,
         status,
         submissionId: submission.id,
@@ -562,14 +569,27 @@ checklistRouter.post(
           } catch {
             /* SharePoint optional */
           }
-          await notifyRfiClosed({
-            projectId: existing.assignment.projectId,
-            number: r.number,
-            subject: r.subject,
-            rfiKind: r.rfiKind,
-            rfiId: r.id,
-            createdById: req.user!.id,
+          const closedFull = await prisma.rfi.findUnique({
+            where: { id: r.id },
+            include: {
+              assignedTo: { select: { fullName: true } },
+              createdBy: { select: { fullName: true } },
+              drawing: { select: { drawingNumber: true, title: true } },
+              vendor: { select: { name: true } },
+            },
           });
+          if (closedFull) {
+            await notifyRfiClosed({
+              projectId: existing.assignment.projectId,
+              rfiId: r.id,
+              createdById: req.user!.id,
+              ...rfiEmailContextFromRecord(
+                closedFull,
+                project,
+                existing.assignment.template.name
+              ),
+            });
+          }
         }
       }
     } catch {

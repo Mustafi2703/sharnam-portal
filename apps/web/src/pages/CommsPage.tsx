@@ -82,7 +82,10 @@ export default function CommsPage() {
   const [schedule, setSchedule] = useState({
     title: "Weekly Site Coordination",
     meetingDate: new Date().toISOString().slice(0, 16),
-    location: "Site cabin / Teams",
+    location: "Site cabin / Microsoft Teams",
+    durationMins: "60",
+    attendeeEmails: "hello@twinoxis.com, baibhabmustafi@gmail.com",
+    createTeams: true,
   });
   const [logForm, setLogForm] = useState({ subject: "", body: "", toRoles: "client", channel: "In-App" });
 
@@ -127,11 +130,24 @@ export default function CommsPage() {
           meetingDate: new Date(schedule.meetingDate).toISOString(),
           location: schedule.location,
           status: "Agenda",
+          durationMins: Number(schedule.durationMins) || 60,
+          attendeeEmails: schedule.attendeeEmails.trim() || undefined,
+          createTeams: schedule.createTeams,
         }),
       });
       setActiveMeeting(m.id);
       setTab("agenda");
-      setMsg("Meeting created in Agenda stage — generate agenda before MoM.");
+      setMsg(
+        m.invite?.email?.skipped
+          ? "Meeting created — email skipped (check project email settings)."
+          : m.invite?.error
+            ? `Meeting created — invite failed: ${m.invite.error}`
+            : m.invite?.teamsJoinUrl
+              ? "Meeting created — one formatted invite sent with Microsoft Teams join link."
+              : m.invite?.email
+                ? "Meeting created — one formatted invite email sent to all attendees."
+                : "Meeting created in Agenda stage — add invite emails to send Teams invite."
+      );
       await load();
     } finally {
       setBusy(false);
@@ -532,6 +548,32 @@ export default function CommsPage() {
                   value={schedule.meetingDate}
                   onChange={(e) => setSchedule({ ...schedule, meetingDate: e.target.value })}
                 />
+                <Input
+                  value={schedule.location}
+                  onChange={(e) => setSchedule({ ...schedule, location: e.target.value })}
+                  placeholder="Location (site cabin / Microsoft Teams)"
+                />
+                <Input
+                  type="number"
+                  min={15}
+                  max={480}
+                  value={schedule.durationMins}
+                  onChange={(e) => setSchedule({ ...schedule, durationMins: e.target.value })}
+                  placeholder="Duration (minutes)"
+                />
+                <Input
+                  value={schedule.attendeeEmails}
+                  onChange={(e) => setSchedule({ ...schedule, attendeeEmails: e.target.value })}
+                  placeholder="Invite emails — one email to all (comma-separated)"
+                />
+                <label className="flex items-center gap-2 text-xs text-steel-muted px-1">
+                  <input
+                    type="checkbox"
+                    checked={schedule.createTeams}
+                    onChange={(e) => setSchedule({ ...schedule, createTeams: e.target.checked })}
+                  />
+                  Schedule Microsoft Teams via Graph
+                </label>
                 <Button type="submit" disabled={busy} className="w-full !text-xs">
                   New meeting (Agenda)
                 </Button>
@@ -554,7 +596,18 @@ export default function CommsPage() {
                       <p className="text-sm text-steel-muted mt-1">
                         {new Date(selected.meetingDate).toLocaleString()}
                         {selected.location ? ` · ${selected.location}` : ""}
+                        {selected.durationMins ? ` · ${selected.durationMins} min` : ""}
                       </p>
+                      {selected.teamsJoinUrl && (
+                        <a
+                          href={selected.teamsJoinUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block mt-2 text-xs font-semibold text-[#6264a7] hover:underline"
+                        >
+                          Join Microsoft Teams →
+                        </a>
+                      )}
                     </div>
                     {canEdit && (
                       <div className="flex flex-wrap gap-2">
