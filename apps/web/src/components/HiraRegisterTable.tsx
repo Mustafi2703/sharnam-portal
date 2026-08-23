@@ -65,7 +65,7 @@ export function HiraRegisterTable({ rows, activeId, onSelect, canEdit, busy, onL
   }, [sorted]);
 
   return (
-    <Card padding={false} className="flex flex-col max-h-[min(72vh,56rem)] min-h-[22rem] overflow-hidden">
+    <Card padding={false} className="spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="font-semibold text-sm text-left">HIRA register — Safety Dashboard.xlsx</h3>

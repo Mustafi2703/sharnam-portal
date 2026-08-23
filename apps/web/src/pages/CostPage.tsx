@@ -7,6 +7,7 @@ import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
 import { BudgetWbsRegister } from "../components/BudgetWbsRegister";
 import { CostSheetUploadPanel } from "../components/CostSheetUploadPanel";
+import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import { BbsEntryTable } from "../components/BbsEntryTable";
 import { MbEntryTable } from "../components/MbEntryTable";
 import { MasterLinePicker } from "../components/MasterLinePicker";
@@ -79,6 +80,8 @@ export default function CostPage() {
   const [file, setFile] = useState<File | null>(null);
   const [structureName, setStructureName] = useState("New structure");
   const [msg, setMsg] = useState("");
+  const [mbAddOpen, setMbAddOpen] = useState(false);
+  const [bbsAddOpen, setBbsAddOpen] = useState(false);
   const [cfView, setCfView] = useState<"chart" | "forecast" | "tracking" | "all">(
     (["chart", "forecast", "tracking", "all"].includes(searchParams.get("cf") || "")
       ? (searchParams.get("cf") as "chart" | "forecast" | "tracking" | "all")
@@ -192,6 +195,17 @@ export default function CostPage() {
     () => [...new Set(bbsRows.map((b: any) => b.barMark).filter(Boolean))] as string[],
     [bbsRows]
   );
+
+  async function importCostSheet(kind: "mb" | "bbs", file: File) {
+    if (!id || !canEdit) return;
+    const pkg = pkgFilter !== "All" ? pkgFilter : (kind === "mb" ? mbPackages[0] : bbsPackages[0]) || "Dormitory Civil";
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("packageName", pkg);
+    const r = await api<{ rowsImported: number }>(`/api/cost/${id}/${kind}/import`, { method: "POST", token, body: fd });
+    setMsg(`Imported ${r.rowsImported} ${kind.toUpperCase()} rows → ${pkg}`);
+    await load();
+  }
 
   const cashflowRows = useMemo(() => {
     let rows: any[] = [];
@@ -411,7 +425,14 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="space-y-3">
+        <div className="space-y-3 page-stack--register flex flex-col min-h-0">
+          <ReferenceSheetToolbar
+            sheetLabel={`BOQ monitoring — ${pkgFilter}`}
+            rowCount={monRows.length}
+            canEdit={canEdit}
+            onDownloadCsv={() => downloadSheet("boq")}
+            message={msg || undefined}
+          />
           <Card className="!p-4 border-line bg-paper/80">
             <h3 className="font-semibold text-sm">BOQ is per project &amp; structure</h3>
             <p className="text-xs text-steel-muted mt-1">
@@ -499,7 +520,16 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="space-y-4">
+        <div className="space-y-4 page-stack--register flex flex-col min-h-0">
+          <ReferenceSheetToolbar
+            sheetLabel={`MB — ${pkgFilter}`}
+            rowCount={mbRows.length}
+            canEdit={canEdit || canSiteEdit}
+            onUpload={canEdit ? (f) => importCostSheet("mb", f) : undefined}
+            onAddRow={canEdit ? () => setMbAddOpen((v) => !v) : undefined}
+            onDownloadCsv={() => downloadSheet("mb")}
+            message={msg || undefined}
+          />
           {canEdit && (
             <MasterLinePicker
               projectId={id!}
@@ -532,7 +562,7 @@ export default function CostPage() {
               </Card>
             ))}
           </div>
-          {canEdit && (
+          {canEdit && mbAddOpen && (
             <Card>
               <h3 className="font-semibold text-sm mb-3">Add MB line</h3>
               <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMb}>
@@ -569,7 +599,16 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="space-y-4">
+        <div className="space-y-4 page-stack--register flex flex-col min-h-0">
+          <ReferenceSheetToolbar
+            sheetLabel={`BBS — ${pkgFilter}`}
+            rowCount={bbsRows.length}
+            canEdit={canEdit || canSiteEdit}
+            onUpload={canEdit ? (f) => importCostSheet("bbs", f) : undefined}
+            onAddRow={canEdit ? () => setBbsAddOpen((v) => !v) : undefined}
+            onDownloadCsv={() => downloadSheet("bbs")}
+            message={msg || undefined}
+          />
           {canEdit && (
             <MasterLinePicker
               projectId={id!}
@@ -676,7 +715,22 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="space-y-3">
+        <div className="space-y-3 page-stack--register flex flex-col min-h-0">
+          <ReferenceSheetToolbar
+            sheetLabel="Cashflow Dashboard"
+            rowCount={cashflowRows.length}
+            canEdit={canEdit}
+            onUpload={async (file) => {
+              const fd = new FormData();
+              fd.append("file", file);
+              fd.append("replace", "1");
+              const res = await api<{ imported: number }>(`/api/cost/${id}/cashflow/import`, { method: "POST", token, body: fd });
+              setMsg(`Cashflow imported — ${res.imported} periods`);
+              await load();
+            }}
+            onDownloadCsv={() => downloadSheet("cashflow")}
+            message={msg || undefined}
+          />
           {canEdit && (
             <Card className="!p-4">
               <h3 className="font-semibold text-sm mb-2">Upload Cashflow Dashboard</h3>

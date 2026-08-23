@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { DemoProjectsPanel } from "../components/DemoProjectsPanel";
+import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import { sortDemoProjectsFirst } from "../lib/demoProjects";
 
 const LEAD_STAGES = ["New", "Qualified", "Proposal", "Negotiation", "Converted", "Lost"];
@@ -19,6 +20,7 @@ export default function CrmPage() {
   const [quotations, setQuotations] = useState<any[]>([]);
   const [bidPackages, setBidPackages] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [leadAddOpen, setLeadAddOpen] = useState(false);
   const [convertLead, setConvertLead] = useState<any | null>(null);
   const [leadForm, setLeadForm] = useState({
     title: "",
@@ -102,6 +104,7 @@ export default function CrmPage() {
       body: JSON.stringify({ ...leadForm, value: leadForm.value ? Number(leadForm.value) : null }),
     });
     setLeadForm({ title: "", contactName: "", email: "", phone: "", stage: "New", value: "" });
+    setLeadAddOpen(false);
     setMsg("Lead added.");
     await load();
   }
@@ -241,7 +244,16 @@ export default function CrmPage() {
 
       {tab === "leads" && canManage && (
         <>
-          <Card>
+          <ReferenceSheetToolbar
+            sheetLabel="CRM leads pipeline"
+            rowCount={leads.length}
+            canEdit
+            onAddRow={() => setLeadAddOpen((v) => !v)}
+            message={msg || undefined}
+          />
+
+          {leadAddOpen && (
+          <Card className="!p-3">
             <h3 className="font-semibold mb-3">Add lead</h3>
             <form className="grid md:grid-cols-3 gap-3" onSubmit={createLead}>
               <Input required placeholder="Opportunity title" value={leadForm.title} onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })} />
@@ -255,10 +267,12 @@ export default function CrmPage() {
               </Select>
               <Input placeholder="Value (INR)" value={leadForm.value} onChange={(e) => setLeadForm({ ...leadForm, value: e.target.value })} />
               <Button type="submit" className="md:col-span-3">Save lead</Button>
+              <Button type="button" variant="secondary" className="md:col-span-3" onClick={() => setLeadAddOpen(false)}>Cancel</Button>
             </form>
           </Card>
+          )}
 
-          <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-3 overflow-x-auto">
+          <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-3 overflow-x-auto pb-2">
             {LEAD_STAGES.map((stage) => (
               <Card key={stage} padding={false} className="min-w-[180px]">
                 <div className="px-3 py-2 border-b bg-sand/50 text-xs font-semibold uppercase tracking-wide flex justify-between">

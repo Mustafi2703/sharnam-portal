@@ -9,6 +9,7 @@ import { QualitySiteRegister } from "../../components/QualitySiteRegister";
 import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
 import type { QapProjectMeta } from "../../components/QapDetailRegister";
 import { SorLogPanel } from "../../components/SorLogPanel";
+import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
@@ -46,6 +47,7 @@ export default function InspectionsPage() {
     actualClosure: "",
   });
   const [ncrModalBusy, setNcrModalBusy] = useState(false);
+  const [ncrAddOpen, setNcrAddOpen] = useState(false);
   const [form, setForm] = useState({
     title: "Site quality inspection",
     drawingId: "",
@@ -109,7 +111,7 @@ export default function InspectionsPage() {
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   return (
-    <div className="space-y-4 min-w-0">
+    <div className={`min-w-0 ${sheetKey === "car-register" || sheetKey === "cube-test" ? "page-stack--register flex flex-col" : "space-y-4"}`}>
       <PageHeader
         dense
         eyebrow="Quality module"
@@ -224,10 +226,18 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "car-register" && (
-        <Card padding={false} className="flex flex-col max-h-[calc(100vh-10rem)] min-h-[24rem] overflow-hidden">
+        <>
+        <ReferenceSheetToolbar
+          sheetLabel="NCR / CAR register — Quality Dashboard"
+          rowCount={dash?.ncrs?.length}
+          canEdit={canManage}
+          message={msg || undefined}
+          onAddRow={canManage ? () => setNcrAddOpen((v) => !v) : undefined}
+        />
+        <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-line shrink-0">
           <h3 className="font-semibold mb-3">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
-          {canManage && (
+          {ncrAddOpen && canManage && (
             <form
               className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 pb-4 border-b border-line"
               onSubmit={async (e) => {
@@ -246,6 +256,7 @@ export default function InspectionsPage() {
                     location: "",
                     contractor: "",
                   });
+                  setNcrAddOpen(false);
                   setMsg(`${ncrForm.kind} raised — feeds DPR quality block and WPR quality slide`);
                   await load();
                 } catch (err) {
@@ -291,7 +302,7 @@ export default function InspectionsPage() {
             </form>
           )}
           </div>
-          <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
+          <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table min-w-[40rem] w-full">
               <thead className="sticky top-0 z-10">
                 <tr>
@@ -370,72 +381,49 @@ export default function InspectionsPage() {
               </tbody>
             </table>
           </div>
-          <div className="shrink-0">
-          <RegisterEntryModal
-            open={!!ncrEdit}
-            title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
-            onClose={() => setNcrEdit(null)}
-            saving={ncrModalBusy}
-            onSave={async () => {
-              if (!ncrEdit || !id) return;
-              setNcrModalBusy(true);
-              try {
-                await api(`/api/checklist/project/${id}/ncr/${ncrEdit.id}`, {
-                  method: "PATCH",
-                  token,
-                  body: JSON.stringify({
-                    ncrType: ncrEditForm.ncrType,
-                    description: ncrEditForm.description,
-                    location: ncrEditForm.location,
-                    status: ncrEditForm.status,
-                    plannedClosure: ncrEditForm.plannedClosure || null,
-                    actualClosure: ncrEditForm.actualClosure || null,
-                  }),
-                });
-                setMsg(`${ncrEdit.number} updated`);
-                setNcrEdit(null);
-                await load();
-              } catch (err) {
-                setMsg(err instanceof Error ? err.message : "Update failed");
-              } finally {
-                setNcrModalBusy(false);
-              }
-            }}
-          >
-            <Select value={ncrEditForm.status} onChange={(e) => setNcrEditForm({ ...ncrEditForm, status: e.target.value })}>
-              <option value="Open">Open</option>
-              <option value="Closed">Closed</option>
-            </Select>
-            <Input
-              placeholder="Type"
-              value={ncrEditForm.ncrType}
-              onChange={(e) => setNcrEditForm({ ...ncrEditForm, ncrType: e.target.value })}
-            />
-            <TextArea
-              placeholder="Description"
-              value={ncrEditForm.description}
-              onChange={(e) => setNcrEditForm({ ...ncrEditForm, description: e.target.value })}
-            />
-            <Input
-              placeholder="Location"
-              value={ncrEditForm.location}
-              onChange={(e) => setNcrEditForm({ ...ncrEditForm, location: e.target.value })}
-            />
-            <Input
-              type="date"
-              placeholder="Planned closure"
-              value={ncrEditForm.plannedClosure}
-              onChange={(e) => setNcrEditForm({ ...ncrEditForm, plannedClosure: e.target.value })}
-            />
-            <Input
-              type="date"
-              placeholder="Actual closure"
-              value={ncrEditForm.actualClosure}
-              onChange={(e) => setNcrEditForm({ ...ncrEditForm, actualClosure: e.target.value })}
-            />
-          </RegisterEntryModal>
-          </div>
         </Card>
+        <RegisterEntryModal
+          open={!!ncrEdit}
+          title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
+          onClose={() => setNcrEdit(null)}
+          saving={ncrModalBusy}
+          onSave={async () => {
+            if (!ncrEdit || !id) return;
+            setNcrModalBusy(true);
+            try {
+              await api(`/api/checklist/project/${id}/ncr/${ncrEdit.id}`, {
+                method: "PATCH",
+                token,
+                body: JSON.stringify({
+                  ncrType: ncrEditForm.ncrType,
+                  description: ncrEditForm.description,
+                  location: ncrEditForm.location,
+                  status: ncrEditForm.status,
+                  plannedClosure: ncrEditForm.plannedClosure || null,
+                  actualClosure: ncrEditForm.actualClosure || null,
+                }),
+              });
+              setMsg(`${ncrEdit.number} updated`);
+              setNcrEdit(null);
+              await load();
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : "Update failed");
+            } finally {
+              setNcrModalBusy(false);
+            }
+          }}
+        >
+          <Select value={ncrEditForm.status} onChange={(e) => setNcrEditForm({ ...ncrEditForm, status: e.target.value })}>
+            <option value="Open">Open</option>
+            <option value="Closed">Closed</option>
+          </Select>
+          <Input placeholder="Type" value={ncrEditForm.ncrType} onChange={(e) => setNcrEditForm({ ...ncrEditForm, ncrType: e.target.value })} />
+          <TextArea placeholder="Description" value={ncrEditForm.description} onChange={(e) => setNcrEditForm({ ...ncrEditForm, description: e.target.value })} />
+          <Input placeholder="Location" value={ncrEditForm.location} onChange={(e) => setNcrEditForm({ ...ncrEditForm, location: e.target.value })} />
+          <Input type="date" value={ncrEditForm.plannedClosure} onChange={(e) => setNcrEditForm({ ...ncrEditForm, plannedClosure: e.target.value })} />
+          <Input type="date" value={ncrEditForm.actualClosure} onChange={(e) => setNcrEditForm({ ...ncrEditForm, actualClosure: e.target.value })} />
+        </RegisterEntryModal>
+        </>
       )}
 
       {sheetKey === "site-observation" && id && (
@@ -459,7 +447,7 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "cube-test" && id && (
-        <div className="min-h-0 flex flex-col flex-1">
+        <div className="flex-1 min-h-0 flex flex-col">
         <CubeRegisterPanel
           projectId={id}
           token={token}

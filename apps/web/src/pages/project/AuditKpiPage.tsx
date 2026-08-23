@@ -189,7 +189,7 @@ export default function AuditKpiPage() {
   const currentSheet = TABS.find((t) => t.key === tab)?.sheet || "";
 
   return (
-    <div className="page-stack">
+    <div className={tab !== "dashboard" && tab !== "kpi-dashboard" ? "page-stack--register flex flex-col min-h-0" : "page-stack"}>
       <PageHeader
         title="Audit & KPI"
         subtitle="Upload client Excel packs, add rows in modal or inline form, download in SPDC column format."

@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
+import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
@@ -45,35 +46,6 @@ const emptyForm = (ncrView: boolean) => ({
   followUpDate: "",
 });
 
-type SafetyForm = ReturnType<typeof emptyForm>;
-
-function recordToForm(r: any): SafetyForm {
-  const d = (v: string | null | undefined) => (v ? String(v).slice(0, 10) : "");
-  return {
-    recordType: r.recordType || "Observation",
-    title: r.title || "",
-    description: r.description || "",
-    severity: r.severity || "Medium",
-    status: r.status || "Open",
-    location: r.location || "",
-    correctiveAction: r.correctiveAction || "",
-    ncrNumber: r.ncrNumber || "",
-    activityTask: r.activityTask || "",
-    category: r.category || "",
-    rootCause: r.rootCause || "",
-    contributingFactors: r.contributingFactors || "",
-    immediateAction: r.immediateAction || "",
-    longTermAction: r.longTermAction || "",
-    responsibleParty: r.responsibleParty || "",
-    targetCompletion: d(r.targetCompletion),
-    timeImpact: r.timeImpact || "",
-    costImpact: r.costImpact || "",
-    actionTaken: r.actionTaken || "",
-    issuedTo: r.issuedTo || "",
-    followUpDate: d(r.followUpDate),
-  };
-}
-
 export default function SafetyPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -86,9 +58,9 @@ export default function SafetyPage() {
   const [filter, setFilter] = useState("All");
   const [active, setActive] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm(ncrView));
-  const [editForm, setEditForm] = useState<SafetyForm | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const hiraAutoSyncRef = useRef(false);
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canEdit = canCreate;
@@ -159,14 +131,9 @@ export default function SafetyPage() {
     return rows.filter((r) => r.recordType === filter);
   }, [data, filter, sheetView]);
 
-  const selected = data?.records.find((r) => r.id === active);
   const registerRows = filtered;
   const sheetHasRegister = !sheetView.kpiOnly && sheetKey !== "";
-
-  useEffect(() => {
-    const row = data?.records.find((r) => r.id === active);
-    setEditForm(row ? recordToForm(row) : null);
-  }, [active, data]);
+  const isRegisterSheet = sheetHasRegister && sheetKey !== "hira";
 
   useEffect(() => {
     if (!sheetHasRegister) return;
@@ -188,27 +155,12 @@ export default function SafetyPage() {
         body: JSON.stringify({ ...form, title }),
       });
       setForm(emptyForm(ncrView));
+      setAddOpen(false);
       setActive(row.id);
       setMsg(`${form.recordType} logged — feeds Safety dashboard and DPR/WPR safety block.`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
-    }
-  }
-
-  async function saveEdit() {
-    if (!selected || !editForm) return;
-    setMsg("");
-    try {
-      await api(`/api/safety/${selected.id}`, {
-        method: "PATCH",
-        token,
-        body: JSON.stringify({ ...editForm, title: editForm.title || selected.title }),
-      });
-      setMsg("Record updated.");
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Failed to save");
     }
   }
 
@@ -225,7 +177,7 @@ export default function SafetyPage() {
             : TYPES;
 
   return (
-    <div className="space-y-4 min-w-0">
+    <div className={`min-w-0 ${isRegisterSheet || sheetKey === "hira" ? "page-stack--register flex flex-col" : "space-y-4"}`}>
       <PageHeader
         dense
         eyebrow="Safety module"
@@ -317,6 +269,7 @@ export default function SafetyPage() {
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
 
       {sheetKey === "hira" && (
+        <div className="page-stack--register flex flex-col min-h-0 flex-1">
         <HiraRegisterTable
           rows={hiraRows}
           activeId={active}
@@ -341,17 +294,25 @@ export default function SafetyPage() {
             }
           }}
         />
+        </div>
       )}
 
-      {sheetHasRegister && canCreate && sheetKey !== "hira" && (
-        <Card>
-          <h3 className="font-semibold mb-1">
-            {showNcrFields ? "Raise Safety NCR (Safety NCR.xlsx form)" : `Log ${sheetView.label.toLowerCase()} record`}
+      {isRegisterSheet && (
+        <ReferenceSheetToolbar
+          sheetLabel={`${sheetView.label} — ${sheetView.sheet}`}
+          rowCount={registerRows.length}
+          canEdit={canCreate}
+          busy={busy}
+          message={msg || undefined}
+          onAddRow={canCreate ? () => setAddOpen((v) => !v) : undefined}
+        />
+      )}
+
+      {isRegisterSheet && addOpen && canCreate && (
+        <Card className="!p-3 shrink-0">
+          <h3 className="font-semibold mb-2 text-sm">
+            {showNcrFields ? "Raise Safety NCR" : `Log ${sheetView.label.toLowerCase()}`}
           </h3>
-          <p className="text-xs text-steel-muted mb-3">
-            Reference sheets: Safety NCR.xlsx · Safety Dashboard.xlsx — sync via{" "}
-            <code className="text-[10px]">node scripts/sync-reference-sheets.mjs</code>
-          </p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
             <Select value={form.recordType} onChange={(e) => setForm({ ...form, recordType: e.target.value })}>
               {formTypes.map((t) => (
@@ -468,18 +429,38 @@ export default function SafetyPage() {
             <Button type="submit" className="sm:col-span-2 lg:col-span-3">
               {form.recordType === "NCR" ? "Raise Safety NCR" : "Save safety record"}
             </Button>
+            <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
           </form>
         </Card>
       )}
 
+      {isRegisterSheet && (
+        <div className="flex flex-wrap gap-1 shrink-0">
+          {["All", "Open", "Closed", ...TYPES].map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`rounded px-3 py-1 text-xs font-medium border ${
+                filter === f ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
+
       {sheetHasRegister && sheetKey !== "hira" && (
-        <Card padding={false}>
+        <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
           <div className="px-4 py-3 border-b border-line bg-sand/40">
             <h3 className="font-semibold text-sm text-left">
               {sheetView.label} register ({sheetView.sheet})
             </h3>
           </div>
-          <div className="sheet-register overflow-x-auto max-h-[28rem]">
+          <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table min-w-[48rem] w-full text-sm">
               <thead>
                 <tr>
@@ -564,244 +545,6 @@ export default function SafetyPage() {
         </Card>
       )}
 
-      {sheetHasRegister && sheetKey !== "hira" && (
-        <>
-      <div className="flex flex-wrap gap-1">
-        {["All", "Open", "Closed", ...TYPES].map((f) => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={`rounded px-3 py-1 text-xs font-medium border ${
-              filter === f ? "bg-procore-navy text-white border-procore-navy" : "bg-white border-line"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid lg:grid-cols-[340px_1fr] gap-4">
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b bg-sand/50 font-semibold text-sm">Safety log</div>
-          <ul className="divide-y max-h-[60vh] overflow-y-auto">
-            {filtered.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                className={`w-full text-left px-4 py-3 ${active === r.id ? "bg-brand-soft" : "hover:bg-sand/40"}`}
-                onClick={() => setActive(r.id)}
-              >
-                <div className="flex justify-between gap-2">
-                  <span className="text-[11px] font-mono text-brand">{r.recordType}</span>
-                  <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
-                </div>
-                <div className="font-medium text-sm mt-1">{r.ncrNumber || r.title}</div>
-                <div className="text-[11px] text-steel-muted mt-1">
-                  {r.severity} · {new Date(r.occurredAt).toLocaleDateString()}
-                  {r.location ? ` · ${r.location}` : ""}
-                </div>
-              </button>
-            ))}
-            {!filtered.length && <li className="p-4 text-sm text-steel-muted">No records.</li>}
-          </ul>
-        </Card>
-
-        <Card>
-          {!selected && <p className="text-sm text-steel-muted">Select a safety record</p>}
-          {selected && editForm && (
-            <div className="space-y-4">
-              <div>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <Badge tone="brand">{selected.recordType}</Badge>
-                  <Badge tone={selected.status === "Open" ? "warn" : "ok"}>{selected.status}</Badge>
-                  <Badge
-                    tone={
-                      selected.severity === "Critical" || selected.severity === "High" ? "danger" : "neutral"
-                    }
-                  >
-                    {selected.severity}
-                  </Badge>
-                  {selected.source && <Badge tone="neutral">{selected.source}</Badge>}
-                </div>
-                <p className="text-sm text-steel-muted">
-                  Reported by {selected.reportedBy?.fullName} · {new Date(selected.occurredAt).toLocaleString()}
-                </p>
-              </div>
-
-              {canEdit ? (
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <Input
-                    value={editForm.title}
-                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                    placeholder="Title"
-                  />
-                  <Input
-                    value={editForm.ncrNumber}
-                    onChange={(e) => setEditForm({ ...editForm, ncrNumber: e.target.value })}
-                    placeholder="NCR number"
-                  />
-                  <Select
-                    value={editForm.severity}
-                    onChange={(e) => setEditForm({ ...editForm, severity: e.target.value })}
-                  >
-                    {SEVERITIES.map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </Select>
-                  <Select
-                    value={editForm.status}
-                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                  >
-                    <option>Open</option>
-                    <option>Closed</option>
-                  </Select>
-                  <Input
-                    value={editForm.location}
-                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                    placeholder="Location"
-                  />
-                  <Input
-                    value={editForm.activityTask}
-                    onChange={(e) => setEditForm({ ...editForm, activityTask: e.target.value })}
-                    placeholder="Activity / task"
-                  />
-                  <Input
-                    value={editForm.category}
-                    onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                    placeholder="Category"
-                  />
-                  <Input
-                    value={editForm.responsibleParty}
-                    onChange={(e) => setEditForm({ ...editForm, responsibleParty: e.target.value })}
-                    placeholder="Responsible party"
-                  />
-                  <Input
-                    value={editForm.issuedTo}
-                    onChange={(e) => setEditForm({ ...editForm, issuedTo: e.target.value })}
-                    placeholder="Issued to"
-                  />
-                  <Input
-                    type="date"
-                    value={editForm.targetCompletion}
-                    onChange={(e) => setEditForm({ ...editForm, targetCompletion: e.target.value })}
-                  />
-                  <Input
-                    type="date"
-                    value={editForm.followUpDate}
-                    onChange={(e) => setEditForm({ ...editForm, followUpDate: e.target.value })}
-                  />
-                  <Input
-                    value={editForm.timeImpact}
-                    onChange={(e) => setEditForm({ ...editForm, timeImpact: e.target.value })}
-                    placeholder="Time impact"
-                  />
-                  <Input
-                    value={editForm.costImpact}
-                    onChange={(e) => setEditForm({ ...editForm, costImpact: e.target.value })}
-                    placeholder="Cost impact"
-                  />
-                  <TextArea
-                    className="sm:col-span-2"
-                    rows={3}
-                    value={editForm.description}
-                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    placeholder="Description"
-                  />
-                  <TextArea
-                    className="sm:col-span-2"
-                    rows={2}
-                    value={editForm.rootCause}
-                    onChange={(e) => setEditForm({ ...editForm, rootCause: e.target.value })}
-                    placeholder="Root cause"
-                  />
-                  <TextArea
-                    className="sm:col-span-2"
-                    rows={2}
-                    value={editForm.immediateAction}
-                    onChange={(e) => setEditForm({ ...editForm, immediateAction: e.target.value })}
-                    placeholder="Immediate action"
-                  />
-                  <TextArea
-                    className="sm:col-span-2"
-                    rows={2}
-                    value={editForm.longTermAction}
-                    onChange={(e) => setEditForm({ ...editForm, longTermAction: e.target.value })}
-                    placeholder="Long-term action"
-                  />
-                  <TextArea
-                    className="sm:col-span-2"
-                    rows={2}
-                    value={editForm.correctiveAction}
-                    onChange={(e) => setEditForm({ ...editForm, correctiveAction: e.target.value })}
-                    placeholder="Corrective action / action taken"
-                  />
-                  <div className="sm:col-span-2 flex flex-wrap gap-2">
-                    <Button type="button" onClick={() => void saveEdit()}>
-                      Save changes
-                    </Button>
-                    {selected.recordType === "NCR" && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => id && openNcrFormWindow(id, "safety", selected.id)}
-                      >
-                        {selected.status === "Open" ? "Open NCR form (Safety NCR.xlsx)" : "View / download NCR form"}
-                      </Button>
-                    )}
-                    {selected.status === "Open" && selected.recordType === "NCR" ? (
-                      <Button
-                        type="button"
-                        variant="dark"
-                        onClick={() => id && openNcrFormWindow(id, "safety", selected.id)}
-                      >
-                        Close via NCR form
-                      </Button>
-                    ) : selected.status === "Open" ? (
-                      <Button
-                        type="button"
-                        variant="dark"
-                        onClick={async () => {
-                          await api(`/api/safety/${selected.id}`, {
-                            method: "PATCH",
-                            token,
-                            body: JSON.stringify({ status: "Closed" }),
-                          });
-                          setMsg("Record closed.");
-                          await load();
-                        }}
-                      >
-                        Close record
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3 text-sm">
-                  <h2 className="text-xl font-semibold">{selected.ncrNumber || selected.title}</h2>
-                  {selected.description && (
-                    <div className="rounded-lg bg-sand/50 p-3 whitespace-pre-wrap">{selected.description}</div>
-                  )}
-                  {selected.rootCause && (
-                    <div>
-                      <div className="text-xs font-mono uppercase text-steel-muted mb-1">Root cause</div>
-                      <p>{selected.rootCause}</p>
-                    </div>
-                  )}
-                  {selected.correctiveAction && (
-                    <div>
-                      <div className="text-xs font-mono uppercase text-steel-muted mb-1">Corrective action</div>
-                      <p>{selected.correctiveAction}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-      </div>
-        </>
-      )}
     </div>
   );
 }

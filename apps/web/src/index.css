@@ -624,28 +624,47 @@ body.is-auth-route #root {
 /* Full-viewport register pages (QAP, cube, audit sheets) */
 .page-stack--register {
   min-height: 0;
-  height: calc(100vh - 7.5rem);
-  max-height: calc(100vh - 7.5rem);
+  flex: 1 1 auto;
+  max-height: none;
   overflow: hidden;
+  gap: 0.65rem;
+  padding-bottom: 0.5rem;
 }
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .page-stack--register {
-    height: calc(100dvh - 6.5rem);
-    max-height: calc(100dvh - 6.5rem);
+    padding-bottom: max(4.5rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)));
+  }
+  .page-stack--register .reference-sheet-toolbar {
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    z-index: 15;
+    margin-left: 0;
+    margin-right: 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   }
 }
 .qap-page__register .spdc-register-panel,
-.page-stack--register .spdc-register-panel {
+.page-stack--register .spdc-register-panel,
+.page-stack--register .register-table-panel {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .qap-page__register .sheet-register__scroll,
-.page-stack--register .sheet-register__scroll {
+.page-stack--register .sheet-register__scroll,
+.page-stack--register .register-table-panel .sheet-register,
+.page-stack--register .register-table-panel > .overflow-x-auto {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .spdc-register-panel .sheet-register__scroll {
   flex: 1 1 auto;
@@ -3891,7 +3910,7 @@ body {
   gap: 0.5rem;
 }
 @media (max-width: 640px) {
-  .reference-sheet-toolbar {
+  .reference-sheet-toolbar:not(.page-stack--register .reference-sheet-toolbar) {
     position: sticky;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
     z-index: 20;
