@@ -608,9 +608,72 @@ body.is-auth-route #root {
 .qap-register__table,
 .cube-register__table {
   width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
   font-size: 0.6875rem;
+}
+.spdc-register-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 24rem;
+  max-height: min(78vh, 56rem);
+  overflow: hidden;
+}
+.spdc-register-panel .sheet-register__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.register-sheet-cell {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 0.2rem;
+  background: rgb(255 255 255 / 0.92);
+  padding: 0.2rem 0.35rem;
+  font-size: inherit;
+  line-height: 1.35;
+  color: var(--color-ink);
+}
+.register-sheet-cell:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 1px rgb(15 118 110 / 0.25);
+  background: #fff;
+}
+.register-sheet-cell--select {
+  cursor: pointer;
+}
+.register-sheet-cell__readonly {
+  display: block;
+  min-height: 1.35em;
+}
+.spdc-register-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 0.72);
+  font-size: 0.875rem;
+  color: var(--color-brand-dark);
+  font-weight: 600;
+}
+.qap-register__table thead tr:first-child th {
+  top: 0;
+}
+.qap-register__table thead tr:nth-child(2) th {
+  top: 1.85rem;
+}
+.cube-register__table thead tr:first-child th {
+  top: 0;
+}
+.cube-register__table thead tr:nth-child(2) th {
+  top: 1.85rem;
 }
 .qap-register__table thead th,
 .cube-register__table thead th {

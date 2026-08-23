@@ -289,6 +289,7 @@ export default function QapPage() {
         onUpdated={load}
         showWeekFilter={false}
         project={project}
+        loading={busy}
       />
       </div>
 

@@ -10,6 +10,11 @@ export type InspectionRfiKind =
 
 export type InspectionRegisterTab = "quality-ir" | "safety-ir" | "activity-checklist" | "hse-register";
 
+/** Common QAP sign-off abbreviations (Excel Week 50) — use in dropdowns, not free-text reformatting. */
+export const QAP_SIGN_CONTRACTOR = ["", "Performer", "Checker", "Yes", "Review", "Witness", "Approve"];
+export const QAP_SIGN_PMC = ["", "Review", "Witness", "Approve", "Yes", "TPC", "Random"];
+export const QAP_SIGN_CLIENT = ["", "Witness", "Random", "Approve", "Yes", "Review"];
+
 export const QAP_LEGENDS: [string, string][] = [
   ["BBS", "Bar Bending Schedule"],
   ["MTC", "Material Test Certificate"],

@@ -459,6 +459,7 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "cube-test" && id && (
+        <div className="min-h-0 flex flex-col flex-1">
         <CubeRegisterPanel
           projectId={id}
           token={token}
@@ -467,6 +468,7 @@ export default function InspectionsPage() {
           onChanged={load}
           project={project}
         />
+        </div>
       )}
 
       {sheetKey === "qi" && (
