@@ -55,7 +55,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "site@sharnam.demo", allowedRoles: ["site_employee"],
     points: ["Day log", "Checklist fills", "Photos · Site RFI"],
     cta: "Enter Site", tone: "#15803D", icon: "ST",
-    landingPath: "/attendance", workspaceKey: "field", group: "role",
+    landingPath: "/attendance", workspaceKey: "comms", group: "role",
     policies: [],
   },
   employee: {
@@ -130,17 +130,6 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Audit"],
     cta: "Enter HR admin", tone: "#6D28D9", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",
-    policies: [],
-  },
-  field: {
-    key: "field", title: "Field", shortLabel: "Field",
-    headline: "Day log, photos, site RFIs.",
-    subtitle: "Field evidence on the project spine.",
-    demoEmail: "site@sharnam.demo",
-    allowedRoles: ["admin", "office", "site_employee", "employee", "vendor"],
-    points: ["Day log", "Photos", "Field RFIs"],
-    cta: "Enter Field", tone: "#DC2626", icon: "FD",
-    landingPath: "/workspace", workspaceKey: "field", group: "module",
     policies: [],
   },
 };

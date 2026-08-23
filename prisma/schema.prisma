@@ -78,7 +78,7 @@ model Project {
   outlookConnected        Boolean   @default(false)
   outlookConnectedAt      DateTime?
   /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
-  enabledModules          String    @default("[\"drawings\",\"dms\",\"quality\",\"safety\",\"progress\",\"comms\",\"field\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
+  enabledModules          String    @default("[\"drawings\",\"dms\",\"quality\",\"safety\",\"inspection\",\"progress\",\"comms\",\"auditKpi\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
   workPackages            String    @default("[\"Civil\",\"PEB\"]") @db.Text
   /// Default R2 bid disciplines for CRM packages on this project (JSON array of {key,label,sheetName})
@@ -135,6 +135,11 @@ model Project {
   snagItems             SnagItem[]
   lessonsLearnt         LessonLearnt[]
   closureReport         ProjectClosureReport?
+  siteAudits            SiteAudit[]
+  auditFindings         AuditFinding[]
+  auditChecklistItems   AuditChecklistItem[]
+  kpiSubjects           KpiSubject[]
+  kpiRoleKras           KpiRoleKra[]
 }
 
 /**
@@ -2123,6 +2128,127 @@ model LessonLearnt {
   source              String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** Site document audit header (SITE_AUDIT_Pack.xlsx) */
+model SiteAudit {
+  id           String    @id @default(cuid())
+  projectId    String
+  title        String
+  auditRef     String?
+  plannedDate  DateTime?
+  status       String    @default("Planned")
+  leadAuditor  String?
+  scopeNotes   String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  findings       AuditFinding[]
+  checklistItems AuditChecklistItem[]
+}
+
+/** Site audit finding / NC (FINDINGS sheet) */
+model AuditFinding {
+  id               String    @id @default(cuid())
+  projectId        String
+  siteAuditId      String?
+  srNo             Int?
+  findingNo        String
+  source           String?
+  refNo            String?
+  folderLocation   String?
+  description      String    @db.Text
+  photoRef         String?
+  severity         String    @default("Minor")
+  status           String    @default("Open")
+  rootCause        String?   @db.Text
+  correctiveAction String?   @db.Text
+  owner            String?
+  dueDate          DateTime?
+  closedAt         DateTime?
+  isoArea          String?
+  subjectCode      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  siteAudit SiteAudit? @relation(fields: [siteAuditId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, findingNo])
+}
+
+/** DC interview / site walk / folder sample checklist rows */
+model AuditChecklistItem {
+  id              String   @id @default(cuid())
+  projectId       String
+  siteAuditId     String?
+  section         String
+  itemNo          Int
+  prompt          String   @db.Text
+  locationChecked String?
+  observed        String?  @db.Text
+  score           Int?
+  photoRef        String?
+  response        String?
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  siteAudit SiteAudit? @relation(fields: [siteAuditId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, section, itemNo])
+}
+
+/** Master KPI subject row (03_SUBJECT_DATA) */
+model KpiSubject {
+  id               String    @id @default(cuid())
+  projectId        String
+  srNo             Int
+  isoArea          String
+  folder           String
+  isoClause        String?
+  name             String
+  custodian        String    @default("HO")
+  relativePath     String?
+  workbookFileName String?
+  recordsCount     Int       @default(0)
+  openCount        Int       @default(0)
+  closedCount      Int       @default(0)
+  overdueCount     Int       @default(0)
+  pctClosed        Float?
+  oldestOpenDays   Int?
+  kraScore         Float?
+  rag              String    @default("UNUSED")
+  lastRefreshedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, srNo])
+}
+
+/** Role KRA scorecard (06_ROLE_KRA) */
+model KpiRoleKra {
+  id           String   @id @default(cuid())
+  projectId    String
+  roleKey      String
+  kraNo        String?
+  description  String?  @db.Text
+  consequence  String?  @db.Text
+  evidenceHint String?
+  kpiCode      String?
+  target       String?
+  subjectCount Int?
+  redCount     Int      @default(0)
+  amberCount   Int      @default(0)
+  greenCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

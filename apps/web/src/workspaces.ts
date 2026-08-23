@@ -13,7 +13,7 @@ export type WorkspaceKey =
   | "inspection"
   | "progress"
   | "comms"
-  | "field"
+  | "auditKpi"
   | "cost"
   | "finance"
   | "reports"
@@ -411,20 +411,18 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Task register from MS Project XML import.",
       sheet: "MS Project XML",
     },
-  ],
-  field: [
     {
-      to: "field/checklist-master",
-      label: "Field checklist master",
-      end: true,
-      blurb: "Site execution checklists — select which form to assign and fill.",
+      to: "progress/checklist-master",
+      label: "Site execution master",
+      roles: ["admin", "office", "employee", "site_employee"],
+      blurb: "Site execution checklists — assign and fill on site.",
     },
-    { to: "field/checklist-logs", label: "Field fill log", blurb: "Closed site checklists — branded sheet report." },
-    { to: "rfis", label: "Field checklist RFI", query: "kind=SiteExecution", blurb: "Request a site checklist fill." },
+    {
+      to: "progress/checklist-logs",
+      label: "Site execution fill log",
+      blurb: "Closed site checklists — branded sheet report.",
+    },
     { to: "site-pilot", label: "Site check-in", blurb: "Photo · GPS · PDF markup · signature → SharePoint.", sheet: "SitePilot" },
-    { to: "/attendance", label: "Attendance punch", blurb: "Selfie + GPS check-in/out (also in sidebar).", sheet: "Attendance" },
-    { to: "diary", label: "Day log", blurb: "Manpower and site notes." },
-    { to: "photos", label: "Photos", blurb: "Site photo albums." },
   ],
   comms: [
     {
@@ -477,6 +475,30 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "employee", "site_employee"],
       blurb: "Connect mailbox and outbox.",
     },
+    { to: "diary", label: "Day log", blurb: "Manpower and site notes — feeds DPR.", sheet: "Day log" },
+    { to: "photos", label: "Photos", blurb: "Site photo albums.", sheet: "Photos" },
+    {
+      to: "rfis",
+      label: "Site checklist RFI",
+      query: "kind=SiteExecution",
+      blurb: "Request a site execution checklist fill.",
+    },
+  ],
+  auditKpi: [
+    {
+      to: "audit-kpi",
+      label: "Audit dashboard",
+      end: true,
+      blurb: "Open/closed findings, RAG — SITE_AUDIT_Pack DASHBOARD.",
+      sheet: "DASHBOARD",
+    },
+    { to: "audit-kpi", label: "Findings", query: "tab=findings", blurb: "NC / observation + CAPA.", sheet: "FINDINGS" },
+    { to: "audit-kpi", label: "Site walk", query: "tab=site-walk", blurb: "Walkthrough checklist.", sheet: "SITE_WALK" },
+    { to: "audit-kpi", label: "DC interview", query: "tab=dc-interview", blurb: "Document controller interview.", sheet: "DC_INTERVIEW" },
+    { to: "audit-kpi", label: "Folder sample", query: "tab=folder-sample", blurb: "Controlled folder sampling.", sheet: "FOLDER_SAMPLE" },
+    { to: "audit-kpi", label: "KPI dashboard", query: "tab=kpi-dashboard", blurb: "127 subjects RAG rollup.", sheet: "00_KPI_DASHBOARD" },
+    { to: "audit-kpi", label: "Subject data", query: "tab=subjects", blurb: "Per-subject workbook health.", sheet: "03_SUBJECT_DATA" },
+    { to: "audit-kpi", label: "Role KRA", query: "tab=role-kra", blurb: "Appraisal scorecard by role.", sheet: "06_ROLE_KRA" },
   ],
   cost: [
     {
@@ -643,7 +665,7 @@ export const MODULE_META: Record<
   },
   progress: {
     title: "Progress",
-    desc: "Overview, milestones, planned vs actual, monthly, hindrance, risk, legal, plus S-curve and MS Project for DPR/WPR.",
+    desc: "Overview, milestones, planned vs actual, site execution checklists, monthly, hindrance, risk, legal, plus S-curve and MS Project for DPR/WPR.",
     path: "hub/progress",
     accent: "#7C3AED",
     soft: "#EDE9FE",
@@ -651,15 +673,15 @@ export const MODULE_META: Record<
     ink: "#4C1D95",
     icon: "PRG",
   },
-  field: {
-    title: "Field",
-    desc: "Site checklists, check-in, day log, and photos — fill site forms from field checklist master.",
-    path: "hub/field",
-    accent: "#D97706",
-    soft: "#FEF3C7",
-    glow: "rgba(217,119,6,0.32)",
-    ink: "#92400E",
-    icon: "FLD",
+  auditKpi: {
+    title: "Audit & KPI",
+    desc: "Site document audit pack + Master KPI dashboard — findings, walk, folder sample, 127 subjects, role KRA.",
+    path: "hub/auditKpi",
+    accent: "#9333EA",
+    soft: "#F3E8FF",
+    glow: "rgba(147,51,234,0.32)",
+    ink: "#581C87",
+    icon: "KPI",
   },
   comms: {
     title: "Comms",
@@ -742,6 +764,7 @@ export const WORKSPACES: {
   if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "cost" || key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
+  if (key === "auditKpi") roles = ["admin", "office", "employee", "client"];
   if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
   return {
     key,
@@ -813,7 +836,7 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "inspection",
   "progress",
   "comms",
-  "field",
+  "auditKpi",
   "cost",
   "finance",
   "reports",

@@ -45,7 +45,6 @@ const MODULE_KEYS: ModuleExportKey[] = [
   "safety",
   "drawings",
   "progress",
-  "field",
   "cost",
 ];
 

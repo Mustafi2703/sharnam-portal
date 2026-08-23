@@ -69,6 +69,22 @@ Leave `app` / `app.spdc.in` records unchanged.
 
 ---
 
+## Auto-deploy on Git push
+
+Once GitHub is connected (Step 2), **every push to `main` triggers a new Hostinger build** — no GitHub Actions or manual upload required.
+
+| Event | Hostinger action |
+|-------|------------------|
+| Push / merge to `main` | Webhook → run `npm run hostinger:build` → restart `server.mjs` |
+| First deploy (empty DB) | Set **`RUN_SEED=1`** in hPanel env → full `seed/seed.ts` during build |
+| Later redeploys | Set **`SKIP_BUILD_SEED=1`** for faster builds (schema still runs `prisma db push`) |
+
+**Verify:** hPanel → portal web app → **Deployments** — latest commit SHA should match GitHub `main`.
+
+**Manual fallback (VPS / SSH):** `./scripts/deploy-to-hostinger.sh root@YOUR_VPS_IP portal.spdc.in`
+
+---
+
 ## Step 3 — Build settings (copy exactly)
 
 | Setting | Value |

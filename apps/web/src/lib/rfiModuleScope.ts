@@ -15,12 +15,19 @@ export type RfiKindFilter =
   | "ClientConcern";
 
 /** Which module owns the current RFI page — keeps Drawing / Quality / Safety checklists separate. */
-export type RfiModuleScope = "drawings" | "quality" | "safety" | "comms" | "inspection" | "field" | "home";
+export type RfiModuleScope = "drawings" | "quality" | "safety" | "comms" | "inspection" | "progress" | "home";
 
 export function rfiModuleScope(pathname: string, search: string): RfiModuleScope {
   const ws = resolveProjectWorkspace(pathname, search);
   if (ws === "home") return "home";
-  if (ws === "drawings" || ws === "quality" || ws === "safety" || ws === "comms" || ws === "field" || ws === "inspection")
+  if (
+    ws === "drawings" ||
+    ws === "quality" ||
+    ws === "safety" ||
+    ws === "comms" ||
+    ws === "progress" ||
+    ws === "inspection"
+  )
     return ws;
   return "home";
 }
@@ -29,7 +36,7 @@ export function defaultRfiKindForModule(scope: RfiModuleScope): RfiKindFilter | 
   if (scope === "quality") return "QualityInspection";
   if (scope === "safety") return "SafetyChecklist";
   if (scope === "drawings") return "DrawingChecklist";
-  if (scope === "field") return "SiteExecution";
+  if (scope === "progress" || scope === "comms") return "SiteExecution";
   return null;
 }
 
@@ -62,8 +69,9 @@ export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, str
       return [["QualityInspection", "Request QI fill"]];
     case "safety":
       return [["SafetyChecklist", "Safety checklist fill"]];
-    case "field":
-      return [["SiteExecution", "Field checklist fill"]];
+    case "progress":
+    case "comms":
+      return [["SiteExecution", "Site checklist fill"]];
     case "inspection":
       return [
         ["QualityIR", "Quality IR"],
@@ -131,11 +139,11 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
         "Drawing Check Master templates only — link a drawing revision when relevant. Quality and Safety checklists live in their own modules.",
     };
   }
-  if (scope === "field" || kind === "SiteExecution") {
+  if ((scope === "progress" || scope === "comms") || kind === "SiteExecution") {
     return {
-      eyebrow: "Field module",
-      title: "Field checklist fill",
-      subtitle: "Site execution checklists from Field checklist master — fill, then the sheet report is generated.",
+      eyebrow: "Site execution",
+      title: "Site checklist fill",
+      subtitle: "Site execution checklists from Progress checklist master — fill, then the sheet report is generated.",
     };
   }
   if (scope === "inspection" || kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") {
@@ -155,7 +163,7 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
 export function rfiListKindFilter(scope: RfiModuleScope, kindFilter: RfiKindFilter): RfiKindFilter {
   if (scope === "quality") return "QualityInspection";
   if (scope === "safety") return "SafetyChecklist";
-  if (scope === "field") return "SiteExecution";
+  if (scope === "progress" || scope === "comms") return "SiteExecution";
   if (scope === "drawings" && kindFilter === "All") return "All";
   if (scope === "drawings" && kindFilter === "RequestForInformation") return "RequestForInformation";
   if (scope === "drawings") return "DrawingChecklist";
@@ -173,12 +181,12 @@ export function checklistFamilyForRfiKind(
 }
 
 export function isModuleScopedRfi(scope: RfiModuleScope): boolean {
-  return scope === "drawings" || scope === "quality" || scope === "safety" || scope === "field";
+  return scope === "drawings" || scope === "quality" || scope === "safety" || scope === "progress" || scope === "comms";
 }
 
-export function moduleForChecklistFamily(family: string): WorkspaceKey | "field" {
+export function moduleForChecklistFamily(family: string): WorkspaceKey {
   if (family === "DrawingCheck") return "drawings";
   if (family === "Safety") return "safety";
-  if (family === "SiteExecution") return "field";
+  if (family === "SiteExecution") return "progress";
   return "quality";
 }

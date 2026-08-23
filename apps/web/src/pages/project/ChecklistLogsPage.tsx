@@ -20,7 +20,7 @@ const MODULE_LOG_ROUTES: Record<string, string> = {
   QualityInspection: "quality/checklist-logs",
   Safety: "safety/checklist-logs",
   ActivityInspection: "inspection/checklist-logs",
-  SiteExecution: "field/checklist-logs",
+  SiteExecution: "progress/checklist-logs",
 };
 
 function familyLockFromPath(pathname: string): string | undefined {
@@ -29,7 +29,7 @@ function familyLockFromPath(pathname: string): string | undefined {
   if (tail === "quality/checklist-logs") return "QualityInspection";
   if (tail === "safety/checklist-logs") return "Safety";
   if (tail === "inspection/checklist-logs") return "ActivityInspection";
-  if (tail === "field/checklist-logs") return "SiteExecution";
+  if (tail === "progress/checklist-logs") return "SiteExecution";
   return undefined;
 }
 

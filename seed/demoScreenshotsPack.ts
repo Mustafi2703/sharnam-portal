@@ -28,7 +28,7 @@ const ALL_MODULES = [
   "safety",
   "progress",
   "comms",
-  "field",
+  "auditKpi",
   "cost",
   "finance",
   "reports",

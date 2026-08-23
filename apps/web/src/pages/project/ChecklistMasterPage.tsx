@@ -23,7 +23,7 @@ const MODULE_MASTER_ROUTES: Record<string, string> = {
   QualityInspection: "quality/checklist-master",
   Safety: "safety/checklist-master",
   ActivityInspection: "inspection/checklist-master",
-  SiteExecution: "field/checklist-master",
+  SiteExecution: "progress/checklist-master",
 };
 
 function familyLockFromPath(pathname: string): Family | undefined {
@@ -32,7 +32,7 @@ function familyLockFromPath(pathname: string): Family | undefined {
   if (tail === "quality/checklist-master") return "QualityInspection";
   if (tail === "safety/checklist-master") return "Safety";
   if (tail === "inspection/checklist-master") return "ActivityInspection";
-  if (tail === "field/checklist-master") return "SiteExecution";
+  if (tail === "progress/checklist-master") return "SiteExecution";
   return undefined;
 }
 

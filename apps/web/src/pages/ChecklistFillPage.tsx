@@ -255,7 +255,7 @@ export default function ChecklistFillPage() {
                       ? "inspection/checklist-logs"
                       : family === "DrawingCheck"
                         ? "drawings/checklist-logs"
-                        : "field/checklist-logs"
+                        : "progress/checklist-logs"
               }`}
               className="text-xs font-semibold text-brand"
             >

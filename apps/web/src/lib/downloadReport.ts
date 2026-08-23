@@ -25,7 +25,7 @@ export type ExportModule =
   | "safety"
   | "drawings"
   | "progress"
-  | "field"
+  | "auditKpi"
   | "cost"
   | "analytics"
   | "dpr"

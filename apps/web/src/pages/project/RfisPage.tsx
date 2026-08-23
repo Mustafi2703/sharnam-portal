@@ -149,7 +149,7 @@ export default function RfisPage() {
         ? "QualityInspection"
         : moduleScope === "safety"
           ? "SafetyChecklist"
-          : moduleScope === "field"
+          : moduleScope === "progress" || moduleScope === "comms"
             ? "SiteExecution"
             : composeMode && kindFilter === "RequestForInformation"
               ? "RequestForInformation"
@@ -254,7 +254,7 @@ export default function RfisPage() {
           : selected?.rfiKind === "ActivityInspection"
             ? `/projects/${id}/inspection/checklist-master`
             : selected?.rfiKind === "SiteExecution"
-              ? `/projects/${id}/field/checklist-master`
+              ? `/projects/${id}/progress/checklist-master`
               : `/projects/${id}/checklist`;
 
   return (

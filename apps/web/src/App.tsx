@@ -38,6 +38,7 @@ import SafetyPage from "./pages/project/SafetyPage";
 import DrawingRegisterPage from "./pages/project/DrawingRegisterPage";
 import ProjectClosurePage from "./pages/project/ProjectClosurePage";
 import ProgressPage from "./pages/project/ProgressPage";
+import AuditKpiPage from "./pages/project/AuditKpiPage";
 import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
 import ChecklistLogsPage from "./pages/project/ChecklistLogsPage";
 import RevisionUploadPage from "./pages/project/RevisionUploadPage";
@@ -139,7 +140,7 @@ export default function App() {
                   <Route path="hub/safety" element={<ModuleHubPage moduleKey="safety" />} />
                   <Route path="hub/inspection" element={<ModuleHubPage moduleKey="inspection" />} />
                   <Route path="hub/progress" element={<ModuleHubPage moduleKey="progress" />} />
-                  <Route path="hub/field" element={<ModuleHubPage moduleKey="field" />} />
+                  <Route path="hub/auditKpi" element={<ModuleHubPage moduleKey="auditKpi" />} />
                   <Route path="hub/comms" element={<ModuleHubPage moduleKey="comms" />} />
                   <Route path="hub/cost" element={<ModuleHubPage moduleKey="cost" />} />
                   <Route path="hub/finance" element={<ModuleHubPage moduleKey="finance" />} />
@@ -169,11 +170,11 @@ export default function App() {
                   <Route path="quality/checklist-master" element={<ChecklistMasterPage lockedFamily="QualityInspection" />} />
                   <Route path="safety/checklist-master" element={<ChecklistMasterPage lockedFamily="Safety" />} />
                   <Route path="inspection/checklist-master" element={<ChecklistMasterPage lockedFamily="ActivityInspection" />} />
-                  <Route path="field/checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
+                  <Route path="progress/checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
                   <Route path="quality/checklist-logs" element={<ChecklistLogsPage lockedFamily="QualityInspection" />} />
                   <Route path="safety/checklist-logs" element={<ChecklistLogsPage lockedFamily="Safety" />} />
                   <Route path="inspection/checklist-logs" element={<ChecklistLogsPage lockedFamily="ActivityInspection" />} />
-                  <Route path="field/checklist-logs" element={<ChecklistLogsPage lockedFamily="SiteExecution" />} />
+                  <Route path="progress/checklist-logs" element={<ChecklistLogsPage lockedFamily="SiteExecution" />} />
                   <Route path="checklist-master" element={<ChecklistMasterPage />} />
                   <Route path="checklist-logs" element={<ChecklistLogsPage />} />
                   <Route path="rfis" element={<RfisPage />} />
@@ -186,6 +187,7 @@ export default function App() {
                   <Route path="cost" element={<CostPage />} />
                   <Route path="finance" element={<FinancePage />} />
                   <Route path="reports" element={<ReportsPage />} />
+                  <Route path="audit-kpi" element={<AuditKpiPage />} />
                   <Route path="site-pilot" element={<SitePilotPage />} />
                   <Route path="dpr-maker" element={<DprMakerPage />} />
                   <Route path="wpr-maker" element={<WprMakerPage />} />

@@ -10,6 +10,7 @@ import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualityS
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedFullDemoPack } from "./fullDemoPack.ts";
+import { seedAuditKpiFromSheets } from "./auditKpiFromSheets.ts";
 import { PrismaClient, type User } from "@prisma/client";
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -1740,6 +1741,8 @@ async function main() {
       await seedQuotationDemo(prisma, officeId);
     }
     await seedFullDemoPack(prisma, { skipDemoDay: true });
+    const auditStats = await seedAuditKpiFromSheets(prisma, project.id);
+    console.log("Audit/KPI seed:", auditStats);
   } catch (e) {
     console.warn(
       "seedProjectAndCost failed — continuing with the users/roles/checklists that were seeded.",

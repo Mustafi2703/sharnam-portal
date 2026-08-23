@@ -9,7 +9,7 @@ import { Button, Card, Input } from "../components/ui";
 import { PORTAL_LOGINS, LOGIN_LANDING_KEY, consumeLoginLanding } from "./PortalLogins";
 import { setActiveWorkspace } from "../workspaces";
 
-const HUB: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "field", "client"];
+const HUB: (keyof typeof PORTAL_LOGINS)[] = ["master", "drawings", "quality", "comms", "client"];
 
 /** Professional themed landing — module logins + style switcher */
 export default function UiOptionLandingPage() {

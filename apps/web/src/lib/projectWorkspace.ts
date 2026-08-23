@@ -13,7 +13,7 @@ function checklistFamilyModule(search: string, tool: "master" | "logs"): Workspa
   if (family === "Safety") return "safety";
   if (family === "DrawingCheck") return "drawings";
   if (family === "ActivityInspection") return "inspection";
-  if (family === "SiteExecution" || (tool === "logs" && family === "SiteExecution")) return "field";
+  if (family === "SiteExecution" || (tool === "logs" && family === "SiteExecution")) return "progress";
   return "quality";
 }
 
@@ -45,7 +45,10 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
   if (tail === "checklist-logs") return checklistFamilyModule(search, "logs");
 
   if (tail === "progress" || tail.startsWith("progress/")) return "progress";
-  if (["diary", "photos", "site-pilot"].includes(tail) || tail.startsWith("field/")) return "field";
+  if (["diary", "photos"].includes(tail)) return "comms";
+  if (tail === "site-pilot") return "comms";
+  if (tail.startsWith("progress/")) return "progress";
+  if (tail === "audit-kpi" || tail.startsWith("audit-kpi/")) return "auditKpi";
   if (["dpr-maker", "wpr-maker"].includes(tail)) return "reports";
   if (["comms", "email", "submittals"].includes(tail)) return "comms";
   if (tail === "cost" || tail.startsWith("cost/")) return "cost";
@@ -60,7 +63,7 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
     if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
-    if (kind === "SiteExecution") return "field";
+    if (kind === "SiteExecution") return "progress";
     const stored = getActiveWorkspace();
     if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms" || stored === "inspection") return stored;
     return "quality";

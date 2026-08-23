@@ -300,7 +300,7 @@ export function ToolRightPanel({
           }
         );
         break;
-      case "field":
+      case "comms":
         actions.push(
           { label: "Day log", to: "diary", primary: true },
           { label: "Photos", to: "photos", secondary: true }
