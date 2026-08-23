@@ -1,12 +1,14 @@
 import { Router } from "express";
+import multer from "multer";
 import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
-
 import { seedAuditKpiFromSheets } from "../services/auditKpiSeed.js";
 
 export const auditKpiRouter = Router();
 auditKpiRouter.use(requireAuth);
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 function csvEscape(v: unknown) {
   const s = v == null ? "" : String(v);
@@ -310,6 +312,35 @@ auditKpiRouter.get("/project/:projectId/download/:sheet.csv", async (req, res) =
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(csv);
 });
+
+auditKpiRouter.post(
+  "/project/:projectId/upload",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: "Excel file required (field: file)" });
+    const pack = String(req.body?.pack || "auto");
+    const name = (req.file.originalname || "").toLowerCase();
+    let auditBuffer: Buffer | undefined;
+    let kpiBuffer: Buffer | undefined;
+    if (pack === "site-audit" || name.includes("audit")) auditBuffer = req.file.buffer;
+    else if (pack === "kpi" || name.includes("kpi")) kpiBuffer = req.file.buffer;
+    else {
+      try {
+        const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+        if (wb.SheetNames.includes("FINDINGS") || wb.SheetNames.includes("SITE_WALK")) auditBuffer = req.file.buffer;
+        if (wb.SheetNames.includes("03_SUBJECT_DATA")) kpiBuffer = req.file.buffer;
+      } catch {
+        return res.status(400).json({ error: "Unrecognised workbook — use SITE_AUDIT_Pack or MASTER_KPI_DASHBOARD" });
+      }
+    }
+    if (!auditBuffer && !kpiBuffer) {
+      return res.status(400).json({ error: "Could not detect pack type — set pack=site-audit or pack=kpi" });
+    }
+    const stats = await seedAuditKpiFromSheets(prisma, req.params.projectId, { auditBuffer, kpiBuffer });
+    res.json({ ok: true, stats });
+  }
+);
 
 auditKpiRouter.post(
   "/project/:projectId/resync",

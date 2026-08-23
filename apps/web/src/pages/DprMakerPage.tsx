@@ -4,6 +4,8 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { EvidencePanel } from "../components/EvidencePanel";
+import { RegisterEntryModal } from "../components/RegisterEntryModal";
+import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -219,6 +221,22 @@ export default function DprMakerPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
   const [recent, setRecent] = useState<any[]>([]);
+  const [lineModalOpen, setLineModalOpen] = useState(false);
+  const [manpowerModalOpen, setManpowerModalOpen] = useState(false);
+  const [lineDraft, setLineDraft] = useState<Line>({
+    description: "",
+    unit: "CUM",
+    scopeQty: 0,
+    rate: 0,
+    cumQtyPrev: 0,
+    qtyToday: 0,
+  });
+  const [manpowerDraft, setManpowerDraft] = useState<Manpower>({
+    trade: "",
+    planned: 0,
+    actual: 0,
+    hoursWorked: 8,
+  });
   const load = useCallback(async () => {
     if (!projectId) return;
     setBusy(true);
@@ -292,14 +310,13 @@ export default function DprMakerPage() {
     setSnap({ ...snap, lines });
   }
   function addLine() {
+    setLineDraft({ description: "", unit: "CUM", scopeQty: 0, rate: 0, cumQtyPrev: 0, qtyToday: 0, group: "" });
+    setLineModalOpen(true);
+  }
+  function commitLineFromModal() {
     if (!snap) return;
-    setSnap({
-      ...snap,
-      lines: [
-        ...snap.lines,
-        { description: "", unit: "CUM", scopeQty: 0, rate: 0, cumQtyPrev: 0, qtyToday: 0 },
-      ],
-    });
+    setSnap({ ...snap, lines: [...snap.lines, { ...lineDraft }] });
+    setLineModalOpen(false);
   }
   function removeLine(idx: number) {
     if (!snap) return;
@@ -313,8 +330,13 @@ export default function DprMakerPage() {
     setSnap({ ...snap, manpower: arr });
   }
   function addManpower() {
+    setManpowerDraft({ trade: "", planned: 0, actual: 0, hoursWorked: 8 });
+    setManpowerModalOpen(true);
+  }
+  function commitManpowerFromModal() {
     if (!snap) return;
-    setSnap({ ...snap, manpower: [...snap.manpower, { trade: "", planned: 0, actual: 0, hoursWorked: 8 }] });
+    setSnap({ ...snap, manpower: [...snap.manpower, { ...manpowerDraft }] });
+    setManpowerModalOpen(false);
   }
   function removeManpower(i: number) {
     if (!snap) return;
@@ -636,6 +658,18 @@ export default function DprMakerPage() {
           Auto-filled from: {snap.autoFillSources.join(" · ")}. Update BOQ, MB, BBS, Planned vs Actual, Safety, and Quality in their modules — then re-open this date to refresh.
         </p>
       ) : null}
+
+      <ReferenceSheetToolbar
+        sheetLabel={`SPDC_DPR_${discipline}_DASHBOARD`}
+        rowCount={snap.lines.length}
+        canEdit
+        onAddRow={() => setLineModalOpen(true)}
+        onGenerate={() => void publish()}
+        generateLabel="Publish DPR"
+        onDownloadXlsx={() => void downloadXlsx()}
+        busy={busy}
+        message={msg}
+      />
 
       <div className="maker-section">
         <div className="maker-toolbar">
@@ -1171,6 +1205,65 @@ export default function DprMakerPage() {
           </ul>
         </Card>
       )}
+
+      <RegisterEntryModal
+        open={lineModalOpen}
+        title="Add BOQ line — quantity progress"
+        onClose={() => setLineModalOpen(false)}
+        onSave={commitLineFromModal}
+        saving={busy}
+        size="lg"
+      >
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block sm:col-span-2">
+            <span className="text-xs text-steel-muted">Description</span>
+            <Input value={lineDraft.description} onChange={(e) => setLineDraft({ ...lineDraft, description: e.target.value })} required />
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Group</span>
+            <Input value={lineDraft.group || ""} onChange={(e) => setLineDraft({ ...lineDraft, group: e.target.value })} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Unit</span>
+            <Input value={lineDraft.unit || ""} onChange={(e) => setLineDraft({ ...lineDraft, unit: e.target.value })} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Scope qty</span>
+            <Input type="number" value={lineDraft.scopeQty ?? 0} onChange={(e) => setLineDraft({ ...lineDraft, scopeQty: Number(e.target.value) })} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Qty today</span>
+            <Input type="number" value={lineDraft.qtyToday ?? 0} onChange={(e) => setLineDraft({ ...lineDraft, qtyToday: Number(e.target.value) })} />
+          </label>
+        </div>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={manpowerModalOpen}
+        title="Add trade — manpower"
+        onClose={() => setManpowerModalOpen(false)}
+        onSave={commitManpowerFromModal}
+        saving={busy}
+      >
+        <label className="block">
+          <span className="text-xs text-steel-muted">Trade</span>
+          <Input value={manpowerDraft.trade} onChange={(e) => setManpowerDraft({ ...manpowerDraft, trade: e.target.value })} required />
+        </label>
+        <div className="grid grid-cols-3 gap-3">
+          <label className="block">
+            <span className="text-xs text-steel-muted">Planned</span>
+            <Input type="number" value={manpowerDraft.planned ?? 0} onChange={(e) => setManpowerDraft({ ...manpowerDraft, planned: Number(e.target.value) })} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Actual</span>
+            <Input type="number" value={manpowerDraft.actual ?? 0} onChange={(e) => setManpowerDraft({ ...manpowerDraft, actual: Number(e.target.value) })} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Hours</span>
+            <Input type="number" value={manpowerDraft.hoursWorked ?? 8} onChange={(e) => setManpowerDraft({ ...manpowerDraft, hoursWorked: Number(e.target.value) })} />
+          </label>
+        </div>
+      </RegisterEntryModal>
     </div>
   );
 }

@@ -5,15 +5,13 @@ import {
   QAP_SIGN_CLIENT,
   QAP_SIGN_CONTRACTOR,
   QAP_SIGN_PMC,
-  qapRoleCellClass,
   qapStatusRowClass,
   remarksCellClass,
 } from "../lib/inspectionRequestForms";
 import { preferWeekLabel, weekMatchesFilter } from "../lib/qapWeek";
 import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
-import { RegisterEntryModal } from "./RegisterEntryModal";
 import { RegisterSheetCell } from "./RegisterSheetCell";
-import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
+import { Badge, Button, Card, Select } from "./ui";
 
 function formatDayLabel(raw: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
@@ -69,23 +67,7 @@ type Props = {
   loading?: boolean;
 };
 
-function emptyEditForm(): Record<string, string> {
-  return {
-    description: "",
-    frequency: "",
-    codeOfConformance: "",
-    testAgency: "",
-    contractorPerformer: "",
-    contractorChecker: "",
-    pmcRole: "",
-    clientRole: "",
-    records: "",
-    remarks: "",
-    status: "Open",
-  };
-}
-
-/** Quality Assurance Plan — client Excel layout with popup editor + stable inline cells. */
+/** Quality Assurance Plan — full client Excel layout; inline edit only. */
 export function QapDetailRegister({
   projectId,
   token,
@@ -98,11 +80,6 @@ export function QapDetailRegister({
 }: Props) {
   const { localRows, mergeRow } = useLocalRegisterRows(rows);
   const [weekFilter, setWeekFilter] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState(emptyEditForm());
-  const [editDaily, setEditDaily] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState(false);
   const [patchErr, setPatchErr] = useState("");
 
   const weeks = useMemo(() => {
@@ -149,7 +126,7 @@ export function QapDetailRegister({
   function renderRoleChip(role?: string | null, fallbackOk?: boolean) {
     const text = (role || "").trim();
     if (text) {
-      return <span className={qapRoleCellClass(text)}>{text}</span>;
+      return <span className="text-[10px] font-semibold">{text}</span>;
     }
     return fallbackOk ? <span className="qap-role-approve">✓</span> : <span className="qap-role-empty">·</span>;
   }
@@ -172,59 +149,8 @@ export function QapDetailRegister({
     }
   }
 
-  function openEdit(q: QapRow) {
-    setEditId(q.id);
-    setEditForm({
-      description: q.description || q.activity || "",
-      frequency: q.frequency || "",
-      codeOfConformance: q.codeOfConformance || "",
-      testAgency: q.testAgency || "",
-      contractorPerformer: q.contractorPerformer || "",
-      contractorChecker: q.contractorChecker || "",
-      pmcRole: q.pmcRole || "",
-      clientRole: q.clientRole || "",
-      records: q.records || "",
-      remarks: q.remarks || "",
-      status: q.status || "Open",
-    });
-    setEditDaily(parseDaily(q));
-    setModalOpen(true);
-  }
-
-  async function saveModal() {
-    if (!editId) return;
-    setSaving(true);
-    try {
-      await patchRow(
-        editId,
-        {
-          description: editForm.description,
-          frequency: editForm.frequency || null,
-          codeOfConformance: editForm.codeOfConformance || null,
-          testAgency: editForm.testAgency || null,
-          contractorPerformer: editForm.contractorPerformer || null,
-          contractorChecker: editForm.contractorChecker || null,
-          contractorOk: !!(editForm.contractorPerformer || editForm.contractorChecker),
-          pmcRole: editForm.pmcRole || null,
-          pmcOk: /review|witness|yes|approve/i.test(editForm.pmcRole),
-          clientRole: editForm.clientRole || null,
-          clientOk: /witness|random|yes|approve/i.test(editForm.clientRole),
-          records: editForm.records || null,
-          remarks: editForm.remarks || null,
-          status: editForm.status,
-          dailyChecks: editDaily,
-        },
-        true
-      );
-      setModalOpen(false);
-      setEditId(null);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const pmConsultant = "Sharnam Project Management Consultants";
-  const colSpan = 12 + dayLabels.length + (canEdit ? 1 : 0);
+  const colSpan = 11 + dayLabels.length;
 
   return (
     <>
@@ -278,7 +204,7 @@ export function QapDetailRegister({
 
         <div className="px-4 py-2 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <p className="text-xs text-steel-muted text-left">
-            Excel-style register — click cells to edit inline, or <strong>Edit</strong> for full row popup ({filtered.length} lines).
+            Full Week 50 sheet — scroll horizontally and vertically. Click any cell to edit inline.
           </p>
           {showWeekFilter && weeks.length > 1 && (
             <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]">
@@ -346,11 +272,6 @@ export function QapDetailRegister({
                   <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
                     Status
                   </th>
-                  {canEdit && (
-                    <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1 min-w-[4rem]">
-                      Edit
-                    </th>
-                  )}
                 </tr>
                 <tr className="bg-brand text-white text-[10px]">
                   <th className="border border-brand-dark/30 px-1 py-0.5">Performer</th>
@@ -548,13 +469,6 @@ export function QapDetailRegister({
                             </Button>
                           )}
                         </td>
-                        {canEdit && (
-                          <td className="text-left align-top border border-line px-1 py-0.5">
-                            <Button type="button" variant="secondary" className="!py-0.5 !px-1.5 !text-[10px]" onClick={() => openEdit(q)}>
-                              Edit
-                            </Button>
-                          </td>
-                        )}
                       </tr>
                     </Fragment>
                   );
@@ -571,79 +485,6 @@ export function QapDetailRegister({
           </div>
         </div>
       </Card>
-
-      <RegisterEntryModal
-        open={modalOpen}
-        title="Edit QAP line"
-        size="xl"
-        onClose={() => setModalOpen(false)}
-        onSave={saveModal}
-        saving={saving}
-      >
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <TextArea
-            className="sm:col-span-2 lg:col-span-3"
-            rows={2}
-            placeholder="Description of activity / material"
-            value={editForm.description}
-            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-          />
-          <Input placeholder="Frequency of check" value={editForm.frequency} onChange={(e) => setEditForm({ ...editForm, frequency: e.target.value })} />
-          <Input placeholder="Code of conformance" value={editForm.codeOfConformance} onChange={(e) => setEditForm({ ...editForm, codeOfConformance: e.target.value })} />
-          <Input placeholder="Test agency" value={editForm.testAgency} onChange={(e) => setEditForm({ ...editForm, testAgency: e.target.value })} />
-          <Select value={editForm.contractorPerformer} onChange={(e) => setEditForm({ ...editForm, contractorPerformer: e.target.value })}>
-            {QAP_SIGN_CONTRACTOR.map((o) => (
-              <option key={o || "empty"} value={o}>
-                {o || "Contractor performer —"}
-              </option>
-            ))}
-          </Select>
-          <Select value={editForm.contractorChecker} onChange={(e) => setEditForm({ ...editForm, contractorChecker: e.target.value })}>
-            {QAP_SIGN_CONTRACTOR.map((o) => (
-              <option key={`c-${o || "empty"}`} value={o}>
-                {o || "Contractor checker —"}
-              </option>
-            ))}
-          </Select>
-          <Select value={editForm.pmcRole} onChange={(e) => setEditForm({ ...editForm, pmcRole: e.target.value })}>
-            {QAP_SIGN_PMC.map((o) => (
-              <option key={`p-${o || "empty"}`} value={o}>
-                {o || "PMC checker —"}
-              </option>
-            ))}
-          </Select>
-          <Select value={editForm.clientRole} onChange={(e) => setEditForm({ ...editForm, clientRole: e.target.value })}>
-            {QAP_SIGN_CLIENT.map((o) => (
-              <option key={`cl-${o || "empty"}`} value={o}>
-                {o || "Client checker —"}
-              </option>
-            ))}
-          </Select>
-          <Input placeholder="Records / documents" value={editForm.records} onChange={(e) => setEditForm({ ...editForm, records: e.target.value })} className="sm:col-span-2" />
-          <TextArea className="sm:col-span-2 lg:col-span-3" rows={2} placeholder="Remarks" value={editForm.remarks} onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })} />
-          <Select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-            <option>Open</option>
-            <option>Done</option>
-          </Select>
-        </div>
-        {dayLabels.length > 0 && (
-          <div>
-            <div className="text-xs font-semibold uppercase text-steel-muted mb-2">Daily checks (Week 50)</div>
-            <div className="flex flex-wrap gap-3">
-              {dayLabels.map((d) => (
-                <label key={d} className="flex items-center gap-1.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={!!editDaily[d]}
-                    onChange={(e) => setEditDaily({ ...editDaily, [d]: e.target.checked })}
-                  />
-                  {formatDayLabel(d)}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-      </RegisterEntryModal>
     </>
   );
 }

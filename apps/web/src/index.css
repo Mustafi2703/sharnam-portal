@@ -620,6 +620,33 @@ body.is-auth-route #root {
   max-height: min(78vh, 56rem);
   overflow: hidden;
 }
+
+/* Full-viewport register pages (QAP, cube, audit sheets) */
+.page-stack--register {
+  min-height: 0;
+  height: calc(100vh - 7.5rem);
+  max-height: calc(100vh - 7.5rem);
+  overflow: hidden;
+}
+@media (max-width: 768px) {
+  .page-stack--register {
+    height: calc(100dvh - 6.5rem);
+    max-height: calc(100dvh - 6.5rem);
+  }
+}
+.qap-page__register .spdc-register-panel,
+.page-stack--register .spdc-register-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+}
+.qap-page__register .sheet-register__scroll,
+.page-stack--register .sheet-register__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
 .spdc-register-panel .sheet-register__scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -3845,8 +3872,64 @@ body {
   color: var(--color-steel-muted);
   margin-bottom: 0.35rem;
 }
+/* Reference sheet toolbar — mobile sticky actions */
+.reference-sheet-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--color-sand) 55%, var(--color-paper));
+}
+.reference-sheet-toolbar__info {
+  min-width: 0;
+}
+.reference-sheet-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+@media (max-width: 640px) {
+  .reference-sheet-toolbar {
+    position: sticky;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+    z-index: 20;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  }
+  .reference-sheet-toolbar__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .reference-sheet-toolbar__actions > button:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+.maker-mobile-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--color-paper) 92%, transparent);
+  border-top: 1px solid var(--color-line);
+  backdrop-filter: blur(8px);
+}
+@media (min-width: 768px) {
+  .maker-mobile-bar {
+    display: none;
+  }
+}
 .maker-toolbar__actions {
-  flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;

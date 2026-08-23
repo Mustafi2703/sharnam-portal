@@ -7,6 +7,8 @@ import { formatQty } from "../../components/BoqMonitoringEditor";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
+import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
 type Tab =
   | "overview"
@@ -46,6 +48,7 @@ export default function ProgressPage() {
   const [msBusy, setMsBusy] = useState<"seed" | "import" | "xml" | null>(null);
   const msImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
+  const [hindranceModalOpen, setHindranceModalOpen] = useState(false);
   const tab = (searchParams.get("tab") as Tab) || "overview";
   const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
   const canEdit =
@@ -610,6 +613,16 @@ export default function ProgressPage() {
 
       {tab === "planned" && (
         <div className="space-y-4 w-full">
+          <ReferenceSheetToolbar
+            sheetLabel="Planned Vs. Actual Dashboard"
+            rowCount={(data.plannedActual || []).length}
+            canEdit={canEdit}
+            onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
+            uploadHint="Upload client Excel — cashflow, manpower, and activity qty columns preserved."
+            onDownloadXlsx={() => void downloadPlannedActual("xlsx")}
+            busy={!!paBusy}
+            message={msg}
+          />
           <Card className="!p-4 flex flex-wrap gap-3 items-center justify-between">
             <div>
               <div className="text-sm font-semibold">Planned Vs. Actual Dashboard</div>
@@ -915,6 +928,16 @@ export default function ProgressPage() {
 
       {tab === "hindrance" && (
         <div className="space-y-4">
+          <ReferenceSheetToolbar
+            sheetLabel="Hindrance Register Dashboard"
+            rowCount={data.hindrances?.length}
+            canEdit={canEdit}
+            onAddRow={() => setHindranceModalOpen(true)}
+            onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
+            uploadHint="Or upload Planned Vs. Actual Dashboard.xlsx — hindrance rows import with progress pack."
+            busy={!!paBusy}
+            message={msg}
+          />
           <div className="grid md:grid-cols-2 gap-3">
             <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
             <BarChart title="Hindrance by critical activity" items={data.charts?.hindranceByActivity || []} />
@@ -1279,6 +1302,36 @@ export default function ProgressPage() {
           </Card>
         </div>
       )}
+
+      <RegisterEntryModal
+        open={hindranceModalOpen}
+        title="Add hindrance row"
+        onClose={() => setHindranceModalOpen(false)}
+        onSave={async () => {
+          await addHindrance({ preventDefault: () => {} } as FormEvent);
+          setHindranceModalOpen(false);
+        }}
+        size="lg"
+      >
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input
+            className="sm:col-span-2"
+            placeholder="Description"
+            value={hindranceForm.description}
+            onChange={(e) => setHindranceForm({ ...hindranceForm, description: e.target.value })}
+            required
+          />
+          <Input placeholder="Location" value={hindranceForm.location} onChange={(e) => setHindranceForm({ ...hindranceForm, location: e.target.value })} />
+          <Input placeholder="Activity affected" value={hindranceForm.activity} onChange={(e) => setHindranceForm({ ...hindranceForm, activity: e.target.value })} />
+          <Select value={hindranceForm.category} onChange={(e) => setHindranceForm({ ...hindranceForm, category: e.target.value })}>
+            {["Design & Technical", "Approval", "Execution", "Material Procurement", "Client"].map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </Select>
+          <Input type="date" value={hindranceForm.occurredAt} onChange={(e) => setHindranceForm({ ...hindranceForm, occurredAt: e.target.value })} />
+          <Input placeholder="Days impacted" value={hindranceForm.daysImpacted} onChange={(e) => setHindranceForm({ ...hindranceForm, daysImpacted: e.target.value })} />
+        </div>
+      </RegisterEntryModal>
 
     </div>
   );

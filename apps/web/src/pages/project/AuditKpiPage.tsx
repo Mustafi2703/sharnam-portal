@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { PieChart } from "../../components/PieChart";
 import { downloadAuthFile } from "../../lib/downloadReport";
 
@@ -54,6 +55,8 @@ export default function AuditKpiPage() {
     source: "Site walk",
     folderLocation: "",
   });
+  const [findingModalOpen, setFindingModalOpen] = useState(false);
+  const [subjectModalOpen, setSubjectModalOpen] = useState(false);
   const [subjectForm, setSubjectForm] = useState({
     isoArea: "",
     name: "",
@@ -113,26 +116,37 @@ export default function AuditKpiPage() {
     void downloadAuthFile(`/api/audit-kpi/project/${id}/download/${sheet}.${ext}`, token, `Sharnam-${sheet}.${ext}`);
   };
 
-  const resync = async () => {
+  const uploadPack = tab === "subjects" || tab === "role-kra" || tab === "kpi-dashboard" ? "kpi" : "site-audit";
+
+  const uploadSheet = async (file: File) => {
     setBusy(true);
     setMsg("");
     try {
-      await api(`/api/audit-kpi/project/${id}/resync`, { token, method: "POST" });
-      setMsg("Resynced from SITE_AUDIT_Pack + MASTER_KPI_DASHBOARD.");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("pack", uploadPack);
+      const out = await api<{ stats: Record<string, number> }>(`/api/audit-kpi/project/${id}/upload`, {
+        token,
+        method: "POST",
+        body: fd,
+      });
+      setMsg(
+        `Imported — ${out.stats.findings ?? 0} findings · ${out.stats.subjects ?? 0} subjects · ${out.stats.checklist ?? 0} checklist rows`
+      );
       await load();
     } catch (e: any) {
-      setMsg(e.message || "Resync failed");
+      setMsg(e.message || "Upload failed");
     } finally {
       setBusy(false);
     }
   };
 
-  const addFinding = async (e: FormEvent) => {
-    e.preventDefault();
+  const saveFinding = async () => {
     setBusy(true);
     try {
       await api(`/api/audit-kpi/project/${id}/findings`, { token, method: "POST", body: JSON.stringify(findingForm) });
       setFindingForm({ description: "", severity: "Minor", source: "Site walk", folderLocation: "" });
+      setFindingModalOpen(false);
       await load();
       setMsg("Finding added.");
     } catch (err: any) {
@@ -142,12 +156,12 @@ export default function AuditKpiPage() {
     }
   };
 
-  const addSubject = async (e: FormEvent) => {
-    e.preventDefault();
+  const saveSubject = async () => {
     setBusy(true);
     try {
       await api(`/api/audit-kpi/project/${id}/subjects`, { token, method: "POST", body: JSON.stringify(subjectForm) });
       setSubjectForm({ isoArea: "", name: "", custodian: "HO", folder: "" });
+      setSubjectModalOpen(false);
       await load();
       setMsg("Subject row added.");
     } catch (err: any) {
@@ -155,6 +169,16 @@ export default function AuditKpiPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const addFinding = async (e: FormEvent) => {
+    e.preventDefault();
+    await saveFinding();
+  };
+
+  const addSubject = async (e: FormEvent) => {
+    e.preventDefault();
+    await saveSubject();
   };
 
   const saveChecklist = async (itemId: string, patch: Record<string, unknown>) => {
@@ -168,8 +192,19 @@ export default function AuditKpiPage() {
     <div className="page-stack">
       <PageHeader
         title="Audit & KPI"
-        subtitle="Site document audit pack + Master KPI dashboard — edit rows, resync reference sheets, download client format."
+        subtitle="Upload client Excel packs, add rows in modal or inline form, download in SPDC column format."
       />
+
+      {(tab === "dashboard" || tab === "kpi-dashboard") && canEdit && (
+        <ReferenceSheetToolbar
+          sheetLabel={tab === "kpi-dashboard" ? "MASTER_KPI_DASHBOARD.xlsx" : "SITE_AUDIT_Pack.xlsx"}
+          canEdit
+          onUpload={uploadSheet}
+          uploadHint="Use the exact column layout from docs/SITE_AUDIT_Pack.xlsx or MASTER_KPI_DASHBOARD.xlsx."
+          busy={busy}
+          message={msg}
+        />
+      )}
 
       <div className="flex flex-wrap gap-2 mb-4">
         {TABS.map((t) => (
@@ -236,14 +271,14 @@ export default function AuditKpiPage() {
           }
           canEdit={canEdit}
           onAddRow={
-            tab === "findings" || tab === "subjects"
-              ? () =>
-                  document
-                    .getElementById(tab === "findings" ? "add-finding-form" : "add-subject-form")
-                    ?.scrollIntoView({ behavior: "smooth" })
-              : undefined
+            tab === "findings"
+              ? () => setFindingModalOpen(true)
+              : tab === "subjects"
+                ? () => setSubjectModalOpen(true)
+                : undefined
           }
-          onResync={canEdit ? resync : undefined}
+          onUpload={canEdit ? uploadSheet : undefined}
+          uploadHint="Workbook must match client template columns (FINDINGS / 03_SUBJECT_DATA / SITE_WALK)."
           onDownloadCsv={() => {
             if (tab === "findings") dl("csv", "findings");
             else if (tab === "subjects") dl("csv", "subjects");
@@ -516,6 +551,79 @@ export default function AuditKpiPage() {
           </div>
         </div>
       )}
+
+      <RegisterEntryModal
+        open={findingModalOpen}
+        title="Add finding — FINDINGS sheet"
+        onClose={() => setFindingModalOpen(false)}
+        onSave={saveFinding}
+        saving={busy}
+        size="lg"
+      >
+        <label className="block">
+          <span className="text-xs text-steel-muted">Finding description</span>
+          <TextArea
+            value={findingForm.description}
+            onChange={(e) => setFindingForm({ ...findingForm, description: e.target.value })}
+            required
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-steel-muted">Folder / location</span>
+          <Input
+            value={findingForm.folderLocation}
+            onChange={(e) => setFindingForm({ ...findingForm, folderLocation: e.target.value })}
+          />
+        </label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-xs text-steel-muted">Severity</span>
+            <Select value={findingForm.severity} onChange={(e) => setFindingForm({ ...findingForm, severity: e.target.value })}>
+              {["Critical", "Major", "Minor", "Observation"].map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </Select>
+          </label>
+          <label className="block">
+            <span className="text-xs text-steel-muted">Source</span>
+            <Select value={findingForm.source} onChange={(e) => setFindingForm({ ...findingForm, source: e.target.value })}>
+              {["Site walk", "Folder sample", "DC interview"].map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </Select>
+          </label>
+        </div>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={subjectModalOpen}
+        title="Add subject — 03_SUBJECT_DATA"
+        onClose={() => setSubjectModalOpen(false)}
+        onSave={saveSubject}
+        saving={busy}
+        size="lg"
+      >
+        <label className="block">
+          <span className="text-xs text-steel-muted">ISO area</span>
+          <Input value={subjectForm.isoArea} onChange={(e) => setSubjectForm({ ...subjectForm, isoArea: e.target.value })} required />
+        </label>
+        <label className="block">
+          <span className="text-xs text-steel-muted">Subject name</span>
+          <Input value={subjectForm.name} onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })} required />
+        </label>
+        <label className="block">
+          <span className="text-xs text-steel-muted">Folder</span>
+          <Input value={subjectForm.folder} onChange={(e) => setSubjectForm({ ...subjectForm, folder: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="text-xs text-steel-muted">Custodian (HO / SITE / BOTH)</span>
+          <Select value={subjectForm.custodian} onChange={(e) => setSubjectForm({ ...subjectForm, custodian: e.target.value })}>
+            {["HO", "SITE", "BOTH"].map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </Select>
+        </label>
+      </RegisterEntryModal>
     </div>
   );
 }
