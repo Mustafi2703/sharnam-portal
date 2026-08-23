@@ -639,7 +639,7 @@ export default function DprMakerPage() {
 
   const h = snap.header;
   return (
-    <div className="maker-shell space-y-5 pb-24">
+    <div className="maker-shell page-stack--register flex flex-col min-h-0 space-y-4 safe-bottom">
       <PageHeader
         eyebrow="DPR Maker · SPDC template output"
         title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
@@ -692,7 +692,6 @@ export default function DprMakerPage() {
               </Button>
             )}
             <Button onClick={save} disabled={busy}>Save draft</Button>
-            <Button onClick={publish} disabled={busy} variant="secondary">Publish to SharePoint</Button>
           </div>
         </div>
         {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
@@ -773,12 +772,12 @@ export default function DprMakerPage() {
       )}
 
       {/* 2. Quantity */}
-      <div className="maker-section maker-section--flush">
-        <div className="maker-section__head maker-section__head--row">
+      <div className="maker-section maker-section--flush flex-1 min-h-0 flex flex-col">
+        <div className="maker-section__head maker-section__head--row shrink-0">
           <span>2. Quantity progress · BOQ item-wise</span>
-          <Button variant="secondary" onClick={addLine}>+ Add item</Button>
+          <Button variant="secondary" onClick={() => setLineModalOpen(true)}>+ Add item</Button>
         </div>
-        <div className="maker-table-wrap">
+        <div className="maker-table-wrap flex-1 min-h-0">
           <table className="maker-table">
             <thead>
               <tr>

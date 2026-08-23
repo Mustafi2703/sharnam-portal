@@ -49,6 +49,9 @@ export default function ProgressPage() {
   const msImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
   const [hindranceModalOpen, setHindranceModalOpen] = useState(false);
+  const [mileAddOpen, setMileAddOpen] = useState(false);
+  const [riskAddOpen, setRiskAddOpen] = useState(false);
+  const [legalAddOpen, setLegalAddOpen] = useState(false);
   const tab = (searchParams.get("tab") as Tab) || "overview";
   const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
   const canEdit =
@@ -155,6 +158,7 @@ export default function ProgressPage() {
       status: "Open",
     });
     setMsg("Hindrance logged");
+    setHindranceModalOpen(false);
     await load();
   }
 
@@ -182,6 +186,7 @@ export default function ProgressPage() {
       description: "",
     });
     setMsg("Risk added");
+    setRiskAddOpen(false);
     await load();
   }
 
@@ -212,6 +217,7 @@ export default function ProgressPage() {
       status: "In Progress",
     });
     setMsg("Milestone added");
+    setMileAddOpen(false);
     await load();
   }
 
@@ -342,11 +348,18 @@ export default function ProgressPage() {
       responsible: "Contractor",
     });
     setMsg("Legal approval row added");
+    setLegalAddOpen(false);
     await load();
   }
 
   return (
-    <div className="space-y-5 w-full min-w-0">
+    <div
+      className={`w-full min-w-0 ${
+        ["planned", "hindrance", "risk", "legal", "milestones", "msproject"].includes(tab)
+          ? "page-stack--register flex flex-col gap-4"
+          : "space-y-5"
+      }`}
+    >
       <div className="w-full">
         <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
           ← Project
@@ -526,8 +539,15 @@ export default function ProgressPage() {
       )}
 
       {tab === "milestones" && (
-        <div className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-3">
+        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+          <ReferenceSheetToolbar
+            sheetLabel="Milestone register"
+            rowCount={data.milestones?.length}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => setMileAddOpen((v) => !v) : undefined}
+            message={msg || undefined}
+          />
+          <div className="grid md:grid-cols-2 gap-3 shrink-0">
             <PieChart title="Milestones by status" items={data.charts?.milestoneByStatus || []} />
             <BarChart
               title="Avg % complete by phase"
@@ -537,8 +557,8 @@ export default function ProgressPage() {
               }))}
             />
           </div>
-          {canEdit && (
-            <Card>
+          {canEdit && mileAddOpen && (
+            <Card className="!p-3 shrink-0">
               <h3 className="font-semibold text-sm mb-3">Add milestone</h3>
               <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMilestone}>
                 <Input placeholder="Code (M11)" value={mileForm.code} onChange={(e) => setMileForm({ ...mileForm, code: e.target.value })} />
@@ -562,12 +582,14 @@ export default function ProgressPage() {
                   ))}
                 </Select>
                 <Button type="submit">Save milestone</Button>
+                <Button type="button" variant="secondary" onClick={() => setMileAddOpen(false)}>Cancel</Button>
               </form>
             </Card>
           )}
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Milestone register · sheet columns</div>
-            <table className="w-full text-sm">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Milestone register · sheet columns</div>
+            <div className="sheet-register__scroll flex-1 min-h-0">
+            <table className="sheet-register__table w-full text-sm min-w-[64rem]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
                   <th className="py-2.5 px-3">ID</th>
@@ -607,12 +629,13 @@ export default function ProgressPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
       )}
 
       {tab === "planned" && (
-        <div className="space-y-4 w-full">
+        <div className="space-y-3 w-full flex-1 min-h-0 flex flex-col">
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
             rowCount={(data.plannedActual || []).length}
@@ -620,98 +643,64 @@ export default function ProgressPage() {
             onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
             uploadHint="Upload client Excel — cashflow, manpower, and activity qty columns preserved."
             onDownloadXlsx={() => void downloadPlannedActual("xlsx")}
+            onGenerate={canEdit ? () => void syncPvaCashflowToCost() : undefined}
+            generateLabel={paBusy === "sync" ? "Syncing…" : "Sync cashflow → Cost"}
             busy={!!paBusy}
             message={msg}
           />
-          <Card className="!p-4 flex flex-wrap gap-3 items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">Planned Vs. Actual Dashboard</div>
-              <p className="text-xs text-steel-muted mt-1 max-w-xl">
-                Sub-tools match the client workbook: cashflow, manpower shortage, and activity qty. Sync cashflow to Cost so WPR stays aligned. BOQ monitoring still lives under Cost.
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {(
-                  [
-                    ["all", "All"],
-                    ["cashflow", "Cashflow"],
-                    ["manpower", "Manpower"],
-                    ["activity", "Activity qty"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`text-xs px-2.5 py-1 rounded border ${
-                      pva === key
-                        ? "bg-brand text-white border-brand"
-                        : "bg-white text-steel border-line hover:border-brand/40"
-                    }`}
-                    onClick={() => {
-                      const next = new URLSearchParams(searchParams);
-                      next.set("tab", "planned");
-                      if (key === "all") next.delete("pva");
-                      else next.set("pva", key);
-                      setSearchParams(next, { replace: true });
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 items-center">
-              <input
-                ref={paImportRef}
-                type="file"
-                accept=".xlsx,.xlsm"
-                className="hidden"
-                disabled={!!paBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void importPlannedActual(f);
-                  e.target.value = "";
-                }}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!!paBusy}
-                className="!text-xs"
-                onClick={() => paImportRef.current?.click()}
-              >
-                {paBusy === "import" ? "Importing…" : "Import Excel"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="!text-xs"
-                disabled={!!paBusy || !canEdit}
-                onClick={() => void syncPvaCashflowToCost()}
-              >
-                {paBusy === "sync" ? "Syncing…" : "Sync cashflow → Cost"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="!text-xs"
-                disabled={!!paBusy}
-                onClick={() => void downloadPlannedActual("xlsx")}
-              >
-                {paBusy === "xlsx" ? "…" : "Export Excel"}
-              </Button>
-              <Button
-                type="button"
-                className="!text-xs"
-                disabled={!!paBusy}
-                onClick={() => void downloadPlannedActual("pdf")}
-              >
-                {paBusy === "pdf" ? "…" : "Export PDF"}
-              </Button>
-              <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs font-semibold text-brand px-1">
+          <Card className="!p-3 shrink-0">
+            <div className="text-sm font-semibold">Planned Vs. Actual sub-tools</div>
+            <p className="text-xs text-steel-muted mt-1 max-w-xl">
+              Cashflow, manpower shortage, and activity qty from the client workbook. BOQ monitoring lives under Cost.
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {(
+                [
+                  ["all", "All"],
+                  ["cashflow", "Cashflow"],
+                  ["manpower", "Manpower"],
+                  ["activity", "Activity qty"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`text-xs px-2.5 py-1 rounded border ${
+                    pva === key
+                      ? "bg-brand text-white border-brand"
+                      : "bg-white text-steel border-line hover:border-brand/40"
+                  }`}
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("tab", "planned");
+                    if (key === "all") next.delete("pva");
+                    else next.set("pva", key);
+                    setSearchParams(next, { replace: true });
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+              <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs font-semibold text-brand px-2 py-1">
                 Open Cost cashflow →
               </Link>
+              <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void downloadPlannedActual("pdf")}>
+                {paBusy === "pdf" ? "…" : "Print / PDF"}
+              </Button>
             </div>
           </Card>
+          <input
+            ref={paImportRef}
+            type="file"
+            accept=".xlsx,.xlsm"
+            className="hidden"
+            disabled={!!paBusy}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importPlannedActual(f);
+              e.target.value = "";
+            }}
+          />
           {(pva === "all" || pva === "cashflow" || pva === "manpower") && (
           <div className="grid lg:grid-cols-2 gap-4 w-full">
             <BarChart
@@ -730,11 +719,11 @@ export default function ProgressPage() {
           </div>
           )}
           {(pva === "all" || pva === "cashflow") && (
-          <Card padding={false} className="flex flex-col max-h-[min(50vh,28rem)] min-h-[16rem] overflow-hidden w-full">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Project cashflow · Planned Vs Actual
             </div>
-            <div className="sheet-register overflow-auto flex-1 min-h-0">
+            <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table min-w-[36rem] w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
@@ -761,9 +750,9 @@ export default function ProgressPage() {
           </Card>
           )}
           {(pva === "all" || pva === "manpower") && (
-          <Card padding={false} className="flex flex-col max-h-[min(50vh,28rem)] min-h-[16rem] overflow-hidden">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
-            <div className="sheet-register overflow-auto flex-1 min-h-0">
+            <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[32rem]">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
@@ -791,7 +780,7 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "activity") && (
           <>
-          <Card padding={false} className="flex flex-col max-h-[calc(100vh-14rem)] min-h-[24rem] overflow-hidden">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
               <span>
                 BOQ / monitoring register ({(data.boqLines || []).length} lines from SPDC Budget)
@@ -800,7 +789,7 @@ export default function ProgressPage() {
                 Open full Cost BOQ →
               </Link>
             </div>
-            <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
+            <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-[11px] min-w-[960px] border-collapse">
               <thead className="sticky top-0 z-10 bg-brand text-white">
                 <tr className="text-left text-[10px] uppercase">
@@ -848,11 +837,11 @@ export default function ProgressPage() {
             </div>
           </Card>
           {(data.activityLines || []).length > 0 && (
-          <Card padding={false} className="flex flex-col max-h-[min(40vh,24rem)] min-h-[12rem] overflow-hidden opacity-90">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col opacity-90">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Weekly activity register ({data.activityLines.length} lines from Excel import)
             </div>
-            <div className="sheet-register overflow-auto flex-1 min-h-0 overscroll-contain">
+            <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-[11px] min-w-[900px] border-collapse">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="text-left text-[10px] uppercase text-steel-muted">
@@ -927,7 +916,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "hindrance" && (
-        <div className="space-y-4">
+        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
           <ReferenceSheetToolbar
             sheetLabel="Hindrance Register Dashboard"
             rowCount={data.hindrances?.length}
@@ -938,47 +927,14 @@ export default function ProgressPage() {
             busy={!!paBusy}
             message={msg}
           />
-          <div className="grid md:grid-cols-2 gap-3">
+          <div className="grid md:grid-cols-2 gap-3 shrink-0">
             <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
             <BarChart title="Hindrance by critical activity" items={data.charts?.hindranceByActivity || []} />
           </div>
-          {canEdit && (
-            <Card>
-              <h3 className="font-semibold text-sm mb-3">Log hindrance</h3>
-              <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addHindrance}>
-                <Input
-                  className="sm:col-span-2"
-                  placeholder="Description"
-                  value={hindranceForm.description}
-                  onChange={(e) => setHindranceForm({ ...hindranceForm, description: e.target.value })}
-                  required
-                />
-                <Input placeholder="Location" value={hindranceForm.location} onChange={(e) => setHindranceForm({ ...hindranceForm, location: e.target.value })} />
-                <Input placeholder="Activity affected" value={hindranceForm.activity} onChange={(e) => setHindranceForm({ ...hindranceForm, activity: e.target.value })} />
-                <Select value={hindranceForm.category} onChange={(e) => setHindranceForm({ ...hindranceForm, category: e.target.value })}>
-                  {["Design & Technical", "Approval", "Execution", "Material Procurement", "Client"].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </Select>
-                <Input placeholder="Type of hindrance" value={hindranceForm.type} onChange={(e) => setHindranceForm({ ...hindranceForm, type: e.target.value })} />
-                <Input type="date" value={hindranceForm.occurredAt} onChange={(e) => setHindranceForm({ ...hindranceForm, occurredAt: e.target.value })} />
-                <Input placeholder="Days impacted" value={hindranceForm.daysImpacted} onChange={(e) => setHindranceForm({ ...hindranceForm, daysImpacted: e.target.value })} />
-                <Select value={hindranceForm.delayType} onChange={(e) => setHindranceForm({ ...hindranceForm, delayType: e.target.value })}>
-                  <option>Overlapping Delay</option>
-                  <option>Non-overlapping Delay</option>
-                </Select>
-                <Input placeholder="Accountable" value={hindranceForm.accountable} onChange={(e) => setHindranceForm({ ...hindranceForm, accountable: e.target.value })} />
-                <Select value={hindranceForm.status} onChange={(e) => setHindranceForm({ ...hindranceForm, status: e.target.value })}>
-                  <option>Open</option>
-                  <option>Resolved</option>
-                </Select>
-                <Button type="submit">Add to register</Button>
-              </form>
-            </Card>
-          )}
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Hindrance register</div>
-            <table className="w-full text-sm min-w-[1000px]">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Hindrance register</div>
+            <div className="sheet-register__scroll flex-1 min-h-0">
+            <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
                   <th className="py-2.5 px-3">Description</th>
@@ -1016,18 +972,26 @@ export default function ProgressPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
       )}
 
       {tab === "risk" && (
-        <div className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-3">
+        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+          <ReferenceSheetToolbar
+            sheetLabel="Risk register"
+            rowCount={data.risks?.length}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => setRiskAddOpen((v) => !v) : undefined}
+            message={msg || undefined}
+          />
+          <div className="grid md:grid-cols-2 gap-3 shrink-0">
             <PieChart title="Risk by status" items={data.charts?.riskByStatus || []} />
             <BarChart title="Risk by severity" items={data.charts?.riskBySeverity || []} />
           </div>
-          {canEdit && (
-            <Card>
+          {canEdit && riskAddOpen && (
+            <Card className="!p-3 shrink-0">
               <h3 className="font-semibold text-sm mb-3">Identify risk</h3>
               <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addRisk}>
                 <Input placeholder="Code (R11)" value={riskForm.code} onChange={(e) => setRiskForm({ ...riskForm, code: e.target.value })} />
@@ -1053,12 +1017,14 @@ export default function ProgressPage() {
                   onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })}
                 />
                 <Button type="submit">Add risk</Button>
+                <Button type="button" variant="secondary" onClick={() => setRiskAddOpen(false)}>Cancel</Button>
               </form>
             </Card>
           )}
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Risk register</div>
-            <table className="w-full text-sm">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Risk register</div>
+            <div className="sheet-register__scroll flex-1 min-h-0">
+            <table className="sheet-register__table w-full text-sm min-w-[56rem]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
                   <th className="py-2.5 px-3">#</th>
@@ -1093,18 +1059,26 @@ export default function ProgressPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
       )}
 
       {tab === "legal" && (
-        <div className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-3">
+        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+          <ReferenceSheetToolbar
+            sheetLabel="Legal Approval Tracker"
+            rowCount={data.legalApprovals?.length}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => setLegalAddOpen((v) => !v) : undefined}
+            message={msg || undefined}
+          />
+          <div className="grid md:grid-cols-2 gap-3 shrink-0">
             <PieChart title="Legal by status" items={data.charts?.legalByStatus || []} />
             <BarChart title="Legal approvals by status" items={data.charts?.legalByStatus || []} />
           </div>
-          {canEdit && (
-            <Card>
+          {canEdit && legalAddOpen && (
+            <Card className="!p-3 shrink-0">
               <h3 className="font-semibold text-sm mb-3">Add legal approval</h3>
               <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addLegal}>
                 <Input placeholder="Approval ID (LA-31)" value={legalForm.approvalId} onChange={(e) => setLegalForm({ ...legalForm, approvalId: e.target.value })} />
@@ -1125,12 +1099,14 @@ export default function ProgressPage() {
                 </Select>
                 <Input placeholder="Responsible" value={legalForm.responsible} onChange={(e) => setLegalForm({ ...legalForm, responsible: e.target.value })} />
                 <Button type="submit">Add row</Button>
+                <Button type="button" variant="secondary" onClick={() => setLegalAddOpen(false)}>Cancel</Button>
               </form>
             </Card>
           )}
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Legal Approval Tracker</div>
-            <table className="w-full text-sm min-w-[1000px]">
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Legal Approval Tracker</div>
+            <div className="sheet-register__scroll flex-1 min-h-0">
+            <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
                   <th className="py-2.5 px-3">ID</th>
@@ -1166,6 +1142,7 @@ export default function ProgressPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
       )}
@@ -1239,33 +1216,79 @@ export default function ProgressPage() {
       )}
 
       {tab === "msproject" && (
-        <div className="space-y-4">
-          <Card className="!p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">MS Project connectivity</p>
-                <h3 className="font-display text-xl text-ink">Task register · % complete · baseline</h3>
-                <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-                  Import <strong>File → Save As → XML</strong> from Microsoft Project (desktop or Project for the web). MPP binary is not supported — use XML export.
-                </p>
-              </div>
-              {canEdit && (
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={!!msBusy} onClick={() => void seedMsProjectDemo()}>
-                    {msBusy === "seed" ? "Seeding…" : "Seed demo schedule file"}
-                  </Button>
-                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
-                    Import XML
-                  </Button>
-                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => void downloadMsProjectXml()}>
-                    Download XML
-                  </Button>
-                </div>
-              )}
-            </div>
+        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+          <ReferenceSheetToolbar
+            sheetLabel="MS Project task register"
+            rowCount={msProject?.tasks?.length}
+            canEdit={canEdit}
+            onUpload={
+              canEdit
+                ? async (file) => {
+                    if (!id) return;
+                    setMsBusy("import");
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      const out = await api<{ taskCount: number; scurvePoints: number }>(
+                        `/api/progress/${id}/ms-project/import`,
+                        { method: "POST", token, body: fd }
+                      );
+                      setMsg(`MS Project imported — ${out.taskCount} tasks · ${out.scurvePoints} S-curve points`);
+                      await Promise.all([load(), loadMsProject()]);
+                    } catch (e) {
+                      setMsg(e instanceof Error ? e.message : "MS Project import failed");
+                    } finally {
+                      setMsBusy(null);
+                    }
+                  }
+                : undefined
+            }
+            uploadHint="Import File → Save As → XML from Microsoft Project."
+            onGenerate={canEdit ? () => void seedMsProjectDemo() : undefined}
+            generateLabel={msBusy === "seed" ? "Seeding…" : "Seed demo schedule"}
+            onDownloadCsv={() => void downloadMsProjectXml()}
+            busy={!!msBusy}
+            message={msg}
+          />
+          <Card className="!p-4 shrink-0">
+            <p className="text-sm text-steel-muted">
+              Import <strong>File → Save As → XML</strong> from Microsoft Project. MPP binary is not supported.
+            </p>
+            <input
+              ref={msImportRef}
+              type="file"
+              accept=".xml,.mpp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f && id) {
+                  void (async () => {
+                    setMsBusy("import");
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", f);
+                      const out = await api<{ taskCount: number; scurvePoints: number }>(
+                        `/api/progress/${id}/ms-project/import`,
+                        { method: "POST", token, body: fd }
+                      );
+                      setMsg(`MS Project imported — ${out.taskCount} tasks`);
+                      await Promise.all([load(), loadMsProject()]);
+                    } catch (err) {
+                      setMsg(err instanceof Error ? err.message : "Import failed");
+                    } finally {
+                      setMsBusy(null);
+                    }
+                  })();
+                }
+                e.target.value = "";
+              }}
+            />
+          </Card>
+          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Task register · % complete · baseline</div>
             {msProject?.tasks?.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="sheet-register__scroll flex-1 min-h-0">
+                <table className="sheet-register__table w-full text-sm min-w-[48rem]">
                   <thead>
                     <tr className="text-left text-[10px] uppercase tracking-wider text-steel-muted border-b border-line">
                       <th className="py-2 pr-3">WBS</th>
@@ -1295,8 +1318,8 @@ export default function ProgressPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-steel-muted py-8 text-center border border-dashed border-line rounded-lg">
-                No MS Project tasks — seed demo or import client XML to populate this register.
+              <p className="text-sm text-steel-muted py-8 text-center">
+                No MS Project tasks — seed demo or import client XML.
               </p>
             )}
           </Card>

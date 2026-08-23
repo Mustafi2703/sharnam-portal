@@ -3777,6 +3777,24 @@ body {
 .maker-shell {
   max-width: 100%;
   overflow-x: hidden;
+  padding-bottom: max(5rem, calc(1rem + env(safe-area-inset-bottom, 0px)));
+}
+@media (min-width: 1025px) {
+  .maker-shell {
+    padding-bottom: 1rem;
+  }
+}
+.maker-shell .reference-sheet-toolbar {
+  flex-shrink: 0;
+}
+.maker-shell .maker-section--flush .maker-table-wrap {
+  max-height: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.page-stack--register .maker-section--flush {
+  min-height: 0;
 }
 .maker-page {
   max-width: 100%;
