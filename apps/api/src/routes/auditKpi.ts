@@ -150,6 +150,35 @@ auditKpiRouter.patch(
   }
 );
 
+auditKpiRouter.post(
+  "/project/:projectId/checklist",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const section = String(body.section || "").trim();
+    const prompt = String(body.prompt || "").trim();
+    if (!section || !prompt) return res.status(400).json({ error: "section and prompt required" });
+    const maxNo = await prisma.auditChecklistItem.aggregate({
+      where: { projectId: req.params.projectId, section },
+      _max: { itemNo: true },
+    });
+    const itemNo = body.itemNo ? Number(body.itemNo) : (maxNo._max.itemNo ?? 0) + 1;
+    const row = await prisma.auditChecklistItem.create({
+      data: {
+        projectId: req.params.projectId,
+        section,
+        itemNo,
+        prompt,
+        locationChecked: body.locationChecked || null,
+        observed: body.observed || null,
+        score: body.score != null && body.score !== "" ? Number(body.score) : null,
+        response: body.response || null,
+      },
+    });
+    res.status(201).json(row);
+  }
+);
+
 auditKpiRouter.get("/project/:projectId/subjects", async (req, res) => {
   const rows = await prisma.kpiSubject.findMany({
     where: { projectId: req.params.projectId },

@@ -616,19 +616,39 @@ body.is-auth-route #root {
 .spdc-register-panel {
   display: flex;
   flex-direction: column;
-  min-height: 24rem;
+  min-height: 18rem;
   max-height: min(78vh, 56rem);
   overflow: hidden;
+}
+.page-stack--register .spdc-register-panel,
+.qap-page .spdc-register-panel {
+  max-height: none;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 /* Full-viewport register pages (QAP, cube, audit sheets) */
 .page-stack--register {
   min-height: 0;
   flex: 1 1 auto;
-  max-height: none;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   gap: 0.65rem;
   padding-bottom: 0.5rem;
+}
+.tool-main:has(.page-stack--register),
+.tool-main:has(.qap-page) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.tool-main:has(.page-stack--register) > .page-stack--register,
+.tool-main:has(.page-stack--register) > .qap-page,
+.tool-main:has(.qap-page) > .qap-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 @media (max-width: 640px) {
   .page-stack--register {
@@ -646,11 +666,13 @@ body.is-auth-route #root {
 }
 .qap-page__register .spdc-register-panel,
 .page-stack--register .spdc-register-panel,
-.page-stack--register .register-table-panel {
+.page-stack--register .register-table-panel,
+.page-stack--register .register-sheet-frame,
+.page-stack--register .sheet-register,
+.qap-page .sheet-register {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
-  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -658,13 +680,25 @@ body.is-auth-route #root {
 .qap-page__register .sheet-register__scroll,
 .page-stack--register .sheet-register__scroll,
 .page-stack--register .register-table-panel .sheet-register,
-.page-stack--register .register-table-panel > .overflow-x-auto {
+.page-stack--register .register-table-panel > .overflow-x-auto,
+.page-stack--register .register-sheet-frame .sheet-register__scroll,
+.qap-page .sheet-register__scroll {
   flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
+  min-height: 14rem;
+  max-height: none !important;
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+.register-sheet-frame .sheet-register__table,
+.page-stack--register .sheet-register__table {
+  min-width: 100%;
+}
+.sheet-register__table td.wrap,
+.sheet-register__table th.wrap {
+  white-space: normal;
+  min-width: 8rem;
+  max-width: 24rem;
 }
 .spdc-register-panel .sheet-register__scroll {
   flex: 1 1 auto;

@@ -8,6 +8,7 @@ import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
 type Tab =
@@ -586,8 +587,8 @@ export default function ProgressPage() {
               </form>
             </Card>
           )}
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Milestone register · sheet columns</div>
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="sheet-register__head shrink-0">Milestone register · sheet columns</div>
             <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[64rem]">
               <thead>
@@ -627,6 +628,7 @@ export default function ProgressPage() {
                     </td>
                   </tr>
                 ))}
+                {!data.milestones?.length && <RegisterEmptyRow colSpan={12} />}
               </tbody>
             </table>
             </div>
@@ -719,7 +721,7 @@ export default function ProgressPage() {
           </div>
           )}
           {(pva === "all" || pva === "cashflow") && (
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Project cashflow · Planned Vs Actual
             </div>
@@ -744,13 +746,14 @@ export default function ProgressPage() {
                     <td className="py-2 px-3 text-right tabular-nums">{pct(p.actualPct)}</td>
                   </tr>
                 ))}
+                {!data.plannedActual?.length && <RegisterEmptyRow colSpan={5} />}
               </tbody>
             </table>
             </div>
           </Card>
           )}
           {(pva === "all" || pva === "manpower") && (
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
             <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[32rem]">
@@ -773,6 +776,7 @@ export default function ProgressPage() {
                     <td className="py-2 px-3 text-right tabular-nums">{pct(m.shortagePct)}</td>
                   </tr>
                 ))}
+                {!data.manpower?.length && <RegisterEmptyRow colSpan={5} />}
               </tbody>
             </table>
             </div>
@@ -780,7 +784,7 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "activity") && (
           <>
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
               <span>
                 BOQ / monitoring register ({(data.boqLines || []).length} lines from SPDC Budget)
@@ -837,7 +841,7 @@ export default function ProgressPage() {
             </div>
           </Card>
           {(data.activityLines || []).length > 0 && (
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col opacity-90">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col opacity-90">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Weekly activity register ({data.activityLines.length} lines from Excel import)
             </div>
@@ -862,6 +866,7 @@ export default function ProgressPage() {
                     <td className="py-1.5 px-2 border border-line">{a.status || "—"}</td>
                   </tr>
                 ))}
+                {!data.activityLines?.length && <RegisterEmptyRow colSpan={5} />}
               </tbody>
             </table>
             </div>
@@ -931,7 +936,7 @@ export default function ProgressPage() {
             <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
             <BarChart title="Hindrance by critical activity" items={data.charts?.hindranceByActivity || []} />
           </div>
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Hindrance register</div>
             <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
@@ -970,6 +975,7 @@ export default function ProgressPage() {
                     </td>
                   </tr>
                 ))}
+                {!data.hindrances?.length && <RegisterEmptyRow colSpan={11} />}
               </tbody>
             </table>
             </div>
@@ -1021,7 +1027,7 @@ export default function ProgressPage() {
               </form>
             </Card>
           )}
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Risk register</div>
             <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[56rem]">
@@ -1057,6 +1063,7 @@ export default function ProgressPage() {
                     </td>
                   </tr>
                 ))}
+                {!data.risks?.length && <RegisterEmptyRow colSpan={9} />}
               </tbody>
             </table>
             </div>
@@ -1103,7 +1110,7 @@ export default function ProgressPage() {
               </form>
             </Card>
           )}
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Legal Approval Tracker</div>
             <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
@@ -1140,6 +1147,7 @@ export default function ProgressPage() {
                     </td>
                   </tr>
                 ))}
+                {!data.legalApprovals?.length && <RegisterEmptyRow colSpan={11} />}
               </tbody>
             </table>
             </div>
@@ -1284,7 +1292,7 @@ export default function ProgressPage() {
               }}
             />
           </Card>
-          <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Task register · % complete · baseline</div>
             {msProject?.tasks?.length ? (
               <div className="sheet-register__scroll flex-1 min-h-0">

@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
@@ -454,8 +455,8 @@ export default function SafetyPage() {
       )}
 
       {sheetHasRegister && sheetKey !== "hira" && (
-        <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
-          <div className="px-4 py-3 border-b border-line bg-sand/40">
+        <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <div className="sheet-register__head shrink-0">
             <h3 className="font-semibold text-sm text-left">
               {sheetView.label} register ({sheetView.sheet})
             </h3>
@@ -533,11 +534,7 @@ export default function SafetyPage() {
                   </tr>
                 ))}
                 {!registerRows.length && (
-                  <tr>
-                    <td colSpan={canEdit ? 7 : 6} className="py-6 text-left text-steel-muted">
-                      No rows for this sheet — run seed or add one above.
-                    </td>
-                  </tr>
+                  <RegisterEmptyRow colSpan={canEdit ? 7 : 6} message="No rows for this sheet — use + Add row or upload Excel." />
                 )}
               </tbody>
             </table>
