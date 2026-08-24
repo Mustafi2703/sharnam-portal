@@ -247,16 +247,18 @@ export default function ProjectToolsLayout() {
             onClick={() => setRightOpen(false)}
           />
         )}
-        <div className="tool-main min-w-0 flex-1 min-h-0 h-full overflow-hidden flex flex-col">
-          <Outlet
-            context={{
-              project,
-              gate,
-              toolLabel,
-              refreshProject: () =>
-                id ? api(`/api/projects/${id}`, { token }).then(setProject) : Promise.resolve(),
-            }}
-          />
+        <div className="tool-main min-w-0 flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="tool-main__outlet flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+            <Outlet
+              context={{
+                project,
+                gate,
+                toolLabel,
+                refreshProject: () =>
+                  id ? api(`/api/projects/${id}`, { token }).then(setProject) : Promise.resolve(),
+              }}
+            />
+          </div>
         </div>
 
         {isDesktopPanel && actionPanel}

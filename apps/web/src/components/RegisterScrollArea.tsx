@@ -8,12 +8,12 @@ type Props = {
 };
 
 /**
- * Bounded scroll region for register tables — max-height from viewport so tbody scrolls.
+ * Scroll region for register tables — absolutely fills `.register-sheet-shell`.
  */
 export function RegisterScrollArea({ children, className = "", tall = false }: Props) {
   return (
     <div
-      className={`register-scroll-area flex-1 min-h-0 basis-0 h-0 ${className}`.trim()}
+      className={`register-scroll-area ${className}`.trim()}
       data-register-scroll={tall ? "tall" : "default"}
     >
       {children}
