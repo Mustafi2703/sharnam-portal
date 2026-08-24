@@ -4,6 +4,7 @@
  */
 import { Router } from "express";
 import multer from "multer";
+import { buildFinanceDisciplineRollup, FINANCE_PACKAGES, FINANCE_MATERIAL_COLUMNS, FINANCE_RA_COLUMNS, materialMatchesPackage, raMatchesPackage, resolveFinancePackage } from "../modules/finance/disciplines.js";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
@@ -12,6 +13,11 @@ import { mockOneDrive } from "../services/mockOneDrive.js";
 export const financeRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 financeRouter.use(requireAuth);
+
+/** Module config — Viatrix Payment Summary packages (for web + integrations). */
+financeRouter.get("/meta/packages", (_req, res) => {
+  res.json({ packages: FINANCE_PACKAGES, raColumns: FINANCE_RA_COLUMNS, materialColumns: FINANCE_MATERIAL_COLUMNS });
+});
 
 function num(v: unknown): number {
   const n = typeof v === "string" ? Number(v.replace(/,/g, "")) : Number(v ?? 0);
@@ -97,14 +103,22 @@ financeRouter.get("/:projectId/summary", async (req, res) => {
     };
   });
 
-  const { getFinanceCostBridge } = await import("../services/financeCostBridge.js");
+  const { getFinanceCostBridge } = await import("../modules/finance/costBridge.js");
   const costBridge = await getFinanceCostBridge(projectId);
+  const materials = await prisma.financeMaterialInvoice.findMany({ where: { projectId } });
+  const byDiscipline = buildFinanceDisciplineRollup({
+    ras,
+    materials,
+    pos,
+    cops,
+  });
   res.json({
     totals,
     raByStatus,
     copByStatus,
     paymentSummary,
-    counts: { capex: capex.length, pos: pos.length, ras: ras.length, cops: cops.length },
+    byDiscipline,
+    counts: { capex: capex.length, pos: pos.length, ras: ras.length, cops: cops.length, materials: materials.length },
     costBridge,
   });
 });
@@ -247,15 +261,16 @@ financeRouter.delete("/po/:id", requireRoles("admin", "office"), async (req: Aut
 /* ─────────────────────────────────────────  RA BILLS  ───────────────────────────────────────── */
 
 financeRouter.get("/:projectId/ra", async (req, res) => {
+  const pkg = resolveFinancePackage(String(req.query.discipline || req.query.package || ""));
   const rows = await prisma.raBill.findMany({
     where: { projectId: req.params.projectId },
     include: {
-      purchaseOrder: { select: { id: true, poNumber: true, vendorName: true } },
+      purchaseOrder: { select: { id: true, poNumber: true, vendorName: true, packageName: true, workTrade: true } },
       certificates: { select: { id: true, certificateNumber: true, status: true } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
   });
-  res.json(rows);
+  res.json(pkg ? rows.filter((r) => raMatchesPackage(r, pkg)) : rows);
 });
 
 financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
@@ -263,6 +278,8 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
   if (!project) return res.status(404).json({ error: "not found" });
 
   const raNumber = s(req.body.raNumber) || `RA-${Date.now()}`;
+  const pkg = resolveFinancePackage(s(req.body.discipline) || s(req.body.packageKey) || "");
+  const discipline = pkg?.discipline || s(req.body.discipline) || "Civil";
   let attachmentUrl: string | undefined;
   if (req.file) {
     const saved = await mockOneDrive.upload(
@@ -277,10 +294,14 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
   // cumulative = previous cumulative + this net
   const purchaseOrderId = s(req.body.purchaseOrderId) || null;
   const prev = await prisma.raBill.aggregate({
-    where: { projectId: req.params.projectId, purchaseOrderId: purchaseOrderId || undefined },
+    where: {
+      projectId: req.params.projectId,
+      discipline: discipline,
+      ...(purchaseOrderId ? { purchaseOrderId } : {}),
+    },
     _sum: { totalInvoiceWithoutGst: true },
   });
-  const previousBillTotal = prev._sum.totalInvoiceWithoutGst || 0;
+  const previousBillTotal = prev._sum?.totalInvoiceWithoutGst || 0;
   const totalInvoiceWithoutGst = num(req.body.totalInvoiceWithoutGst) || (num(req.body.againstBillRaised) - num(req.body.priceVariation));
   const netAmountPayable =
     num(req.body.netAmountPayable) ||
@@ -309,7 +330,7 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
       previousBillTotal,
       cumulativeBillTotal: previousBillTotal + totalInvoiceWithoutGst,
       status: s(req.body.status) || "Submitted",
-      discipline: s(req.body.discipline) || null,
+      discipline,
       vendorId: s(req.body.vendorId) || null,
       vendorName: s(req.body.vendorName) || null,
       copNo: s(req.body.copNo) || null,
@@ -339,23 +360,18 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
 financeRouter.put("/ra/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.raBill.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
-  const row = await prisma.raBill.update({
-    where: { id: req.params.id },
-    data: {
-      status: s(req.body.status) || before.status,
-      description: s(req.body.description) || before.description,
-      copNo: s(req.body.copNo) || before.copNo,
-      againstBillRaised: num(req.body.againstBillRaised),
-      priceVariation: num(req.body.priceVariation),
-      totalInvoiceWithoutGst: num(req.body.totalInvoiceWithoutGst),
-      gstAmount: num(req.body.gstAmount),
-      totalInvoiceWithGst: num(req.body.totalInvoiceWithGst),
-      advanceAdjusted: num(req.body.advanceAdjusted),
-      retentionAmount: num(req.body.retentionAmount),
-      otherRecoveries: num(req.body.otherRecoveries),
-      netAmountPayable: num(req.body.netAmountPayable),
-    },
-  });
+  const data: Record<string, unknown> = {};
+  if (req.body.status != null) data.status = s(req.body.status) || before.status;
+  if (req.body.description != null) data.description = s(req.body.description) || before.description;
+  if (req.body.copNo != null) data.copNo = s(req.body.copNo) || before.copNo;
+  if (req.body.raNumber != null) data.raNumber = s(req.body.raNumber) || before.raNumber;
+  if (req.body.invoiceNumber != null) data.invoiceNumber = s(req.body.invoiceNumber) || null;
+  if (req.body.invoiceDate !== undefined) data.invoiceDate = req.body.invoiceDate ? new Date(req.body.invoiceDate) : null;
+  if (req.body.discipline != null) data.discipline = s(req.body.discipline) || before.discipline;
+  for (const k of ["againstBillRaised", "priceVariation", "totalInvoiceWithoutGst", "gstAmount", "totalInvoiceWithGst", "advanceAdjusted", "retentionAmount", "otherRecoveries", "netAmountPayable"] as const) {
+    if (req.body[k] != null && req.body[k] !== "") data[k] = num(req.body[k]);
+  }
+  const row = await prisma.raBill.update({ where: { id: req.params.id }, data });
   res.json(row);
 });
 
@@ -386,7 +402,7 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   if (req.file) {
     const saved = await mockOneDrive.upload(
       project.code,
-      "09_COMMERCIAL_AND_CHANGE/09.05_Variation_Extra_Item_Evaluation",
+      "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification",
       `COP-${s(req.body.certificateNumber || "").replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}${extOf(req.file)}`,
       req.file.buffer
     );
@@ -426,11 +442,40 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
     await prisma.raBill.update({ where: { id: created.raBillId }, data: { copNo: created.certificateNumber } });
   }
 
-  const { syncCopToCashflow } = await import("../services/cashflowCopSync.js");
+  const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
   await syncCopToCashflow(req.params.projectId);
 
   await audit("finance.cop.create", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: created.id, meta: { certificateNumber: created.certificateNumber } });
   res.status(201).json(created);
+});
+
+/** Download Viatrix-format COP certificate (xlsx). */
+financeRouter.get("/:projectId/cop/:copId/download.xlsx", async (req, res) => {
+  const cop = await prisma.certificateOfPayment.findFirst({
+    where: { id: req.params.copId, projectId: req.params.projectId },
+  });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const { buildViatrixCopWorkbook } = await import("../modules/finance/copWorkbook.js");
+  const { buffer, filename } = await buildViatrixCopWorkbook(cop.id);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buffer);
+});
+
+/** Generate Viatrix COP and save to 09.01 Interim Bill folder on DMS. */
+financeRouter.post("/:projectId/cop/:copId/save-to-dms", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const cop = await prisma.certificateOfPayment.findFirst({
+    where: { id: req.params.copId, projectId: project.id },
+  });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const { saveViatrixCopToDms } = await import("../modules/finance/copWorkbook.js");
+  const out = await saveViatrixCopToDms(cop.id, (code, folder, name, buf) =>
+    mockOneDrive.upload(code, folder, name, buf)
+  );
+  await audit("finance.cop.export", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: cop.id, meta: { filename: out.filename } });
+  res.json(out);
 });
 
 financeRouter.put("/cop/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -449,7 +494,7 @@ financeRouter.put("/cop/:id", requireRoles("admin", "office"), async (req: Authe
       approvedById: req.body.approved ? req.user!.id : before.approvedById,
     },
   });
-  const { syncCopToCashflow } = await import("../services/cashflowCopSync.js");
+  const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
   await syncCopToCashflow(row.projectId);
   res.json(row);
 });
@@ -458,7 +503,7 @@ financeRouter.delete("/cop/:id", requireRoles("admin", "office"), async (req: Au
   const before = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id } });
   await prisma.certificateOfPayment.delete({ where: { id: req.params.id } });
   if (before) {
-    const { syncCopToCashflow } = await import("../services/cashflowCopSync.js");
+    const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
     await syncCopToCashflow(before.projectId);
   }
   await audit("finance.cop.delete", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: req.params.id });
@@ -543,6 +588,91 @@ financeRouter.post("/:projectId/audit-dump", requireRoles("admin", "office"), as
   await audit("finance.audit.dump", { userId: req.user!.id, entity: "Project", entityId: project.id, meta: { rows: { capex: capex.length, pos: pos.length, ras: ras.length, cops: cops.length } } });
 
   res.json({ ok: true, uploaded: uploaded.length, at: new Date().toISOString(), registers: drops.map((d) => d.name) });
+});
+
+/* ─────────────────────────────────────────  MATERIAL INVOICES  ───────────────────────────────────────── */
+
+financeRouter.get("/:projectId/material-invoices", async (req, res) => {
+  const pkg = resolveFinancePackage(String(req.query.discipline || req.query.package || ""));
+  const rows = await prisma.financeMaterialInvoice.findMany({
+    where: { projectId: req.params.projectId },
+    orderBy: [{ sheetCategory: "asc" }, { receivedDate: "asc" }],
+  });
+  res.json(pkg ? rows.filter((r) => materialMatchesPackage(r, pkg)) : rows);
+});
+
+financeRouter.post("/:projectId/material-invoices", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const pkg = resolveFinancePackage(s(req.body.packageKey) || s(req.body.sheetCategory) || s(req.body.discipline) || "");
+  const sheetCategory = s(req.body.sheetCategory) || pkg?.sheetName || "Other";
+  const created = await prisma.financeMaterialInvoice.create({
+    data: {
+      projectId: req.params.projectId,
+      sheetCategory,
+      srNo: s(req.body.srNo) || null,
+      receivedDate: req.body.receivedDate ? new Date(req.body.receivedDate) : null,
+      description: s(req.body.description) || "Invoice line",
+      vehicleNo: s(req.body.vehicleNo) || null,
+      taxInvoiceNo: s(req.body.taxInvoiceNo) || null,
+      invoiceDate: req.body.invoiceDate ? new Date(req.body.invoiceDate) : null,
+      amountWithoutGst: num(req.body.amountWithoutGst),
+      amountWithGst: num(req.body.amountWithGst),
+      gstAmount: num(req.body.gstAmount),
+      retentionAmount: num(req.body.retentionAmount),
+      netPayable: num(req.body.netPayable) || num(req.body.amountWithGst),
+      againstBillRaised: num(req.body.againstBillRaised),
+      notes: s(req.body.notes) || null,
+    },
+  });
+  res.status(201).json(created);
+});
+
+financeRouter.put("/material-invoices/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const before = await prisma.financeMaterialInvoice.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  const data: Record<string, unknown> = {};
+  if (req.body.sheetCategory != null) data.sheetCategory = s(req.body.sheetCategory) || before.sheetCategory;
+  if (req.body.srNo != null) data.srNo = s(req.body.srNo) || null;
+  if (req.body.receivedDate !== undefined) data.receivedDate = req.body.receivedDate ? new Date(req.body.receivedDate) : before.receivedDate;
+  if (req.body.description != null) data.description = s(req.body.description) || before.description;
+  if (req.body.taxInvoiceNo != null) data.taxInvoiceNo = s(req.body.taxInvoiceNo) || null;
+  if (req.body.invoiceDate !== undefined) data.invoiceDate = req.body.invoiceDate ? new Date(req.body.invoiceDate) : before.invoiceDate;
+  for (const k of ["amountWithoutGst", "amountWithGst", "gstAmount", "retentionAmount", "netPayable", "againstBillRaised"] as const) {
+    if (req.body[k] != null && req.body[k] !== "") data[k] = num(req.body[k]);
+  }
+  if (req.body.notes != null) data.notes = s(req.body.notes) || null;
+  const row = await prisma.financeMaterialInvoice.update({ where: { id: req.params.id }, data });
+  res.json(row);
+});
+
+financeRouter.delete("/material-invoices/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.financeMaterialInvoice.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+/* ─────────────────────────────────────────  PAYMENT SUMMARY WORKBOOK  ───────────────────────────────────────── */
+
+financeRouter.get("/:projectId/payment-summary/download.xlsx", async (req, res) => {
+  const { buildPaymentSummaryWorkbook } = await import("../modules/finance/paymentSummaryWorkbook.js");
+  const buf = await buildPaymentSummaryWorkbook(req.params.projectId);
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  const filename = `Payment-Summary-${project?.code || "export"}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buf);
+});
+
+financeRouter.post("/:projectId/payment-summary/sync-template", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { syncPaymentSummaryTemplate } = await import("../modules/finance/paymentSummaryWorkbook.js");
+  const out = await syncPaymentSummaryTemplate(req.params.projectId);
+  await audit("finance.paymentSummary.sync", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: out });
+  res.json(out);
+});
+
+financeRouter.post("/:projectId/payment-summary/import", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
+  if (!req.file) return res.status(400).json({ error: "Upload Payment Summary xlsx" });
+  const { importPaymentSummaryWorkbook } = await import("../modules/finance/paymentSummaryWorkbook.js");
+  const out = await importPaymentSummaryWorkbook(req.params.projectId, req.file.buffer, req.body.replace === "1", s(req.body.discipline) || undefined);
+  res.json(out);
 });
 
 /* ─────────────────────────────────────────  helpers  ───────────────────────────────────────── */

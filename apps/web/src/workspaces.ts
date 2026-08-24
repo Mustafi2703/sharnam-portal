@@ -560,11 +560,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   finance: [
+    { to: "finance", label: "Bill registers", query: "tab=bills", blurb: "Viatrix Payment Summary sheets — create & edit per discipline." },
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
     { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Capital expenditure lines." },
     { to: "finance", label: "Purchase Orders", query: "tab=po", blurb: "Purchase order register." },
     { to: "finance", label: "RA Bill Tracker", query: "tab=ra", blurb: "Running account bills." },
     { to: "finance", label: "COP", query: "tab=cop", blurb: "Certificate of payment." },
+    { to: "finance", label: "Material invoices", query: "tab=invoices", blurb: "PEB / steel / fire tax invoices." },
     { to: "finance", label: "Payment Summary", query: "tab=summary", blurb: "Payment summary rollup." },
     { to: "finance", label: "Audit Sheets", query: "tab=audit", blurb: "Audit sheets → drive export." },
   ],

@@ -119,7 +119,8 @@ export default function AuditKpiPage() {
     void downloadAuthFile(`/api/audit-kpi/project/${id}/download/${sheet}.${ext}`, token, `Sharnam-${sheet}.${ext}`);
   };
 
-  const uploadPack = tab === "subjects" || tab === "role-kra" || tab === "kpi-dashboard" ? "kpi" : "site-audit";
+  const uploadPack =
+    tab === "subjects" || tab === "role-kra" || tab === "kpi-dashboard" ? "kpi" : "site-audit";
 
   const uploadSheet = async (file: File) => {
     setBusy(true);
@@ -298,7 +299,9 @@ export default function AuditKpiPage() {
               ? data?.findings?.length
               : tab === "subjects"
                 ? subjects.length
-                : checklist.length
+                : tab === "role-kra"
+                  ? kras.length
+                  : checklist.length
           }
           canEdit={canEdit}
           onAddRow={
@@ -311,7 +314,11 @@ export default function AuditKpiPage() {
                   : undefined
           }
           onUpload={canEdit ? uploadSheet : undefined}
-          uploadHint="Workbook must match client template columns (FINDINGS / 03_SUBJECT_DATA / SITE_WALK)."
+          uploadHint={
+            tab === "role-kra" || tab === "subjects"
+              ? "Upload MASTER_KPI_DASHBOARD.xlsx (03_SUBJECT_DATA / 06_ROLE_KRA sheets)."
+              : "Workbook must match client template columns (FINDINGS / SITE_WALK / DC_INTERVIEW / FOLDER_SAMPLE)."
+          }
           onDownloadCsv={() => {
             if (tab === "findings") dl("csv", "findings");
             else if (tab === "subjects") dl("csv", "subjects");
@@ -417,7 +424,17 @@ export default function AuditKpiPage() {
                       row.score ?? "—"
                     )}
                   </td>
-                  <td>{row.response || "—"}</td>
+                  <td>
+                    {canEdit ? (
+                      <input
+                        className="register-sheet-cell w-full"
+                        defaultValue={row.response || ""}
+                        onBlur={(e) => void saveChecklist(row.id, { response: e.target.value })}
+                      />
+                    ) : (
+                      row.response || "—"
+                    )}
+                  </td>
                 </tr>
               ))}
               {!checklist.length && <RegisterEmptyRow colSpan={6} />}

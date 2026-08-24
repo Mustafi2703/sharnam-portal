@@ -180,7 +180,7 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     ]),
   ].filter(Boolean);
 
-  const { getFinanceCostBridge } = await import("../services/financeCostBridge.js");
+  const { getFinanceCostBridge } = await import("../modules/finance/costBridge.js");
   const financeBridge = await getFinanceCostBridge(projectId);
 
   const sheetTools = {

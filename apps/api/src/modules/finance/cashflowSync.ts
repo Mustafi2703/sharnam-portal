@@ -3,7 +3,7 @@
  * Certified / Approved / Paid COP amounts roll into the matching calendar period
  * so DPR header AC certified and WPR cashflow stay aligned.
  */
-import { prisma } from "../prisma.js";
+import { prisma } from "../../prisma.js";
 
 function startOfDay(d: Date) {
   const x = new Date(d);

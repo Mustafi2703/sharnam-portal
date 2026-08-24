@@ -1,1 +1,1 @@
-export { seedAuditKpiFromSheets } from "../apps/api/src/services/auditKpiSeed.ts";
+export { seedAuditKpiFromSheets } from "../apps/api/src/modules/audit-kpi/seedFromSheets.ts";

@@ -3,7 +3,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
-import { seedAuditKpiFromSheets } from "../services/auditKpiSeed.js";
+import { seedAuditKpiFromSheets } from "../modules/audit-kpi/seedFromSheets.js";
 
 export const auditKpiRouter = Router();
 auditKpiRouter.use(requireAuth);
@@ -18,6 +18,18 @@ function csvEscape(v: unknown) {
 
 function toCsv(headers: string[], rows: unknown[][]) {
   return [headers.join(","), ...rows.map((r) => r.map(csvEscape).join(","))].join("\n");
+}
+
+function closureRatio(s: {
+  pctClosed: number | null;
+  closedCount: number;
+  recordsCount: number;
+}): number {
+  if (s.pctClosed != null && Number.isFinite(s.pctClosed)) {
+    return s.pctClosed > 1 ? s.pctClosed / 100 : s.pctClosed;
+  }
+  if (s.recordsCount > 0) return s.closedCount / s.recordsCount;
+  return 0;
 }
 
 auditKpiRouter.get("/project/:projectId/dashboard", async (req, res) => {
@@ -40,8 +52,7 @@ auditKpiRouter.get("/project/:projectId/dashboard", async (req, res) => {
   const overdueSubjects = subjects.filter((s) => s.overdueCount > 0).length;
   const avgClosure =
     subjects.length > 0
-      ? subjects.reduce((a, s) => a + (s.pctClosed ?? (s.closedCount && s.recordsCount ? s.closedCount / s.recordsCount : 0)), 0) /
-        subjects.length
+      ? subjects.reduce((a, s) => a + closureRatio(s), 0) / subjects.length
       : 0;
 
   res.json({

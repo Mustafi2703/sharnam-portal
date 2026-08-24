@@ -153,7 +153,11 @@ export async function seedAuditKpiFromSheets(
             openCount: num(row[9]) ?? 0,
             closedCount: num(row[10]) ?? 0,
             overdueCount: num(row[11]) ?? 0,
-            pctClosed: num(row[12]),
+            pctClosed: (() => {
+              const raw = num(row[12]);
+              if (raw == null) return null;
+              return raw > 1 ? raw / 100 : raw;
+            })(),
             oldestOpenDays: num(row[13]),
             kraScore: num(row[14]),
             rag: cell(row[15]) || "UNUSED",
@@ -164,7 +168,11 @@ export async function seedAuditKpiFromSheets(
             openCount: num(row[9]) ?? 0,
             closedCount: num(row[10]) ?? 0,
             overdueCount: num(row[11]) ?? 0,
-            pctClosed: num(row[12]),
+            pctClosed: (() => {
+              const raw = num(row[12]);
+              if (raw == null) return null;
+              return raw > 1 ? raw / 100 : raw;
+            })(),
             rag: cell(row[15]) || "UNUSED",
             lastRefreshedAt: new Date(),
           },

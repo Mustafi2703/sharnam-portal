@@ -2,7 +2,7 @@
  * Cross-module bridge: Cost (engineering BOQ/MB/BBS/cashflow) ↔ Finance (PO/RA/COP).
  * Commercial COP certificates live in Finance; Cost cashflow chart tracks planned vs actual outflow.
  */
-import { prisma } from "../prisma.js";
+import { prisma } from "../../prisma.js";
 
 export type FinanceCostBridge = {
   finance: {

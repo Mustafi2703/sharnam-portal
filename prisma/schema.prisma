@@ -128,6 +128,7 @@ model Project {
   purchaseOrders        PurchaseOrder[]
   raBills               RaBill[]
   certificates          CertificateOfPayment[]
+  financeMaterialInvoices FinanceMaterialInvoice[]
   capexLines            ProjectCapex[]
   quotations            Quotation[]
   bidPackages           CrmBidPackage[]
@@ -1976,6 +1977,7 @@ model RaBill {
   certificates  CertificateOfPayment[]
 
   @@index([projectId, purchaseOrderId])
+  @@index([projectId, discipline])
 }
 
 /**
@@ -2020,6 +2022,34 @@ model CertificateOfPayment {
   raBill        RaBill?        @relation(fields: [raBillId], references: [id])
 
   @@unique([projectId, certificateNumber])
+}
+
+/** Payment Summary workbook — material supply / advance invoice lines (non-RA). */
+model FinanceMaterialInvoice {
+  id                String    @id @default(cuid())
+  projectId         String
+  /// PEB Supply Material | PEB ERECTION | CIVIL STEEL | Karmasth Fire | Other
+  sheetCategory     String    @default("Other")
+  srNo              String?
+  receivedDate      DateTime?
+  description       String
+  vehicleNo         String?
+  taxInvoiceNo      String?
+  invoiceDate       DateTime?
+  challanNo         String?
+  amountWithoutGst  Float     @default(0)
+  amountWithGst     Float     @default(0)
+  gstAmount         Float     @default(0)
+  retentionAmount   Float     @default(0)
+  netPayable        Float     @default(0)
+  againstBillRaised Float     @default(0)
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, sheetCategory])
 }
 
 /**
