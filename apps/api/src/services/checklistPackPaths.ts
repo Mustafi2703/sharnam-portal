@@ -9,6 +9,7 @@ import XLSX from "../lib/xlsx.js";
 export function resolveChecklistPackRoot(): string | null {
   const candidates = [
     process.env.SHARNAM_CHECKLIST_PACK_ROOT?.trim(),
+    path.join(process.cwd(), "seed", "checklist-pack"),
     path.join(
       process.cwd(),
       "module_prompts",
@@ -29,6 +30,7 @@ export function resolveFinalIndexPath(): string | null {
   const root = resolveChecklistPackRoot();
   const candidates = [
     root ? path.join(root, "Final Index.xlsx") : "",
+    path.join(process.cwd(), "seed", "checklist-pack", "Final Index.xlsx"),
     path.join(process.cwd(), "seed", "data", "Quality Dashboard.xlsx"),
     path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Quality Dashboard.xlsx"),
   ].filter(Boolean);
