@@ -506,11 +506,32 @@ export async function seedWprSections(
       "Attach a mobilisation site plan photo — steel yard, office container, labour colony, store, QC lab, toilets, etc. Use the Photos section below to link SharePoint image paths.",
     photos: [],
   };
+  const openNcrs = ncrs.filter((n: { status?: string }) => n.status === "Open").length;
+  const dprDayCount = new Set(dprSnaps.map((s: { logDate: Date }) => new Date(s.logDate).toISOString().slice(0, 10))).size;
+  const pvaLatest = plannedActual[plannedActual.length - 1];
+  const plannedPct = pvaLatest?.plannedPct != null ? `${Math.round(Number(pvaLatest.plannedPct) * 1000) / 10}%` : "";
+  const actualPct = pvaLatest?.actualPct != null ? `${Math.round(Number(pvaLatest.actualPct) * 1000) / 10}%` : "";
+  const onTrack = milestones.filter(
+    (m: { varianceDays?: number; status?: string }) =>
+      (m.varianceDays || 0) <= 0 && (m.status || "").toLowerCase() !== "delayed"
+  ).length;
+
   const projectDashboard: WprSection = {
     title: DEFAULT_WPR_TITLES.projectDashboard,
-    notes: "Insert the KPI dashboard image (or fill the KPI table).",
+    notes: "Auto-filled from live Progress, DPR, Quality and Safety registers for this reporting window.",
     headers: ["KPI", "Value"],
-    rows: [],
+    rows: [
+      ["Reporting window", `${isoDate(weekStart)} → ${isoDate(weekEnd)}`],
+      ["Planned progress %", plannedPct || "Import Progress → Planned vs Actual"],
+      ["Actual progress %", actualPct || "—"],
+      ["DPR days logged", dprDayCount || "No DPR in window — fill DPR Maker"],
+      ["Open NCRs", openNcrs],
+      ["QAP activities (project)", qap.length],
+      ["Cube tests (window)", cubes.length],
+      ["Safety events (window)", safety.length],
+      ["Milestones on track", milestones.length ? `${onTrack} / ${milestones.length}` : "—"],
+      ["Drawings in register", registerLines.length || drawings.length],
+    ],
   };
   const criticalAreas: WprSection = {
     title: DEFAULT_WPR_TITLES.criticalAreas,

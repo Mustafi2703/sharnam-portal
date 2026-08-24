@@ -4,6 +4,7 @@
  */
 import { prisma } from "../prisma.js";
 import { loadQualityDashboardWorkbook, type ChecklistCatalogRow } from "./qualityDashboardSheets.js";
+import { findChecklistWorkbook, loadChecklistPackInventory } from "./checklistPackPaths.js";
 
 function familyForCategory(category: string): "QualityInspection" | "Safety" {
   const c = category.trim().toLowerCase();
@@ -36,6 +37,7 @@ async function ensureTemplate(row: ChecklistCatalogRow) {
   });
   if (other) return { template: other, created: false, skipped: true };
 
+  const workbookPath = findChecklistWorkbook(row.name);
   const template = await prisma.checklistTemplate.create({
     data: {
       name: row.name,
@@ -43,7 +45,9 @@ async function ensureTemplate(row: ChecklistCatalogRow) {
       checklistType,
       source: "Quality Dashboard.xlsx · Sheet1",
       requirePhotosMin: 3,
-      instructions: "Minimum 3 observation photos. Fill on site; branded sheet downloads on submit for DPR/WPR.",
+      instructions: workbookPath
+        ? `Client workbook on file: ${workbookPath}. Minimum 3 observation photos. Fill on site; branded sheet downloads on submit for DPR/WPR.`
+        : "Minimum 3 observation photos. Fill on site; branded sheet downloads on submit for DPR/WPR.",
       items: {
         create: [
           { itemCode: "1", description: `${row.name} — preliminary checks`, sortOrder: 1, section: "Pre-checks", requirePhoto: true },
@@ -77,7 +81,7 @@ export async function syncQualityChecklistCatalog(projectId: string) {
     });
     assigned++;
   }
-  return { catalog: catalog.length, created, assigned, skipped, source: workbook?.source || "Quality Dashboard.xlsx" };
+  return { catalog: catalog.length, created, assigned, skipped, source: workbook?.source || "Quality Dashboard.xlsx", pack: loadChecklistPackInventory() };
 }
 
 export type CatalogStatusRow = ChecklistCatalogRow & {

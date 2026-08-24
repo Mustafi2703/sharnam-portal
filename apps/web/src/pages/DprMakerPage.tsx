@@ -4,6 +4,7 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { BarChart } from "../components/PieChart";
+import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { EvidencePanel } from "../components/EvidencePanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
@@ -300,6 +301,60 @@ export default function DprMakerPage() {
     };
   }, [snap]);
 
+  /** API charts with client-side fallback so dashboard always renders. */
+  const displayCharts = useMemo(() => {
+    if (!snap || !computed) return null;
+    const api = snap.charts;
+    const boqProgress =
+      api?.boqProgress?.length
+        ? api.boqProgress
+        : snap.lines
+            .filter((l) => l.description && num(l.scopeQty) > 0)
+            .slice(0, 10)
+            .map((l, i) => ({
+              label: l.description.slice(0, 36),
+              planned: Math.round((computed.rows[i]?.planned ?? 0) * 1000) / 10,
+              actual: Math.round((computed.rows[i]?.pctComplete ?? 0) * 1000) / 10,
+            }));
+
+    const manpower =
+      api?.manpower?.length
+        ? api.manpower
+        : snap.manpower
+            .filter((m) => m.trade && (m.planned || m.actual))
+            .slice(0, 8)
+            .map((m) => ({
+              label: m.trade.slice(0, 24),
+              planned: num(m.planned),
+              actual: num(m.actual),
+            }));
+
+    const scurve =
+      api?.scurve?.length
+        ? api.scurve
+        : [
+            {
+              date: logDate,
+              label: new Date(logDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+              planned: Math.round(computed.plannedPct * 1000) / 10,
+              actual: Math.round(computed.actualPct * 1000) / 10,
+            },
+          ];
+
+    return {
+      summary: api?.summary ?? {
+        plannedPct: Math.round(computed.plannedPct * 1000) / 10,
+        actualPct: Math.round(computed.actualPct * 1000) / 10,
+        variance: Math.round(computed.variance * 1000) / 10,
+        spi: Math.round(computed.spi * 100) / 100,
+        overallStatus: computed.actualPct >= computed.plannedPct ? "On programme" : "Behind",
+      },
+      scurve,
+      boqProgress,
+      manpower,
+    };
+  }, [snap, computed, logDate]);
+
   function updateHeader<K extends keyof Header>(k: K, v: Header[K]) {
     if (!snap) return;
     setSnap({ ...snap, header: { ...snap.header, [k]: v } });
@@ -568,7 +623,7 @@ export default function DprMakerPage() {
         token,
         body: JSON.stringify({ logDate, discipline }),
       });
-      setMsg(`Published → ${out.publishedPath || out.url || "OneDrive/SharePoint"}${out.provider ? ` · ${out.provider}` : ""}`);
+      setMsg(`Published → ${out.publishedPath || out.url || "OneDrive/SharePoint"}${out.provider ? ` · ${out.provider}` : ""}${out.provider === "mock-onedrive" ? " (SharePoint not live — check server env)" : ""}`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Publish failed");
@@ -696,6 +751,9 @@ export default function DprMakerPage() {
           </div>
         </div>
         {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
+        <div className="px-4 pb-4">
+          <SharePointStatusBanner />
+        </div>
       </div>
 
       {/* 1. Header */}
@@ -758,34 +816,36 @@ export default function DprMakerPage() {
       )}
 
       {/* DPR DASHBOARD — mirrors Excel DASHBOARD sheet charts (BOQ, manpower, S-curve) */}
-      {snap.charts && (snap.charts.scurve?.length || snap.charts.boqProgress?.length || snap.charts.manpower?.length) ? (
+      {displayCharts ? (
         <div className="maker-section shrink-0">
           <div className="maker-section__head">DPR dashboard · matches Excel DASHBOARD sheet</div>
           <div className="maker-section__body grid lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {snap.charts.scurve && snap.charts.scurve.length > 0 && (
-              <Card className="!p-4 lg:col-span-2 xl:col-span-1">
-                <p className="text-[10px] uppercase font-semibold text-steel-muted mb-2">Planned vs actual progress</p>
-                <DprScurveChart points={snap.charts.scurve} />
-              </Card>
-            )}
-            {snap.charts.boqProgress && snap.charts.boqProgress.length > 0 && (
+            <Card className="!p-4 lg:col-span-2 xl:col-span-1">
+              <p className="text-[10px] uppercase font-semibold text-steel-muted mb-2">Planned vs actual progress</p>
+              <DprScurveChart points={displayCharts.scurve} />
+            </Card>
+            {displayCharts.boqProgress.length > 0 ? (
               <BarChart
                 title="BOQ progress today"
-                items={snap.charts.boqProgress}
+                items={displayCharts.boqProgress}
                 valueKey="actual"
                 compareKey="planned"
               />
+            ) : (
+              <Card className="!p-4 text-sm text-steel-muted">Add BOQ lines with scope qty to see progress bars.</Card>
             )}
-            {snap.charts.manpower && snap.charts.manpower.length > 0 && (
+            {displayCharts.manpower.length > 0 ? (
               <BarChart
                 title="Manpower deployed today"
-                items={snap.charts.manpower}
+                items={displayCharts.manpower}
                 valueKey="actual"
                 compareKey="planned"
               />
+            ) : (
+              <Card className="!p-4 text-sm text-steel-muted">Fill manpower trades (planned / actual) for histogram.</Card>
             )}
           </div>
-          <p className="text-xs text-steel-muted mt-2 px-1">
+          <p className="text-xs text-steel-muted mt-2 px-4 pb-4">
             Charts feed the SPDC DASHBOARD sheet on XLSX publish · data also saved to DMS{" "}
             <code className="font-mono text-[10px]">07.02_Daily_Site_Records</code>.
           </p>
@@ -1295,7 +1355,7 @@ function DprScurveChart({ points }: { points: { label: string; planned: number; 
   const w = 320;
   const h = 140;
   const pad = 24;
-  const maxY = Math.max(100, ...points.flatMap((p) => [p.planned, p.actual])) * 1.05;
+  const maxY = Math.max(10, ...points.flatMap((p) => [p.planned, p.actual])) * 1.15;
   const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
   const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
   const planned = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.planned)}`).join(" ");

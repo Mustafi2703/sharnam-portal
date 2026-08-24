@@ -85,12 +85,15 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
       setMsg("");
     }
     try {
-      const out = await api<{ catalog: number; created: number; assigned: number }>(
+      const out = await api<{ catalog: number; created: number; assigned: number; pack?: { workbookFiles: number; matchedToCatalog: number; catalogRows: number } }>(
         `/api/checklist/project/${projectId}/quality-catalog/sync`,
         { method: "POST", token }
       );
       if (!silent) {
-        setMsg(`Onboarded ${out.catalog} types (${out.created} new) and assigned to this project.`);
+        const packNote = out.pack
+          ? ` · ${out.pack.matchedToCatalog}/${out.pack.catalogRows} linked to client xlsx in New folder`
+          : "";
+        setMsg(`Onboarded ${out.catalog} types (${out.created} new) and assigned to this project${packNote}.`);
       }
       await onChanged();
     } catch (err) {

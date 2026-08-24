@@ -28,6 +28,15 @@ function resolveQualityDashboardPath(): string | null {
     path.join(process.cwd(), "seed", "data", "Quality Dashboard.xlsx"),
     path.join(process.cwd(), "Sharnam_modules_docs", "Quality Dashboard.xlsx"),
     path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Quality Dashboard.xlsx"),
+    path.join(
+      process.cwd(),
+      "module_prompts",
+      "Sharnam_modules_docs 2",
+      "modules",
+      "files (2)",
+      "New folder",
+      "Final Index.xlsx"
+    ),
   ].filter(Boolean);
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;

@@ -1736,6 +1736,12 @@ checklistRouter.post(
   }
 );
 
+/** Inventory of client checklist pack (New folder + Final Index). */
+checklistRouter.get("/checklist-pack/inventory", requireAuth, async (_req, res) => {
+  const { loadChecklistPackInventory } = await import("../services/checklistPackPaths.js");
+  res.json(loadChecklistPackInventory());
+});
+
 checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) => {
   const week = req.query.week ? String(req.query.week) : undefined;
   const { exportQapWorkbook } = await import("../services/qapImportExport.js");

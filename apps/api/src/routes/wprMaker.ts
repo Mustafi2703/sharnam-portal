@@ -31,6 +31,35 @@ import {
 import { buildWprPptx } from "../services/wprPptx.js";
 import { seedWprSections } from "../services/wprSeedSections.js";
 import { snapWeekEnding } from "../services/wprDemoSeed.js";
+import { loadWprChartPack } from "../services/wprCharts.js";
+
+export type WprDateRange = { start: Date; end: Date; weekEnd: Date; preset: string };
+
+export function parseWprDateRange(query: {
+  end?: unknown;
+  start?: unknown;
+  preset?: unknown;
+}): WprDateRange {
+  const preset = String(query.preset || "week").toLowerCase();
+  const endRaw = query.end ? new Date(String(query.end)) : new Date();
+  const end = snapWeekEnding(Number.isNaN(endRaw.getTime()) ? new Date() : endRaw);
+
+  if (query.start) {
+    const start = new Date(String(query.start));
+    start.setHours(0, 0, 0, 0);
+    if (!Number.isNaN(start.getTime()) && start <= end) {
+      return { start, end, weekEnd: end, preset: "custom" };
+    }
+  }
+
+  const start = new Date(end);
+  if (preset === "last14") start.setDate(end.getDate() - 13);
+  else if (preset === "last28") start.setDate(end.getDate() - 27);
+  else if (preset === "last56") start.setDate(end.getDate() - 55);
+  else start.setDate(end.getDate() - 6);
+  start.setHours(0, 0, 0, 0);
+  return { start, end, weekEnd: end, preset };
+}
 
 export const wprMakerRouter = Router();
 wprMakerRouter.use(requireAuth);
@@ -38,10 +67,7 @@ wprMakerRouter.use(requireAuth);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 function parseEnd(v: unknown): Date {
-  const s = typeof v === "string" ? v : "";
-  const parsed = s ? new Date(s) : new Date();
-  const d = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  return snapWeekEnding(d);
+  return parseWprDateRange({ end: v }).weekEnd;
 }
 
 async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): Promise<WprSections> {
@@ -53,10 +79,12 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
-  const weekEnd = parseEnd(req.query.end);
-  const weekStart = new Date(weekEnd);
-  weekStart.setDate(weekEnd.getDate() - 6);
-  weekStart.setHours(0, 0, 0, 0);
+  const range = parseWprDateRange({
+    end: req.query.end,
+    start: req.query.start,
+    preset: req.query.preset,
+  });
+  const { start: weekStart, end: weekEnd } = range;
 
   const existing = await prisma.wprSnapshot.findUnique({
     where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
@@ -78,17 +106,78 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
     ? JSON.parse(existing.sectionsJson || "{}")
     : await seedSections(projectId, weekStart, weekEnd);
 
+  const charts = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+
   res.json({
     projectId,
     projectCode: project.code,
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
+    rangePreset: range.preset,
     reportNumber: existing?.reportNumber,
     header,
     sections,
+    charts,
     status: existing?.status || "Draft",
     publishedAt: existing?.publishedAt,
     publishedPath: existing?.publishedPath,
+  });
+});
+
+/** Re-build all WPR sections from live portal data for the selected date window. */
+wprMakerRouter.post("/:projectId/refresh", async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+
+  const range = parseWprDateRange({
+    end: req.body.weekEnding ?? req.body.end,
+    start: req.body.start,
+    preset: req.body.preset,
+  });
+  const { start: weekStart, end: weekEnd } = range;
+  const sections = await seedSections(projectId, weekStart, weekEnd);
+  const charts = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const reportNumber = req.body.reportNumber != null ? Number(req.body.reportNumber) : undefined;
+
+  const saved = await prisma.wprSnapshot.upsert({
+    where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
+    create: {
+      projectId,
+      weekEnding: weekEnd,
+      reportNumber: reportNumber ?? null,
+      sectionsJson: JSON.stringify(sections),
+      status: "Draft",
+      createdById: req.user!.id,
+    },
+    update: {
+      sectionsJson: JSON.stringify(sections),
+      reportNumber: reportNumber ?? undefined,
+      updatedAt: new Date(),
+    },
+  });
+
+  await audit("wpr.refreshed", {
+    userId: req.user!.id,
+    entity: "WprSnapshot",
+    entityId: saved.id,
+    meta: {
+      weekStart: weekStart.toISOString(),
+      weekEnd: weekEnd.toISOString(),
+      preset: range.preset,
+      sections: Object.keys(sections).length,
+    },
+  });
+
+  res.json({
+    ok: true,
+    id: saved.id,
+    weekStart: weekStart.toISOString(),
+    weekEnd: weekEnd.toISOString(),
+    rangePreset: range.preset,
+    sections,
+    charts,
+    status: saved.status,
   });
 });
 

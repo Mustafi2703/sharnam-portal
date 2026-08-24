@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Input, PageHeader } from "../components/ui";
+import { Badge, Button, Input, PageHeader, Select } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
 import { SignaturePad } from "../components/SignaturePad";
+import { WprDashboardCharts, type WprCharts } from "../components/WprDashboardCharts";
+import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 
 /**
  * WPR Maker — editable weekly progress report per project × weekEnding.
@@ -65,13 +67,23 @@ type Pack = {
   projectCode: string;
   weekStart: string;
   weekEnd: string;
+  rangePreset?: string;
   reportNumber?: number;
   header: Header;
   sections: Sections;
+  charts?: WprCharts;
   status: string;
   publishedAt?: string | null;
   publishedPath?: string | null;
 };
+
+const RANGE_PRESETS = [
+  { value: "week", label: "This week (7 days)" },
+  { value: "last14", label: "Last 14 days" },
+  { value: "last28", label: "Last 4 weeks" },
+  { value: "last56", label: "Last 8 weeks" },
+  { value: "custom", label: "Custom range" },
+];
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -94,8 +106,12 @@ export default function WprMakerPage() {
   const [weekEnd, setWeekEnd] = useState<string>(
     () => searchParams.get("end") || new Date().toISOString().slice(0, 10)
   );
+  const [weekStart, setWeekStart] = useState<string>(() => searchParams.get("start") || "");
+  const [rangePreset, setRangePreset] = useState<string>(() => searchParams.get("preset") || "week");
+  const [viewTab, setViewTab] = useState<"dashboard" | "sections">("dashboard");
   const [reportNumber, setReportNumber] = useState<string>("");
   const [pack, setPack] = useState<Pack | null>(null);
+  const [charts, setCharts] = useState<WprCharts | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["brief"]));
@@ -108,8 +124,12 @@ export default function WprMakerPage() {
     setBusy(true);
     setMsg("");
     try {
-      const p = await api<Pack>(`/api/wpr-maker/${projectId}?end=${weekEnd}`, { token });
+      const qs = new URLSearchParams({ end: weekEnd, preset: rangePreset });
+      if (rangePreset === "custom" && weekStart) qs.set("start", weekStart);
+      const p = await api<Pack>(`/api/wpr-maker/${projectId}?${qs}`, { token });
       setPack(p);
+      setCharts(p.charts || null);
+      if (p.weekStart) setWeekStart(p.weekStart.slice(0, 10));
       setReportNumber(p.reportNumber != null ? String(p.reportNumber) : "");
       const r = await api<any[]>(`/api/wpr-maker/${projectId}/recent`, { token }).catch(() => []);
       setRecent(r);
@@ -118,12 +138,41 @@ export default function WprMakerPage() {
     } finally {
       setBusy(false);
     }
-  }, [projectId, weekEnd, token]);
+  }, [projectId, weekEnd, weekStart, rangePreset, token]);
 
   useEffect(() => {
     const end = searchParams.get("end");
+    const start = searchParams.get("start");
+    const preset = searchParams.get("preset");
     if (end) setWeekEnd(end);
+    if (start) setWeekStart(start);
+    if (preset) setRangePreset(preset);
   }, [searchParams]);
+
+  async function refreshFromLive() {
+    if (!pack) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ sections: Sections; charts: WprCharts }>(`/api/wpr-maker/${projectId}/refresh`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          weekEnding: weekEnd,
+          start: rangePreset === "custom" && weekStart ? weekStart : undefined,
+          preset: rangePreset,
+          reportNumber: reportNumber ? Number(reportNumber) : null,
+        }),
+      });
+      setPack({ ...pack, sections: out.sections });
+      setCharts(out.charts);
+      setMsg("WPR regenerated from live portal data (Progress, DPR, Quality, Safety, Drawings, Cost).");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -302,7 +351,7 @@ export default function WprMakerPage() {
         token,
         body: JSON.stringify({ weekEnding: weekEnd }),
       });
-      setMsg(`Published → ${out.publishedPath || out.url || "SharePoint"}${out.provider ? ` · ${out.provider}` : ""}`);
+      setMsg(`Published → ${out.publishedPath || out.url || "SharePoint"}${out.provider ? ` · ${out.provider}` : ""}${out.provider === "mock-onedrive" ? " (SharePoint not live — check server env)" : ""}`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Publish failed");
@@ -367,8 +416,8 @@ export default function WprMakerPage() {
     <div className="maker-shell space-y-5 pb-24">
       <PageHeader
         eyebrow="WPR Maker · SPDC pack"
-        title={`Weekly Progress Report — Week ending ${new Date(weekEnd).toDateString().slice(4)}`}
-        subtitle="24-section editable pack. Edit any section, then publish an XLSX pack to SharePoint."
+        title={`Weekly Progress Report — ${pack.header.projectName || pack.projectCode}`}
+        subtitle="Dashboard charts match the client PPT. Regenerate from live data, filter any week or day range, then export XLSX / PPTX."
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>
@@ -380,23 +429,75 @@ export default function WprMakerPage() {
       />
 
       <div className="maker-section">
-        <div className="maker-toolbar">
+        <div className="maker-toolbar flex-wrap">
+          <div className="maker-toolbar__field">
+            <label>Period preset</label>
+            <Select
+              value={rangePreset}
+              onChange={(e) => setRangePreset(e.target.value)}
+            >
+              {RANGE_PRESETS.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </Select>
+          </div>
           <div className="maker-toolbar__field">
             <label>Week ending</label>
             <Input type="date" value={weekEnd} onChange={(e) => setWeekEnd(e.target.value)} />
           </div>
+          {rangePreset === "custom" ? (
+            <div className="maker-toolbar__field">
+              <label>Range start</label>
+              <Input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
+            </div>
+          ) : null}
           <div className="maker-toolbar__field">
             <label>Report number</label>
             <Input type="number" placeholder="50" value={reportNumber} onChange={(e) => setReportNumber(e.target.value)} />
           </div>
-          <div className="maker-toolbar__actions">
-            <Button onClick={save} disabled={busy}>Save draft</Button>
-            <Button onClick={publish} disabled={busy} variant="secondary">Publish to SharePoint</Button>
+          <div className="maker-toolbar__actions flex-wrap">
+            <Button onClick={() => void load()} disabled={busy} variant="secondary">Load period</Button>
+            <Button onClick={refreshFromLive} disabled={busy}>Regenerate from live data</Button>
+            <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
+            <Button onClick={publish} disabled={busy}>Publish to SharePoint</Button>
           </div>
         </div>
+        <div className="flex gap-2 px-4 pb-3 border-b border-line">
+          <button
+            type="button"
+            className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${viewTab === "dashboard" ? "bg-brand text-white" : "text-steel-muted hover:bg-sand"}`}
+            onClick={() => setViewTab("dashboard")}
+          >
+            Dashboard & charts
+          </button>
+          <button
+            type="button"
+            className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${viewTab === "sections" ? "bg-brand text-white" : "text-steel-muted hover:bg-sand"}`}
+            onClick={() => setViewTab("sections")}
+          >
+            24 report sections
+          </button>
+        </div>
         {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
+        <div className="px-4 pb-4 space-y-3">
+          <SharePointStatusBanner />
+        </div>
       </div>
 
+      {viewTab === "dashboard" ? (
+        <div className="maker-section p-4">
+          {charts ? (
+            <WprDashboardCharts charts={charts} />
+          ) : (
+            <div className="text-sm text-steel-muted space-y-3">
+              <p>Loading charts… or click <strong>Regenerate from live data</strong> to build the WPR dashboard from DPR, Progress, Cost, Quality and Safety.</p>
+              <Button onClick={refreshFromLive} disabled={busy}>Regenerate from live data</Button>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewTab === "sections" ? (
       <div className="maker-accordion">
         {SECTION_ORDER.map((key) => {
           const sec = pack.sections[key] || { title: key };
@@ -513,7 +614,9 @@ export default function WprMakerPage() {
           );
         })}
       </div>
+      ) : null}
 
+      {viewTab === "sections" ? (
       <div className="maker-section">
         <div className="maker-section__head">Sign-off & attachments</div>
         <div className="maker-section__body space-y-4">
@@ -565,6 +668,7 @@ export default function WprMakerPage() {
           </section>
         </div>
       </div>
+      ) : null}
 
       {recent.length > 0 && (
         <div className="maker-section maker-section--flush">
@@ -584,8 +688,9 @@ export default function WprMakerPage() {
       )}
 
       <div className="maker-sticky-bar">
-        <Button onClick={save} disabled={busy}>Save draft</Button>
-        <Button onClick={publish} disabled={busy} variant="secondary">Publish</Button>
+        <Button onClick={refreshFromLive} disabled={busy}>Regenerate</Button>
+        <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
+        <Button onClick={publish} disabled={busy}>Publish</Button>
         <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export SPDC pack</Button>
         <Button type="button" variant="secondary" onClick={downloadClientXlsx} disabled={busy}>Export client workbook</Button>
         <Button type="button" variant="secondary" onClick={downloadPptx} disabled={busy}>Export PPTX</Button>
