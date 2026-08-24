@@ -29,14 +29,14 @@ function SheetTable({
   stickyFirst?: boolean;
 }) {
   return (
-    <div className={`sheet-register w-full flex-1 min-h-0 flex flex-col overflow-hidden ${title ? "" : ""}`}>
+    <div className="sheet-register w-full min-h-[40vh] flex flex-col">
       {title && (
         <div className="sheet-register__head shrink-0">
           <span>{title}</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">{rows.length} rows</span>
         </div>
       )}
-      <div className="sheet-register__scroll flex-1 min-h-0">
+      <div className="sheet-register__scroll min-h-[36vh] flex-1">
         <table className="sheet-register__table">
           <thead>
             <tr>
@@ -264,7 +264,7 @@ export default function CostPage() {
     <div
       className={`w-full min-w-0 ${
         isRegisterView
-          ? "cost-page cost-page--register page-stack--register spdc-register-page flex flex-col min-h-0 flex-1 overflow-hidden gap-3"
+          ? "cost-page cost-page--register page-stack--register flex flex-col gap-3 pb-6"
           : "space-y-5"
       }`}
     >
@@ -440,8 +440,8 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
-          <div className="shrink-0 space-y-2">
+        <div className="flex flex-col gap-3 min-w-0">
+          <div className="space-y-2">
           <ReferenceSheetToolbar
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
@@ -488,9 +488,9 @@ export default function CostPage() {
             Edit BOQ inline — office edits rate/qty; site edits GFC and Achieved. Use toolbar to load SPDC template or sync MB → achieved.
           </p>
           </div>
-          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <BoqMonitoringEditor
-            className="flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
+            className="flex flex-col min-w-0"
             projectId={id!}
             token={token}
             rows={monRows}
@@ -504,8 +504,8 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
-          <div className="shrink-0 space-y-3 max-h-[42vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0">
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto overscroll-contain">
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
             rowCount={mbRows.length}
@@ -574,7 +574,7 @@ export default function CostPage() {
             </Card>
           )}
           </div>
-          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <MbEntryTable
             projectId={id!}
             token={token}
@@ -588,8 +588,8 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
-          <div className="shrink-0 space-y-3 max-h-[42vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0">
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto overscroll-contain">
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
             rowCount={bbsRows.length}
@@ -637,7 +637,7 @@ export default function CostPage() {
             </details>
           )}
           </div>
-          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <BbsEntryTable
             projectId={id!}
             token={token}
@@ -652,8 +652,8 @@ export default function CostPage() {
       )}
 
       {tab === "budget" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
-          <div className="shrink-0 space-y-3 max-h-[38vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0">
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto overscroll-contain">
           {canEdit && (
             <Card className="!p-4">
               <h3 className="font-semibold text-sm mb-2">Upload Budget WBS (optional)</h3>
@@ -696,7 +696,7 @@ export default function CostPage() {
             </div>
           </div>
           </div>
-          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <BudgetWbsRegister
             projectId={id!}
             token={token}
@@ -709,8 +709,8 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
-          <div className="shrink-0 space-y-3 max-h-[55vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0">
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto overscroll-contain">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}
@@ -842,7 +842,7 @@ export default function CostPage() {
             />
           </div>
           </div>
-          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}

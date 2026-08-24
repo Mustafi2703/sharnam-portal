@@ -195,7 +195,7 @@ export default function QapPage() {
   }
 
   return (
-    <div className="qap-page page-stack--register spdc-register-page flex flex-col min-h-0 flex-1">
+    <div className="qap-page page-stack--register flex flex-col gap-3 pb-6">
       <div className="shrink-0">
       <PageHeader
         eyebrow="Quality module"

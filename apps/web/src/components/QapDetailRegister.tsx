@@ -172,7 +172,7 @@ export function QapDetailRegister({
 
   return (
     <>
-      <Card padding={false} className="spdc-register-panel register-editor-panel relative flex flex-col min-h-0 flex-1 overflow-hidden">
+      <Card padding={false} className="spdc-register-panel register-editor-panel relative flex flex-col min-h-[52vh] flex-1">
         {loading && <div className="spdc-register-loading">Loading QAP register…</div>}
 
         <RegisterBrandHeader
@@ -204,7 +204,7 @@ export function QapDetailRegister({
           Scroll ↔ ↕ for full sheet · every white cell is editable · saves on blur
         </div>
 
-        <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden border-t border-line">
+        <div className="sheet-register flex-1 min-h-[48vh] flex flex-col border-t border-line">
           <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="qap-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">

@@ -627,38 +627,44 @@ body.is-auth-route #root {
   flex: 1 1 auto;
 }
 
-/* SPDC register pages (QAP, Cube) — fill viewport; scroll inside sheet only */
+/* SPDC register pages — page scrolls; wide sheets scroll inside .sheet-register__scroll */
 .spdc-register-page,
 .qap-page {
   min-height: 0;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .tool-main:has(.spdc-register-page),
 .tool-main:has(.qap-page),
-.tool-main:has(.cube-page__register) {
+.tool-main:has(.cube-page__register),
+.tool-main:has(.page-stack--register),
+.tool-main:has(.cost-page--register),
+.tool-main:has(.progress-page--register) {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .tool-main:has(.spdc-register-page) > .spdc-register-page,
 .tool-main:has(.spdc-register-page) > .page-stack--register,
 .tool-main:has(.qap-page) > .qap-page,
-.tool-main:has(.cube-page__register) > .page-stack--register {
+.tool-main:has(.cube-page__register) > .page-stack--register,
+.tool-main:has(.page-stack--register) > .page-stack--register,
+.tool-main:has(.page-stack--register) > .qap-page,
+.tool-main:has(.qap-page) > .qap-page,
+.tool-main:has(.cost-page--register) > .cost-page--register,
+.tool-main:has(.progress-page--register) > .progress-page--register {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
 }
 .qap-page__register,
 .cube-page__register {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(72vh, 42rem);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 /* Full-viewport register pages (QAP, cube, audit, cost, progress sheets) */
@@ -668,25 +674,7 @@ body.is-auth-route #root {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  padding-bottom: 0.5rem;
-}
-.tool-main:has(.page-stack--register),
-.tool-main:has(.qap-page),
-.tool-main:has(.cost-page--register),
-.tool-main:has(.progress-page--register) {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-.tool-main:has(.page-stack--register) > .page-stack--register,
-.tool-main:has(.page-stack--register) > .qap-page,
-.tool-main:has(.qap-page) > .qap-page,
-.tool-main:has(.cost-page--register) > .cost-page--register,
-.tool-main:has(.progress-page--register) > .progress-page--register {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
+  padding-bottom: 1.5rem;
 }
 @media (max-width: 640px) {
   .page-stack--register {
@@ -709,11 +697,10 @@ body.is-auth-route #root {
 .page-stack--register .sheet-register,
 .qap-page .sheet-register {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(58vh, 36rem);
   max-height: none;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .qap-page__register .sheet-register__scroll,
 .page-stack--register .sheet-register__scroll,
@@ -746,17 +733,19 @@ body.is-auth-route #root {
 .cost-page__register,
 .page-stack--register .cost-page__register {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(58vh, 36rem);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .page-stack--register .cost-page__register .boq-editor,
 .page-stack--register .cost-page__register .mb-entry-panel,
 .page-stack--register .cost-page__register .bbs-entry-panel,
 .page-stack--register .cost-page__register .budget-wbs-panel {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(52vh, 32rem);
+}
+.boq-editor__table {
+  min-width: 120rem;
 }
 .page-stack--register .boq-editor,
 .page-stack--register .mb-entry-panel,
@@ -6280,7 +6269,7 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 960px;
+  max-width: min(96vw, 1280px);
   max-height: 100%;
   margin: 0;
   background: var(--color-paper);
@@ -6288,7 +6277,7 @@ body {
 @media (min-width: 768px) {
   .markup-modal { padding: 1rem; align-items: center; }
   .markup-modal__panel {
-    max-height: 92vh;
+    max-height: 94vh;
     border-radius: 14px;
     box-shadow: 0 24px 64px rgba(0,0,0,0.35);
     overflow: hidden;

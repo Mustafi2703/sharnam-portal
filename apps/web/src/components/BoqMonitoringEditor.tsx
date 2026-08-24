@@ -243,7 +243,7 @@ function EditLineModal({
     >
       <div
         ref={panelRef}
-        className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-xl border border-line bg-paper shadow-2xl"
+        className="w-full max-w-6xl max-h-[94vh] overflow-y-auto rounded-xl border border-line bg-paper shadow-2xl"
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-line bg-paper">
           <div>
@@ -257,9 +257,9 @@ function EditLineModal({
           </Button>
         </div>
 
-        <div className="p-5 space-y-3">
+        <div className="p-5 sm:p-6 space-y-4">
           {canFullEdit && (
-            <>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
                 Package
                 <Select
@@ -272,7 +272,7 @@ function EditLineModal({
                   ))}
                 </Select>
               </label>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              <label className="block sm:col-span-2 text-xs font-semibold uppercase tracking-wider text-steel-muted">
                 Section
                 <Input
                   className="mt-1"
@@ -281,33 +281,31 @@ function EditLineModal({
                   placeholder="SECTION A — EARTH WORK"
                 />
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
-                  Item no
-                  <Input
-                    className="mt-1"
-                    value={draft.itemNo || ""}
-                    onChange={(e) => onChange({ ...draft, itemNo: e.target.value })}
-                  />
-                </label>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
-                  UOM
-                  <Input
-                    className="mt-1"
-                    value={draft.uom || ""}
-                    onChange={(e) => onChange({ ...draft, uom: e.target.value })}
-                  />
-                </label>
-              </div>
-            </>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                Item no
+                <Input
+                  className="mt-1"
+                  value={draft.itemNo || ""}
+                  onChange={(e) => onChange({ ...draft, itemNo: e.target.value })}
+                />
+              </label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                UOM
+                <Input
+                  className="mt-1"
+                  value={draft.uom || ""}
+                  onChange={(e) => onChange({ ...draft, uom: e.target.value })}
+                />
+              </label>
+            </div>
           )}
 
           <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
             Description
             {canFullEdit ? (
               <TextArea
-                className="mt-1 !min-h-[7rem]"
-                rows={5}
+                className="mt-1 !min-h-[8rem]"
+                rows={6}
                 value={draft.description || ""}
                 onChange={(e) => onChange({ ...draft, description: e.target.value })}
                 placeholder="Full BOQ description…"
@@ -319,7 +317,7 @@ function EditLineModal({
             )}
           </label>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {canFullEdit && (
               <>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
@@ -630,15 +628,15 @@ export function BoqMonitoringEditor({
         </details>
       )}
 
-      <div className="sheet-register w-full boq-editor flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="sheet-register__head">
+      <div className="sheet-register w-full boq-editor flex flex-col min-h-[52vh]">
+        <div className="sheet-register__head shrink-0">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
             {rows.length} lines · {grouped.length} sections · all SPDC Monitoring columns (qty · cost · progress · EV · CPI · ETC)
           </span>
         </div>
-        <div className="sheet-register__scroll flex-1 min-h-0">
-          <table className="sheet-register__table boq-editor__table">
+        <div className="sheet-register__scroll min-h-[48vh] flex-1">
+          <table className="sheet-register__table boq-editor__table min-w-[120rem]">
             <thead>
               <tr>
                 {MON_HEADERS.map((h, i) => (
