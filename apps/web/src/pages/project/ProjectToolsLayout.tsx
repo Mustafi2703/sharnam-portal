@@ -247,7 +247,7 @@ export default function ProjectToolsLayout() {
             onClick={() => setRightOpen(false)}
           />
         )}
-        <div className="tool-main page-stack min-w-0">
+        <div className="tool-main min-w-0 flex-1 min-h-0 h-full overflow-hidden flex flex-col">
           <Outlet
             context={{
               project,

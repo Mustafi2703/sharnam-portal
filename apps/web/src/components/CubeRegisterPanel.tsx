@@ -4,6 +4,7 @@ import { groupCubeRows, fmtCubeDate, type CubeRow } from "../lib/cubeRegister";
 import { cubeResultRowClass, fmtRegisterNum } from "../lib/inspectionRequestForms";
 import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
 import { CubeRegisterAddForm, type CubeAddFormState } from "./CubeRegisterAddForm";
+import { RegisterScrollArea } from "./RegisterScrollArea";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { Badge, Button, Card, Select } from "./ui";
 import { RegisterFilterBar } from "./RegisterFilterBar";
@@ -300,7 +301,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
         </div>
 
         <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line">
-          <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
+          <RegisterScrollArea tall className="flex-1 min-h-0">
             <table className="cube-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>
@@ -415,7 +416,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                 )}
               </tbody>
             </table>
-          </div>
+          </RegisterScrollArea>
         </div>
       </Card>
     </div>

@@ -10,6 +10,7 @@ import {
 } from "../lib/inspectionRequestForms";
 import { preferWeekLabel, weekMatchesFilter } from "../lib/qapWeek";
 import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
+import { RegisterScrollArea } from "./RegisterScrollArea";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { RegisterBrandHeader } from "./RegisterBrandHeader";
 import { Badge, Button, Card, Select } from "./ui";
@@ -205,7 +206,7 @@ export function QapDetailRegister({
         </div>
 
         <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line">
-          <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
+          <RegisterScrollArea tall className="flex-1 min-h-0">
             <table className="qap-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>
@@ -483,7 +484,7 @@ export function QapDetailRegister({
                 )}
               </tbody>
             </table>
-          </div>
+          </RegisterScrollArea>
         </div>
       </Card>
     </>

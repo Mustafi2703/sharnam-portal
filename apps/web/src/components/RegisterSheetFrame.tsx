@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { RegisterScrollArea } from "./RegisterScrollArea";
 
 export const REGISTER_EMPTY_MSG =
   "No rows yet — upload the client Excel or use + Add row in the toolbar.";
@@ -46,7 +47,7 @@ export function RegisterSheetFrame({
           {rowCount != null ? `${rowCount} rows` : ""}
         </span>
       </div>
-      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">{children}</div>
+      <RegisterScrollArea className="flex-1 min-h-0">{children}</RegisterScrollArea>
     </div>
   );
 }
