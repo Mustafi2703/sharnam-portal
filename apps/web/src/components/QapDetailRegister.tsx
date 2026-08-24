@@ -202,11 +202,12 @@ export function QapDetailRegister({
           </div>
         </div>
 
-        <div className="px-4 py-2 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <p className="text-xs text-steel-muted text-left">
-            Full Week 50 sheet — scroll horizontally and vertically. Click any cell to edit inline.
-          </p>
-          {showWeekFilter && weeks.length > 1 && (
+        {patchErr && (
+          <p className="text-xs text-danger bg-red-50 px-4 py-2 border-b border-line shrink-0">{patchErr}</p>
+        )}
+
+        {showWeekFilter && weeks.length > 1 && (
+          <div className="px-4 py-2 border-b border-line bg-sand/40 shrink-0">
             <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]">
               {weeks.map((w) => (
                 <option key={w} value={w}>
@@ -214,70 +215,66 @@ export function QapDetailRegister({
                 </option>
               ))}
             </Select>
-          )}
-        </div>
-
-        {patchErr && (
-          <p className="text-xs text-danger bg-red-50 px-4 py-2 border-b border-line shrink-0">{patchErr}</p>
+          </div>
         )}
 
-        <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden border-t border-line">
           <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="qap-register__table min-w-[88rem]">
-              <thead>
-                <tr className="bg-brand text-white">
+              <thead className="spdc-register-thead">
+                <tr>
                   <th rowSpan={2} className="text-left qap-sticky-sr">
                     Sr.No.
                   </th>
                   <th rowSpan={2} className="text-left qap-sticky-activity">
                     Activity
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[12rem] border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left min-w-[12rem]">
                     Description of Activity / Material
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[7rem] border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left min-w-[7rem]">
                     Frequency of check
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[8rem] border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left min-w-[8rem]">
                     Code of Conformance
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[7rem] border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left min-w-[7rem]">
                     Test agency
                   </th>
-                  <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-1 bg-brand-dark/20">
+                  <th colSpan={2} className="text-center spdc-th-contractor">
                     Contractor
                   </th>
-                  <th colSpan={1} className="text-center border border-brand-dark/30 px-1 py-1 bg-emerald-800/40">
+                  <th colSpan={1} className="text-center spdc-th-pmc">
                     PMC
                   </th>
-                  <th colSpan={1} className="text-center border border-brand-dark/30 px-1 py-1 bg-amber-900/40">
+                  <th colSpan={1} className="text-center spdc-th-client">
                     CLIENT
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[8rem] border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left min-w-[8rem]">
                     Records and documents to be Maintained
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[6rem] border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left min-w-[6rem]">
                     Remarks if any
                   </th>
                   {dayLabels.map((d) => (
                     <th
                       key={d}
                       rowSpan={2}
-                      className="text-center min-w-[2.5rem] border border-brand-dark/30 px-0.5 py-1 align-middle"
+                      className="text-center min-w-[2.5rem] align-middle"
                       title={d}
                     >
                       {formatDayLabel(d)}
                     </th>
                   ))}
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">
+                  <th rowSpan={2} className="text-left">
                     Status
                   </th>
                 </tr>
-                <tr className="bg-brand text-white text-[10px]">
-                  <th className="border border-brand-dark/30 px-1 py-0.5">Performer</th>
-                  <th className="border border-brand-dark/30 px-1 py-0.5">Checker</th>
-                  <th className="border border-brand-dark/30 px-1 py-0.5 bg-emerald-800/40">Checker</th>
-                  <th className="border border-brand-dark/30 px-1 py-0.5 bg-amber-900/40">Checker</th>
+                <tr>
+                  <th className="spdc-th-contractor spdc-th-sub">Performer</th>
+                  <th className="spdc-th-contractor spdc-th-sub">Checker</th>
+                  <th className="spdc-th-pmc spdc-th-sub">Checker</th>
+                  <th className="spdc-th-client spdc-th-sub">Checker</th>
                 </tr>
               </thead>
               <tbody>

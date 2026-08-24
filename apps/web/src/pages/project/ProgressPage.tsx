@@ -878,23 +878,41 @@ export default function ProgressPage() {
       )}
 
       {tab === "monthly" && (
-        <div className="space-y-4">
-          <BarChart
-            title="SOR / observation closure"
-            items={data.charts?.sor || []}
-            valueKey="closed"
-            compareKey="open"
+        <div className="space-y-4 flex-1 min-h-0 flex flex-col">
+          <ReferenceSheetToolbar
+            sheetLabel="Monthly Progress Dashboard"
+            rowCount={data.sorStats?.length}
+            canEdit={canEdit}
+            uploadHint="Monthly SOR rows are loaded from the client Monthly Progress Dashboard pack at seed — use Planned vs Actual upload for cashflow/manpower."
+            message={msg || undefined}
           />
-          <Card className="overflow-x-auto !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold">Monthly Progress · SOR Log</div>
-            <table className="w-full text-sm">
+          <div className="grid md:grid-cols-2 gap-4 shrink-0">
+            <BarChart
+              title="SOR / observation closure"
+              items={data.charts?.sor || []}
+              valueKey="closed"
+              compareKey="open"
+            />
+            <PieChart
+              title="SOR closure rate"
+              items={(data.sorStats || []).map((s: any) => ({
+                label: s.observation?.slice(0, 24) || "SOR",
+                value: s.closedCount || 0,
+                color: s.closureRate >= 0.9 ? "#16A34A" : s.closureRate >= 0.5 ? "#D97706" : "#DC2626",
+              })).filter((x: { value: number }) => x.value > 0)}
+            />
+          </div>
+          <Card className="overflow-x-auto !p-0 sheet-register register-table-panel flex-1 min-h-0 flex flex-col">
+            <div className="sheet-register__head shrink-0">Monthly Progress · SOR Log</div>
+            <div className="sheet-register__scroll flex-1 min-h-0">
+            <table className="sheet-register__table w-full text-sm min-w-[36rem]">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
-                  <th className="py-2.5 px-3">Observation</th>
-                  <th className="py-2.5 pr-3">Total</th>
-                  <th className="py-2.5 pr-3">Open</th>
-                  <th className="py-2.5 pr-3">Closed</th>
-                  <th className="py-2.5 px-3">Closure rate</th>
+                <tr>
+                  <th>Observation</th>
+                  <th>Total</th>
+                  <th>Open</th>
+                  <th>Closed</th>
+                  <th>Closure rate</th>
                 </tr>
               </thead>
               <tbody>
@@ -916,6 +934,7 @@ export default function ProgressPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
       )}

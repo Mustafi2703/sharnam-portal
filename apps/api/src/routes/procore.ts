@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -444,7 +445,7 @@ inspectionsRouter.post("/project/:projectId", requireRoles("admin", "office", "s
     const disc = drawing?.discipline || "Architecture";
     await mockOneDrive.upload(
       project.code,
-      `Inspections/${disc}`,
+      `${MODULE_TO_ISO_FOLDER.qualityChecklist}/Inspections/${disc}`,
       `${inspection.id}-meta.txt`,
       Buffer.from(
         `Inspection: ${inspection.title}\nType: ${inspection.inspectionType}\nDrawing: ${drawing?.drawingNumber || "n/a"}\n`
@@ -556,7 +557,7 @@ inspectionsRouter.post(
       const kind = f.mimetype?.startsWith("image/") ? "photo" : "doc";
       const saved = await mockOneDrive.upload(
         item.inspection.project.code,
-        "Inspections",
+        `${MODULE_TO_ISO_FOLDER.qualityChecklist}/Inspections`,
         f.originalname,
         f.buffer
       );
@@ -719,7 +720,12 @@ directoryRouter.post(
     let fileUrl = req.body.fileUrl || "";
     if (req.file) {
       const { mockOneDrive } = await import("../services/mockOneDrive.js");
-      const saved = await mockOneDrive.upload(project.code, "Photos", req.file.originalname, req.file.buffer);
+      const saved = await mockOneDrive.upload(
+        project.code,
+        `${MODULE_TO_ISO_FOLDER.photos}/Site Progress`,
+        req.file.originalname,
+        req.file.buffer
+      );
       fileUrl = saved.url;
     }
     if (!fileUrl) fileUrl = `/uploads/photos/placeholder-${Date.now()}.txt`;

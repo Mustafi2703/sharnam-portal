@@ -582,8 +582,8 @@ body.is-auth-route #root {
   padding: 0.45rem 0.55rem;
   border-right: 1px solid var(--color-line);
   background: color-mix(in srgb, var(--color-sand) 72%, white);
-  font-weight: 600;
-  color: var(--color-steel-muted);
+  font-weight: 700;
+  color: #0f172a;
 }
 .spdc-register-meta__value {
   padding: 0.45rem 0.55rem;
@@ -616,15 +616,49 @@ body.is-auth-route #root {
 .spdc-register-panel {
   display: flex;
   flex-direction: column;
-  min-height: 18rem;
-  max-height: min(78vh, 56rem);
+  min-height: 14rem;
   overflow: hidden;
 }
 .page-stack--register .spdc-register-panel,
-.qap-page .spdc-register-panel {
+.qap-page .spdc-register-panel,
+.spdc-register-page .spdc-register-panel {
   max-height: none;
   min-height: 0;
   flex: 1 1 auto;
+}
+
+/* SPDC register pages (QAP, Cube) — fill viewport; scroll inside sheet only */
+.spdc-register-page,
+.qap-page {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tool-main:has(.spdc-register-page),
+.tool-main:has(.qap-page),
+.tool-main:has(.cube-page__register) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.tool-main:has(.spdc-register-page) > .spdc-register-page,
+.tool-main:has(.spdc-register-page) > .page-stack--register,
+.tool-main:has(.qap-page) > .qap-page,
+.tool-main:has(.cube-page__register) > .page-stack--register {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.qap-page__register,
+.cube-page__register {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Full-viewport register pages (QAP, cube, audit, cost, progress sheets) */
@@ -721,10 +755,11 @@ body.is-auth-route #root {
 }
 .spdc-register-panel .sheet-register__scroll {
   flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
+  min-height: min(42vh, 22rem);
+  max-height: none !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  overflow: auto;
 }
 .register-sheet-cell {
   width: 100%;
@@ -779,10 +814,49 @@ body.is-auth-route #root {
   position: sticky;
   top: 0;
   z-index: 3;
-  padding: 0.35rem 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--color-brand-dark) 35%, #0f766e);
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #064e3b;
   vertical-align: middle;
   white-space: nowrap;
+  background: #0c4a44 !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 0.625rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  line-height: 1.25;
+}
+.qap-register__table thead th.spdc-th-contractor,
+.cube-register__table thead th.spdc-th-contractor {
+  background: #1e3a5f !important;
+}
+.qap-register__table thead th.spdc-th-pmc,
+.cube-register__table thead th.spdc-th-pmc {
+  background: #065f46 !important;
+}
+.qap-register__table thead th.spdc-th-client,
+.cube-register__table thead th.spdc-th-client {
+  background: #78350f !important;
+}
+.qap-register__table thead th.spdc-th-sub,
+.cube-register__table thead th.spdc-th-sub {
+  background: color-mix(in srgb, #0c4a44 88%, #000) !important;
+  font-weight: 600;
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.qap-register__table thead th.spdc-th-contractor.spdc-th-sub,
+.cube-register__table thead th.spdc-th-contractor.spdc-th-sub {
+  background: #172554 !important;
+}
+.qap-register__table thead th.spdc-th-pmc.spdc-th-sub,
+.cube-register__table thead th.spdc-th-pmc.spdc-th-sub {
+  background: #064e3b !important;
+}
+.qap-register__table thead th.spdc-th-client.spdc-th-sub,
+.cube-register__table thead th.spdc-th-client.spdc-th-sub {
+  background: #451a03 !important;
 }
 .qap-register__table tbody td,
 .cube-register__table tbody td {
@@ -815,6 +889,12 @@ body.is-auth-route #root {
 .qap-register__table thead .qap-sticky-sr,
 .qap-register__table thead .qap-sticky-activity {
   z-index: 4;
+  background: #0c4a44 !important;
+  color: #fff !important;
+}
+.qap-register__table tbody .qap-sticky-sr,
+.qap-register__table tbody .qap-sticky-activity {
+  background: #fff;
 }
 .qap-section-band td {
   background: linear-gradient(90deg, #ecfdf5 0%, #d1fae5 100%) !important;

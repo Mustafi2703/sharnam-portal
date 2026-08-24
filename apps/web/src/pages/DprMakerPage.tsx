@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { BarChart } from "../components/PieChart";
 import { EvidencePanel } from "../components/EvidencePanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
@@ -756,20 +757,42 @@ export default function DprMakerPage() {
         </div>
       )}
 
-      {/* Planned vs actual S-curve only — BOQ/manpower charts stay in XLSX export */}
-      {snap.charts?.scurve && snap.charts.scurve.length > 0 && (
-        <div className="maker-section">
-          <div className="maker-section__head">Planned vs actual progress</div>
-          <div className="maker-section__body">
-            <Card className="!p-4">
-              <DprScurveChart points={snap.charts!.scurve} />
-            </Card>
+      {/* DPR DASHBOARD — mirrors Excel DASHBOARD sheet charts (BOQ, manpower, S-curve) */}
+      {snap.charts && (snap.charts.scurve?.length || snap.charts.boqProgress?.length || snap.charts.manpower?.length) ? (
+        <div className="maker-section shrink-0">
+          <div className="maker-section__head">DPR dashboard · matches Excel DASHBOARD sheet</div>
+          <div className="maker-section__body grid lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {snap.charts.scurve && snap.charts.scurve.length > 0 && (
+              <Card className="!p-4 lg:col-span-2 xl:col-span-1">
+                <p className="text-[10px] uppercase font-semibold text-steel-muted mb-2">Planned vs actual progress</p>
+                <DprScurveChart points={snap.charts.scurve} />
+              </Card>
+            )}
+            {snap.charts.boqProgress && snap.charts.boqProgress.length > 0 && (
+              <BarChart
+                title="BOQ progress today"
+                items={snap.charts.boqProgress}
+                valueKey="actual"
+                compareKey="planned"
+              />
+            )}
+            {snap.charts.manpower && snap.charts.manpower.length > 0 && (
+              <BarChart
+                title="Manpower deployed today"
+                items={snap.charts.manpower}
+                valueKey="actual"
+                compareKey="planned"
+              />
+            )}
           </div>
           <p className="text-xs text-steel-muted mt-2 px-1">
-            S-curve data also feeds the SPDC DASHBOARD sheet when you download XLSX.
+            Charts feed the SPDC DASHBOARD sheet on XLSX publish · data also saved to DMS{" "}
+            <code className="font-mono text-[10px]">07.02_Daily_Site_Records</code>.
           </p>
         </div>
-      )}
+      ) : null}
+
+      {/* Legacy single S-curve block removed — included in dashboard grid above */}
 
       {/* 2. Quantity */}
       <div className="maker-section maker-section--flush flex-1 min-h-0 flex flex-col">

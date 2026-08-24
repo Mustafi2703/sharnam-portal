@@ -111,15 +111,24 @@ export default function InspectionsPage() {
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   return (
-    <div className={`min-w-0 min-h-0 ${sheetKey === "car-register" || sheetKey === "cube-test" ? "page-stack--register flex flex-col" : "space-y-4"}`}>
+    <div
+      className={`min-w-0 min-h-0 ${
+        sheetKey === "car-register" || sheetKey === "cube-test"
+          ? "page-stack--register spdc-register-page flex flex-col flex-1"
+          : "space-y-4"
+      }`}
+    >
+      <div className={sheetKey === "cube-test" ? "shrink-0" : undefined}>
       <PageHeader
-        dense
+        dense={sheetKey === "cube-test"}
         eyebrow="Quality module"
         title={pageTitle}
-        subtitle={pageSubtitle}
+        subtitle={sheetKey === "cube-test" ? "SPDC cube register — scroll the sheet; edit cells inline." : pageSubtitle}
       />
+      </div>
 
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1">
+      {sheetKey !== "cube-test" && (
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1 shrink-0">
         <div className="flex flex-wrap gap-1.5">
           <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
           <Link to={`/projects/${id}/qap`}>
@@ -136,8 +145,9 @@ export default function InspectionsPage() {
           <Link to={`/projects/${id}/qap`}>Quality Assurance Plan →</Link>
         </div>
       </div>
+      )}
 
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
       {sheetKey === "" && dash && (
         <div className="space-y-4">
@@ -447,7 +457,7 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "cube-test" && id && (
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="cube-page__register flex-1 min-h-0 flex flex-col">
         <CubeRegisterPanel
           projectId={id}
           token={token}

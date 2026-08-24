@@ -441,6 +441,41 @@ export default function CostPage() {
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
             canEdit={canEdit}
+            onUpload={
+              canEdit
+                ? async (file) => {
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    const batch = await api<{ rowCount?: number }>(`/api/cost/${id}/boq/import`, {
+                      method: "POST",
+                      token,
+                      body: fd,
+                    });
+                    setMsg(`Imported ${batch.rowCount ?? 0} BOQ/monitoring rows from ${file.name}`);
+                    await load();
+                  }
+                : undefined
+            }
+            uploadHint="Upload SPDC budget / BOQ Excel — populates monitoring lines for this project."
+            onGenerate={
+              canEdit
+                ? async () => {
+                    try {
+                      const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number }>(
+                        `/api/cost/${id}/sync-template`,
+                        { method: "POST", token }
+                      );
+                      setMsg(
+                        `Loaded server template — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}`
+                      );
+                      await load();
+                    } catch (e: any) {
+                      setMsg(e?.message || "Template sync failed");
+                    }
+                  }
+                : undefined
+            }
+            generateLabel="Load SPDC template"
             onDownloadCsv={() => downloadSheet("boq")}
             message={msg || undefined}
           />

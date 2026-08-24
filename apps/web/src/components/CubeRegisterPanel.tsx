@@ -317,55 +317,27 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
   }
 
   return (
-    <div className="space-y-4 min-h-0 flex flex-col flex-1">
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
-      {patchErr && <p className="text-sm text-danger bg-red-50 rounded-lg px-3 py-2">{patchErr}</p>}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 shrink-0">
-        <Card className="!p-3">
-          <div className="text-[10px] uppercase text-steel-muted">Specimens</div>
-          <div className="text-xl font-display">{filtered.length}</div>
-        </Card>
-        <Card className="!p-3">
-          <div className="text-[10px] uppercase text-steel-muted">Footing groups</div>
-          <div className="text-xl font-display">{grouped.length}</div>
-        </Card>
-        <Card className="!p-3">
-          <div className="text-[10px] uppercase text-steel-muted">Pass</div>
-          <div className="text-xl font-display text-ok">{stats.pass}</div>
-        </Card>
-        <Card className="!p-3">
-          <div className="text-[10px] uppercase text-steel-muted">Fail</div>
-          <div className="text-xl font-display text-danger">{stats.fail}</div>
-        </Card>
-        <Card className="!p-3">
-          <div className="text-[10px] uppercase text-steel-muted">Pending</div>
-          <div className="text-xl font-display">{stats.pending}</div>
-        </Card>
-        <Card className="!p-3">
-          <div className="text-[10px] uppercase text-steel-muted">Test agencies logged</div>
-          <div className="text-xl font-display">{stats.agencies}</div>
-        </Card>
-      </div>
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      {patchErr && <p className="text-sm text-danger bg-red-50 rounded-lg px-3 py-2 shrink-0">{patchErr}</p>}
 
       {canEdit && (
-        <Card className="shrink-0">
-          <h3 className="font-semibold mb-1">Add cube test entry</h3>
-          <p className="text-xs text-steel-muted mb-3">
-            SPDC format — inline form below, or edit any row in the register popup.
-          </p>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={onCreate}>
+        <details className="shrink-0 rounded border border-line bg-white">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">
+            Add cube test entry (SPDC format)
+          </summary>
+          <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 pt-0 border-t border-line" onSubmit={onCreate}>
             {formFields}
             <Button type="submit" disabled={busy} className="sm:col-span-2 lg:col-span-4 sm:w-auto">
               Add cube row
             </Button>
           </form>
-        </Card>
+        </details>
       )}
 
       {localRows.length === 0 && !busy && !syncing && (
         <Card className="!p-3 border-amber-200 bg-amber-50 text-sm text-amber-900 shrink-0">
-          Cube register is empty — loading SPDC template automatically, or click <strong>Load SPDC cube template</strong>.
+          Cube register is empty — loading SPDC template automatically, or click <strong>Load SPDC cube template</strong> in the register header.
         </Card>
       )}
 
@@ -414,12 +386,17 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           </div>
         </div>
 
-        <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold text-sm text-left">
-            Cube register — SPDC format ({filtered.length} specimens · {grouped.length} groups)
-          </h3>
+        <div className="px-4 py-2 border-b border-line bg-sand/40 shrink-0 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-left min-w-0">
+            <h3 className="font-semibold text-sm text-ink">
+              Cube register — SPDC format ({filtered.length} specimens · {grouped.length} groups)
+            </h3>
+            <p className="text-[10px] text-steel-muted mt-0.5">
+              Pass {stats.pass} · Fail {stats.fail} · Pending {stats.pending} · Agencies {stats.agencies}
+            </p>
+          </div>
           {canEdit && (
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
+            <Button type="button" variant="secondary" className="!text-xs shrink-0" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
               Load SPDC cube template
             </Button>
           )}
@@ -441,27 +418,27 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
         <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden">
           <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="cube-register__table min-w-[92rem]">
-              <thead>
-                <tr className="bg-brand text-white text-[10px]">
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Sr. No.</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Date of Casting</th>
-                  <th rowSpan={2} className="text-left min-w-[10rem] border border-brand-dark/30 px-1 py-1">Description</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Grade</th>
-                  <th rowSpan={2} className="text-left min-w-[7rem] border border-brand-dark/30 px-1 py-1">Test agency</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Phase</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Weight</th>
-                  <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">Testing Date</th>
-                  <th colSpan={2} className="text-center border border-brand-dark/30 px-1 py-0.5">Load (kN)</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Strength MPa</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Avg</th>
-                  <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Result</th>
-                  {canEdit && <th rowSpan={2} className="text-left border border-brand-dark/30 px-1 py-1">Edit</th>}
+              <thead className="spdc-register-thead">
+                <tr>
+                  <th rowSpan={2} className="text-left">Sr. No.</th>
+                  <th rowSpan={2} className="text-left">Date of Casting</th>
+                  <th rowSpan={2} className="text-left min-w-[10rem]">Description</th>
+                  <th rowSpan={2} className="text-left">Grade</th>
+                  <th rowSpan={2} className="text-left min-w-[7rem]">Test agency</th>
+                  <th rowSpan={2} className="text-left">Phase</th>
+                  <th rowSpan={2} className="text-left">Weight (kg)</th>
+                  <th colSpan={2} className="text-center">Testing Date</th>
+                  <th colSpan={2} className="text-center">Load (kN)</th>
+                  <th rowSpan={2} className="text-left">Strength (MPa)</th>
+                  <th rowSpan={2} className="text-left">Avg Strength (MPa)</th>
+                  <th rowSpan={2} className="text-left">Result</th>
+                  {canEdit && <th rowSpan={2} className="text-left">Edit</th>}
                 </tr>
-                <tr className="bg-brand text-white text-[10px]">
-                  <th className="border border-brand-dark/30 px-1 py-0.5">7-day</th>
-                  <th className="border border-brand-dark/30 px-1 py-0.5">28-day</th>
-                  <th className="border border-brand-dark/30 px-1 py-0.5">7-day</th>
-                  <th className="border border-brand-dark/30 px-1 py-0.5">28-day</th>
+                <tr>
+                  <th className="spdc-th-sub text-center">7-day</th>
+                  <th className="spdc-th-sub text-center">28-day</th>
+                  <th className="spdc-th-sub text-center">7-day</th>
+                  <th className="spdc-th-sub text-center">28-day</th>
                 </tr>
               </thead>
               <tbody>

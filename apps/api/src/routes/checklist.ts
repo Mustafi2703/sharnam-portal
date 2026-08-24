@@ -294,6 +294,8 @@ checklistRouter.post(
     let itemAttachCount = 0;
     if (files.length) {
       const { mockOneDrive } = await import("../services/mockOneDrive.js");
+      const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+      const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
       const commentsRaw = req.body.itemCommentsJson;
       let itemComments: Record<string, string> = {};
       if (typeof commentsRaw === "string" && commentsRaw) {
@@ -310,7 +312,7 @@ checklistRouter.post(
         if (itemId) itemAttachCount += 1;
         const saved = await mockOneDrive.upload(
           assignment.project.code,
-          "Checklists",
+          checklistFolder,
           f.originalname,
           f.buffer
         );
@@ -467,13 +469,15 @@ checklistRouter.post(
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length) {
       const { mockOneDrive } = await import("../services/mockOneDrive.js");
+      const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+      const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
       for (const f of files) {
         const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
         const itemId = scoped?.[1] || null;
         const kind = scoped?.[2] || (f.mimetype?.startsWith("image/") ? "photo" : "doc");
         const saved = await mockOneDrive.upload(
           assignment.project.code,
-          "Checklists",
+          checklistFolder,
           f.originalname,
           f.buffer
         );

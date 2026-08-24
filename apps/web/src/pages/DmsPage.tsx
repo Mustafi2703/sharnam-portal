@@ -103,6 +103,7 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
   const [filter, setFilter] = useState("");
   const [msg, setMsg] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [dumping, setDumping] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -272,6 +273,33 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
             <Button type="button" variant="secondary" disabled={syncing} onClick={() => void fullSync()}>
               {syncing ? "Syncing…" : "Sync library"}
             </Button>
+            {canUpload && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={dumping}
+                onClick={async () => {
+                  if (!id) return;
+                  setDumping(true);
+                  setMsg("");
+                  try {
+                    const out = await api<{ registers?: { name: string }[] }>(`/api/dms/${id}/dump-logs`, {
+                      method: "POST",
+                      token,
+                    });
+                    const n = out.registers?.length ?? 0;
+                    setMsg(`Refreshed ${n} register CSVs to ISO folders + _Registers mirror.`);
+                    await load(path);
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Register refresh failed");
+                  } finally {
+                    setDumping(false);
+                  }
+                }}
+              >
+                {dumping ? "Refreshing…" : "Refresh registers → drive"}
+              </Button>
+            )}
           </div>
         }
       />

@@ -179,7 +179,8 @@ export default function QapPage() {
   }
 
   return (
-    <div className="qap-page page-stack--register flex flex-col min-h-0">
+    <div className="qap-page page-stack--register spdc-register-page flex flex-col min-h-0 flex-1">
+      <div className="shrink-0">
       <PageHeader
         eyebrow="Quality module"
         title="Quality Assurance Plan"
@@ -202,6 +203,7 @@ export default function QapPage() {
           </div>
         }
       />
+      </div>
 
       {(qapRows.length === 0 || qapNeedsFullResync(dash?.qap || [])) && !busy && (
         <Card className="!p-3 border-amber-200 bg-amber-50 shrink-0">
