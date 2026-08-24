@@ -1124,134 +1124,78 @@ body.is-auth-route #root {
   background: linear-gradient(90deg, rgb(15 118 110 / 0.06), transparent);
 }
 
-/* ═══ Register layout — canonical (middle column between nav + actions) ═══ */
+/* ═══ Middle column — one scroll surface for every module tool tab ═══ */
 .tool-main__outlet {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
   padding: 1rem 1.25rem 2rem;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: auto !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
 }
 
-/* Register sheets: page shell locked, inner grid scrolls */
-.tool-main__outlet:has(> .page-stack--register),
-.tool-main__outlet:has(> .qap-page),
-.tool-main__outlet:has(> .spdc-register-page),
-.tool-main__outlet:has(> .cost-page--register),
-.tool-main__outlet:has(> .progress-page--register),
-.tool-main__outlet:has(> .maker-shell) {
-  padding: 0.5rem 0.75rem 0.35rem;
-  overflow: hidden;
-}
-
-.tool-main:has(.page-stack--register),
-.tool-main:has(.qap-page),
-.tool-main:has(.spdc-register-page),
-.tool-main:has(.cost-page--register),
-.tool-main:has(.progress-page--register) {
-  gap: 0 !important;
-  overflow: hidden !important;
-}
-
-.tool-main__outlet > .page-stack--register,
-.tool-main__outlet > .qap-page,
-.tool-main__outlet > .spdc-register-page,
-.tool-main__outlet > .cost-page--register,
-.tool-main__outlet > .progress-page--register,
-.tool-main__outlet > .maker-shell {
-  flex: 1 1 auto;
-  min-height: 0 !important;
-  height: auto !important;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.page-stack--register .register-page-fill,
-.page-stack--register .register-tab-body,
-.page-stack--register .cost-page__register,
-.page-stack--register .progress-page__register,
-.qap-page__register,
-.cube-page__register {
-  flex: 1 1 auto;
-  min-height: 0 !important;
-  height: auto !important;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.spdc-register-panel.register-editor-panel,
-.page-stack--register .spdc-register-panel,
-.page-stack--register .register-table-panel,
-.page-stack--register .register-panel-fill {
-  flex: 1 1 auto;
-  min-height: 0 !important;
-  height: auto !important;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.register-sheet-shell,
-.spdc-register-panel .sheet-register.register-sheet-shell,
-.page-stack--register .register-sheet-shell {
-  flex: 1 1 auto;
-  min-height: 0 !important;
-  height: auto !important;
-  position: relative;
-  overflow: hidden;
-}
-
-.register-sheet-shell > .register-scroll-area,
-.register-sheet-shell > .sheet-register__scroll {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+/* Hubs scroll because content grows naturally — tool tabs must do the same (no flex clip) */
+.tool-main__outlet > * {
   height: auto !important;
   max-height: none !important;
   flex: none !important;
-  min-height: 0;
-  overflow: auto !important;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y;
+  overflow: visible !important;
 }
 
-/* Table panels: header row fixed, body scrolls below */
-.spdc-register-panel.register-table-panel,
-.page-stack--register .register-table-panel.spdc-register-panel {
-  flex: 1 1 auto;
-  min-height: 0 !important;
-  height: auto !important;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.spdc-register-panel.register-table-panel > .sheet-register__scroll,
-.page-stack--register .register-table-panel > .sheet-register__scroll {
-  flex: 1 1 auto;
-  min-height: 0 !important;
+.tool-main__outlet .page-stack--register,
+.tool-main__outlet .qap-page,
+.tool-main__outlet .spdc-register-page,
+.tool-main__outlet .cost-page--register,
+.tool-main__outlet .progress-page--register,
+.tool-main__outlet .maker-shell,
+.tool-main__outlet .register-page-fill,
+.tool-main__outlet .register-tab-body,
+.tool-main__outlet .cost-page__register,
+.tool-main__outlet .progress-page__register,
+.tool-main__outlet .qap-page__register,
+.tool-main__outlet .cube-page__register,
+.tool-main__outlet .spdc-register-panel,
+.tool-main__outlet .register-panel-fill,
+.tool-main__outlet .register-sheet-shell {
   height: auto !important;
   max-height: none !important;
-  position: static;
-  overflow: auto !important;
+  flex: none !important;
+  overflow: visible !important;
+  position: static !important;
 }
 
-/* Standalone scroll blocks (Progress tabs, etc.) when not in register-sheet-shell */
-.page-stack--register .sheet-register__scroll.register-sheet-viewport:not(.register-sheet-shell *) {
-  flex: 1 1 auto;
-  min-height: 12rem;
-  max-height: min(calc(100dvh - 13rem), var(--register-sheet-cap, 56rem));
+/* Wide register tables — horizontal scroll; vertical scroll is the outlet above */
+.register-scroll-area,
+.sheet-register__scroll,
+.register-sheet-viewport,
+.tool-main__outlet .register-scroll-area,
+.tool-main__outlet .sheet-register__scroll,
+.tool-main__outlet .register-sheet-viewport,
+.tool-main__outlet .register-sheet-shell > .register-scroll-area,
+.tool-main__outlet .register-sheet-shell > .sheet-register__scroll,
+.page-stack--register .register-sheet-shell > .register-scroll-area,
+.page-stack--register .register-sheet-shell > .sheet-register__scroll {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible !important;
+  max-height: none !important;
   height: auto !important;
-  overflow: auto !important;
+  position: static !important;
+  flex: none !important;
+  min-height: 0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-stack--register .reference-sheet-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: var(--color-paper);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.06);
 }
 
 /* Register add/edit modals — large, scrollable body on 13" laptops */
