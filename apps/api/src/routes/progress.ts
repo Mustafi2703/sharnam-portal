@@ -40,6 +40,17 @@ progressRouter.get("/:projectId/verify", requireRoles("admin", "office", "employ
   res.json({ project: { id: project.id, code: project.code, name: project.name }, ...report });
 });
 
+/** Re-import Monthly SOR summary from Excel (fixes duplicate rows from older seeds). */
+progressRouter.post("/:projectId/resync-sor", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const { resyncProgressSorStats } = await import("../services/progressSorParse.js");
+  const rows = await resyncProgressSorStats(project.id);
+  await audit("progress.sor.resync", { userId: req.user!.id, entity: "project", entityId: project.id, meta: { count: rows.length } });
+  const report = await verifyProgressProject(project.id);
+  res.json({ imported: rows.length, rows, verify: report });
+});
+
 /** Full DPR/WPR pack readiness (all modules / sheet sources) */
 progressRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "employee"), async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });

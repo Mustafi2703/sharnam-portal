@@ -11,6 +11,7 @@ import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedFullDemoPack } from "./fullDemoPack.ts";
 import { seedAuditKpiFromSheets } from "./auditKpiFromSheets.ts";
+import { resyncProgressSorStats } from "../apps/api/src/services/progressSorParse.ts";
 import { PrismaClient, type User } from "@prisma/client";
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -1174,32 +1175,8 @@ async function seedProjectAndCost(users: User[]) {
   }
 
   if (fs.existsSync(monthlyFile)) {
-    const wb = XLSX.readFile(monthlyFile);
-    const sor = wb.Sheets["SOR Log"];
-    if (sor) {
-      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sor, { header: 1, defval: "" }) as unknown[][];
-      let n = 0;
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i] as (string | number)[];
-        const observation = cellStr(row[1], 120);
-        if (!observation || !cellNum(row[0])) {
-          if (n > 0) break;
-          continue;
-        }
-        await prisma.progressSorStat.create({
-          data: {
-            projectId: project.id,
-            observation,
-            total: cellNum(row[2]),
-            openCount: cellNum(row[3]),
-            closedCount: cellNum(row[4]),
-            closureRate: cellNum(row[5]),
-          },
-        });
-        n++;
-      }
-      console.log("Monthly SOR stats seeded:", n);
-    }
+    const rows = await resyncProgressSorStats(project.id);
+    console.log("Monthly SOR stats seeded:", rows.length);
   }
 
   // Cost from SPDC Budget workbook (Budget / Monitoring / MB / BBS / rate diffs)

@@ -110,6 +110,13 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
 
   const grouped = useMemo(() => groupCubeRows(filtered), [filtered]);
 
+  const displayGroups = useMemo(() => {
+    const allowed = new Set(filtered.map((r) => r.id));
+    return groupCubeRows(localRows)
+      .map((g) => ({ ...g, specimens: g.specimens.filter((s) => allowed.has(s.id)) }))
+      .filter((g) => g.specimens.length > 0);
+  }, [localRows, filtered]);
+
   const stats = useMemo(() => {
     const pass = localRows.filter((r) => /pass/i.test(r.result || "")).length;
     const fail = localRows.filter((r) => /fail/i.test(r.result || "")).length;
@@ -326,86 +333,100 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => {
-                  const phase = specimenPhase(c);
-                  const strength = rowStrength(c);
-                  return (
-                    <tr key={c.id} className={cubeResultRowClass(c.result)}>
-                      <td className="text-left font-mono align-top">
-                        {cellInput(c.srNo || "", (v) => void patchCube(c.id, { srNo: v || null }))}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.castDate ? c.castDate.slice(0, 10) : "", (v) => void patchCube(c.id, { castDate: v || null }), {
-                          type: "date",
-                        })}
-                      </td>
-                      <td className="text-left align-top max-w-[14rem]">
-                        {cellInput(c.description, (v) => void patchCube(c.id, { description: v }), { className: "min-w-[10rem]" })}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.grade || "", (v) => void patchCube(c.id, { grade: v || null }))}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.testAgency || "", (v) => void patchCube(c.id, { testAgency: v || null }))}
-                      </td>
-                      <td
-                        className={`text-left font-mono align-top ${phase === "7D" ? "cube-phase-7d" : phase === "28D" ? "cube-phase-28d" : ""}`}
-                      >
-                        {phase}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.cubeWeight != null ? String(c.cubeWeight) : "", (v) =>
-                          void patchCube(c.id, { cubeWeight: v ? Number(v) : null }), { numeric: true })}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput((c.testDate7 || "").slice(0, 10), (v) => void patchCube(c.id, { testDate7: v || null }), {
-                          type: "date",
-                        })}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput((c.testDate28 || "").slice(0, 10), (v) => void patchCube(c.id, { testDate28: v || null }), {
-                          type: "date",
-                        })}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.load7 != null ? String(c.load7) : "", (v) =>
-                          void patchCube(c.id, { load7: v ? Number(v) : null }), { numeric: true })}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.load28 != null ? String(c.load28) : "", (v) =>
-                          void patchCube(c.id, { load28: v ? Number(v) : null }), { numeric: true })}
-                      </td>
-                      <td className="text-left align-top font-medium">
-                        {cellInput(strength != null ? String(strength) : "", (v) => {
-                          const n = v ? Number(v) : null;
-                          if (phase === "7D") void patchCube(c.id, { strength7: n, strength: n });
-                          else if (phase === "28D") void patchCube(c.id, { strength28: n, strength: n });
-                          else void patchCube(c.id, { strength: n });
-                        }, { numeric: true })}
-                      </td>
-                      <td className="text-left align-top">
-                        {cellInput(c.avgStrength != null ? String(c.avgStrength) : "", (v) =>
-                          void patchCube(c.id, { avgStrength: v ? Number(v) : null }), { numeric: true })}
-                      </td>
-                      <td className="text-left align-top">
-                        {canEdit ? (
-                          <Select
-                            className="!py-1 !text-xs !min-w-[5.5rem] register-sheet-cell--select"
-                            value={c.result || "Pending"}
-                            onChange={(e) => void patchCube(c.id, { result: e.target.value })}
-                          >
-                            {["Pending", "PASS", "FAIL"].map((r) => (
-                              <option key={r}>{r}</option>
-                            ))}
-                          </Select>
-                        ) : (
-                          <Badge tone={/pass/i.test(c.result || "") ? "ok" : /fail/i.test(c.result || "") ? "danger" : "warn"}>
-                            {c.result || "Pending"}
-                          </Badge>
-                        )}
-                      </td>
-                    </tr>
-                  );
+                {displayGroups.flatMap((g) => {
+                  const span = g.specimens.length;
+                  return g.specimens.map((c, idx) => {
+                    const phase = specimenPhase(c);
+                    const strength = rowStrength(c);
+                    const isFirst = idx === 0;
+                    return (
+                      <tr key={c.id} className={cubeResultRowClass(c.result)}>
+                        {isFirst ? (
+                          <>
+                            <td rowSpan={span} className="text-left font-mono align-top border-b border-line/60">
+                              {cellInput(c.srNo || "", (v) => void patchCube(c.id, { srNo: v || null }))}
+                            </td>
+                            <td rowSpan={span} className="text-left align-top border-b border-line/60">
+                              {cellInput(c.castDate ? c.castDate.slice(0, 10) : "", (v) => void patchCube(c.id, { castDate: v || null }), {
+                                type: "date",
+                              })}
+                            </td>
+                            <td rowSpan={span} className="text-left align-top max-w-[14rem] border-b border-line/60">
+                              {cellInput(c.description, (v) => void patchCube(c.id, { description: v }), { className: "min-w-[10rem]" })}
+                            </td>
+                            <td rowSpan={span} className="text-left align-top border-b border-line/60">
+                              {cellInput(c.grade || "", (v) => void patchCube(c.id, { grade: v || null }))}
+                            </td>
+                            <td rowSpan={span} className="text-left align-top border-b border-line/60">
+                              {cellInput(c.testAgency || "", (v) => void patchCube(c.id, { testAgency: v || null }))}
+                            </td>
+                          </>
+                        ) : null}
+                        <td
+                          className={`text-left font-mono align-top ${phase === "7D" ? "cube-phase-7d" : phase === "28D" ? "cube-phase-28d" : ""}`}
+                        >
+                          {phase}
+                        </td>
+                        <td className="text-left align-top">
+                          {cellInput(c.cubeWeight != null ? String(c.cubeWeight) : "", (v) =>
+                            void patchCube(c.id, { cubeWeight: v ? Number(v) : null }), { numeric: true })}
+                        </td>
+                        <td className="text-left align-top">
+                          {cellInput((c.testDate7 || "").slice(0, 10), (v) => void patchCube(c.id, { testDate7: v || null }), {
+                            type: "date",
+                          })}
+                        </td>
+                        <td className="text-left align-top">
+                          {cellInput((c.testDate28 || "").slice(0, 10), (v) => void patchCube(c.id, { testDate28: v || null }), {
+                            type: "date",
+                          })}
+                        </td>
+                        <td className="text-left align-top">
+                          {cellInput(c.load7 != null ? String(c.load7) : "", (v) =>
+                            void patchCube(c.id, { load7: v ? Number(v) : null }), { numeric: true })}
+                        </td>
+                        <td className="text-left align-top">
+                          {cellInput(c.load28 != null ? String(c.load28) : "", (v) =>
+                            void patchCube(c.id, { load28: v ? Number(v) : null }), { numeric: true })}
+                        </td>
+                        <td className="text-left align-top font-medium">
+                          {cellInput(strength != null ? String(strength) : "", (v) => {
+                            const n = v ? Number(v) : null;
+                            if (phase === "7D") void patchCube(c.id, { strength7: n, strength: n });
+                            else if (phase === "28D") void patchCube(c.id, { strength28: n, strength: n });
+                            else void patchCube(c.id, { strength: n });
+                          }, { numeric: true })}
+                        </td>
+                        <td className="text-left align-top">
+                          {c.avgStrength != null
+                            ? cellInput(String(c.avgStrength), (v) =>
+                                void patchCube(c.id, { avgStrength: v ? Number(v) : null }), { numeric: true })
+                            : ""}
+                        </td>
+                        {isFirst ? (
+                          <td rowSpan={span} className="text-left align-top border-b border-line/60">
+                            {canEdit ? (
+                              <Select
+                                className="!py-1 !text-xs !min-w-[5.5rem] register-sheet-cell--select"
+                                value={g.result || c.result || "Pending"}
+                                onChange={(e) => {
+                                  for (const s of g.specimens) void patchCube(s.id, { result: e.target.value });
+                                }}
+                              >
+                                {["Pending", "PASS", "FAIL"].map((r) => (
+                                  <option key={r}>{r}</option>
+                                ))}
+                              </Select>
+                            ) : (
+                              <Badge tone={/pass/i.test(g.result || c.result || "") ? "ok" : /fail/i.test(g.result || c.result || "") ? "danger" : "warn"}>
+                                {g.result || c.result || "Pending"}
+                              </Badge>
+                            )}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  });
                 })}
                 {!filtered.length && (
                   <tr>

@@ -4,6 +4,7 @@ import XLSX from "../lib/xlsx.js";
 import { resolveExcelRoot } from "../lib/excelRoot.js";
 import { prisma } from "../prisma.js";
 import { MS_PROJECT_SCURVE_PACKAGE, MS_PROJECT_SOURCE } from "./msProjectSchedule.js";
+import { parseProgressSorSummaryRows } from "./progressSorParse.js";
 
 export type VerifyCheck = {
   key: string;
@@ -113,15 +114,7 @@ export function readProgressExcelExpectations() {
   }).length;
 
   const sorRows = sheetRows(root, monthlyFile, /sor/i) || [];
-  let sor = 0;
-  for (let i = 1; i < sorRows.length; i++) {
-    const row = sorRows[i] as unknown[];
-    if (!cellNum(row[0]) || !cellStr(row[1])) {
-      if (sor > 0) break;
-      continue;
-    }
-    sor++;
-  }
+  const sor = parseProgressSorSummaryRows(sorRows).length;
 
   return {
     excelRoot: root,

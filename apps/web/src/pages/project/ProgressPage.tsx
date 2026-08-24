@@ -45,6 +45,7 @@ export default function ProgressPage() {
   const [data, setData] = useState<any>(null);
   const [verify, setVerify] = useState<any>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [resyncBusy, setResyncBusy] = useState(false);
   const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
   const [msProject, setMsProject] = useState<any>(null);
@@ -61,6 +62,7 @@ export default function ProgressPage() {
   const canEdit =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
   const canVerify = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
+  const canResyncExcel = user?.role === "admin" || user?.role === "office";
 
   const [hindranceForm, setHindranceForm] = useState({
     description: "",
@@ -122,6 +124,27 @@ export default function ProgressPage() {
       setVerifyBusy(false);
     }
   }
+
+  async function runResyncSor() {
+    if (!canResyncExcel || !id) return;
+    setResyncBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ imported: number; verify: typeof verify }>(`/api/progress/${id}/resync-sor`, {
+        method: "POST",
+        token,
+      });
+      setVerify(out.verify);
+      await load();
+      setMsg(`Monthly SOR re-synced from Excel (${out.imported} rows).`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "SOR resync failed");
+    } finally {
+      setResyncBusy(false);
+    }
+  }
+
+  const sorCheckFailed = verify?.checks?.some((c: { key: string; ok: boolean }) => c.key === "count.sor" && !c.ok);
 
   useEffect(() => {
     void load();
@@ -441,6 +464,28 @@ export default function ProgressPage() {
                 </tbody>
               </table>
             </div>
+            {canResyncExcel && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
+                {sorCheckFailed ? (
+                  <p className="text-xs text-danger flex-1 min-w-[12rem]">
+                    Monthly SOR count differs from Excel — duplicate rows from an older seed. Resync replaces them with
+                    the 3 summary rows from the Monthly Progress Dashboard pack.
+                  </p>
+                ) : (
+                  <p className="text-xs text-steel-muted flex-1 min-w-[12rem]">
+                    Re-import Monthly SOR summary from the client Excel pack (admin/office).
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant={sorCheckFailed ? "primary" : "secondary"}
+                  disabled={resyncBusy || verifyBusy}
+                  onClick={() => void runResyncSor()}
+                >
+                  {resyncBusy ? "Resyncing…" : "Resync SOR from Excel"}
+                </Button>
+              </div>
+            )}
           </div>
         </details>
       )}
