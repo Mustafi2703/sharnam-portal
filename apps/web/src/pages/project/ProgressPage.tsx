@@ -389,57 +389,60 @@ export default function ProgressPage() {
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
       {verify && (
-        <Card
-          className={`shrink-0 !p-4 border ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
-            isProgressRegister ? "!py-3" : ""
+        <details
+          className={`shrink-0 rounded-lg border bg-paper ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
+            isProgressRegister ? "" : "open"
           }`}
+          open={!isProgressRegister || !verify.ok}
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <summary className="cursor-pointer px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-steel-muted">Backend vs Excel packs</div>
-              <div className="font-semibold mt-0.5">
-                {verify.ok ? "All tracked Progress data matches source sheets" : "Mismatches found — check failed rows"}
+              <div className="font-semibold text-sm mt-0.5">
+                {verify.ok ? "Progress data matches Excel" : "Mismatches found — expand to review"}
               </div>
-              {verify.msProjectOverlay &&
-              (verify.msProjectOverlay.milestones > 0 ||
-                verify.msProjectOverlay.plannedActual > 0 ||
-                verify.msProjectOverlay.activityLines > 0) ? (
-                <p className="text-xs text-steel-muted mt-1">
-                  MS Project overlay excluded: {verify.msProjectOverlay.milestones} milestones ·{" "}
-                  {verify.msProjectOverlay.plannedActual} S-curve months · {verify.msProjectOverlay.activityLines} schedule
-                  lines
-                </p>
-              ) : null}
             </div>
             <Badge tone={verify.ok ? "ok" : "danger"}>
               {verify.summary.passed}/{verify.summary.total} passed
             </Badge>
-          </div>
-          <div className={`overflow-x-auto ${isProgressRegister ? "max-h-52 overflow-y-auto register-sheet-viewport" : ""}`}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase text-steel-muted border-b border-line">
-                  <th className="py-2 pr-3">Check</th>
-                  <th className="py-2 pr-3">Expected (Excel)</th>
-                  <th className="py-2 pr-3">Actual (DB)</th>
-                  <th className="py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {verify.checks.map((c: any) => (
-                  <tr key={c.key} className="border-b border-line/60">
-                    <td className="py-1.5 pr-3">{c.label}</td>
-                    <td className="py-1.5 pr-3 font-mono text-xs">{String(c.expected)}</td>
-                    <td className="py-1.5 pr-3 font-mono text-xs">{String(c.actual)}</td>
-                    <td className="py-1.5">
-                      <Badge tone={c.ok ? "ok" : "danger"}>{c.ok ? "OK" : "Fail"}</Badge>
-                    </td>
+          </summary>
+          <div className="px-4 pb-4 border-t border-line/60">
+            {verify.msProjectOverlay &&
+            (verify.msProjectOverlay.milestones > 0 ||
+              verify.msProjectOverlay.plannedActual > 0 ||
+              verify.msProjectOverlay.activityLines > 0) ? (
+              <p className="text-xs text-steel-muted mt-2 mb-2">
+                MS Project overlay excluded: {verify.msProjectOverlay.milestones} milestones ·{" "}
+                {verify.msProjectOverlay.plannedActual} S-curve months · {verify.msProjectOverlay.activityLines} schedule
+                lines
+              </p>
+            ) : null}
+            <div className="overflow-x-auto max-h-48 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase text-steel-muted border-b border-line">
+                    <th className="py-2 pr-3">Check</th>
+                    <th className="py-2 pr-3">Expected (Excel)</th>
+                    <th className="py-2 pr-3">Actual (DB)</th>
+                    <th className="py-2">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {verify.checks.map((c: any) => (
+                    <tr key={c.key} className="border-b border-line/60">
+                      <td className="py-1.5 pr-3">{c.label}</td>
+                      <td className="py-1.5 pr-3 font-mono text-xs">{String(c.expected)}</td>
+                      <td className="py-1.5 pr-3 font-mono text-xs">{String(c.actual)}</td>
+                      <td className="py-1.5">
+                        <Badge tone={c.ok ? "ok" : "danger"}>{c.ok ? "OK" : "Fail"}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </Card>
+        </details>
       )}
 
       {!isProgressRegister && (

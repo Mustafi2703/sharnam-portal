@@ -299,7 +299,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           Scroll ↔ ↕ for full sheet · every white cell is editable · saves on blur
         </div>
 
-        <div className="sheet-register register-sheet-shell flex flex-col border-t border-line">
+        <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line">
           <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="cube-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
