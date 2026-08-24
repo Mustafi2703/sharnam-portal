@@ -357,7 +357,7 @@ export default function ProgressPage() {
     <div
       className={`w-full min-w-0 ${
         ["planned", "hindrance", "risk", "legal", "milestones", "msproject"].includes(tab)
-          ? "progress-page--register page-stack--register flex flex-col gap-4 min-h-0"
+          ? "progress-page--register page-stack--register flex flex-col gap-4"
           : "space-y-5"
       }`}
     >
@@ -1361,7 +1361,7 @@ export default function ProgressPage() {
           await addHindrance({ preventDefault: () => {} } as FormEvent);
           setHindranceModalOpen(false);
         }}
-        size="lg"
+        size="xl"
       >
         <div className="grid sm:grid-cols-2 gap-3">
           <Input

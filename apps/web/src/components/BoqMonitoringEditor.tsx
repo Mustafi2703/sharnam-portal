@@ -233,7 +233,7 @@ function EditLineModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] bg-ink/45 flex items-end sm:items-center justify-center p-3"
+      className="register-modal z-[70]"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -243,11 +243,12 @@ function EditLineModal({
     >
       <div
         ref={panelRef}
-        className="w-full max-w-6xl max-h-[94vh] overflow-y-auto rounded-xl border border-line bg-paper shadow-2xl"
+        className="register-modal__panel register-modal__panel--2xl"
+        onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-line bg-paper">
+        <div className="register-modal__head">
           <div>
-            <h2 id={titleId} className="font-display text-xl text-ink">
+            <h2 id={titleId} className="font-display text-lg sm:text-xl text-ink">
               {title}
             </h2>
             <p className="text-xs text-steel-muted mt-1">Edit description, rates, and quantities</p>
@@ -257,7 +258,7 @@ function EditLineModal({
           </Button>
         </div>
 
-        <div className="p-5 sm:p-6 space-y-4">
+        <div className="register-modal__body space-y-4">
           {canFullEdit && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
@@ -549,7 +550,7 @@ export function BoqMonitoringEditor({
   const colSpan = (canTouch ? MON_HEADERS.length + 1 : MON_HEADERS.length);
 
   return (
-    <div className={`flex flex-col gap-4 min-h-0 min-w-0 ${className}`.trim()}>
+    <div className={`flex flex-col gap-4 min-w-0 ${className}`.trim()}>
       {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
 
       {canFullEdit && (
@@ -628,14 +629,14 @@ export function BoqMonitoringEditor({
         </details>
       )}
 
-      <div className="sheet-register w-full boq-editor flex flex-col min-h-[52vh]">
+      <div className="sheet-register w-full boq-editor flex flex-col min-h-[20rem]">
         <div className="sheet-register__head shrink-0">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
             {rows.length} lines · {grouped.length} sections · all SPDC Monitoring columns (qty · cost · progress · EV · CPI · ETC)
           </span>
         </div>
-        <div className="sheet-register__scroll min-h-[48vh] flex-1">
+        <div className="sheet-register__scroll min-h-[20rem]">
           <table className="sheet-register__table boq-editor__table min-w-[120rem]">
             <thead>
               <tr>

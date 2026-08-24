@@ -172,7 +172,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
         </Card>
       )}
 
-      <Card padding={false} className="flex flex-col max-h-[calc(100vh-14rem)] min-h-[20rem]">
+      <Card padding={false} className="flex flex-col min-h-[20rem]">
         <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
           <h3 className="font-semibold text-sm text-left">
             {recordType} register ({filtered.length})
@@ -189,7 +189,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
           onChange={(k, v) => setFilters({ ...filters, [k]: v })}
           onClear={() => setFilters({ status: "All", from: "", to: "", q: "" })}
         />
-        <div className="sheet-register overflow-auto flex-1 min-h-0">
+        <div className="sheet-register overflow-auto min-h-[18rem]">
           <table className="sheet-register__table min-w-[48rem] w-full text-sm">
             <thead>
               <tr>

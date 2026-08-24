@@ -38,7 +38,7 @@ export function RegisterSheetFrame({
   className = "",
 }: Props) {
   return (
-    <div className={`sheet-register register-sheet-frame flex-1 min-h-0 flex flex-col ${className}`}>
+    <div className={`sheet-register register-sheet-frame flex flex-col min-h-[22rem] ${className}`}>
       <div className="sheet-register__head shrink-0">
         <span>{title}</span>
         <span className="text-steel-muted font-normal normal-case tracking-normal text-xs">
@@ -46,7 +46,7 @@ export function RegisterSheetFrame({
           {rowCount != null ? `${rowCount} rows` : ""}
         </span>
       </div>
-      <div className="sheet-register__scroll flex-1 min-h-0">{children}</div>
+      <div className="sheet-register__scroll min-h-[20rem]">{children}</div>
     </div>
   );
 }

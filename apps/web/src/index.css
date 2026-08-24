@@ -616,22 +616,22 @@ body.is-auth-route #root {
 .spdc-register-panel {
   display: flex;
   flex-direction: column;
-  min-height: 14rem;
-  overflow: hidden;
+  min-height: 22rem;
+  overflow: visible;
 }
 .page-stack--register .spdc-register-panel,
 .qap-page .spdc-register-panel,
 .spdc-register-page .spdc-register-panel {
   max-height: none;
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: 22rem;
+  flex: 0 1 auto;
 }
 
 /* SPDC register pages — page scrolls; wide sheets scroll inside .sheet-register__scroll */
 .spdc-register-page,
 .qap-page {
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: auto;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
 }
@@ -656,21 +656,21 @@ body.is-auth-route #root {
 .tool-main:has(.qap-page) > .qap-page,
 .tool-main:has(.cost-page--register) > .cost-page--register,
 .tool-main:has(.progress-page--register) > .progress-page--register {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 1 auto;
+  min-height: auto;
 }
 .qap-page__register,
 .cube-page__register {
-  flex: 1 1 auto;
-  min-height: min(72vh, 42rem);
+  flex: 0 1 auto;
+  min-height: 22rem;
   display: flex;
   flex-direction: column;
 }
 
 /* Full-viewport register pages (QAP, cube, audit, cost, progress sheets) */
 .page-stack--register {
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: auto;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
@@ -696,8 +696,8 @@ body.is-auth-route #root {
 .page-stack--register .register-sheet-frame,
 .page-stack--register .sheet-register,
 .qap-page .sheet-register {
-  flex: 1 1 auto;
-  min-height: min(58vh, 36rem);
+  flex: 0 1 auto;
+  min-height: 22rem;
   max-height: none;
   display: flex;
   flex-direction: column;
@@ -711,9 +711,10 @@ body.is-auth-route #root {
 .page-stack--register .mb-entry-panel .sheet-register__scroll,
 .page-stack--register .bbs-entry-panel .sheet-register__scroll,
 .page-stack--register .budget-wbs-panel .sheet-register__scroll,
-.qap-page .sheet-register__scroll {
-  flex: 1 1 auto;
-  min-height: 14rem;
+.qap-page .sheet-register__scroll,
+.spdc-register-panel .sheet-register__scroll {
+  flex: 0 1 auto;
+  min-height: 22rem;
   max-height: none !important;
   overflow: auto;
   overscroll-behavior: contain;
@@ -723,8 +724,8 @@ body.is-auth-route #root {
 .page-stack--register .cube-page__register .sheet-register__scroll,
 .cost-page__register .sheet-register__scroll,
 .page-stack--register .cost-page__register .sheet-register__scroll {
-  flex: 1 1 auto;
-  min-height: min(72vh, 42rem);
+  flex: 0 1 auto;
+  min-height: 22rem;
   max-height: none !important;
   overflow: auto;
   overscroll-behavior: contain;
@@ -732,8 +733,8 @@ body.is-auth-route #root {
 }
 .cost-page__register,
 .page-stack--register .cost-page__register {
-  flex: 1 1 auto;
-  min-height: min(58vh, 36rem);
+  flex: 0 1 auto;
+  min-height: 22rem;
   display: flex;
   flex-direction: column;
 }
@@ -741,8 +742,8 @@ body.is-auth-route #root {
 .page-stack--register .cost-page__register .mb-entry-panel,
 .page-stack--register .cost-page__register .bbs-entry-panel,
 .page-stack--register .cost-page__register .budget-wbs-panel {
-  flex: 1 1 auto;
-  min-height: min(52vh, 32rem);
+  flex: 0 1 auto;
+  min-height: 20rem;
 }
 .boq-editor__table {
   min-width: 120rem;
@@ -751,16 +752,22 @@ body.is-auth-route #root {
 .page-stack--register .mb-entry-panel,
 .page-stack--register .bbs-entry-panel,
 .page-stack--register .budget-wbs-panel {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 1 auto;
+  min-height: 20rem;
   max-height: none;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 .register-sheet-frame .sheet-register__table,
-.page-stack--register .sheet-register__table {
-  min-width: 100%;
+.page-stack--register .register-table-panel,
+.page-stack--register .register-table-panel.spdc-register-panel {
+  overflow: visible;
+  min-height: 22rem;
+  flex: 0 1 auto;
+}
+.page-stack--register .register-table-panel .sheet-register__scroll {
+  min-height: 22rem;
 }
 .sheet-register__table td.wrap,
 .sheet-register__table th.wrap {
@@ -769,8 +776,8 @@ body.is-auth-route #root {
   max-width: 24rem;
 }
 .spdc-register-panel .sheet-register__scroll {
-  flex: 1 1 auto;
-  min-height: min(42vh, 22rem);
+  flex: 0 1 auto;
+  min-height: 22rem;
   max-height: none !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -779,7 +786,7 @@ body.is-auth-route #root {
 .spdc-register-panel.register-editor-panel .sheet-register__scroll,
 .cube-page__register .spdc-register-panel .sheet-register__scroll,
 .qap-page__register .spdc-register-panel .sheet-register__scroll {
-  min-height: min(72vh, 42rem);
+  min-height: 22rem;
   max-height: none !important;
 }
 .register-scroll-hint {
@@ -788,6 +795,76 @@ body.is-auth-route #root {
   text-transform: uppercase;
   color: var(--color-steel-muted);
   background: linear-gradient(90deg, rgb(15 118 110 / 0.06), transparent);
+}
+
+/* Register add/edit modals — large, scrollable body on 13" laptops */
+.register-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.5rem;
+  background: rgb(0 0 0 / 0.5);
+}
+@media (min-width: 640px) {
+  .register-modal {
+    align-items: center;
+    padding: 1rem;
+  }
+}
+.register-modal__panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 96dvh;
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+  overflow: hidden;
+}
+@media (min-width: 640px) {
+  .register-modal__panel {
+    max-height: 92dvh;
+  }
+}
+.register-modal__panel--md { max-width: min(96vw, 48rem); }
+.register-modal__panel--lg { max-width: min(96vw, 64rem); }
+.register-modal__panel--xl { max-width: min(96vw, 72rem); }
+.register-modal__panel--2xl { max-width: min(96vw, 90rem); }
+.register-modal__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-paper);
+}
+.register-modal__body {
+  flex: 1 1 auto;
+  min-height: 14rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.25rem;
+}
+.register-modal__body > * + * {
+  margin-top: 1rem;
+}
+.register-modal__foot {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-sand) 30%, var(--color-paper));
 }
 .register-editor-pro.qap-register__table,
 .register-editor-pro.cube-register__table {

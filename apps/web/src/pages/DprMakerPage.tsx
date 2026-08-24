@@ -1294,7 +1294,7 @@ export default function DprMakerPage() {
         onClose={() => setLineModalOpen(false)}
         onSave={commitLineFromModal}
         saving={busy}
-        size="lg"
+        size="xl"
       >
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="block sm:col-span-2">

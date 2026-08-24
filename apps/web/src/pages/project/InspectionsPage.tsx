@@ -117,9 +117,9 @@ export default function InspectionsPage() {
 
   return (
     <div
-      className={`min-w-0 min-h-0 ${
+      className={`min-w-0 ${
         sheetKey === "car-register" || sheetKey === "cube-test"
-          ? "page-stack--register spdc-register-page flex flex-col flex-1"
+          ? "page-stack--register spdc-register-page flex flex-col"
           : "space-y-4"
       }`}
     >
@@ -400,6 +400,7 @@ export default function InspectionsPage() {
         <RegisterEntryModal
           open={!!ncrEdit}
           title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
+          size="xl"
           onClose={() => setNcrEdit(null)}
           saving={ncrModalBusy}
           onSave={async () => {
@@ -493,7 +494,7 @@ export default function InspectionsPage() {
             }
             sharePointUrl={cubeSharePointUrl}
           />
-          <div className="cube-page__register flex-1 min-h-0 flex flex-col">
+          <div className="cube-page__register flex flex-col">
             <CubeRegisterPanel
               projectId={id}
               token={token}

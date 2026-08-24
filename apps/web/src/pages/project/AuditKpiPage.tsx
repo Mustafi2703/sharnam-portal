@@ -221,7 +221,7 @@ export default function AuditKpiPage() {
   const currentSheet = TABS.find((t) => t.key === tab)?.sheet || "";
 
   return (
-    <div className={tab !== "dashboard" && tab !== "kpi-dashboard" ? "page-stack--register flex flex-col min-h-0" : "page-stack"}>
+    <div className={tab !== "dashboard" && tab !== "kpi-dashboard" ? "page-stack--register flex flex-col" : "page-stack"}>
       <PageHeader
         title="Audit & KPI"
         subtitle="Upload client Excel packs, add rows in modal or inline form, download in SPDC column format."
@@ -517,7 +517,7 @@ export default function AuditKpiPage() {
         onClose={() => setFindingModalOpen(false)}
         onSave={saveFinding}
         saving={busy}
-        size="lg"
+        size="xl"
       >
         <label className="block">
           <span className="text-xs text-steel-muted">Finding description</span>
@@ -560,7 +560,7 @@ export default function AuditKpiPage() {
         onClose={() => setSubjectModalOpen(false)}
         onSave={saveSubject}
         saving={busy}
-        size="lg"
+        size="xl"
       >
         <label className="block">
           <span className="text-xs text-steel-muted">ISO area</span>
@@ -590,7 +590,7 @@ export default function AuditKpiPage() {
         onClose={() => setChecklistModalOpen(false)}
         onSave={saveChecklistRow}
         saving={busy}
-        size="lg"
+        size="xl"
       >
         <label className="block">
           <span className="text-xs text-steel-muted">Prompt / checklist question</span>

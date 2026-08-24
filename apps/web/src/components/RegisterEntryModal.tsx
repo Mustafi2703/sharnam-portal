@@ -12,21 +12,21 @@ type Props = {
 };
 
 /** Reusable modal for register add/edit — pairs with inline forms on the same page. */
-const MODAL_WIDTH = { md: "max-w-3xl", lg: "max-w-5xl", xl: "max-w-6xl", "2xl": "max-w-7xl" } as const;
+const MODAL_PANEL = { md: "register-modal__panel--md", lg: "register-modal__panel--lg", xl: "register-modal__panel--xl", "2xl": "register-modal__panel--2xl" } as const;
 
-export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "lg", children }: Props) {
+export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "xl", children }: Props) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-6 bg-black/45" role="dialog" aria-modal="true">
-      <div className={`w-full ${MODAL_WIDTH[size]} max-h-[94vh] overflow-y-auto rounded-xl bg-paper border border-line shadow-2xl`}>
-        <div className="sticky top-0 flex items-center justify-between gap-3 px-5 py-4 border-b border-line bg-paper">
-          <h3 className="font-semibold text-ink">{title}</h3>
-          <button type="button" className="text-steel-muted hover:text-ink text-xl leading-none" onClick={onClose} aria-label="Close">
+    <div className="register-modal" role="dialog" aria-modal="true">
+      <div className={`register-modal__panel ${MODAL_PANEL[size]}`}>
+        <div className="register-modal__head">
+          <h3 className="font-semibold text-ink text-base sm:text-lg">{title}</h3>
+          <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={onClose} aria-label="Close">
             ×
           </button>
         </div>
-        <div className="p-5 space-y-4">{children}</div>
-        <div className="sticky bottom-0 flex flex-wrap gap-2 justify-end px-5 py-4 border-t border-line bg-sand/30">
+        <div className="register-modal__body space-y-4">{children}</div>
+        <div className="register-modal__foot">
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>

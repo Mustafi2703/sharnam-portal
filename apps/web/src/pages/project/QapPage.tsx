@@ -351,7 +351,7 @@ export default function QapPage() {
         />
       )}
 
-      <div className="qap-page__register flex-1 min-h-0 flex flex-col">
+      <div className="qap-page__register flex flex-col">
         <QapDetailRegister
           projectId={id!}
           token={token}
