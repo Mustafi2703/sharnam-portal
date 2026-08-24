@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
@@ -13,6 +13,7 @@ import { MbEntryTable } from "../components/MbEntryTable";
 import { MasterLinePicker } from "../components/MasterLinePicker";
 import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
+import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -80,6 +81,8 @@ export default function CostPage() {
   const [billsData, setBillsData] = useState<{ bills: any[]; totals: any } | null>(null);
   const [parties, setParties] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const autoSyncRef = useRef(false);
+  const [syncing, setSyncing] = useState(false);
   const [mbAddOpen, setMbAddOpen] = useState(false);
   const [bbsAddOpen, setBbsAddOpen] = useState(false);
   const [cfView, setCfView] = useState<"chart" | "forecast" | "tracking" | "all">(
@@ -175,6 +178,84 @@ export default function CostPage() {
     }
   }, [id, token, clientBlocked, pkgFilter]);
 
+  async function syncFullTemplate(silent = false) {
+    if (!id || !canEdit) return null;
+    setSyncing(true);
+    if (!silent) setMsg("");
+    try {
+      const out = await api<{
+        budget: number;
+        monitoring: number;
+        mb: number;
+        bbs: number;
+        cashflow?: number;
+        fullWorkbook?: boolean;
+      }>(`/api/cost/${id}/sync-template`, { method: "POST", token });
+      setMsg(
+        `Loaded SPDC_Budget_Arvind 49.xls — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}${out.cashflow != null ? `, Cashflow ${out.cashflow}` : ""} rows`
+      );
+      await load();
+      return out;
+    } catch (err) {
+      if (!silent) setMsg(err instanceof Error ? err.message : "Template load failed");
+      return null;
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  /** Auto-load full SPDC budget when registers are empty or partial (QAP/Cube pattern). */
+  useEffect(() => {
+    if (!summary || !canEdit || autoSyncRef.current || syncing) return;
+    if (!costNeedsFullSync(summary.totals)) return;
+    autoSyncRef.current = true;
+    void (async () => {
+      const out = await syncFullTemplate(true);
+      if (!out) autoSyncRef.current = false;
+      else if (tab !== "monitoring") setTab("monitoring", DEFAULT_COST_MONITORING_PKG);
+    })();
+  }, [summary, canEdit, id, token]);
+
+  async function uploadBoqOrWorkbook(file: File, openPackage?: string) {
+    if (!id || !canEdit) return;
+    setSyncing(true);
+    setMsg("");
+    try {
+      if (isLikelySpdcBudgetFile(file)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const out = await api<{
+          fullWorkbook?: boolean;
+          monitoring?: number;
+          mb?: number;
+          bbs?: number;
+          budget?: number;
+          openPackage?: string;
+          rowCount?: number;
+        }>(`/api/cost/${id}/boq/import`, { method: "POST", token, body: fd });
+        if (out.fullWorkbook) {
+          setMsg(
+            `Loaded full SPDC workbook — Budget ${out.budget ?? "—"}, Monitoring ${out.monitoring ?? out.rowCount ?? 0}, MB ${out.mb ?? 0}, BBS ${out.bbs ?? 0}`
+          );
+          const pkg = out.openPackage || openPackage || DEFAULT_COST_MONITORING_PKG;
+          setTab("monitoring", pkg);
+          await load();
+          return;
+        }
+      }
+      const fd = new FormData();
+      fd.append("file", file);
+      const batch = await api<{ rowCount?: number }>(`/api/cost/${id}/boq/import`, { method: "POST", token, body: fd });
+      setMsg(`Imported ${batch.rowCount ?? 0} BOQ/monitoring rows from ${file.name}`);
+      setTab("monitoring", openPackage || pkgFilter !== "All" ? openPackage || pkgFilter : DEFAULT_COST_MONITORING_PKG);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const contractors = useMemo(() => parties.filter((p) => p.partyType === "Contractor"), [parties]);
   const vendors = useMemo(() => parties.filter((p) => p.partyType === "Vendor" || !p.partyType), [parties]);
   const pmcParties = useMemo(() => parties.filter((p) => p.partyType === "PMC"), [parties]);
@@ -198,6 +279,11 @@ export default function CostPage() {
 
   async function importCostSheet(kind: "mb" | "bbs", file: File) {
     if (!id || !canEdit) return;
+    if (isLikelySpdcBudgetFile(file)) {
+      await uploadBoqOrWorkbook(file);
+      setTab(kind === "mb" ? "mb" : "bbs", kind === "mb" ? "Dormitory Civil" : "Dormitory BBS");
+      return;
+    }
     const fd = new FormData();
     fd.append("file", file);
     if (/budget|monitoring|dormitory mb|dormitory bbs/i.test(file.name) || file.name.endsWith(".xls")) {
@@ -251,7 +337,7 @@ export default function CostPage() {
     );
   }
 
-  if (!summary) return <div className="text-steel-muted py-10">Loading cost sheets…</div>;
+  if (!summary) return <div className="text-steel-muted py-10">{syncing ? "Loading SPDC cost sheets…" : "Loading cost sheets…"}</div>;
 
   async function addMb(e: FormEvent) {
     e.preventDefault();
@@ -407,10 +493,14 @@ export default function CostPage() {
           token={token}
           structures={summary.structures || []}
           canEdit={!!canEdit}
+          busy={syncing}
           message={tab === "boq" ? msg : undefined}
           onMessage={setMsg}
           onChanged={load}
           onOpenTab={(t, pkg) => setTab(t, pkg || "All")}
+          onSyncTemplate={async () => {
+            await syncFullTemplate();
+          }}
         />
       )}
 
@@ -477,41 +567,18 @@ export default function CostPage() {
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
             canEdit={canEdit}
-            onUpload={
-              canEdit
-                ? async (file) => {
-                    const fd = new FormData();
-                    fd.append("file", file);
-                    const batch = await api<{ rowCount?: number }>(`/api/cost/${id}/boq/import`, {
-                      method: "POST",
-                      token,
-                      body: fd,
-                    });
-                    setMsg(`Imported ${batch.rowCount ?? 0} BOQ/monitoring rows from ${file.name}`);
-                    await load();
-                  }
-                : undefined
-            }
-            uploadHint="Upload SPDC budget / BOQ Excel — populates monitoring lines for this project."
+            onUpload={canEdit ? (file) => uploadBoqOrWorkbook(file, pkgFilter !== "All" ? pkgFilter : undefined) : undefined}
+            uploadHint="Upload SPDC_Budget_Arvind 49.xls for full Budget + Monitoring + MB + BBS, or a single BOQ sheet."
             onGenerate={
               canEdit
                 ? async () => {
-                    try {
-                      const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number }>(
-                        `/api/cost/${id}/sync-template`,
-                        { method: "POST", token }
-                      );
-                      setMsg(
-                        `Loaded server template — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}`
-                      );
-                      await load();
-                    } catch (e: any) {
-                      setMsg(e?.message || "Template sync failed");
-                    }
+                    const out = await syncFullTemplate();
+                    if (out) setTab("monitoring", DEFAULT_COST_MONITORING_PKG);
                   }
                 : undefined
             }
             generateLabel="Load SPDC template"
+            busy={syncing}
             onDownloadCsv={() => downloadSheet("boq")}
             message={msg || undefined}
           />

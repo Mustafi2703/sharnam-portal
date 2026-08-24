@@ -524,6 +524,30 @@ costRouter.post(
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "file required" });
+    const { isFullSpdcWorkbook } = await import("../services/costSheetParser.js");
+    const { syncBudgetWorkbookFromBuffer } = await import("../services/budgetWorkbookImport.js");
+    if (
+      isFullSpdcWorkbook(req.file.buffer) ||
+      /spdc_budget|budget_arvind|arvind.*49/i.test(req.file.originalname || "")
+    ) {
+      try {
+        const out = await syncBudgetWorkbookFromBuffer(req.params.projectId, req.file.buffer, req.file.originalname);
+        await audit("cost.boq_import.full_workbook", {
+          userId: req.user!.id,
+          entity: "Project",
+          entityId: req.params.projectId,
+          meta: out,
+        });
+        return res.status(201).json({
+          ...out,
+          rowCount: out.monitoring,
+          openTab: "monitoring",
+          openPackage: "Civil Dormitory",
+        });
+      } catch (err) {
+        return res.status(400).json({ error: err instanceof Error ? err.message : "Full workbook import failed" });
+      }
+    }
     const rows = parseBoqBuffer(req.file.buffer);
     const batch = await prisma.boqImportBatch.create({
       data: {
@@ -684,6 +708,18 @@ costRouter.post(
     if (!isFullSpdcWorkbook(req.file.buffer) && kind === "all") {
       return res.status(400).json({
         error: "Upload SPDC_Budget_Arvind 49.xls (Budget + Monitoring + MB + BBS tabs), or use MB/BBS tab upload for a single sheet.",
+      });
+    }
+
+    if (isFullSpdcWorkbook(req.file.buffer) && kind === "all") {
+      const { syncBudgetWorkbookFromBuffer } = await import("../services/budgetWorkbookImport.js");
+      const out = await syncBudgetWorkbookFromBuffer(req.params.projectId, req.file.buffer, req.file.originalname);
+      return res.status(201).json({
+        ...out,
+        mbImported: out.mb,
+        bbsImported: out.bbs,
+        openTab: "monitoring",
+        openPackage: "Civil Dormitory",
       });
     }
 
@@ -1336,6 +1372,15 @@ costRouter.post(
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "file required" });
+    const { isFullSpdcWorkbook } = await import("../services/costSheetParser.js");
+    const { syncBudgetWorkbookFromBuffer } = await import("../services/budgetWorkbookImport.js");
+    if (
+      isFullSpdcWorkbook(req.file.buffer) ||
+      /spdc_budget|budget_arvind|arvind.*49/i.test(req.file.originalname || "")
+    ) {
+      const out = await syncBudgetWorkbookFromBuffer(req.params.projectId, req.file.buffer, req.file.originalname);
+      return res.status(201).json({ ...out, openTab: "monitoring", openPackage: "Civil Dormitory" });
+    }
     const packageName = String(req.body.packageName || "Imported structure");
     const rows = parseBoqBuffer(req.file.buffer);
     const batch = await prisma.boqImportBatch.create({

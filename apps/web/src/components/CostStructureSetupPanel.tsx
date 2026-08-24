@@ -20,6 +20,7 @@ type Props = {
   busy?: boolean;
   onChanged: () => void | Promise<void>;
   onOpenTab: (tab: "monitoring" | "mb" | "bbs" | "budget" | "cashflow", pkg?: string) => void;
+  onSyncTemplate?: () => void | Promise<void>;
   message?: string;
   onMessage?: (msg: string) => void;
 };
@@ -33,6 +34,7 @@ export function CostStructureSetupPanel({
   busy,
   onChanged,
   onOpenTab,
+  onSyncTemplate,
   message,
   onMessage,
 }: Props) {
@@ -56,6 +58,11 @@ export function CostStructureSetupPanel({
   );
 
   async function loadFullTemplate() {
+    if (onSyncTemplate) {
+      await onSyncTemplate();
+      onOpenTab("monitoring", "Civil Dormitory");
+      return;
+    }
     setLocalBusy(true);
     onMessage?.("");
     try {
@@ -67,6 +74,7 @@ export function CostStructureSetupPanel({
         `Loaded SPDC_Budget_Arvind 49.xls — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}${out.cashflow != null ? `, Cashflow ${out.cashflow}` : ""} rows`
       );
       await onChanged();
+      onOpenTab("monitoring", "Civil Dormitory");
     } catch (err) {
       onMessage?.(err instanceof Error ? err.message : "Template load failed");
     } finally {
@@ -81,15 +89,31 @@ export function CostStructureSetupPanel({
     try {
       const fd = new FormData();
       fd.append("file", workbookFile);
-      fd.append("kind", "all");
-      fd.append("replace", "1");
-      const out = await api<{ mbImported: number; bbsImported: number; mbSheets: number; bbsSheets: number; packages: string[] }>(
-        `/api/cost/${projectId}/workbook/import`,
-        { method: "POST", token, body: fd }
-      );
-      onMessage?.(
-        `Imported ${out.mbSheets} MB tabs (${out.mbImported} rows) + ${out.bbsSheets} BBS tabs (${out.bbsImported} rows) — ${out.packages.join(", ")}`
-      );
+      if (/\.xls$/i.test(workbookFile.name) || /budget|arvind/i.test(workbookFile.name)) {
+        const out = await api<{
+          fullWorkbook?: boolean;
+          budget: number;
+          monitoring: number;
+          mb: number;
+          bbs: number;
+          openPackage?: string;
+        }>(`/api/cost/${projectId}/boq/import`, { method: "POST", token, body: fd });
+        onMessage?.(
+          `Loaded full workbook — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}`
+        );
+        onOpenTab("monitoring", out.openPackage || "Civil Dormitory");
+      } else {
+        fd.append("kind", "all");
+        fd.append("replace", "1");
+        const out = await api<{ mbImported: number; bbsImported: number; mbSheets: number; bbsSheets: number; packages: string[] }>(
+          `/api/cost/${projectId}/workbook/import`,
+          { method: "POST", token, body: fd }
+        );
+        onMessage?.(
+          `Imported ${out.mbSheets} MB tabs (${out.mbImported} rows) + ${out.bbsSheets} BBS tabs (${out.bbsImported} rows) — ${out.packages.join(", ")}`
+        );
+        onOpenTab("mb", out.packages[0] || "Dormitory Civil");
+      }
       setWorkbookFile(null);
       await onChanged();
     } catch (err) {
@@ -109,9 +133,10 @@ export function CostStructureSetupPanel({
       fd.append("file", structureFile);
       fd.append("packageName", structureName.trim() || "Imported structure");
       await api(`/api/cost/${projectId}/structure/import`, { method: "POST", token, body: fd });
-      onMessage?.(`Structure "${structureName}" BOQ imported — open Monitoring tab to view lines.`);
+      onMessage?.(`Structure "${structureName}" BOQ imported — opening monitoring sheet.`);
       setStructureFile(null);
       await onChanged();
+      onOpenTab("monitoring", structureName.trim() || "Imported structure");
     } catch (err) {
       onMessage?.(err instanceof Error ? err.message : "Structure import failed");
     } finally {
