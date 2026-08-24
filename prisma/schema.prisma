@@ -63,6 +63,8 @@ model Project {
   clientGst               String?
   designConsultant        String?
   contractorName          String?
+  /// Client logo for register headers (SharePoint or local uploads URL)
+  clientLogoUrl           String?
   location                String?
   status                  String    @default("Planning")
   startDate               DateTime?

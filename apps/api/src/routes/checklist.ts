@@ -1387,6 +1387,7 @@ checklistRouter.post(
         weekLabel: String(body.weekLabel || `W${Math.ceil((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 604800000)}`),
         section: body.section ? String(body.section) : body.activity ? String(body.activity) : null,
         activity: String(body.activity || body.section || "QC activity"),
+        srNo: body.srNo ? String(body.srNo) : null,
         description: body.description ? String(body.description) : body.discipline ? String(body.discipline) : null,
         discipline: body.discipline || body.section || null,
         frequency: body.frequency ? String(body.frequency) : null,
@@ -1750,6 +1751,61 @@ checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) =>
   res.setHeader("Content-Disposition", `attachment; filename="QAP-${weekLabel.replace(/\s+/g, "-")}.xlsx"`);
   res.send(buffer);
 });
+
+checklistRouter.post(
+  "/project/:projectId/qap/publish",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const week = req.body?.week ? String(req.body.week) : req.query.week ? String(req.query.week) : undefined;
+    const { exportQapWorkbook } = await import("../services/qapImportExport.js");
+    const { publishRegisterWorkbook } = await import("../services/registerWorkbookPublish.js");
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: req.params.projectId } });
+    const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
+    const fileName = `QAP-${project.code}-${weekLabel.replace(/\s+/g, "-")}.xlsx`;
+    const published = await publishRegisterWorkbook({
+      projectId: req.params.projectId,
+      userId: req.user!.id,
+      moduleKey: "qap",
+      fileName,
+      buffer,
+      auditAction: "qap.published",
+      auditMeta: { weekLabel },
+    });
+    res.json({ ok: true, weekLabel, ...published });
+  }
+);
+
+checklistRouter.get("/project/:projectId/cubes/download.xlsx", async (req, res) => {
+  const { exportCubeWorkbook } = await import("../services/cubeRegisterImport.js");
+  const { buffer } = await exportCubeWorkbook(req.params.projectId);
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  const code = project?.code || "export";
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Cube-Register-${code}.xlsx"`);
+  res.send(buffer);
+});
+
+checklistRouter.post(
+  "/project/:projectId/cubes/publish",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const { exportCubeWorkbook } = await import("../services/cubeRegisterImport.js");
+    const { publishRegisterWorkbook } = await import("../services/registerWorkbookPublish.js");
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: req.params.projectId } });
+    const { buffer, rowCount } = await exportCubeWorkbook(req.params.projectId);
+    const fileName = `Cube-Register-${project.code}.xlsx`;
+    const published = await publishRegisterWorkbook({
+      projectId: req.params.projectId,
+      userId: req.user!.id,
+      moduleKey: "cube",
+      fileName,
+      buffer,
+      auditAction: "cube.published",
+      auditMeta: { rowCount },
+    });
+    res.json({ ok: true, rowCount, ...published });
+  }
+);
 
 checklistRouter.get("/project/:projectId/qap/download.html", async (req, res) => {
   const week = req.query.week ? String(req.query.week) : undefined;

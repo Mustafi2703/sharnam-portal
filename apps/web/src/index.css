@@ -732,6 +732,15 @@ body.is-auth-route #root {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+.cube-page__register .sheet-register__scroll,
+.page-stack--register .cube-page__register .sheet-register__scroll {
+  flex: 1 1 auto;
+  min-height: 14rem;
+  max-height: none !important;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 .page-stack--register .boq-editor,
 .page-stack--register .mb-entry-panel,
 .page-stack--register .bbs-entry-panel,
@@ -760,6 +769,54 @@ body.is-auth-route #root {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   overflow: auto;
+}
+.spdc-register-panel.register-editor-panel .sheet-register__scroll,
+.cube-page__register .spdc-register-panel .sheet-register__scroll,
+.qap-page__register .spdc-register-panel .sheet-register__scroll {
+  min-height: min(72vh, 42rem);
+  max-height: none !important;
+}
+.register-scroll-hint {
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-steel-muted);
+  background: linear-gradient(90deg, rgb(15 118 110 / 0.06), transparent);
+}
+.register-editor-pro.qap-register__table,
+.register-editor-pro.cube-register__table {
+  font-size: 0.8125rem;
+}
+.register-editor-pro td {
+  padding: 0.4rem 0.5rem;
+  vertical-align: top;
+  line-height: 1.4;
+  min-height: 2.25rem;
+}
+.register-editor-pro .register-sheet-cell {
+  padding: 0.45rem 0.55rem;
+  min-height: 2rem;
+  font-size: 0.8125rem;
+  min-width: 4.5rem;
+}
+.register-editor-pro .register-sheet-cell--select {
+  min-width: 5.5rem;
+}
+.register-editor-pro.qap-register__table thead th,
+.register-editor-pro.cube-register__table thead th {
+  font-size: 0.6875rem;
+  padding: 0.5rem 0.55rem;
+}
+.register-editor-pro .qap-sticky-sr,
+.register-editor-pro .qap-sticky-activity {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--color-paper, #fff);
+  box-shadow: 2px 0 4px rgb(0 0 0 / 0.04);
+}
+.register-editor-pro .qap-sticky-activity {
+  left: 3.25rem;
 }
 .register-sheet-cell {
   width: 100%;

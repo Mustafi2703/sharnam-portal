@@ -219,6 +219,7 @@ export async function listDriveChildren(driveId: string, itemPath = "root") {
 export const PROJECT_LIBRARY_FOLDERS = [
   // Root registers
   "_Registers",
+  "00_PROJECT_BRANDING",
   // 01
   "01_CONTEXT_AND_GOVERNANCE",
   "01_CONTEXT_AND_GOVERNANCE/01.01_Project_Charter_and_Context",

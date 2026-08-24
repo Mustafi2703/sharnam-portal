@@ -165,3 +165,98 @@ export async function importCubeRegisterWorkbook(projectId: string, buffer: Buff
   const groups = new Set(parsed.map((r) => r.srNo));
   return { imported: parsed.length, groups: groups.size };
 }
+
+export async function exportCubeWorkbook(projectId: string) {
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  const rows = await prisma.cubeTest.findMany({
+    where: { projectId },
+    orderBy: [{ srNo: "asc" }, { castDate: "asc" }, { description: "asc" }],
+  });
+  if (!rows.length) throw new Error("No cube rows to export");
+
+  const header = [
+    "Sr. No.",
+    "Date of Casting",
+    "Description",
+    "Grade",
+    "Weight of cube (kg)",
+    "7-day Testing Date",
+    "28-day Testing Date",
+    "7-day Load (kN)",
+    "28-day Load (kN)",
+    "Strength (MPa)",
+    "Average Strength (MPa)",
+    "Result",
+    "Test agency",
+  ];
+
+  const fmtDay = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : "");
+
+  const dataRows = rows.map((r) => [
+    r.srNo || "",
+    fmtDay(r.castDate),
+    r.description,
+    r.grade || "",
+    r.cubeWeight ?? "",
+    fmtDay(r.testDate7),
+    fmtDay(r.testDate28),
+    r.load7 ?? "",
+    r.load28 ?? "",
+    r.strength7 ?? r.strength28 ?? r.strength ?? "",
+    r.avgStrength ?? "",
+    r.result || "Pending",
+    r.testAgency || "",
+  ]);
+
+  const templatePath = resolveCubeRegisterPath();
+  if (templatePath && fs.existsSync(templatePath)) {
+    const wb = XLSX.read(fs.readFileSync(templatePath), { type: "buffer" });
+    const sheetName = wb.SheetNames.find((n) => /sheet1/i.test(n)) || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const metaRows: [string, string][] = [
+      ["Project", project.name],
+      ["Client", project.clientName || ""],
+      ["Design Consultant", project.designConsultant || ""],
+      ["PM Consultant", "Sharnam Project Management Consultants"],
+      ["Contractor", project.contractorName || ""],
+    ];
+    for (let i = 0; i < metaRows.length; i++) {
+      const cellA = XLSX.utils.encode_cell({ r: i, c: 0 });
+      const cellB = XLSX.utils.encode_cell({ r: i, c: 1 });
+      if (!ws[cellA]) ws[cellA] = { t: "s", v: metaRows[i][0] };
+      else ws[cellA].v = metaRows[i][0];
+      if (!ws[cellB]) ws[cellB] = { t: "s", v: metaRows[i][1] };
+      else ws[cellB].v = metaRows[i][1];
+    }
+    const startRow = 10;
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      for (let c = 0; c < row.length; c++) {
+        const addr = XLSX.utils.encode_cell({ r: startRow + i, c });
+        const val = row[c];
+        ws[addr] = { t: typeof val === "number" ? "n" : "s", v: val ?? "" };
+      }
+    }
+    return {
+      buffer: Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" })),
+      rowCount: rows.length,
+    };
+  }
+
+  const { workbookBuffer } = await import("./brandedExport.js");
+  const coverRows: (string | number)[][] = [
+    ["SPDC Cube Register"],
+    ["Project", project.name],
+    ["Client", project.clientName || ""],
+    ["Design Consultant", project.designConsultant || ""],
+    ["PM Consultant", "Sharnam Project Management Consultants"],
+    ["Contractor", project.contractorName || ""],
+    [],
+    header,
+    ...dataRows,
+  ];
+  return {
+    buffer: workbookBuffer([{ name: "Sheet1", rows: coverRows }], { title: "Cube Register", projectCode: project.code }),
+    rowCount: rows.length,
+  };
+}

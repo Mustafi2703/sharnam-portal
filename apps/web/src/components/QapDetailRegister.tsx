@@ -11,6 +11,7 @@ import {
 import { preferWeekLabel, weekMatchesFilter } from "../lib/qapWeek";
 import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
 import { RegisterSheetCell } from "./RegisterSheetCell";
+import { RegisterBrandHeader } from "./RegisterBrandHeader";
 import { Badge, Button, Card, Select } from "./ui";
 
 function formatDayLabel(raw: string): string {
@@ -49,11 +50,13 @@ type QapRow = {
 };
 
 export type QapProjectMeta = {
+  id?: string;
   name?: string;
   code?: string;
   clientName?: string;
   designConsultant?: string;
   contractorName?: string;
+  clientLogoUrl?: string | null;
 };
 
 type Props = {
@@ -65,6 +68,7 @@ type Props = {
   showWeekFilter?: boolean;
   project?: QapProjectMeta | null;
   loading?: boolean;
+  onProjectUpdated?: () => void | Promise<void>;
 };
 
 /** Quality Assurance Plan — full client Excel layout; inline edit only. */
@@ -77,6 +81,7 @@ export function QapDetailRegister({
   showWeekFilter = true,
   project,
   loading,
+  onProjectUpdated,
 }: Props) {
   const { localRows, mergeRow } = useLocalRegisterRows(rows);
   const [weekFilter, setWeekFilter] = useState("");
@@ -149,58 +154,35 @@ export function QapDetailRegister({
     }
   }
 
-  const pmConsultant = "Sharnam Project Management Consultants";
   const colSpan = 11 + dayLabels.length;
+
+  const legend = (
+    <>
+      <div className="text-[10px] font-bold uppercase text-brand-dark mb-1 px-1">Legends</div>
+      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] leading-tight px-1 max-h-24 overflow-y-auto">
+        {QAP_LEGENDS.map(([abbr, full]) => (
+          <div key={abbr} className="truncate" title={full}>
+            <span className="font-bold text-brand-dark">{abbr}</span>
+            <span className="text-steel-muted"> — {full}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
 
   return (
     <>
-      <Card padding={false} className="spdc-register-panel relative flex flex-col min-h-0 flex-1 overflow-hidden">
+      <Card padding={false} className="spdc-register-panel register-editor-panel relative flex flex-col min-h-0 flex-1 overflow-hidden">
         {loading && <div className="spdc-register-loading">Loading QAP register…</div>}
 
-        <div className="border-b border-line bg-white shrink-0">
-          <div className="grid lg:grid-cols-[8rem_1fr_14rem] gap-0 border-b border-line">
-            <div className="p-3 border-r border-line bg-sand/50 flex items-center justify-center text-[10px] font-semibold text-steel-muted uppercase tracking-wide">
-              Client LOGO
-            </div>
-            <div className="p-4 flex items-center justify-center border-r border-line">
-              <h2 className="font-display text-lg sm:text-xl font-bold text-brand-dark tracking-tight">
-                Quality Assurance Plan
-              </h2>
-            </div>
-            <div className="p-2 bg-brand-soft/30">
-              <div className="text-[10px] font-bold uppercase text-brand-dark mb-1 px-1">Legends</div>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] leading-tight px-1 max-h-24 overflow-y-auto">
-                {QAP_LEGENDS.map(([abbr, full]) => (
-                  <div key={abbr} className="truncate" title={full}>
-                    <span className="font-bold text-brand-dark">{abbr}</span>
-                    <span className="text-steel-muted"> — {full}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="spdc-register-meta">
-            {(
-              [
-                ["Project", project?.name || "—", false],
-                ["Client", project?.clientName || "—", true],
-                ["Design Consultant", project?.designConsultant || "—", false],
-                ["PM Consultant", pmConsultant, false],
-                ["Contractor", project?.contractorName || "—", false],
-              ] as const
-            ).map(([label, value, highlightClient]) => (
-              <div
-                key={label}
-                className={`spdc-register-meta__cell${highlightClient ? " spdc-register-meta__cell--client" : ""}`}
-              >
-                <span className="spdc-register-meta__label">{label}</span>
-                <span className="spdc-register-meta__value" title={String(value)}>
-                  {value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <RegisterBrandHeader
+          title="Quality Assurance Plan"
+          project={project}
+          token={token}
+          canEdit={canEdit}
+          onProjectUpdated={onProjectUpdated}
+          legend={legend}
+        />
 
         {patchErr && (
           <p className="text-xs text-danger bg-red-50 px-4 py-2 border-b border-line shrink-0">{patchErr}</p>
@@ -218,9 +200,13 @@ export function QapDetailRegister({
           </div>
         )}
 
+        <div className="register-scroll-hint shrink-0 px-4 py-1.5 border-b border-line">
+          Scroll ↔ ↕ for full sheet · every white cell is editable · saves on blur
+        </div>
+
         <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden border-t border-line">
           <div className="sheet-register__scroll flex-1 min-h-0">
-            <table className="qap-register__table min-w-[88rem]">
+            <table className="qap-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>
                   <th rowSpan={2} className="text-left qap-sticky-sr">
@@ -296,9 +282,27 @@ export function QapDetailRegister({
                         </tr>
                       )}
                       <tr className={qapStatusRowClass(q.status)}>
-                        <td className="text-left font-mono tabular-nums qap-sticky-sr align-top">{srDisplay}</td>
+                        <td className="text-left font-mono tabular-nums qap-sticky-sr align-top">
+                          <RegisterSheetCell
+                            value={srDisplay}
+                            disabled={!canEdit}
+                            className="min-w-[2.5rem]"
+                            onCommit={(v) => void patchRow(q.id, { srNo: v || null })}
+                          />
+                        </td>
                         <td className="text-left align-top qap-sticky-activity font-semibold text-brand-dark">
-                          {showActivity ? section : ""}
+                          {canEdit ? (
+                            <RegisterSheetCell
+                              value={showActivity ? section : q.activity || ""}
+                              disabled={!canEdit}
+                              className="min-w-[8rem] font-semibold"
+                              onCommit={(v) => void patchRow(q.id, { section: v, activity: v })}
+                            />
+                          ) : showActivity ? (
+                            section
+                          ) : (
+                            ""
+                          )}
                         </td>
                         <td className="text-left align-top border border-line px-1 py-0.5">
                           <RegisterSheetCell

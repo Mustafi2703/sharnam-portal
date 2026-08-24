@@ -6,13 +6,15 @@ type ReferenceSheetToolbarProps = {
   sheetLabel: string;
   rowCount?: number;
   canEdit?: boolean;
-  /** Opens add-row modal — inline form on page stays visible too */
   onAddRow?: () => void;
   onUpload?: (file: File) => void | Promise<void>;
   uploadTitle?: string;
   uploadHint?: string;
   onDownloadCsv?: () => void;
   onDownloadXlsx?: () => void;
+  onPublishSharePoint?: () => void | Promise<void>;
+  publishLabel?: string;
+  sharePointUrl?: string | null;
   onGenerate?: () => void;
   generateLabel?: string;
   busy?: boolean;
@@ -30,6 +32,9 @@ export function ReferenceSheetToolbar({
   uploadHint,
   onDownloadCsv,
   onDownloadXlsx,
+  onPublishSharePoint,
+  publishLabel = "Publish to SharePoint",
+  sharePointUrl,
   onGenerate,
   generateLabel = "Generate pack",
   busy,
@@ -45,8 +50,28 @@ export function ReferenceSheetToolbar({
           <strong className="block text-sm text-ink">{sheetLabel}</strong>
           {rowCount != null && <span className="text-xs text-steel-muted">{rowCount} rows</span>}
           {message && <p className="text-xs text-steel-muted mt-1 w-full">{message}</p>}
+          {sharePointUrl && (
+            <a
+              href={sharePointUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-brand font-semibold mt-1 inline-block"
+            >
+              Open in SharePoint ↗
+            </a>
+          )}
         </div>
         <div className="reference-sheet-toolbar__actions">
+          {onDownloadXlsx && (
+            <Button type="button" variant="secondary" onClick={onDownloadXlsx} disabled={busy}>
+              Download XLSX
+            </Button>
+          )}
+          {onPublishSharePoint && (
+            <Button type="button" variant="secondary" onClick={() => void onPublishSharePoint()} disabled={busy}>
+              {publishLabel}
+            </Button>
+          )}
           {canEdit && onUpload && (
             <Button type="button" variant="secondary" onClick={() => setUploadOpen(true)} disabled={busy}>
               Upload sheet
@@ -65,11 +90,6 @@ export function ReferenceSheetToolbar({
           {onDownloadCsv && (
             <Button type="button" variant="secondary" onClick={onDownloadCsv} disabled={busy}>
               CSV
-            </Button>
-          )}
-          {onDownloadXlsx && (
-            <Button type="button" variant="secondary" onClick={onDownloadXlsx} disabled={busy}>
-              XLSX
             </Button>
           )}
         </div>

@@ -173,6 +173,7 @@ export function qapRowsNeedFullResync(rows: QapRowProbe[]): boolean {
 }
 
 export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
   const where: { projectId: string; weekLabel?: string } = { projectId };
   if (weekLabel) where.weekLabel = weekLabel;
   const rows = await prisma.qapActivity.findMany({
@@ -237,8 +238,60 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
     ];
   });
 
-  const sheets: SheetSpec[] = [{ name: "Sheet1", rows: [header, ...dataRows] }];
-  return { weekLabel: wl, buffer: workbookBuffer(sheets), sheets };
+  const templatePath = resolveQapWeek50Path();
+  if (templatePath && fs.existsSync(templatePath)) {
+    const wb = XLSX.read(fs.readFileSync(templatePath), { type: "buffer" });
+    const sheetName = wb.SheetNames.find((n) => /sheet1/i.test(n)) || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const metaRows: [string, string][] = [
+      ["Project", project.name],
+      ["Client", project.clientName || ""],
+      ["Design Consultant", project.designConsultant || ""],
+      ["PM Consultant", "Sharnam Project Management Consultants"],
+      ["Contractor", project.contractorName || ""],
+      ["Week", wl],
+    ];
+    for (let i = 0; i < metaRows.length; i++) {
+      const cellA = XLSX.utils.encode_cell({ r: i, c: 0 });
+      const cellB = XLSX.utils.encode_cell({ r: i, c: 1 });
+      if (!ws[cellA]) ws[cellA] = { t: "s", v: metaRows[i][0] };
+      else ws[cellA].v = metaRows[i][0];
+      if (!ws[cellB]) ws[cellB] = { t: "s", v: metaRows[i][1] };
+      else ws[cellB].v = metaRows[i][1];
+    }
+    const startRow = 9;
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      for (let c = 0; c < row.length; c++) {
+        const addr = XLSX.utils.encode_cell({ r: startRow + i, c });
+        const val = row[c];
+        ws[addr] = { t: typeof val === "number" ? "n" : "s", v: val ?? "" };
+      }
+    }
+    const ref = ws["!ref"];
+    if (ref) {
+      const range = XLSX.utils.decode_range(ref);
+      range.e.r = Math.max(range.e.r, startRow + dataRows.length);
+      range.e.c = Math.max(range.e.c, header.length - 1);
+      ws["!ref"] = XLSX.utils.encode_range(range);
+    }
+    return { weekLabel: wl, buffer: Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" })), sheets: [{ name: sheetName, rows: [header, ...dataRows] }] };
+  }
+
+  const coverRows: (string | number)[][] = [
+    ["Quality Assurance Plan"],
+    ["Project", project.name],
+    ["Client", project.clientName || ""],
+    ["Design Consultant", project.designConsultant || ""],
+    ["PM Consultant", "Sharnam Project Management Consultants"],
+    ["Contractor", project.contractorName || ""],
+    ["Week", wl],
+    [],
+    header,
+    ...dataRows,
+  ];
+  const sheets: SheetSpec[] = [{ name: "Sheet1", rows: coverRows }];
+  return { weekLabel: wl, buffer: workbookBuffer(sheets, { title: "Quality Assurance Plan", projectCode: project.code }), sheets };
 }
 
 export async function exportQapHtml(projectId: string, weekLabel?: string) {

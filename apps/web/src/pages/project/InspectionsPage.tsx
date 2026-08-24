@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
@@ -48,6 +49,8 @@ export default function InspectionsPage() {
   });
   const [ncrModalBusy, setNcrModalBusy] = useState(false);
   const [ncrAddOpen, setNcrAddOpen] = useState(false);
+  const [cubeAddOpen, setCubeAddOpen] = useState(false);
+  const [cubeSharePointUrl, setCubeSharePointUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "Site quality inspection",
     drawingId: "",
@@ -78,11 +81,13 @@ export default function InspectionsPage() {
     setDash(dashRes);
     if (projRes) {
       setProject({
+        id: projRes.id,
         name: projRes.name,
         code: projRes.code,
         clientName: projRes.clientName,
         designConsultant: projRes.designConsultant,
         contractorName: projRes.contractorName,
+        clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
       });
     }
     setDrawings(d.filter((x) => x.isPublished));
@@ -457,16 +462,51 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "cube-test" && id && (
-        <div className="cube-page__register flex-1 min-h-0 flex flex-col">
-        <CubeRegisterPanel
-          projectId={id}
-          token={token}
-          rows={dash?.cubes || []}
-          canEdit={canManage}
-          onChanged={load}
-          project={project}
-        />
-        </div>
+        <>
+          <ReferenceSheetToolbar
+            sheetLabel="SPDC Cube Register"
+            rowCount={dash?.cubes?.length}
+            canEdit={canManage}
+            message={msg || undefined}
+            onAddRow={canManage ? () => setCubeAddOpen((v) => !v) : undefined}
+            onDownloadXlsx={async () => {
+              if (!id) return;
+              await downloadAuthFile(`/api/checklist/project/${id}/cubes/download.xlsx`, token, `Cube-Register-${project?.code || id}.xlsx`);
+            }}
+            onPublishSharePoint={
+              canManage
+                ? async () => {
+                    if (!id) return;
+                    try {
+                      const out = await api<{ url?: string; sharePointUrl?: string }>(
+                        `/api/checklist/project/${id}/cubes/publish`,
+                        { method: "POST", token, body: JSON.stringify({}) }
+                      );
+                      const link = out.sharePointUrl || out.url || null;
+                      setCubeSharePointUrl(link);
+                      setMsg("Cube register published to SharePoint");
+                    } catch (err) {
+                      setMsg(err instanceof Error ? err.message : "Publish failed");
+                    }
+                  }
+                : undefined
+            }
+            sharePointUrl={cubeSharePointUrl}
+          />
+          <div className="cube-page__register flex-1 min-h-0 flex flex-col">
+            <CubeRegisterPanel
+              projectId={id}
+              token={token}
+              rows={dash?.cubes || []}
+              canEdit={canManage}
+              onChanged={load}
+              project={project}
+              addOpen={cubeAddOpen}
+              onAddClose={() => setCubeAddOpen(false)}
+              onProjectUpdated={load}
+            />
+          </div>
+        </>
       )}
 
       {sheetKey === "qi" && (

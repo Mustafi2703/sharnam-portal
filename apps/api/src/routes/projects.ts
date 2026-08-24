@@ -520,6 +520,35 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
   res.json(project);
 });
 
+/** Upload client logo for register headers — stored in project library + clientLogoUrl on project. */
+projectsRouter.post(
+  "/:id/client-logo",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer) return res.status(400).json({ error: "Image file required (PNG/JPG)" });
+    if (!req.file.mimetype?.startsWith("image/")) return res.status(400).json({ error: "Logo must be an image" });
+    const project = await prisma.project.findUnique({ where: { id: req.params.id } });
+    if (!project) return res.status(404).json({ error: "project not found" });
+    const ext = /\.png$/i.test(req.file.originalname) ? "png" : /\.jpe?g$/i.test(req.file.originalname) ? "jpg" : "png";
+    const folder = "00_PROJECT_BRANDING";
+    const fileName = `client-logo.${ext}`;
+    const saved = await mockOneDrive.upload(project.code, folder, fileName, req.file.buffer, req.file.mimetype);
+    const logoUrl = saved.sharePointUrl || saved.url;
+    const updated = await prisma.project.update({
+      where: { id: project.id },
+      data: { clientLogoUrl: logoUrl },
+    });
+    await audit("project.client_logo", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: project.id,
+      meta: { path: saved.path, provider: saved.provider },
+    });
+    res.json({ ok: true, clientLogoUrl: updated.clientLogoUrl, url: logoUrl, provider: saved.provider });
+  }
+);
+
 projectsRouter.get("/:id/emails", requireRoles("admin", "office", "employee", "site_employee"), async (req, res) => {
   const rows = await prisma.emailOutbox.findMany({
     where: { projectId: req.params.id },

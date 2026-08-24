@@ -5,6 +5,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
+import { QapRegisterAddForm } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { normalizeWeekLabel, preferWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
 
@@ -22,13 +23,16 @@ export default function QapPage() {
   const [weekFilter, setWeekFilter] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({
+    addMode: "section" as "section" | "line",
     weekLabel: "Week 50",
+    srNo: "",
     section: "",
     description: "",
     frequency: "",
     codeOfConformance: "",
     testAgency: "",
   });
+  const [sharePointUrl, setSharePointUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -48,11 +52,13 @@ export default function QapPage() {
       setDash(dashRes);
       if (projRes) {
         setProject({
+          id: projRes.id,
           name: projRes.name,
           code: projRes.code,
           clientName: projRes.clientName,
           designConsultant: projRes.designConsultant,
           contractorName: projRes.contractorName,
+          clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
         });
       }
       if (!weekFilter && dashRes?.qap?.length) {
@@ -148,6 +154,15 @@ export default function QapPage() {
     }
   }
 
+  const qapSections = useMemo(() => {
+    const set = new Set<string>();
+    qapRows.forEach((q: any) => {
+      const s = q.section || q.activity;
+      if (s) set.add(s);
+    });
+    return Array.from(set).sort();
+  }, [qapRows]);
+
   async function onAddRow(e: FormEvent) {
     e.preventDefault();
     if (!id) return;
@@ -160,6 +175,7 @@ export default function QapPage() {
           weekLabel: addForm.weekLabel,
           section: addForm.section,
           activity: addForm.section,
+          srNo: addForm.addMode === "section" ? addForm.srNo || null : null,
           description: addForm.description,
           discipline: addForm.section,
           frequency: addForm.frequency,
@@ -167,7 +183,7 @@ export default function QapPage() {
           testAgency: addForm.testAgency,
         }),
       });
-      setAddForm({ ...addForm, section: "", description: "", frequency: "", codeOfConformance: "", testAgency: "" });
+      setAddForm({ ...addForm, section: addForm.addMode === "line" ? addForm.section : "", description: "", frequency: "", codeOfConformance: "", testAgency: "", srNo: "" });
       setAddOpen(false);
       setMsg("QAP line added");
       await load();
@@ -272,6 +288,32 @@ export default function QapPage() {
           const q = weekFilter ? `?week=${encodeURIComponent(weekFilter)}` : "";
           await downloadAuthFile(`/api/checklist/project/${id}/qap/download.xlsx${q}`, token, `QAP-${weekFilter || "export"}.xlsx`);
         }}
+        onPublishSharePoint={
+          canManage
+            ? async () => {
+                if (!id) return;
+                setBusy(true);
+                try {
+                  const out = await api<{ url?: string; sharePointUrl?: string; weekLabel?: string }>(
+                    `/api/checklist/project/${id}/qap/publish`,
+                    {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ week: weekFilter || undefined }),
+                    }
+                  );
+                  const link = out.sharePointUrl || out.url || null;
+                  setSharePointUrl(link);
+                  setMsg(`QAP published to SharePoint${out.weekLabel ? ` (${out.weekLabel})` : ""}`);
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Publish failed");
+                } finally {
+                  setBusy(false);
+                }
+              }
+            : undefined
+        }
+        sharePointUrl={sharePointUrl}
         onGenerate={
           canManage
             ? async () => {
@@ -297,39 +339,16 @@ export default function QapPage() {
       />
 
       {addOpen && canManage && (
-        <Card className="!p-3 shrink-0">
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2" onSubmit={onAddRow}>
-            <Input
-              placeholder="Week (e.g. Week 50)"
-              value={addForm.weekLabel}
-              onChange={(e) => setAddForm({ ...addForm, weekLabel: e.target.value })}
-              required
-            />
-            <Input
-              placeholder="Activity section"
-              value={addForm.section}
-              onChange={(e) => setAddForm({ ...addForm, section: e.target.value })}
-              required
-            />
-            <Input
-              placeholder="Description / material"
-              value={addForm.description}
-              onChange={(e) => setAddForm({ ...addForm, description: e.target.value })}
-              required
-            />
-            <Input placeholder="Frequency" value={addForm.frequency} onChange={(e) => setAddForm({ ...addForm, frequency: e.target.value })} />
-            <Input placeholder="Code of conformance" value={addForm.codeOfConformance} onChange={(e) => setAddForm({ ...addForm, codeOfConformance: e.target.value })} />
-            <Input placeholder="Test agency" value={addForm.testAgency} onChange={(e) => setAddForm({ ...addForm, testAgency: e.target.value })} />
-            <div className="sm:col-span-2 lg:col-span-3 flex gap-2">
-              <Button type="submit" disabled={busy}>
-                Add line
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
+        <QapRegisterAddForm
+          open={addOpen}
+          busy={busy}
+          weeks={weeks}
+          sections={qapSections}
+          form={addForm}
+          onChange={setAddForm}
+          onSubmit={onAddRow}
+          onClose={() => setAddOpen(false)}
+        />
       )}
 
       <div className="qap-page__register flex-1 min-h-0 flex flex-col">
@@ -342,6 +361,7 @@ export default function QapPage() {
           showWeekFilter={false}
           project={project}
           loading={busy}
+          onProjectUpdated={load}
         />
       </div>
     </div>
