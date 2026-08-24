@@ -317,7 +317,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
   }
 
   return (
-    <div className="space-y-4 min-h-0 flex flex-col">
+    <div className="space-y-4 min-h-0 flex flex-col flex-1">
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
       {patchErr && <p className="text-sm text-danger bg-red-50 rounded-lg px-3 py-2">{patchErr}</p>}
 
@@ -369,7 +369,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
         </Card>
       )}
 
-      <Card padding={false} className="spdc-register-panel relative flex-1 min-h-[24rem]">
+      <Card padding={false} className="spdc-register-panel relative flex flex-col min-h-0 flex-1 overflow-hidden">
         {(syncing || busy) && localRows.length === 0 && (
           <div className="spdc-register-loading">Loading cube register…</div>
         )}
@@ -438,8 +438,8 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           onClear={() => setFilters({ grade: "All", result: "All", from: "", to: "", q: "" })}
         />
 
-        <div className="sheet-register flex-1 min-h-0 flex flex-col">
-          <div className="sheet-register__scroll">
+        <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="cube-register__table min-w-[92rem]">
               <thead>
                 <tr className="bg-brand text-white text-[10px]">

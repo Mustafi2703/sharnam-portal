@@ -18,6 +18,8 @@ import {
 import { seedClosureDrawingsForDemoProjects } from "./closureDrawingsSeed.ts";
 import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
 import { seedWprDemoWeek, snapWeekEnding } from "../apps/api/src/services/wprDemoSeed.ts";
+import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
+import { seedAuditKpiFromSheets } from "./auditKpiFromSheets.ts";
 
 export const DEMO_PROJECT_CODES = ["SPDC-DEMO-01", "SPDC-PILOT-02"] as const;
 
@@ -91,6 +93,10 @@ export async function seedAllDemoSheetModules(prisma: PrismaClient) {
     await seedChecklistFillsForReports(prisma, project.id, reporter.id);
     await seedQualitySafetyDemoForDpr(prisma, project.id, anchor, reporter.id, { weekDays: 7, skipIfSheetData: true });
     await linkDrawingRegisterToGfc(prisma, project.id);
+    console.log(`  Finance PO · RA · COP — ${code}`);
+    await seedFinanceRaCopDemo(prisma, project.id, reporter.id);
+    console.log(`  Audit & KPI packs — ${code}`);
+    await seedAuditKpiFromSheets(prisma, project.id);
   }
 
   const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
@@ -123,7 +129,7 @@ export async function seedAllDemoSheetModules(prisma: PrismaClient) {
   }
 
   console.log("\n✓ Demo screenshot pack ready on SPDC-DEMO-01 and SPDC-PILOT-02");
-  console.log("  Drawing register · GFC links · Quality · Safety · DPR week · WPR week + client pack");
+  console.log("  Drawing register · GFC links · Quality · Safety · Finance · DPR week · WPR week + client pack");
 }
 
 async function main() {

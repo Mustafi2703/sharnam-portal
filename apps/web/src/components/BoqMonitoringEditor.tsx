@@ -55,6 +55,7 @@ type Props = {
   canFullEdit: boolean;
   canSiteEdit: boolean;
   onChanged: () => void;
+  className?: string;
 };
 
 type Draft = ReturnType<typeof emptyDraft>;
@@ -399,6 +400,7 @@ export function BoqMonitoringEditor({
   canFullEdit,
   canSiteEdit,
   onChanged,
+  className = "",
 }: Props) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -549,8 +551,8 @@ export function BoqMonitoringEditor({
   const colSpan = (canTouch ? MON_HEADERS.length + 1 : MON_HEADERS.length);
 
   return (
-    <div className="space-y-4">
-      {msg && <p className="text-sm text-brand font-medium">{msg}</p>}
+    <div className={`flex flex-col gap-4 min-h-0 min-w-0 ${className}`.trim()}>
+      {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
 
       {canFullEdit && (
         <div className="boq-add-panel rounded-[var(--ui-radius,14px)] border border-line bg-paper p-4">
@@ -626,14 +628,14 @@ export function BoqMonitoringEditor({
         </div>
       )}
 
-      <div className="sheet-register w-full boq-editor">
+      <div className="sheet-register w-full boq-editor flex-1 min-h-0 flex flex-col overflow-hidden">
         <div className="sheet-register__head">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
             {rows.length} lines · {grouped.length} sections · all SPDC Monitoring columns (qty · cost · progress · EV · CPI · ETC)
           </span>
         </div>
-        <div className="sheet-register__scroll">
+        <div className="sheet-register__scroll flex-1 min-h-0">
           <table className="sheet-register__table boq-editor__table">
             <thead>
               <tr>

@@ -627,7 +627,7 @@ body.is-auth-route #root {
   flex: 1 1 auto;
 }
 
-/* Full-viewport register pages (QAP, cube, audit sheets) */
+/* Full-viewport register pages (QAP, cube, audit, cost, progress sheets) */
 .page-stack--register {
   min-height: 0;
   flex: 1 1 auto;
@@ -637,7 +637,9 @@ body.is-auth-route #root {
   padding-bottom: 0.5rem;
 }
 .tool-main:has(.page-stack--register),
-.tool-main:has(.qap-page) {
+.tool-main:has(.qap-page),
+.tool-main:has(.cost-page--register),
+.tool-main:has(.progress-page--register) {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -645,7 +647,9 @@ body.is-auth-route #root {
 }
 .tool-main:has(.page-stack--register) > .page-stack--register,
 .tool-main:has(.page-stack--register) > .qap-page,
-.tool-main:has(.qap-page) > .qap-page {
+.tool-main:has(.qap-page) > .qap-page,
+.tool-main:has(.cost-page--register) > .cost-page--register,
+.tool-main:has(.progress-page--register) > .progress-page--register {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -682,6 +686,10 @@ body.is-auth-route #root {
 .page-stack--register .register-table-panel .sheet-register,
 .page-stack--register .register-table-panel > .overflow-x-auto,
 .page-stack--register .register-sheet-frame .sheet-register__scroll,
+.page-stack--register .boq-editor .sheet-register__scroll,
+.page-stack--register .mb-entry-panel .sheet-register__scroll,
+.page-stack--register .bbs-entry-panel .sheet-register__scroll,
+.page-stack--register .budget-wbs-panel .sheet-register__scroll,
 .qap-page .sheet-register__scroll {
   flex: 1 1 auto;
   min-height: 14rem;
@@ -689,6 +697,17 @@ body.is-auth-route #root {
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+.page-stack--register .boq-editor,
+.page-stack--register .mb-entry-panel,
+.page-stack--register .bbs-entry-panel,
+.page-stack--register .budget-wbs-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .register-sheet-frame .sheet-register__table,
 .page-stack--register .sheet-register__table {

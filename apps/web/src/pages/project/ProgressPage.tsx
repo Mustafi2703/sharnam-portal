@@ -357,7 +357,7 @@ export default function ProgressPage() {
     <div
       className={`w-full min-w-0 ${
         ["planned", "hindrance", "risk", "legal", "milestones", "msproject"].includes(tab)
-          ? "page-stack--register flex flex-col gap-4"
+          ? "progress-page--register page-stack--register flex flex-col gap-4 min-h-0"
           : "space-y-5"
       }`}
     >

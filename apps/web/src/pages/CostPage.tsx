@@ -15,6 +15,7 @@ import { BarChart, PieChart } from "../components/PieChart";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
+const COST_REGISTER_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "bills", "boq", "mb", "bbs"];
 
 function SheetTable({
   title,
@@ -257,8 +258,14 @@ export default function CostPage() {
   const packageTools =
     tab === "monitoring" ? monPackages : tab === "mb" ? mbPackages : tab === "bbs" ? bbsPackages : [];
 
+  const isRegisterView = COST_REGISTER_TABS.includes(tab);
+
   return (
-    <div className="space-y-5 w-full min-w-0">
+    <div
+      className={`w-full min-w-0 ${
+        isRegisterView ? "cost-page cost-page--register page-stack--register flex flex-col min-h-0 gap-3" : "space-y-5"
+      }`}
+    >
       <PageHero
         title="Cost"
         subtitle="Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance."
@@ -304,8 +311,10 @@ export default function CostPage() {
         }
       />
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
+      {!isRegisterView && (
+      <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         {(
           [
@@ -369,9 +378,11 @@ export default function CostPage() {
           <div className="kpi-tile__hint">Planned vs actual periods loaded</div>
         </div>
       </div>
+      </>
+      )}
 
       {["monitoring", "mb", "bbs"].includes(tab) && (
-        <div className="space-y-2">
+        <div className="space-y-2 shrink-0">
           <div className="text-[10px] uppercase tracking-wider text-steel-muted font-mono">
             Package tools (from SPDC Budget sheets)
           </div>
@@ -425,7 +436,7 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="space-y-3 page-stack--register flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
           <ReferenceSheetToolbar
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
@@ -508,6 +519,7 @@ export default function CostPage() {
             </Card>
           )}
           <BoqMonitoringEditor
+            className="flex-1 min-h-0 flex flex-col min-w-0"
             projectId={id!}
             token={token}
             rows={monRows}
@@ -520,7 +532,7 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="space-y-4 page-stack--register flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
             rowCount={mbRows.length}
@@ -599,7 +611,7 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="space-y-4 page-stack--register flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
             rowCount={bbsRows.length}
@@ -715,7 +727,7 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="space-y-3 page-stack--register flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}

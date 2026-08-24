@@ -111,7 +111,7 @@ export default function InspectionsPage() {
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   return (
-    <div className={`min-w-0 ${sheetKey === "car-register" || sheetKey === "cube-test" ? "page-stack--register flex flex-col" : "space-y-4"}`}>
+    <div className={`min-w-0 min-h-0 ${sheetKey === "car-register" || sheetKey === "cube-test" ? "page-stack--register flex flex-col" : "space-y-4"}`}>
       <PageHeader
         dense
         eyebrow="Quality module"

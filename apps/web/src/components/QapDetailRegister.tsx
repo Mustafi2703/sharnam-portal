@@ -154,7 +154,7 @@ export function QapDetailRegister({
 
   return (
     <>
-      <Card padding={false} className="spdc-register-panel relative">
+      <Card padding={false} className="spdc-register-panel relative flex flex-col min-h-0 flex-1 overflow-hidden">
         {loading && <div className="spdc-register-loading">Loading QAP register…</div>}
 
         <div className="border-b border-line bg-white shrink-0">
@@ -221,8 +221,8 @@ export function QapDetailRegister({
           <p className="text-xs text-danger bg-red-50 px-4 py-2 border-b border-line shrink-0">{patchErr}</p>
         )}
 
-        <div className="sheet-register flex-1 min-h-0 flex flex-col">
-          <div className="sheet-register__scroll">
+        <div className="sheet-register flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="sheet-register__scroll flex-1 min-h-0">
             <table className="qap-register__table min-w-[88rem]">
               <thead>
                 <tr className="bg-brand text-white">

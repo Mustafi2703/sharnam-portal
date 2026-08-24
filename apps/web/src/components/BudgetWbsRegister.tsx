@@ -239,14 +239,14 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
         </Card>
       )}
 
-      <div className="sheet-register w-full">
-        <div className="sheet-register__head">
+      <div className="sheet-register w-full budget-wbs-panel flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="sheet-register__head shrink-0">
           <span>Budget WBS</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
             {rows.length} rows · Sr · Stakeholder · Budgeted · WO · Certified · Forecast ± · Non-tendered · BRD · Gross · Remarks
           </span>
         </div>
-        <div className="sheet-register__scroll">
+        <div className="sheet-register__scroll flex-1 min-h-0">
           <table className="sheet-register__table">
             <thead>
               <tr>
