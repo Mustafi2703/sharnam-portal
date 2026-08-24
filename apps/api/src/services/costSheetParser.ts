@@ -233,7 +233,104 @@ function bestSheetParse<T>(buffer: Buffer, parse: (rows: unknown[][]) => T[], na
   return best;
 }
 
+/** SPDC_Budget_Arvind 49.xls — Excel tab name → portal package name */
+export const SPDC_MB_SHEET_PACKAGES: [string, string][] = [
+  ["DORMITORY MB", "Dormitory Civil"],
+  ["Electric MB", "Electric"],
+  ["Plumbing MB", "Plumbing"],
+  ["UGWT MB", "UGWT"],
+  ["Septic Tank", "Septic Tank"],
+  ["Compound Wall", "Compound Wall"],
+  ["Road & Paving", "Road & Paving"],
+  ["Windows ", "Windows"],
+  ["Furniture", "Furniture"],
+  ["WPC Door", "WPC Door"],
+  ["Fire Fighting", "Fire Fighting"],
+  ["Fire Alarm", "Fire Alarm"],
+  ["Gas Line", "Gas Line"],
+  ["External Electric", "External Electric"],
+];
+
+export const SPDC_BBS_SHEET_PACKAGES: [string, string][] = [
+  ["DORMITORY BBS", "Dormitory BBS"],
+  ["Compound Wall BBS", "Compound Wall BBS"],
+  ["Septic Tank BBS", "Septic Tank BBS"],
+  ["Road BBS", "Road BBS"],
+  ["UGWT BBS", "UGWT BBS"],
+];
+
+export const SPDC_MONITORING_SHEET_PACKAGES: [string, string][] = [
+  ["Monitoring Combined", "Combined"],
+  ["Monitoring Civil Dormitory", "Civil Dormitory"],
+  ["Monitoring Electric", "Electric"],
+  ["Monitoring Plumbing", "Plumbing"],
+  ["Monitoring UGWT", "UGWT"],
+  ["Monitoring Septic Tank", "Septic Tank"],
+  ["Monitoring External Dev", "External Development"],
+  ["Monitoring Windows", "Windows"],
+  ["Monitoring Furniture ", "Furniture"],
+  ["Monitoring WPC Door", "WPC Door"],
+  ["Monitoring Fire Fighting", "Fire Fighting"],
+  ["Monitoring Gas", "Gas Line"],
+  ["Monitoring External Electric", "External Electric"],
+];
+
+function resolveSheetPackage(sheetName: string, mappings: [string, string][], fallbackHint?: RegExp): string | null {
+  const trimmed = sheetName.trim();
+  for (const [sheet, pkg] of mappings) {
+    if (trimmed === sheet.trim() || trimmed.toLowerCase() === sheet.trim().toLowerCase()) return pkg;
+  }
+  if (fallbackHint?.test(trimmed)) {
+    const base = trimmed.replace(/\s*(MB|BBS|Monitoring)\s*$/i, "").trim();
+    return base || trimmed;
+  }
+  return null;
+}
+
+export type ParsedSheetBatch<T> = { sheetName: string; packageName: string; lines: T[] };
+
+export function parseAllMbSheets(buffer: Buffer): ParsedSheetBatch<ParsedMbLine>[] {
+  const wb = workbookFromBuffer(buffer);
+  const out: ParsedSheetBatch<ParsedMbLine>[] = [];
+  for (const name of wb.SheetNames) {
+    const pkg =
+      resolveSheetPackage(name, SPDC_MB_SHEET_PACKAGES, /\bMB\b|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i) ||
+      null;
+    if (!pkg && !/\bMB\b|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i.test(name))
+      continue;
+    const lines = parseMbRows(sheetRows(wb, name));
+    if (lines.length) out.push({ sheetName: name, packageName: pkg || name.trim(), lines });
+  }
+  return out;
+}
+
+export function parseAllBbsSheets(buffer: Buffer): ParsedSheetBatch<ParsedBbsLine>[] {
+  const wb = workbookFromBuffer(buffer);
+  const out: ParsedSheetBatch<ParsedBbsLine>[] = [];
+  for (const name of wb.SheetNames) {
+    const pkg =
+      resolveSheetPackage(name, SPDC_BBS_SHEET_PACKAGES, /\bBBS\b|bending|rebar|bar/i) || null;
+    if (!pkg && !/\bBBS\b|bending|rebar|bar/i.test(name)) continue;
+    const lines = parseBbsRows(sheetRows(wb, name)).filter((r) => r.rowKind !== "header" || (r.location && !r.diameterMm));
+    const dataLines = lines.filter((r) => r.rowKind !== "header" && (r.diameterMm || r.totalLength || r.weightKg));
+    if (dataLines.length || lines.length >= 3)
+      out.push({ sheetName: name, packageName: pkg || name.replace(/\s*BBS\s*/i, " BBS").trim(), lines });
+  }
+  return out;
+}
+
+export function isFullSpdcWorkbook(buffer: Buffer): boolean {
+  const wb = workbookFromBuffer(buffer);
+  const names = wb.SheetNames.join(" ").toLowerCase();
+  return /budget|monitoring|dormitory mb|dormitory bbs/.test(names);
+}
+
 export function parseMbBuffer(buffer: Buffer): ParsedMbLine[] {
+  if (isFullSpdcWorkbook(buffer)) {
+    const all = parseAllMbSheets(buffer);
+    if (all.length === 1) return all[0]!.lines;
+    if (all.length > 1) return bestSheetParse(buffer, parseMbRows, /mb|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i);
+  }
   return bestSheetParse(buffer, parseMbRows, /mb|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i);
 }
 

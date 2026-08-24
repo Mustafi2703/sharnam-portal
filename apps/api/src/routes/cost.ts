@@ -3,7 +3,7 @@ import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { parseBoqBuffer } from "../services/boqParser.js";
-import { parseBbsBuffer, parseMbBuffer } from "../services/costSheetParser.js";
+import { parseBbsBuffer, parseMbBuffer, parseAllMbSheets, parseAllBbsSheets, isFullSpdcWorkbook } from "../services/costSheetParser.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
@@ -193,6 +193,18 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     rates: { rows: rateDiffs.length },
   };
 
+  const structureNames = new Set<string>();
+  for (const p of packages) structureNames.add(p);
+  for (const m of sheetTools.monitoring) if (m.packageName) structureNames.add(m.packageName);
+  const structures = [...structureNames].sort().map((name) => ({
+    packageName: name,
+    monitoringRows: monByPackage[name] || 0,
+    mbRows: mbByPackage[name]?.lines || 0,
+    mbQty: mbByPackage[name]?.qty || 0,
+    bbsRows: bbsByPackage[name]?.lines || 0,
+    bbsWeightKg: bbsByPackage[name]?.weightKg || 0,
+  }));
+
   res.json({
     totals: {
       budgeted,
@@ -215,6 +227,7 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     mbByPackage,
     bbsByPackage,
     sheetTools,
+    structures,
     activePackage: pkg || null,
     budget,
     monitoring,
@@ -650,6 +663,146 @@ costRouter.post(
     } catch (err) {
       res.status(404).json({ error: err instanceof Error ? err.message : "Budget sync failed" });
     }
+  }
+);
+
+/** Import all MB and/or BBS sheets from SPDC_Budget_Arvind workbook (multi-tab). */
+costRouter.post(
+  "/:projectId/workbook/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "project not found" });
+    if (!req.file) return res.status(400).json({ error: "file required (.xlsx / .xls)" });
+
+    const kind = String(req.body.kind || "all").toLowerCase();
+    const replace = String(req.body.replace || "") === "1" || req.body.replace === true;
+    const importMb = kind === "all" || kind === "mb";
+    const importBbs = kind === "all" || kind === "bbs";
+
+    if (!isFullSpdcWorkbook(req.file.buffer) && kind === "all") {
+      return res.status(400).json({
+        error: "Upload SPDC_Budget_Arvind 49.xls (Budget + Monitoring + MB + BBS tabs), or use MB/BBS tab upload for a single sheet.",
+      });
+    }
+
+    const mbSheets = importMb ? parseAllMbSheets(req.file.buffer) : [];
+    const bbsSheets = importBbs ? parseAllBbsSheets(req.file.buffer) : [];
+    if (!mbSheets.length && !bbsSheets.length) {
+      return res.status(400).json({ error: "No MB/BBS sheets found — check SPDC workbook tab names." });
+    }
+
+    if (replace) {
+      if (importMb) await prisma.costMbLine.deleteMany({ where: { projectId: project.id } });
+      if (importBbs) await prisma.costBbsLine.deleteMany({ where: { projectId: project.id } });
+    }
+
+    let mbImported = 0;
+    let bbsImported = 0;
+    const packagesImported: string[] = [];
+
+    for (const batch of mbSheets) {
+      if (!replace) {
+        await prisma.costMbLine.deleteMany({ where: { projectId: project.id, packageName: batch.packageName } });
+      }
+      await prisma.costMbLine.createMany({
+        data: batch.lines.map((r) => ({
+          projectId: project.id,
+          packageName: batch.packageName,
+          srNo: r.srNo || null,
+          itemCode: r.itemCode || r.srNo || null,
+          description: r.description,
+          nos1: r.nos1,
+          nos2: r.nos2,
+          length: r.length,
+          width: r.width,
+          height: r.height,
+          qty: r.qty,
+          unit: r.unit || null,
+          raBill: r.raBill || null,
+          remark: r.remark || null,
+        })),
+      });
+      mbImported += batch.lines.length;
+      packagesImported.push(batch.packageName);
+      const { syncAchievedFromMb } = await import("../services/costQuantitySync.js");
+      await syncAchievedFromMb(project.id, batch.packageName);
+    }
+
+    for (const batch of bbsSheets) {
+      const dataLines = batch.lines.filter((r) => r.rowKind !== "header" && (r.diameterMm || r.totalLength || r.weightKg || r.location));
+      if (!dataLines.length) continue;
+      if (!replace) {
+        await prisma.costBbsLine.deleteMany({ where: { projectId: project.id, packageName: batch.packageName } });
+      }
+      await prisma.costBbsLine.createMany({
+        data: dataLines.map((r) => ({
+          projectId: project.id,
+          packageName: batch.packageName,
+          barMark: r.barMark || null,
+          shapeCode: r.shapeCode || null,
+          itemCode: r.itemCode || null,
+          sectionMark: r.sectionMark || null,
+          diameterMm: r.diameterMm || 0,
+          shape: r.shape || null,
+          lengthMm: r.lengthMm || 0,
+          nos: r.nos || 0,
+          nosPerMember: r.nosPerMember || 0,
+          nosOfMember: r.nosOfMember || 0,
+          shapeLenA: r.shapeLenA || 0,
+          shapeLenB: r.shapeLenB || 0,
+          shapeLenC: r.shapeLenC || 0,
+          shapeLenD: r.shapeLenD || 0,
+          shapeLenE: r.shapeLenE || 0,
+          totalLength: r.totalLength || 0,
+          weightKg: r.weightKg || 0,
+          location: r.location || null,
+        })),
+      });
+      bbsImported += dataLines.length;
+      packagesImported.push(batch.packageName);
+      const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
+      await applyShapeMastersToBbs(project.id, batch.packageName);
+    }
+
+    const saved = await mockOneDrive.upload(
+      project.code,
+      `${MODULE_TO_ISO_FOLDER.boq}/workbooks`,
+      `${Date.now()}-${req.file.originalname}`,
+      req.file.buffer
+    );
+
+    const batch = await prisma.boqImportBatch.create({
+      data: {
+        projectId: project.id,
+        fileName: req.file.originalname,
+        rowCount: mbImported + bbsImported,
+        summaryJson: JSON.stringify({
+          kind: "workbook_mb_bbs",
+          mbSheets: mbSheets.map((s) => ({ sheet: s.sheetName, package: s.packageName, rows: s.lines.length })),
+          bbsSheets: bbsSheets.map((s) => ({ sheet: s.sheetName, package: s.packageName, rows: s.lines.length })),
+          storagePath: saved.path,
+          replace,
+        }),
+      },
+    });
+
+    await audit("cost.workbook_import", {
+      userId: req.user!.id,
+      entity: "BoqImportBatch",
+      entityId: batch.id,
+      meta: { mbImported, bbsImported, packages: packagesImported },
+    });
+
+    res.status(201).json({
+      ok: true,
+      mbImported,
+      bbsImported,
+      mbSheets: mbSheets.length,
+      bbsSheets: bbsSheets.length,
+      packages: [...new Set(packagesImported)],
+    });
   }
 );
 

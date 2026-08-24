@@ -119,7 +119,7 @@ export function MbEntryTable({ projectId, token, rows, canFullEdit, canSiteEdit,
         </span>
       </div>
       <div className="sheet-register__scroll register-sheet-viewport">
-        <table className="sheet-register__table">
+        <table className="sheet-register__table min-w-[72rem]">
           <thead>
             <tr>
               <th className="sticky-col" rowSpan={2}>Package</th>

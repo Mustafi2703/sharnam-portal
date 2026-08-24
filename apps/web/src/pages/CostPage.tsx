@@ -12,6 +12,7 @@ import { BbsEntryTable } from "../components/BbsEntryTable";
 import { MbEntryTable } from "../components/MbEntryTable";
 import { MasterLinePicker } from "../components/MasterLinePicker";
 import { BarChart, PieChart } from "../components/PieChart";
+import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -29,14 +30,14 @@ function SheetTable({
   stickyFirst?: boolean;
 }) {
   return (
-    <div className="sheet-register w-full min-h-[40vh] flex flex-col">
+    <div className="sheet-register w-full register-panel-fill flex flex-col">
       {title && (
         <div className="sheet-register__head shrink-0">
           <span>{title}</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">{rows.length} rows</span>
         </div>
       )}
-      <div className="sheet-register__scroll min-h-[36vh] flex-1">
+      <div className="sheet-register__scroll register-sheet-viewport">
         <table className="sheet-register__table">
           <thead>
             <tr>
@@ -78,8 +79,6 @@ export default function CostPage() {
   const [summary, setSummary] = useState<any>(null);
   const [billsData, setBillsData] = useState<{ bills: any[]; totals: any } | null>(null);
   const [parties, setParties] = useState<any[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [structureName, setStructureName] = useState("New structure");
   const [msg, setMsg] = useState("");
   const [mbAddOpen, setMbAddOpen] = useState(false);
   const [bbsAddOpen, setBbsAddOpen] = useState(false);
@@ -199,10 +198,27 @@ export default function CostPage() {
 
   async function importCostSheet(kind: "mb" | "bbs", file: File) {
     if (!id || !canEdit) return;
-    const pkg = pkgFilter !== "All" ? pkgFilter : (kind === "mb" ? mbPackages[0] : bbsPackages[0]) || "Dormitory Civil";
     const fd = new FormData();
     fd.append("file", file);
-    fd.append("packageName", pkg);
+    if (/budget|monitoring|dormitory mb|dormitory bbs/i.test(file.name) || file.name.endsWith(".xls")) {
+      fd.append("kind", kind);
+      fd.append("replace", "0");
+      try {
+        const r = await api<{ mbImported?: number; bbsImported?: number; mbSheets?: number; bbsSheets?: number; packages?: string[] }>(
+          `/api/cost/${id}/workbook/import`,
+          { method: "POST", token, body: fd }
+        );
+        setMsg(
+          `Workbook import — ${r.mbSheets ?? 0} MB tabs (${r.mbImported ?? 0} rows), ${r.bbsSheets ?? 0} BBS tabs (${r.bbsImported ?? 0} rows)`
+        );
+        await load();
+        return;
+      } catch {
+        /* fall through to single-sheet import */
+      }
+    }
+    const pkg = pkgFilter !== "All" ? pkgFilter : (kind === "mb" ? mbPackages[0] : bbsPackages[0]) || "Dormitory Civil";
+    fd.set("packageName", pkg);
     const r = await api<{ rowsImported: number }>(`/api/cost/${id}/${kind}/import`, { method: "POST", token, body: fd });
     setMsg(`Imported ${r.rowsImported} ${kind.toUpperCase()} rows → ${pkg}`);
     await load();
@@ -385,6 +401,19 @@ export default function CostPage() {
       </>
       )}
 
+      {isRegisterView && (
+        <CostStructureSetupPanel
+          projectId={id!}
+          token={token}
+          structures={summary.structures || []}
+          canEdit={!!canEdit}
+          message={tab === "boq" ? msg : undefined}
+          onMessage={setMsg}
+          onChanged={load}
+          onOpenTab={(t, pkg) => setTab(t, pkg || "All")}
+        />
+      )}
+
       {["monitoring", "mb", "bbs"].includes(tab) && (
         <div className="space-y-2 shrink-0">
           <div className="text-[10px] uppercase tracking-wider text-steel-muted font-mono">
@@ -440,8 +469,10 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="flex flex-col gap-3 min-w-0">
-          <div className="space-y-2">
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
+          <details className="rounded border border-line bg-paper shrink-0" open>
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BOQ monitoring · upload · template</summary>
+            <div className="p-3 pt-0 space-y-2 border-t border-line">
           <ReferenceSheetToolbar
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
@@ -487,8 +518,9 @@ export default function CostPage() {
           <p className="text-xs text-steel-muted px-1">
             Edit BOQ inline — office edits rate/qty; site edits GFC and Achieved. Use toolbar to load SPDC template or sync MB → achieved.
           </p>
-          </div>
-          <div className="cost-page__register register-page-fill min-w-0">
+            </div>
+          </details>
+          <div className="cost-page__register register-page-fill min-w-0 flex-1">
           <BoqMonitoringEditor
             className="flex flex-col min-w-0"
             projectId={id!}
@@ -504,8 +536,10 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="flex flex-col gap-3 min-w-0">
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
+          <details className="rounded border border-line bg-paper shrink-0">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">MB tools · upload · add row</summary>
+            <div className="p-3 pt-0 space-y-3 border-t border-line">
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
             rowCount={mbRows.length}
@@ -573,8 +607,9 @@ export default function CostPage() {
               </form>
             </Card>
           )}
-          </div>
-          <div className="cost-page__register register-page-fill min-w-0">
+            </div>
+          </details>
+          <div className="cost-page__register register-page-fill min-w-0 flex-1">
           <MbEntryTable
             projectId={id!}
             token={token}
@@ -588,8 +623,10 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="flex flex-col gap-3 min-w-0">
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
+          <details className="rounded border border-line bg-paper shrink-0">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BBS tools · upload · shapes</summary>
+            <div className="p-3 pt-0 space-y-3 border-t border-line">
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
             rowCount={bbsRows.length}
@@ -636,8 +673,9 @@ export default function CostPage() {
               </div>
             </details>
           )}
-          </div>
-          <div className="cost-page__register register-page-fill min-w-0">
+            </div>
+          </details>
+          <div className="cost-page__register register-page-fill min-w-0 flex-1">
           <BbsEntryTable
             projectId={id!}
             token={token}
@@ -652,14 +690,16 @@ export default function CostPage() {
       )}
 
       {tab === "budget" && (
-        <div className="flex flex-col gap-3 min-w-0">
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
+          <details className="rounded border border-line bg-paper shrink-0">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Budget WBS · upload · totals</summary>
+            <div className="p-3 pt-0 space-y-3 border-t border-line">
           {canEdit && (
             <Card className="!p-4">
               <h3 className="font-semibold text-sm mb-2">Upload Budget WBS (optional)</h3>
               <p className="text-xs text-steel-muted mb-3">
-                Or use <strong>Load budget template</strong> below to pull the full{" "}
-                <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> (Budget + Monitoring + MB + BBS).
+                Or use <strong>Load SPDC template</strong> in the setup panel above for full{" "}
+                <code className="font-mono">SPDC_Budget_Arvind 49.xls</code>.
               </p>
               <form
                 className="flex flex-wrap gap-3 items-center"
@@ -695,8 +735,9 @@ export default function CostPage() {
               <div className="font-display text-lg">{formatINR(summary.totals.planned)}</div>
             </div>
           </div>
-          </div>
-          <div className="cost-page__register register-page-fill min-w-0">
+            </div>
+          </details>
+          <div className="cost-page__register register-page-fill min-w-0 flex-1">
           <BudgetWbsRegister
             projectId={id!}
             token={token}
@@ -709,8 +750,7 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="flex flex-col gap-3 min-w-0">
-          <div className="space-y-3 max-h-[55vh] overflow-y-auto overscroll-contain">
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}
@@ -726,11 +766,14 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("cashflow")}
             message={msg || undefined}
           />
+          <details className="rounded border border-line bg-paper shrink-0">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Cashflow charts · filters · import</summary>
+            <div className="p-3 pt-0 space-y-3 border-t border-line">
           {canEdit && (
             <Card className="!p-4">
               <h3 className="font-semibold text-sm mb-2">Upload Cashflow Dashboard</h3>
               <p className="text-xs text-steel-muted mb-3">
-                <code className="font-mono">Cashflow - Dashboard.xlsx</code> — Chart (INR), Forecast, Tracking sheets. Budget WBS totals feed forecast structure rows.
+                <code className="font-mono">Cashflow - Dashboard.xlsx</code> — Chart (INR), Forecast, Tracking sheets.
               </p>
               <form
                 className="flex flex-wrap gap-3 items-center"
@@ -814,10 +857,6 @@ export default function CostPage() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-steel-muted">
-            From <code className="font-mono">Cashflow - Dashboard.xlsx</code> plus Finance COP (Certified/Approved/Paid).
-            Day / week / month grains feed DPR, WPR, and monthly dashboards. Planned from Excel; actual overlays COP.
-          </p>
           <div className="grid lg:grid-cols-2 gap-3">
             <BarChart
               title="Planned vs actual by period"
@@ -841,8 +880,9 @@ export default function CostPage() {
                 .slice(0, 8)}
             />
           </div>
-          </div>
-          <div className="cost-page__register register-page-fill min-w-0">
+            </div>
+          </details>
+          <div className="cost-page__register register-page-fill min-w-0 flex-1">
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}
@@ -1011,50 +1051,14 @@ export default function CostPage() {
       )}
 
       {tab === "boq" && (
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 min-w-0">
-          <Card className="!p-4 border-brand/30 bg-brand-soft/30">
-            <h3 className="font-semibold text-sm">Project-wise structure BOQ upload</h3>
-            <p className="text-xs text-steel-muted mt-1">
-              Each structure gets its own <strong>package name</strong> (Monitoring Civil Dormitory, Electric, …). Lines appear on the Monitoring tab filtered by that package. This is not stored as a global master — only for this project.
-            </p>
-          </Card>
-          <div className="grid lg:grid-cols-2 gap-4">
-          <Card>
-            <h3 className="font-semibold mb-2">Upload structure / BOQ</h3>
-            <p className="text-xs text-steel-muted mb-3">
-              Excel/CSV per structure — creates monitoring lines under the package name you enter below.
-            </p>
-            {canEdit && (
-              <form
-                className="space-y-3"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!file) return;
-                  const fd = new FormData();
-                  fd.append("file", file);
-                  fd.append("packageName", structureName || "Imported structure");
-                  await api(`/api/cost/${id}/structure/import`, { method: "POST", token, body: fd });
-                  setFile(null);
-                  setMsg(`Imported structure: ${structureName}`);
-                  await load();
-                }}
-              >
-                <Input
-                  placeholder="Structure / package name"
-                  value={structureName}
-                  onChange={(e) => setStructureName(e.target.value)}
-                  required
-                />
-                <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-                <Button type="submit" disabled={!file}>
-                  Upload BOQ for structure
-                </Button>
-              </form>
-            )}
-          </Card>
-          <Card>
-            <h3 className="font-semibold mb-2">Import batches</h3>
-            <ul className="text-sm space-y-2 max-h-72 overflow-y-auto">
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
+          <p className="text-xs text-steel-muted shrink-0">
+            Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
+          </p>
+          <div className="cost-page__register register-page-fill min-w-0 flex-1 overflow-y-auto space-y-4">
+          <Card className="!p-4 border-brand/30 bg-brand-soft/30 shrink-0">
+            <h3 className="font-semibold text-sm">Import batches</h3>
+            <ul className="text-sm space-y-2 max-h-48 overflow-y-auto mt-2">
               {summary.boqBatches.map((b: any) => (
                 <li key={b.id} className="border border-line px-3 py-2 rounded-sm">
                   <div className="font-medium">{b.fileName}</div>
