@@ -555,9 +555,10 @@ export function BoqMonitoringEditor({
       {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
 
       {canFullEdit && (
-        <div className="boq-add-panel rounded-[var(--ui-radius,14px)] border border-line bg-paper p-4">
+        <details className="boq-add-panel shrink-0 rounded-[var(--ui-radius,14px)] border border-line bg-paper">
+          <summary className="cursor-pointer px-4 py-3 font-semibold text-sm text-brand-dark">Add BOQ line</summary>
+          <div className="p-4 pt-0 border-t border-line">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <h3 className="font-semibold text-sm">Add BOQ line</h3>
             <span className="text-[11px] text-steel-muted uppercase tracking-wider">Section · item · quantities · all SPDC columns on save</span>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -625,7 +626,8 @@ export function BoqMonitoringEditor({
               </Button>
             </div>
           </div>
-        </div>
+          </div>
+        </details>
       )}
 
       <div className="sheet-register w-full boq-editor flex-1 min-h-0 flex flex-col overflow-hidden">

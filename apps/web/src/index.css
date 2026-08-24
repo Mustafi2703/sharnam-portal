@@ -733,13 +733,30 @@ body.is-auth-route #root {
   -webkit-overflow-scrolling: touch;
 }
 .cube-page__register .sheet-register__scroll,
-.page-stack--register .cube-page__register .sheet-register__scroll {
+.page-stack--register .cube-page__register .sheet-register__scroll,
+.cost-page__register .sheet-register__scroll,
+.page-stack--register .cost-page__register .sheet-register__scroll {
   flex: 1 1 auto;
-  min-height: 14rem;
+  min-height: min(72vh, 42rem);
   max-height: none !important;
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+.cost-page__register,
+.page-stack--register .cost-page__register {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.page-stack--register .cost-page__register .boq-editor,
+.page-stack--register .cost-page__register .mb-entry-panel,
+.page-stack--register .cost-page__register .bbs-entry-panel,
+.page-stack--register .cost-page__register .budget-wbs-panel {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .page-stack--register .boq-editor,
 .page-stack--register .mb-entry-panel,

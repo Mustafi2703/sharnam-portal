@@ -29,14 +29,14 @@ function SheetTable({
   stickyFirst?: boolean;
 }) {
   return (
-    <div className="sheet-register w-full">
+    <div className={`sheet-register w-full flex-1 min-h-0 flex flex-col overflow-hidden ${title ? "" : ""}`}>
       {title && (
-        <div className="sheet-register__head">
+        <div className="sheet-register__head shrink-0">
           <span>{title}</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">{rows.length} rows</span>
         </div>
       )}
-      <div className="sheet-register__scroll">
+      <div className="sheet-register__scroll flex-1 min-h-0">
         <table className="sheet-register__table">
           <thead>
             <tr>
@@ -263,9 +263,12 @@ export default function CostPage() {
   return (
     <div
       className={`w-full min-w-0 ${
-        isRegisterView ? "cost-page cost-page--register page-stack--register flex flex-col min-h-0 gap-3" : "space-y-5"
+        isRegisterView
+          ? "cost-page cost-page--register page-stack--register spdc-register-page flex flex-col min-h-0 flex-1 overflow-hidden gap-3"
+          : "space-y-5"
       }`}
     >
+      <div className="shrink-0">
       <PageHero
         title="Cost"
         subtitle="Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance."
@@ -310,6 +313,7 @@ export default function CostPage() {
           </div>
         }
       />
+      </div>
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -436,7 +440,8 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
+          <div className="shrink-0 space-y-2">
           <ReferenceSheetToolbar
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
@@ -479,82 +484,13 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("boq")}
             message={msg || undefined}
           />
-          <Card className="!p-4 border-line bg-paper/80">
-            <h3 className="font-semibold text-sm">BOQ is per project &amp; structure</h3>
-            <p className="text-xs text-steel-muted mt-1">
-              Monitoring lines come from <strong>this project only</strong> — upload each structure/package on the{" "}
-              <button type="button" className="text-brand font-semibold underline-offset-2 hover:underline" onClick={() => setTab("boq")}>
-                BOQ tab
-              </button>{" "}
-              (e.g. Civil Dormitory, Electric, UGWT). Global masters apply to <strong>MB &amp; BBS only</strong>.
-            </p>
-          </Card>
-          <p className="text-sm text-steel-muted">
-            Edit sections and line items inline. Office edits BOQ rate/qty; site edits GFC and Achieved. MB item codes roll up to Achieved via sync.
+          <p className="text-xs text-steel-muted px-1">
+            Edit BOQ inline — office edits rate/qty; site edits GFC and Achieved. Use toolbar to load SPDC template or sync MB → achieved.
           </p>
-          {canEdit && (
-            <Card className="!p-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold text-sm">Load SPDC budget workbook</div>
-                <p className="text-xs text-steel-muted mt-0.5">
-                  Reloads Budget WBS + all Monitoring packages + MB + BBS from{" "}
-                  <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> (same as QAP / Cube template sync).
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={async () => {
-                  try {
-                    const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number }>(
-                      `/api/cost/${id}/sync-template`,
-                      { method: "POST", token }
-                    );
-                    setMsg(
-                      `Template loaded — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}`
-                    );
-                    await load();
-                  } catch (e: any) {
-                    setMsg(e?.message || "Sync failed");
-                  }
-                }}
-              >
-                Load budget template
-              </Button>
-            </Card>
-          )}
-          {canEdit && (
-            <Card className="!p-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold text-sm">MB → BOQ achieved sync</div>
-                <p className="text-xs text-steel-muted mt-0.5">
-                  Matches MB item code to monitoring item no (e.g. Dormitory Civil → Civil Dormitory). GFC qty is never overwritten.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={async () => {
-                  const pkg = pkgFilter !== "All" ? pkgFilter : undefined;
-                  const res = await api<{ mbSync: { linesUpdated: number }[] }>(
-                    `/api/cost/${id}/sync-from-sheets`,
-                    {
-                      method: "POST",
-                      token,
-                      body: JSON.stringify({ packageName: pkg, applyShapes: true }),
-                    }
-                  );
-                  const n = (res.mbSync || []).reduce((s, r) => s + r.linesUpdated, 0);
-                  setMsg(`Synced ${n} monitoring line(s) from MB · BBS shape codes applied`);
-                  await load();
-                }}
-              >
-                Sync from MB &amp; BBS shapes
-              </Button>
-            </Card>
-          )}
+          </div>
+          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
           <BoqMonitoringEditor
-            className="flex-1 min-h-0 flex flex-col min-w-0"
+            className="flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
             projectId={id!}
             token={token}
             rows={monRows}
@@ -563,11 +499,13 @@ export default function CostPage() {
             canSiteEdit={canSiteEdit}
             onChanged={() => void load()}
           />
+          </div>
         </div>
       )}
 
       {tab === "mb" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
+          <div className="shrink-0 space-y-3 max-h-[42vh] overflow-y-auto overscroll-contain">
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
             rowCount={mbRows.length}
@@ -578,6 +516,9 @@ export default function CostPage() {
             message={msg || undefined}
           />
           {canEdit && (
+            <details className="rounded border border-line bg-paper">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Import from master · upload sheet</summary>
+              <div className="p-3 pt-0 space-y-3 border-t border-line">
             <MasterLinePicker
               projectId={id!}
               token={token}
@@ -587,8 +528,13 @@ export default function CostPage() {
               canEdit={canEdit}
               onImported={() => void load()}
             />
+              </div>
+            </details>
           )}
           {(canEdit || canSiteEdit) && (
+            <details className="rounded border border-line bg-paper" open>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">MB sheet upload &amp; markup</summary>
+              <div className="p-3 pt-0 border-t border-line">
             <CostSheetUploadPanel
               projectId={id!}
               token={token}
@@ -599,18 +545,11 @@ export default function CostPage() {
               canEdit={canEdit}
               onChanged={() => void load()}
             />
+              </div>
+            </details>
           )}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {Object.entries(summary.mbByPackage || {}).map(([pkg, v]: [string, any]) => (
-              <Card key={pkg} className="!p-3">
-                <div className="text-[10px] uppercase text-steel-muted">{pkg}</div>
-                <div className="font-display text-xl mt-1">{Number(v.qty).toLocaleString("en-IN", { maximumFractionDigits: 1 })}</div>
-                <div className="text-xs text-steel-muted">{v.lines} MB lines</div>
-              </Card>
-            ))}
-          </div>
           {canEdit && mbAddOpen && (
-            <Card>
+            <Card className="!p-3">
               <h3 className="font-semibold text-sm mb-3">Add MB line</h3>
               <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMb}>
                 <Select value={mbForm.packageName} onChange={(e) => setMbForm({ ...mbForm, packageName: e.target.value })}>
@@ -634,6 +573,8 @@ export default function CostPage() {
               </form>
             </Card>
           )}
+          </div>
+          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
           <MbEntryTable
             projectId={id!}
             token={token}
@@ -642,11 +583,13 @@ export default function CostPage() {
             canSiteEdit={canSiteEdit}
             onChanged={() => void load()}
           />
+          </div>
         </div>
       )}
 
       {tab === "bbs" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
+          <div className="shrink-0 space-y-3 max-h-[42vh] overflow-y-auto overscroll-contain">
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
             rowCount={bbsRows.length}
@@ -657,6 +600,9 @@ export default function CostPage() {
             message={msg || undefined}
           />
           {canEdit && (
+            <details className="rounded border border-line bg-paper">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Import from master</summary>
+              <div className="p-3 pt-0 border-t border-line">
             <MasterLinePicker
               projectId={id!}
               token={token}
@@ -666,15 +612,16 @@ export default function CostPage() {
               canEdit={canEdit}
               onImported={() => void load()}
             />
+              </div>
+            </details>
           )}
-          <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm">
-            <strong className="text-ink">BBS upload &amp; shape markup</strong>
-            <span className="text-steel-muted">
-              {" "}
-              — Import the Excel sheet, then upload an annotated bend diagram in the <strong>Shape of bar</strong> column for each row (same position as SPDC * BBS sheets).
-            </span>
-          </div>
           {(canEdit || canSiteEdit) && (
+            <details className="rounded border border-line bg-paper" open>
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BBS upload &amp; shape markup</summary>
+              <div className="p-3 pt-0 space-y-2 border-t border-line">
+            <p className="text-xs text-steel-muted">
+              Import Excel, then upload bend diagrams in the <strong>Shape of bar</strong> column (SPDC BBS layout).
+            </p>
             <CostSheetUploadPanel
               projectId={id!}
               token={token}
@@ -686,16 +633,11 @@ export default function CostPage() {
               canEdit={canEdit || canSiteEdit}
               onChanged={() => void load()}
             />
+              </div>
+            </details>
           )}
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {Object.entries(summary.bbsByPackage || {}).map(([pkg, v]: [string, any]) => (
-              <Card key={pkg} className="!p-3">
-                <div className="text-[10px] uppercase text-steel-muted">{pkg}</div>
-                <div className="font-display text-xl mt-1">{Number(v.weightKg).toLocaleString("en-IN", { maximumFractionDigits: 1 })} kg</div>
-                <div className="text-xs text-steel-muted">{v.lines} bars</div>
-              </Card>
-            ))}
           </div>
+          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
           <BbsEntryTable
             projectId={id!}
             token={token}
@@ -705,11 +647,13 @@ export default function CostPage() {
             canSiteEdit={canSiteEdit}
             onChanged={() => void load()}
           />
+          </div>
         </div>
       )}
 
       {tab === "budget" && (
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
+          <div className="shrink-0 space-y-3 max-h-[38vh] overflow-y-auto overscroll-contain">
           {canEdit && (
             <Card className="!p-4">
               <h3 className="font-semibold text-sm mb-2">Upload Budget WBS (optional)</h3>
@@ -751,6 +695,8 @@ export default function CostPage() {
               <div className="font-display text-lg">{formatINR(summary.totals.planned)}</div>
             </div>
           </div>
+          </div>
+          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
           <BudgetWbsRegister
             projectId={id!}
             token={token}
@@ -758,11 +704,13 @@ export default function CostPage() {
             canEdit={!!canEdit}
             onChanged={load}
           />
+          </div>
         </div>
       )}
 
       {tab === "cashflow" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0">
+        <div className="flex-1 min-h-0 flex flex-col gap-3 min-w-0 overflow-hidden">
+          <div className="shrink-0 space-y-3 max-h-[55vh] overflow-y-auto overscroll-contain">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}
@@ -893,6 +841,8 @@ export default function CostPage() {
                 .slice(0, 8)}
             />
           </div>
+          </div>
+          <div className="cost-page__register flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}
@@ -904,10 +854,12 @@ export default function CostPage() {
               `${Math.round((b.progressPct || 0) * 100)}%`,
             ])}
           />
+          </div>
         </div>
       )}
 
       {tab === "rates" && (
+        <div className="flex-1 min-h-0 overflow-y-auto min-w-0">
         <SheetTable
           title="Rate difference (Steel / Cement / Tiles)"
           headers={["Material", "Description", "Vendor", "Qty", "Basic", "Purchase", "Excess", "Saving"]}
@@ -922,10 +874,11 @@ export default function CostPage() {
             formatINR(b.savingAmount),
           ])}
         />
+        </div>
       )}
 
       {tab === "bills" && (
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 min-w-0">
           <Card className="!p-4 border-brand/30 bg-brand-soft/30">
             <h3 className="font-semibold text-sm">Commercial COP lives in Finance</h3>
             <p className="text-xs text-steel-muted mt-1">
@@ -1058,7 +1011,7 @@ export default function CostPage() {
       )}
 
       {tab === "boq" && (
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 min-w-0">
           <Card className="!p-4 border-brand/30 bg-brand-soft/30">
             <h3 className="font-semibold text-sm">Project-wise structure BOQ upload</h3>
             <p className="text-xs text-steel-muted mt-1">

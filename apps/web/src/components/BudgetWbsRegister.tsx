@@ -166,11 +166,11 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
   }
 
   return (
-    <div className="space-y-4">
-      {msg && <p className="text-sm text-brand font-medium">{msg}</p>}
+    <div className="flex flex-col flex-1 min-h-0 gap-4 min-w-0">
+      {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
 
       {canEdit && (
-        <Card className="!p-4 space-y-3">
+        <Card className="!p-4 space-y-3 shrink-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="font-semibold text-sm">Budget WBS — SPDC columns</h3>
