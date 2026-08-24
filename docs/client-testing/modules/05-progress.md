@@ -157,3 +157,20 @@ Ask these in order. Recommended default in *italics* if they have no strong view
 
 ### Client sign-off
 - [ ] Pages approved for UAT
+
+---
+
+## Data verification (Excel vs DB)
+
+| Action | Who | Notes |
+|--------|-----|-------|
+| **Verify vs Excel** on Progress page | Office / admin | `GET /api/progress/:id/verify` |
+| CLI | Dev | `npm run db:verify-progress` on `SPDC-DEMO-01` |
+
+**Excel root:** `SHARNAM_EXCEL_ROOT=./seed/data` (same as seed). Workbooks in `seed/data/`.
+
+**Checked registers:** Milestones · hindrance · risk · legal · PvsA cashflow months · weekly manpower · activity qty · monthly SOR — plus samples (M01, August ₹, LA-01, first trade).
+
+**MS Project overlay:** Schedule import / **Seed demo** rows (`MS Project XML` category, S-curve package) are **excluded** from Excel count checks. The verify panel lists overlay counts when present.
+
+**Clean baseline:** `npm run db:seed` after schema push resets Excel-only progress data.

@@ -22,15 +22,15 @@ export function DrawingRfiRegisterTable({ rows, activeId, onSelect }: Props) {
   }
 
   return (
-    <div className="overflow-hidden border border-line rounded-lg bg-white">
-      <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex flex-wrap justify-between gap-2">
+    <div className="sheet-register flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill border border-line rounded-lg bg-white overflow-hidden">
+      <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex flex-wrap justify-between gap-2 shrink-0">
         <div>
           <div className="text-sm font-semibold">RFI register</div>
           <div className="text-[11px] text-white/70 font-mono">SPDC_RFI_Form_and_Register.xlsx · 04_RFI_REGISTER</div>
         </div>
         <span className="text-xs font-mono bg-white/10 px-2 py-1 rounded">{rows.length} rows</span>
       </div>
-      <div className="overflow-x-auto">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="w-full text-[11px] min-w-[2400px]">
           <thead className="bg-sand text-left text-[10px] uppercase tracking-wide text-steel-muted sticky top-0 z-10">
             <tr>

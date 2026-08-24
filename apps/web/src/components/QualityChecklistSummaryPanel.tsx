@@ -105,9 +105,10 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
   }
 
   return (
-    <div className="space-y-4">
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+    <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
+      <div className="shrink-0 space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <Card className="!p-3">
           <div className="text-[10px] uppercase text-steel-muted">Catalog types</div>
@@ -177,8 +178,9 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
           )}
         </Card>
       </div>
+      </div>
 
-      <Card padding={false} className="overflow-hidden">
+      <Card padding={false} className="overflow-hidden flex flex-col flex-1 min-h-0 register-panel-fill">
         <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="font-semibold text-sm">Checklist catalog — Quality Dashboard · Sheet1</h3>
@@ -205,7 +207,7 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
             />
           </div>
         </div>
-        <div className="overflow-auto max-h-[min(56vh,40rem)]">
+        <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
           <table className="sheet-register__table w-full text-xs min-w-[52rem]">
             <thead>
               <tr>

@@ -5,3 +5,4 @@ export { default as ChecklistMasterPage } from "../../pages/project/ChecklistMas
 export { default as ChecklistLogsPage } from "../../pages/project/ChecklistLogsPage";
 export { default as ChecklistAssignPage } from "../../pages/project/ChecklistAssignPage";
 export { DrawingCheckModal } from "../../components/DrawingCheckModal";
+export * from "./roles";

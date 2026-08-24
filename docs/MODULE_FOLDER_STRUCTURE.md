@@ -87,11 +87,19 @@ Avoid flat prefixes like `financePaymentSummary.ts` — use folder + descriptive
 
 | Module | API `modules/` | Web `modules/` |
 |--------|----------------|----------------|
-| Finance | ✅ live | ✅ live |
-| Cost | README + planned files | README + index re-exports |
-| DPR / WPR / Reports | README | README + index |
-| Drawings / Quality / Safety / Progress | README | README + index |
-| Comms / Audit-KPI / CRM / Closure / HRMS | README | README + index |
+| Finance | ✅ live (`roles`, `manifest`, domain files) | ✅ live (pages + components) |
+| Audit-KPI | ✅ live | ✅ index + roles |
+| Cost | ✅ barrel + roles + manifest (services re-export) | ✅ index + roles |
+| Quality / Safety / Drawings / Progress | ✅ index + roles + manifest + service re-exports | ✅ index + roles |
+| DPR / WPR / Reports / Comms / CRM / Checklist / Closure / HRMS / Custom-sheets / DMS | ✅ index + roles + manifest | ✅ index + roles |
+
+**Canonical registry:** `packages/shared/src/moduleRegistry.ts` — backend files, frontend files, routes, permission module per portal module.
+
+**Role helpers:** `packages/shared/src/moduleRoles.ts` — `createModuleRoleHelpers()` used by API `modules/*/roles.ts` and web `modules/*/roles.ts`.
+
+**API guards:** `apps/api/src/modules/_shared/guards.ts` — `requireModuleView("cost")` etc.
+
+**Web access:** `apps/web/src/lib/moduleAccess.ts` — `canAccessModule(role, "quality")`.
 
 **How to migrate one module**
 

@@ -178,7 +178,8 @@ export default function SafetyPage() {
             : TYPES;
 
   return (
-    <div className={`min-w-0 ${isRegisterSheet || sheetKey === "hira" ? "page-stack--register flex flex-col" : "space-y-4"}`}>
+    <div className={`min-w-0 ${isRegisterSheet || sheetKey === "hira" ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden" : "space-y-4"}`}>
+      <div className="shrink-0 space-y-2">
       <PageHeader
         dense
         eyebrow="Safety module"
@@ -199,6 +200,7 @@ export default function SafetyPage() {
           <Link to={`/projects/${id}/safety/checklist-master`}>Safety checklist master →</Link>
           <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`}>Raise Safety RFI →</Link>
         </div>
+      </div>
       </div>
 
       {sheetView.kpiOnly && dash?.onePager && (
@@ -267,10 +269,10 @@ export default function SafetyPage() {
         </div>
       )}
 
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
       {sheetKey === "hira" && (
-        <div className="page-stack--register flex flex-col min-h-0 flex-1">
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <HiraRegisterTable
           rows={hiraRows}
           activeId={active}
@@ -299,6 +301,8 @@ export default function SafetyPage() {
       )}
 
       {isRegisterSheet && (
+        <>
+        <div className="shrink-0 space-y-2">
         <ReferenceSheetToolbar
           sheetLabel={`${sheetView.label} — ${sheetView.sheet}`}
           rowCount={registerRows.length}
@@ -307,9 +311,8 @@ export default function SafetyPage() {
           message={msg || undefined}
           onAddRow={canCreate ? () => setAddOpen((v) => !v) : undefined}
         />
-      )}
 
-      {isRegisterSheet && addOpen && canCreate && (
+      {addOpen && canCreate && (
         <Card className="!p-3 shrink-0">
           <h3 className="font-semibold mb-2 text-sm">
             {showNcrFields ? "Raise Safety NCR" : `Log ${sheetView.label.toLowerCase()}`}
@@ -437,8 +440,7 @@ export default function SafetyPage() {
         </Card>
       )}
 
-      {isRegisterSheet && (
-        <div className="flex flex-wrap gap-1 shrink-0">
+        <div className="flex flex-wrap gap-1">
           {["All", "Open", "Closed", ...TYPES].map((f) => (
             <button
               key={f}
@@ -452,16 +454,16 @@ export default function SafetyPage() {
             </button>
           ))}
         </div>
-      )}
+        </div>
 
-      {sheetHasRegister && sheetKey !== "hira" && (
-        <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+        <div className="register-tab-body">
+        <Card padding={false} className="sheet-register register-table-panel spdc-register-panel register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="sheet-register__head shrink-0">
             <h3 className="font-semibold text-sm text-left">
               {sheetView.label} register ({sheetView.sheet})
             </h3>
           </div>
-          <div className="sheet-register__scroll flex-1 min-h-0">
+          <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table min-w-[48rem] w-full text-sm">
               <thead>
                 <tr>
@@ -540,6 +542,8 @@ export default function SafetyPage() {
             </table>
           </div>
         </Card>
+        </div>
+        </>
       )}
 
     </div>

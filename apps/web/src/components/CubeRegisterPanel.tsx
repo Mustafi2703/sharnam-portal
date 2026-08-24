@@ -215,7 +215,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
       {patchErr && <p className="text-sm text-danger bg-red-50 rounded-lg px-3 py-2 shrink-0">{patchErr}</p>}
 
@@ -236,7 +236,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
         </Card>
       )}
 
-      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1">
+      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden">
         {(syncing || busy) && localRows.length === 0 && (
           <div className="spdc-register-loading">Loading cube register…</div>
         )}
@@ -280,6 +280,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           )}
         </div>
 
+        <div className="shrink-0">
         <RegisterFilterBar
           fields={[
             { key: "grade", label: "Grade", type: "select", options: grades },
@@ -292,13 +293,14 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           onChange={(k, v) => setFilters({ ...filters, [k]: v })}
           onClear={() => setFilters({ grade: "All", result: "All", from: "", to: "", q: "" })}
         />
+        </div>
 
         <div className="register-scroll-hint shrink-0 px-4 py-1.5 border-b border-line">
           Scroll ↔ ↕ for full sheet · every white cell is editable · saves on blur
         </div>
 
         <div className="sheet-register register-sheet-shell flex flex-col border-t border-line">
-          <div className="sheet-register__scroll register-sheet-viewport">
+          <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="cube-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>

@@ -629,14 +629,14 @@ export function BoqMonitoringEditor({
         </details>
       )}
 
-      <div className="sheet-register w-full boq-editor register-panel-fill flex flex-col">
+      <div className="sheet-register w-full boq-editor register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className="sheet-register__head shrink-0">
           <span>BOQ / Monitoring — editable register</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">
             {rows.length} lines · {grouped.length} sections · all SPDC Monitoring columns (qty · cost · progress · EV · CPI · ETC)
           </span>
         </div>
-        <div className="sheet-register__scroll register-sheet-viewport">
+        <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
           <table className="sheet-register__table boq-editor__table min-w-[120rem]">
             <thead>
               <tr>

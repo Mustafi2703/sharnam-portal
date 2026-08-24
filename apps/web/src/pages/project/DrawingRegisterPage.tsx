@@ -77,7 +77,14 @@ export default function DrawingRegisterPage() {
   }, [lines, filterPackage, filterBuilding, filterDiscipline, filterCritical]);
 
   return (
-    <div className="space-y-5">
+    <div
+      className={`min-w-0 ${
+        sheetKey === "master"
+          ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
+          : "space-y-5"
+      }`}
+    >
+      <div className="shrink-0">
       <PageHeader
         eyebrow="Drawings module"
         title={sheetView.label}
@@ -99,8 +106,9 @@ export default function DrawingRegisterPage() {
           </div>
         }
       />
+      </div>
 
-      {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
+      {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
       {sheetKey === "" && data && (
         <div className="space-y-4">
@@ -132,10 +140,13 @@ export default function DrawingRegisterPage() {
       )}
 
       {sheetKey === "master" && canEdit && (
+        <div className="shrink-0">
         <MasterDrawingRegisterForm projectId={id!} form={form} onChange={setForm} onSubmit={addLine} />
+        </div>
       )}
 
       {sheetKey === "master" && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <MasterDrawingRegisterTable
           lines={lines}
           filteredLines={filteredLines}
@@ -158,6 +169,7 @@ export default function DrawingRegisterPage() {
             setFilterCritical("All");
           }}
         />
+        </div>
       )}
 
       {sheetKey === "" && (

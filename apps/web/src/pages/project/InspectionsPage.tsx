@@ -5,7 +5,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
-import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams } from "../../lib/qualitySheetViews";
+import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams, type QualitySheetKey } from "../../lib/qualitySheetViews";
 import { QualitySiteRegister } from "../../components/QualitySiteRegister";
 import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
 import type { QapProjectMeta } from "../../components/QapDetailRegister";
@@ -14,6 +14,16 @@ import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
+
+/** Excel register sheets — fill viewport; dashboard / QI workflow excluded */
+const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
+  "sor-log",
+  "site-observation",
+  "site-instruction",
+  "checklist-summary",
+  "car-register",
+  "cube-test",
+]);
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
@@ -115,24 +125,26 @@ export default function InspectionsPage() {
   const pageTitle = sheetView.label;
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
+  const isQualityRegister = QUALITY_REGISTER_SHEETS.has(sheetKey);
+
   return (
     <div
       className={`min-w-0 ${
-        sheetKey === "car-register" || sheetKey === "cube-test"
-          ? "page-stack--register spdc-register-page flex flex-col"
+        isQualityRegister
+          ? "page-stack--register spdc-register-page flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
           : "space-y-4"
       }`}
     >
-      <div className={sheetKey === "cube-test" ? "shrink-0" : undefined}>
+      <div className={isQualityRegister ? "shrink-0 space-y-2" : undefined}>
       <PageHeader
-        dense={sheetKey === "cube-test"}
+        dense={isQualityRegister}
         eyebrow="Quality module"
         title={pageTitle}
         subtitle={sheetKey === "cube-test" ? "SPDC cube register — scroll the sheet; edit cells inline." : pageSubtitle}
       />
       </div>
 
-      {sheetKey !== "cube-test" && (
+      {sheetKey !== "cube-test" && !isQualityRegister && (
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1 shrink-0">
         <div className="flex flex-wrap gap-1.5">
           <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
@@ -223,14 +235,17 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "sor-log" && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <SorLogPanel
           projectId={id!}
           summary={dash?.workbook?.sorLog || []}
           entries={dash?.sorEntries || []}
         />
+        </div>
       )}
 
       {sheetKey === "checklist-summary" && dash && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <QualityChecklistSummaryPanel
           projectId={id!}
           token={token}
@@ -238,10 +253,12 @@ export default function InspectionsPage() {
           canManage={canManage}
           onChanged={load}
         />
+        </div>
       )}
 
       {sheetKey === "car-register" && (
         <>
+          <div className="shrink-0">
         <ReferenceSheetToolbar
           sheetLabel="NCR / CAR register — Quality Dashboard"
           rowCount={dash?.ncrs?.length}
@@ -249,7 +266,8 @@ export default function InspectionsPage() {
           message={msg || undefined}
           onAddRow={canManage ? () => setNcrAddOpen((v) => !v) : undefined}
         />
-        <Card padding={false} className="register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
+        </div>
+        <Card padding={false} className="register-table-panel spdc-register-panel register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-line shrink-0">
           <h3 className="font-semibold mb-3">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
           {ncrAddOpen && canManage && (
@@ -317,7 +335,7 @@ export default function InspectionsPage() {
             </form>
           )}
           </div>
-          <div className="sheet-register__scroll flex-1 min-h-0">
+          <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table min-w-[40rem] w-full">
               <thead className="sticky top-0 z-10">
                 <tr>
@@ -443,6 +461,7 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "site-observation" && id && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <QualitySiteRegister
           projectId={id}
           token={token}
@@ -450,9 +469,11 @@ export default function InspectionsPage() {
           canEdit={canManage}
           onChanged={load}
         />
+        </div>
       )}
 
       {sheetKey === "site-instruction" && id && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <QualitySiteRegister
           projectId={id}
           token={token}
@@ -460,10 +481,12 @@ export default function InspectionsPage() {
           canEdit={canManage}
           onChanged={load}
         />
+        </div>
       )}
 
       {sheetKey === "cube-test" && id && (
         <>
+          <div className="shrink-0">
           <ReferenceSheetToolbar
             sheetLabel="SPDC Cube Register"
             rowCount={dash?.cubes?.length}
@@ -494,7 +517,8 @@ export default function InspectionsPage() {
             }
             sharePointUrl={cubeSharePointUrl}
           />
-          <div className="cube-page__register register-page-fill flex flex-col">
+          </div>
+          <div className="cube-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
             <CubeRegisterPanel
               projectId={id}
               token={token}

@@ -9,3 +9,4 @@ export { QualitySiteRegister } from "../../components/QualitySiteRegister";
 export { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
 export { InspectionRegisterTable } from "../../components/InspectionRegisterTable";
 export { SpdcInspectionFormPanel } from "../../components/SpdcInspectionFormPanel";
+export * from "./roles";

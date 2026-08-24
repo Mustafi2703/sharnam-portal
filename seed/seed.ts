@@ -1179,10 +1179,13 @@ async function seedProjectAndCost(users: User[]) {
     if (sor) {
       const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sor, { header: 1, defval: "" }) as unknown[][];
       let n = 0;
-      for (let i = 1; i < Math.min(rows.length, 24); i++) {
+      for (let i = 1; i < rows.length; i++) {
         const row = rows[i] as (string | number)[];
         const observation = cellStr(row[1], 120);
-        if (!observation || !cellNum(row[0])) continue;
+        if (!observation || !cellNum(row[0])) {
+          if (n > 0) break;
+          continue;
+        }
         await prisma.progressSorStat.create({
           data: {
             projectId: project.id,

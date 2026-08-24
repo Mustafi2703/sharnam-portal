@@ -22,6 +22,8 @@ type Tab =
   | "scurve"
   | "msproject";
 
+const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "milestones", "msproject"];
+
 function fmtDate(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v);
@@ -54,6 +56,7 @@ export default function ProgressPage() {
   const [riskAddOpen, setRiskAddOpen] = useState(false);
   const [legalAddOpen, setLegalAddOpen] = useState(false);
   const tab = (searchParams.get("tab") as Tab) || "overview";
+  const isProgressRegister = PROGRESS_REGISTER_TABS.includes(tab);
   const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
   const canEdit =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
@@ -357,11 +360,11 @@ export default function ProgressPage() {
     <div
       className={`w-full min-w-0 ${
         ["planned", "hindrance", "risk", "legal", "milestones", "msproject"].includes(tab)
-          ? "progress-page--register page-stack--register flex flex-col gap-4"
+          ? "progress-page--register page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
           : "space-y-5"
       }`}
     >
-      <div className="w-full">
+      <div className="w-full shrink-0">
         <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
           ← Project
         </Link>
@@ -383,22 +386,36 @@ export default function ProgressPage() {
         />
       </div>
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
       {verify && (
-        <Card className={`!p-4 border ${verify.ok ? "border-ok/40" : "border-danger/40"}`}>
+        <Card
+          className={`shrink-0 !p-4 border ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
+            isProgressRegister ? "!py-3" : ""
+          }`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-steel-muted">Backend vs Excel packs</div>
               <div className="font-semibold mt-0.5">
                 {verify.ok ? "All tracked Progress data matches source sheets" : "Mismatches found — check failed rows"}
               </div>
+              {verify.msProjectOverlay &&
+              (verify.msProjectOverlay.milestones > 0 ||
+                verify.msProjectOverlay.plannedActual > 0 ||
+                verify.msProjectOverlay.activityLines > 0) ? (
+                <p className="text-xs text-steel-muted mt-1">
+                  MS Project overlay excluded: {verify.msProjectOverlay.milestones} milestones ·{" "}
+                  {verify.msProjectOverlay.plannedActual} S-curve months · {verify.msProjectOverlay.activityLines} schedule
+                  lines
+                </p>
+              ) : null}
             </div>
             <Badge tone={verify.ok ? "ok" : "danger"}>
               {verify.summary.passed}/{verify.summary.total} passed
             </Badge>
           </div>
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto ${isProgressRegister ? "max-h-52 overflow-y-auto register-sheet-viewport" : ""}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase text-steel-muted border-b border-line">
@@ -425,7 +442,8 @@ export default function ProgressPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 w-full">
+      {!isProgressRegister && (
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 w-full shrink-0">
         {[
           ["Milestones", data.totals.milestones],
           ["Delayed", data.totals.delayed],
@@ -439,6 +457,7 @@ export default function ProgressPage() {
           </Card>
         ))}
       </div>
+      )}
 
       {tab === "overview" && (
         <div className="space-y-4 w-full">
@@ -540,7 +559,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "milestones" && (
-        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+        <div className="register-tab-body">
           <ReferenceSheetToolbar
             sheetLabel="Milestone register"
             rowCount={data.milestones?.length}
@@ -589,7 +608,7 @@ export default function ProgressPage() {
           )}
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="sheet-register__head shrink-0">Milestone register · sheet columns</div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[64rem]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
@@ -725,7 +744,7 @@ export default function ProgressPage() {
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Project cashflow · Planned Vs Actual
             </div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table min-w-[36rem] w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
@@ -755,7 +774,7 @@ export default function ProgressPage() {
           {(pva === "all" || pva === "manpower") && (
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[32rem]">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
@@ -793,7 +812,7 @@ export default function ProgressPage() {
                 Open full Cost BOQ →
               </Link>
             </div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-[11px] min-w-[960px] border-collapse">
               <thead className="sticky top-0 z-10 bg-brand text-white">
                 <tr className="text-left text-[10px] uppercase">
@@ -845,7 +864,7 @@ export default function ProgressPage() {
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Weekly activity register ({data.activityLines.length} lines from Excel import)
             </div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-[11px] min-w-[900px] border-collapse">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="text-left text-[10px] uppercase text-steel-muted">
@@ -904,7 +923,7 @@ export default function ProgressPage() {
           </div>
           <Card className="overflow-x-auto !p-0 sheet-register register-table-panel flex-1 min-h-0 flex flex-col">
             <div className="sheet-register__head shrink-0">Monthly Progress · SOR Log</div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[36rem]">
               <thead>
                 <tr>
@@ -940,7 +959,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "hindrance" && (
-        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+        <div className="register-tab-body">
           <ReferenceSheetToolbar
             sheetLabel="Hindrance Register Dashboard"
             rowCount={data.hindrances?.length}
@@ -957,7 +976,7 @@ export default function ProgressPage() {
           </div>
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Hindrance register</div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
@@ -1003,7 +1022,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "risk" && (
-        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+        <div className="register-tab-body">
           <ReferenceSheetToolbar
             sheetLabel="Risk register"
             rowCount={data.risks?.length}
@@ -1048,7 +1067,7 @@ export default function ProgressPage() {
           )}
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Risk register</div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[56rem]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
@@ -1091,7 +1110,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "legal" && (
-        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+        <div className="register-tab-body">
           <ReferenceSheetToolbar
             sheetLabel="Legal Approval Tracker"
             rowCount={data.legalApprovals?.length}
@@ -1131,7 +1150,7 @@ export default function ProgressPage() {
           )}
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Legal Approval Tracker</div>
-            <div className="sheet-register__scroll flex-1 min-h-0">
+            <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
@@ -1243,7 +1262,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "msproject" && (
-        <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+        <div className="register-tab-body">
           <ReferenceSheetToolbar
             sheetLabel="MS Project task register"
             rowCount={msProject?.tasks?.length}
@@ -1314,7 +1333,7 @@ export default function ProgressPage() {
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Task register · % complete · baseline</div>
             {msProject?.tasks?.length ? (
-              <div className="sheet-register__scroll flex-1 min-h-0">
+              <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
                 <table className="sheet-register__table w-full text-sm min-w-[48rem]">
                   <thead>
                     <tr className="text-left text-[10px] uppercase tracking-wider text-steel-muted border-b border-line">

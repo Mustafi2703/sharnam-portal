@@ -79,7 +79,7 @@ export function HiraRegisterTable({ rows, activeId, onSelect, canEdit, busy, onL
           </Button>
         )}
       </div>
-      <div className="sheet-register overflow-auto flex-1 min-h-0">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="hira-register__table min-w-[72rem] w-full">
           <thead>
             <tr className="bg-brand text-white">

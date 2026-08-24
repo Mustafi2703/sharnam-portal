@@ -195,7 +195,7 @@ export default function QapPage() {
   }
 
   return (
-    <div className="qap-page page-stack--register flex flex-col gap-3 pb-6">
+    <div className="qap-page page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-3 pb-2">
       <div className="shrink-0">
       <PageHeader
         eyebrow="Quality module"
@@ -231,7 +231,8 @@ export default function QapPage() {
         </Card>
       )}
 
-      <div className="flex flex-wrap gap-2 items-center text-sm shrink-0">
+      <div className="shrink-0 space-y-2">
+      <div className="flex flex-wrap gap-2 items-center text-sm">
         <span className="text-steel-muted font-semibold">Week:</span>
         <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]">
           <option value="">All weeks</option>
@@ -325,6 +326,7 @@ export default function QapPage() {
         }
         generateLabel="Print / PDF"
       />
+      </div>
 
       <input
         ref={importRef}
@@ -351,7 +353,7 @@ export default function QapPage() {
         />
       )}
 
-      <div className="qap-page__register register-page-fill flex flex-col">
+      <div className="qap-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <QapDetailRegister
           projectId={id!}
           token={token}

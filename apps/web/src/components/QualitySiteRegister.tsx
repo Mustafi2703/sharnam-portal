@@ -134,11 +134,11 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
   }
 
   return (
-    <div className="space-y-4">
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+    <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
+      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
       {canEdit && (
-        <Card>
+        <Card className="shrink-0">
           <h3 className="font-semibold mb-1">Log {recordType.toLowerCase()}</h3>
           <p className="text-xs text-steel-muted mb-3">Inline form — or use Edit on a row to open the popup editor.</p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
@@ -172,12 +172,13 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
         </Card>
       )}
 
-      <Card padding={false} className="flex flex-col register-panel-fill min-h-0">
+      <Card padding={false} className="flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill">
         <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
           <h3 className="font-semibold text-sm text-left">
             {recordType} register ({filtered.length})
           </h3>
         </div>
+        <div className="shrink-0">
         <RegisterFilterBar
           fields={[
             { key: "status", label: "Status", type: "select", options: ["Open", "Closed"] },
@@ -189,7 +190,8 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
           onChange={(k, v) => setFilters({ ...filters, [k]: v })}
           onClear={() => setFilters({ status: "All", from: "", to: "", q: "" })}
         />
-        <div className="sheet-register overflow-auto register-sheet-viewport">
+        </div>
+        <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
           <table className="sheet-register__table min-w-[48rem] w-full text-sm">
             <thead>
               <tr>

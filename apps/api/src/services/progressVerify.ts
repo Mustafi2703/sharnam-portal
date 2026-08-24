@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
 import XLSX from "../lib/xlsx.js";
+import { resolveExcelRoot } from "../lib/excelRoot.js";
 import { prisma } from "../prisma.js";
+import { MS_PROJECT_SCURVE_PACKAGE, MS_PROJECT_SOURCE } from "./msProjectSchedule.js";
 
 export type VerifyCheck = {
   key: string;
@@ -12,10 +14,6 @@ export type VerifyCheck = {
   detail?: string;
 };
 
-function excelRoot() {
-  return path.resolve(process.env.SHARNAM_EXCEL_ROOT || process.cwd());
-}
-
 function cellStr(v: unknown) {
   return String(v ?? "").trim();
 }
@@ -25,9 +23,10 @@ function cellNum(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function sheetRows(file: string, sheetName?: string | RegExp) {
-  if (!fs.existsSync(file)) return null;
-  const wb = XLSX.readFile(file);
+function sheetRows(root: string, file: string, sheetName?: string | RegExp) {
+  const abs = path.isAbsolute(file) ? file : path.join(root, file);
+  if (!fs.existsSync(abs)) return null;
+  const wb = XLSX.readFile(abs);
   let name =
     typeof sheetName === "string"
       ? sheetName
@@ -43,7 +42,7 @@ function sheetRows(file: string, sheetName?: string | RegExp) {
 
 /** Expected Progress sheet counts + key field samples from client Excel packs */
 export function readProgressExcelExpectations() {
-  const root = excelRoot();
+  const root = resolveExcelRoot();
   const overview = path.join(root, "Progress Overview.xlsx");
   const mileFile = path.join(root, "Milestone tracking.xlsx");
   const plannedFile = path.join(root, "Planned Vs. Actual Dashboard (1).xlsx");
@@ -56,7 +55,7 @@ export function readProgressExcelExpectations() {
   );
 
   const mileRows =
-    sheetRows(mileFile, /data input/i) || sheetRows(overview, /^Milestone$/i) || [];
+    sheetRows(root, mileFile, /data input/i) || sheetRows(root, overview, /^Milestone$/i) || [];
   const milestones = mileRows
     .slice(1)
     .filter((r) => /^M\d+/i.test(cellStr((r as unknown[])[0])))
@@ -74,13 +73,13 @@ export function readProgressExcelExpectations() {
       };
     });
 
-  const hindRows = sheetRows(hindFile, /hinder/i) || sheetRows(overview, /hinder/i) || [];
+  const hindRows = sheetRows(root, hindFile, /hinder/i) || sheetRows(root, overview, /hinder/i) || [];
   const hindrances = hindRows.slice(2).filter((r) => cellStr((r as unknown[])[1])).length;
 
-  const riskRows = sheetRows(overview, /risk/i) || [];
+  const riskRows = sheetRows(root, overview, /risk/i) || [];
   const risks = riskRows.slice(2).filter((r) => /^R\d+/i.test(cellStr((r as unknown[])[0]))).length;
 
-  const legalRows = sheetRows(overview, /legal/i) || [];
+  const legalRows = sheetRows(root, overview, /legal/i) || [];
   const legal = legalRows
     .slice(3)
     .filter((r) => cellStr((r as unknown[])[0]) && cellStr((r as unknown[])[3])).length;
@@ -88,7 +87,7 @@ export function readProgressExcelExpectations() {
     | unknown[]
     | undefined;
 
-  const cashRows = sheetRows(plannedFile, /cashflow/i) || [];
+  const cashRows = sheetRows(root, plannedFile, /cashflow/i) || [];
   const cashflow = cashRows
     .slice(1)
     .filter((r) => cellStr((r as unknown[])[0]) && cellNum((r as unknown[])[3]) > 0)
@@ -97,7 +96,7 @@ export function readProgressExcelExpectations() {
       return { month: cellStr(row[0]), planned: cellNum(row[3]), actual: cellNum(row[4]) };
     });
 
-  const manRows = sheetRows(plannedFile, /weekly manpower/i) || [];
+  const manRows = sheetRows(root, plannedFile, /weekly manpower/i) || [];
   const manpower: { trade: string; required: number; available: number }[] = [];
   for (let i = 2; i < manRows.length; i++) {
     const row = manRows[i] as unknown[];
@@ -107,24 +106,25 @@ export function readProgressExcelExpectations() {
     manpower.push({ trade, required: cellNum(row[1]), available: cellNum(row[2]) });
   }
 
-  const actRows = sheetRows(plannedFile, /planned vs actual/i) || [];
+  const actRows = sheetRows(root, plannedFile, /planned vs actual/i) || [];
   const activities = actRows.filter((r) => {
     const row = r as unknown[];
     return cellNum(row[0]) > 0 && cellStr(row[2]);
   }).length;
 
-  const sorRows = sheetRows(monthlyFile, /sor/i) || [];
+  const sorRows = sheetRows(root, monthlyFile, /sor/i) || [];
   let sor = 0;
   for (let i = 1; i < sorRows.length; i++) {
     const row = sorRows[i] as unknown[];
     if (!cellNum(row[0]) || !cellStr(row[1])) {
-      if (sor > 0) break; // end of primary SOR summary block
+      if (sor > 0) break;
       continue;
     }
     sor++;
   }
 
   return {
+    excelRoot: root,
     files: { overview, mileFile, plannedFile, hindFile, monthlyFile },
     milestones,
     counts: {
@@ -156,14 +156,17 @@ function near(a: number, b: number, eps = 0.02) {
 export async function verifyProgressProject(projectId: string) {
   const expected = readProgressExcelExpectations();
   const [
-    milestones,
+    milestonesAll,
     hindrances,
     risks,
-    plannedActual,
+    plannedActualAll,
     legal,
     manpower,
-    activityLines,
+    activityLinesAll,
     sor,
+    msMilestones,
+    msPlannedActual,
+    msActivityLines,
   ] = await Promise.all([
     prisma.progressMilestone.findMany({ where: { projectId }, orderBy: { code: "asc" } }),
     prisma.progressHindrance.findMany({ where: { projectId } }),
@@ -173,7 +176,14 @@ export async function verifyProgressProject(projectId: string) {
     prisma.progressManpower.findMany({ where: { projectId } }),
     prisma.progressActivityLine.findMany({ where: { projectId } }),
     prisma.progressSorStat.findMany({ where: { projectId } }),
+    prisma.progressMilestone.count({ where: { projectId, category: MS_PROJECT_SOURCE } }),
+    prisma.progressPlannedActual.count({ where: { projectId, packageName: MS_PROJECT_SCURVE_PACKAGE } }),
+    prisma.progressActivityLine.count({ where: { projectId, status: MS_PROJECT_SOURCE } }),
   ]);
+
+  const milestones = milestonesAll.filter((m) => m.category !== MS_PROJECT_SOURCE);
+  const plannedActual = plannedActualAll.filter((p) => p.packageName !== MS_PROJECT_SCURVE_PACKAGE);
+  const activityLines = activityLinesAll.filter((a) => a.status !== MS_PROJECT_SOURCE);
 
   const checks: VerifyCheck[] = [];
 
@@ -287,8 +297,14 @@ export async function verifyProgressProject(projectId: string) {
       legal: legal.length,
       activityLines: activityLines.length,
     },
+    msProjectOverlay: {
+      milestones: msMilestones,
+      plannedActual: msPlannedActual,
+      activityLines: msActivityLines,
+      note: "Excluded from Excel count checks — from MS Project XML import / seed-demo",
+    },
     checks,
     failed,
-    excelRoot: excelRoot(),
+    excelRoot: expected.excelRoot,
   };
 }

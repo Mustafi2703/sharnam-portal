@@ -257,3 +257,19 @@ export {
   applyFormulasToWorksheet,
   SUPPORTED_FORMULAS,
 } from "./sheetFormulas.js";
+
+export {
+  type PortalModuleId,
+  type ModuleDefinition,
+  type ModuleFileRef,
+  MODULE_REGISTRY,
+  PORTAL_MODULE_IDS,
+  getModuleDefinition,
+  moduleViewRoles,
+} from "./moduleRegistry.js";
+
+export {
+  rolesForModule,
+  roleCanModule,
+  createModuleRoleHelpers,
+} from "./moduleRoles.js";

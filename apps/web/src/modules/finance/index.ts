@@ -6,3 +6,4 @@ export * from "@sharnam/finance/disciplines";
 export { FinanceBillRegister } from "./components/FinanceBillRegister";
 export { FinanceDisciplineStrip } from "./components/FinanceDisciplineStrip";
 export { default as FinancePage } from "./pages/FinancePage";
+export * from "./roles";

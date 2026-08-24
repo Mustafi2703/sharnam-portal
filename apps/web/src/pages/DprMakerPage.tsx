@@ -695,7 +695,8 @@ export default function DprMakerPage() {
 
   const h = snap.header;
   return (
-    <div className="maker-shell page-stack--register flex flex-col min-h-0 space-y-4 safe-bottom">
+    <div className="maker-shell page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2 safe-bottom">
+      <div className="shrink-0 space-y-2">
       <PageHeader
         eyebrow="DPR Maker · SPDC template output"
         title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
@@ -754,6 +755,7 @@ export default function DprMakerPage() {
         <div className="px-4 pb-4">
           <SharePointStatusBanner />
         </div>
+      </div>
       </div>
 
       {/* 1. Header */}
@@ -855,12 +857,12 @@ export default function DprMakerPage() {
       {/* Legacy single S-curve block removed — included in dashboard grid above */}
 
       {/* 2. Quantity */}
-      <div className="maker-section maker-section--flush flex-1 min-h-0 flex flex-col">
+      <div className="maker-section maker-section--flush flex-1 min-h-0 flex flex-col overflow-hidden">
         <div className="maker-section__head maker-section__head--row shrink-0">
           <span>2. Quantity progress · BOQ item-wise</span>
           <Button variant="secondary" onClick={() => setLineModalOpen(true)}>+ Add item</Button>
         </div>
-        <div className="maker-table-wrap flex-1 min-h-0">
+        <div className="maker-table-wrap register-sheet-viewport flex-1 min-h-0 overflow-auto">
           <table className="maker-table">
             <thead>
               <tr>

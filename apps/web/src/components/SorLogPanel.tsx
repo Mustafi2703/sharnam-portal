@@ -55,7 +55,7 @@ export function SorLogPanel({ projectId, summary, entries }: Props) {
   }, [entries, filters]);
 
   return (
-    <Card padding={false} className="flex flex-col register-panel-fill">
+    <Card padding={false} className="flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill">
       <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
         <h3 className="font-semibold text-sm text-left">SOR Log — Site Observation Register</h3>
         <p className="text-xs text-steel-muted mt-1 text-left">
@@ -95,6 +95,7 @@ export function SorLogPanel({ projectId, summary, entries }: Props) {
         </div>
       )}
 
+      <div className="shrink-0">
       <RegisterFilterBar
         fields={[
           { key: "type", label: "Type", type: "select", options: TYPE_OPTIONS },
@@ -107,8 +108,9 @@ export function SorLogPanel({ projectId, summary, entries }: Props) {
         onChange={(k, v) => setFilters({ ...filters, [k]: v })}
         onClear={() => setFilters({ type: "All", status: "All", from: "", to: "", q: "" })}
       />
+      </div>
 
-      <div className="sheet-register overflow-auto register-sheet-viewport">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table min-w-[52rem] w-full text-xs">
           <thead className="sticky top-0 z-10 bg-white shadow-sm">
             <tr>

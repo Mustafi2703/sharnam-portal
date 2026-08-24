@@ -110,7 +110,7 @@ export function MbEntryTable({ projectId, token, rows, canFullEdit, canSiteEdit,
   }
 
   return (
-    <div className="sheet-register w-full mb-entry-panel register-panel-fill flex flex-col">
+    <div className="sheet-register w-full mb-entry-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden">
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
       <div className="sheet-register__head">
         <span>Measurement book (MB) — SPDC columns</span>
@@ -118,7 +118,7 @@ export function MbEntryTable({ projectId, token, rows, canFullEdit, canSiteEdit,
           {rows.length} rows · grouped by item / heading · click cells to edit
         </span>
       </div>
-      <div className="sheet-register__scroll register-sheet-viewport">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table min-w-[72rem]">
           <thead>
             <tr>

@@ -54,8 +54,8 @@ export function MasterDrawingRegisterTable({
     filterPackage !== "All" || filterBuilding !== "All" || filterDiscipline !== "All" || filterCritical !== "All";
 
   return (
-    <div className="sheet-register">
-      <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex flex-wrap justify-between gap-2">
+    <div className="sheet-register flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill">
+      <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex flex-wrap justify-between gap-2 shrink-0">
         <div>
           <div className="text-sm font-semibold">Master Drawing Register</div>
           <div className="text-[11px] text-white/70">DRAWING REGISTER - 01.xlsx · Master sheet</div>
@@ -63,7 +63,7 @@ export function MasterDrawingRegisterTable({
         <Badge tone="neutral">{filteredLines.length} / {lines.length} lines</Badge>
       </div>
 
-      <div className="sheet-register__filter-bar px-4 py-3 border-b border-line space-y-3">
+      <div className="sheet-register__filter-bar px-4 py-3 border-b border-line space-y-3 shrink-0">
         <p className="reg-filter-label text-[10px] font-mono uppercase tracking-wider">Filter table</p>
         <div className="flex flex-wrap gap-1.5">
           {packageOptions.map((p) => (
@@ -120,7 +120,7 @@ export function MasterDrawingRegisterTable({
         </div>
       </div>
 
-      <div className="sheet-register__scroll">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table min-w-[1800px]">
           <thead>
             <tr>

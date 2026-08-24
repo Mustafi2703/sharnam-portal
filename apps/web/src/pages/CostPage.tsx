@@ -38,7 +38,7 @@ function SheetTable({
           <span className="text-steel-muted font-normal normal-case tracking-normal">{rows.length} rows</span>
         </div>
       )}
-      <div className="sheet-register__scroll register-sheet-viewport">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table">
           <thead>
             <tr>
@@ -366,7 +366,7 @@ export default function CostPage() {
     <div
       className={`w-full min-w-0 ${
         isRegisterView
-          ? "cost-page cost-page--register page-stack--register flex flex-col gap-3 pb-6"
+          ? "cost-page cost-page--register page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
           : "space-y-5"
       }`}
     >
@@ -488,6 +488,11 @@ export default function CostPage() {
       )}
 
       {isRegisterView && (
+        <details className="rounded border border-line bg-paper shrink-0">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">
+            Cost sheet setup — SPDC format ({(summary.structures || []).length} structures)
+          </summary>
+          <div className="border-t border-line">
         <CostStructureSetupPanel
           projectId={id!}
           token={token}
@@ -502,6 +507,8 @@ export default function CostPage() {
             await syncFullTemplate();
           }}
         />
+          </div>
+        </details>
       )}
 
       {["monitoring", "mb", "bbs"].includes(tab) && (
@@ -559,8 +566,8 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
-          <details className="rounded border border-line bg-paper shrink-0" open>
+        <div className="register-tab-body">
+          <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BOQ monitoring · upload · template</summary>
             <div className="p-3 pt-0 space-y-2 border-t border-line">
           <ReferenceSheetToolbar
@@ -587,9 +594,9 @@ export default function CostPage() {
           </p>
             </div>
           </details>
-          <div className="cost-page__register register-page-fill min-w-0 flex-1">
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <BoqMonitoringEditor
-            className="flex flex-col min-w-0"
+            className="flex flex-col flex-1 min-h-0 overflow-hidden min-w-0"
             projectId={id!}
             token={token}
             rows={monRows}
@@ -603,7 +610,7 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
+        <div className="register-tab-body">
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">MB tools · upload · add row</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -676,7 +683,7 @@ export default function CostPage() {
           )}
             </div>
           </details>
-          <div className="cost-page__register register-page-fill min-w-0 flex-1">
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <MbEntryTable
             projectId={id!}
             token={token}
@@ -690,7 +697,7 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
+        <div className="register-tab-body">
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BBS tools · upload · shapes</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -742,7 +749,7 @@ export default function CostPage() {
           )}
             </div>
           </details>
-          <div className="cost-page__register register-page-fill min-w-0 flex-1">
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <BbsEntryTable
             projectId={id!}
             token={token}
@@ -757,7 +764,7 @@ export default function CostPage() {
       )}
 
       {tab === "budget" && (
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
+        <div className="register-tab-body">
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Budget WBS · upload · totals</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -804,7 +811,7 @@ export default function CostPage() {
           </div>
             </div>
           </details>
-          <div className="cost-page__register register-page-fill min-w-0 flex-1">
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <BudgetWbsRegister
             projectId={id!}
             token={token}
@@ -817,7 +824,7 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
+        <div className="register-tab-body">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}
@@ -949,7 +956,7 @@ export default function CostPage() {
           </div>
             </div>
           </details>
-          <div className="cost-page__register register-page-fill min-w-0 flex-1">
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}
@@ -985,8 +992,8 @@ export default function CostPage() {
       )}
 
       {tab === "bills" && (
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 min-w-0">
-          <Card className="!p-4 border-brand/30 bg-brand-soft/30">
+        <div className="register-tab-body">
+          <Card className="!p-4 border-brand/30 bg-brand-soft/30 shrink-0">
             <h3 className="font-semibold text-sm">Commercial COP lives in Finance</h3>
             <p className="text-xs text-steel-muted mt-1">
               Official <strong>Certificate of Payment</strong> (PO → RA Bill → COP) is maintained in{" "}
@@ -1013,7 +1020,7 @@ export default function CostPage() {
             )}
           </Card>
           {canEdit && (
-            <Card>
+            <Card className="shrink-0">
               <h3 className="font-semibold mb-2">Vendor / contractor bill · COP</h3>
               <p className="text-xs text-steel-muted mb-3">Select contractor or vendor and PMC from directory.</p>
               <form
@@ -1101,6 +1108,7 @@ export default function CostPage() {
               </form>
             </Card>
           )}
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <SheetTable
             title="COP / bill register"
             headers={["Bill no", "Vendor", "COP", "Amount", "GST", "Status", "Date"]}
@@ -1114,15 +1122,16 @@ export default function CostPage() {
               new Date(b.billDate).toLocaleDateString("en-IN"),
             ])}
           />
+          </div>
         </div>
       )}
 
       {tab === "boq" && (
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
+        <div className="register-tab-body">
           <p className="text-xs text-steel-muted shrink-0">
             Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
           </p>
-          <div className="cost-page__register register-page-fill min-w-0 flex-1 overflow-y-auto space-y-4">
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0 space-y-4">
           <Card className="!p-4 border-brand/30 bg-brand-soft/30 shrink-0">
             <h3 className="font-semibold text-sm">Import batches</h3>
             <ul className="text-sm space-y-2 max-h-48 overflow-y-auto mt-2">

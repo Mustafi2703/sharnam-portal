@@ -28,8 +28,10 @@ export type ScurvePoint = {
 };
 
 const MS_PROJECT_FOLDER = "07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve/MS_Project";
-const MS_SOURCE = "MS Project XML";
-const SCURVE_PACKAGE = "MS Project S-curve";
+export const MS_PROJECT_SOURCE = "MS Project XML";
+export const MS_PROJECT_SCURVE_PACKAGE = "MS Project S-curve";
+const MS_SOURCE = MS_PROJECT_SOURCE;
+const SCURVE_PACKAGE = MS_PROJECT_SCURVE_PACKAGE;
 
 function tagValue(block: string, tag: string): string {
   const m = block.match(new RegExp(`<${tag}>([^<]*)</${tag}>`, "i"));

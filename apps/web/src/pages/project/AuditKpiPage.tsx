@@ -221,7 +221,8 @@ export default function AuditKpiPage() {
   const currentSheet = TABS.find((t) => t.key === tab)?.sheet || "";
 
   return (
-    <div className={tab !== "dashboard" && tab !== "kpi-dashboard" ? "page-stack--register flex flex-col" : "page-stack"}>
+    <div className={tab !== "dashboard" && tab !== "kpi-dashboard" ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2" : "page-stack"}>
+      <div className="shrink-0">
       <PageHeader
         title="Audit & KPI"
         subtitle="Upload client Excel packs, add rows in modal or inline form, download in SPDC column format."
@@ -238,7 +239,9 @@ export default function AuditKpiPage() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4 shrink-0">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -334,6 +337,7 @@ export default function AuditKpiPage() {
       )}
 
       {tab === "findings" && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <RegisterSheetFrame
           title="Audit findings register"
           sheetLabel={currentSheet}
@@ -366,9 +370,11 @@ export default function AuditKpiPage() {
             </tbody>
           </table>
         </RegisterSheetFrame>
+        </div>
       )}
 
       {checklistTab && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <RegisterSheetFrame
           title={TABS.find((t) => t.key === tab)?.label || "Checklist"}
           sheetLabel={currentSheet}
@@ -441,9 +447,11 @@ export default function AuditKpiPage() {
             </tbody>
           </table>
         </RegisterSheetFrame>
+        </div>
       )}
 
       {tab === "subjects" && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <RegisterSheetFrame
           title="KPI subject data"
           sheetLabel={currentSheet}
@@ -476,9 +484,11 @@ export default function AuditKpiPage() {
             </tbody>
           </table>
         </RegisterSheetFrame>
+        </div>
       )}
 
       {tab === "role-kra" && (
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <RegisterSheetFrame
           title="Role KRA matrix"
           sheetLabel={currentSheet}
@@ -509,6 +519,7 @@ export default function AuditKpiPage() {
             </tbody>
           </table>
         </RegisterSheetFrame>
+        </div>
       )}
 
       <RegisterEntryModal

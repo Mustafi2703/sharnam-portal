@@ -258,7 +258,7 @@ export default function RfisPage() {
               : `/projects/${id}/checklist`;
 
   return (
-    <div className="space-y-6 min-w-0">
+    <div className={registerMode ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2 min-w-0" : "space-y-6 min-w-0"}>
       <PageHeader
         eyebrow={pageCopy.eyebrow}
         title={isClient ? "Concerns & RFIs" : pageCopy.title}
@@ -573,7 +573,7 @@ export default function RfisPage() {
       </div>
 
       {registerMode && (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 shrink-0">
           {[
             ["Total RFIs", registerDashboard.total],
             ["Awaiting response", registerDashboard.awaiting],
@@ -590,10 +590,12 @@ export default function RfisPage() {
       )}
 
       {registerMode ? (
-        <div className="space-y-4">
+        <div className="register-tab-body flex-1 min-h-0">
+          <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
           <DrawingRfiRegisterTable rows={filtered} activeId={active} onSelect={setActive} />
+          </div>
           {selected && (
-            <Card>
+            <Card className="shrink-0 mt-2 max-h-[40vh] overflow-y-auto">
               <div className="space-y-4">
                 <div>
                   <div className="font-mono text-xs text-brand">{selected.number}</div>

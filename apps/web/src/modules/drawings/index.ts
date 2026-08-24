@@ -7,3 +7,4 @@ export { default as RevisionUploadPage } from "../../pages/project/RevisionUploa
 export { DrawingsModuleNav } from "../../components/DrawingsModuleNav";
 export { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
 export { SiteDrawingRegisterTable } from "../../components/SiteDrawingRegisterTable";
+export * from "./roles";

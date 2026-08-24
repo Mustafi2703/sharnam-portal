@@ -2,8 +2,15 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
-import { parseBoqBuffer } from "../services/boqParser.js";
-import { parseBbsBuffer, parseMbBuffer, parseAllMbSheets, parseAllBbsSheets, isFullSpdcWorkbook } from "../services/costSheetParser.js";
+import {
+  parseBoqBuffer,
+  parseBbsBuffer,
+  parseMbBuffer,
+  parseAllMbSheets,
+  parseAllBbsSheets,
+  isFullSpdcWorkbook,
+} from "../modules/cost/index.js";
+import { requireModuleView } from "../modules/_shared/guards.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
@@ -30,6 +37,7 @@ const CASHFLOW_SHEET_TOOLS = [
 
 export const costRouter = Router();
 costRouter.use(requireAuth);
+costRouter.use(requireModuleView("cost"));
 
 /** Global BBS shape code master — must register before /:projectId routes */
 costRouter.get("/shape-masters", async (_req, res) => {
