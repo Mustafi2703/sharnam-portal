@@ -416,6 +416,8 @@ body.is-auth-route #root {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
+  gap: 0;
 }
 
 @media (min-width: 1024px) {
@@ -1129,6 +1131,22 @@ body.is-auth-route #root {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  padding: 1rem 1.25rem 2rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+/* Register sheets: page shell locked, inner grid scrolls */
+.tool-main__outlet:has(> .page-stack--register),
+.tool-main__outlet:has(> .qap-page),
+.tool-main__outlet:has(> .spdc-register-page),
+.tool-main__outlet:has(> .cost-page--register),
+.tool-main__outlet:has(> .progress-page--register),
+.tool-main__outlet:has(> .maker-shell) {
+  padding: 0.5rem 0.75rem 0.35rem;
   overflow: hidden;
 }
 
@@ -1137,7 +1155,6 @@ body.is-auth-route #root {
 .tool-main:has(.spdc-register-page),
 .tool-main:has(.cost-page--register),
 .tool-main:has(.progress-page--register) {
-  padding: 0.5rem 0.75rem 0.35rem !important;
   gap: 0 !important;
   overflow: hidden !important;
 }
