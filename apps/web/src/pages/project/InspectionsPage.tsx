@@ -494,7 +494,7 @@ export default function InspectionsPage() {
             }
             sharePointUrl={cubeSharePointUrl}
           />
-          <div className="cube-page__register flex flex-col">
+          <div className="cube-page__register register-page-fill flex flex-col">
             <CubeRegisterPanel
               projectId={id}
               token={token}

@@ -519,6 +519,10 @@ body.is-auth-route #root {
   overflow: auto;
   max-height: min(72vh, 880px);
 }
+.sheet-register__scroll.register-sheet-viewport,
+.page-stack--register .sheet-register__scroll {
+  max-height: none !important;
+}
 .sheet-register__table {
   width: 100%;
   border-collapse: separate;
@@ -616,24 +620,95 @@ body.is-auth-route #root {
 .spdc-register-panel {
   display: flex;
   flex-direction: column;
-  min-height: 22rem;
+  min-height: var(--register-sheet-min, 18rem);
   overflow: visible;
 }
+
+/* Responsive register sheet + modal sizing — 13" / 15" / 24" */
+:root {
+  --register-chrome: 15.5rem;
+  --register-sheet-min: clamp(18rem, calc(100dvh - var(--register-chrome)), 30rem);
+  --register-modal-h: clamp(20rem, 88dvh, 36rem);
+  --register-modal-w-md: min(96vw, 42rem);
+  --register-modal-w-lg: min(96vw, 56rem);
+  --register-modal-w-xl: min(96vw, 68rem);
+  --register-modal-w-2xl: min(96vw, 80rem);
+}
+@media (min-width: 1280px) {
+  :root {
+    --register-chrome: 13.5rem;
+    --register-sheet-min: clamp(22rem, calc(100dvh - var(--register-chrome)), 44rem);
+    --register-modal-h: clamp(24rem, 86dvh, 50rem);
+    --register-modal-w-xl: min(92vw, 76rem);
+    --register-modal-w-2xl: min(90vw, 88rem);
+  }
+}
+@media (min-width: 1440px) {
+  :root {
+    --register-chrome: 12rem;
+    --register-sheet-min: clamp(26rem, calc(100dvh - var(--register-chrome)), 52rem);
+    --register-modal-h: clamp(28rem, 84dvh, 56rem);
+    --register-modal-w-2xl: min(88vw, 92rem);
+  }
+}
+@media (min-width: 1920px) {
+  :root {
+    --register-chrome: 10rem;
+    --register-sheet-min: clamp(32rem, calc(100dvh - var(--register-chrome)), 68rem);
+    --register-modal-h: clamp(32rem, 82dvh, 64rem);
+    --register-modal-w-2xl: min(84vw, 100rem);
+  }
+}
+
+.register-sheet-viewport,
+.page-stack--register .sheet-register__scroll,
+.page-stack--register .register-table-panel > .overflow-x-auto,
+.spdc-register-panel .sheet-register__scroll {
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
+  max-height: none !important;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.register-page-fill {
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.register-panel-fill {
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.register-sheet-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .page-stack--register .spdc-register-panel,
 .qap-page .spdc-register-panel,
 .spdc-register-page .spdc-register-panel {
   max-height: none;
-  min-height: 22rem;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
 }
 
-/* SPDC register pages — page scrolls; wide sheets scroll inside .sheet-register__scroll */
+/* SPDC register pages — sheet fills viewport on laptop+; page scrolls on smaller screens */
 .spdc-register-page,
 .qap-page {
   min-height: auto;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 .tool-main:has(.spdc-register-page),
 .tool-main:has(.qap-page),
@@ -645,7 +720,6 @@ body.is-auth-route #root {
   flex-direction: column;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: auto;
 }
 .tool-main:has(.spdc-register-page) > .spdc-register-page,
 .tool-main:has(.spdc-register-page) > .page-stack--register,
@@ -656,25 +730,87 @@ body.is-auth-route #root {
 .tool-main:has(.qap-page) > .qap-page,
 .tool-main:has(.cost-page--register) > .cost-page--register,
 .tool-main:has(.progress-page--register) > .progress-page--register {
-  flex: 0 1 auto;
-  min-height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
 .qap-page__register,
 .cube-page__register {
-  flex: 0 1 auto;
-  min-height: 22rem;
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 /* Full-viewport register pages (QAP, cube, audit, cost, progress sheets) */
 .page-stack--register {
-  min-height: auto;
-  flex: 0 1 auto;
+  min-height: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
   padding-bottom: 1.5rem;
+  min-width: 0;
+}
+@media (max-width: 1279px) {
+  .tool-main:has(.page-stack--register),
+  .tool-main:has(.qap-page),
+  .tool-main:has(.spdc-register-page),
+  .tool-main:has(.cost-page--register),
+  .tool-main:has(.progress-page--register) {
+    overflow-y: auto;
+  }
+  .tool-main:has(.page-stack--register) > .page-stack--register,
+  .tool-main:has(.qap-page) > .qap-page,
+  .tool-main:has(.spdc-register-page) > .spdc-register-page,
+  .tool-main:has(.cost-page--register) > .cost-page--register,
+  .tool-main:has(.progress-page--register) > .progress-page--register {
+    flex: 0 1 auto;
+    min-height: auto;
+  }
+  .page-stack--register,
+  .register-page-fill,
+  .qap-page__register,
+  .cube-page__register,
+  .cost-page__register {
+    flex: 0 1 auto;
+    min-height: auto;
+  }
+}
+@media (min-width: 1280px) {
+  .tool-main:has(.page-stack--register),
+  .tool-main:has(.qap-page),
+  .tool-main:has(.spdc-register-page),
+  .tool-main:has(.cost-page--register),
+  .tool-main:has(.progress-page--register) {
+    overflow: hidden;
+  }
+  .page-stack--register {
+    overflow: hidden;
+    padding-bottom: 0.75rem;
+  }
+  .register-page-fill,
+  .qap-page__register,
+  .cube-page__register,
+  .cost-page__register {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .register-panel-fill.spdc-register-panel,
+  .spdc-register-panel.register-editor-panel,
+  .page-stack--register .register-table-panel.spdc-register-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .register-panel-fill .sheet-register,
+  .spdc-register-panel .sheet-register.register-sheet-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
 }
 @media (max-width: 640px) {
   .page-stack--register {
@@ -696,78 +832,52 @@ body.is-auth-route #root {
 .page-stack--register .register-sheet-frame,
 .page-stack--register .sheet-register,
 .qap-page .sheet-register {
-  flex: 0 1 auto;
-  min-height: 22rem;
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
   max-height: none;
   display: flex;
   flex-direction: column;
-}
-.qap-page__register .sheet-register__scroll,
-.page-stack--register .sheet-register__scroll,
-.page-stack--register .register-table-panel .sheet-register,
-.page-stack--register .register-table-panel > .overflow-x-auto,
-.page-stack--register .register-sheet-frame .sheet-register__scroll,
-.page-stack--register .boq-editor .sheet-register__scroll,
-.page-stack--register .mb-entry-panel .sheet-register__scroll,
-.page-stack--register .bbs-entry-panel .sheet-register__scroll,
-.page-stack--register .budget-wbs-panel .sheet-register__scroll,
-.qap-page .sheet-register__scroll,
-.spdc-register-panel .sheet-register__scroll {
-  flex: 0 1 auto;
-  min-height: 22rem;
-  max-height: none !important;
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-.cube-page__register .sheet-register__scroll,
-.page-stack--register .cube-page__register .sheet-register__scroll,
-.cost-page__register .sheet-register__scroll,
-.page-stack--register .cost-page__register .sheet-register__scroll {
-  flex: 0 1 auto;
-  min-height: 22rem;
-  max-height: none !important;
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  min-width: 0;
 }
 .cost-page__register,
 .page-stack--register .cost-page__register {
-  flex: 0 1 auto;
-  min-height: 22rem;
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 .page-stack--register .cost-page__register .boq-editor,
 .page-stack--register .cost-page__register .mb-entry-panel,
 .page-stack--register .cost-page__register .bbs-entry-panel,
-.page-stack--register .cost-page__register .budget-wbs-panel {
-  flex: 0 1 auto;
-  min-height: 20rem;
-}
-.boq-editor__table {
-  min-width: 120rem;
-}
+.page-stack--register .cost-page__register .budget-wbs-panel,
 .page-stack--register .boq-editor,
 .page-stack--register .mb-entry-panel,
 .page-stack--register .bbs-entry-panel,
 .page-stack--register .budget-wbs-panel {
-  flex: 0 1 auto;
-  min-height: 20rem;
+  flex: 1 1 auto;
+  min-height: var(--register-sheet-min);
   max-height: none;
   display: flex;
   flex-direction: column;
   overflow: visible;
+  min-width: 0;
+}
+.boq-editor__table {
+  min-width: 120rem;
 }
 .register-sheet-frame .sheet-register__table,
 .page-stack--register .register-table-panel,
 .page-stack--register .register-table-panel.spdc-register-panel {
   overflow: visible;
-  min-height: 22rem;
-  flex: 0 1 auto;
+  min-height: var(--register-sheet-min);
+  flex: 1 1 auto;
+  min-width: 0;
 }
-.page-stack--register .register-table-panel .sheet-register__scroll {
-  min-height: 22rem;
+@media (min-width: 1280px) {
+  .page-stack--register .register-table-panel.spdc-register-panel {
+    overflow: hidden;
+  }
 }
 .sheet-register__table td.wrap,
 .sheet-register__table th.wrap {
@@ -775,18 +885,11 @@ body.is-auth-route #root {
   min-width: 8rem;
   max-width: 24rem;
 }
-.spdc-register-panel .sheet-register__scroll {
-  flex: 0 1 auto;
-  min-height: 22rem;
-  max-height: none !important;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  overflow: auto;
-}
+.spdc-register-panel .sheet-register__scroll.register-sheet-viewport,
 .spdc-register-panel.register-editor-panel .sheet-register__scroll,
 .cube-page__register .spdc-register-panel .sheet-register__scroll,
 .qap-page__register .spdc-register-panel .sheet-register__scroll {
-  min-height: 22rem;
+  min-height: var(--register-sheet-min);
   max-height: none !important;
 }
 .register-scroll-hint {
@@ -818,22 +921,17 @@ body.is-auth-route #root {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 96dvh;
+  max-height: var(--register-modal-h);
   background: var(--color-paper);
   border: 1px solid var(--color-line);
   border-radius: 0.75rem;
   box-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
   overflow: hidden;
 }
-@media (min-width: 640px) {
-  .register-modal__panel {
-    max-height: 92dvh;
-  }
-}
-.register-modal__panel--md { max-width: min(96vw, 48rem); }
-.register-modal__panel--lg { max-width: min(96vw, 64rem); }
-.register-modal__panel--xl { max-width: min(96vw, 72rem); }
-.register-modal__panel--2xl { max-width: min(96vw, 90rem); }
+.register-modal__panel--md { max-width: var(--register-modal-w-md); }
+.register-modal__panel--lg { max-width: var(--register-modal-w-lg); }
+.register-modal__panel--xl { max-width: var(--register-modal-w-xl); }
+.register-modal__panel--2xl { max-width: var(--register-modal-w-2xl); }
 .register-modal__head {
   flex-shrink: 0;
   display: flex;
@@ -846,7 +944,7 @@ body.is-auth-route #root {
 }
 .register-modal__body {
   flex: 1 1 auto;
-  min-height: 14rem;
+  min-height: clamp(12rem, 38dvh, 28rem);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;

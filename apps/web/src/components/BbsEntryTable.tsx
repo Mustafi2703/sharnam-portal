@@ -192,7 +192,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
   }, [rows]);
 
   return (
-    <div className="sheet-register w-full bbs-entry-panel min-h-[20rem] flex flex-col space-y-2">
+    <div className="sheet-register w-full bbs-entry-panel register-panel-fill flex flex-col space-y-2">
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
       <div className="sheet-register__head">
@@ -202,7 +202,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
         </span>
       </div>
 
-      <div className="sheet-register__scroll min-h-[20rem]">
+      <div className="sheet-register__scroll register-sheet-viewport">
         <table className="sheet-register__table">
           <thead>
             <tr>

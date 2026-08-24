@@ -236,7 +236,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
         </Card>
       )}
 
-      <Card padding={false} className="spdc-register-panel register-editor-panel relative flex flex-col flex-1">
+      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1">
         {(syncing || busy) && localRows.length === 0 && (
           <div className="spdc-register-loading">Loading cube register…</div>
         )}
@@ -297,8 +297,8 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           Scroll ↔ ↕ for full sheet · every white cell is editable · saves on blur
         </div>
 
-        <div className="sheet-register flex flex-col border-t border-line">
-          <div className="sheet-register__scroll min-h-[22rem]">
+        <div className="sheet-register register-sheet-shell flex flex-col border-t border-line">
+          <div className="sheet-register__scroll register-sheet-viewport">
             <table className="cube-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>

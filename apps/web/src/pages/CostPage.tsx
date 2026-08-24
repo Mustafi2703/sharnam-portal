@@ -488,7 +488,7 @@ export default function CostPage() {
             Edit BOQ inline — office edits rate/qty; site edits GFC and Achieved. Use toolbar to load SPDC template or sync MB → achieved.
           </p>
           </div>
-          <div className="cost-page__register min-w-0">
+          <div className="cost-page__register register-page-fill min-w-0">
           <BoqMonitoringEditor
             className="flex flex-col min-w-0"
             projectId={id!}
@@ -574,7 +574,7 @@ export default function CostPage() {
             </Card>
           )}
           </div>
-          <div className="cost-page__register min-w-0">
+          <div className="cost-page__register register-page-fill min-w-0">
           <MbEntryTable
             projectId={id!}
             token={token}
@@ -637,7 +637,7 @@ export default function CostPage() {
             </details>
           )}
           </div>
-          <div className="cost-page__register min-w-0">
+          <div className="cost-page__register register-page-fill min-w-0">
           <BbsEntryTable
             projectId={id!}
             token={token}
@@ -696,7 +696,7 @@ export default function CostPage() {
             </div>
           </div>
           </div>
-          <div className="cost-page__register min-w-0">
+          <div className="cost-page__register register-page-fill min-w-0">
           <BudgetWbsRegister
             projectId={id!}
             token={token}
@@ -842,7 +842,7 @@ export default function CostPage() {
             />
           </div>
           </div>
-          <div className="cost-page__register min-w-0">
+          <div className="cost-page__register register-page-fill min-w-0">
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}
