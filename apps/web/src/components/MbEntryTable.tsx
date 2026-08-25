@@ -97,7 +97,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
       subtitle={`${rows.length} lines · SPDC MB format — Sr · Description · Nos × L × W × H · Qty · UoM · RA-Bill · Remark`}
       footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
     >
-      <table className="cube-register__table register-editor-pro cost-register-table min-w-[92rem] mb-entry-panel">
+      <table className="cube-register__table register-editor-pro cost-register-table min-w-[92rem]">
         <thead className="cost-register-thead">
           <tr className="cost-col-group-row">
             {MB_COLUMN_GROUPS.map((g) => (

@@ -13,12 +13,18 @@ type Props = {
   footer?: ReactNode;
 };
 
+const PANEL_CLASS: Record<CostSheetKind, string> = {
+  mb: "mb-entry-panel",
+  bbs: "bbs-entry-panel",
+  monitoring: "boq-editor",
+};
+
 /** Cube-style full-height cost register — themed header + scroll hint + inner scroll. */
 export function CostRegisterShell({ title, subtitle, sheetKind, toolbar, children, footer }: Props) {
   return (
     <Card
       padding={false}
-      className={`cost-register-shell cost-register-shell--${sheetKind} spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden`}
+      className={`cost-register-shell cost-register-shell--${sheetKind} ${PANEL_CLASS[sheetKind]} spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden`}
     >
       <div className="cost-register-shell__title-bar px-4 py-2.5 border-b shrink-0 text-left">
         <h3 className="cost-register-shell__title font-semibold text-sm">{title}</h3>

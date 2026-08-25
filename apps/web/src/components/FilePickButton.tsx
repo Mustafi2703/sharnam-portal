@@ -33,7 +33,7 @@ export function FilePickButton({
   }
 
   return (
-    <>
+    <span className="file-pick-btn-wrap">
       <button
         type="button"
         disabled={disabled}
@@ -51,7 +51,9 @@ export function FilePickButton({
         className="photo-capture__input"
         disabled={disabled}
         onChange={onChange}
+        tabIndex={-1}
+        aria-hidden
       />
-    </>
+    </span>
   );
 }

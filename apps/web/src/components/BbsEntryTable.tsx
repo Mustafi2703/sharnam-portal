@@ -195,7 +195,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
       subtitle={`${rows.length} lines · ${uploaded} shapes · all SPDC BBS columns including SHAPE OF BAR`}
       footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
     >
-        <table className="cube-register__table register-editor-pro cost-register-table min-w-[108rem] bbs-entry-panel">
+        <table className="cube-register__table register-editor-pro cost-register-table min-w-[108rem]">
           <thead className="cost-register-thead">
             <tr className="cost-col-group-row">
               {BBS_COLUMN_GROUPS.map((g) => (
