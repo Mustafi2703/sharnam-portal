@@ -137,13 +137,13 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       }),
       prisma.costMbLine.findMany({
         where: mbWhere,
-        take: pkg ? 2000 : 800,
-        orderBy: [{ packageName: "asc" }, { srNo: "asc" }],
+        take: pkg ? 5000 : 1500,
+        orderBy: [{ packageName: "asc" }, { srNo: "asc" }, { createdAt: "asc" }],
       }),
       prisma.costBbsLine.findMany({
         where: bbsWhere,
-        take: pkg ? 2000 : 800,
-        orderBy: [{ packageName: "asc" }, { barMark: "asc" }],
+        take: pkg ? 5000 : 1500,
+        orderBy: [{ packageName: "asc" }, { barMark: "asc" }, { createdAt: "asc" }],
       }),
       prisma.costMonitoringLine.groupBy({ by: ["packageName"], where: { projectId }, _count: true }),
       prisma.costMbLine.groupBy({ by: ["packageName"], where: { projectId }, _count: true }),
@@ -783,13 +783,17 @@ costRouter.post(
     }
 
     for (const batch of bbsSheets) {
-      const dataLines = batch.lines.filter((r) => r.rowKind !== "header" && (r.diameterMm || r.totalLength || r.weightKg || r.location));
-      if (!dataLines.length) continue;
+      const linesToImport = batch.lines.filter(
+        (r) =>
+          r.rowKind === "header" ||
+          (r.diameterMm >= 6 || r.totalLength > 0 || r.weightKg > 0 || (r.nos ?? 0) > 0)
+      );
+      if (!linesToImport.length) continue;
       if (!replace) {
         await prisma.costBbsLine.deleteMany({ where: { projectId: project.id, packageName: batch.packageName } });
       }
       await prisma.costBbsLine.createMany({
-        data: dataLines.map((r) => ({
+        data: linesToImport.map((r) => ({
           projectId: project.id,
           packageName: batch.packageName,
           barMark: r.barMark || null,
@@ -812,7 +816,7 @@ costRouter.post(
           location: r.location || null,
         })),
       });
-      bbsImported += dataLines.length;
+      bbsImported += linesToImport.length;
       packagesImported.push(batch.packageName);
       const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
       await applyShapeMastersToBbs(project.id, batch.packageName);

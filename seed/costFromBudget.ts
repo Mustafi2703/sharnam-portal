@@ -197,7 +197,30 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
       const rows = sheet(wb, sheetName);
       if (!rows.length) continue;
       for (const r of parseBbsRows(rows)) {
-        if (r.rowKind === "header") continue;
+        if (r.rowKind === "header") {
+          data.push({
+            projectId,
+            packageName,
+            barMark: r.barMark || null,
+            shapeCode: r.shapeCode || null,
+            sectionMark: r.sectionMark || r.barMark || null,
+            diameterMm: 0,
+            shape: null,
+            lengthMm: 0,
+            nos: 0,
+            nosPerMember: 0,
+            nosOfMember: 0,
+            shapeLenA: 0,
+            shapeLenB: 0,
+            shapeLenC: 0,
+            shapeLenD: 0,
+            shapeLenE: 0,
+            totalLength: 0,
+            weightKg: 0,
+            location: r.location || null,
+          });
+          continue;
+        }
         if (!r.diameterMm && !r.totalLength && !r.nos && !r.weightKg) continue;
         data.push({
           projectId,

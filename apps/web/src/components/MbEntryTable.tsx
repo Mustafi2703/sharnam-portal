@@ -1,7 +1,7 @@
 /**
  * Measurement book — SPDC MB sheet (cube-style register, inline editable).
  */
-import { Fragment, useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "../api";
 import { Button } from "./ui";
 import { formatQty } from "./BoqMonitoringEditor";
@@ -41,20 +41,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
   const [msg, setMsg] = useState("");
   const canEditDims = canFullEdit || canSiteEdit;
   const colSpan = 13;
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, MbRow[]>();
-    let lastHeading = "";
-    for (const r of rows) {
-      const sr = String(r.srNo || "").trim();
-      const looksHeading = !sr || !/^\d/.test(sr);
-      if (looksHeading && r.description) lastHeading = r.description;
-      const key = r.itemCode || lastHeading || r.packageName || "General";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(r);
-    }
-    return [...map.entries()];
-  }, [rows]);
+  const isHeadingRow = (r: MbRow) => !r.qty && !r.nos1 && !r.length && !r.width && !r.height;
 
   async function patchLine(id: string, body: Record<string, unknown>) {
     setBusyId(id);
@@ -107,7 +94,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
     <CostRegisterShell
       sheetKind="mb"
       title={`Measurement Book (MB)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${rows.length} lines · ${grouped.length} sections · all SPDC MB columns visible`}
+      subtitle={`${rows.length} lines · SPDC MB format — Sr · Description · Nos × L × W × H · Qty · UoM · RA-Bill · Remark`}
       footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
     >
       <table className="cube-register__table register-editor-pro cost-register-table min-w-[92rem] mb-entry-panel">
@@ -136,14 +123,21 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
           </tr>
         </thead>
         <tbody>
-          {grouped.map(([heading, items]) => (
-            <Fragment key={heading}>
-              <tr className="boq-section-row">
-                <td colSpan={colSpan} className="sticky-col text-left">
-                  <span className="boq-section-label">{heading}</span>
-                </td>
-              </tr>
-              {items.map((b) => (
+          {rows.map((b) => {
+            if (isHeadingRow(b)) {
+              return (
+                <tr key={b.id} className="boq-section-row">
+                  <td colSpan={colSpan} className="sticky-col text-left">
+                    <span className="boq-section-label">
+                      {b.srNo ? `${b.srNo} · ` : ""}
+                      {b.description}
+                      {b.remark ? ` — ${b.remark}` : ""}
+                    </span>
+                  </td>
+                </tr>
+              );
+            }
+            return (
                 <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
                   <td className={mbColClass(0, { sticky: true, extra: "text-left align-top" })}>
                     {cell(b.packageName, (v) => void patchLine(b.id, { packageName: v }), { disabled: !canFullEdit })}
@@ -192,9 +186,8 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
                     )}
                   </td>
                 </tr>
-              ))}
-            </Fragment>
-          ))}
+            );
+          })}
           {!rows.length && (
             <tr>
               <td colSpan={colSpan} className="empty text-left p-6">

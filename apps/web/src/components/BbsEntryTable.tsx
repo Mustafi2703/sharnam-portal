@@ -1,7 +1,7 @@
 /**
  * BBS register — column order matches SPDC * BBS sheets (diagram in SHAPE OF BAR col).
  */
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, apiBase } from "../api";
 import { FilePickButton } from "./FilePickButton";
 import { Button, Select } from "./ui";
@@ -185,15 +185,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   }
 
   const uploaded = rows.filter((r) => r.shapeDiagramPath || r.shapeDiagramUrl).length;
-  const grouped = useMemo(() => {
-    const map = new Map<string, BbsRow[]>();
-    for (const r of rows) {
-      const key = r.sectionMark || r.packageName || "General";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(r);
-    }
-    return [...map.entries()];
-  }, [rows]);
+  const isSectionRow = (r: BbsRow) => !r.diameterMm && !r.totalLength && !r.nos && !r.weightKg;
 
   return (
     <>
@@ -236,14 +228,19 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
             </tr>
           </thead>
           <tbody>
-            {grouped.map(([heading, items]) => (
-              <Fragment key={heading}>
-                <tr className="boq-section-row">
-                  <td colSpan={colSpan} className="sticky-col">
-                    <span className="boq-section-label">{heading}</span>
-                  </td>
-                </tr>
-                {items.map((b) => {
+            {rows.map((b) => {
+              if (isSectionRow(b)) {
+                return (
+                  <tr key={b.id} className="boq-section-row">
+                    <td colSpan={colSpan} className="sticky-col">
+                      <span className="boq-section-label">
+                        {b.barMark ? `${b.barMark} · ` : ""}
+                        {b.location || b.sectionMark || "—"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              }
               const href = fileHref(b.shapeDiagramPath, b.shapeDiagramUrl);
               const hasDiagram = Boolean(href);
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
@@ -493,8 +490,6 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                 </tr>
               );
             })}
-              </Fragment>
-            ))}
             {!rows.length && (
               <tr>
                 <td colSpan={colSpan} className="empty text-left p-6">
