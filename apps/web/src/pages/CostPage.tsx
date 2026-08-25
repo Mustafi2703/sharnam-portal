@@ -379,6 +379,18 @@ export default function CostPage() {
     return rows;
   }, [summary, cfView, cfGrain]);
 
+  const monitoringPackageOptions = useMemo(() => {
+    const fromTools = monPackages.filter(Boolean);
+    if (fromTools.length) return fromTools;
+    return (summary?.packages || []).filter(Boolean);
+  }, [monPackages, summary?.packages]);
+
+  useEffect(() => {
+    if (!siteBoqMode || tab !== "monitoring" || pkgFilter !== "All") return;
+    const first = monitoringPackageOptions[0];
+    if (first) setTab("monitoring", first);
+  }, [siteBoqMode, tab, pkgFilter, monitoringPackageOptions]);
+
   if (clientBlocked) {
     return (
       <div className="space-y-4 w-full">
@@ -415,12 +427,6 @@ export default function CostPage() {
 
   const isRegisterView = COST_REGISTER_TABS.includes(tab);
 
-  const monitoringPackageOptions = useMemo(() => {
-    const fromTools = monPackages.filter(Boolean);
-    if (fromTools.length) return fromTools;
-    return (summary?.packages || []).filter(Boolean);
-  }, [monPackages, summary?.packages]);
-
   const costHeroSubtitle =
     tab === "monitoring"
       ? siteBoqMode
@@ -429,12 +435,6 @@ export default function CostPage() {
       : tab === "mb" || tab === "bbs"
         ? "Parikh-style MB / BBS registers — office setup lives under Admin · cost sheet setup."
         : "Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance.";
-
-  useEffect(() => {
-    if (!siteBoqMode || tab !== "monitoring" || pkgFilter !== "All") return;
-    const first = monitoringPackageOptions[0];
-    if (first) setTab("monitoring", first);
-  }, [siteBoqMode, tab, pkgFilter, monitoringPackageOptions]);
 
   return (
     <div
