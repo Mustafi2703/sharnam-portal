@@ -785,8 +785,11 @@ costRouter.post(
     for (const batch of bbsSheets) {
       const linesToImport = batch.lines.filter(
         (r) =>
-          r.rowKind === "header" ||
-          (r.diameterMm >= 6 || r.totalLength > 0 || r.weightKg > 0 || (r.nos ?? 0) > 0)
+          (r.rowKind && r.rowKind !== "data") ||
+          r.diameterMm >= 6 ||
+          r.totalLength > 0 ||
+          r.weightKg > 0 ||
+          (r.nos ?? 0) > 0
       );
       if (!linesToImport.length) continue;
       if (!replace) {

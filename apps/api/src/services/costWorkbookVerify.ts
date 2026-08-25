@@ -90,7 +90,7 @@ export function readSpdcBudgetExpectations(workbookPath?: string | null) {
   }
   for (const [sheetName, packageName] of SPDC_BBS_SHEETS) {
     counts[`bbs:${packageName}`] = parseBbsRows(sheetRows(wb, sheetName)).filter(
-      (r) => r.rowKind !== "header" && (r.diameterMm || r.totalLength || r.weightKg || r.nos)
+      (r) => r.rowKind === "data" && (r.diameterMm || r.totalLength || r.weightKg || r.nos)
     ).length;
   }
   const rates = countRateRows(wb);
