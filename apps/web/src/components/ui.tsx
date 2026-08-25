@@ -136,8 +136,8 @@ export function Button({
 }) {
   const variants = {
     primary:
-      "bg-[var(--mod-accent,var(--color-brand))] hover:brightness-[0.94] text-white shadow-sm border border-transparent",
-    secondary: "bg-paper border border-line text-ink hover:bg-[var(--mod-soft,var(--color-brand-soft))]",
+      "bg-[var(--color-brand)] hover:brightness-[0.94] text-white shadow-sm border border-transparent",
+    secondary: "bg-paper border border-line text-ink hover:bg-[var(--color-brand-soft)]",
     ghost: "text-steel-muted hover:text-ink hover:bg-sand/70",
     dark: "bg-ink text-white hover:bg-steel-2",
   };

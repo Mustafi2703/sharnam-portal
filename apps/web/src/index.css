@@ -13,7 +13,7 @@
   --color-accent: #0b6a78;
   --color-steel: #16181c;
   --color-steel-2: #2a2f38;
-  --color-steel-muted: #5c6570;
+  --color-steel-muted: #3f4752;
   --color-sand: #f0f2f4;
   --color-ink: #121417;
   --color-paper: #ffffff;
@@ -74,19 +74,6 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  transition: background-color 0.22s ease, color 0.22s ease;
-}
-
-html.theme-transition *,
-html.theme-transition *::before,
-html.theme-transition *::after {
-  transition:
-    background-color 0.22s ease,
-    color 0.22s ease,
-    border-color 0.22s ease,
-    box-shadow 0.22s ease,
-    fill 0.22s ease,
-    stroke 0.22s ease !important;
 }
 
 /* Login / auth routes — allow portrait scroll on mobile */
@@ -1604,13 +1591,25 @@ body.is-auth-route #root {
   box-shadow: inset 3px 0 0 var(--color-brand);
 }
 .cube-row-pass td {
-  background: color-mix(in srgb, #ecfdf5 70%, white) !important;
+  background: color-mix(in srgb, #ecfdf5 70%, var(--color-paper)) !important;
 }
 .cube-row-fail td {
-  background: color-mix(in srgb, #fef2f2 75%, white) !important;
+  background: color-mix(in srgb, #fef2f2 75%, var(--color-paper)) !important;
 }
 .cube-row-pending td {
-  background: color-mix(in srgb, #fffbeb 55%, white) !important;
+  background: color-mix(in srgb, #fffbeb 55%, var(--color-paper)) !important;
+}
+[data-theme="dark"] .cube-row-pass td {
+  background: #14532d !important;
+  color: #d1fae5;
+}
+[data-theme="dark"] .cube-row-fail td {
+  background: #7f1d1d !important;
+  color: #fecaca;
+}
+[data-theme="dark"] .cube-row-pending td {
+  background: #3d3014 !important;
+  color: #fde68a;
 }
 .cube-phase-7d {
   background: #e0f2fe !important;
@@ -1623,6 +1622,14 @@ body.is-auth-route #root {
   color: #7e22ce;
   font-weight: 700;
   text-align: center;
+}
+[data-theme="dark"] .cube-phase-7d {
+  background: #0c4a6e !important;
+  color: #7dd3fc;
+}
+[data-theme="dark"] .cube-phase-28d {
+  background: #4c1d95 !important;
+  color: #e9d5ff;
 }
 .cube-num {
   font-variant-numeric: tabular-nums;
@@ -1671,6 +1678,44 @@ body.is-auth-route #root {
   --cost-col-bar-bg: #dbeafe;
   --cost-col-shape-bg: #bfdbfe;
   --cost-col-total-bg: #93c5fd;
+}
+
+[data-theme="dark"] .cost-register-shell--mb {
+  --cost-accent: #fcd34d;
+  --cost-head-bg: #1c1810;
+  --cost-thead-bg: #2a2314;
+  --cost-section-bg: #3d3014;
+  --cost-border: #d97706;
+  --cost-scroll-hint: #fde68a;
+  --cost-col-meta-bg: #1c1810;
+  --cost-col-dims-bg: #2a2314;
+  --cost-col-result-bg: #3d3014;
+}
+[data-theme="dark"] .cost-register-shell--bbs {
+  --cost-accent: #93c5fd;
+  --cost-head-bg: #121a28;
+  --cost-thead-bg: #1a2740;
+  --cost-section-bg: #1e3a5f;
+  --cost-border: #3b82f6;
+  --cost-scroll-hint: #bfdbfe;
+  --cost-col-meta-bg: #121a28;
+  --cost-col-bar-bg: #152238;
+  --cost-col-shape-bg: #1a2c48;
+  --cost-col-total-bg: #1e3a5f;
+}
+[data-theme="dark"] .cost-register-shell--monitoring {
+  --cost-accent: #6ee7b7;
+  --cost-head-bg: #10201a;
+  --cost-thead-bg: #143328;
+  --cost-section-bg: #14532d;
+  --cost-border: #10b981;
+  --cost-scroll-hint: #a7f3d0;
+  --cost-col-meta-bg: #10201a;
+  --cost-col-qty-bg: #152238;
+  --cost-col-qty-achieved-bg: #14532d;
+  --cost-col-cost-bg: #2a2314;
+  --cost-col-pct-bg: #143328;
+  --cost-col-ev-bg: #1e1a32;
 }
 
 /* Column group bands — header + body cells */
@@ -1735,17 +1780,8 @@ body.is-auth-route #root {
 .cost-register-shell--bbs .cost-col--total td {
   background: var(--cost-col-total-bg);
 }
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--meta td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--qty td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--cost td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--pct td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--ev td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--dims td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--result td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--bar td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--shape td,
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--total td {
-  filter: brightness(0.985);
+.cost-register-shell--bbs .cost-col-group-row .cost-col--total {
+  background: var(--cost-col-total-bg);
 }
 
 .cost-register-shell--monitoring .cost-col-group-row .cost-col--meta {
@@ -1822,7 +1858,7 @@ body.is-auth-route #root {
   color: var(--cost-accent);
 }
 .cost-register-shell__scroll-hint {
-  background: color-mix(in srgb, var(--cost-head-bg) 70%, white);
+  background: color-mix(in srgb, var(--cost-head-bg) 70%, var(--color-paper));
   color: var(--cost-scroll-hint);
   border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line));
 }
@@ -1835,7 +1871,7 @@ body.is-auth-route #root {
   white-space: nowrap;
 }
 .cost-register-shell .cost-register-thead .spdc-th-sub {
-  background: color-mix(in srgb, var(--cost-thead-bg) 85%, white) !important;
+  background: color-mix(in srgb, var(--cost-thead-bg) 85%, var(--color-paper)) !important;
   font-weight: 600;
   font-size: 0.625rem;
 }
@@ -1848,7 +1884,7 @@ body.is-auth-route #root {
 }
 
 .cost-register-shell .boq-subsection-row td {
-  background: color-mix(in srgb, var(--cost-section-bg) 55%, white) !important;
+  background: color-mix(in srgb, var(--cost-section-bg) 55%, var(--color-paper)) !important;
   color: var(--cost-accent);
   font-weight: 600;
   font-size: 0.8125rem;
@@ -1857,25 +1893,25 @@ body.is-auth-route #root {
 }
 
 .cost-register-shell .boq-desc-row td {
-  background: color-mix(in srgb, var(--cost-head-bg) 40%, white) !important;
+  background: color-mix(in srgb, var(--cost-head-bg) 40%, var(--color-paper)) !important;
   font-size: 0.75rem;
   line-height: 1.45;
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
-  color: var(--color-ink-muted, #64748b);
+  color: var(--color-steel-muted);
   padding-top: 0.45rem !important;
   padding-bottom: 0.45rem !important;
 }
 
 .cost-register-shell .boq-total-row td {
-  background: color-mix(in srgb, var(--cost-accent) 8%, white) !important;
+  background: color-mix(in srgb, var(--cost-accent) 8%, var(--color-paper)) !important;
   font-weight: 600;
   border-top: 2px solid color-mix(in srgb, var(--cost-border) 50%, transparent) !important;
 }
 
 .cost-register-shell .boq-subheader-row td {
-  background: color-mix(in srgb, var(--cost-thead-bg) 70%, white) !important;
+  background: color-mix(in srgb, var(--cost-thead-bg) 70%, var(--color-paper)) !important;
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1919,9 +1955,6 @@ body.is-auth-route #root {
   padding-left: 0.35rem;
 }
 
-.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) td {
-  background: color-mix(in srgb, var(--cost-head-bg) 35%, white);
-}
 .cost-register-shell .cost-register-table .sticky-col {
   background: inherit;
   box-shadow: 2px 0 0 color-mix(in srgb, var(--cost-border) 25%, transparent);
@@ -1929,15 +1962,15 @@ body.is-auth-route #root {
 
 .cost-register-shell--mb .register-sheet-cell:focus {
   outline-color: var(--cost-border);
-  background: #fffbeb;
+  background: var(--cost-head-bg);
 }
 .cost-register-shell--bbs .register-sheet-cell:focus {
   outline-color: var(--cost-border);
-  background: #eff6ff;
+  background: var(--cost-head-bg);
 }
 .cost-register-shell--monitoring .register-sheet-cell:focus {
   outline-color: var(--cost-border);
-  background: #ecfdf5;
+  background: var(--cost-head-bg);
 }
 
 /* Flow bar — sheet colour chips */
@@ -3208,8 +3241,40 @@ body.is-auth-route #root {
 [data-theme="dark"] .text-steel-muted {
   color: var(--color-steel-muted) !important;
 }
+[data-theme="dark"] .cost-sheet-bar--monitoring {
+  background: #10201a;
+  border-color: #10b981;
+}
+[data-theme="dark"] .cost-sheet-bar--mb {
+  background: #1c1810;
+  border-color: #d97706;
+}
+[data-theme="dark"] .cost-sheet-bar--bbs {
+  background: #121a28;
+  border-color: #3b82f6;
+}
+
+[data-theme="dark"] .cost-flow-btn--mb {
+  background: #1c1810;
+  border-color: #d97706;
+  color: #fde68a;
+}
+[data-theme="dark"] .cost-flow-btn--bbs {
+  background: #121a28;
+  border-color: #3b82f6;
+  color: #bfdbfe;
+}
+[data-theme="dark"] .cost-flow-btn--mon {
+  background: #10201a;
+  border-color: #10b981;
+  color: #a7f3d0;
+}
+
 [data-theme="dark"] .text-brand {
-  color: var(--color-brand) !important;
+  color: var(--color-brand-dark) !important;
+}
+[data-theme="dark"] .text-brand-dark {
+  color: var(--color-brand-dark) !important;
 }
 [data-theme="dark"] .border-line {
   border-color: var(--color-line) !important;
@@ -3337,7 +3402,7 @@ body {
   background: color-mix(in srgb, var(--color-sand) 35%, var(--color-paper));
 }
 .cost-register-shell .boq-editor__table tbody tr.boq-line-row:nth-child(even) td:not([class*="cost-col"]) {
-  background: color-mix(in srgb, var(--cost-head-bg) 35%, white);
+  background: color-mix(in srgb, var(--cost-head-bg) 35%, var(--color-paper));
 }
 .boq-editor__table .boq-desc-col {
   min-width: 18rem;

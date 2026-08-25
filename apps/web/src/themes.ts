@@ -14,7 +14,7 @@ const LIGHT: Record<string, string> = {
   "--color-accent": "#0B6A78",
   "--color-steel": "#16181C",
   "--color-steel-2": "#2A2F38",
-  "--color-steel-muted": "#5C6570",
+  "--color-steel-muted": "#3F4752",
   "--color-sand": "#F0F2F4",
   "--color-ink": "#121417",
   "--color-paper": "#FFFFFF",
@@ -40,7 +40,7 @@ const LIGHT: Record<string, string> = {
   "--wd-chrome-border": "#D5DADD",
   "--side-bg": "#F7F9FB",
   "--side-fg": "#121417",
-  "--side-muted": "#5C6570",
+  "--side-muted": "#3F4752",
   "--side-hover": "#E8EEF2",
   "--side-active": "#0B6A78",
   "--side-active-bg": "rgba(11, 106, 120, 0.12)",
@@ -57,24 +57,24 @@ const LIGHT: Record<string, string> = {
 };
 
 const DARK: Record<string, string> = {
-  "--color-brand": "#2EC4B6",
-  "--color-brand-dark": "#5EEAD4",
-  "--color-brand-soft": "#12353A",
-  "--color-brand-glow": "#5EEAD4",
+  "--color-brand": "#0F766E",
+  "--color-brand-dark": "#7EE8DC",
+  "--color-brand-soft": "#143840",
+  "--color-brand-glow": "#2EC4B6",
   "--color-mark": "#F0783A",
-  "--color-accent": "#2EC4B6",
+  "--color-accent": "#7EE8DC",
   "--color-steel": "#E8ECF0",
-  "--color-steel-2": "#CBD5E1",
-  "--color-steel-muted": "#A8B4C4",
-  "--color-sand": "#0B0D10",
-  "--color-ink": "#F8FAFC",
-  "--color-paper": "#151A21",
-  "--color-line": "#2E3744",
+  "--color-steel-2": "#D5DEE8",
+  "--color-steel-muted": "#C5D0DC",
+  "--color-sand": "#10141A",
+  "--color-ink": "#F4F7FB",
+  "--color-paper": "#1A2129",
+  "--color-line": "#3A4554",
   "--color-ok": "#34D399",
   "--color-warn": "#FBBF24",
   "--color-danger": "#F87171",
-  "--color-procore-navy": "#2EC4B6",
-  "--color-procore-blue": "#5EEAD4",
+  "--color-procore-navy": "#7EE8DC",
+  "--color-procore-blue": "#2EC4B6",
   "--color-kpi-1": "#2EC4B6",
   "--color-kpi-2": "#F0783A",
   "--color-kpi-3": "#60A5FA",
@@ -88,16 +88,16 @@ const DARK: Record<string, string> = {
   "--chart-5": "#34D399",
   "--chart-6": "#F472B6",
   "--wd-chrome": "#10141A",
-  "--wd-chrome-border": "#2E3744",
-  "--side-bg": "#0B0E13",
-  "--side-fg": "#F8FAFC",
-  "--side-muted": "#B6C0CE",
+  "--wd-chrome-border": "#3A4554",
+  "--side-bg": "#0E1218",
+  "--side-fg": "#F4F7FB",
+  "--side-muted": "#C5D0DC",
   "--side-hover": "#1C2430",
-  "--side-active": "#2EC4B6",
-  "--side-active-bg": "rgba(46, 196, 182, 0.24)",
-  "--side-border": "#243040",
-  "--login-panel-bg": "#151A21",
-  "--login-panel-muted": "#A8B4C4",
+  "--side-active": "#7EE8DC",
+  "--side-active-bg": "rgba(14, 118, 110, 0.35)",
+  "--side-border": "#2A3442",
+  "--login-panel-bg": "#1A2129",
+  "--login-panel-muted": "#C5D0DC",
   "--ui-radius": "8px",
   "--ui-radius-sm": "6px",
   "--ui-nav-h": "52px",
@@ -119,7 +119,6 @@ export function getColorMode(): ColorMode {
 
 export function applyColorMode(mode: ColorMode) {
   const root = document.documentElement;
-  root.classList.add("theme-transition");
   const vars = mode === "dark" ? DARK : LIGHT;
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   // Reset module overlay tokens; route handlers re-apply accent when needed
@@ -133,7 +132,6 @@ export function applyColorMode(mode: ColorMode) {
   } catch {
     /* ignore */
   }
-  window.setTimeout(() => root.classList.remove("theme-transition"), 280);
   return mode;
 }
 
@@ -198,33 +196,35 @@ function withAlpha(hex: string, alpha: number) {
 export function applyModuleAccent(accent: string, soft: string) {
   const root = document.documentElement;
   const dark = getColorMode() === "dark";
-  const ink = dark ? mixHex(accent, "#ffffff", 0.35) : mixHex(accent, "#000000", 0.28);
+  // Fill is dark enough for white button text; brand-dark is light enough to read on paper.
+  const fill = dark ? mixHex(accent, "#0B0E13", 0.42) : accent;
+  const ink = dark ? mixHex(accent, "#ffffff", 0.48) : mixHex(accent, "#000000", 0.28);
   const softBg = dark ? mixHex(accent, "#0B0E13", 0.78) : soft;
-  const glow = mixHex(accent, "#ffffff", 0.35);
+  const glow = dark ? mixHex(accent, "#ffffff", 0.28) : mixHex(accent, "#ffffff", 0.35);
   const kpi2 = dark ? "#F0783A" : "#C45C26";
   const kpi3 = mixHex(accent, "#2563EB", 0.45);
   const kpi4 = mixHex(accent, "#7C3AED", 0.4);
   const kpi5 = mixHex(accent, "#059669", 0.35);
   const kpi6 = mixHex(accent, "#DB2777", 0.4);
 
-  root.style.setProperty("--mod-accent", accent);
+  root.style.setProperty("--mod-accent", fill);
   root.style.setProperty("--mod-soft", softBg);
-  root.style.setProperty("--color-brand", accent);
+  root.style.setProperty("--color-brand", fill);
   root.style.setProperty("--color-brand-dark", ink);
   root.style.setProperty("--color-brand-soft", softBg);
   root.style.setProperty("--color-brand-glow", glow);
-  root.style.setProperty("--color-accent", accent);
-  root.style.setProperty("--color-procore-blue", accent);
-  root.style.setProperty("--side-active", accent);
+  root.style.setProperty("--color-accent", dark ? ink : accent);
+  root.style.setProperty("--color-procore-blue", dark ? ink : accent);
+  root.style.setProperty("--side-active", dark ? ink : accent);
   root.style.setProperty("--side-active-bg", withAlpha(accent, dark ? 0.28 : 0.22));
-  root.style.setProperty("--wd-accent", accent);
-  root.style.setProperty("--color-kpi-1", accent);
+  root.style.setProperty("--wd-accent", fill);
+  root.style.setProperty("--color-kpi-1", dark ? ink : accent);
   root.style.setProperty("--color-kpi-2", kpi2);
   root.style.setProperty("--color-kpi-3", kpi3);
   root.style.setProperty("--color-kpi-4", kpi4);
   root.style.setProperty("--color-kpi-5", kpi5);
   root.style.setProperty("--color-kpi-6", kpi6);
-  root.style.setProperty("--chart-1", accent);
+  root.style.setProperty("--chart-1", dark ? ink : accent);
   root.style.setProperty("--chart-2", kpi2);
   root.style.setProperty("--chart-3", kpi3);
   root.style.setProperty("--chart-4", kpi4);
