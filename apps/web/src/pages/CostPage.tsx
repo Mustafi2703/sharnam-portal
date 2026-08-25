@@ -10,9 +10,9 @@ import { CostSheetUploadPanel } from "../components/CostSheetUploadPanel";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import { BbsEntryTable } from "../components/BbsEntryTable";
 import { MbEntryTable } from "../components/MbEntryTable";
-import { MasterLinePicker } from "../components/MasterLinePicker";
 import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
+import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
@@ -85,6 +85,8 @@ export default function CostPage() {
   const [syncing, setSyncing] = useState(false);
   const [mbAddOpen, setMbAddOpen] = useState(false);
   const [bbsAddOpen, setBbsAddOpen] = useState(false);
+  const [monAddOpen, setMonAddOpen] = useState(false);
+  const [syncSheetBusy, setSyncSheetBusy] = useState(false);
   const [cfView, setCfView] = useState<"chart" | "forecast" | "tracking" | "all">(
     (["chart", "forecast", "tracking", "all"].includes(searchParams.get("cf") || "")
       ? (searchParams.get("cf") as "chart" | "forecast" | "tracking" | "all")
@@ -276,6 +278,39 @@ export default function CostPage() {
     () => [...new Set(bbsRows.map((b: any) => b.barMark).filter(Boolean))] as string[],
     [bbsRows]
   );
+
+  const activePkg = pkgFilter !== "All" ? pkgFilter : undefined;
+  const flowCounts = useMemo(
+    () => ({
+      mb: activePkg ? summary?.mbByPackage?.[activePkg]?.lines ?? mbRows.length : mbRows.length,
+      bbs: activePkg ? summary?.bbsByPackage?.[activePkg]?.lines ?? bbsRows.length : bbsRows.length,
+      monitoring: activePkg ? summary?.monByPackage?.[activePkg] ?? monRows.length : monRows.length,
+    }),
+    [activePkg, summary, mbRows.length, bbsRows.length, monRows.length]
+  );
+
+  async function syncMbToMonitoring() {
+    if (!id || !activePkg) return;
+    setSyncSheetBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ mbSync?: { updated?: number } }>(`/api/cost/${id}/sync-from-sheets`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ packageName: activePkg }),
+      });
+      setMsg(`Synced MB → Monitoring for ${activePkg} (${out.mbSync?.updated ?? 0} lines updated).`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncSheetBusy(false);
+    }
+  }
+
+  function navigateCostFlow(next: "mb" | "bbs" | "monitoring", pkg?: string) {
+    setTab(next, pkg || activePkg || DEFAULT_COST_MONITORING_PKG);
+  }
 
   async function importCostSheet(kind: "mb" | "bbs", file: File) {
     if (!id || !canEdit) return;
@@ -488,9 +523,9 @@ export default function CostPage() {
       )}
 
       {isRegisterView && (
-        <details className="rounded border border-line bg-paper shrink-0">
+        <details className="rounded border border-line bg-paper shrink-0" open>
           <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">
-            Cost sheet setup — SPDC format ({(summary.structures || []).length} structures)
+            Cost sheet setup — structures · MB · BBS · Monitoring upload
           </summary>
           <div className="border-t border-line">
         <CostStructureSetupPanel
@@ -566,16 +601,23 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="register-tab-body">
-          <details className="rounded border border-line bg-paper shrink-0">
-            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BOQ monitoring · upload · template</summary>
-            <div className="p-3 pt-0 space-y-2 border-t border-line">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
+          <CostSheetFlowBar
+            active="monitoring"
+            packageName={pkgFilter}
+            counts={flowCounts}
+            onNavigate={navigateCostFlow}
+            onSyncMbToMonitoring={activePkg ? () => void syncMbToMonitoring() : undefined}
+            syncBusy={syncSheetBusy}
+            canEdit={canEdit}
+          />
           <ReferenceSheetToolbar
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}
             canEdit={canEdit}
-            onUpload={canEdit ? (file) => uploadBoqOrWorkbook(file, pkgFilter !== "All" ? pkgFilter : undefined) : undefined}
-            uploadHint="Upload SPDC_Budget_Arvind 49.xls for full Budget + Monitoring + MB + BBS, or a single BOQ sheet."
+            onUpload={canEdit ? (file) => uploadBoqOrWorkbook(file, activePkg) : undefined}
+            uploadHint="Upload SPDC_Budget_Arvind 49.xls (full workbook) or a single monitoring BOQ for this package."
+            onAddRow={canEdit ? () => setMonAddOpen((v) => !v) : undefined}
             onGenerate={
               canEdit
                 ? async () => {
@@ -589,31 +631,26 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("boq")}
             message={msg || undefined}
           />
-          <p className="text-xs text-steel-muted px-1">
-            Edit BOQ inline — office edits rate/qty; site edits GFC and Achieved. Use toolbar to load SPDC template or sync MB → achieved.
-          </p>
-            </div>
-          </details>
           <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
-          <BoqMonitoringEditor
-            className="flex flex-col flex-1 min-h-0 overflow-hidden min-w-0"
-            projectId={id!}
-            token={token}
-            rows={monRows}
-            packages={(summary.packages || []).length ? summary.packages : ["Civil"]}
-            canFullEdit={canEdit}
-            canSiteEdit={canSiteEdit}
-            onChanged={() => void load()}
-          />
+            <BoqMonitoringEditor
+              className="flex flex-col flex-1 min-h-0 overflow-hidden min-w-0"
+              projectId={id!}
+              token={token}
+              rows={monRows}
+              packages={(summary.packages || []).length ? summary.packages : ["Civil"]}
+              canFullEdit={canEdit}
+              canSiteEdit={canSiteEdit}
+              singlePackage={activePkg}
+              addOpen={monAddOpen}
+              onChanged={() => void load()}
+            />
           </div>
         </div>
       )}
 
       {tab === "mb" && (
-        <div className="register-tab-body">
-          <details className="rounded border border-line bg-paper shrink-0">
-            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">MB tools · upload · add row</summary>
-            <div className="p-3 pt-0 space-y-3 border-t border-line">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
+          <CostSheetFlowBar active="mb" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
             rowCount={mbRows.length}
@@ -623,41 +660,8 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("mb")}
             message={msg || undefined}
           />
-          {canEdit && (
-            <details className="rounded border border-line bg-paper">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Import from master · upload sheet</summary>
-              <div className="p-3 pt-0 space-y-3 border-t border-line">
-            <MasterLinePicker
-              projectId={id!}
-              token={token}
-              kind="mb"
-              defaultPackage={pkgFilter}
-              packageOptions={mbPackages.length ? mbPackages : packages.filter((p: string) => p !== "All")}
-              canEdit={canEdit}
-              onImported={() => void load()}
-            />
-              </div>
-            </details>
-          )}
-          {(canEdit || canSiteEdit) && (
-            <details className="rounded border border-line bg-paper" open>
-              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">MB sheet upload &amp; markup</summary>
-              <div className="p-3 pt-0 border-t border-line">
-            <CostSheetUploadPanel
-              projectId={id!}
-              token={token}
-              kind="mb"
-              packageName={pkgFilter}
-              packageOptions={mbPackages.length ? mbPackages : packages.filter((p: string) => p !== "All")}
-              files={sheetFiles}
-              canEdit={canEdit}
-              onChanged={() => void load()}
-            />
-              </div>
-            </details>
-          )}
           {canEdit && mbAddOpen && (
-            <Card className="!p-3">
+            <Card className="!p-3 shrink-0">
               <h3 className="font-semibold text-sm mb-3">Add MB line</h3>
               <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMb}>
                 <Select value={mbForm.packageName} onChange={(e) => setMbForm({ ...mbForm, packageName: e.target.value })}>
@@ -681,26 +685,23 @@ export default function CostPage() {
               </form>
             </Card>
           )}
-            </div>
-          </details>
           <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
-          <MbEntryTable
-            projectId={id!}
-            token={token}
-            rows={mbRows}
-            canFullEdit={canEdit}
-            canSiteEdit={canSiteEdit}
-            onChanged={() => void load()}
-          />
+            <MbEntryTable
+              projectId={id!}
+              token={token}
+              rows={mbRows}
+              singlePackage={activePkg}
+              canFullEdit={canEdit}
+              canSiteEdit={canSiteEdit}
+              onChanged={() => void load()}
+            />
           </div>
         </div>
       )}
 
       {tab === "bbs" && (
-        <div className="register-tab-body">
-          <details className="rounded border border-line bg-paper shrink-0">
-            <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BBS tools · upload · shapes</summary>
-            <div className="p-3 pt-0 space-y-3 border-t border-line">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
+          <CostSheetFlowBar active="bbs" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
             rowCount={bbsRows.length}
@@ -710,29 +711,7 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("bbs")}
             message={msg || undefined}
           />
-          {canEdit && (
-            <details className="rounded border border-line bg-paper">
-              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Import from master</summary>
-              <div className="p-3 pt-0 border-t border-line">
-            <MasterLinePicker
-              projectId={id!}
-              token={token}
-              kind="bbs"
-              defaultPackage={pkgFilter}
-              packageOptions={bbsPackages.length ? bbsPackages : packages.filter((p: string) => p !== "All")}
-              canEdit={canEdit}
-              onImported={() => void load()}
-            />
-              </div>
-            </details>
-          )}
           {(canEdit || canSiteEdit) && (
-            <details className="rounded border border-line bg-paper" open>
-              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">BBS upload &amp; shape markup</summary>
-              <div className="p-3 pt-0 space-y-2 border-t border-line">
-            <p className="text-xs text-steel-muted">
-              Import Excel, then upload bend diagrams in the <strong>Shape of bar</strong> column (SPDC BBS layout).
-            </p>
             <CostSheetUploadPanel
               projectId={id!}
               token={token}
@@ -744,21 +723,18 @@ export default function CostPage() {
               canEdit={canEdit || canSiteEdit}
               onChanged={() => void load()}
             />
-              </div>
-            </details>
           )}
-            </div>
-          </details>
           <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
-          <BbsEntryTable
-            projectId={id!}
-            token={token}
-            rows={bbsRows}
-            canUpload={canEdit || canSiteEdit}
-            canFullEdit={canEdit}
-            canSiteEdit={canSiteEdit}
-            onChanged={() => void load()}
-          />
+            <BbsEntryTable
+              projectId={id!}
+              token={token}
+              rows={bbsRows}
+              singlePackage={activePkg}
+              canUpload={canEdit || canSiteEdit}
+              canFullEdit={canEdit}
+              canSiteEdit={canSiteEdit}
+              onChanged={() => void load()}
+            />
           </div>
         </div>
       )}

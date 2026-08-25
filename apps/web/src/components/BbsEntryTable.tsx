@@ -8,6 +8,7 @@ import { Button, Select } from "./ui";
 import PdfMarkup from "./PdfMarkup";
 import ImageMarkup from "./ImageMarkup";
 import { formatQty } from "./BoqMonitoringEditor";
+import { CostRegisterShell } from "./CostRegisterShell";
 
 function CellInput({
   value,
@@ -70,6 +71,7 @@ type Props = {
   projectId: string;
   token?: string | null;
   rows: BbsRow[];
+  singlePackage?: string;
   canUpload: boolean;
   canFullEdit: boolean;
   canSiteEdit: boolean;
@@ -93,7 +95,7 @@ function fmtNum(v?: number | null) {
   return Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 }
 
-export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, canSiteEdit, onChanged }: Props) {
+export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload, canFullEdit, canSiteEdit, onChanged }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [markupRow, setMarkupRow] = useState<BbsRow | null>(null);
   const [shapeDraft, setShapeDraft] = useState<File | null>(null);
@@ -101,6 +103,8 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
   const [msg, setMsg] = useState("");
   const [shapeMasters, setShapeMasters] = useState<{ shapeCode: string; name?: string | null }[]>([]);
   const canEditDims = canFullEdit || canSiteEdit;
+  const hidePackage = Boolean(singlePackage);
+  const colSpan = hidePackage ? 16 : 17;
 
   useEffect(() => {
     void api<{ shapeCode: string; name?: string | null }[]>("/api/cost/shape-masters", { token })
@@ -192,21 +196,16 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
   }, [rows]);
 
   return (
-    <div className="sheet-register w-full bbs-entry-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden space-y-2">
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
-
-      <div className="sheet-register__head">
-        <span>Bar bending schedule — SPDC column layout</span>
-        <span className="text-steel-muted font-normal normal-case tracking-normal">
-          {uploaded}/{rows.length} shapes · click cells to edit
-        </span>
-      </div>
-
-      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
-        <table className="sheet-register__table">
-          <thead>
+    <>
+    <CostRegisterShell
+      title={`Bar Bending Schedule (BBS)${singlePackage ? ` — ${singlePackage}` : ""}`}
+      subtitle={`${rows.length} lines · ${uploaded} shapes uploaded · SHAPE OF BAR column = bend diagram`}
+      footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
+    >
+        <table className="cube-register__table register-editor-pro min-w-[104rem] bbs-entry-panel">
+          <thead className="spdc-register-thead">
             <tr>
-              <th className="sticky-col" rowSpan={2}>Package</th>
+              {!hidePackage && <th className="text-left sticky-col" rowSpan={2}>Package</th>}
               <th rowSpan={2}>SR. NO</th>
               <th rowSpan={2}>DESCRIPTION</th>
               <th rowSpan={2} className="min-w-[140px]">SHAPE OF BAR</th>
@@ -232,7 +231,7 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
             {grouped.map(([heading, items]) => (
               <Fragment key={heading}>
                 <tr className="boq-section-row">
-                  <td colSpan={17} className="sticky-col">
+                  <td colSpan={colSpan} className="sticky-col">
                     <span className="boq-section-label">{heading}</span>
                   </td>
                 </tr>
@@ -242,14 +241,16 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
                 <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
-                  <td className="sticky-col wrap">
+                  {!hidePackage && (
+                  <td className="sticky-col wrap text-left align-top">
                     {canFullEdit ? (
                       <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
                     ) : (
                       b.packageName
                     )}
                   </td>
-                  <td className="wrap font-medium">
+                  )}
+                  <td className="wrap font-medium text-left align-top">
                     {canEditDims ? (
                       <CellInput value={b.barMark} onCommit={(v) => void patchLine(b.id, { barMark: v })} />
                     ) : (
@@ -490,14 +491,14 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={17} className="empty">
-                  No BBS rows — import Excel above or run seed.
+                <td colSpan={colSpan} className="empty text-left p-6">
+                  No BBS rows — upload a BBS sheet in setup or add via structure import.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
+    </CostRegisterShell>
 
       {markupRow && shapeDraft && (
         <div className="markup-modal" role="dialog" aria-modal="true" aria-label="BBS row shape markup">
@@ -537,6 +538,6 @@ export function BbsEntryTable({ projectId, token, rows, canUpload, canFullEdit, 
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

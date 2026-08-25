@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { Button, Input, Select, TextArea } from "./ui";
+import { CostRegisterShell } from "./CostRegisterShell";
 
 export type MonLine = {
   id: string;
@@ -56,6 +57,8 @@ type Props = {
   canSiteEdit: boolean;
   onChanged: () => void;
   className?: string;
+  singlePackage?: string;
+  addOpen?: boolean;
 };
 
 type Draft = ReturnType<typeof emptyDraft>;
@@ -400,6 +403,8 @@ export function BoqMonitoringEditor({
   canSiteEdit,
   onChanged,
   className = "",
+  singlePackage,
+  addOpen = false,
 }: Props) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -410,6 +415,8 @@ export function BoqMonitoringEditor({
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
   const canTouch = canFullEdit || canSiteEdit;
+  const hidePackage = Boolean(singlePackage);
+  const headers = hidePackage ? MON_HEADERS.filter((h) => h !== "Package") : [...MON_HEADERS];
 
   const grouped = useMemo(() => {
     const map = new Map<string, MonLine[]>();
@@ -547,19 +554,16 @@ export function BoqMonitoringEditor({
     }
   }
 
-  const colSpan = (canTouch ? MON_HEADERS.length + 1 : MON_HEADERS.length);
+  const colSpan = (canTouch ? headers.length + 1 : headers.length);
 
   return (
-    <div className={`flex flex-col gap-4 min-w-0 ${className}`.trim()}>
-      {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
+    <div className={`flex flex-col flex-1 min-h-0 min-w-0 ${className}`.trim()}>
+      {msg && <p className="text-sm text-brand font-medium shrink-0 px-1">{msg}</p>}
 
-      {canFullEdit && (
-        <details className="boq-add-panel shrink-0 rounded-[var(--ui-radius,14px)] border border-line bg-paper">
-          <summary className="cursor-pointer px-4 py-3 font-semibold text-sm text-brand-dark">Add BOQ line</summary>
-          <div className="p-4 pt-0 border-t border-line">
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <span className="text-[11px] text-steel-muted uppercase tracking-wider">Section · item · quantities · all SPDC columns on save</span>
-          </div>
+      {canFullEdit && addOpen && (
+        <div className="boq-add-panel shrink-0 rounded-[var(--ui-radius,14px)] border border-line bg-paper mb-2">
+          <div className="px-4 py-3 border-b border-line font-semibold text-sm text-brand-dark">Add monitoring line</div>
+          <div className="p-4 space-y-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Select
               value={draft.packageName || ""}
@@ -626,22 +630,18 @@ export function BoqMonitoringEditor({
             </div>
           </div>
           </div>
-        </details>
+        </div>
       )}
 
-      <div className="sheet-register w-full boq-editor register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden">
-        <div className="sheet-register__head shrink-0">
-          <span>BOQ / Monitoring — editable register</span>
-          <span className="text-steel-muted font-normal normal-case tracking-normal">
-            {rows.length} lines · {grouped.length} sections · all SPDC Monitoring columns (qty · cost · progress · EV · CPI · ETC)
-          </span>
-        </div>
-        <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
-          <table className="sheet-register__table boq-editor__table min-w-[120rem]">
-            <thead>
+      <CostRegisterShell
+        title={`BOQ / Monitoring${singlePackage ? ` — ${singlePackage}` : ""}`}
+        subtitle={`${rows.length} lines · ${grouped.length} sections · BOQ → GFC → Achieved → Certified (all SPDC columns)`}
+      >
+          <table className="cube-register__table register-editor-pro boq-editor__table min-w-[120rem]">
+            <thead className="spdc-register-thead">
               <tr>
-                {MON_HEADERS.map((h, i) => (
-                  <th key={h} className={i === 0 ? "sticky-col" : i >= 4 ? "num" : i === 2 ? "boq-desc-col" : undefined}>
+                {headers.map((h, i) => (
+                  <th key={h} className={`text-left ${i === 0 && !hidePackage ? "sticky-col" : ""} ${i >= (hidePackage ? 3 : 4) ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""}`}>
                     {h.includes("(") ? (
                       <>
                         {h.split("(")[0].trim()}
@@ -683,7 +683,7 @@ export function BoqMonitoringEditor({
                     const certCost = b.certifiedInvoiceCost ?? b.certifiedQty * rate;
                     return (
                       <tr key={b.id} className={`boq-line-row ${busy ? "opacity-60" : ""}`}>
-                        <td className="sticky-col">{b.packageName}</td>
+                        {!hidePackage && <td className="sticky-col text-left align-top">{b.packageName}</td>}
                         <td className="whitespace-nowrap">{b.itemNo ?? "—"}</td>
                         <td className="boq-desc-col">
                           <div className="boq-desc" title={b.description}>
@@ -815,8 +815,7 @@ export function BoqMonitoringEditor({
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+      </CostRegisterShell>
 
       <EditLineModal
         open={!!editLine}

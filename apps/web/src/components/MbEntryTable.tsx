@@ -1,10 +1,12 @@
 /**
- * Measurement book — inline editable rows (SPDC MB sheet columns).
+ * Measurement book — SPDC MB sheet (cube-style register, inline editable).
  */
 import { Fragment, useMemo, useState } from "react";
 import { api } from "../api";
 import { Button } from "./ui";
 import { formatQty } from "./BoqMonitoringEditor";
+import { CostRegisterShell } from "./CostRegisterShell";
+import { RegisterSheetCell } from "./RegisterSheetCell";
 
 export type MbRow = {
   id: string;
@@ -27,47 +29,17 @@ type Props = {
   projectId: string;
   token?: string | null;
   rows: MbRow[];
+  singlePackage?: string;
   canFullEdit: boolean;
   canSiteEdit: boolean;
   onChanged: () => void;
 };
 
-function CellInput({
-  value,
-  disabled,
-  type = "text",
-  className = "",
-  onCommit,
-}: {
-  value: string | number | null | undefined;
-  disabled?: boolean;
-  type?: string;
-  className?: string;
-  onCommit: (v: string) => void;
-}) {
-  return (
-    <input
-      type={type}
-      disabled={disabled}
-      defaultValue={type === "number" ? formatQty(Number(value) || 0) : String(value ?? "")}
-      className={`boq-cell-input ${className}`}
-      step={type === "number" ? "any" : undefined}
-      onBlur={(e) => {
-        const next = e.target.value;
-        const prev = type === "number" ? formatQty(Number(value) || 0) : String(value ?? "");
-        if (next !== prev) onCommit(next);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-      }}
-    />
-  );
-}
-
-export function MbEntryTable({ projectId, token, rows, canFullEdit, canSiteEdit, onChanged }: Props) {
+export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdit, canSiteEdit, onChanged }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const canEditDims = canFullEdit || canSiteEdit;
+  const hidePackage = Boolean(singlePackage);
 
   const grouped = useMemo(() => {
     const map = new Map<string, MbRow[]>();
@@ -82,6 +54,8 @@ export function MbEntryTable({ projectId, token, rows, canFullEdit, canSiteEdit,
     }
     return [...map.entries()];
   }, [rows]);
+
+  const colSpan = hidePackage ? 12 : 13;
 
   async function patchLine(id: string, body: Record<string, unknown>) {
     setBusyId(id);
@@ -109,152 +83,125 @@ export function MbEntryTable({ projectId, token, rows, canFullEdit, canSiteEdit,
     }
   }
 
+  function cell(
+    value: string | number | null | undefined,
+    onSave: (v: string) => void,
+    opts?: { type?: string; numeric?: boolean; disabled?: boolean; className?: string }
+  ) {
+    if (opts?.disabled) {
+      if (opts.numeric && value != null && value !== "") {
+        return <span className="cube-num tabular-nums">{formatQty(Number(value))}</span>;
+      }
+      return <span>{value ?? "—"}</span>;
+    }
+    return (
+      <RegisterSheetCell
+        type={opts?.type || (opts?.numeric ? "number" : "text")}
+        value={opts?.numeric ? formatQty(Number(value) || 0) : String(value ?? "")}
+        className={opts?.className}
+        onCommit={onSave}
+      />
+    );
+  }
+
   return (
-    <div className="sheet-register w-full mb-entry-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden">
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
-      <div className="sheet-register__head">
-        <span>Measurement book (MB) — SPDC columns</span>
-        <span className="text-steel-muted font-normal normal-case tracking-normal">
-          {rows.length} rows · grouped by item / heading · click cells to edit
-        </span>
-      </div>
-      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
-        <table className="sheet-register__table min-w-[72rem]">
-          <thead>
-            <tr>
-              <th className="sticky-col" rowSpan={2}>Package</th>
-              <th rowSpan={2}>SR No.</th>
-              <th rowSpan={2}>Description</th>
-              <th colSpan={2}>No</th>
-              <th rowSpan={2} className="num">Length</th>
-              <th rowSpan={2} className="num">Width</th>
-              <th rowSpan={2} className="num">Height</th>
-              <th rowSpan={2} className="num">Qty.</th>
-              <th rowSpan={2}>UoM.</th>
-              <th rowSpan={2}>RA-BILL</th>
-              <th rowSpan={2}>Remark</th>
-              <th rowSpan={2} />
-            </tr>
-            <tr>
-              <th className="num">No</th>
-              <th className="num">No</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grouped.map(([heading, items]) => (
-              <Fragment key={heading}>
-                <tr className="boq-section-row">
-                  <td colSpan={13} className="sticky-col">
-                    <span className="boq-section-label">{heading}</span>
-                  </td>
-                </tr>
-                {items.map((b) => (
-                  <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
-                    <td className="sticky-col wrap">
-                      {canFullEdit ? (
-                        <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
-                      ) : (
-                        b.packageName
-                      )}
-                    </td>
-                    <td>
-                      {canEditDims ? (
-                        <CellInput value={b.srNo} onCommit={(v) => void patchLine(b.id, { srNo: v })} />
-                      ) : (
-                        b.srNo || "—"
-                      )}
-                    </td>
-                    <td className="wrap min-w-[160px]">
-                      {canEditDims ? (
-                        <CellInput value={b.description} onCommit={(v) => void patchLine(b.id, { description: v })} />
-                      ) : (
-                        b.description
-                      )}
-                    </td>
-                    <td className="num">
-                      {canEditDims ? (
-                        <CellInput type="number" value={b.nos1} onCommit={(v) => void patchLine(b.id, { nos1: Number(v) || 0 })} />
-                      ) : (
-                        formatQty(b.nos1)
-                      )}
-                    </td>
-                    <td className="num">
-                      {canEditDims ? (
-                        <CellInput type="number" value={b.nos2} onCommit={(v) => void patchLine(b.id, { nos2: Number(v) || 0 })} />
-                      ) : (
-                        formatQty(b.nos2)
-                      )}
-                    </td>
-                    <td className="num">
-                      {canEditDims ? (
-                        <CellInput type="number" value={b.length} onCommit={(v) => void patchLine(b.id, { length: Number(v) || 0 })} />
-                      ) : (
-                        formatQty(b.length)
-                      )}
-                    </td>
-                    <td className="num">
-                      {canEditDims ? (
-                        <CellInput type="number" value={b.width} onCommit={(v) => void patchLine(b.id, { width: Number(v) || 0 })} />
-                      ) : (
-                        formatQty(b.width)
-                      )}
-                    </td>
-                    <td className="num">
-                      {canEditDims ? (
-                        <CellInput type="number" value={b.height} onCommit={(v) => void patchLine(b.id, { height: Number(v) || 0 })} />
-                      ) : (
-                        formatQty(b.height)
-                      )}
-                    </td>
-                    <td className="num">
-                      {canFullEdit ? (
-                        <CellInput type="number" value={b.qty} onCommit={(v) => void patchLine(b.id, { qty: Number(v) || 0 })} />
-                      ) : (
-                        formatQty(b.qty)
-                      )}
-                    </td>
-                    <td>
-                      {canFullEdit ? (
-                        <CellInput value={b.unit} onCommit={(v) => void patchLine(b.id, { unit: v })} />
-                      ) : (
-                        b.unit || "—"
-                      )}
-                    </td>
-                    <td>
-                      {canFullEdit ? (
-                        <CellInput value={b.raBill} onCommit={(v) => void patchLine(b.id, { raBill: v })} />
-                      ) : (
-                        b.raBill || "—"
-                      )}
-                    </td>
-                    <td className="wrap">
-                      {canEditDims ? (
-                        <CellInput value={b.remark} onCommit={(v) => void patchLine(b.id, { remark: v })} />
-                      ) : (
-                        b.remark || "—"
-                      )}
-                    </td>
-                    <td>
-                      {canFullEdit && (
-                        <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
-                          Del
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </Fragment>
-            ))}
-            {!rows.length && (
-              <tr>
-                <td colSpan={13} className="empty">
-                  No MB rows — import from master, upload Excel, or add a line above.
+    <CostRegisterShell
+      title={`Measurement Book (MB)${singlePackage ? ` — ${singlePackage}` : ""}`}
+      subtitle={`${rows.length} lines · ${grouped.length} sections · Nos × Length × Width × Height → Qty`}
+      footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
+    >
+      <table className="cube-register__table register-editor-pro min-w-[88rem] mb-entry-panel">
+        <thead className="spdc-register-thead">
+          <tr>
+            {!hidePackage && <th rowSpan={2} className="text-left sticky-col">Package</th>}
+            <th rowSpan={2} className="text-left">SR No.</th>
+            <th rowSpan={2} className="text-left min-w-[12rem]">Description</th>
+            <th colSpan={2} className="text-center">No</th>
+            <th rowSpan={2} className="text-left num">Length</th>
+            <th rowSpan={2} className="text-left num">Width</th>
+            <th rowSpan={2} className="text-left num">Height</th>
+            <th rowSpan={2} className="text-left num">Qty</th>
+            <th rowSpan={2} className="text-left">UoM</th>
+            <th rowSpan={2} className="text-left">RA-Bill</th>
+            <th rowSpan={2} className="text-left min-w-[8rem]">Remark</th>
+            <th rowSpan={2} className="text-left w-12" />
+          </tr>
+          <tr>
+            <th className="spdc-th-sub text-center num">No</th>
+            <th className="spdc-th-sub text-center num">No</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grouped.map(([heading, items]) => (
+            <Fragment key={heading}>
+              <tr className="boq-section-row">
+                <td colSpan={colSpan} className="sticky-col text-left">
+                  <span className="boq-section-label">{heading}</span>
                 </td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+              {items.map((b) => (
+                <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
+                  {!hidePackage && (
+                    <td className="sticky-col text-left align-top">
+                      {cell(b.packageName, (v) => void patchLine(b.id, { packageName: v }), { disabled: !canFullEdit })}
+                    </td>
+                  )}
+                  <td className="text-left align-top font-mono">
+                    {cell(b.srNo, (v) => void patchLine(b.id, { srNo: v }), { disabled: !canEditDims })}
+                  </td>
+                  <td className="text-left align-top min-w-[12rem]">
+                    {cell(b.description, (v) => void patchLine(b.id, { description: v }), {
+                      disabled: !canEditDims,
+                      className: "min-w-[10rem]",
+                    })}
+                  </td>
+                  <td className="text-left align-top num">
+                    {cell(b.nos1, (v) => void patchLine(b.id, { nos1: Number(v) || 0 }), { numeric: true, disabled: !canEditDims })}
+                  </td>
+                  <td className="text-left align-top num">
+                    {cell(b.nos2, (v) => void patchLine(b.id, { nos2: Number(v) || 0 }), { numeric: true, disabled: !canEditDims })}
+                  </td>
+                  <td className="text-left align-top num">
+                    {cell(b.length, (v) => void patchLine(b.id, { length: Number(v) || 0 }), { numeric: true, disabled: !canEditDims })}
+                  </td>
+                  <td className="text-left align-top num">
+                    {cell(b.width, (v) => void patchLine(b.id, { width: Number(v) || 0 }), { numeric: true, disabled: !canEditDims })}
+                  </td>
+                  <td className="text-left align-top num">
+                    {cell(b.height, (v) => void patchLine(b.id, { height: Number(v) || 0 }), { numeric: true, disabled: !canEditDims })}
+                  </td>
+                  <td className="text-left align-top num font-medium">
+                    {cell(b.qty, (v) => void patchLine(b.id, { qty: Number(v) || 0 }), { numeric: true, disabled: !canFullEdit })}
+                  </td>
+                  <td className="text-left align-top">
+                    {cell(b.unit, (v) => void patchLine(b.id, { unit: v }), { disabled: !canFullEdit })}
+                  </td>
+                  <td className="text-left align-top">
+                    {cell(b.raBill, (v) => void patchLine(b.id, { raBill: v }), { disabled: !canFullEdit })}
+                  </td>
+                  <td className="text-left align-top">
+                    {cell(b.remark, (v) => void patchLine(b.id, { remark: v }), { disabled: !canEditDims, className: "min-w-[6rem]" })}
+                  </td>
+                  <td className="text-left align-top">
+                    {canFullEdit && (
+                      <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
+                        Del
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </Fragment>
+          ))}
+          {!rows.length && (
+            <tr>
+              <td colSpan={colSpan} className="empty text-left p-6">
+                No MB rows — pick a package above, upload an MB sheet in setup, or add a row.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </CostRegisterShell>
   );
 }

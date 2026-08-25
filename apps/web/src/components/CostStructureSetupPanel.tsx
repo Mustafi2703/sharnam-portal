@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Button, Card, Input } from "./ui";
@@ -144,6 +144,68 @@ export function CostStructureSetupPanel({
     }
   }
 
+  async function uploadSheetForPackage(pkg: string, kind: "monitoring" | "mb" | "bbs", file: File) {
+    setLocalBusy(true);
+    onMessage?.("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("packageName", pkg);
+      if (kind === "monitoring") {
+        await api(`/api/cost/${projectId}/structure/import`, { method: "POST", token, body: fd });
+        onMessage?.(`Monitoring BOQ imported for ${pkg}`);
+        onOpenTab("monitoring", pkg);
+      } else {
+        fd.append("replace", "0");
+        await api(`/api/cost/${projectId}/${kind}/import`, { method: "POST", token, body: fd });
+        onMessage?.(`${kind.toUpperCase()} sheet imported for ${pkg}`);
+        onOpenTab(kind, pkg);
+      }
+      await onChanged();
+    } catch (err) {
+      onMessage?.(err instanceof Error ? err.message : "Sheet upload failed");
+    } finally {
+      setLocalBusy(false);
+    }
+  }
+
+  function SheetUploadBtn({
+    label,
+    pkg,
+    kind,
+  }: {
+    label: string;
+    pkg: string;
+    kind: "monitoring" | "mb" | "bbs";
+  }) {
+    const ref = useRef<HTMLInputElement>(null);
+    if (!canEdit) return null;
+    return (
+      <>
+        <input
+          ref={ref}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void uploadSheetForPackage(pkg, kind, f);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          disabled={isBusy}
+          title={`Upload ${label} for ${pkg}`}
+          className="text-[10px] font-semibold text-brand px-1.5 py-0.5 rounded border border-brand/30 hover:bg-brand-soft disabled:opacity-50"
+          onClick={() => ref.current?.click()}
+        >
+          ↑ {label}
+        </button>
+      </>
+    );
+  }
+
   return (
     <Card padding={false} className="register-panel-fill overflow-visible shrink-0">
       <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
@@ -203,6 +265,7 @@ export function CostStructureSetupPanel({
               <th className="text-left num">MB lines</th>
               <th className="text-left num">BBS lines</th>
               <th className="text-left">Open sheets</th>
+              <th className="text-left min-w-[11rem]">Upload per structure</th>
             </tr>
           </thead>
           <tbody>
@@ -229,11 +292,18 @@ export function CostStructureSetupPanel({
                     BBS
                   </button>
                 </td>
+                <td className="text-left">
+                  <div className="flex flex-wrap gap-1">
+                    <SheetUploadBtn label="Mon" pkg={s.packageName} kind="monitoring" />
+                    <SheetUploadBtn label="MB" pkg={s.packageName} kind="mb" />
+                    <SheetUploadBtn label="BBS" pkg={s.packageName} kind="bbs" />
+                  </div>
+                </td>
               </tr>
             ))}
             {!structures.length && (
               <tr>
-                <td colSpan={5} className="empty text-left p-6">
+                <td colSpan={6} className="empty text-left p-6">
                   {hasData ? "No structure rows" : (
                     <>
                       No cost sheets yet — click <strong>Load SPDC_Budget_Arvind 49.xls</strong> above, or see{" "}
