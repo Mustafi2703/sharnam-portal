@@ -526,7 +526,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <button
               type="button"
-              className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
+              className="hidden md:inline-flex app-topbar__nav-toggle h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
               aria-label={hidden ? "Show left navigation" : "Hide left navigation"}
               title={hidden ? "Show left navigation" : "Hide left navigation"}
               onClick={() => setHidden((h) => !h)}

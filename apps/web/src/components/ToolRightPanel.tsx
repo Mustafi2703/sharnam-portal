@@ -300,12 +300,6 @@ export function ToolRightPanel({
           }
         );
         break;
-      case "comms":
-        actions.push(
-          { label: "Day log", to: "diary", primary: true },
-          { label: "Photos", to: "photos", secondary: true }
-        );
-        break;
       case "reports":
         actions.push({ label: "Open DPR / WPR", to: "reports", primary: true });
         break;

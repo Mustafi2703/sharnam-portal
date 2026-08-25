@@ -125,8 +125,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       prisma.costBudgetLine.findMany({ where: { projectId } }),
       prisma.costMonitoringLine.findMany({
         where: monWhere,
-        take: pkg ? 2000 : 800,
-        orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
+        take: 8000,
+        orderBy: [{ packageName: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       }),
       prisma.costCashflowPeriod.findMany({ where: { projectId }, orderBy: { periodLabel: "asc" } }),
       prisma.costRateDifference.findMany({ where: { projectId } }),
@@ -137,12 +137,12 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       }),
       prisma.costMbLine.findMany({
         where: mbWhere,
-        take: pkg ? 8000 : 2000,
+        take: 8000,
         orderBy: [{ packageName: "asc" }, { lineIndex: "asc" }, { createdAt: "asc" }],
       }),
       prisma.costBbsLine.findMany({
         where: bbsWhere,
-        take: pkg ? 8000 : 2000,
+        take: 8000,
         orderBy: [{ packageName: "asc" }, { lineIndex: "asc" }, { createdAt: "asc" }],
       }),
       prisma.costMonitoringLine.groupBy({ by: ["packageName"], where: { projectId }, _count: true }),

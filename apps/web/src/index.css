@@ -986,15 +986,6 @@ body.is-auth-route #root {
   .page-stack--register {
     padding-bottom: max(4.5rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)));
   }
-  .page-stack--register .reference-sheet-toolbar {
-    position: sticky;
-    top: 0;
-    bottom: auto;
-    z-index: 15;
-    margin-left: 0;
-    margin-right: 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  }
 }
 .qap-page__register .spdc-register-panel,
 .cube-page__register .spdc-register-panel,
@@ -1133,7 +1124,7 @@ body.is-auth-route #root {
 }
 .page-stack--register > .shrink-0,
 .page-stack--register > details,
-.page-stack--register .reference-sheet-toolbar {
+.page-stack--register .sheet-actions-bar {
   flex-shrink: 0;
 }
 .page-stack--register .register-tab-body {
@@ -1298,13 +1289,7 @@ body.is-auth-route #root {
   padding: 0.32rem 0.45rem;
 }
 
-.page-stack--register .reference-sheet-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 12;
-  background: var(--color-paper);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.06);
-}
+/* Compact register actions — not sticky, no overlay */
 
 /* Register add/edit modals — large, scrollable body on 13" laptops */
 .register-modal {
@@ -2940,7 +2925,7 @@ body.is-auth-route #root {
   color: var(--color-brand);
 }
 .app-topbar .app-topbar__menu-btn,
-.app-topbar button.hidden.md\\:inline-flex {
+.app-topbar .app-topbar__nav-toggle {
   border-color: var(--color-line);
   background: var(--color-paper);
   color: var(--color-ink);
@@ -4928,7 +4913,7 @@ body {
     padding-bottom: 1rem;
   }
 }
-.maker-shell .reference-sheet-toolbar {
+.maker-shell .sheet-actions-bar {
   flex-shrink: 0;
 }
 .maker-shell .maker-section--flush .maker-table-wrap {
@@ -5053,7 +5038,15 @@ body {
   color: var(--color-steel-muted);
   margin-bottom: 0.35rem;
 }
-/* Reference sheet toolbar — mobile sticky actions */
+/* Compact register actions — sit in document flow, never overlay the sheet */
+.sheet-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+/* Legacy reference-sheet-toolbar (unused) */
 .reference-sheet-toolbar {
   display: flex;
   flex-direction: column;

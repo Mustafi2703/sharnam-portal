@@ -444,13 +444,16 @@ export function BoqMonitoringEditor({
   const headers = [...MON_HEADERS];
 
   const grouped = useMemo(() => {
-    const map = new Map<string, MonLine[]>();
+    const groups: { key: string; section: string; items: MonLine[] }[] = [];
     for (const r of rows) {
-      const key = r.section?.trim() || "General";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(r);
+      const pkg = r.packageName?.trim() || "General";
+      const section = r.section?.trim() || "";
+      const key = section ? `${pkg} › ${section}` : pkg;
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) last.items.push(r);
+      else groups.push({ key, section, items: [r] });
     }
-    return [...map.entries()];
+    return groups;
   }, [rows]);
 
   async function patchLine(id: string, patch: Record<string, unknown>, reload = true) {
@@ -585,20 +588,26 @@ export function BoqMonitoringEditor({
   const colSpan = (canTouch ? headers.length + 1 : headers.length);
 
   function monitoringSectionRow(section: string, items: MonLine[]) {
+    const hasSection = Boolean(section.trim());
+    if (!hasSection && singlePackage) return null;
     return (
       <tr className="boq-section-row">
-        {monitoringBandEmpty(0, "p")}
+        <td className={monitoringColClass(0, { sticky: true, extra: "text-left" })}>
+          {items[0]?.packageName || ""}
+        </td>
         {monitoringBandEmpty(1, "sr")}
-        <td className={monitoringColClass(2, { sticky: true, extra: "text-left boq-desc-col" })}>
+        <td className={monitoringColClass(2, { extra: "text-left boq-desc-col" })}>
           {canFullEdit ? (
             <CellInput
-              key={`sec-${section}-${items.map((i) => i.id).join(",")}`}
-              value={section === "General" ? "" : section}
+              key={`sec-${items[0]?.id || "x"}-${section}`}
+              value={section}
               className="boq-section-input"
               onCommit={(v) => void renameSection(items, v)}
             />
-          ) : (
+          ) : hasSection ? (
             <SectionBandLabel section={section} />
+          ) : (
+            <span className="boq-section-label">{items[0]?.packageName || ""}</span>
           )}
         </td>
         {Array.from({ length: MON_DATA_COLS - 3 }, (_, i) => monitoringBandEmpty(i + 3, `mon-b-${i + 3}`))}
@@ -732,8 +741,8 @@ export function BoqMonitoringEditor({
               </tr>
             </thead>
             <tbody>
-              {grouped.map(([section, items]) => (
-                <Fragment key={section}>
+              {grouped.map(({ key, section, items }) => (
+                <Fragment key={key}>
                   {monitoringSectionRow(section, items)}
                   {items.map((b) => {
                     const busy = savingId === b.id;

@@ -51,7 +51,7 @@ if (skipAllSeed) {
     });
     console.log("==> Full seed complete. Remove RUN_SEED=1 from Hostinger env after verifying login.");
   } catch {
-    console.error("FATAL: seed failed during build");
+    console.error("FATAL: seed failed during build — Hostinger will retry on next deploy after the seed bug is fixed.");
     process.exit(1);
   }
 } else {

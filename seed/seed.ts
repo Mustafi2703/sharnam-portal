@@ -172,16 +172,21 @@ async function seedUsers() {
     });
     users.push(u);
     if (d.role !== "client" && d.role !== "vendor") {
-      await prisma.employeeProfile.upsert({
-        where: { userId: u.id },
-        create: {
-          userId: u.id,
-          empCode: `EMP-${d.role.toUpperCase().slice(0, 3)}`,
-          department: d.role === "site_employee" ? "Site" : "Office",
-          designation: d.fullName,
-        },
-        update: {},
-      });
+      const empCode = `EMP-${d.email.split("@")[0].toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12)}`;
+      const existing = await prisma.employeeProfile.findUnique({ where: { userId: u.id } });
+      if (!existing) {
+        const taken = await prisma.employeeProfile.findUnique({ where: { empCode } });
+        if (!taken) {
+          await prisma.employeeProfile.create({
+            data: {
+              userId: u.id,
+              empCode,
+              department: d.role === "site_employee" ? "Site" : "Office",
+              designation: d.fullName,
+            },
+          });
+        }
+      }
     }
   }
   return users;
@@ -1752,9 +1757,6 @@ async function main() {
 main()
   .catch((e) => {
     console.error("Seed hard-failed at top level:", e);
-    // Do NOT exit(1): we don't want to block the API from starting because
-    // a client-provided reference sheet is missing. All required admin/role
-    // rows are created inside seedRoles + seedUsers before this point.
-    console.warn("Continuing to server start anyway.");
+    process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());

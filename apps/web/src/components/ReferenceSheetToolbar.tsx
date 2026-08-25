@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useRef } from "react";
 import { Button } from "./ui";
-import { SheetUploadModal } from "./SheetUploadModal";
 
 type ReferenceSheetToolbarProps = {
   sheetLabel: string;
@@ -22,14 +20,13 @@ type ReferenceSheetToolbarProps = {
   message?: string;
 };
 
-/** Shared toolbar — upload modal, add row, download client format. Mobile sticky bar. */
+/** Compact register actions — upload, add row, load template. No overlay modal. */
 export function ReferenceSheetToolbar({
   sheetLabel,
   rowCount,
   canEdit,
   onAddRow,
   onUpload,
-  uploadTitle,
   uploadHint,
   onDownloadCsv,
   onDownloadXlsx,
@@ -41,84 +38,66 @@ export function ReferenceSheetToolbar({
   busy,
   message,
 }: ReferenceSheetToolbarProps) {
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const location = useLocation();
-
-  useEffect(() => {
-    setUploadOpen(false);
-  }, [sheetLabel, location.pathname, location.search]);
-
-  useEffect(() => {
-    return () => setUploadOpen(false);
-  }, []);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   return (
-    <>
-      <div className="reference-sheet-toolbar mb-4">
-        <div className="reference-sheet-toolbar__info">
-          <span className="maker-toolbar__label">Reference sheet</span>
-          <strong className="block text-sm text-ink">{sheetLabel}</strong>
-          {rowCount != null && <span className="text-xs text-steel-muted">{rowCount} rows</span>}
-          {message && <p className="text-xs text-steel-muted mt-1 w-full">{message}</p>}
-          {sharePointUrl && (
-            <a
-              href={sharePointUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-brand font-semibold mt-1 inline-block"
-            >
-              Open in SharePoint ↗
-            </a>
-          )}
-        </div>
-        <div className="reference-sheet-toolbar__actions">
-          {onDownloadXlsx && (
-            <Button type="button" variant="secondary" onClick={onDownloadXlsx} disabled={busy}>
-              Download XLSX
-            </Button>
-          )}
-          {onPublishSharePoint && (
-            <Button type="button" variant="secondary" onClick={() => void onPublishSharePoint()} disabled={busy}>
-              {publishLabel}
-            </Button>
-          )}
-          {canEdit && onUpload && (
-            <Button type="button" variant="secondary" onClick={() => setUploadOpen(true)} disabled={busy}>
+    <div className="sheet-actions-bar shrink-0 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
+      <div className="min-w-0 text-left">
+        <strong className="text-sm text-ink">{sheetLabel}</strong>
+        {rowCount != null && <span className="text-xs text-steel-muted ml-2">{rowCount} rows</span>}
+        {message && <p className="text-xs text-steel-muted mt-0.5">{message}</p>}
+        {sharePointUrl && (
+          <a href={sharePointUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand font-semibold ml-2">
+            Open in SharePoint ↗
+          </a>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        {onDownloadXlsx && (
+          <Button type="button" variant="secondary" onClick={onDownloadXlsx} disabled={busy}>
+            Download XLSX
+          </Button>
+        )}
+        {onPublishSharePoint && (
+          <Button type="button" variant="secondary" onClick={() => void onPublishSharePoint()} disabled={busy}>
+            {publishLabel}
+          </Button>
+        )}
+        {canEdit && onUpload && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              title={uploadHint || "Upload sheet"}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void onUpload(file);
+              }}
+            />
+            <Button type="button" variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy}>
               Upload sheet
             </Button>
-          )}
-          {canEdit && onAddRow && (
-            <Button type="button" onClick={onAddRow} disabled={busy}>
-              + Add row
-            </Button>
-          )}
-          {onGenerate && (
-            <Button type="button" onClick={onGenerate} disabled={busy}>
-              {generateLabel}
-            </Button>
-          )}
-          {onDownloadCsv && (
-            <Button type="button" variant="secondary" onClick={onDownloadCsv} disabled={busy}>
-              CSV
-            </Button>
-          )}
-        </div>
+          </>
+        )}
+        {canEdit && onAddRow && (
+          <Button type="button" onClick={onAddRow} disabled={busy}>
+            + Add row
+          </Button>
+        )}
+        {onGenerate && (
+          <Button type="button" onClick={onGenerate} disabled={busy}>
+            {busy ? "Saving…" : generateLabel}
+          </Button>
+        )}
+        {onDownloadCsv && (
+          <Button type="button" variant="secondary" onClick={onDownloadCsv} disabled={busy}>
+            CSV
+          </Button>
+        )}
       </div>
-
-      {onUpload && (
-        <SheetUploadModal
-          open={uploadOpen}
-          title={uploadTitle || `Upload — ${sheetLabel}`}
-          sheetLabel={sheetLabel}
-          hint={uploadHint}
-          busy={busy}
-          onClose={() => setUploadOpen(false)}
-          onUpload={async (file) => {
-            await onUpload(file);
-            setUploadOpen(false);
-          }}
-        />
-      )}
-    </>
+    </div>
   );
 }

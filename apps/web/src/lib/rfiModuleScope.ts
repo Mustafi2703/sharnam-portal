@@ -70,7 +70,6 @@ export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, str
     case "safety":
       return [["SafetyChecklist", "Safety checklist fill"]];
     case "progress":
-    case "comms":
       return [["SiteExecution", "Site checklist fill"]];
     case "inspection":
       return [

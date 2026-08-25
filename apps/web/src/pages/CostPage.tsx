@@ -14,7 +14,7 @@ import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
-import { flowPackageForTab, linkedBbsPackage, linkedMbPackage } from "../lib/spdcCostPackages";
+import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -98,7 +98,7 @@ export default function CostPage() {
   const [cfGrain, setCfGrain] = useState<"day" | "week" | "month">("month");
   const rawTab = searchParams.get("tab") || "monitoring";
   const tab: CostTab = COST_TABS.includes(rawTab as CostTab) ? (rawTab as CostTab) : "monitoring";
-  const pkgFilter = searchParams.get("pkg") || "All";
+  const pkgFilter = searchParams.get("pkg") || DEFAULT_COST_MONITORING_PKG;
   const setTab = (next: CostTab, pkg?: string, cf?: string) => {
     const nextParams: Record<string, string> = {};
     if (next !== "monitoring") nextParams.tab = next;
@@ -303,7 +303,7 @@ export default function CostPage() {
   );
 
   const activePkg = pkgFilter !== "All" ? pkgFilter : undefined;
-  const mbFlowPkg = activePkg ? linkedMbPackage(activePkg) ?? activePkg : undefined;
+  const mbFlowPkg = activePkg ? mbPackageForSelection(activePkg) : undefined;
   const bbsFlowPkg = mbFlowPkg ? linkedBbsPackage(mbFlowPkg) : undefined;
   const flowCounts = useMemo(
     () => ({
@@ -339,7 +339,7 @@ export default function CostPage() {
       setTab(next, base);
       return;
     }
-    const mbPkg = linkedMbPackage(base) ?? base;
+    const mbPkg = mbPackageForSelection(base);
     const resolved = next === "bbs" ? linkedBbsPackage(mbPkg) : next === "mb" ? mbPkg : base;
     setTab(next, resolved);
   }
