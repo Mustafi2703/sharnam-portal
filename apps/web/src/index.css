@@ -1669,6 +1669,164 @@ body.is-auth-route #root {
   --cost-section-bg: #a7f3d0;
   --cost-border: #10b981;
   --cost-scroll-hint: #065f46;
+  --cost-col-meta-bg: #f0fdf4;
+  --cost-col-qty-bg: #dbeafe;
+  --cost-col-qty-achieved-bg: #6ee7b7;
+  --cost-col-cost-bg: #fef3c7;
+  --cost-col-pct-bg: #bbf7d0;
+  --cost-col-ev-bg: #ede9fe;
+}
+.cost-register-shell--mb {
+  --cost-col-meta-bg: #fffbeb;
+  --cost-col-dims-bg: #fef3c7;
+  --cost-col-result-bg: #fde68a;
+}
+.cost-register-shell--bbs {
+  --cost-col-meta-bg: #eff6ff;
+  --cost-col-bar-bg: #dbeafe;
+  --cost-col-shape-bg: #bfdbfe;
+  --cost-col-total-bg: #93c5fd;
+}
+
+/* Column group bands — header + body cells */
+.cost-register-shell .cost-col-group-row th.cost-col-group {
+  text-align: center;
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.25rem;
+  border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line)) !important;
+}
+.cost-register-shell--monitoring .cost-col--meta th,
+.cost-register-shell--monitoring .cost-col--meta td {
+  background: var(--cost-col-meta-bg);
+}
+.cost-register-shell--monitoring .cost-col--qty th,
+.cost-register-shell--monitoring .cost-col--qty td {
+  background: var(--cost-col-qty-bg);
+}
+.cost-register-shell--monitoring .cost-col--qty.cost-col--achieved th,
+.cost-register-shell--monitoring .cost-col--qty.cost-col--achieved td {
+  background: var(--cost-col-qty-achieved-bg);
+  box-shadow: inset 3px 0 0 var(--cost-border);
+}
+.cost-register-shell--monitoring .cost-col--cost th,
+.cost-register-shell--monitoring .cost-col--cost td {
+  background: var(--cost-col-cost-bg);
+}
+.cost-register-shell--monitoring .cost-col--pct th,
+.cost-register-shell--monitoring .cost-col--pct td {
+  background: var(--cost-col-pct-bg);
+}
+.cost-register-shell--monitoring .cost-col--ev th,
+.cost-register-shell--monitoring .cost-col--ev td {
+  background: var(--cost-col-ev-bg);
+}
+.cost-register-shell--mb .cost-col--meta th,
+.cost-register-shell--mb .cost-col--meta td {
+  background: var(--cost-col-meta-bg);
+}
+.cost-register-shell--mb .cost-col--dims th,
+.cost-register-shell--mb .cost-col--dims td {
+  background: var(--cost-col-dims-bg);
+}
+.cost-register-shell--mb .cost-col--result th,
+.cost-register-shell--mb .cost-col--result td {
+  background: var(--cost-col-result-bg);
+}
+.cost-register-shell--bbs .cost-col--meta th,
+.cost-register-shell--bbs .cost-col--meta td {
+  background: var(--cost-col-meta-bg);
+}
+.cost-register-shell--bbs .cost-col--bar th,
+.cost-register-shell--bbs .cost-col--bar td {
+  background: var(--cost-col-bar-bg);
+}
+.cost-register-shell--bbs .cost-col--shape th,
+.cost-register-shell--bbs .cost-col--shape td {
+  background: var(--cost-col-shape-bg);
+}
+.cost-register-shell--bbs .cost-col--total th,
+.cost-register-shell--bbs .cost-col--total td {
+  background: var(--cost-col-total-bg);
+}
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--meta td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--qty td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--cost td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--pct td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--ev td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--dims td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--result td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--bar td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--shape td,
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) .cost-col--total td {
+  filter: brightness(0.985);
+}
+
+.cost-register-shell--monitoring .cost-col-group-row .cost-col--meta {
+  background: var(--cost-col-meta-bg);
+}
+.cost-register-shell--monitoring .cost-col-group-row .cost-col--qty {
+  background: var(--cost-col-qty-bg);
+}
+.cost-register-shell--monitoring .cost-col-group-row .cost-col--cost {
+  background: var(--cost-col-cost-bg);
+}
+.cost-register-shell--monitoring .cost-col-group-row .cost-col--pct {
+  background: var(--cost-col-pct-bg);
+}
+.cost-register-shell--monitoring .cost-col-group-row .cost-col--ev {
+  background: var(--cost-col-ev-bg);
+}
+.cost-register-shell--mb .cost-col-group-row .cost-col--meta {
+  background: var(--cost-col-meta-bg);
+}
+.cost-register-shell--mb .cost-col-group-row .cost-col--dims {
+  background: var(--cost-col-dims-bg);
+}
+.cost-register-shell--mb .cost-col-group-row .cost-col--result {
+  background: var(--cost-col-result-bg);
+}
+.cost-register-shell--bbs .cost-col-group-row .cost-col--meta {
+  background: var(--cost-col-meta-bg);
+}
+.cost-register-shell--bbs .cost-col-group-row .cost-col--bar {
+  background: var(--cost-col-bar-bg);
+}
+.cost-register-shell--bbs .cost-col-group-row .cost-col--shape {
+  background: var(--cost-col-shape-bg);
+}
+.cost-register-shell--bbs .cost-col-group-row .cost-col--total {
+  background: var(--cost-col-total-bg);
+}
+
+/* Cost page — sheet-coloured tool bars */
+.cost-sheet-bar--monitoring {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+}
+.cost-sheet-bar--mb {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+.cost-sheet-bar--bbs {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+.cost-pkg-chip--monitoring.cost-pkg-chip--active {
+  background: #047857;
+  border-color: #064e3b;
+  color: white;
+}
+.cost-pkg-chip--mb.cost-pkg-chip--active {
+  background: #b45309;
+  border-color: #92400e;
+  color: white;
+}
+.cost-pkg-chip--bbs.cost-pkg-chip--active {
+  background: #1d4ed8;
+  border-color: #1e3a8a;
+  color: white;
 }
 
 .cost-register-shell__title-bar {
@@ -3093,6 +3251,11 @@ body {
   padding-top: 0.55rem !important;
   padding-bottom: 0.55rem !important;
 }
+.cost-register-shell .boq-section-row td {
+  background: var(--cost-section-bg) !important;
+  color: var(--cost-accent);
+  border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line)) !important;
+}
 .boq-section-input {
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -3116,19 +3279,17 @@ body {
 .sheet-register__table tbody tr.boq-line-row:nth-child(even) td {
   background: color-mix(in srgb, var(--color-sand) 35%, var(--color-paper));
 }
+.cost-register-shell .boq-editor__table tbody tr.boq-line-row:nth-child(even) td:not([class*="cost-col"]) {
+  background: color-mix(in srgb, var(--cost-head-bg) 35%, white);
+}
 .boq-editor__table .boq-desc-col {
   min-width: 18rem;
   max-width: 28rem;
   width: 32%;
 }
-.boq-editor__table th.boq-achieved-col,
-.boq-editor__table td.boq-achieved-col {
-  background: color-mix(in srgb, var(--color-brand-soft, #ccfbf1) 55%, var(--color-paper));
-  box-shadow: inset 3px 0 0 var(--color-brand, #0d9488);
-}
-.boq-cell-input.boq-achieved-input {
+.cost-register-shell--monitoring .boq-cell-input.boq-achieved-input {
   background: var(--color-paper);
-  border-color: var(--color-brand, #0d9488);
+  border-color: var(--cost-border);
   font-weight: 600;
 }
 .boq-desc {

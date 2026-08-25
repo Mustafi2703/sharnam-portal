@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Button, Input, Select, TextArea } from "./ui";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { RegisterEntryModal } from "./RegisterEntryModal";
+import { MON_COLUMN_GROUPS, monitoringColClass } from "../lib/costSheetColumns";
 
 export type MonLine = {
   id: string;
@@ -670,11 +671,27 @@ export function BoqMonitoringEditor({
       >
           <table className="cube-register__table register-editor-pro cost-register-table boq-editor__table min-w-[128rem]">
             <thead className="cost-register-thead">
+              <tr className="cost-col-group-row">
+                {MON_COLUMN_GROUPS.map((g) => (
+                  <th key={g.key} colSpan={g.to - g.from + 1} className={`cost-col-group cost-col--${g.key}`}>
+                    {g.label}
+                  </th>
+                ))}
+                {canTouch && (
+                  <th rowSpan={2} className="boq-actions-col">
+                    Actions
+                  </th>
+                )}
+              </tr>
               <tr>
                 {headers.map((h, i) => (
                   <th
                     key={h}
-                    className={`text-left ${i === 0 ? "sticky-col" : ""} ${i >= 4 ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""} ${siteQtyOnly && h === "Achieved Qty" ? "boq-achieved-col" : ""}`}
+                    className={monitoringColClass(i, {
+                      achieved: h === "Achieved Qty",
+                      sticky: i === 0,
+                      extra: `text-left ${i >= 4 ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""}`,
+                    })}
                   >
                     {h.includes("(") ? (
                       <>
@@ -717,16 +734,16 @@ export function BoqMonitoringEditor({
                     const certCost = b.certifiedInvoiceCost ?? b.certifiedQty * rate;
                     return (
                       <tr key={b.id} className={`boq-line-row ${busy ? "opacity-60" : ""}`}>
-                        <td className="sticky-col text-left align-top">{b.packageName}</td>
-                        <td className="whitespace-nowrap">{b.itemNo ?? "—"}</td>
-                        <td className="boq-desc-col">
+                        <td className={monitoringColClass(0, { sticky: true, extra: "text-left align-top" })}>{b.packageName}</td>
+                        <td className={monitoringColClass(1, { extra: "whitespace-nowrap" })}>{b.itemNo ?? "—"}</td>
+                        <td className={monitoringColClass(2, { extra: "boq-desc-col" })}>
                           <div className="boq-desc" title={b.description}>
                             {b.description || "—"}
                           </div>
                         </td>
-                        <td>{b.uom ?? "—"}</td>
-                        <td className="num rupee">{formatInr(b.rate)}</td>
-                        <td className="num">
+                        <td className={monitoringColClass(3)}>{b.uom ?? "—"}</td>
+                        <td className={monitoringColClass(4, { extra: "num rupee" })}>{formatInr(b.rate)}</td>
+                        <td className={monitoringColClass(5, { extra: "num" })}>
                           {canFullEdit ? (
                             <CellInput
                               type="number"
@@ -737,7 +754,7 @@ export function BoqMonitoringEditor({
                             formatQty(b.boqQty)
                           )}
                         </td>
-                        <td className="num">
+                        <td className={monitoringColClass(6, { extra: "num" })}>
                           {canFullEdit ? (
                             <CellInput
                               type="number"
@@ -748,7 +765,7 @@ export function BoqMonitoringEditor({
                             formatQty(b.extraQty)
                           )}
                         </td>
-                        <td className="num">
+                        <td className={monitoringColClass(7, { extra: "num" })}>
                           {canEditGfc ? (
                             <CellInput
                               type="number"
@@ -759,7 +776,7 @@ export function BoqMonitoringEditor({
                             formatQty(b.gfcQty)
                           )}
                         </td>
-                        <td className={`num ${siteQtyOnly ? "boq-achieved-col" : ""}`}>
+                        <td className={monitoringColClass(8, { achieved: true, extra: "num" })}>
                           {canEditAchieved ? (
                             <CellInput
                               type="number"
@@ -771,9 +788,9 @@ export function BoqMonitoringEditor({
                             formatQty(b.achievedQty)
                           )}
                         </td>
-                        <td className="num">{formatQty(b.excessQty)}</td>
-                        <td className="num">{formatQty(b.savingQty)}</td>
-                        <td className="num">
+                        <td className={monitoringColClass(9, { extra: "num" })}>{formatQty(b.excessQty)}</td>
+                        <td className={monitoringColClass(10, { extra: "num" })}>{formatQty(b.savingQty)}</td>
+                        <td className={monitoringColClass(11, { extra: "num" })}>
                           {canFullEdit ? (
                             <CellInput
                               type="number"
@@ -784,34 +801,34 @@ export function BoqMonitoringEditor({
                             formatQty(b.certifiedQty)
                           )}
                         </td>
-                        <td className="num rupee">{formatInr(boqCost)}</td>
-                        <td className="num rupee">{formatInr(extraCost)}</td>
-                        <td className="num rupee">{formatInr(gfcCost)}</td>
-                        <td className="num rupee">{formatInr(achCost)}</td>
-                        <td className="num rupee">{formatInr(b.excessCost ?? Math.max(0, gfcCost - boqCost))}</td>
-                        <td className="num rupee">{formatInr(b.savingCost ?? Math.max(0, boqCost - gfcCost))}</td>
-                        <td className="num rupee">{formatInr(certCost)}</td>
-                        <td className="num">{formatPct(b.pctBoq)}</td>
-                        <td className="num">{formatPct(b.pctGfc)}</td>
-                        <td className="num">{formatPct((b.pctAchieved || 0) * 100)}</td>
-                        <td className="num">{formatPct(b.pctCertified)}</td>
-                        <td className="num rupee">{formatInr(b.evBoq ?? achCost)}</td>
-                        <td className="num rupee">{formatInr(b.evGfc ?? achCost)}</td>
-                        <td className="num rupee">{formatInr(b.evCertified ?? certCost)}</td>
-                        <td className="num rupee">{formatInr(b.actualCost ?? achCost)}</td>
-                        <td className="num">{formatIdx(b.cpi)}</td>
-                        <td>{b.cpiStatus || "—"}</td>
-                        <td className="num rupee">{formatInr(b.etcBoq)}</td>
-                        <td className="num rupee">{formatInr(b.etcGfc)}</td>
-                        <td className="num rupee">{formatInr(b.etcCertified)}</td>
-                        <td className="num rupee">{formatInr(b.eac ?? boqCost)}</td>
-                        <td className="num rupee">{formatInr(b.vac)}</td>
-                        <td className="num rupee">{formatInr(b.varBoqGfc)}</td>
-                        <td className="num rupee">{formatInr(b.varGfcAchieved)}</td>
-                        <td className="num rupee">{formatInr(b.varGfcCertified)}</td>
-                        <td className="num">{formatIdx(b.overrunBoq)}</td>
-                        <td className="num">{formatIdx(b.overrunGfc)}</td>
-                        <td className="num">{formatIdx(b.overrunCertified)}</td>
+                        <td className={monitoringColClass(12, { extra: "num rupee" })}>{formatInr(boqCost)}</td>
+                        <td className={monitoringColClass(13, { extra: "num rupee" })}>{formatInr(extraCost)}</td>
+                        <td className={monitoringColClass(14, { extra: "num rupee" })}>{formatInr(gfcCost)}</td>
+                        <td className={monitoringColClass(15, { extra: "num rupee" })}>{formatInr(achCost)}</td>
+                        <td className={monitoringColClass(16, { extra: "num rupee" })}>{formatInr(b.excessCost ?? Math.max(0, gfcCost - boqCost))}</td>
+                        <td className={monitoringColClass(17, { extra: "num rupee" })}>{formatInr(b.savingCost ?? Math.max(0, boqCost - gfcCost))}</td>
+                        <td className={monitoringColClass(18, { extra: "num rupee" })}>{formatInr(certCost)}</td>
+                        <td className={monitoringColClass(19, { extra: "num" })}>{formatPct(b.pctBoq)}</td>
+                        <td className={monitoringColClass(20, { extra: "num" })}>{formatPct(b.pctGfc)}</td>
+                        <td className={monitoringColClass(21, { extra: "num" })}>{formatPct((b.pctAchieved || 0) * 100)}</td>
+                        <td className={monitoringColClass(22, { extra: "num" })}>{formatPct(b.pctCertified)}</td>
+                        <td className={monitoringColClass(23, { extra: "num rupee" })}>{formatInr(b.evBoq ?? achCost)}</td>
+                        <td className={monitoringColClass(24, { extra: "num rupee" })}>{formatInr(b.evGfc ?? achCost)}</td>
+                        <td className={monitoringColClass(25, { extra: "num rupee" })}>{formatInr(b.evCertified ?? certCost)}</td>
+                        <td className={monitoringColClass(26, { extra: "num rupee" })}>{formatInr(b.actualCost ?? achCost)}</td>
+                        <td className={monitoringColClass(27, { extra: "num" })}>{formatIdx(b.cpi)}</td>
+                        <td className={monitoringColClass(28)}>{b.cpiStatus || "—"}</td>
+                        <td className={monitoringColClass(29, { extra: "num rupee" })}>{formatInr(b.etcBoq)}</td>
+                        <td className={monitoringColClass(30, { extra: "num rupee" })}>{formatInr(b.etcGfc)}</td>
+                        <td className={monitoringColClass(31, { extra: "num rupee" })}>{formatInr(b.etcCertified)}</td>
+                        <td className={monitoringColClass(32, { extra: "num rupee" })}>{formatInr(b.eac ?? boqCost)}</td>
+                        <td className={monitoringColClass(33, { extra: "num rupee" })}>{formatInr(b.vac)}</td>
+                        <td className={monitoringColClass(34, { extra: "num rupee" })}>{formatInr(b.varBoqGfc)}</td>
+                        <td className={monitoringColClass(35, { extra: "num rupee" })}>{formatInr(b.varGfcAchieved)}</td>
+                        <td className={monitoringColClass(36, { extra: "num rupee" })}>{formatInr(b.varGfcCertified)}</td>
+                        <td className={monitoringColClass(37, { extra: "num" })}>{formatIdx(b.overrunBoq)}</td>
+                        <td className={monitoringColClass(38, { extra: "num" })}>{formatIdx(b.overrunGfc)}</td>
+                        <td className={monitoringColClass(39, { extra: "num" })}>{formatIdx(b.overrunCertified)}</td>
                         {canTouch && (
                           <td className="boq-actions-col">
                             <div className="flex items-center gap-2">

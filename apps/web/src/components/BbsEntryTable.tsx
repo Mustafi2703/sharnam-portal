@@ -9,6 +9,7 @@ import PdfMarkup from "./PdfMarkup";
 import ImageMarkup from "./ImageMarkup";
 import { formatQty } from "./BoqMonitoringEditor";
 import { CostRegisterShell } from "./CostRegisterShell";
+import { BBS_COLUMN_GROUPS, bbsColClass } from "../lib/costSheetColumns";
 
 function CellInput({
   value,
@@ -204,27 +205,34 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
     >
         <table className="cube-register__table register-editor-pro cost-register-table min-w-[108rem] bbs-entry-panel">
           <thead className="cost-register-thead">
-            <tr>
-              <th className="text-left sticky-col" rowSpan={2}>Package</th>
-              <th rowSpan={2}>SR. NO</th>
-              <th rowSpan={2}>DESCRIPTION</th>
-              <th rowSpan={2} className="min-w-[140px]">SHAPE OF BAR</th>
-              <th rowSpan={2}>DIA</th>
-              <th rowSpan={2}>NO PER MEMBER</th>
-              <th rowSpan={2}>NO OF MEMBER</th>
-              <th rowSpan={2}>TOTAL NOS OF BARS</th>
-              <th colSpan={5}>SHAPE LENGTH</th>
-              <th rowSpan={2}>Cutting Length</th>
-              <th rowSpan={2}>Total LENGTH</th>
-              <th rowSpan={2}>Weight kg</th>
-              <th rowSpan={2} />
+            <tr className="cost-col-group-row">
+              {BBS_COLUMN_GROUPS.map((g) => (
+                <th key={g.key} colSpan={g.to - g.from + 1} className={`cost-col-group cost-col--${g.key}`}>
+                  {g.label}
+                </th>
+              ))}
+              <th rowSpan={3} />
             </tr>
             <tr>
-              <th>A</th>
-              <th>B</th>
-              <th>C</th>
-              <th>D</th>
-              <th>E</th>
+              <th className={bbsColClass(0, { sticky: true, extra: "text-left" })} rowSpan={2}>Package</th>
+              <th className={bbsColClass(1)} rowSpan={2}>SR. NO</th>
+              <th className={bbsColClass(2)} rowSpan={2}>DESCRIPTION</th>
+              <th className={bbsColClass(3, { extra: "min-w-[140px]" })} rowSpan={2}>SHAPE OF BAR</th>
+              <th className={bbsColClass(4)} rowSpan={2}>DIA</th>
+              <th className={bbsColClass(5)} rowSpan={2}>NO PER MEMBER</th>
+              <th className={bbsColClass(6)} rowSpan={2}>NO OF MEMBER</th>
+              <th className={bbsColClass(7)} rowSpan={2}>TOTAL NOS OF BARS</th>
+              <th colSpan={5} className={`${bbsColClass(8)} text-center`}>SHAPE LENGTH</th>
+              <th className={bbsColClass(13)} rowSpan={2}>Cutting Length</th>
+              <th className={bbsColClass(14)} rowSpan={2}>Total LENGTH</th>
+              <th className={bbsColClass(15)} rowSpan={2}>Weight kg</th>
+            </tr>
+            <tr>
+              <th className={bbsColClass(8, { extra: "spdc-th-sub" })}>A</th>
+              <th className={bbsColClass(9, { extra: "spdc-th-sub" })}>B</th>
+              <th className={bbsColClass(10, { extra: "spdc-th-sub" })}>C</th>
+              <th className={bbsColClass(11, { extra: "spdc-th-sub" })}>D</th>
+              <th className={bbsColClass(12, { extra: "spdc-th-sub" })}>E</th>
             </tr>
           </thead>
           <tbody>
@@ -241,21 +249,21 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
                 <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
-                  <td className="sticky-col wrap text-left align-top">
+                  <td className={bbsColClass(0, { sticky: true, extra: "wrap text-left align-top" })}>
                     {canFullEdit ? (
                       <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
                     ) : (
                       b.packageName
                     )}
                   </td>
-                  <td className="wrap font-medium text-left align-top">
+                  <td className={bbsColClass(1, { extra: "wrap font-medium text-left align-top" })}>
                     {canEditDims ? (
                       <CellInput value={b.barMark} onCommit={(v) => void patchLine(b.id, { barMark: v })} />
                     ) : (
                       b.barMark || "—"
                     )}
                   </td>
-                  <td className="wrap min-w-[140px]">
+                  <td className={bbsColClass(2, { extra: "wrap min-w-[140px]" })}>
                     {canEditDims ? (
                       <CellInput
                         value={b.location || b.sectionMark || ""}
@@ -265,7 +273,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       b.location || b.sectionMark || "—"
                     )}
                   </td>
-                  <td className="align-top">
+                  <td className={bbsColClass(3, { extra: "align-top" })}>
                     <div className="flex flex-col gap-1.5 min-w-[120px]">
                       {canEditDims && (
                         <Select
@@ -347,7 +355,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       </div>
                     </div>
                   </td>
-                  <td>
+                  <td className={bbsColClass(4)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -358,7 +366,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       b.diameterMm ? `${b.diameterMm}` : "—"
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(5)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -369,7 +377,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.nosPerMember)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(6)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -380,14 +388,14 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.nosOfMember)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(7)}>
                     {canEditDims ? (
                       <CellInput type="number" value={b.nos} onCommit={(v) => void patchLine(b.id, { nos: Number(v) || 0 })} />
                     ) : (
                       fmtNum(b.nos)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(8)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -398,7 +406,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.shapeLenA)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(9)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -409,7 +417,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.shapeLenB)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(10)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -420,7 +428,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.shapeLenC)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(11)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -431,7 +439,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.shapeLenD)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(12)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -442,7 +450,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.shapeLenE)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(13)}>
                     {canEditDims ? (
                       <CellInput
                         type="number"
@@ -453,7 +461,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.lengthMm)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(14)}>
                     {canFullEdit ? (
                       <CellInput
                         type="number"
@@ -464,7 +472,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       fmtNum(b.totalLength)
                     )}
                   </td>
-                  <td>
+                  <td className={bbsColClass(15)}>
                     {canFullEdit ? (
                       <CellInput
                         type="number"

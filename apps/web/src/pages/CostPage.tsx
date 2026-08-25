@@ -650,7 +650,7 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="flex flex-wrap items-end gap-3 shrink-0 rounded border border-line bg-paper px-3 py-2.5">
+        <div className="cost-sheet-bar cost-sheet-bar--monitoring flex flex-wrap items-end gap-3 shrink-0 rounded border px-3 py-2.5">
           <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
             BOQ package
             <Select
@@ -692,16 +692,16 @@ export default function CostPage() {
       )}
 
       {["mb", "bbs"].includes(tab) && (
-        <div className="space-y-2 shrink-0">
-          <div className="text-[10px] uppercase tracking-wider text-steel-muted font-mono">
+        <div className={`cost-sheet-bar cost-sheet-bar--${tab} space-y-2 shrink-0 rounded border px-3 py-2.5`}>
+          <div className="text-[10px] uppercase tracking-wider font-mono" style={{ color: tab === "mb" ? "#92400e" : "#1e40af" }}>
             Package tools (from SPDC Budget sheets)
           </div>
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
               onClick={() => setPkg("All")}
-              className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-                pkgFilter === "All" ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink"
+              className={`cost-pkg-chip cost-pkg-chip--${tab} rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
+                pkgFilter === "All" ? "cost-pkg-chip--active" : "bg-paper/80 border-line text-ink"
               }`}
             >
               All packages
@@ -711,8 +711,8 @@ export default function CostPage() {
                 key={p}
                 type="button"
                 onClick={() => setPkg(p)}
-                className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border max-w-[220px] truncate ${
-                  pkgFilter === p ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink hover:border-brand/40"
+                className={`cost-pkg-chip cost-pkg-chip--${tab} rounded-sm px-2.5 py-1.5 text-xs font-medium border max-w-[220px] truncate ${
+                  pkgFilter === p ? "cost-pkg-chip--active" : "bg-paper/80 border-line text-ink hover:border-brand/40"
                 }`}
                 title={p}
               >
@@ -733,8 +733,8 @@ export default function CostPage() {
                     key={p}
                     type="button"
                     onClick={() => setPkg(p)}
-                    className={`rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
-                      pkgFilter === p ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line text-ink"
+                    className={`cost-pkg-chip cost-pkg-chip--${tab} rounded-sm px-2.5 py-1.5 text-xs font-medium border ${
+                      pkgFilter === p ? "cost-pkg-chip--active" : "bg-paper/80 border-line text-ink"
                     }`}
                   >
                     {p}
