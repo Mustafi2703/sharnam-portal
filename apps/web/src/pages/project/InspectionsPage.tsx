@@ -140,7 +140,7 @@ export default function InspectionsPage() {
         dense={isQualityRegister}
         eyebrow="Quality module"
         title={pageTitle}
-        subtitle={sheetKey === "cube-test" ? "SPDC cube register — 100-row sheet viewport; scroll inside the panel." : pageSubtitle}
+        subtitle={sheetKey === "cube-test" ? "SPDC cube register — project details fixed; scroll rows inside the sheet." : pageSubtitle}
       />
       </div>
 

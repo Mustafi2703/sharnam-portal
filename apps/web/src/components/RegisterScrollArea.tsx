@@ -11,7 +11,7 @@ type Props = {
 export function RegisterScrollArea({ children, className = "", tall = false }: Props) {
   return (
     <div
-      className={`register-scroll-area ${className}`.trim()}
+      className={`register-scroll-area${tall ? " register-scroll-area--tall" : ""} ${className}`.trim()}
       data-register-scroll={tall ? "tall" : "default"}
     >
       {children}

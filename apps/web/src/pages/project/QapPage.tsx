@@ -200,7 +200,7 @@ export default function QapPage() {
       <PageHeader
         eyebrow="Quality module"
         title="Quality Assurance Plan"
-        subtitle="Full Week 50 register — 100-row sheet viewport; scroll inside the panel."
+        subtitle="Full Week 50 register — project details fixed; scroll rows inside the sheet."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} open</Badge>

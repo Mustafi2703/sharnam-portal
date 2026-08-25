@@ -725,12 +725,33 @@ body.is-auth-route #root {
   max-height: var(--register-scroll-h-tall);
 }
 
-/* QAP + Cube — 100-row sheet target; compact rows; internal scroll in tool outlet */
+/* QAP + Cube — balanced sheet body (project meta stays visible; table scrolls inside) */
 .qap-page,
 .spdc-register-page:has(.cube-page__register) {
-  --register-rows-target: 100;
-  --register-sheet-cap: calc(var(--register-row-h-compact) * var(--register-rows-target) + var(--register-head-h));
-  --register-scroll-h-tall: min(calc(100dvh - var(--register-chrome) - 10rem), var(--register-sheet-cap));
+  --register-sheet-row-h: 1.85rem;
+  --register-sheet-head-h: 3.7rem;
+  --register-rows-visible: 16;
+  --register-sheet-body-h: calc(
+    var(--register-sheet-head-h) + var(--register-sheet-row-h) * var(--register-rows-visible)
+  );
+}
+@media (min-width: 1280px) {
+  .qap-page,
+  .spdc-register-page:has(.cube-page__register) {
+    --register-rows-visible: 22;
+  }
+}
+@media (min-width: 1440px) {
+  .qap-page,
+  .spdc-register-page:has(.cube-page__register) {
+    --register-rows-visible: 28;
+  }
+}
+@media (min-width: 1920px) {
+  .qap-page,
+  .spdc-register-page:has(.cube-page__register) {
+    --register-rows-visible: 34;
+  }
 }
 .qap-page .spdc-register-panel.register-editor-panel,
 .cube-page__register .spdc-register-panel.register-editor-panel {
@@ -1154,8 +1175,6 @@ body.is-auth-route #root {
 }
 
 .tool-main__outlet .page-stack--register,
-.tool-main__outlet .qap-page,
-.tool-main__outlet .spdc-register-page,
 .tool-main__outlet .cost-page--register,
 .tool-main__outlet .progress-page--register,
 .tool-main__outlet .maker-shell,
@@ -1163,8 +1182,6 @@ body.is-auth-route #root {
 .tool-main__outlet .register-tab-body,
 .tool-main__outlet .cost-page__register,
 .tool-main__outlet .progress-page__register,
-.tool-main__outlet .qap-page__register,
-.tool-main__outlet .cube-page__register,
 .tool-main__outlet .spdc-register-panel,
 .tool-main__outlet .register-panel-fill,
 .tool-main__outlet .register-sheet-shell {
@@ -1175,17 +1192,72 @@ body.is-auth-route #root {
   position: static !important;
 }
 
-/* Wide register tables — horizontal scroll; vertical scroll is the outlet above */
-.register-scroll-area,
-.sheet-register__scroll,
-.register-sheet-viewport,
-.tool-main__outlet .register-scroll-area,
-.tool-main__outlet .sheet-register__scroll,
-.tool-main__outlet .register-sheet-viewport,
-.tool-main__outlet .register-sheet-shell > .register-scroll-area,
-.tool-main__outlet .register-sheet-shell > .sheet-register__scroll,
-.page-stack--register .register-sheet-shell > .register-scroll-area,
-.page-stack--register .register-sheet-shell > .sheet-register__scroll {
+/* QAP / Cube — fill outlet height; headers fixed, sheet body scrolls */
+.tool-main__outlet:has(.qap-page),
+.tool-main__outlet:has(.spdc-register-page:has(.cube-page__register)) {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding-bottom: 0.5rem;
+}
+
+.tool-main__outlet > .qap-page,
+.tool-main__outlet > .spdc-register-page:has(.cube-page__register) {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+}
+
+.tool-main__outlet .qap-page__register,
+.tool-main__outlet .cube-page__register {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+}
+
+.tool-main__outlet .qap-page .spdc-register-panel.register-editor-panel,
+.tool-main__outlet .cube-page__register .spdc-register-panel.register-editor-panel {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.tool-main__outlet .qap-page .register-sheet-shell,
+.tool-main__outlet .cube-page__register .register-sheet-shell {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Wide register tables — horizontal scroll; QAP/Cube tall body scrolls internally */
+.register-scroll-area:not(.register-scroll-area--tall),
+.sheet-register__scroll:not(.register-scroll-area--tall),
+.register-sheet-viewport:not(.register-scroll-area--tall),
+.tool-main__outlet .register-scroll-area:not(.register-scroll-area--tall),
+.tool-main__outlet .sheet-register__scroll:not(.register-scroll-area--tall),
+.tool-main__outlet .register-sheet-viewport:not(.register-scroll-area--tall),
+.tool-main__outlet .register-sheet-shell > .register-scroll-area:not(.register-scroll-area--tall),
+.tool-main__outlet .register-sheet-shell > .sheet-register__scroll:not(.register-scroll-area--tall),
+.page-stack--register .register-sheet-shell > .register-scroll-area:not(.register-scroll-area--tall),
+.page-stack--register .register-sheet-shell > .sheet-register__scroll:not(.register-scroll-area--tall) {
   display: block;
   width: 100%;
   overflow-x: auto;
@@ -1198,42 +1270,14 @@ body.is-auth-route #root {
   -webkit-overflow-scrolling: touch;
 }
 
-/* QAP + Cube registers — scroll inside the sheet panel (~100 rows), not the whole tool outlet */
-.tool-main__outlet .qap-page,
-.tool-main__outlet .spdc-register-page:has(.cube-page__register) {
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  height: calc(100dvh - var(--register-chrome) - 2rem) !important;
-  max-height: calc(100dvh - var(--register-chrome) - 2rem) !important;
-  overflow: hidden !important;
-}
-
-.tool-main__outlet .qap-page__register,
-.tool-main__outlet .cube-page__register,
-.tool-main__outlet .qap-page .spdc-register-panel.register-editor-panel,
-.tool-main__outlet .cube-page__register .spdc-register-panel.register-editor-panel,
-.tool-main__outlet .qap-page .register-sheet-shell,
-.tool-main__outlet .cube-page__register .register-sheet-shell {
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
-  height: 0 !important;
-  max-height: none !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-  position: relative !important;
-}
-
-.tool-main__outlet .qap-page .register-scroll-area[data-register-scroll="tall"],
-.tool-main__outlet .cube-page__register .register-scroll-area[data-register-scroll="tall"] {
+.tool-main__outlet .qap-page .register-scroll-area--tall,
+.tool-main__outlet .cube-page__register .register-scroll-area--tall {
   flex: 1 1 0% !important;
   display: block !important;
   width: 100% !important;
-  min-height: 0 !important;
-  height: 0 !important;
+  min-height: min(var(--register-sheet-body-h), calc(100dvh - 22rem)) !important;
   max-height: none !important;
+  height: auto !important;
   overflow: auto !important;
   overflow-x: auto !important;
   overflow-y: auto !important;
@@ -1244,14 +1288,14 @@ body.is-auth-route #root {
 
 .qap-page .register-editor-pro td,
 .cube-page__register .register-editor-pro td {
-  min-height: 1.75rem;
-  padding: 0.28rem 0.45rem;
+  min-height: var(--register-sheet-row-h, 1.85rem);
+  padding: 0.3rem 0.45rem;
 }
 
 .qap-page .register-editor-pro .register-sheet-cell,
 .cube-page__register .register-editor-pro .register-sheet-cell {
-  min-height: 1.65rem;
-  padding: 0.3rem 0.45rem;
+  min-height: 1.6rem;
+  padding: 0.32rem 0.45rem;
 }
 
 .page-stack--register .reference-sheet-toolbar {
