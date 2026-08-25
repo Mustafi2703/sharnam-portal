@@ -3121,6 +3121,16 @@ body {
   max-width: 28rem;
   width: 32%;
 }
+.boq-editor__table th.boq-achieved-col,
+.boq-editor__table td.boq-achieved-col {
+  background: color-mix(in srgb, var(--color-brand-soft, #ccfbf1) 55%, var(--color-paper));
+  box-shadow: inset 3px 0 0 var(--color-brand, #0d9488);
+}
+.boq-cell-input.boq-achieved-input {
+  background: var(--color-paper);
+  border-color: var(--color-brand, #0d9488);
+  font-weight: 600;
+}
 .boq-desc {
   white-space: normal;
   overflow-wrap: anywhere;

@@ -146,6 +146,7 @@ export default function CostPage() {
   }, [pkgFilter]);
   const canEdit = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
   const canSiteEdit = user?.role === "site_employee";
+  const siteBoqMode = canSiteEdit && !canEdit;
   const clientBlocked = user?.role === "client";
 
   const load = () => {
@@ -414,6 +415,27 @@ export default function CostPage() {
 
   const isRegisterView = COST_REGISTER_TABS.includes(tab);
 
+  const monitoringPackageOptions = useMemo(() => {
+    const fromTools = monPackages.filter(Boolean);
+    if (fromTools.length) return fromTools;
+    return (summary?.packages || []).filter(Boolean);
+  }, [monPackages, summary?.packages]);
+
+  const costHeroSubtitle =
+    tab === "monitoring"
+      ? siteBoqMode
+        ? "Pick a BOQ package and update achieved quantities — all monitoring columns stay visible."
+        : "BOQ / Monitoring — pick a package, upload BOQ if needed, track GFC and achieved qty."
+      : tab === "mb" || tab === "bbs"
+        ? "Parikh-style MB / BBS registers — office setup lives under Admin · cost sheet setup."
+        : "Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance.";
+
+  useEffect(() => {
+    if (!siteBoqMode || tab !== "monitoring" || pkgFilter !== "All") return;
+    const first = monitoringPackageOptions[0];
+    if (first) setTab("monitoring", first);
+  }, [siteBoqMode, tab, pkgFilter, monitoringPackageOptions]);
+
   return (
     <div
       className={`w-full min-w-0 ${
@@ -425,7 +447,7 @@ export default function CostPage() {
       <div className="shrink-0">
       <PageHero
         title="Cost"
-        subtitle="Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance."
+        subtitle={costHeroSubtitle}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
               <ReportExportButtons projectId={id} kind="cost" compact />
@@ -464,7 +486,7 @@ export default function CostPage() {
                   Finance →
                 </Button>
               </Link>
-              {canEdit && (
+              {canEdit && !siteBoqMode && (
                 <Button
                   type="button"
                   className="!bg-white/15 !text-white !border-white/30"
@@ -482,7 +504,7 @@ export default function CostPage() {
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
-      {verify && (
+      {verify && canEdit && !siteBoqMode && (
         <details
           className={`shrink-0 rounded-lg border bg-paper ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
             isRegisterView ? "open" : ""
@@ -603,10 +625,10 @@ export default function CostPage() {
       </>
       )}
 
-      {isRegisterView && (
-        <details className="rounded border border-line bg-paper shrink-0" open>
+      {isRegisterView && canEdit && (
+        <details className="rounded border border-line bg-paper shrink-0" open={tab === "boq"}>
           <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">
-            Cost sheet setup — structures · MB · BBS · Monitoring upload
+            Admin · cost sheet setup (structures · MB · BBS · bulk upload)
           </summary>
           <div className="border-t border-line">
         <CostStructureSetupPanel
@@ -627,7 +649,49 @@ export default function CostPage() {
         </details>
       )}
 
-      {["monitoring", "mb", "bbs"].includes(tab) && (
+      {tab === "monitoring" && (
+        <div className="flex flex-wrap items-end gap-3 shrink-0 rounded border border-line bg-paper px-3 py-2.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
+            BOQ package
+            <Select
+              className="mt-1 min-w-[14rem] max-w-full"
+              value={pkgFilter}
+              onChange={(e) => setPkg(e.target.value)}
+            >
+              <option value="All">All packages ({monitoringPackageOptions.length})</option>
+              {monitoringPackageOptions.map((p: string) => (
+                <option key={p} value={p}>
+                  {p}
+                  {summary?.monByPackage?.[p] != null ? ` · ${summary.monByPackage[p]} lines` : ""}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {canEdit && (
+            <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              Upload BOQ
+              <input
+                type="file"
+                accept=".xls,.xlsx,.csv"
+                disabled={syncing}
+                className="mt-1 block max-w-xs text-xs file:mr-2 file:rounded-sm file:border file:border-line file:bg-sand file:px-2 file:py-1 file:text-xs file:font-medium"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void uploadBoqOrWorkbook(file, activePkg);
+                }}
+              />
+            </label>
+          )}
+          <p className="text-xs text-steel-muted pb-0.5 ml-auto max-w-md">
+            {siteBoqMode
+              ? "Choose a package to open its BOQ. Edit Achieved Qty in the highlighted column."
+              : "Open a package BOQ below — upload full SPDC workbook or a single monitoring sheet per package."}
+          </p>
+        </div>
+      )}
+
+      {["mb", "bbs"].includes(tab) && (
         <div className="space-y-2 shrink-0">
           <div className="text-[10px] uppercase tracking-wider text-steel-muted font-mono">
             Package tools (from SPDC Budget sheets)
@@ -653,7 +717,6 @@ export default function CostPage() {
                 title={p}
               >
                 {p}
-                {tab === "monitoring" && summary.monByPackage?.[p] != null ? ` (${summary.monByPackage[p]})` : ""}
                 {tab === "mb" && summary.mbByPackage?.[p]?.lines != null
                   ? ` (${summary.mbByPackage[p].lines})`
                   : ""}
@@ -683,15 +746,17 @@ export default function CostPage() {
 
       {tab === "monitoring" && (
         <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
-          <CostSheetFlowBar
-            active="monitoring"
-            packageName={pkgFilter}
-            counts={flowCounts}
-            onNavigate={navigateCostFlow}
-            onSyncMbToMonitoring={activePkg ? () => void syncMbToMonitoring() : undefined}
-            syncBusy={syncSheetBusy}
-            canEdit={canEdit}
-          />
+          {canEdit && !siteBoqMode && (
+            <CostSheetFlowBar
+              active="monitoring"
+              packageName={pkgFilter}
+              counts={flowCounts}
+              onNavigate={navigateCostFlow}
+              onSyncMbToMonitoring={activePkg ? () => void syncMbToMonitoring() : undefined}
+              syncBusy={syncSheetBusy}
+              canEdit={canEdit}
+            />
+          )}
           <ReferenceSheetToolbar
             sheetLabel={`BOQ monitoring — ${pkgFilter}`}
             rowCount={monRows.length}

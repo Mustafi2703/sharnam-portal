@@ -264,7 +264,7 @@ export function ToolRightPanel({
       case "cost":
         if (canUpload) {
           actions.push(
-            { label: "Cost hub", onClick: () => navigate(`/projects/${ctx.projectId}/hub/cost`), primary: true },
+            { label: "BOQ / Monitoring", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=monitoring`), primary: true },
             { label: "MB sheets", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=mb`), secondary: true },
             { label: "Cashflow", onClick: () => navigate(`/projects/${ctx.projectId}/cost?tab=cashflow`), secondary: true }
           );

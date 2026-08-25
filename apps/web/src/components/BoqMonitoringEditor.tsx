@@ -213,6 +213,7 @@ function EditLineModal({
   draft,
   packages,
   canFullEdit,
+  siteQtyOnly,
   busy,
   error,
   onChange,
@@ -224,6 +225,7 @@ function EditLineModal({
   draft: Draft;
   packages: string[];
   canFullEdit: boolean;
+  siteQtyOnly?: boolean;
   busy?: boolean;
   error?: string;
   onChange: (d: Draft) => void;
@@ -268,7 +270,9 @@ function EditLineModal({
             <h2 id={titleId} className="font-display text-lg sm:text-xl text-ink">
               {title}
             </h2>
-            <p className="text-xs text-steel-muted mt-1">Edit description, rates, and quantities</p>
+            <p className="text-xs text-steel-muted mt-1">
+              {siteQtyOnly ? "Update achieved quantity for this BOQ line" : "Edit description, rates, and quantities"}
+            </p>
           </div>
           <Button type="button" variant="ghost" className="!px-2 !py-1 !text-xs" onClick={onClose}>
             Close
@@ -370,20 +374,22 @@ function EditLineModal({
                 </label>
               </>
             )}
-            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
-              GFC qty
-              <Input
-                className="mt-1"
-                type="number"
-                step="any"
-                value={String(draft.gfcQty ?? "")}
-                onChange={(e) => onChange({ ...draft, gfcQty: Number(e.target.value) })}
-              />
-            </label>
+            {!siteQtyOnly && (
+              <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+                GFC qty
+                <Input
+                  className="mt-1"
+                  type="number"
+                  step="any"
+                  value={String(draft.gfcQty ?? "")}
+                  onChange={(e) => onChange({ ...draft, gfcQty: Number(e.target.value) })}
+                />
+              </label>
+            )}
             <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
               Achieved qty
               <Input
-                className="mt-1"
+                className="mt-1 boq-achieved-input"
                 type="number"
                 step="any"
                 value={String(draft.achievedQty ?? "")}
@@ -430,6 +436,9 @@ export function BoqMonitoringEditor({
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
   const canTouch = canFullEdit || canSiteEdit;
+  const siteQtyOnly = canSiteEdit && !canFullEdit;
+  const canEditGfc = canFullEdit;
+  const canEditAchieved = canFullEdit || canSiteEdit;
   const headers = [...MON_HEADERS];
 
   const grouped = useMemo(() => {
@@ -538,10 +547,12 @@ export function BoqMonitoringEditor({
     setEditBusy(true);
     setEditError("");
     try {
-      const patch: Record<string, unknown> = {
-        gfcQty: Number(editDraft.gfcQty || 0),
-        achievedQty: Number(editDraft.achievedQty || 0),
-      };
+      const patch: Record<string, unknown> = siteQtyOnly
+        ? { achievedQty: Number(editDraft.achievedQty || 0) }
+        : {
+            gfcQty: Number(editDraft.gfcQty || 0),
+            achievedQty: Number(editDraft.achievedQty || 0),
+          };
       if (canFullEdit) {
         Object.assign(patch, {
           packageName: editDraft.packageName || "Civil",
@@ -651,13 +662,20 @@ export function BoqMonitoringEditor({
       <CostRegisterShell
         sheetKind="monitoring"
         title={`BOQ / Monitoring${singlePackage ? ` — ${singlePackage}` : ""}`}
-        subtitle={`${rows.length} lines · ${grouped.length} sections · all ${headers.length} SPDC monitoring columns visible`}
+        subtitle={
+          siteQtyOnly
+            ? `${rows.length} lines · ${grouped.length} sections · edit Achieved Qty (white cells) — all monitoring columns visible`
+            : `${rows.length} lines · ${grouped.length} sections · all ${headers.length} SPDC monitoring columns visible`
+        }
       >
           <table className="cube-register__table register-editor-pro cost-register-table boq-editor__table min-w-[128rem]">
             <thead className="cost-register-thead">
               <tr>
                 {headers.map((h, i) => (
-                  <th key={h} className={`text-left ${i === 0 ? "sticky-col" : ""} ${i >= 4 ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""}`}>
+                  <th
+                    key={h}
+                    className={`text-left ${i === 0 ? "sticky-col" : ""} ${i >= 4 ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""} ${siteQtyOnly && h === "Achieved Qty" ? "boq-achieved-col" : ""}`}
+                  >
                     {h.includes("(") ? (
                       <>
                         {h.split("(")[0].trim()}
@@ -731,7 +749,7 @@ export function BoqMonitoringEditor({
                           )}
                         </td>
                         <td className="num">
-                          {canTouch ? (
+                          {canEditGfc ? (
                             <CellInput
                               type="number"
                               value={b.gfcQty}
@@ -741,10 +759,11 @@ export function BoqMonitoringEditor({
                             formatQty(b.gfcQty)
                           )}
                         </td>
-                        <td className="num">
-                          {canTouch ? (
+                        <td className={`num ${siteQtyOnly ? "boq-achieved-col" : ""}`}>
+                          {canEditAchieved ? (
                             <CellInput
                               type="number"
+                              className={siteQtyOnly ? "boq-achieved-input" : undefined}
                               value={b.achievedQty}
                               onCommit={(v) => void patchLine(b.id, { achievedQty: Number(v) || 0 })}
                             />
@@ -839,6 +858,7 @@ export function BoqMonitoringEditor({
         draft={editDraft}
         packages={packages}
         canFullEdit={canFullEdit}
+        siteQtyOnly={siteQtyOnly}
         busy={editBusy}
         error={editError}
         onChange={setEditDraft}
