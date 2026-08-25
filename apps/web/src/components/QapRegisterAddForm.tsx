@@ -1,4 +1,5 @@
-import { FormEvent } from "react";
+import { FormEvent, useRef } from "react";
+import { RegisterEntryModal } from "./RegisterEntryModal";
 import { Button, Input, Select } from "./ui";
 
 export type QapAddFormState = {
@@ -23,31 +24,31 @@ type Props = {
   onClose: () => void;
 };
 
-/** Add QAP section or line — master-register style form. */
+/** Add QAP section or line — popup so the register sheet stays visible behind. */
 export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange, onSubmit, onClose }: Props) {
-  if (!open) return null;
-
+  const formRef = useRef<HTMLFormElement>(null);
   const set = (patch: Partial<QapAddFormState>) => onChange({ ...form, ...patch });
 
-  return (
-    <div className="sheet-register overflow-hidden shrink-0">
-      <div className="sheet-register__head flex-col sm:flex-row sm:items-start gap-2">
-        <div>
-          <div className="font-display text-sm text-ink">
-            {form.addMode === "section" ? "Add QAP activity section" : "Add QAP line under section"}
-          </div>
-          <p className="text-xs font-normal text-steel-muted mt-1 max-w-3xl">
-            {form.addMode === "section"
-              ? "Start a new activity group (e.g. Concreting, Reinforcement) — first row of the section band."
-              : "Add another description line under an existing activity section."}
-          </p>
-        </div>
-        <Button type="button" variant="ghost" className="!text-xs shrink-0" onClick={onClose}>
-          Close
-        </Button>
-      </div>
+  const title = form.addMode === "section" ? "Add QAP activity section" : "Add QAP line under section";
+  const saveLabel = form.addMode === "section" ? "Save section" : "Save QAP line";
 
-      <form className="p-4 space-y-4 bg-paper border-t border-line" onSubmit={onSubmit}>
+  return (
+    <RegisterEntryModal
+      open={open}
+      title={title}
+      onClose={onClose}
+      onSave={() => formRef.current?.requestSubmit()}
+      saving={busy}
+      size="2xl"
+      saveLabel={saveLabel}
+    >
+      <p className="text-sm text-steel-muted">
+        {form.addMode === "section"
+          ? "Start a new activity group (e.g. Concreting, Reinforcement) — first row of the section band."
+          : "Add another description line under an existing activity section."}
+      </p>
+
+      <form ref={formRef} className="space-y-4" onSubmit={onSubmit}>
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -152,15 +153,7 @@ export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange
             </label>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>
-            {form.addMode === "section" ? "Save section" : "Save QAP line"}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
       </form>
-    </div>
+    </RegisterEntryModal>
   );
 }

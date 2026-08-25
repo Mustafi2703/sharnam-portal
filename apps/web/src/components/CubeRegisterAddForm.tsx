@@ -1,5 +1,6 @@
-import { FormEvent } from "react";
-import { Button, Input, Select } from "./ui";
+import { FormEvent, useRef } from "react";
+import { RegisterEntryModal } from "./RegisterEntryModal";
+import { Input, Select } from "./ui";
 
 export type CubeAddFormState = {
   srNo: string;
@@ -27,28 +28,27 @@ type Props = {
   onClose: () => void;
 };
 
-/** Add cube test line — same layout pattern as Master Drawing Register form. */
+/** Add cube test line — popup modal; register sheet stays visible behind. */
 export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onClose }: Props) {
-  if (!open) return null;
-
+  const formRef = useRef<HTMLFormElement>(null);
   const set = (patch: Partial<CubeAddFormState>) => onChange({ ...form, ...patch });
 
   return (
-    <div className="sheet-register overflow-hidden shrink-0">
-      <div className="sheet-register__head flex-col sm:flex-row sm:items-start gap-2">
-        <div>
-          <div className="font-display text-sm text-ink">Add cube test entry</div>
-          <p className="text-xs font-normal text-steel-muted mt-1 max-w-3xl">
-            New specimen row for the SPDC cube register — appears immediately in the scrollable sheet below.
-            Group fields (sr no, cast date, footing) can repeat for multiple cubes from the same pour.
-          </p>
-        </div>
-        <Button type="button" variant="ghost" className="!text-xs shrink-0" onClick={onClose}>
-          Close
-        </Button>
-      </div>
+    <RegisterEntryModal
+      open={open}
+      title="Add cube test entry"
+      onClose={onClose}
+      onSave={() => formRef.current?.requestSubmit()}
+      saving={busy}
+      size="2xl"
+      saveLabel="Save cube row"
+    >
+      <p className="text-sm text-steel-muted">
+        New specimen row for the SPDC cube register. Group fields (sr no, cast date, footing) can repeat for multiple
+        cubes from the same pour.
+      </p>
 
-      <form className="p-4 space-y-4 bg-paper border-t border-line" onSubmit={onSubmit}>
+      <form ref={formRef} className="space-y-4" onSubmit={onSubmit}>
         <div className="rounded-lg border border-line bg-gradient-to-br from-teal-50/80 to-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wider mb-3 text-brand-dark">Pour / footing</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -141,16 +141,7 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
             </label>
           </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>
-            Save cube row
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
       </form>
-    </div>
+    </RegisterEntryModal>
   );
 }

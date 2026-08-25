@@ -227,9 +227,9 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
       {patchErr && <p className="text-sm text-danger bg-red-50 rounded-lg px-3 py-2 shrink-0">{patchErr}</p>}
 
-      {canEdit && addOpen && (
+      {canEdit && (
         <CubeRegisterAddForm
-          open={addOpen}
+          open={!!addOpen}
           busy={busy}
           form={form}
           onChange={setForm}

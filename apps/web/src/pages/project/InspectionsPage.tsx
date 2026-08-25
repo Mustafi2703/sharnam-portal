@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
@@ -59,6 +59,8 @@ export default function InspectionsPage() {
   });
   const [ncrModalBusy, setNcrModalBusy] = useState(false);
   const [ncrAddOpen, setNcrAddOpen] = useState(false);
+  const [ncrAddBusy, setNcrAddBusy] = useState(false);
+  const ncrAddFormRef = useRef<HTMLFormElement>(null);
   const [cubeAddOpen, setCubeAddOpen] = useState(false);
   const [cubeSharePointUrl, setCubeSharePointUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -126,6 +128,34 @@ export default function InspectionsPage() {
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   const isQualityRegister = QUALITY_REGISTER_SHEETS.has(sheetKey);
+
+  async function submitNcrAdd(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setNcrAddBusy(true);
+    try {
+      await api(`/api/checklist/project/${id}/ncr`, {
+        method: "POST",
+        token,
+        body: JSON.stringify(ncrForm),
+      });
+      setNcrForm({
+        kind: ncrForm.kind,
+        number: "",
+        ncrType: "",
+        description: "",
+        location: "",
+        contractor: "",
+      });
+      setNcrAddOpen(false);
+      setMsg(`${ncrForm.kind} raised — feeds DPR quality block and WPR quality slide`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setNcrAddBusy(false);
+    }
+  }
 
   return (
     <div
@@ -264,76 +294,12 @@ export default function InspectionsPage() {
           rowCount={dash?.ncrs?.length}
           canEdit={canManage}
           message={msg || undefined}
-          onAddRow={canManage ? () => setNcrAddOpen((v) => !v) : undefined}
+          onAddRow={canManage ? () => setNcrAddOpen(true) : undefined}
         />
         </div>
         <Card padding={false} className="register-table-panel spdc-register-panel register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-line shrink-0">
           <h3 className="font-semibold mb-3">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
-          {ncrAddOpen && canManage && (
-            <form
-              className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 pb-4 border-b border-line"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                try {
-                  await api(`/api/checklist/project/${id}/ncr`, {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify(ncrForm),
-                  });
-                  setNcrForm({
-                    kind: ncrForm.kind,
-                    number: "",
-                    ncrType: "",
-                    description: "",
-                    location: "",
-                    contractor: "",
-                  });
-                  setNcrAddOpen(false);
-                  setMsg(`${ncrForm.kind} raised — feeds DPR quality block and WPR quality slide`);
-                  await load();
-                } catch (err) {
-                  setMsg(err instanceof Error ? err.message : "Failed");
-                }
-              }}
-            >
-              <Select
-                value={ncrForm.kind}
-                onChange={(e) => setNcrForm({ ...ncrForm, kind: e.target.value as "NCR" | "CAR" })}
-              >
-                <option value="NCR">NCR (defect)</option>
-                <option value="CAR">CAR (corrective action)</option>
-              </Select>
-              <Input
-                placeholder="Number (optional — auto if blank)"
-                value={ncrForm.number}
-                onChange={(e) => setNcrForm({ ...ncrForm, number: e.target.value })}
-              />
-              <Input
-                placeholder="Type (Workmanship / Material / …)"
-                value={ncrForm.ncrType}
-                onChange={(e) => setNcrForm({ ...ncrForm, ncrType: e.target.value })}
-              />
-              <TextArea
-                className="sm:col-span-2 lg:col-span-3"
-                placeholder="Description — what failed / corrective action required"
-                value={ncrForm.description}
-                onChange={(e) => setNcrForm({ ...ncrForm, description: e.target.value })}
-                required
-              />
-              <Input
-                placeholder="Location"
-                value={ncrForm.location}
-                onChange={(e) => setNcrForm({ ...ncrForm, location: e.target.value })}
-              />
-              <Input
-                placeholder="Contractor"
-                value={ncrForm.contractor}
-                onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value })}
-              />
-              <Button type="submit">Raise {ncrForm.kind}</Button>
-            </form>
-          )}
           </div>
           <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table min-w-[40rem] w-full">
@@ -416,6 +382,52 @@ export default function InspectionsPage() {
           </div>
         </Card>
         <RegisterEntryModal
+          open={ncrAddOpen && canManage}
+          title={`Raise ${ncrForm.kind}`}
+          size="xl"
+          onClose={() => setNcrAddOpen(false)}
+          saving={ncrAddBusy}
+          saveLabel={`Raise ${ncrForm.kind}`}
+          onSave={() => ncrAddFormRef.current?.requestSubmit()}
+        >
+          <form ref={ncrAddFormRef} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={submitNcrAdd}>
+            <Select
+              value={ncrForm.kind}
+              onChange={(e) => setNcrForm({ ...ncrForm, kind: e.target.value as "NCR" | "CAR" })}
+            >
+              <option value="NCR">NCR (defect)</option>
+              <option value="CAR">CAR (corrective action)</option>
+            </Select>
+            <Input
+              placeholder="Number (optional — auto if blank)"
+              value={ncrForm.number}
+              onChange={(e) => setNcrForm({ ...ncrForm, number: e.target.value })}
+            />
+            <Input
+              placeholder="Type (Workmanship / Material / …)"
+              value={ncrForm.ncrType}
+              onChange={(e) => setNcrForm({ ...ncrForm, ncrType: e.target.value })}
+            />
+            <TextArea
+              className="sm:col-span-2 lg:col-span-3"
+              placeholder="Description — what failed / corrective action required"
+              value={ncrForm.description}
+              onChange={(e) => setNcrForm({ ...ncrForm, description: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Location"
+              value={ncrForm.location}
+              onChange={(e) => setNcrForm({ ...ncrForm, location: e.target.value })}
+            />
+            <Input
+              placeholder="Contractor"
+              value={ncrForm.contractor}
+              onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value })}
+            />
+          </form>
+        </RegisterEntryModal>
+        <RegisterEntryModal
           open={!!ncrEdit}
           title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
           size="xl"
@@ -492,7 +504,7 @@ export default function InspectionsPage() {
             rowCount={dash?.cubes?.length}
             canEdit={canManage}
             message={msg || undefined}
-            onAddRow={canManage ? () => setCubeAddOpen((v) => !v) : undefined}
+            onAddRow={canManage ? () => setCubeAddOpen(true) : undefined}
             onDownloadXlsx={async () => {
               if (!id) return;
               await downloadAuthFile(`/api/checklist/project/${id}/cubes/download.xlsx`, token, `Cube-Register-${project?.code || id}.xlsx`);

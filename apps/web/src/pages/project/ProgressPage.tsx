@@ -56,6 +56,9 @@ export default function ProgressPage() {
   const [mileAddOpen, setMileAddOpen] = useState(false);
   const [riskAddOpen, setRiskAddOpen] = useState(false);
   const [legalAddOpen, setLegalAddOpen] = useState(false);
+  const mileFormRef = useRef<HTMLFormElement>(null);
+  const riskFormRef = useRef<HTMLFormElement>(null);
+  const legalFormRef = useRef<HTMLFormElement>(null);
   const tab = (searchParams.get("tab") as Tab) || "overview";
   const isProgressRegister = PROGRESS_REGISTER_TABS.includes(tab);
   const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
@@ -612,7 +615,7 @@ export default function ProgressPage() {
             sheetLabel="Milestone register"
             rowCount={data.milestones?.length}
             canEdit={canEdit}
-            onAddRow={canEdit ? () => setMileAddOpen((v) => !v) : undefined}
+            onAddRow={canEdit ? () => setMileAddOpen(true) : undefined}
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
@@ -625,35 +628,6 @@ export default function ProgressPage() {
               }))}
             />
           </div>
-          {canEdit && mileAddOpen && (
-            <Card className="!p-3 shrink-0">
-              <h3 className="font-semibold text-sm mb-3">Add milestone</h3>
-              <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMilestone}>
-                <Input placeholder="Code (M11)" value={mileForm.code} onChange={(e) => setMileForm({ ...mileForm, code: e.target.value })} />
-                <Input placeholder="Phase" value={mileForm.category} onChange={(e) => setMileForm({ ...mileForm, category: e.target.value })} />
-                <Input
-                  className="sm:col-span-2"
-                  placeholder="Milestone name"
-                  value={mileForm.activity}
-                  onChange={(e) => setMileForm({ ...mileForm, activity: e.target.value })}
-                  required
-                />
-                <Input type="date" value={mileForm.plannedStart} onChange={(e) => setMileForm({ ...mileForm, plannedStart: e.target.value })} />
-                <Input type="date" value={mileForm.plannedEnd} onChange={(e) => setMileForm({ ...mileForm, plannedEnd: e.target.value })} />
-                <Input placeholder="Plan days" value={mileForm.plannedDays} onChange={(e) => setMileForm({ ...mileForm, plannedDays: e.target.value })} />
-                <Input placeholder="Actual days" value={mileForm.actualDays} onChange={(e) => setMileForm({ ...mileForm, actualDays: e.target.value })} />
-                <Input placeholder="Weightage" value={mileForm.weightage} onChange={(e) => setMileForm({ ...mileForm, weightage: e.target.value })} />
-                <Input placeholder="% complete 0–1" value={mileForm.pctComplete} onChange={(e) => setMileForm({ ...mileForm, pctComplete: e.target.value })} />
-                <Select value={mileForm.status} onChange={(e) => setMileForm({ ...mileForm, status: e.target.value })}>
-                  {["Completed", "Delayed", "In Progress", "Not Started"].map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </Select>
-                <Button type="submit">Save milestone</Button>
-                <Button type="button" variant="secondary" onClick={() => setMileAddOpen(false)}>Cancel</Button>
-              </form>
-            </Card>
-          )}
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="sheet-register__head shrink-0">Milestone register · sheet columns</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -1075,44 +1049,13 @@ export default function ProgressPage() {
             sheetLabel="Risk register"
             rowCount={data.risks?.length}
             canEdit={canEdit}
-            onAddRow={canEdit ? () => setRiskAddOpen((v) => !v) : undefined}
+            onAddRow={canEdit ? () => setRiskAddOpen(true) : undefined}
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
             <PieChart title="Risk by status" items={data.charts?.riskByStatus || []} />
             <BarChart title="Risk by severity" items={data.charts?.riskBySeverity || []} />
           </div>
-          {canEdit && riskAddOpen && (
-            <Card className="!p-3 shrink-0">
-              <h3 className="font-semibold text-sm mb-3">Identify risk</h3>
-              <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addRisk}>
-                <Input placeholder="Code (R11)" value={riskForm.code} onChange={(e) => setRiskForm({ ...riskForm, code: e.target.value })} />
-                <Input placeholder="Name" value={riskForm.name} onChange={(e) => setRiskForm({ ...riskForm, name: e.target.value })} required />
-                <Select value={riskForm.category} onChange={(e) => setRiskForm({ ...riskForm, category: e.target.value })}>
-                  {["Execution", "Planning/ Scope", "Communications", "Schedule", "Estimating", "Controlling"].map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </Select>
-                <Select value={riskForm.opportunityThreat} onChange={(e) => setRiskForm({ ...riskForm, opportunityThreat: e.target.value })}>
-                  <option>Threat</option>
-                  <option>Opportunity</option>
-                  <option>Both</option>
-                </Select>
-                <Input type="number" min={1} max={5} placeholder="Probability 1–5" value={riskForm.probability} onChange={(e) => setRiskForm({ ...riskForm, probability: e.target.value })} />
-                <Input type="number" min={1} max={5} placeholder="Consequence 1–5" value={riskForm.consequence} onChange={(e) => setRiskForm({ ...riskForm, consequence: e.target.value })} />
-                <Input placeholder="Cost impact ₹" value={riskForm.costImpact} onChange={(e) => setRiskForm({ ...riskForm, costImpact: e.target.value })} />
-                <TextArea
-                  className="sm:col-span-2 lg:col-span-3"
-                  rows={2}
-                  placeholder="Detailed description"
-                  value={riskForm.description}
-                  onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })}
-                />
-                <Button type="submit">Add risk</Button>
-                <Button type="button" variant="secondary" onClick={() => setRiskAddOpen(false)}>Cancel</Button>
-              </form>
-            </Card>
-          )}
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Risk register</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -1163,39 +1106,13 @@ export default function ProgressPage() {
             sheetLabel="Legal Approval Tracker"
             rowCount={data.legalApprovals?.length}
             canEdit={canEdit}
-            onAddRow={canEdit ? () => setLegalAddOpen((v) => !v) : undefined}
+            onAddRow={canEdit ? () => setLegalAddOpen(true) : undefined}
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
             <PieChart title="Legal by status" items={data.charts?.legalByStatus || []} />
             <BarChart title="Legal approvals by status" items={data.charts?.legalByStatus || []} />
           </div>
-          {canEdit && legalAddOpen && (
-            <Card className="!p-3 shrink-0">
-              <h3 className="font-semibold text-sm mb-3">Add legal approval</h3>
-              <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addLegal}>
-                <Input placeholder="Approval ID (LA-31)" value={legalForm.approvalId} onChange={(e) => setLegalForm({ ...legalForm, approvalId: e.target.value })} />
-                <Input placeholder="Category" value={legalForm.category} onChange={(e) => setLegalForm({ ...legalForm, category: e.target.value })} />
-                <Input placeholder="Authority" value={legalForm.authority} onChange={(e) => setLegalForm({ ...legalForm, authority: e.target.value })} />
-                <Input
-                  className="sm:col-span-2"
-                  placeholder="Description"
-                  value={legalForm.description}
-                  onChange={(e) => setLegalForm({ ...legalForm, description: e.target.value })}
-                  required
-                />
-                <Input placeholder="Package / building" value={legalForm.packageName} onChange={(e) => setLegalForm({ ...legalForm, packageName: e.target.value })} />
-                <Select value={legalForm.status} onChange={(e) => setLegalForm({ ...legalForm, status: e.target.value })}>
-                  {["Approved", "Submitted", "Delayed", "In Progress", "Not Submitted"].map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </Select>
-                <Input placeholder="Responsible" value={legalForm.responsible} onChange={(e) => setLegalForm({ ...legalForm, responsible: e.target.value })} />
-                <Button type="submit">Add row</Button>
-                <Button type="button" variant="secondary" onClick={() => setLegalAddOpen(false)}>Cancel</Button>
-              </form>
-            </Card>
-          )}
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Legal Approval Tracker</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -1419,6 +1336,101 @@ export default function ProgressPage() {
           </Card>
         </div>
       )}
+
+      <RegisterEntryModal
+        open={mileAddOpen && canEdit}
+        title="Add milestone"
+        onClose={() => setMileAddOpen(false)}
+        onSave={() => mileFormRef.current?.requestSubmit()}
+        size="2xl"
+        saveLabel="Save milestone"
+      >
+        <form ref={mileFormRef} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMilestone}>
+          <Input placeholder="Code (M11)" value={mileForm.code} onChange={(e) => setMileForm({ ...mileForm, code: e.target.value })} />
+          <Input placeholder="Phase" value={mileForm.category} onChange={(e) => setMileForm({ ...mileForm, category: e.target.value })} />
+          <Input
+            className="sm:col-span-2"
+            placeholder="Milestone name"
+            value={mileForm.activity}
+            onChange={(e) => setMileForm({ ...mileForm, activity: e.target.value })}
+            required
+          />
+          <Input type="date" value={mileForm.plannedStart} onChange={(e) => setMileForm({ ...mileForm, plannedStart: e.target.value })} />
+          <Input type="date" value={mileForm.plannedEnd} onChange={(e) => setMileForm({ ...mileForm, plannedEnd: e.target.value })} />
+          <Input placeholder="Plan days" value={mileForm.plannedDays} onChange={(e) => setMileForm({ ...mileForm, plannedDays: e.target.value })} />
+          <Input placeholder="Actual days" value={mileForm.actualDays} onChange={(e) => setMileForm({ ...mileForm, actualDays: e.target.value })} />
+          <Input placeholder="Weightage" value={mileForm.weightage} onChange={(e) => setMileForm({ ...mileForm, weightage: e.target.value })} />
+          <Input placeholder="% complete 0–1" value={mileForm.pctComplete} onChange={(e) => setMileForm({ ...mileForm, pctComplete: e.target.value })} />
+          <Select value={mileForm.status} onChange={(e) => setMileForm({ ...mileForm, status: e.target.value })}>
+            {["Completed", "Delayed", "In Progress", "Not Started"].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </Select>
+        </form>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={riskAddOpen && canEdit}
+        title="Identify risk"
+        onClose={() => setRiskAddOpen(false)}
+        onSave={() => riskFormRef.current?.requestSubmit()}
+        size="2xl"
+        saveLabel="Add risk"
+      >
+        <form ref={riskFormRef} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addRisk}>
+          <Input placeholder="Code (R11)" value={riskForm.code} onChange={(e) => setRiskForm({ ...riskForm, code: e.target.value })} />
+          <Input placeholder="Name" value={riskForm.name} onChange={(e) => setRiskForm({ ...riskForm, name: e.target.value })} required />
+          <Select value={riskForm.category} onChange={(e) => setRiskForm({ ...riskForm, category: e.target.value })}>
+            {["Execution", "Planning/ Scope", "Communications", "Schedule", "Estimating", "Controlling"].map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </Select>
+          <Select value={riskForm.opportunityThreat} onChange={(e) => setRiskForm({ ...riskForm, opportunityThreat: e.target.value })}>
+            <option>Threat</option>
+            <option>Opportunity</option>
+            <option>Both</option>
+          </Select>
+          <Input type="number" min={1} max={5} placeholder="Probability 1–5" value={riskForm.probability} onChange={(e) => setRiskForm({ ...riskForm, probability: e.target.value })} />
+          <Input type="number" min={1} max={5} placeholder="Consequence 1–5" value={riskForm.consequence} onChange={(e) => setRiskForm({ ...riskForm, consequence: e.target.value })} />
+          <Input placeholder="Cost impact ₹" value={riskForm.costImpact} onChange={(e) => setRiskForm({ ...riskForm, costImpact: e.target.value })} />
+          <TextArea
+            className="sm:col-span-2 lg:col-span-3"
+            rows={2}
+            placeholder="Detailed description"
+            value={riskForm.description}
+            onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })}
+          />
+        </form>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={legalAddOpen && canEdit}
+        title="Add legal approval"
+        onClose={() => setLegalAddOpen(false)}
+        onSave={() => legalFormRef.current?.requestSubmit()}
+        size="2xl"
+        saveLabel="Add row"
+      >
+        <form ref={legalFormRef} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addLegal}>
+          <Input placeholder="Approval ID (LA-31)" value={legalForm.approvalId} onChange={(e) => setLegalForm({ ...legalForm, approvalId: e.target.value })} />
+          <Input placeholder="Category" value={legalForm.category} onChange={(e) => setLegalForm({ ...legalForm, category: e.target.value })} />
+          <Input placeholder="Authority" value={legalForm.authority} onChange={(e) => setLegalForm({ ...legalForm, authority: e.target.value })} />
+          <Input
+            className="sm:col-span-2"
+            placeholder="Description"
+            value={legalForm.description}
+            onChange={(e) => setLegalForm({ ...legalForm, description: e.target.value })}
+            required
+          />
+          <Input placeholder="Package / building" value={legalForm.packageName} onChange={(e) => setLegalForm({ ...legalForm, packageName: e.target.value })} />
+          <Select value={legalForm.status} onChange={(e) => setLegalForm({ ...legalForm, status: e.target.value })}>
+            {["Approved", "Submitted", "Delayed", "In Progress", "Not Submitted"].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </Select>
+          <Input placeholder="Responsible" value={legalForm.responsible} onChange={(e) => setLegalForm({ ...legalForm, responsible: e.target.value })} />
+        </form>
+      </RegisterEntryModal>
 
       <RegisterEntryModal
         open={hindranceModalOpen}

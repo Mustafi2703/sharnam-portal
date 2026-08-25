@@ -2,6 +2,7 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { Button, Input, Select, TextArea } from "./ui";
 import { CostRegisterShell } from "./CostRegisterShell";
+import { RegisterEntryModal } from "./RegisterEntryModal";
 
 export type MonLine = {
   id: string;
@@ -59,6 +60,7 @@ type Props = {
   className?: string;
   singlePackage?: string;
   addOpen?: boolean;
+  onAddClose?: () => void;
 };
 
 type Draft = ReturnType<typeof emptyDraft>;
@@ -417,6 +419,7 @@ export function BoqMonitoringEditor({
   className = "",
   singlePackage,
   addOpen = false,
+  onAddClose,
 }: Props) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -498,6 +501,7 @@ export function BoqMonitoringEditor({
       setDraft(emptyDraft(draft.packageName || packages[0] || "Civil"));
       onChanged();
       setMsg("Line added");
+      onAddClose?.();
     } catch (e: any) {
       setMsg(e?.message || "Could not add line");
     } finally {
@@ -571,11 +575,17 @@ export function BoqMonitoringEditor({
     <div className={`flex flex-col flex-1 min-h-0 min-w-0 ${className}`.trim()}>
       {msg && <p className="text-sm text-brand font-medium shrink-0 px-1">{msg}</p>}
 
-      {canFullEdit && addOpen && (
-        <div className="boq-add-panel shrink-0 rounded-[var(--ui-radius,14px)] border border-line bg-paper mb-2">
-          <div className="px-4 py-3 border-b border-line font-semibold text-sm text-brand-dark">Add monitoring line</div>
-          <div className="p-4 space-y-3">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+      {canFullEdit && (
+        <RegisterEntryModal
+          open={addOpen}
+          title="Add monitoring line"
+          onClose={() => onAddClose?.()}
+          onSave={() => void addLine()}
+          saving={adding}
+          size="2xl"
+          saveLabel="Add line"
+        >
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Select
               value={draft.packageName || ""}
               onChange={(e) => setDraft({ ...draft, packageName: e.target.value })}
@@ -602,7 +612,7 @@ export function BoqMonitoringEditor({
             <TextArea
               className="sm:col-span-2 lg:col-span-4 !min-h-[4.5rem]"
               rows={3}
-              placeholder="Description"
+              placeholder="Description *"
               value={draft.description || ""}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
@@ -634,14 +644,8 @@ export function BoqMonitoringEditor({
               value={String(draft.gfcQty ?? "")}
               onChange={(e) => setDraft({ ...draft, gfcQty: Number(e.target.value) })}
             />
-            <div className="sm:col-span-2 lg:col-span-4">
-              <Button type="button" disabled={adding} onClick={() => void addLine()}>
-                {adding ? "Adding…" : "Add line"}
-              </Button>
-            </div>
           </div>
-          </div>
-        </div>
+        </RegisterEntryModal>
       )}
 
       <CostRegisterShell

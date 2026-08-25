@@ -277,7 +277,7 @@ export default function QapPage() {
         canEdit={canManage}
         busy={busy}
         message={msg || undefined}
-        onAddRow={() => setAddOpen((v) => !v)}
+        onAddRow={canManage ? () => setAddOpen(true) : undefined}
         onUpload={async (file) => {
           if (/\.xlsx?$/i.test(file.name)) await importExcel(file);
           else await uploadToDms(file);
@@ -340,7 +340,7 @@ export default function QapPage() {
         }}
       />
 
-      {addOpen && canManage && (
+      {canManage && (
         <QapRegisterAddForm
           open={addOpen}
           busy={busy}

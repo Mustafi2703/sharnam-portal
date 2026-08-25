@@ -6,6 +6,7 @@ import { PieChart } from "../../components/PieChart";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
+import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
@@ -62,6 +63,7 @@ export default function SafetyPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const addFormRef = useRef<HTMLFormElement>(null);
   const hiraAutoSyncRef = useRef(false);
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canEdit = canCreate;
@@ -146,6 +148,7 @@ export default function SafetyPage() {
   async function createRecord(e: FormEvent) {
     e.preventDefault();
     setMsg("");
+    setBusy(true);
     try {
       const title =
         form.title ||
@@ -162,6 +165,8 @@ export default function SafetyPage() {
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -309,15 +314,19 @@ export default function SafetyPage() {
           canEdit={canCreate}
           busy={busy}
           message={msg || undefined}
-          onAddRow={canCreate ? () => setAddOpen((v) => !v) : undefined}
+          onAddRow={canCreate ? () => setAddOpen(true) : undefined}
         />
 
-      {addOpen && canCreate && (
-        <Card className="!p-3 shrink-0">
-          <h3 className="font-semibold mb-2 text-sm">
-            {showNcrFields ? "Raise Safety NCR" : `Log ${sheetView.label.toLowerCase()}`}
-          </h3>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
+      <RegisterEntryModal
+        open={addOpen && canCreate}
+        title={showNcrFields ? "Raise Safety NCR" : `Log ${sheetView.label.toLowerCase()}`}
+        onClose={() => setAddOpen(false)}
+        onSave={() => addFormRef.current?.requestSubmit()}
+        saving={busy}
+        size="2xl"
+        saveLabel={form.recordType === "NCR" ? "Raise Safety NCR" : "Save safety record"}
+      >
+        <form ref={addFormRef} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
             <Select value={form.recordType} onChange={(e) => setForm({ ...form, recordType: e.target.value })}>
               {formTypes.map((t) => (
                 <option key={t}>{t}</option>
@@ -430,15 +439,8 @@ export default function SafetyPage() {
               value={form.correctiveAction || form.actionTaken}
               onChange={(e) => setForm({ ...form, correctiveAction: e.target.value, actionTaken: e.target.value })}
             />
-            <Button type="submit" className="sm:col-span-2 lg:col-span-3">
-              {form.recordType === "NCR" ? "Raise Safety NCR" : "Save safety record"}
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-          </form>
-        </Card>
-      )}
+        </form>
+      </RegisterEntryModal>
 
         <div className="flex flex-wrap gap-1">
           {["All", "Open", "Closed", ...TYPES].map((f) => (

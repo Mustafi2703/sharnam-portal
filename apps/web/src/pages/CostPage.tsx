@@ -698,7 +698,7 @@ export default function CostPage() {
             canEdit={canEdit}
             onUpload={canEdit ? (file) => uploadBoqOrWorkbook(file, activePkg) : undefined}
             uploadHint="Upload SPDC_Budget_Arvind 49.xls (full workbook) or a single monitoring BOQ for this package."
-            onAddRow={canEdit ? () => setMonAddOpen((v) => !v) : undefined}
+            onAddRow={canEdit ? () => setMonAddOpen(true) : undefined}
             onGenerate={
               canEdit
                 ? async () => {
@@ -723,6 +723,7 @@ export default function CostPage() {
               canSiteEdit={canSiteEdit}
               singlePackage={activePkg}
               addOpen={monAddOpen}
+              onAddClose={() => setMonAddOpen(false)}
               onChanged={() => void load()}
             />
           </div>

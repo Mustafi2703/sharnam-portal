@@ -8,17 +8,26 @@ type Props = {
   onSave: () => void | Promise<void>;
   saving?: boolean;
   size?: "md" | "lg" | "xl" | "2xl";
+  saveLabel?: string;
   children: ReactNode;
 };
 
 /** Reusable modal for register add/edit — pairs with inline forms on the same page. */
 const MODAL_PANEL = { md: "register-modal__panel--md", lg: "register-modal__panel--lg", xl: "register-modal__panel--xl", "2xl": "register-modal__panel--2xl" } as const;
 
-export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "xl", children }: Props) {
+export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "xl", saveLabel = "Save", children }: Props) {
   if (!open) return null;
   return (
-    <div className="register-modal" role="dialog" aria-modal="true">
-      <div className={`register-modal__panel ${MODAL_PANEL[size]}`}>
+    <div
+      className="register-modal"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className={`register-modal__panel ${MODAL_PANEL[size]}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="register-modal__head">
           <h3 className="font-semibold text-ink text-base sm:text-lg">{title}</h3>
           <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={onClose} aria-label="Close">
@@ -31,7 +40,7 @@ export function RegisterEntryModal({ open, title, onClose, onSave, saving, size 
             Cancel
           </Button>
           <Button type="button" onClick={() => void onSave()} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : saveLabel}
           </Button>
         </div>
       </div>
