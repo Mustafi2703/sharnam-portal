@@ -10,6 +10,7 @@ import ImageMarkup from "./ImageMarkup";
 import { formatQty } from "./BoqMonitoringEditor";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { BBS_COLUMN_GROUPS, bbsColClass } from "../lib/costSheetColumns";
+import { bbsRowBandClass, bbsRowKind } from "../lib/costSheetRows";
 
 function CellInput({
   value,
@@ -185,7 +186,21 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   }
 
   const uploaded = rows.filter((r) => r.shapeDiagramPath || r.shapeDiagramUrl).length;
-  const isSectionRow = (r: BbsRow) => !r.diameterMm && !r.totalLength && !r.nos && !r.weightKg;
+
+  function bandRow(b: BbsRow) {
+    const kind = bbsRowKind(b);
+    const label = b.location || b.sectionMark || "—";
+    return (
+      <tr key={b.id} className={bbsRowBandClass(kind)}>
+        <td colSpan={colSpan} className="sticky-col">
+          <span className={kind === "section" ? "boq-section-label" : "boq-subsection-label"}>
+            {b.barMark ? `${b.barMark} · ` : ""}
+            {label}
+          </span>
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <>
@@ -229,17 +244,8 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
           </thead>
           <tbody>
             {rows.map((b) => {
-              if (isSectionRow(b)) {
-                return (
-                  <tr key={b.id} className="boq-section-row">
-                    <td colSpan={colSpan} className="sticky-col">
-                      <span className="boq-section-label">
-                        {b.barMark ? `${b.barMark} · ` : ""}
-                        {b.location || b.sectionMark || "—"}
-                      </span>
-                    </td>
-                  </tr>
-                );
+              if (bbsRowKind(b) !== "data") {
+                return bandRow(b);
               }
               const href = fileHref(b.shapeDiagramPath, b.shapeDiagramUrl);
               const hasDiagram = Boolean(href);

@@ -8,6 +8,7 @@ import { formatQty } from "./BoqMonitoringEditor";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { MB_COLUMN_GROUPS, mbColClass } from "../lib/costSheetColumns";
+import { mbRowBandClass, mbRowKind } from "../lib/costSheetRows";
 
 export type MbRow = {
   id: string;
@@ -41,7 +42,45 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
   const [msg, setMsg] = useState("");
   const canEditDims = canFullEdit || canSiteEdit;
   const colSpan = 13;
-  const isHeadingRow = (r: MbRow) => !r.qty && !r.nos1 && !r.length && !r.width && !r.height;
+
+  function bandRow(b: MbRow) {
+    const kind = mbRowKind(b);
+    const cls = mbRowBandClass(kind);
+    if (kind === "total") {
+      return (
+        <tr key={b.id} className={cls}>
+          <td colSpan={8} className="sticky-col text-left">
+            <span className="boq-total-label">{b.description}</span>
+          </td>
+          <td className={mbColClass(8, { extra: "text-left num font-semibold" })}>
+            {b.qty ? formatQty(Number(b.qty)) : "—"}
+          </td>
+          <td className={mbColClass(9, { extra: "text-left" })}>{b.unit || "—"}</td>
+          <td colSpan={3} />
+        </tr>
+      );
+    }
+    if (kind === "description") {
+      return (
+        <tr key={b.id} className={cls}>
+          <td colSpan={colSpan} className="sticky-col text-left">
+            <span className="boq-desc-label">{b.description}</span>
+          </td>
+        </tr>
+      );
+    }
+    return (
+      <tr key={b.id} className={cls}>
+        <td colSpan={colSpan} className="sticky-col text-left">
+          <span className="boq-section-label">
+            {b.srNo ? `${b.srNo} · ` : ""}
+            {b.description}
+            {b.remark ? ` — ${b.remark}` : ""}
+          </span>
+        </td>
+      </tr>
+    );
+  }
 
   async function patchLine(id: string, body: Record<string, unknown>) {
     setBusyId(id);
@@ -124,18 +163,9 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
         </thead>
         <tbody>
           {rows.map((b) => {
-            if (isHeadingRow(b)) {
-              return (
-                <tr key={b.id} className="boq-section-row">
-                  <td colSpan={colSpan} className="sticky-col text-left">
-                    <span className="boq-section-label">
-                      {b.srNo ? `${b.srNo} · ` : ""}
-                      {b.description}
-                      {b.remark ? ` — ${b.remark}` : ""}
-                    </span>
-                  </td>
-                </tr>
-              );
+            const kind = mbRowKind(b);
+            if (kind !== "data") {
+              return bandRow(b);
             }
             return (
                 <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
@@ -148,7 +178,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
                   <td className={mbColClass(2, { extra: "text-left align-top min-w-[12rem]" })}>
                     {cell(b.description, (v) => void patchLine(b.id, { description: v }), {
                       disabled: !canEditDims,
-                      className: "min-w-[10rem]",
+                      className: "min-w-[10rem] cost-row-desc",
                     })}
                   </td>
                   <td className={mbColClass(3, { extra: "text-left align-top num" })}>

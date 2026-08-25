@@ -47,7 +47,7 @@ export type ParsedBbsLine = {
   totalLength: number;
   weightKg: number;
   location?: string;
-  rowKind?: "header" | "data";
+  rowKind?: "section" | "subsection" | "subheader" | "data" | "note";
 };
 
 function sheetRows(wb: WorkBook, name?: string): unknown[][] {
@@ -68,10 +68,51 @@ function colIndex(hdr: unknown[], patterns: RegExp[]): number {
   return -1;
 }
 
-function isMbFooter(text: string) {
-  return /total up to date|previous bill|this bill|name of project|name of contractor|w\.o\. no|invoice date|bill submission|ref no\.|ra bill no/i.test(
-    text
-  );
+function isMbMetaFooter(text: string) {
+  return /name of project|name of contractor|w\.o\. no|invoice date|bill submission|ref no\.|ra bill no/i.test(text);
+}
+
+function isMbTotalRow(text: string) {
+  return /total up to date|previous bill qty|this bill quantity/i.test(text.trim());
+}
+
+type MbColLayout = {
+  startRow: number;
+  sr: number;
+  desc: number;
+  nos1: number;
+  nos2: number;
+  length: number;
+  width: number;
+  height: number;
+  qty: number;
+  uom: number;
+  raBill: number;
+  remark: number;
+};
+
+function detectMbLayout(rows: unknown[][]): MbColLayout {
+  const headerRow = detectMbHeaderRow(rows);
+  const hdr = (headerRow >= 0 ? rows[headerRow] : []) as unknown[];
+  const nosCols: number[] = [];
+  for (let j = 0; j < hdr.length; j++) {
+    const t = s(hdr[j], 40).toLowerCase().replace(/\s+/g, " ");
+    if (t === "no" || t === "no." || t === "nos") nosCols.push(j);
+  }
+  return {
+    startRow: (headerRow >= 0 ? headerRow : 0) + 1,
+    sr: colIndex(hdr, [/sr\.?\s*no/]) >= 0 ? colIndex(hdr, [/sr\.?\s*no/]) : 0,
+    desc: colIndex(hdr, [/description|particular|item of work/]) >= 0 ? colIndex(hdr, [/description|particular|item of work/]) : 1,
+    nos1: nosCols[0] ?? 2,
+    nos2: nosCols[1] ?? nosCols[0] ?? 3,
+    length: colIndex(hdr, [/^length/]) >= 0 ? colIndex(hdr, [/^length/]) : 4,
+    width: colIndex(hdr, [/^width/]) >= 0 ? colIndex(hdr, [/^width/]) : 5,
+    height: colIndex(hdr, [/^height/, /^hight/]) >= 0 ? colIndex(hdr, [/^height/, /^hight/]) : 6,
+    qty: colIndex(hdr, [/^qty/]) >= 0 ? colIndex(hdr, [/^qty/]) : 7,
+    uom: colIndex(hdr, [/^uom/, /unit/]) >= 0 ? colIndex(hdr, [/^uom/, /unit/]) : 8,
+    raBill: colIndex(hdr, [/ra-?bill/, /ra bill/]) >= 0 ? colIndex(hdr, [/ra-?bill/, /ra bill/]) : 9,
+    remark: colIndex(hdr, [/remark/]) >= 0 ? colIndex(hdr, [/remark/]) : 10,
+  };
 }
 
 function detectMbHeaderRow(rows: unknown[][]): number {
@@ -172,26 +213,44 @@ function bbsWeightKg(diaMm: number, totalLenM: number, row: unknown[], weightCol
 }
 
 export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
-  const header = detectMbHeaderRow(rows);
-  const start = header >= 0 ? header + 1 : 0;
+  const layout = detectMbLayout(rows);
   const out: ParsedMbLine[] = [];
 
-  for (let i = start; i < rows.length; i++) {
+  for (let i = layout.startRow; i < rows.length; i++) {
     const row = rows[i] as unknown[];
-    const srRaw = s(row[0], 40);
-    const descPrimary = s(row[1], 400);
-    const descExtra = s(row[2], 400);
-    let description = descPrimary || srRaw;
+    const srRaw = s(row[layout.sr], 40);
+    const descPrimary = s(row[layout.desc], 400);
+    const altLabel = s(row[layout.nos1], 400);
+    let description = descPrimary || altLabel || srRaw;
     if (!description) continue;
-    if (isMbFooter(description) || isMbFooter(descExtra)) continue;
+    if (isMbMetaFooter(description) || isMbMetaFooter(altLabel)) continue;
 
-    const nos1 = n(row[2]);
-    const nos2 = n(row[3]) || 1;
-    const length = n(row[4]);
-    const width = n(row[5]);
-    const height = n(row[6]);
-    const qty = n(row[7]);
-    const hasMeasure = qty > 0 || nos1 > 0 || length > 0 || width > 0 || height > 0;
+    const altIsNumeric = altLabel && /^-?\d+(\.\d+)?$/.test(altLabel.trim());
+    const descExtra =
+      altLabel && descPrimary && !altIsNumeric && !isMbTotalRow(altLabel) ? altLabel : "";
+    const nos1 = altLabel && descPrimary && !altIsNumeric ? 0 : n(row[layout.nos1]);
+    const nos2 = n(row[layout.nos2]) || 1;
+    const length = n(row[layout.length]);
+    const width = n(row[layout.width]);
+    const height = n(row[layout.height]);
+    const qty = n(row[layout.qty]);
+    const hasMeasure = Math.abs(qty) > 0 || Math.abs(nos1) > 0 || Math.abs(length) > 0 || Math.abs(width) > 0 || Math.abs(height) > 0;
+
+    if (isMbTotalRow(description)) {
+      out.push({
+        srNo: undefined,
+        description,
+        nos1: 0,
+        nos2: 0,
+        length: 0,
+        width: 0,
+        height: 0,
+        qty,
+        unit: s(row[layout.uom], 20) || undefined,
+        remark: s(row[layout.remark], 200) || undefined,
+      });
+      continue;
+    }
 
     // SPDC heading / section rows (EXCAVATION, DORMITORY, item 2., Part A, …)
     if (!hasMeasure) {
@@ -238,9 +297,9 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
       width,
       height,
       qty: qty || nos1 * nos2 * (length || 1) * (width || 1) * (height || 1),
-      unit: s(row[8], 20) || undefined,
-      raBill: s(row[9], 80) || undefined,
-      remark: s(row[10], 200) || undefined,
+      unit: s(row[layout.uom], 20) || undefined,
+      raBill: s(row[layout.raBill], 80) || undefined,
+      remark: s(row[layout.remark], 200) || undefined,
     });
   }
   return out;
@@ -275,15 +334,15 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
     const cuttingLen = n(row[layout.cutting]);
     const totalLen = n(row[layout.totalLen]);
     const shapeFromCell = shapeCell && !/^[\d.\-]+$/.test(shapeCell) ? shapeCell : undefined;
+    const weightKg = bbsWeightKg(dia, totalLen, row, layout.weight);
 
-    // Section band rows (A / 1 / FOOTING with title in description column)
-    if (markRaw && !dia && !totalNos && !totalLen && description && dia < 6) {
-      currentSection = markRaw;
-      if (/^[A-Z0-9]{1,6}$/i.test(markRaw)) currentShapeCode = markRaw.toUpperCase();
+    if (!description && !markRaw) continue;
+    if (/^description$|^shape of bar$|^shape length$|^cutting length$|^total\s*length$|^weight\s*kg$/i.test(description)) continue;
+    if (/^(l|b|h|dia|spacing|d)$/i.test(description) && !dia && !totalLen) {
       out.push({
-        barMark: markRaw,
+        sectionMark: currentSection || undefined,
         shapeCode: currentShapeCode || undefined,
-        sectionMark: currentSection,
+        barMark: markRaw || undefined,
         diameterMm: 0,
         lengthMm: 0,
         nos: 0,
@@ -297,17 +356,46 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
         totalLength: 0,
         weightKg: 0,
         location: description,
-        rowKind: "header",
+        rowKind: "subheader",
       });
       continue;
     }
 
-    if (!description && !markRaw) continue;
-    if (/description|shape of bar|shape length|cutting length|total\s*length/i.test(description)) continue;
+    const hasSteel =
+      (dia >= 6 && dia <= 50) ||
+      totalLen > 0 ||
+      totalNos > 0 ||
+      weightKg > 0 ||
+      (shapeFromCell && (nosPerMember > 0 || nosOfMember > 0));
 
-    if (!dia && !totalLen && !totalNos && !shapeFromCell) {
-      if (description) {
+    if (!hasSteel) {
+      if (markRaw && /^[A-Z]$/.test(markRaw)) {
+        currentSection = markRaw;
+        currentShapeCode = markRaw.toUpperCase();
         out.push({
+          barMark: markRaw,
+          shapeCode: currentShapeCode,
+          sectionMark: currentSection,
+          diameterMm: 0,
+          lengthMm: 0,
+          nos: 0,
+          nosPerMember: 0,
+          nosOfMember: 0,
+          shapeLenA: 0,
+          shapeLenB: 0,
+          shapeLenC: 0,
+          shapeLenD: 0,
+          shapeLenE: 0,
+          totalLength: 0,
+          weightKg: 0,
+          location: description,
+          rowKind: "section",
+        });
+        continue;
+      }
+      if (markRaw && /^\d+$/.test(markRaw)) {
+        out.push({
+          barMark: markRaw,
           sectionMark: currentSection || undefined,
           shapeCode: currentShapeCode || undefined,
           diameterMm: 0,
@@ -323,7 +411,51 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
           totalLength: 0,
           weightKg: 0,
           location: description,
-          rowKind: "header",
+          rowKind: "subsection",
+        });
+        continue;
+      }
+      if (description && (/^footing\s*=|^column\s|^beam\s|^slab\s|^ring\s|^steel\s|^pedestal/i.test(description) || description.length <= 72)) {
+        out.push({
+          sectionMark: currentSection || undefined,
+          shapeCode: currentShapeCode || undefined,
+          barMark: markRaw || undefined,
+          diameterMm: 0,
+          lengthMm: 0,
+          nos: 0,
+          nosPerMember: 0,
+          nosOfMember: 0,
+          shapeLenA: 0,
+          shapeLenB: 0,
+          shapeLenC: 0,
+          shapeLenD: 0,
+          shapeLenE: 0,
+          totalLength: 0,
+          weightKg: 0,
+          location: description,
+          rowKind: "subsection",
+        });
+        continue;
+      }
+      if (description) {
+        out.push({
+          sectionMark: currentSection || undefined,
+          shapeCode: currentShapeCode || undefined,
+          barMark: markRaw || undefined,
+          diameterMm: 0,
+          lengthMm: 0,
+          nos: 0,
+          nosPerMember: 0,
+          nosOfMember: 0,
+          shapeLenA: 0,
+          shapeLenB: 0,
+          shapeLenC: 0,
+          shapeLenD: 0,
+          shapeLenE: 0,
+          totalLength: 0,
+          weightKg: 0,
+          location: description,
+          rowKind: "note",
         });
       }
       continue;
@@ -333,7 +465,10 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
     if (dia > 0 && dia < 6) continue;
     if (dia > 50) continue;
 
-    const weightKg = bbsWeightKg(dia, totalLen, row, layout.weight);
+    if (markRaw && /^[A-Z]$/.test(markRaw)) {
+      currentSection = markRaw;
+      currentShapeCode = markRaw.toUpperCase();
+    }
 
     out.push({
       barMark: markRaw || currentSection || undefined,
@@ -424,8 +559,8 @@ export function parseAllBbsSheets(buffer: Buffer): ParsedSheetBatch<ParsedBbsLin
     const pkg =
       resolveSheetPackage(name, SPDC_BBS_SHEET_PACKAGES, /\bBBS\b|bending|rebar|bar/i) || null;
     if (!pkg && !/\bBBS\b|bending|rebar|bar/i.test(name)) continue;
-    const lines = parseBbsRows(sheetRows(wb, name)).filter((r) => r.rowKind !== "header" || (r.location && !r.diameterMm));
-    const dataLines = lines.filter((r) => r.rowKind !== "header" && (r.diameterMm || r.totalLength || r.weightKg));
+    const lines = parseBbsRows(sheetRows(wb, name));
+    const dataLines = lines.filter((r) => r.rowKind === "data" && (r.diameterMm || r.totalLength || r.weightKg));
     if (dataLines.length || lines.length >= 3)
       out.push({ sheetName: name, packageName: pkg || name.replace(/\s*BBS\s*/i, " BBS").trim(), lines });
   }
