@@ -23,8 +23,9 @@ export type ScheduleMeetingWithInviteOpts = {
   createdByName?: string;
   createdById?: string;
   /** Comma-separated — one formatted email to all (single Graph sendMail) */
-  attendeeEmails: string;
+  attendeeEmails?: string;
   createTeams?: boolean;
+  agendaItems?: string[];
 };
 
 export type ScheduleMeetingResult = {
@@ -46,7 +47,7 @@ export async function scheduleMeetingWithInvite(
   const end = new Date(opts.meetingDate.getTime() + durationMins * 60_000);
   const portal = portalOrigin();
   const portalAgendaUrl = `${portal}/projects/${opts.projectId}/comms?tab=agenda&meeting=${opts.meetingId}`;
-  const recipients = parseEmails(opts.attendeeEmails);
+  const recipients = parseEmails(opts.attendeeEmails || "");
 
   let teamsJoinUrl: string | null = null;
   let graphEventId: string | null = null;
@@ -75,7 +76,7 @@ export async function scheduleMeetingWithInvite(
   }
 
   const attendeeList = recipients.join(", ");
-  const { bodyHtml, bodyText } = buildMeetingScheduledEmail({
+  const emailCtx = {
     projectCode: opts.projectCode,
     projectName: opts.projectName,
     title: opts.title,
@@ -90,17 +91,34 @@ export async function scheduleMeetingWithInvite(
     calendarWebLink,
     portalAgendaUrl,
     teamsNote,
-  });
+    agendaItems: opts.agendaItems,
+  };
+  const { bodyHtml, bodyText } = buildMeetingScheduledEmail(emailCtx);
 
-  const email = await queueProjectEmail({
-    projectId: opts.projectId,
-    subject: `Meeting invitation — ${opts.title}`,
-    body: bodyText,
-    bodyHtml,
-    context: "meeting.schedule",
-    createdById: opts.createdById,
-    toOverride: opts.attendeeEmails,
-  });
+  const email =
+    recipients.length > 0
+      ? await queueProjectEmail({
+          projectId: opts.projectId,
+          subject: `Meeting invitation — ${opts.title}`,
+          body: bodyText,
+          bodyHtml,
+          context: "meeting.schedule",
+          createdById: opts.createdById,
+          toOverride: opts.attendeeEmails,
+        })
+      : { skipped: true as const, reason: "no_recipients" };
+
+  try {
+    const { queueProjectWhatsApp } = await import("./projectWhatsApp.js");
+    const { whatsAppMeetingScheduled } = await import("./whatsappMessages.js");
+    await queueProjectWhatsApp({
+      projectId: opts.projectId,
+      text: whatsAppMeetingScheduled(emailCtx),
+      context: "meeting.schedule",
+    });
+  } catch {
+    /* WhatsApp optional */
+  }
 
   return {
     teamsJoinUrl,

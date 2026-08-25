@@ -230,7 +230,7 @@ commsRouter.get("/meetings/:projectId", async (req, res) => {
 commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({
     where: { id: req.params.projectId },
-    select: { id: true, code: true, name: true, notificationEmails: true },
+    select: { id: true, code: true, name: true, notificationEmails: true, notificationWhatsApp: true },
   });
   if (!project) return res.status(404).json({ error: "Project not found" });
 
@@ -254,48 +254,52 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
       ? req.body.attendeeEmails.trim()
       : (project.notificationEmails || "").trim();
 
+  const agendaFromBody = Array.isArray(req.body.agendaItems)
+    ? req.body.agendaItems.map(String).filter(Boolean)
+    : undefined;
+
   let invite: Record<string, unknown> | null = null;
-  if (attendeeRaw) {
-    try {
-      const { scheduleMeetingWithInvite } = await import("../services/meetingNotify.js");
-      const result = await scheduleMeetingWithInvite({
-        projectId: project.id,
-        projectCode: project.code,
-        projectName: project.name,
-        meetingId: meeting.id,
-        title: meeting.title,
-        meetingDate: meeting.meetingDate,
-        durationMins,
-        location: meeting.location,
-        status: meeting.status,
-        createdByName: req.user!.fullName || undefined,
-        createdById: req.user!.id,
-        attendeeEmails: attendeeRaw,
-        createTeams: req.body.createTeams !== false,
-      });
+  try {
+    const { scheduleMeetingWithInvite } = await import("../services/meetingNotify.js");
+    const result = await scheduleMeetingWithInvite({
+      projectId: project.id,
+      projectCode: project.code,
+      projectName: project.name,
+      meetingId: meeting.id,
+      title: meeting.title,
+      meetingDate: meeting.meetingDate,
+      durationMins,
+      location: meeting.location,
+      status: meeting.status,
+      createdByName: req.user!.fullName || undefined,
+      createdById: req.user!.id,
+      attendeeEmails: attendeeRaw || undefined,
+      createTeams: req.body.createTeams !== false,
+      agendaItems: agendaFromBody,
+    });
 
-      const updated = await prisma.meeting.update({
-        where: { id: meeting.id },
-        data: {
-          teamsJoinUrl: result.teamsJoinUrl,
-          graphEventId: result.graphEventId,
-          calendarWebLink: result.calendarWebLink,
-        },
-      });
-
-      invite = {
+    const updated = await prisma.meeting.update({
+      where: { id: meeting.id },
+      data: {
         teamsJoinUrl: result.teamsJoinUrl,
         graphEventId: result.graphEventId,
         calendarWebLink: result.calendarWebLink,
-        teamsProvider: result.teamsProvider,
-        teamsNote: result.teamsNote,
-        email: result.email,
-      };
+      },
+    });
 
-      return res.status(201).json({ ...updated, invite });
-    } catch (err) {
-      invite = { error: err instanceof Error ? err.message : String(err) };
-    }
+    invite = {
+      teamsJoinUrl: result.teamsJoinUrl,
+      graphEventId: result.graphEventId,
+      calendarWebLink: result.calendarWebLink,
+      teamsProvider: result.teamsProvider,
+      teamsNote: result.teamsNote,
+      email: result.email,
+      whatsApp: project.notificationWhatsApp ? "queued" : "no_numbers",
+    };
+
+    return res.status(201).json({ ...updated, invite });
+  } catch (err) {
+    invite = { error: err instanceof Error ? err.message : String(err) };
   }
 
   res.status(201).json({ ...meeting, invite });

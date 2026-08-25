@@ -9,6 +9,16 @@ import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import type { PrismaClient } from "@prisma/client";
+import { parseBbsRows, parseMbRows } from "../apps/api/src/services/costSheetParser.ts";
+import { monitoringItemRows, parseSpdcMonitoringRows } from "../apps/api/src/services/spdcMonitoringParser.ts";
+import {
+  COST_SHEET_TOOLS,
+  SPDC_BBS_SHEETS,
+  SPDC_BUDGET_DATA_START_ROW,
+  SPDC_MB_SHEETS,
+  SPDC_MONITORING_SHEETS,
+  SPDC_RATE_SHEETS,
+} from "../apps/api/src/services/spdcBudgetManifest.ts";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -46,49 +56,6 @@ async function createManyChunks(
   }
 }
 
-/** All Monitoring* sheets in the Budget workbook → package tools */
-const MONITORING_SHEETS: [string, string][] = [
-  ["Monitoring Combined", "Combined"],
-  ["Monitoring Civil Dormitory", "Civil Dormitory"],
-  ["Monitoring Electric", "Electric"],
-  ["Monitoring Plumbing", "Plumbing"],
-  ["Monitoring UGWT", "UGWT"],
-  ["Monitoring Septic Tank", "Septic Tank"],
-  ["Monitoring External Dev", "External Development"],
-  ["Monitoring Windows", "Windows"],
-  ["Monitoring Furniture ", "Furniture"],
-  ["Monitoring WPC Door", "WPC Door"],
-  ["Monitoring Fire Fighting", "Fire Fighting"],
-  ["Monitoring Gas", "Gas Line"],
-  ["Monitoring External Electric", "External Electric"],
-];
-
-/** Measurement book / BOQ dimension sheets */
-const MB_SHEETS: [string, string, number][] = [
-  ["DORMITORY MB", "Dormitory Civil", 500],
-  ["Electric MB", "Electric", 400],
-  ["Plumbing MB", "Plumbing", 400],
-  ["UGWT MB", "UGWT", 200],
-  ["Septic Tank", "Septic Tank", 200],
-  ["Compound Wall", "Compound Wall", 200],
-  ["Road & Paving", "Road & Paving", 200],
-  ["Windows ", "Windows", 100],
-  ["Furniture", "Furniture", 100],
-  ["WPC Door", "WPC Door", 50],
-  ["Fire Fighting", "Fire Fighting", 200],
-  ["Fire Alarm", "Fire Alarm", 100],
-  ["Gas Line", "Gas Line", 200],
-  ["External Electric", "External Electric", 250],
-];
-
-const BBS_SHEETS: [string, string, number][] = [
-  ["DORMITORY BBS", "Dormitory BBS", 400],
-  ["Compound Wall BBS", "Compound Wall BBS", 120],
-  ["Septic Tank BBS", "Septic Tank BBS", 80],
-  ["Road BBS", "Road BBS", 50],
-  ["UGWT BBS", "UGWT BBS", 80],
-];
-
 export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId: string, excelRoot: string) {
   const file = path.join(excelRoot, "SPDC_Budget_Arvind 49.xls");
   if (!fs.existsSync(file)) {
@@ -104,14 +71,15 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
   await prisma.costRateDifference.deleteMany({ where: { projectId } });
   await prisma.costCashflowPeriod.deleteMany({ where: { projectId } });
 
-  // Budget WBS
+  // Budget WBS — XLSX omits empty column A: sr=0, description=1, stakeholder=2, amounts from 3+
   {
     const rows = sheet(wb, "Budget");
     const data: Record<string, unknown>[] = [];
-    for (let i = 3; i < rows.length; i++) {
+    for (let i = SPDC_BUDGET_DATA_START_ROW; i < rows.length; i++) {
       const row = rows[i] as unknown[];
       const description = s(row[1], 400);
-      if (!description) continue;
+      if (!description || /^description$/i.test(description)) continue;
+      if (/total net project cost|total project cost|^gst\s|^expected over budget/i.test(description)) continue;
       data.push({
         projectId,
         srNo: s(row[0], 20) || null,
@@ -137,81 +105,55 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
     console.log("Budget WBS lines:", data.length);
   }
 
-  // All monitoring packages
+  // All monitoring packages — section › subsection on each BOQ line
   {
     const data: Record<string, unknown>[] = [];
-    for (const [sheetName, packageName] of MONITORING_SHEETS) {
+    for (const [sheetName, packageName] of SPDC_MONITORING_SHEETS) {
       const rows = sheet(wb, sheetName);
-      let section: string | null = null;
-      for (let i = 2; i < rows.length; i++) {
-        const row = rows[i] as unknown[];
-        const description = s(row[1], 500);
-        const itemNo = s(row[0], 40);
-        if (!description || /total amount|^electric work$|^plumbing work$/i.test(description)) continue;
-        const uom = s(row[2], 20);
-        const rate = n(row[3]);
-        const boqQty = n(row[4]);
-        const heading = !itemNo && !uom && rate === 0 && boqQty === 0;
-        if (heading) {
-          section = description;
-          continue;
-        }
-        const gfcQty = n(row[6]);
-        const extraQty = n(row[5]);
-        const achievedQty = n(row[7]);
-        const certifiedQty = n(row[10]);
-        const boqCost = n(row[11]) || rate * boqQty;
-        const extraItemCost = n(row[12]) || extraQty * rate;
-        const gfcCost = n(row[13]) || gfcQty * rate;
-        const achievedCost = n(row[14]) || achievedQty * rate;
-        const excessCost = n(row[15]);
-        const savingCost = n(row[16]);
-        const certifiedInvoiceCost = n(row[17]) || certifiedQty * rate;
-        const actualCost = n(row[25]) || achievedCost;
-        const cpi = n(row[26]);
+      for (const line of monitoringItemRows(parseSpdcMonitoringRows(rows, packageName))) {
         data.push({
           projectId,
-          packageName,
-          section,
-          itemNo: itemNo || null,
-          description,
-          uom: uom || null,
-          rate,
-          boqQty,
-          extraQty,
-          gfcQty,
-          achievedQty,
-          excessQty: Math.max(0, gfcQty - boqQty),
-          savingQty: Math.max(0, boqQty - gfcQty),
-          certifiedQty,
-          boqCost,
-          extraItemCost,
-          gfcCost,
-          achievedCost,
-          excessCost: excessCost || Math.max(0, gfcCost - boqCost),
-          savingCost: savingCost || Math.max(0, boqCost - gfcCost),
-          certifiedInvoiceCost,
-          pctBoq: n(row[18]),
-          pctGfc: n(row[19]),
-          pctAchieved: n(row[20]),
-          pctCertified: n(row[21]),
-          evBoq: n(row[22]) || achievedCost,
-          evGfc: n(row[23]) || achievedCost,
-          evCertified: n(row[24]),
-          actualCost,
-          cpi,
-          cpiStatus: s(row[27], 40) || null,
-          etcBoq: n(row[28]),
-          etcGfc: n(row[29]),
-          etcCertified: n(row[30]),
-          eac: n(row[31]) || boqCost,
-          vac: n(row[32]),
-          varBoqGfc: n(row[33]),
-          varGfcAchieved: n(row[34]),
-          varGfcCertified: n(row[35]),
-          overrunBoq: n(row[36]),
-          overrunGfc: n(row[37]),
-          overrunCertified: n(row[38]),
+          packageName: line.packageName,
+          section: line.section,
+          itemNo: line.itemNo,
+          description: line.description,
+          uom: line.uom,
+          rate: line.rate,
+          boqQty: line.boqQty,
+          extraQty: line.extraQty,
+          gfcQty: line.gfcQty,
+          achievedQty: line.achievedQty,
+          excessQty: line.excessQty,
+          savingQty: line.savingQty,
+          certifiedQty: line.certifiedQty,
+          boqCost: line.boqCost,
+          extraItemCost: line.extraItemCost,
+          gfcCost: line.gfcCost,
+          achievedCost: line.achievedCost,
+          excessCost: line.excessCost,
+          savingCost: line.savingCost,
+          certifiedInvoiceCost: line.certifiedInvoiceCost,
+          pctBoq: line.pctBoq,
+          pctGfc: line.pctGfc,
+          pctAchieved: line.pctAchieved,
+          pctCertified: line.pctCertified,
+          evBoq: line.evBoq,
+          evGfc: line.evGfc,
+          evCertified: line.evCertified,
+          actualCost: line.actualCost,
+          cpi: line.cpi,
+          cpiStatus: line.cpiStatus,
+          etcBoq: line.etcBoq,
+          etcGfc: line.etcGfc,
+          etcCertified: line.etcCertified,
+          eac: line.eac,
+          vac: line.vac,
+          varBoqGfc: line.varBoqGfc,
+          varGfcAchieved: line.varGfcAchieved,
+          varGfcCertified: line.varGfcCertified,
+          overrunBoq: line.overrunBoq,
+          overrunGfc: line.overrunGfc,
+          overrunCertified: line.overrunCertified,
         });
       }
     }
@@ -219,93 +161,66 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
     console.log("Monitoring lines:", data.length);
   }
 
-  // All MB / structure sheets
+  // All MB / structure sheets — full row import (no caps)
   {
     const data: Record<string, unknown>[] = [];
-    for (const [sheetName, packageName, limit] of MB_SHEETS) {
+    for (const [sheetName, packageName] of SPDC_MB_SHEETS) {
       const rows = sheet(wb, sheetName);
       if (!rows.length) continue;
-      let header = -1;
-      for (let i = 0; i < Math.min(rows.length, 20); i++) {
-        const a = s((rows[i] as unknown[])[0]).toLowerCase();
-        const b = s((rows[i] as unknown[])[1]).toLowerCase();
-        if ((a.includes("sr") || a === "1") && (b.includes("desc") || b.includes("item"))) {
-          header = i;
-          break;
-        }
-      }
-      const start = header >= 0 ? header + 1 : 0;
-      let pkg = 0;
-      for (let i = start; i < rows.length && pkg < limit; i++) {
-        const row = rows[i] as unknown[];
-        const description = s(row[1], 400) || s(row[0], 400);
-        if (!description || /total up to date|previous bill|this bill|name of project|name of contractor|w\.o\. no/i.test(description))
-          continue;
-        const qty = n(row[7]);
-        const nos1 = n(row[2]);
-        const nos2 = n(row[3]);
-        if (!qty && !nos1 && !n(row[4]) && !s(row[0], 10).match(/^\d/)) continue;
-        if (!qty && !n(row[4]) && !n(row[5]) && !n(row[6]) && !nos1) continue;
+      for (const r of parseMbRows(rows)) {
         data.push({
           projectId,
           packageName,
-          srNo: s(row[0], 40) || null,
-          description,
-          nos1,
-          nos2: nos2 || 1,
-          length: n(row[4]),
-          width: n(row[5]),
-          height: n(row[6]),
-          qty: qty || nos1 * (nos2 || 1) * (n(row[4]) || 1) * (n(row[5]) || 1) * (n(row[6]) || 1),
-          unit: s(row[8], 20) || null,
-          raBill: s(row[9], 80) || null,
-          remark: s(row[10], 200) || null,
+          srNo: r.srNo || null,
+          itemCode: r.itemCode || r.srNo || null,
+          description: r.description,
+          nos1: r.nos1,
+          nos2: r.nos2,
+          length: r.length,
+          width: r.width,
+          height: r.height,
+          qty: r.qty,
+          unit: r.unit || null,
+          raBill: r.raBill || null,
+          remark: r.remark || null,
         });
-        pkg++;
       }
     }
     await createManyChunks(prisma, "costMbLine", data);
     console.log("MB lines:", data.length);
   }
 
-  // BBS
+  // BBS — full row import via shared parser
   {
     const data: Record<string, unknown>[] = [];
-    for (const [sheetName, packageName, limit] of BBS_SHEETS) {
+    for (const [sheetName, packageName] of SPDC_BBS_SHEETS) {
       const rows = sheet(wb, sheetName);
-      let pkg = 0;
-      for (let i = 6; i < rows.length && pkg < limit; i++) {
-        const row = rows[i] as unknown[];
-        const description = s(row[1], 300);
-        const dia = n(row[8]);
-        const totalLen = n(row[18]) || n(row[17]);
-        const nosPerMember = n(row[9]);
-        const nosOfMember = n(row[10]);
-        const nos = n(row[11]) || (nosPerMember && nosOfMember ? nosPerMember * nosOfMember : n(row[5]));
-        if (!description || /name of project|bar bending|sr\.?\s*no/i.test(description)) continue;
-        if (!dia && !totalLen && !nos) continue;
-        const weight =
-          dia && totalLen ? (Math.PI * (dia / 1000 / 2) ** 2 * totalLen * 7850) / 1000 : 0;
+      if (!rows.length) continue;
+      for (const r of parseBbsRows(rows)) {
+        if (r.rowKind === "header") continue;
+        if (!r.diameterMm && !r.totalLength && !r.nos && !r.weightKg) continue;
         data.push({
           projectId,
           packageName,
-          barMark: s(row[0], 40) || null,
-          diameterMm: dia,
-          shape: s(row[2], 80) || null,
-          lengthMm: n(row[17]) || n(row[12]),
-          nos: nos || nosPerMember,
-          nosPerMember,
-          nosOfMember,
-          shapeLenA: n(row[12]),
-          shapeLenB: n(row[13]),
-          shapeLenC: n(row[14]),
-          shapeLenD: n(row[15]),
-          shapeLenE: n(row[16]),
-          totalLength: totalLen,
-          weightKg: Math.round(weight * 100) / 100,
-          location: s(row[1], 80),
+          barMark: r.barMark || null,
+          shapeCode: r.shapeCode || null,
+          itemCode: r.itemCode || null,
+          sectionMark: r.sectionMark || null,
+          diameterMm: r.diameterMm,
+          shape: r.shape || null,
+          lengthMm: r.lengthMm,
+          nos: r.nos,
+          nosPerMember: r.nosPerMember,
+          nosOfMember: r.nosOfMember,
+          shapeLenA: r.shapeLenA,
+          shapeLenB: r.shapeLenB,
+          shapeLenC: r.shapeLenC,
+          shapeLenD: r.shapeLenD,
+          shapeLenE: r.shapeLenE,
+          totalLength: r.totalLength,
+          weightKg: r.weightKg,
+          location: r.location || null,
         });
-        pkg++;
       }
     }
     await createManyChunks(prisma, "costBbsLine", data);
@@ -509,13 +424,4 @@ async function seedCashflowDashboard(
 }
 
 /** Catalog of Cost sheet tools — mirrors Excel tabs */
-export const COST_SHEET_TOOLS = {
-  cashflow: [
-    { id: "chart", label: "Cash Flow Chart", source: "Cashflow - Dashboard.xlsx" },
-    { id: "forecast", label: "Cash Flow Forecast", source: "Cashflow - Dashboard.xlsx" },
-    { id: "tracking", label: "Tracking", source: "Cashflow - Dashboard.xlsx" },
-  ],
-  monitoringPackages: MONITORING_SHEETS.map(([, pkg]) => pkg),
-  mbPackages: MB_SHEETS.map(([, pkg]) => pkg),
-  bbsPackages: BBS_SHEETS.map(([, pkg]) => pkg),
-};
+export { COST_SHEET_TOOLS };

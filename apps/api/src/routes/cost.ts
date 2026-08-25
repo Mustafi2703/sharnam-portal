@@ -684,6 +684,14 @@ costRouter.delete("/budget/:lineId", requireRoles("admin", "office"), async (req
 });
 
 /** Load full SPDC_Budget_Arvind workbook (Budget + Monitoring + MB + BBS + rates) like QAP/Cube sync-template. */
+costRouter.get("/:projectId/verify", requireRoles("admin", "office", "employee"), async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const { verifyCostProject } = await import("../services/costWorkbookVerify.js");
+  const report = await verifyCostProject(project.id);
+  res.json(report);
+});
+
 costRouter.post(
   "/:projectId/sync-template",
   requireRoles("admin", "office", "employee", "site_employee"),
@@ -1373,7 +1381,7 @@ costRouter.delete(
   }
 );
 
-/** Multi-structure BOQ / MB import — optional packageName on multipart */
+/** Multi-structure BOQ / Monitoring import — SPDC Monitoring* layout or generic BOQ */
 costRouter.post(
   "/:projectId/structure/import",
   requireRoles("admin", "office"),
@@ -1389,14 +1397,68 @@ costRouter.post(
       const out = await syncBudgetWorkbookFromBuffer(req.params.projectId, req.file.buffer, req.file.originalname);
       return res.status(201).json({ ...out, openTab: "monitoring", openPackage: "Civil Dormitory" });
     }
-    const packageName = String(req.body.packageName || "Imported structure");
+    const packageName = String(req.body.packageName || "Imported structure").trim();
+    const replace = String(req.body.replace || "1") !== "0";
+
+    const XLSX = (await import("../lib/xlsx.js")).default;
+    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName =
+      wb.SheetNames.find((n) => /monitoring/i.test(n)) ||
+      wb.SheetNames.find((n) => !/\b(MB|BBS|Budget|RATE|Steel|Cement|Tiles)\b/i.test(n)) ||
+      wb.SheetNames[0];
+    const rawRows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheetName!], {
+      header: 1,
+      defval: "",
+    }) as unknown[][];
+
+    const { isSpdcMonitoringSheet, monitoringItemRows, monitoringLineToDb, parseSpdcMonitoringRows } = await import(
+      "../services/spdcMonitoringParser.js"
+    );
+
+    if (isSpdcMonitoringSheet(rawRows)) {
+      const lines = monitoringItemRows(parseSpdcMonitoringRows(rawRows, packageName));
+      if (!lines.length) return res.status(400).json({ error: "No monitoring BOQ rows parsed — check SPDC Monitoring layout" });
+      if (replace) {
+        await prisma.costMonitoringLine.deleteMany({ where: { projectId: req.params.projectId, packageName } });
+      }
+      const chunk = 100;
+      for (let i = 0; i < lines.length; i += chunk) {
+        await prisma.costMonitoringLine.createMany({
+          data: lines.slice(i, i + chunk).map((line) => ({
+            projectId: req.params.projectId,
+            ...monitoringLineToDb(line),
+          })),
+        });
+      }
+      const batch = await prisma.boqImportBatch.create({
+        data: {
+          projectId: req.params.projectId,
+          fileName: `${packageName} · ${req.file.originalname}`,
+          rowCount: lines.length,
+          summaryJson: JSON.stringify({ packageName, kind: "monitoring", spdc: true, items: lines.length }),
+        },
+      });
+      return res.status(201).json({
+        ...batch,
+        packageName,
+        rowCount: lines.length,
+        openTab: "monitoring",
+        openPackage: packageName,
+      });
+    }
+
     const rows = parseBoqBuffer(req.file.buffer);
+    const items = rows.filter((r) => r.rowKind === "item");
+    if (!items.length) return res.status(400).json({ error: "No BOQ rows parsed" });
+    if (replace) {
+      await prisma.costMonitoringLine.deleteMany({ where: { projectId: req.params.projectId, packageName } });
+    }
     const batch = await prisma.boqImportBatch.create({
       data: {
         projectId: req.params.projectId,
         fileName: `${packageName} · ${req.file.originalname}`,
         rowCount: rows.length,
-        summaryJson: JSON.stringify({ packageName, items: rows.filter((r) => r.rowKind === "item").length }),
+        summaryJson: JSON.stringify({ packageName, items: items.length }),
         items: {
           create: rows.map((r) => ({
             srNo: r.srNo,
@@ -1412,22 +1474,20 @@ costRouter.post(
         },
       },
     });
-    for (const r of rows.filter((x) => x.rowKind === "item").slice(0, 300)) {
-      await prisma.costMonitoringLine.create({
-        data: {
-          projectId: req.params.projectId,
-          packageName,
-          section: r.section || packageName,
-          itemNo: r.srNo,
-          description: r.description,
-          uom: r.unit,
-          rate: r.rate,
-          boqQty: r.qty,
-          boqCost: r.amount,
-        },
-      });
-    }
-    res.status(201).json(batch);
+    await prisma.costMonitoringLine.createMany({
+      data: items.map((r) => ({
+        projectId: req.params.projectId,
+        packageName,
+        section: r.section || packageName,
+        itemNo: r.srNo,
+        description: r.description,
+        uom: r.unit,
+        rate: r.rate,
+        boqQty: r.qty,
+        boqCost: r.amount,
+      })),
+    });
+    res.status(201).json({ ...batch, packageName, rowCount: items.length, openTab: "monitoring", openPackage: packageName });
   }
 );
 

@@ -1,4 +1,5 @@
 import { queueProjectEmail } from "./email.js";
+import { portalOrigin } from "./rfiFlowNotify.js";
 
 export async function notifyNcrStatus(opts: {
   projectId: string;
@@ -13,6 +14,11 @@ export async function notifyNcrStatus(opts: {
     opts.kind === "SafetyNCR" ? "Safety NCR" : opts.kind === "QualityCAR" ? "CAR" : "Quality NCR";
   const verb =
     opts.event === "created" ? "raised" : opts.event === "closed" ? "closed" : "updated";
+  const registerUrl =
+    opts.kind === "SafetyNCR"
+      ? `${portalOrigin()}/projects/${opts.projectId}/safety`
+      : `${portalOrigin()}/projects/${opts.projectId}/quality/ncr`;
+
   try {
     await queueProjectEmail({
       projectId: opts.projectId,
@@ -24,9 +30,30 @@ export async function notifyNcrStatus(opts: {
         `Description: ${opts.description.slice(0, 500)}`,
         "",
         "Review in the portal Quality / Safety module and complete the NCR form before closing.",
+        "",
+        registerUrl,
       ].join("\n"),
       context: `ncr.${opts.event}`,
       createdById: opts.createdById,
+    });
+  } catch {
+    /* optional */
+  }
+
+  try {
+    const { queueProjectWhatsApp } = await import("./projectWhatsApp.js");
+    const { whatsAppNcrStatus } = await import("./whatsappMessages.js");
+    await queueProjectWhatsApp({
+      projectId: opts.projectId,
+      text: whatsAppNcrStatus({
+        kind: opts.kind,
+        number: opts.number,
+        status: opts.status,
+        description: opts.description,
+        event: opts.event,
+        registerUrl,
+      }),
+      context: `ncr.${opts.event}`,
     });
   } catch {
     /* optional */

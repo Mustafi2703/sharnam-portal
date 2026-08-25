@@ -71,8 +71,11 @@ model Project {
   endDate                 DateTime?
   /// Comma-separated notification emails for this project
   notificationEmails      String?
+  /// Comma-separated WhatsApp mobiles (10-digit India or +91…)
+  notificationWhatsApp    String?
   emailFromName           String?   @default("शरणम् Portal")
   emailEnabled            Boolean   @default(true)
+  whatsAppEnabled         Boolean   @default(true)
   notifyOnDrawingPublish  Boolean   @default(true)
   notifyOnChecklistSubmit Boolean   @default(true)
   /// Outlook / Microsoft 365 mailbox for project mail (Graph when configured)

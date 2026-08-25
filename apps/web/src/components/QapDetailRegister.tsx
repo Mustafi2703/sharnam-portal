@@ -202,7 +202,7 @@ export function QapDetailRegister({
         )}
 
         <div className="register-scroll-hint shrink-0 px-4 py-1.5 border-b border-line">
-          Scroll ↔ ↕ for full sheet · every white cell is editable · saves on blur
+          Scroll ↔ ↕ inside sheet (100-row viewport) · every white cell is editable · saves on blur
         </div>
 
         <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line">

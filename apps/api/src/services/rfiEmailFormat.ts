@@ -181,9 +181,13 @@ export function wrapRfiEmailHtml(opts: {
   secondaryAction?: { href: string; label: string };
   extraHtml?: string;
   footerNote?: string;
+  /** Override default RFI detail rows (e.g. NCR/CAR) */
+  detailRows?: RfiDetailRow[];
+  particularsLabel?: string;
 }) {
-  const rows = rfiDetailRows(opts.ctx);
+  const rows = opts.detailRows ?? rfiDetailRows(opts.ctx);
   const questionLabel = opts.questionLabel || "Question / instruction";
+  const particularsLabel = opts.particularsLabel || "RFI particulars";
   const actions = [
     opts.primaryAction ? buttonHtml(opts.primaryAction.href, opts.primaryAction.label, true) : "",
     opts.secondaryAction ? buttonHtml(opts.secondaryAction.href, opts.secondaryAction.label, false) : "",
@@ -208,7 +212,7 @@ export function wrapRfiEmailHtml(opts: {
         <tr>
           <td style="background:#fff;padding:24px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
             <p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#334155;">${escapeHtml(opts.intro)}</p>
-            <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">RFI particulars</p>
+            <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">${escapeHtml(particularsLabel)}</p>
             ${detailTableHtml(rows)}
             <div style="margin-top:20px;padding:16px;background:#fff7ed;border-left:4px solid ${BRAND_ORANGE};border-radius:0 8px 8px 0;">
               <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#9a3412;margin-bottom:8px;">${escapeHtml(questionLabel)}</div>

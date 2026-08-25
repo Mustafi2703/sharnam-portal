@@ -176,7 +176,7 @@ export async function notifyRfiRaised(
 
   const { bodyHtml, bodyText } = buildRfiRaisedEmail({ ctx, fillUrl: fill, registerUrl: register });
 
-  return queueProjectEmail({
+  const emailResult = await queueProjectEmail({
     projectId: opts.projectId,
     subject: `Action required — ${opts.number}: ${opts.subject}`,
     body: bodyText,
@@ -185,6 +185,29 @@ export async function notifyRfiRaised(
     createdById: opts.createdById,
     toOverride: opts.toOverride,
   });
+
+  try {
+    const { queueProjectWhatsApp } = await import("./projectWhatsApp.js");
+    const { whatsAppRfiRaised } = await import("./whatsappMessages.js");
+    await queueProjectWhatsApp({
+      projectId: opts.projectId,
+      text: whatsAppRfiRaised({
+        number: opts.number,
+        subject: opts.subject,
+        question: opts.question,
+        rfiKind: opts.rfiKind,
+        status: opts.status,
+        dueDate: opts.dueDate,
+        fillUrl: fill,
+        registerUrl: register,
+      }),
+      context: "rfi.create",
+    });
+  } catch {
+    /* optional */
+  }
+
+  return emailResult;
 }
 
 export async function notifyChecklistSubmittedForReview(opts: {
@@ -312,7 +335,7 @@ export async function notifyRfiClosed(
 
   const { bodyHtml, bodyText } = buildRfiClosedEmail({ ctx, registerUrl: register });
 
-  return queueProjectEmail({
+  const emailResult = await queueProjectEmail({
     projectId: opts.projectId,
     subject: `Closed — ${opts.number}: ${opts.subject}`,
     body: bodyText,
@@ -321,6 +344,24 @@ export async function notifyRfiClosed(
     createdById: opts.createdById,
     toOverride: opts.toOverride,
   });
+
+  try {
+    const { queueProjectWhatsApp } = await import("./projectWhatsApp.js");
+    const { whatsAppRfiClosed } = await import("./whatsappMessages.js");
+    await queueProjectWhatsApp({
+      projectId: opts.projectId,
+      text: whatsAppRfiClosed({
+        number: opts.number,
+        subject: opts.subject,
+        registerUrl: register,
+      }),
+      context: "rfi.status.closed",
+    });
+  } catch {
+    /* optional */
+  }
+
+  return emailResult;
 }
 
 export async function notifyRfiResponse(opts: {

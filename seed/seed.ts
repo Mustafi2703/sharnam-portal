@@ -572,6 +572,8 @@ async function seedProjectAndCost(users: User[]) {
       location: "Ahmedabad, Gujarat",
       status: "In Progress",
       notificationEmails: "office@sharnam.demo,client@sharnam.demo",
+      notificationWhatsApp: "8160757201,9106945294",
+      whatsAppEnabled: true,
       emailFromName: "शरणम् Portal",
       emailEnabled: true,
       notifyOnDrawingPublish: true,
@@ -579,6 +581,8 @@ async function seedProjectAndCost(users: User[]) {
     },
     update: {
       notificationEmails: "office@sharnam.demo,client@sharnam.demo",
+      notificationWhatsApp: "8160757201,9106945294",
+      whatsAppEnabled: true,
       emailFromName: "शरणम् Portal",
       emailEnabled: true,
     },

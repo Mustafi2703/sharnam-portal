@@ -60,7 +60,7 @@ function workbookFromBuffer(buffer: Buffer) {
   return XLSX.read(buffer, { type: "buffer" });
 }
 
-function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
+export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
   let header = -1;
   for (let i = 0; i < Math.min(rows.length, 25); i++) {
     const a = s((rows[i] as unknown[])[0]).toLowerCase();
@@ -102,7 +102,7 @@ function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
   return out;
 }
 
-function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
+export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
   let start = 6;
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const joined = (rows[i] as unknown[]).map((c) => s(c, 40)).join(" ").toLowerCase();
@@ -233,47 +233,16 @@ function bestSheetParse<T>(buffer: Buffer, parse: (rows: unknown[][]) => T[], na
   return best;
 }
 
+import {
+  SPDC_BBS_SHEETS,
+  SPDC_MB_SHEETS,
+  SPDC_MONITORING_SHEETS,
+} from "./spdcBudgetManifest.js";
+
 /** SPDC_Budget_Arvind 49.xls — Excel tab name → portal package name */
-export const SPDC_MB_SHEET_PACKAGES: [string, string][] = [
-  ["DORMITORY MB", "Dormitory Civil"],
-  ["Electric MB", "Electric"],
-  ["Plumbing MB", "Plumbing"],
-  ["UGWT MB", "UGWT"],
-  ["Septic Tank", "Septic Tank"],
-  ["Compound Wall", "Compound Wall"],
-  ["Road & Paving", "Road & Paving"],
-  ["Windows ", "Windows"],
-  ["Furniture", "Furniture"],
-  ["WPC Door", "WPC Door"],
-  ["Fire Fighting", "Fire Fighting"],
-  ["Fire Alarm", "Fire Alarm"],
-  ["Gas Line", "Gas Line"],
-  ["External Electric", "External Electric"],
-];
-
-export const SPDC_BBS_SHEET_PACKAGES: [string, string][] = [
-  ["DORMITORY BBS", "Dormitory BBS"],
-  ["Compound Wall BBS", "Compound Wall BBS"],
-  ["Septic Tank BBS", "Septic Tank BBS"],
-  ["Road BBS", "Road BBS"],
-  ["UGWT BBS", "UGWT BBS"],
-];
-
-export const SPDC_MONITORING_SHEET_PACKAGES: [string, string][] = [
-  ["Monitoring Combined", "Combined"],
-  ["Monitoring Civil Dormitory", "Civil Dormitory"],
-  ["Monitoring Electric", "Electric"],
-  ["Monitoring Plumbing", "Plumbing"],
-  ["Monitoring UGWT", "UGWT"],
-  ["Monitoring Septic Tank", "Septic Tank"],
-  ["Monitoring External Dev", "External Development"],
-  ["Monitoring Windows", "Windows"],
-  ["Monitoring Furniture ", "Furniture"],
-  ["Monitoring WPC Door", "WPC Door"],
-  ["Monitoring Fire Fighting", "Fire Fighting"],
-  ["Monitoring Gas", "Gas Line"],
-  ["Monitoring External Electric", "External Electric"],
-];
+export const SPDC_MB_SHEET_PACKAGES = SPDC_MB_SHEETS;
+export const SPDC_BBS_SHEET_PACKAGES = SPDC_BBS_SHEETS;
+export const SPDC_MONITORING_SHEET_PACKAGES = SPDC_MONITORING_SHEETS;
 
 function resolveSheetPackage(sheetName: string, mappings: [string, string][], fallbackHint?: RegExp): string | null {
   const trimmed = sheetName.trim();

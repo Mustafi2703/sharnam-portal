@@ -87,6 +87,8 @@ export default function CostPage() {
   const [bbsAddOpen, setBbsAddOpen] = useState(false);
   const [monAddOpen, setMonAddOpen] = useState(false);
   const [syncSheetBusy, setSyncSheetBusy] = useState(false);
+  const [verify, setVerify] = useState<any>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const [cfView, setCfView] = useState<"chart" | "forecast" | "tracking" | "all">(
     (["chart", "forecast", "tracking", "all"].includes(searchParams.get("cf") || "")
       ? (searchParams.get("cf") as "chart" | "forecast" | "tracking" | "all")
@@ -180,6 +182,20 @@ export default function CostPage() {
     }
   }, [id, token, clientBlocked, pkgFilter]);
 
+  async function runVerify() {
+    if (!id) return;
+    setVerifyBusy(true);
+    setMsg("");
+    try {
+      const report = await api(`/api/cost/${id}/verify`, { token });
+      setVerify(report);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Verify failed");
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
+
   async function syncFullTemplate(silent = false) {
     if (!id || !canEdit) return null;
     setSyncing(true);
@@ -197,6 +213,7 @@ export default function CostPage() {
         `Loaded SPDC_Budget_Arvind 49.xls — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}${out.cashflow != null ? `, Cashflow ${out.cashflow}` : ""} rows`
       );
       await load();
+      if (!silent) void runVerify();
       return out;
     } catch (err) {
       if (!silent) setMsg(err instanceof Error ? err.message : "Template load failed");
@@ -447,12 +464,76 @@ export default function CostPage() {
                   Finance →
                 </Button>
               </Link>
+              {canEdit && (
+                <Button
+                  type="button"
+                  className="!bg-white/15 !text-white !border-white/30"
+                  variant="secondary"
+                  disabled={verifyBusy || syncing}
+                  onClick={() => void runVerify()}
+                >
+                  {verifyBusy ? "Verifying…" : "Verify vs Excel"}
+                </Button>
+              )}
           </div>
         }
       />
       </div>
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
+
+      {verify && (
+        <details
+          className={`shrink-0 rounded-lg border bg-paper ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
+            isRegisterView ? "open" : ""
+          }`}
+          open={!verify.ok}
+        >
+          <summary className="cursor-pointer px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
+            <div>
+              <div className="text-sm font-semibold text-brand-dark">SPDC_Budget_Arvind 49.xls parity</div>
+              <div className="text-xs text-steel-muted">
+                {verify.ok ? "All sheets match Excel row counts" : "Mismatches — re-sync template or expand to review"}
+                {verify.workbook ? ` · ${verify.workbook} (${verify.sheetCount ?? 36} tabs)` : ""}
+              </div>
+            </div>
+            <Badge tone={verify.ok ? "ok" : "danger"}>
+              {verify.summary?.passed ?? 0}/{verify.summary?.total ?? 0} passed
+            </Badge>
+          </summary>
+          <div className="px-4 pb-4 border-t border-line/60 max-h-72 overflow-auto">
+            <table className="w-full text-xs mt-2">
+              <thead>
+                <tr className="text-left text-steel-muted border-b border-line/60">
+                  <th className="py-1 pr-3 font-medium">Check</th>
+                  <th className="py-1 pr-3 font-medium">Excel</th>
+                  <th className="py-1 pr-3 font-medium">DB</th>
+                  <th className="py-1 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(verify.checks || []).map((c: any) => (
+                  <tr key={c.key} className="border-b border-line/40">
+                    <td className="py-1 pr-3">{c.label}</td>
+                    <td className="py-1 pr-3 font-mono">{String(c.expected)}</td>
+                    <td className="py-1 pr-3 font-mono">{String(c.actual)}</td>
+                    <td className="py-1">
+                      <Badge tone={c.ok ? "ok" : "danger"}>{c.ok ? "OK" : "Mismatch"}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!verify.ok && canEdit && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" disabled={syncing} onClick={() => void syncFullTemplate()}>
+                  {syncing ? "Loading…" : "Re-sync SPDC workbook"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </details>
+      )}
 
       {!isRegisterView && (
       <>

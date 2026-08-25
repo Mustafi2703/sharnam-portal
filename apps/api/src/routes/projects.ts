@@ -469,6 +469,8 @@ projectsRouter.get("/:id", async (req, res) => {
 projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
   const {
     notificationEmails,
+    notificationWhatsApp,
+    whatsAppEnabled,
     emailFromName,
     emailEnabled,
     notifyOnDrawingPublish,
@@ -491,6 +493,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     where: { id: req.params.id },
     data: {
       notificationEmails: notificationEmails !== undefined ? String(notificationEmails) : undefined,
+      notificationWhatsApp: notificationWhatsApp !== undefined ? String(notificationWhatsApp) : undefined,
+      whatsAppEnabled: typeof whatsAppEnabled === "boolean" ? whatsAppEnabled : undefined,
       emailFromName: emailFromName !== undefined ? String(emailFromName) : undefined,
       emailEnabled: typeof emailEnabled === "boolean" ? emailEnabled : undefined,
       notifyOnDrawingPublish: typeof notifyOnDrawingPublish === "boolean" ? notifyOnDrawingPublish : undefined,
@@ -570,6 +574,64 @@ projectsRouter.post("/:id/emails/send", requireRoles("admin", "office", "employe
   });
   if (result.skipped) return res.status(400).json({ error: result.reason });
   res.status(201).json(result.email);
+});
+
+projectsRouter.get("/:id/whatsapp/status", requireRoles("admin", "office", "employee", "site_employee"), async (req, res) => {
+  const { whatsAppStatus } = await import("../services/projectWhatsApp.js");
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { notificationWhatsApp: true, whatsAppEnabled: true },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  res.json({
+    ...whatsAppStatus(),
+    numbers: project.notificationWhatsApp || "",
+    enabled: project.whatsAppEnabled !== false,
+  });
+});
+
+projectsRouter.post("/:id/whatsapp/test", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const { queueProjectWhatsApp, whatsAppStatus } = await import("../services/projectWhatsApp.js");
+  const { waMeLink } = await import("../services/whatsappNotify.js");
+
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { code: true, notificationWhatsApp: true },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+
+  const text =
+    typeof req.body.message === "string" && req.body.message.trim()
+      ? req.body.message.trim()
+      : `Test update from Sharnam Portal (${project.code || "project"}) — ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`;
+
+  const toRaw =
+    typeof req.body.toNumbers === "string" && req.body.toNumbers.trim()
+      ? req.body.toNumbers.trim()
+      : project.notificationWhatsApp || "";
+
+  const result = await queueProjectWhatsApp({
+    projectId: req.params.id,
+    text,
+    context: "whatsapp.test",
+    toOverride: toRaw || undefined,
+  });
+
+  const api = whatsAppStatus();
+  if (result.skipped && result.reason === "api_not_configured" && toRaw) {
+    const mobiles = toRaw.split(/[,;]+/).map((s: string) => s.trim()).filter(Boolean);
+    const links = mobiles.map((mobile: string) => ({ mobile, url: waMeLink(mobile, text) }));
+    return res.status(200).json({
+      mode: "manual",
+      message: "WhatsApp API not configured — open wa.me links to send manually",
+      api,
+      links,
+      text,
+    });
+  }
+
+  if (result.skipped) return res.status(400).json({ error: result.reason, api });
+  res.status(201).json({ mode: "api", api, ...result });
 });
 
 projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

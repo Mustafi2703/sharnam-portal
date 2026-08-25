@@ -24,6 +24,8 @@ export type MeetingEmailContext = {
   calendarWebLink?: string | null;
   portalAgendaUrl: string;
   teamsNote?: string | null;
+  /** Numbered agenda lines shown in the invite body */
+  agendaItems?: string[];
 };
 
 type DetailRow = { label: string; value: string };
@@ -83,6 +85,15 @@ function linkLine(label: string, href: string) {
   return `<p style="margin:10px 0 0;font-size:12px;color:#64748b;">${escapeHtml(label)}<br/><a href="${escapeHtml(href)}" style="color:${BRAND_TEAL};word-break:break-all;">${escapeHtml(href)}</a></p>`;
 }
 
+function agendaBlockHtml(items?: string[]) {
+  if (!items?.length) return "";
+  const lis = items.map((item) => `<li style="margin:6px 0;font-size:13px;color:#334155;line-height:1.5;">${escapeHtml(item)}</li>`).join("");
+  return `<div style="margin-top:20px;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+    <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Meeting agenda</p>
+    <ol style="margin:0;padding-left:20px;">${lis}</ol>
+  </div>`;
+}
+
 export function buildMeetingScheduledEmail(ctx: MeetingEmailContext) {
   const rows = meetingDetailRows(ctx);
   const intro = ctx.teamsJoinUrl
@@ -127,6 +138,7 @@ export function buildMeetingScheduledEmail(ctx: MeetingEmailContext) {
             <p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#334155;">${escapeHtml(intro)}</p>
             <p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Meeting particulars</p>
             ${detailTableHtml(rows)}
+            ${agendaBlockHtml(ctx.agendaItems)}
             <div style="margin-top:22px;">${actions}</div>
             ${extra}
           </td>
@@ -154,6 +166,9 @@ export function buildMeetingScheduledEmail(ctx: MeetingEmailContext) {
     ctx.scheduledByName ? `Scheduled by: ${ctx.scheduledByName}` : "",
     ctx.attendeeList ? `Invited: ${ctx.attendeeList}` : "",
     "",
+    ...(ctx.agendaItems?.length
+      ? ["Agenda:", ...ctx.agendaItems.map((item, i) => `${i + 1}. ${item}`), ""]
+      : []),
     ...(ctx.teamsJoinUrl ? ["Join Microsoft Teams:", ctx.teamsJoinUrl, ""] : []),
     "Portal agenda / MoM:",
     ctx.portalAgendaUrl,

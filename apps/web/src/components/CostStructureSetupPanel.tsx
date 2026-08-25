@@ -211,14 +211,14 @@ export function CostStructureSetupPanel({
       <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
         <h3 className="font-semibold text-sm text-ink">Cost sheet setup — SPDC format</h3>
         <p className="text-xs text-steel-muted mt-1 text-left max-w-4xl">
-          One <strong>structure / package</strong> per discipline (Civil Dormitory, Electric, UGWT, …). Each structure has its own{" "}
-          <strong>Monitoring BOQ</strong>, <strong>MB</strong>, and <strong>BBS</strong> sheet tabs matching{" "}
-          <code className="font-mono text-[11px]">SPDC_Budget_Arvind 49.xls</code>. Load the server template or upload the full workbook.
+          One <strong>structure / package</strong> per discipline (Civil Dormitory, Electric, UGWT, …). Each row has{" "}
+          <strong>Monitoring</strong> (BOQ with section › sub-section), plus <strong>MB</strong> and <strong>BBS</strong> sheet tools.
+          Load the full server template or upload per structure.
         </p>
       </div>
 
       {canEdit && (
-        <div className="px-4 py-3 border-b border-line grid lg:grid-cols-3 gap-4 shrink-0">
+        <div className="px-4 py-3 border-b border-line grid sm:grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
           <div className="space-y-2">
             <div className="text-[10px] uppercase font-semibold text-steel-muted">1 · Full SPDC template</div>
             <p className="text-xs text-steel-muted">Budget WBS + all Monitoring + 14 MB + 5 BBS + rates + cashflow from server file.</p>
@@ -227,16 +227,22 @@ export function CostStructureSetupPanel({
             </Button>
           </div>
           <div className="space-y-2">
-            <div className="text-[10px] uppercase font-semibold text-steel-muted">2 · MB + BBS workbook upload</div>
-            <p className="text-xs text-steel-muted">Imports every MB/BBS tab with correct package names (replaces existing MB/BBS).</p>
+            <div className="text-[10px] uppercase font-semibold text-steel-muted">2 · Monitoring per structure</div>
+            <p className="text-xs text-steel-muted">
+              Upload a <strong>Monitoring*</strong> tab for each package below (↑ Mon). Sections & sub-sections (e.g. Dormitory Room › Size) import automatically.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="text-[10px] uppercase font-semibold text-steel-muted">3 · MB + BBS tools (bulk)</div>
+            <p className="text-xs text-steel-muted">Imports every MB/BBS tab — per-structure MB/BBS upload stays in the table below.</p>
             <input type="file" accept=".xlsx,.xls" onChange={(e) => setWorkbookFile(e.target.files?.[0] || null)} className="text-xs w-full" />
             <Button type="button" variant="secondary" disabled={isBusy || !workbookFile} onClick={() => void importWorkbook()}>
               Import all MB/BBS sheets
             </Button>
           </div>
           <form className="space-y-2" onSubmit={addStructure}>
-            <div className="text-[10px] uppercase font-semibold text-steel-muted">3 · Add structure (BOQ only)</div>
-            <p className="text-xs text-steel-muted">Creates monitoring lines under a new package name.</p>
+            <div className="text-[10px] uppercase font-semibold text-steel-muted">4 · New structure (monitoring BOQ)</div>
+            <p className="text-xs text-steel-muted">Adds a package with SPDC or generic BOQ lines (section headings preserved).</p>
             <Input placeholder="Structure / package name" value={structureName} onChange={(e) => setStructureName(e.target.value)} required />
             <input type="file" accept=".xlsx,.xls,.csv" required onChange={(e) => setStructureFile(e.target.files?.[0] || null)} className="text-xs w-full" />
             <Button type="submit" variant="secondary" disabled={isBusy || !structureFile}>

@@ -88,6 +88,18 @@ function formatIdx(n: number | null | undefined) {
   return v.toFixed(3);
 }
 
+function SectionBandLabel({ section }: { section: string }) {
+  if (!section || section === "General") return <span className="text-steel-muted italic">General</span>;
+  const parts = section.split(" › ").map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return <span className="boq-section-label">{section}</span>;
+  return (
+    <span className="boq-section-label flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wide text-steel-muted font-semibold">{parts[0]}</span>
+      <span>{parts.slice(1).join(" › ")}</span>
+    </span>
+  );
+}
+
 const MON_HEADERS = [
   "Package",
   "ITEM NO.",
@@ -669,7 +681,7 @@ export function BoqMonitoringEditor({
                           onCommit={(v) => void renameSection(items, v)}
                         />
                       ) : (
-                        <span className="boq-section-label">{section}</span>
+                        <SectionBandLabel section={section} />
                       )}
                     </td>
                   </tr>
