@@ -1537,6 +1537,130 @@ body.is-auth-route #root {
   white-space: nowrap;
 }
 
+/* ── Cost sheet registers — MB (amber) · BBS (blue) · Monitoring (green) ── */
+.cost-register-shell--mb {
+  --cost-accent: #b45309;
+  --cost-head-bg: #fffbeb;
+  --cost-thead-bg: #fef3c7;
+  --cost-section-bg: #fde68a;
+  --cost-border: #f59e0b;
+  --cost-scroll-hint: #92400e;
+}
+.cost-register-shell--bbs {
+  --cost-accent: #1d4ed8;
+  --cost-head-bg: #eff6ff;
+  --cost-thead-bg: #dbeafe;
+  --cost-section-bg: #bfdbfe;
+  --cost-border: #3b82f6;
+  --cost-scroll-hint: #1e40af;
+}
+.cost-register-shell--monitoring {
+  --cost-accent: #047857;
+  --cost-head-bg: #ecfdf5;
+  --cost-thead-bg: #d1fae5;
+  --cost-section-bg: #a7f3d0;
+  --cost-border: #10b981;
+  --cost-scroll-hint: #065f46;
+}
+
+.cost-register-shell__title-bar {
+  background: var(--cost-head-bg);
+  border-color: color-mix(in srgb, var(--cost-border) 45%, var(--color-line));
+}
+.cost-register-shell__title {
+  color: var(--cost-accent);
+}
+.cost-register-shell__scroll-hint {
+  background: color-mix(in srgb, var(--cost-head-bg) 70%, white);
+  color: var(--cost-scroll-hint);
+  border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line));
+}
+
+.cost-register-shell .cost-register-thead th {
+  background: var(--cost-thead-bg) !important;
+  color: var(--cost-accent);
+  border-color: color-mix(in srgb, var(--cost-border) 40%, var(--color-line)) !important;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cost-register-shell .cost-register-thead .spdc-th-sub {
+  background: color-mix(in srgb, var(--cost-thead-bg) 85%, white) !important;
+  font-weight: 600;
+  font-size: 0.625rem;
+}
+
+.cost-register-shell .boq-section-row td {
+  background: var(--cost-section-bg) !important;
+  color: var(--cost-accent);
+  font-weight: 700;
+  border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line)) !important;
+}
+
+.cost-register-shell .cost-register-table tbody tr.boq-line-row:nth-child(even) td {
+  background: color-mix(in srgb, var(--cost-head-bg) 35%, white);
+}
+.cost-register-shell .cost-register-table .sticky-col {
+  background: inherit;
+  box-shadow: 2px 0 0 color-mix(in srgb, var(--cost-border) 25%, transparent);
+}
+
+.cost-register-shell--mb .register-sheet-cell:focus {
+  outline-color: var(--cost-border);
+  background: #fffbeb;
+}
+.cost-register-shell--bbs .register-sheet-cell:focus {
+  outline-color: var(--cost-border);
+  background: #eff6ff;
+}
+.cost-register-shell--monitoring .register-sheet-cell:focus {
+  outline-color: var(--cost-border);
+  background: #ecfdf5;
+}
+
+/* Flow bar — sheet colour chips */
+.cost-flow-btn--mb {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.cost-flow-btn--mb:hover {
+  border-color: #f59e0b;
+}
+.cost-flow-btn--mb-active {
+  background: #b45309;
+  border-color: #92400e;
+  color: white;
+  box-shadow: 0 1px 3px rgb(180 83 9 / 0.35);
+}
+.cost-flow-btn--bbs {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+.cost-flow-btn--bbs:hover {
+  border-color: #3b82f6;
+}
+.cost-flow-btn--bbs-active {
+  background: #1d4ed8;
+  border-color: #1e3a8a;
+  color: white;
+  box-shadow: 0 1px 3px rgb(29 78 216 / 0.35);
+}
+.cost-flow-btn--mon {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+.cost-flow-btn--mon:hover {
+  border-color: #10b981;
+}
+.cost-flow-btn--mon-active {
+  background: #047857;
+  border-color: #064e3b;
+  color: white;
+  box-shadow: 0 1px 3px rgb(4 120 87 / 0.35);
+}
+
 .hira-register__table {
   width: 100%;
   border-collapse: collapse;

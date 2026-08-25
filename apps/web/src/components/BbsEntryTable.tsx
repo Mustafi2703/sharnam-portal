@@ -103,8 +103,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   const [msg, setMsg] = useState("");
   const [shapeMasters, setShapeMasters] = useState<{ shapeCode: string; name?: string | null }[]>([]);
   const canEditDims = canFullEdit || canSiteEdit;
-  const hidePackage = Boolean(singlePackage);
-  const colSpan = hidePackage ? 16 : 17;
+  const colSpan = 17;
 
   useEffect(() => {
     void api<{ shapeCode: string; name?: string | null }[]>("/api/cost/shape-masters", { token })
@@ -198,14 +197,15 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   return (
     <>
     <CostRegisterShell
+      sheetKind="bbs"
       title={`Bar Bending Schedule (BBS)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${rows.length} lines · ${uploaded} shapes uploaded · SHAPE OF BAR column = bend diagram`}
+      subtitle={`${rows.length} lines · ${uploaded} shapes · all SPDC BBS columns including SHAPE OF BAR`}
       footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
     >
-        <table className="cube-register__table register-editor-pro min-w-[104rem] bbs-entry-panel">
-          <thead className="spdc-register-thead">
+        <table className="cube-register__table register-editor-pro cost-register-table min-w-[108rem] bbs-entry-panel">
+          <thead className="cost-register-thead">
             <tr>
-              {!hidePackage && <th className="text-left sticky-col" rowSpan={2}>Package</th>}
+              <th className="text-left sticky-col" rowSpan={2}>Package</th>
               <th rowSpan={2}>SR. NO</th>
               <th rowSpan={2}>DESCRIPTION</th>
               <th rowSpan={2} className="min-w-[140px]">SHAPE OF BAR</th>
@@ -241,7 +241,6 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
                 <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
-                  {!hidePackage && (
                   <td className="sticky-col wrap text-left align-top">
                     {canFullEdit ? (
                       <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
@@ -249,7 +248,6 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                       b.packageName
                     )}
                   </td>
-                  )}
                   <td className="wrap font-medium text-left align-top">
                     {canEditDims ? (
                       <CellInput value={b.barMark} onCommit={(v) => void patchLine(b.id, { barMark: v })} />

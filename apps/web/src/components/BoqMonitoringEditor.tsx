@@ -415,8 +415,7 @@ export function BoqMonitoringEditor({
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
   const canTouch = canFullEdit || canSiteEdit;
-  const hidePackage = Boolean(singlePackage);
-  const headers = hidePackage ? MON_HEADERS.filter((h) => h !== "Package") : [...MON_HEADERS];
+  const headers = [...MON_HEADERS];
 
   const grouped = useMemo(() => {
     const map = new Map<string, MonLine[]>();
@@ -634,14 +633,15 @@ export function BoqMonitoringEditor({
       )}
 
       <CostRegisterShell
+        sheetKind="monitoring"
         title={`BOQ / Monitoring${singlePackage ? ` — ${singlePackage}` : ""}`}
-        subtitle={`${rows.length} lines · ${grouped.length} sections · BOQ → GFC → Achieved → Certified (all SPDC columns)`}
+        subtitle={`${rows.length} lines · ${grouped.length} sections · all ${headers.length} SPDC monitoring columns visible`}
       >
-          <table className="cube-register__table register-editor-pro boq-editor__table min-w-[120rem]">
-            <thead className="spdc-register-thead">
+          <table className="cube-register__table register-editor-pro cost-register-table boq-editor__table min-w-[128rem]">
+            <thead className="cost-register-thead">
               <tr>
                 {headers.map((h, i) => (
-                  <th key={h} className={`text-left ${i === 0 && !hidePackage ? "sticky-col" : ""} ${i >= (hidePackage ? 3 : 4) ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""}`}>
+                  <th key={h} className={`text-left ${i === 0 ? "sticky-col" : ""} ${i >= 4 ? "num" : ""} ${h === "Item of Work" ? "boq-desc-col min-w-[14rem]" : ""}`}>
                     {h.includes("(") ? (
                       <>
                         {h.split("(")[0].trim()}
@@ -683,7 +683,7 @@ export function BoqMonitoringEditor({
                     const certCost = b.certifiedInvoiceCost ?? b.certifiedQty * rate;
                     return (
                       <tr key={b.id} className={`boq-line-row ${busy ? "opacity-60" : ""}`}>
-                        {!hidePackage && <td className="sticky-col text-left align-top">{b.packageName}</td>}
+                        <td className="sticky-col text-left align-top">{b.packageName}</td>
                         <td className="whitespace-nowrap">{b.itemNo ?? "—"}</td>
                         <td className="boq-desc-col">
                           <div className="boq-desc" title={b.description}>

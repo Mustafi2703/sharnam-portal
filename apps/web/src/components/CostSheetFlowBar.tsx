@@ -12,10 +12,10 @@ type Props = {
   canEdit?: boolean;
 };
 
-const STEPS: { key: FlowTab; label: string; hint: string }[] = [
-  { key: "mb", label: "1 · MB", hint: "Measurement book — Nos × L × W × H → Qty" },
-  { key: "bbs", label: "2 · BBS", hint: "Bar bending — marks, shapes, weight kg" },
-  { key: "monitoring", label: "3 · Monitoring", hint: "BOQ · GFC · Achieved · Certified" },
+const STEPS: { key: FlowTab; label: string; hint: string; tone: string; activeTone: string }[] = [
+  { key: "mb", label: "1 · MB", hint: "Measurement book — Nos × L × W × H → Qty", tone: "cost-flow-btn--mb", activeTone: "cost-flow-btn--mb-active" },
+  { key: "bbs", label: "2 · BBS", hint: "Bar bending — marks, shapes, weight kg", tone: "cost-flow-btn--bbs", activeTone: "cost-flow-btn--bbs-active" },
+  { key: "monitoring", label: "3 · Monitoring", hint: "BOQ · GFC · Achieved · Certified", tone: "cost-flow-btn--mon", activeTone: "cost-flow-btn--mon-active" },
 ];
 
 /** SPDC cost chain — MB feeds BBS feeds Monitoring achieved qty. */
@@ -55,12 +55,10 @@ export function CostSheetFlowBar({
               type="button"
               title={s.hint}
               onClick={() => onNavigate(s.key, pkg || undefined)}
-              className={`rounded-md px-3 py-2 text-left border min-w-[8.5rem] transition ${
-                isActive ? "bg-procore-navy text-white border-procore-navy shadow-sm" : "bg-sand/30 border-line text-ink hover:border-brand/40"
-              }`}
+              className={`cost-flow-btn rounded-md px-3 py-2 text-left border min-w-[8.5rem] transition ${isActive ? s.activeTone : s.tone}`}
             >
               <span className="block text-xs font-bold">{s.label}</span>
-              <span className={`block text-[10px] mt-0.5 ${isActive ? "text-white/80" : "text-steel-muted"}`}>
+              <span className={`block text-[10px] mt-0.5 ${isActive ? "opacity-90" : "text-steel-muted"}`}>
                 {n != null ? `${n} rows` : s.hint.split("—")[0]?.trim()}
               </span>
               {i < STEPS.length - 1 && (

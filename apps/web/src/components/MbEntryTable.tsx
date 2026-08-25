@@ -39,7 +39,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const canEditDims = canFullEdit || canSiteEdit;
-  const hidePackage = Boolean(singlePackage);
+  const colSpan = 13;
 
   const grouped = useMemo(() => {
     const map = new Map<string, MbRow[]>();
@@ -54,8 +54,6 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
     }
     return [...map.entries()];
   }, [rows]);
-
-  const colSpan = hidePackage ? 12 : 13;
 
   async function patchLine(id: string, body: Record<string, unknown>) {
     setBusyId(id);
@@ -106,14 +104,15 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
 
   return (
     <CostRegisterShell
+      sheetKind="mb"
       title={`Measurement Book (MB)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${rows.length} lines · ${grouped.length} sections · Nos × Length × Width × Height → Qty`}
+      subtitle={`${rows.length} lines · ${grouped.length} sections · all SPDC MB columns visible`}
       footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
     >
-      <table className="cube-register__table register-editor-pro min-w-[88rem] mb-entry-panel">
-        <thead className="spdc-register-thead">
+      <table className="cube-register__table register-editor-pro cost-register-table min-w-[92rem] mb-entry-panel">
+        <thead className="cost-register-thead">
           <tr>
-            {!hidePackage && <th rowSpan={2} className="text-left sticky-col">Package</th>}
+            <th rowSpan={2} className="text-left sticky-col">Package</th>
             <th rowSpan={2} className="text-left">SR No.</th>
             <th rowSpan={2} className="text-left min-w-[12rem]">Description</th>
             <th colSpan={2} className="text-center">No</th>
@@ -141,11 +140,9 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
               </tr>
               {items.map((b) => (
                 <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
-                  {!hidePackage && (
-                    <td className="sticky-col text-left align-top">
-                      {cell(b.packageName, (v) => void patchLine(b.id, { packageName: v }), { disabled: !canFullEdit })}
-                    </td>
-                  )}
+                  <td className="sticky-col text-left align-top">
+                    {cell(b.packageName, (v) => void patchLine(b.id, { packageName: v }), { disabled: !canFullEdit })}
+                  </td>
                   <td className="text-left align-top font-mono">
                     {cell(b.srNo, (v) => void patchLine(b.id, { srNo: v }), { disabled: !canEditDims })}
                   </td>
