@@ -47,6 +47,26 @@ export const SPDC_BBS_SHEETS: [string, string][] = [
   ["UGWT BBS", "UGWT BBS"],
 ];
 
+/** MB package → linked BBS tab (SPDC sheet flow). */
+export const SPDC_MB_TO_BBS_PACKAGE: Record<string, string> = {
+  "Dormitory Civil": "Dormitory BBS",
+  "Compound Wall": "Compound Wall BBS",
+  "Septic Tank": "Septic Tank BBS",
+  "Road & Paving": "Road BBS",
+  UGWT: "UGWT BBS",
+};
+
+export function linkedBbsPackage(mbPackage: string): string {
+  return SPDC_MB_TO_BBS_PACKAGE[mbPackage] ?? mbPackage;
+}
+
+export function linkedMbPackage(bbsPackage: string): string | undefined {
+  for (const [mb, bbs] of Object.entries(SPDC_MB_TO_BBS_PACKAGE)) {
+    if (bbs === bbsPackage) return mb;
+  }
+  return undefined;
+}
+
 export const SPDC_RATE_SHEETS = [
   { sheet: "STEEL RATE DIFFRENCE", material: "Steel" as const },
   { sheet: "CEMENT RATE DIFFRENCE", material: "Cement" as const },

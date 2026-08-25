@@ -10,6 +10,7 @@ import ImageMarkup from "./ImageMarkup";
 import { formatQty } from "./BoqMonitoringEditor";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { BBS_COLUMN_GROUPS, bbsColClass } from "../lib/costSheetColumns";
+import { bbsBandEmpty, BBS_DATA_COLS } from "../lib/costBandRows";
 import { bbsRowBandClass, bbsRowKind } from "../lib/costSheetRows";
 
 function CellInput({
@@ -65,6 +66,7 @@ export type BbsRow = {
   totalLength?: number;
   weightKg?: number;
   location?: string | null;
+  rowKind?: string | null;
   shapeDiagramPath?: string | null;
   shapeDiagramUrl?: string | null;
 };
@@ -105,7 +107,11 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   const [msg, setMsg] = useState("");
   const [shapeMasters, setShapeMasters] = useState<{ shapeCode: string; name?: string | null }[]>([]);
   const canEditDims = canFullEdit || canSiteEdit;
-  const colSpan = 17;
+  const colSpan = BBS_DATA_COLS + 1;
+
+  function bbsRangeEmpty(from: number, to: number) {
+    return Array.from({ length: to - from + 1 }, (_, i) => bbsBandEmpty(from + i, `bbs-b-${from + i}`));
+  }
 
   useEffect(() => {
     void api<{ shapeCode: string; name?: string | null }[]>("/api/cost/shape-masters", { token })
@@ -190,14 +196,35 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   function bandRow(b: BbsRow) {
     const kind = bbsRowKind(b);
     const label = b.location || b.sectionMark || "—";
+    const labelClass =
+      kind === "section" ? "boq-section-label" : kind === "subheader" ? "boq-subheader-label" : "boq-subsection-label";
+
+    if (kind === "subheader") {
+      return (
+        <tr key={b.id} className={bbsRowBandClass(kind)}>
+          {bbsBandEmpty(0, "p")}
+          {bbsBandEmpty(1, "sr")}
+          <td className={bbsColClass(2, { sticky: true, extra: "text-left uppercase tracking-wide text-[10px]" })}>
+            <span className={labelClass}>{label}</span>
+          </td>
+          {bbsRangeEmpty(3, 15)}
+          <td className="w-12" />
+        </tr>
+      );
+    }
+
     return (
       <tr key={b.id} className={bbsRowBandClass(kind)}>
-        <td colSpan={colSpan} className="sticky-col">
-          <span className={kind === "section" ? "boq-section-label" : "boq-subsection-label"}>
-            {b.barMark ? `${b.barMark} · ` : ""}
+        {bbsBandEmpty(0, "p")}
+        <td className={bbsColClass(1, { extra: "text-left font-semibold font-mono" })}>{b.barMark || "\u00a0"}</td>
+        <td className={bbsColClass(2, { sticky: true, extra: "text-left" })}>
+          <span className={labelClass}>
+            {kind === "subsection" && b.barMark ? "" : b.barMark && kind !== "section" ? `${b.barMark} · ` : ""}
             {label}
           </span>
         </td>
+        {bbsRangeEmpty(3, 15)}
+        <td className="w-12" />
       </tr>
     );
   }

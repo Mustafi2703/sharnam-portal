@@ -8,6 +8,7 @@ type MbLike = {
   srNo?: string | null;
   description?: string | null;
   remark?: string | null;
+  rowKind?: string | null;
   nos1?: number | null;
   nos2?: number | null;
   length?: number | null;
@@ -20,12 +21,16 @@ type BbsLike = {
   barMark?: string | null;
   location?: string | null;
   sectionMark?: string | null;
+  rowKind?: string | null;
   diameterMm?: number | null;
   totalLength?: number | null;
   nos?: number | null;
   weightKg?: number | null;
   shapeLenA?: number | null;
 };
+
+const MB_ROW_KINDS = new Set<MbRowKind>(["item", "description", "subitem", "subsection", "data", "total", "note"]);
+const BBS_ROW_KINDS = new Set<BbsRowKind>(["section", "subsection", "subheader", "data", "note"]);
 
 function hasMbMeasure(r: MbLike) {
   return (
@@ -42,6 +47,8 @@ function isMbTotal(desc: string) {
 }
 
 export function mbRowKind(r: MbLike): MbRowKind {
+  const stored = String(r.rowKind ?? "").trim() as MbRowKind;
+  if (stored && MB_ROW_KINDS.has(stored)) return stored;
   const desc = String(r.description ?? "").trim();
   const sr = String(r.srNo ?? "").trim();
   if (!desc) return "note";
@@ -66,6 +73,8 @@ export function mbRowKind(r: MbLike): MbRowKind {
 }
 
 export function bbsRowKind(r: BbsLike): BbsRowKind {
+  const stored = String(r.rowKind ?? "").trim() as BbsRowKind;
+  if (stored && BBS_ROW_KINDS.has(stored)) return stored;
   const mark = String(r.barMark ?? "").trim();
   const loc = String(r.location ?? r.sectionMark ?? "").trim();
   const hasData =

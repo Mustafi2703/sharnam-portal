@@ -167,6 +167,7 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
     for (const [sheetName, packageName] of SPDC_MB_SHEETS) {
       const rows = sheet(wb, sheetName);
       if (!rows.length) continue;
+      let lineIndex = 0;
       for (const r of parseMbRows(rows)) {
         data.push({
           projectId,
@@ -183,6 +184,8 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           unit: r.unit || null,
           raBill: r.raBill || null,
           remark: r.remark || null,
+          rowKind: r.rowKind || "data",
+          lineIndex: lineIndex++,
         });
       }
     }
@@ -196,6 +199,7 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
     for (const [sheetName, packageName] of SPDC_BBS_SHEETS) {
       const rows = sheet(wb, sheetName);
       if (!rows.length) continue;
+      let lineIndex = 0;
       for (const r of parseBbsRows(rows)) {
         if (r.rowKind && r.rowKind !== "data") {
           data.push({
@@ -218,6 +222,8 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
             totalLength: 0,
             weightKg: 0,
             location: r.location || null,
+            rowKind: r.rowKind,
+            lineIndex: lineIndex++,
           });
           continue;
         }
@@ -243,6 +249,8 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
           totalLength: r.totalLength,
           weightKg: r.weightKg,
           location: r.location || null,
+          rowKind: r.rowKind || "data",
+          lineIndex: lineIndex++,
         });
       }
     }

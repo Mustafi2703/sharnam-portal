@@ -14,6 +14,7 @@ import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
+import { flowPackageForTab, linkedBbsPackage, linkedMbPackage } from "../lib/spdcCostPackages";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
@@ -150,7 +151,11 @@ export default function CostPage() {
   const clientBlocked = user?.role === "client";
 
   const load = () => {
-    const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
+    const apiPkg =
+      pkgFilter !== "All" && (tab === "mb" || tab === "bbs")
+        ? flowPackageForTab(tab, pkgFilter)
+        : pkgFilter;
+    const q = apiPkg !== "All" ? `?package=${encodeURIComponent(apiPkg)}` : "";
     return api(`/api/cost/${id}/summary${q}`, { token }).then(setSummary);
   };
   const loadBills = () => api<{ bills: any[]; totals: any }>(`/api/cost/${id}/bills`, { token }).then(setBillsData);
@@ -181,7 +186,7 @@ export default function CostPage() {
           api<any[]>("/api/vendors", { token }).then(setParties).catch(() => setParties([]))
         );
     }
-  }, [id, token, clientBlocked, pkgFilter]);
+  }, [id, token, clientBlocked, pkgFilter, tab]);
 
   async function runVerify() {
     if (!id) return;
@@ -298,13 +303,15 @@ export default function CostPage() {
   );
 
   const activePkg = pkgFilter !== "All" ? pkgFilter : undefined;
+  const mbFlowPkg = activePkg ? linkedMbPackage(activePkg) ?? activePkg : undefined;
+  const bbsFlowPkg = mbFlowPkg ? linkedBbsPackage(mbFlowPkg) : undefined;
   const flowCounts = useMemo(
     () => ({
-      mb: activePkg ? summary?.mbByPackage?.[activePkg]?.lines ?? mbRows.length : mbRows.length,
-      bbs: activePkg ? summary?.bbsByPackage?.[activePkg]?.lines ?? bbsRows.length : bbsRows.length,
+      mb: mbFlowPkg ? summary?.mbByPackage?.[mbFlowPkg]?.lines ?? mbRows.length : mbRows.length,
+      bbs: bbsFlowPkg ? summary?.bbsByPackage?.[bbsFlowPkg]?.lines ?? 0 : bbsRows.length,
       monitoring: activePkg ? summary?.monByPackage?.[activePkg] ?? monRows.length : monRows.length,
     }),
-    [activePkg, summary, mbRows.length, bbsRows.length, monRows.length]
+    [activePkg, mbFlowPkg, bbsFlowPkg, summary, mbRows.length, bbsRows.length, monRows.length]
   );
 
   async function syncMbToMonitoring() {
@@ -327,7 +334,14 @@ export default function CostPage() {
   }
 
   function navigateCostFlow(next: "mb" | "bbs" | "monitoring", pkg?: string) {
-    setTab(next, pkg || activePkg || DEFAULT_COST_MONITORING_PKG);
+    const base = pkg || activePkg || DEFAULT_COST_MONITORING_PKG;
+    if (base === "All") {
+      setTab(next, base);
+      return;
+    }
+    const mbPkg = linkedMbPackage(base) ?? base;
+    const resolved = next === "bbs" ? linkedBbsPackage(mbPkg) : next === "mb" ? mbPkg : base;
+    setTab(next, resolved);
   }
 
   async function importCostSheet(kind: "mb" | "bbs", file: File) {

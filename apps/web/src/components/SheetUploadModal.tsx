@@ -1,4 +1,5 @@
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./ui";
 
 type SheetUploadModalProps = {
@@ -12,7 +13,7 @@ type SheetUploadModalProps = {
   onUpload: (file: File) => void | Promise<void>;
 };
 
-/** Procore-style upload modal — dropzone + browse for reference Excel packs */
+/** Procore-style upload modal — portaled so it never sticks inside scroll containers. */
 export function SheetUploadModal({
   open,
   title,
@@ -26,6 +27,24 @@ export function SheetUploadModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [drag, setDrag] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setFile(null);
+      setDrag(false);
+      return;
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busy) onClose();
+    }
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, busy, onClose]);
 
   if (!open) return null;
 
@@ -47,28 +66,30 @@ export function SheetUploadModal({
   }
 
   function close() {
+    if (busy) return;
     setFile(null);
     onClose();
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/45"
+      className="register-modal"
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      onClick={close}
     >
-      <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-xl bg-paper border border-line shadow-xl">
-        <div className="sticky top-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-4 border-b border-line bg-paper">
-          <div>
+      <div className="register-modal__panel register-modal__panel--md" onClick={(e) => e.stopPropagation()}>
+        <div className="register-modal__head">
+          <div className="min-w-0">
             <h3 className="font-semibold text-ink">{title}</h3>
-            <p className="text-xs text-steel-muted mt-0.5">{sheetLabel}</p>
+            <p className="text-xs text-steel-muted mt-0.5 truncate">{sheetLabel}</p>
           </div>
-          <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none p-1" onClick={close} aria-label="Close">
+          <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={close} aria-label="Close">
             ×
           </button>
         </div>
-        <div className="p-4 sm:p-5 space-y-4">
+        <div className="register-modal__body space-y-4">
           <div
             className={`rounded-xl border-2 border-dashed px-4 py-8 text-center transition ${
               drag ? "border-brand bg-brand-soft/40" : "border-line bg-sand/30"
@@ -100,7 +121,7 @@ export function SheetUploadModal({
           </div>
           {hint && <p className="text-xs text-steel-muted leading-relaxed">{hint}</p>}
         </div>
-        <div className="sticky bottom-0 flex flex-wrap gap-2 justify-end px-4 sm:px-5 py-4 border-t border-line bg-sand/40 safe-bottom">
+        <div className="register-modal__foot safe-bottom">
           <Button type="button" variant="secondary" onClick={close} disabled={busy}>
             Cancel
           </Button>
@@ -109,6 +130,7 @@ export function SheetUploadModal({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

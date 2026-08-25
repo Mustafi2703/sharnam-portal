@@ -13,6 +13,8 @@ function s(v: unknown, max = 500): string {
   return t ? t.slice(0, max) : "";
 }
 
+export type MbRowKind = "item" | "description" | "subitem" | "subsection" | "data" | "total" | "note";
+
 export type ParsedMbLine = {
   srNo?: string;
   itemCode?: string;
@@ -26,7 +28,43 @@ export type ParsedMbLine = {
   unit?: string;
   raBill?: string;
   remark?: string;
+  rowKind?: MbRowKind;
+  lineIndex?: number;
 };
+
+function hasMbMeasureFields(r: Pick<ParsedMbLine, "qty" | "nos1" | "length" | "width" | "height">) {
+  return (
+    Math.abs(r.qty) > 0 ||
+    Math.abs(r.nos1) > 0 ||
+    Math.abs(r.length) > 0 ||
+    Math.abs(r.width) > 0 ||
+    Math.abs(r.height) > 0
+  );
+}
+
+export function inferMbRowKind(r: Pick<ParsedMbLine, "srNo" | "description" | "remark" | "qty" | "nos1" | "length" | "width" | "height">): MbRowKind {
+  const desc = String(r.description ?? "").trim();
+  const sr = String(r.srNo ?? "").trim();
+  if (!desc) return "note";
+  if (isMbTotalRow(desc)) return "total";
+  if (hasMbMeasureFields(r)) return "data";
+  if (sr && /^\d+$/.test(sr)) {
+    if (/^-do\b/i.test(desc)) return "subitem";
+    return "item";
+  }
+  if (!sr && desc.length > 90) return "description";
+  if (
+    !sr &&
+    desc.length <= 64 &&
+    !/[.;]/.test(desc) &&
+    !/^providing|^excavation|^filling|^less |^ded |^do /i.test(desc) &&
+    (/^[A-Z][A-Za-z0-9\s\-&/().]+$/.test(desc) || /^[A-Z][A-Z0-9\s\-&/().]+$/.test(desc))
+  ) {
+    return "subsection";
+  }
+  if (sr && /^-do\b/i.test(desc)) return "subitem";
+  return "note";
+}
 
 export type ParsedBbsLine = {
   barMark?: string;
@@ -237,7 +275,7 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
     const hasMeasure = Math.abs(qty) > 0 || Math.abs(nos1) > 0 || Math.abs(length) > 0 || Math.abs(width) > 0 || Math.abs(height) > 0;
 
     if (isMbTotalRow(description)) {
-      out.push({
+      const totalRow: ParsedMbLine = {
         srNo: undefined,
         description,
         nos1: 0,
@@ -248,7 +286,9 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
         qty,
         unit: s(row[layout.uom], 20) || undefined,
         remark: s(row[layout.remark], 200) || undefined,
-      });
+      };
+      totalRow.rowKind = inferMbRowKind(totalRow);
+      out.push(totalRow);
       continue;
     }
 
@@ -257,7 +297,7 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
       const srNo = srRaw && !/^\d+\.\d+$/.test(srRaw) ? srRaw : /^\d+(\.\d+)?$/.test(srRaw) ? srRaw : undefined;
       const itemCode = /^\d+(\.\d+)?$/.test(srRaw) ? srRaw : undefined;
       if (descExtra && descPrimary) {
-        out.push({
+        const band: ParsedMbLine = {
           srNo: srNo || itemCode,
           itemCode,
           description: descPrimary,
@@ -268,9 +308,11 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
           height: 0,
           qty: 0,
           remark: descExtra,
-        });
+        };
+        band.rowKind = inferMbRowKind(band);
+        out.push(band);
       } else {
-        out.push({
+        const band: ParsedMbLine = {
           srNo: srNo || itemCode,
           itemCode,
           description,
@@ -280,14 +322,16 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
           width: 0,
           height: 0,
           qty: 0,
-        });
+        };
+        band.rowKind = inferMbRowKind(band);
+        out.push(band);
       }
       continue;
     }
 
     // Measurement row — description usually in col 1; sr may be empty
     const measureDesc = descPrimary || description;
-    out.push({
+    const dataRow: ParsedMbLine = {
       srNo: srRaw && /^\d+(\.\d+)?$/.test(srRaw) ? srRaw : undefined,
       itemCode: /^\d+(\.\d+)?$/.test(srRaw) ? srRaw : undefined,
       description: measureDesc,
@@ -300,7 +344,9 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
       unit: s(row[layout.uom], 20) || undefined,
       raBill: s(row[layout.raBill], 80) || undefined,
       remark: s(row[layout.remark], 200) || undefined,
-    });
+    };
+    dataRow.rowKind = inferMbRowKind(dataRow);
+    out.push(dataRow);
   }
   return out;
 }

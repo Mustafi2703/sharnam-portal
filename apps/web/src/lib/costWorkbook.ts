@@ -11,7 +11,9 @@ export function costNeedsFullSync(totals?: {
   const mon = totals.monitoringLines ?? 0;
   const mb = totals.mbLines ?? 0;
   const budget = totals.budgeted ?? 0;
-  return mon < 80 || mb < 40 || budget < 1_000_000;
+  // Full SPDC workbook expects ~4300 MB lines; partial legacy seed caps around 500/package.
+  const mbIncomplete = budget > 1_000_000 && mb > 0 && mb < 3500;
+  return mon < 80 || mbIncomplete || budget < 1_000_000;
 }
 
 export function isLikelySpdcBudgetFile(file: File): boolean {

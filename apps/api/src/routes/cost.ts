@@ -137,13 +137,13 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       }),
       prisma.costMbLine.findMany({
         where: mbWhere,
-        take: pkg ? 5000 : 1500,
-        orderBy: [{ packageName: "asc" }, { srNo: "asc" }, { createdAt: "asc" }],
+        take: pkg ? 8000 : 2000,
+        orderBy: [{ packageName: "asc" }, { lineIndex: "asc" }, { createdAt: "asc" }],
       }),
       prisma.costBbsLine.findMany({
         where: bbsWhere,
-        take: pkg ? 5000 : 1500,
-        orderBy: [{ packageName: "asc" }, { barMark: "asc" }, { createdAt: "asc" }],
+        take: pkg ? 8000 : 2000,
+        orderBy: [{ packageName: "asc" }, { lineIndex: "asc" }, { createdAt: "asc" }],
       }),
       prisma.costMonitoringLine.groupBy({ by: ["packageName"], where: { projectId }, _count: true }),
       prisma.costMbLine.groupBy({ by: ["packageName"], where: { projectId }, _count: true }),
@@ -759,7 +759,7 @@ costRouter.post(
         await prisma.costMbLine.deleteMany({ where: { projectId: project.id, packageName: batch.packageName } });
       }
       await prisma.costMbLine.createMany({
-        data: batch.lines.map((r) => ({
+        data: batch.lines.map((r, lineIndex) => ({
           projectId: project.id,
           packageName: batch.packageName,
           srNo: r.srNo || null,
@@ -774,6 +774,8 @@ costRouter.post(
           unit: r.unit || null,
           raBill: r.raBill || null,
           remark: r.remark || null,
+          rowKind: r.rowKind || "data",
+          lineIndex,
         })),
       });
       mbImported += batch.lines.length;
@@ -796,7 +798,7 @@ costRouter.post(
         await prisma.costBbsLine.deleteMany({ where: { projectId: project.id, packageName: batch.packageName } });
       }
       await prisma.costBbsLine.createMany({
-        data: linesToImport.map((r) => ({
+        data: linesToImport.map((r, lineIndex) => ({
           projectId: project.id,
           packageName: batch.packageName,
           barMark: r.barMark || null,
@@ -817,6 +819,8 @@ costRouter.post(
           totalLength: r.totalLength || 0,
           weightKg: r.weightKg || 0,
           location: r.location || null,
+          rowKind: r.rowKind || "data",
+          lineIndex,
         })),
       });
       bbsImported += linesToImport.length;
@@ -1565,7 +1569,7 @@ async function importCostSheet(
 
   if (kind === "bbs") {
     await prisma.costBbsLine.createMany({
-      data: parsed.map((r) => ({
+      data: parsed.map((r, lineIndex) => ({
         projectId: project.id,
         packageName,
         barMark: (r.barMark as string) || null,
@@ -1586,13 +1590,15 @@ async function importCostSheet(
         totalLength: Number(r.totalLength) || 0,
         weightKg: Number(r.weightKg) || 0,
         location: (r.location as string) || null,
+        rowKind: (r.rowKind as string) || "data",
+        lineIndex,
       })),
     });
     const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
     await applyShapeMastersToBbs(project.id, packageName);
   } else {
     await prisma.costMbLine.createMany({
-      data: parsed.map((r) => ({
+      data: parsed.map((r, lineIndex) => ({
         projectId: project.id,
         packageName,
         srNo: (r.srNo as string) || null,
@@ -1607,6 +1613,8 @@ async function importCostSheet(
         unit: (r.unit as string) || null,
         raBill: (r.raBill as string) || null,
         remark: (r.remark as string) || null,
+        rowKind: (r.rowKind as string) || "data",
+        lineIndex,
       })),
     });
     const { syncAchievedFromMb } = await import("../services/costQuantitySync.js");

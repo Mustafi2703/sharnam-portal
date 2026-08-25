@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Button } from "./ui";
 import { SheetUploadModal } from "./SheetUploadModal";
 
@@ -41,6 +42,15 @@ export function ReferenceSheetToolbar({
   message,
 }: ReferenceSheetToolbarProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    setUploadOpen(false);
+  }, [sheetLabel, location.pathname, location.search]);
+
+  useEffect(() => {
+    return () => setUploadOpen(false);
+  }, []);
 
   return (
     <>

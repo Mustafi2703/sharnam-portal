@@ -655,6 +655,10 @@ model CostMbLine {
   remark      String?
   /// Links to CostMonitoringLine.itemNo for achieved qty rollup
   itemCode    String?
+  /// SPDC sheet row order — preserves Excel band › entry sequence
+  lineIndex   Int      @default(0)
+  /// item | description | subsection | subitem | data | total | note
+  rowKind     String   @default("data")
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -691,6 +695,10 @@ model CostBbsLine {
   /// Annotated bend diagram (PDF/PNG) for this bar mark — SharePoint path
   shapeDiagramPath String?
   shapeDiagramUrl  String?
+  /// SPDC sheet row order
+  lineIndex   Int      @default(0)
+  /// section | subsection | subheader | data | note
+  rowKind     String   @default("data")
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

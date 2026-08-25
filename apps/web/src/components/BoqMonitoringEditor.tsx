@@ -4,6 +4,7 @@ import { Button, Input, Select, TextArea } from "./ui";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { MON_COLUMN_GROUPS, monitoringColClass } from "../lib/costSheetColumns";
+import { monitoringBandEmpty, MON_DATA_COLS } from "../lib/costBandRows";
 
 export type MonLine = {
   id: string;
@@ -583,6 +584,29 @@ export function BoqMonitoringEditor({
 
   const colSpan = (canTouch ? headers.length + 1 : headers.length);
 
+  function monitoringSectionRow(section: string, items: MonLine[]) {
+    return (
+      <tr className="boq-section-row">
+        {monitoringBandEmpty(0, "p")}
+        {monitoringBandEmpty(1, "sr")}
+        <td className={monitoringColClass(2, { sticky: true, extra: "text-left boq-desc-col" })}>
+          {canFullEdit ? (
+            <CellInput
+              key={`sec-${section}-${items.map((i) => i.id).join(",")}`}
+              value={section === "General" ? "" : section}
+              className="boq-section-input"
+              onCommit={(v) => void renameSection(items, v)}
+            />
+          ) : (
+            <SectionBandLabel section={section} />
+          )}
+        </td>
+        {Array.from({ length: MON_DATA_COLS - 3 }, (_, i) => monitoringBandEmpty(i + 3, `mon-b-${i + 3}`))}
+        {canTouch && <td className="boq-actions-col" />}
+      </tr>
+    );
+  }
+
   return (
     <div className={`flex flex-col flex-1 min-h-0 min-w-0 ${className}`.trim()}>
       {msg && <p className="text-sm text-brand font-medium shrink-0 px-1">{msg}</p>}
@@ -710,20 +734,7 @@ export function BoqMonitoringEditor({
             <tbody>
               {grouped.map(([section, items]) => (
                 <Fragment key={section}>
-                  <tr className="boq-section-row">
-                    <td colSpan={colSpan} className="sticky-col">
-                      {canFullEdit ? (
-                        <CellInput
-                          key={`sec-${section}-${items.map((i) => i.id).join(",")}`}
-                          value={section === "General" ? "" : section}
-                          className="boq-section-input"
-                          onCommit={(v) => void renameSection(items, v)}
-                        />
-                      ) : (
-                        <SectionBandLabel section={section} />
-                      )}
-                    </td>
-                  </tr>
+                  {monitoringSectionRow(section, items)}
                   {items.map((b) => {
                     const busy = savingId === b.id;
                     const rate = Number(b.rate) || 0;
