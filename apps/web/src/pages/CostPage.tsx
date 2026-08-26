@@ -41,7 +41,7 @@ function SheetTable({
           <span className="text-steel-muted font-normal normal-case tracking-normal">{rows.length} rows</span>
         </div>
       )}
-      <div className="sheet-register__scroll register-sheet-viewport register-scroll-area flex-1 min-h-0 overflow-auto">
+      <div className="sheet-register__scroll register-sheet-viewport register-scroll-area scrollbars-visible flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table">
           <thead>
             <tr>

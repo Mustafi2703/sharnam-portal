@@ -11,7 +11,7 @@ type Props = {
 export function RegisterScrollArea({ children, className = "", tall = false }: Props) {
   return (
     <div
-      className={`register-scroll-area register-sheet-viewport min-w-0 min-h-0${tall ? " register-scroll-area--tall" : ""} ${className}`.trim()}
+      className={`register-scroll-area register-sheet-viewport scrollbars-visible min-w-0 min-h-0${tall ? " register-scroll-area--tall" : ""} ${className}`.trim()}
       data-register-scroll={tall ? "tall" : "default"}
     >
       {children}

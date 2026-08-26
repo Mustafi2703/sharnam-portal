@@ -131,6 +131,171 @@ body.is-auth-route #root {
   scrollbar-width: thin;
 }
 
+/* Visible scrollbars — sheet panels, registers, main outlet (macOS overlay scrollbars off) */
+:root {
+  --scrollbar-size: 11px;
+  --scrollbar-track: rgb(15 118 110 / 0.12);
+  --scrollbar-thumb: rgb(15 118 110 / 0.42);
+  --scrollbar-thumb-hover: rgb(11 106 120 / 0.62);
+}
+[data-theme="dark"] {
+  --scrollbar-track: rgb(148 163 184 / 0.14);
+  --scrollbar-thumb: rgb(148 163 184 / 0.42);
+  --scrollbar-thumb-hover: rgb(203 213 225 / 0.58);
+}
+
+.scrollbars-visible,
+.scrollbar-thin,
+.tool-main__outlet,
+.tool-actions__body,
+.side-nav__scroll,
+.app-frame__scroll,
+.scroll-panel,
+.scroll-panel-lg,
+.sheet-register__scroll,
+.register-scroll-area,
+.register-sheet-viewport,
+.progress-sheet-block .sheet-register__scroll,
+.progress-sheet-block .register-sheet-viewport,
+.cost-sheet-block .sheet-register__scroll,
+.cost-sheet-block .register-scroll-area,
+.cost-sheet-block .register-sheet-viewport,
+.register-tab-body--stack,
+.maker-table-wrap,
+.page-stack--register .sheet-register__scroll,
+.page-stack--register .register-scroll-area,
+.page-stack--register .register-sheet-viewport,
+.qap-page .register-scroll-area,
+.cube-page__register .register-scroll-area,
+.drawings-register > div.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-gutter: stable;
+}
+
+.scrollbars-visible::-webkit-scrollbar,
+.scrollbar-thin::-webkit-scrollbar,
+.tool-main__outlet::-webkit-scrollbar,
+.tool-actions__body::-webkit-scrollbar,
+.side-nav__scroll::-webkit-scrollbar,
+.app-frame__scroll::-webkit-scrollbar,
+.scroll-panel::-webkit-scrollbar,
+.scroll-panel-lg::-webkit-scrollbar,
+.sheet-register__scroll::-webkit-scrollbar,
+.register-scroll-area::-webkit-scrollbar,
+.register-sheet-viewport::-webkit-scrollbar,
+.progress-sheet-block .sheet-register__scroll::-webkit-scrollbar,
+.progress-sheet-block .register-sheet-viewport::-webkit-scrollbar,
+.cost-sheet-block .sheet-register__scroll::-webkit-scrollbar,
+.cost-sheet-block .register-scroll-area::-webkit-scrollbar,
+.cost-sheet-block .register-sheet-viewport::-webkit-scrollbar,
+.register-tab-body--stack::-webkit-scrollbar,
+.maker-table-wrap::-webkit-scrollbar,
+.page-stack--register .sheet-register__scroll::-webkit-scrollbar,
+.page-stack--register .register-scroll-area::-webkit-scrollbar,
+.page-stack--register .register-sheet-viewport::-webkit-scrollbar,
+.qap-page .register-scroll-area::-webkit-scrollbar,
+.cube-page__register .register-scroll-area::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  -webkit-appearance: none;
+}
+
+.scrollbars-visible::-webkit-scrollbar-track,
+.scrollbar-thin::-webkit-scrollbar-track,
+.tool-main__outlet::-webkit-scrollbar-track,
+.tool-actions__body::-webkit-scrollbar-track,
+.side-nav__scroll::-webkit-scrollbar-track,
+.app-frame__scroll::-webkit-scrollbar-track,
+.scroll-panel::-webkit-scrollbar-track,
+.scroll-panel-lg::-webkit-scrollbar-track,
+.sheet-register__scroll::-webkit-scrollbar-track,
+.register-scroll-area::-webkit-scrollbar-track,
+.register-sheet-viewport::-webkit-scrollbar-track,
+.progress-sheet-block .sheet-register__scroll::-webkit-scrollbar-track,
+.progress-sheet-block .register-sheet-viewport::-webkit-scrollbar-track,
+.cost-sheet-block .sheet-register__scroll::-webkit-scrollbar-track,
+.cost-sheet-block .register-scroll-area::-webkit-scrollbar-track,
+.cost-sheet-block .register-sheet-viewport::-webkit-scrollbar-track,
+.register-tab-body--stack::-webkit-scrollbar-track,
+.maker-table-wrap::-webkit-scrollbar-track,
+.page-stack--register .sheet-register__scroll::-webkit-scrollbar-track,
+.page-stack--register .register-scroll-area::-webkit-scrollbar-track,
+.page-stack--register .register-sheet-viewport::-webkit-scrollbar-track,
+.qap-page .register-scroll-area::-webkit-scrollbar-track,
+.cube-page__register .register-scroll-area::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+.scrollbars-visible::-webkit-scrollbar-thumb,
+.scrollbar-thin::-webkit-scrollbar-thumb,
+.tool-main__outlet::-webkit-scrollbar-thumb,
+.tool-actions__body::-webkit-scrollbar-thumb,
+.side-nav__scroll::-webkit-scrollbar-thumb,
+.app-frame__scroll::-webkit-scrollbar-thumb,
+.scroll-panel::-webkit-scrollbar-thumb,
+.scroll-panel-lg::-webkit-scrollbar-thumb,
+.sheet-register__scroll::-webkit-scrollbar-thumb,
+.register-scroll-area::-webkit-scrollbar-thumb,
+.register-sheet-viewport::-webkit-scrollbar-thumb,
+.progress-sheet-block .sheet-register__scroll::-webkit-scrollbar-thumb,
+.progress-sheet-block .register-sheet-viewport::-webkit-scrollbar-thumb,
+.cost-sheet-block .sheet-register__scroll::-webkit-scrollbar-thumb,
+.cost-sheet-block .register-scroll-area::-webkit-scrollbar-thumb,
+.cost-sheet-block .register-sheet-viewport::-webkit-scrollbar-thumb,
+.register-tab-body--stack::-webkit-scrollbar-thumb,
+.maker-table-wrap::-webkit-scrollbar-thumb,
+.page-stack--register .sheet-register__scroll::-webkit-scrollbar-thumb,
+.page-stack--register .register-scroll-area::-webkit-scrollbar-thumb,
+.page-stack--register .register-sheet-viewport::-webkit-scrollbar-thumb,
+.qap-page .register-scroll-area::-webkit-scrollbar-thumb,
+.cube-page__register .register-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbars-visible::-webkit-scrollbar-thumb:hover,
+.scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.tool-main__outlet::-webkit-scrollbar-thumb:hover,
+.tool-actions__body::-webkit-scrollbar-thumb:hover,
+.side-nav__scroll::-webkit-scrollbar-thumb:hover,
+.app-frame__scroll::-webkit-scrollbar-thumb:hover,
+.scroll-panel::-webkit-scrollbar-thumb:hover,
+.scroll-panel-lg::-webkit-scrollbar-thumb:hover,
+.sheet-register__scroll::-webkit-scrollbar-thumb:hover,
+.register-scroll-area::-webkit-scrollbar-thumb:hover,
+.register-sheet-viewport::-webkit-scrollbar-thumb:hover,
+.progress-sheet-block .sheet-register__scroll::-webkit-scrollbar-thumb:hover,
+.progress-sheet-block .register-sheet-viewport::-webkit-scrollbar-thumb:hover,
+.cost-sheet-block .sheet-register__scroll::-webkit-scrollbar-thumb:hover,
+.cost-sheet-block .register-scroll-area::-webkit-scrollbar-thumb:hover,
+.cost-sheet-block .register-sheet-viewport::-webkit-scrollbar-thumb:hover,
+.register-tab-body--stack::-webkit-scrollbar-thumb:hover,
+.maker-table-wrap::-webkit-scrollbar-thumb:hover,
+.page-stack--register .sheet-register__scroll::-webkit-scrollbar-thumb:hover,
+.page-stack--register .register-scroll-area::-webkit-scrollbar-thumb:hover,
+.page-stack--register .register-sheet-viewport::-webkit-scrollbar-thumb:hover,
+.qap-page .register-scroll-area::-webkit-scrollbar-thumb:hover,
+.cube-page__register .register-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+/* Sheet / register bodies — always show scrollbar tracks when scrollable */
+.sheet-register__scroll,
+.register-scroll-area,
+.register-sheet-viewport,
+.progress-sheet-block .sheet-register__scroll,
+.progress-sheet-block .register-sheet-viewport,
+.cost-sheet-block .sheet-register__scroll,
+.cost-sheet-block .register-scroll-area,
+.cost-sheet-block .register-sheet-viewport {
+  overflow: scroll !important;
+}
+
 .list-roomy > * + * {
   margin-top: 0.35rem;
 }
@@ -312,7 +477,7 @@ body.is-auth-route #root {
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
@@ -1073,7 +1238,7 @@ body.is-auth-route #root {
   min-width: 0;
   min-height: 18rem;
   max-height: min(calc(100dvh - 11rem), 720px);
-  overflow: auto !important;
+  overflow: scroll !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
@@ -1258,7 +1423,7 @@ body.is-auth-route #root {
   height: 0;
   padding: 1rem 1.25rem 0.5rem;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;

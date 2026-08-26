@@ -36,7 +36,7 @@ export function ModuleToolNav({
   const hubLabel = moduleKey === "home" ? "Project home" : "Hub";
 
   return (
-    <nav className="flex gap-2 overflow-x-auto overscroll-x-contain scrollbar-thin" aria-label={`${moduleKey} module tools`}>
+    <nav className="flex gap-2 overflow-x-scroll overscroll-x-contain scrollbars-visible" aria-label={`${moduleKey} module tools`}>
       <Link
         to={hubHref}
         className="tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border border-line text-steel-muted hover:text-ink transition whitespace-nowrap"

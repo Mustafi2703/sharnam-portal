@@ -12,7 +12,7 @@ export function DrawingsModuleNav({ projectId, accent = "#2563EB" }: { projectId
   );
 
   return (
-    <nav className="flex gap-2 overflow-x-auto overscroll-x-contain scrollbar-thin" aria-label="Drawings module tools">
+    <nav className="flex gap-2 overflow-x-scroll overscroll-x-contain scrollbars-visible" aria-label="Drawings module tools">
       {items.map((item) => {
         const href = `/projects/${projectId}/${item.to}${item.query ? `?${item.query}` : ""}`;
         const active = drawingsNavActive(item.key, location.pathname, location.search);
