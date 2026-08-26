@@ -530,13 +530,7 @@ export default function ProgressPage() {
   }
 
   return (
-    <div
-      className={`w-full min-w-0 ${
-        ["planned", "hindrance", "risk", "legal", "milestones", "msproject"].includes(tab)
-          ? "progress-page--register page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
-          : "space-y-5"
-      }`}
-    >
+    <div className="w-full min-w-0 space-y-5 pb-4">
       <div className="w-full shrink-0">
         <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
           ← Project
@@ -775,7 +769,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "milestones" && (
-        <div className="register-tab-body register-tab-body--sheet progress-page__register">
+        <div className="progress-sheet-block space-y-3">
           <ReferenceSheetToolbar
             sheetLabel="Milestone register"
             rowCount={data.milestones?.length}
@@ -860,7 +854,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "planned" && (
-        <div className="register-tab-body register-tab-body--stack progress-page__register gap-3">
+        <div className="progress-sheet-block space-y-4">
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
             rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
@@ -1138,7 +1132,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "monthly" && (
-        <div className="space-y-4 flex-1 min-h-0 flex flex-col">
+        <div className="progress-sheet-block space-y-4">
           <ReferenceSheetToolbar
             sheetLabel="Monthly Progress Dashboard"
             rowCount={data.sorStats?.length}
@@ -1201,7 +1195,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "hindrance" && (
-        <div className="register-tab-body register-tab-body--sheet progress-page__register">
+        <div className="progress-sheet-block space-y-3">
           <ReferenceSheetToolbar
             sheetLabel="Hindrance Register Dashboard"
             rowCount={data.hindrances?.length}
@@ -1292,7 +1286,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "risk" && (
-        <div className="register-tab-body register-tab-body--sheet progress-page__register">
+        <div className="progress-sheet-block space-y-3">
           <ReferenceSheetToolbar
             sheetLabel="Risk Register - Dashboard"
             rowCount={data.risks?.length}
@@ -1377,7 +1371,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "legal" && (
-        <div className="register-tab-body register-tab-body--sheet progress-page__register">
+        <div className="progress-sheet-block space-y-3">
           <ReferenceSheetToolbar
             sheetLabel="Legal Approval Tracker"
             rowCount={data.legalApprovals?.length}
@@ -1520,7 +1514,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "msproject" && (
-        <div className="register-tab-body register-tab-body--sheet progress-page__register">
+        <div className="progress-sheet-block space-y-3">
           <ReferenceSheetToolbar
             sheetLabel="MS Project task register"
             rowCount={msProject?.tasks?.length}

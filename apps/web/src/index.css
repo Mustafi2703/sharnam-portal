@@ -1054,6 +1054,24 @@ body.is-auth-route #root {
   overflow: auto !important;
 }
 
+/* Progress module tabs — same outlet scroll as Overview; each sheet gets a tall scroll body */
+.progress-sheet-block .sheet-register {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.progress-sheet-block .sheet-register__scroll,
+.progress-sheet-block .register-sheet-viewport {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 18rem;
+  max-height: min(calc(100dvh - 11rem), 720px);
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Universal register fill — Quality · Safety · Cost · Progress · Audit */
 .page-stack--register,
 .cost-page--register.page-stack--register,
