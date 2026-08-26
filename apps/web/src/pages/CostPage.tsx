@@ -20,7 +20,7 @@ import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../l
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
-const COST_REGISTER_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "bills", "boq", "mb", "bbs"];
+const COST_REGISTER_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "bills", "boq", "mb", "bbs"];
 
 function SheetTable({
   title,
@@ -34,14 +34,14 @@ function SheetTable({
   stickyFirst?: boolean;
 }) {
   return (
-    <div className="sheet-register w-full register-panel-fill flex flex-col">
+    <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden w-full min-w-0">
       {title && (
         <div className="sheet-register__head shrink-0">
           <span>{title}</span>
           <span className="text-steel-muted font-normal normal-case tracking-normal">{rows.length} rows</span>
         </div>
       )}
-      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
+      <div className="sheet-register__scroll register-sheet-viewport register-scroll-area flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table">
           <thead>
             <tr>
@@ -935,17 +935,19 @@ export default function CostPage() {
             </form>
           </RegisterEntryModal>
           {(canEdit || canSiteEdit) && (
-            <CostSheetUploadPanel
-              projectId={id!}
-              token={token}
-              kind="bbs"
-              packageName={pkgFilter}
-              packageOptions={bbsPackages.length ? bbsPackages : packages.filter((p: string) => p !== "All")}
-              barMarks={bbsBarMarks}
-              files={sheetFiles}
-              canEdit={canEdit || canSiteEdit}
-              onChanged={() => void load()}
-            />
+            <div className="shrink-0">
+              <CostSheetUploadPanel
+                projectId={id!}
+                token={token}
+                kind="bbs"
+                packageName={pkgFilter}
+                packageOptions={bbsPackages.length ? bbsPackages : packages.filter((p: string) => p !== "All")}
+                barMarks={bbsBarMarks}
+                files={sheetFiles}
+                canEdit={canEdit || canSiteEdit}
+                onChanged={() => void load()}
+              />
+            </div>
           )}
           <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
             <BbsEntryTable
@@ -1172,21 +1174,29 @@ export default function CostPage() {
       )}
 
       {tab === "rates" && (
-        <div className="flex-1 min-h-0 overflow-y-auto min-w-0">
-        <SheetTable
-          title="Rate difference (Steel / Cement / Tiles)"
-          headers={["Material", "Description", "Vendor", "Qty", "Basic", "Purchase", "Excess", "Saving"]}
-          rows={summary.rateDiffs.map((b: any) => [
-            b.materialType,
-            b.description,
-            b.vendorName,
-            b.qty,
-            b.basicRate,
-            b.purchaseRate,
-            formatINR(b.excessAmount),
-            formatINR(b.savingAmount),
-          ])}
-        />
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+          <ReferenceSheetToolbar
+            sheetLabel="Rate difference register"
+            rowCount={summary.rateDiffs?.length}
+            onDownloadCsv={() => downloadSheet("rates")}
+            message={msg || undefined}
+          />
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+            <SheetTable
+              title="Rate difference (Steel / Cement / Tiles)"
+              headers={["Material", "Description", "Vendor", "Qty", "Basic", "Purchase", "Excess", "Saving"]}
+              rows={summary.rateDiffs.map((b: any) => [
+                b.materialType,
+                b.description,
+                b.vendorName,
+                b.qty,
+                b.basicRate,
+                b.purchaseRate,
+                formatINR(b.excessAmount),
+                formatINR(b.savingAmount),
+              ])}
+            />
+          </div>
         </div>
       )}
 
@@ -1330,21 +1340,28 @@ export default function CostPage() {
           <p className="text-xs text-steel-muted shrink-0">
             Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
           </p>
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0 space-y-4">
-          <Card className="!p-4 border-brand/30 bg-brand-soft/30 shrink-0">
-            <h3 className="font-semibold text-sm">Import batches</h3>
-            <ul className="text-sm space-y-2 max-h-48 overflow-y-auto mt-2">
-              {summary.boqBatches.map((b: any) => (
-                <li key={b.id} className="border border-line px-3 py-2 rounded-sm">
-                  <div className="font-medium">{b.fileName}</div>
-                  <div className="text-xs text-steel-muted">
-                    {b.rowCount} rows · {new Date(b.createdAt).toLocaleString("en-IN")}
-                  </div>
-                </li>
-              ))}
-              {!summary.boqBatches.length && <li className="text-steel-muted">No imports yet.</li>}
-            </ul>
-          </Card>
+          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+            <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden w-full min-w-0">
+              <div className="sheet-register__head shrink-0">
+                <span>BOQ import batches</span>
+                <span className="text-steel-muted font-normal normal-case tracking-normal">
+                  {summary.boqBatches?.length ?? 0} batches
+                </span>
+              </div>
+              <div className="sheet-register__scroll register-sheet-viewport register-scroll-area flex-1 min-h-0 overflow-auto p-4">
+                <ul className="text-sm space-y-2">
+                  {summary.boqBatches.map((b: any) => (
+                    <li key={b.id} className="border border-line px-3 py-2 rounded-sm bg-paper">
+                      <div className="font-medium">{b.fileName}</div>
+                      <div className="text-xs text-steel-muted">
+                        {b.rowCount} rows · {new Date(b.createdAt).toLocaleString("en-IN")}
+                      </div>
+                    </li>
+                  ))}
+                  {!summary.boqBatches.length && <li className="text-steel-muted py-6 text-center">No imports yet.</li>}
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       )}

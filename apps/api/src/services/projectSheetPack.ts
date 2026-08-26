@@ -7,6 +7,7 @@ import path from "path";
 import { prisma } from "../prisma.js";
 import { resolveExcelRoot } from "../lib/excelRoot.js";
 import { verifyPackCompleteness } from "./packCompleteness.js";
+import { MS_PROJECT_SCURVE_PACKAGE, MS_PROJECT_SOURCE } from "./msProjectSchedule.js";
 
 export type PackStep = {
   key: string;
@@ -32,13 +33,22 @@ export function resolvePlannedActualPath(): string | null {
   ]);
 }
 
-export async function syncProgressTemplates(projectId: string) {
+export async function syncProgressTemplates(projectId: string, opts?: { force?: boolean }) {
   const file = resolvePlannedActualPath();
   let cashflow = 0;
   let manpower = 0;
   let activityLines = 0;
   if (file) {
     const { importPlannedActualDashboard } = await import("./plannedActualDashboard.js");
+    if (opts?.force) {
+      await prisma.progressPlannedActual.deleteMany({
+        where: { projectId, NOT: { packageName: MS_PROJECT_SCURVE_PACKAGE } },
+      });
+      await prisma.progressManpower.deleteMany({ where: { projectId } });
+      await prisma.progressActivityLine.deleteMany({
+        where: { projectId, NOT: { status: MS_PROJECT_SOURCE } },
+      });
+    }
     const counts = await importPlannedActualDashboard(projectId, fs.readFileSync(file));
     cashflow = counts.cashflow;
     manpower = counts.manpower;
@@ -53,7 +63,15 @@ export async function syncProgressTemplates(projectId: string) {
   } catch {
     /* optional monthly pack */
   }
-  return { cashflow, manpower, activityLines, sor, file: file ? path.basename(file) : null };
+  let registers: Awaited<ReturnType<typeof import("./progressRegistersImport.js").syncProgressRegisterPack>> | null =
+    null;
+  try {
+    const { syncProgressRegisterPack } = await import("./progressRegistersImport.js");
+    registers = await syncProgressRegisterPack(projectId, opts);
+  } catch {
+    /* optional register packs */
+  }
+  return { cashflow, manpower, activityLines, sor, registers, file: file ? path.basename(file) : null };
 }
 
 export async function provisionProjectSheetPack(

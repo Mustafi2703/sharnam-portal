@@ -166,7 +166,7 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
   }
 
   return (
-    <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden gap-2 min-w-0">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2 min-w-0">
       {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
 
       {canEdit && (

@@ -1,6 +1,6 @@
 /**
  * Import Progress Excel formats onto a project: milestones, hindrance, risk, legal.
- * Column layouts match seed/seed.ts (Milestone tracking / Progress Overview / Hindrance).
+ * Column layouts match client SPDC workbooks (Milestone tracking, Hindrance, Risk, Legal).
  */
 import fs from "fs";
 import path from "path";
@@ -59,6 +59,22 @@ export function resolveHindrancePath() {
   ]);
 }
 
+export function resolveRiskPath() {
+  return firstExisting(resolveExcelRoot(), [
+    "Risk Register - Dashboard 1.xlsx",
+    "Risk Register - Dashboard.xlsx",
+    "Progress Overview.xlsx",
+  ]);
+}
+
+export function resolveLegalPath() {
+  return firstExisting(resolveExcelRoot(), [
+    "Legal Approvals - Dashboard.xlsx",
+    "Legal Approvals - Dashboard (1).xlsx",
+    "Progress Overview.xlsx",
+  ]);
+}
+
 export function resolveProgressOverviewPath() {
   return firstExisting(resolveExcelRoot(), ["Progress Overview.xlsx"]);
 }
@@ -77,7 +93,7 @@ export async function syncMilestonesFromTemplate(projectId: string, opts?: { for
     });
   }
 
-  const rows = sheetRows(file, (names) => names.find((n) => /milestone|data input/i.test(n)) || names[0]);
+  const rows = sheetRows(file, (names) => names.find((n) => /data input/i.test(n)) || names[0]);
   let imported = 0;
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] as unknown[];
@@ -143,7 +159,8 @@ export async function syncHindranceFromTemplate(projectId: string, opts?: { forc
         delayType: s(row[12], 80) || null,
         accountable: s(row[13], 80) || null,
         status: s(row[14], 40) || "Open",
-        remarks: s(row[15], 500) || null,
+        resolutionDescription: s(row[15], 500) || null,
+        remarks: s(row[16], 500) || null,
       },
     });
     imported++;
@@ -152,21 +169,28 @@ export async function syncHindranceFromTemplate(projectId: string, opts?: { forc
 }
 
 export async function syncRiskFromTemplate(projectId: string, opts?: { force?: boolean }) {
-  const file = resolveProgressOverviewPath();
+  const dedicated = resolveRiskPath();
+  const overview = resolveProgressOverviewPath();
+  const file =
+    dedicated && path.basename(dedicated).includes("Risk Register") ? dedicated : overview || dedicated;
   if (!file) return { imported: 0, skipped: true, source: null };
   const existing = await prisma.progressRisk.count({ where: { projectId } });
   if (existing >= 1 && !opts?.force) return { imported: 0, skipped: true, source: path.basename(file) };
   if (opts?.force) await prisma.progressRisk.deleteMany({ where: { projectId } });
 
-  const rows = sheetRows(file, (names) => names.find((n) => /risk/i.test(n)));
+  const useDedicated = path.basename(file).includes("Risk Register");
+  const rows = sheetRows(file, (names) =>
+    useDedicated ? names.find((n) => /risk register/i.test(n)) : names.find((n) => /risk/i.test(n))
+  );
   let imported = 0;
-  for (let i = 2; i < rows.length && imported < 40; i++) {
+  for (let i = 2; i < rows.length; i++) {
     const row = rows[i] as unknown[];
     const code = s(row[0], 20);
     const name = s(row[3], 200);
     if (!code || !name || !/^R\d+/i.test(code)) continue;
     const probability = Math.min(5, Math.max(1, Math.round(n(row[5]) || 1)));
     const consequence = Math.min(5, Math.max(1, Math.round(n(row[6]) || 1)));
+    const statusRaw = s(row[16], 80);
     await prisma.progressRisk.create({
       data: {
         projectId,
@@ -180,7 +204,15 @@ export async function syncRiskFromTemplate(projectId: string, opts?: { force?: b
         severity: n(row[7]) || probability * consequence,
         probabilityPct: n(row[8]),
         costImpact: n(row[9]),
-        status: /complete|close|mitigat/i.test(String(row[11] || "")) ? "Closed" : "Open",
+        weeksLikely: n(row[10]),
+        urgency: s(row[11], 40) || null,
+        responseCategory: s(row[12], 80) || null,
+        impactNotes: s(row[13], 2000) || null,
+        riskOwner: s(row[14], 120) || null,
+        contingencyPlan: s(row[15], 2000) || null,
+        status: statusRaw || "Open",
+        dateLastUpdated: excelDate(row[17]),
+        trackingComments: s(row[18], 500) || null,
       },
     });
     imported++;
@@ -189,7 +221,7 @@ export async function syncRiskFromTemplate(projectId: string, opts?: { force?: b
 }
 
 export async function syncLegalFromTemplate(projectId: string, opts?: { force?: boolean }) {
-  const file = resolveProgressOverviewPath();
+  const file = resolveLegalPath();
   if (!file) return { imported: 0, skipped: true, source: null };
   const existing = await prisma.progressLegalApproval.count({ where: { projectId } });
   if (existing >= 1 && !opts?.force) return { imported: 0, skipped: true, source: path.basename(file) };

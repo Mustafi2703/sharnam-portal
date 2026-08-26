@@ -979,6 +979,35 @@ body.is-auth-route #root {
   min-width: 0;
   overflow: hidden;
 }
+
+/* Cost module — inner sheet scroll (same flex chain as Drawing master register) */
+.cost-page--register .register-tab-body > .cost-page__register,
+.cost-page--register .register-tab-body > .register-page-fill {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+.cost-page--register .cost-page__register > .sheet-register,
+.cost-page--register .cost-page__register > .boq-editor,
+.cost-page--register .cost-page__register > .mb-entry-panel,
+.cost-page--register .cost-page__register > .bbs-entry-panel,
+.cost-page--register .cost-page__register > .budget-wbs-panel,
+.cost-page--register .cost-page__register > .cost-register-shell,
+.cost-page--register .cost-page__register > div.flex.flex-col.flex-1 {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+.tool-main__outlet .cost-page--register .cost-page__register .sheet-register__scroll,
+.tool-main__outlet .cost-page--register .cost-page__register .register-scroll-area,
+.tool-main__outlet .cost-page--register .cost-page__register .register-sheet-viewport {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: 0 !important;
+  overflow: auto !important;
+}
 .page-stack--register .cost-page__register .boq-editor,
 .page-stack--register .cost-page__register .mb-entry-panel,
 .page-stack--register .cost-page__register .bbs-entry-panel,

@@ -1,6 +1,6 @@
 /**
  * Planned Vs. Actual Dashboard.xlsx — import / export.
- * Column layout mirrors seed/seed.ts (Progress Overview + Planned Vs Actual packs).
+ * Activity qty from "As per drawing status" sheet (client workbook layout).
  */
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
@@ -105,7 +105,45 @@ function parseManpowerSheet(rows: unknown[][]): ParsedPlannedActual["manpower"] 
   return out;
 }
 
-function parseActivitySheet(rows: unknown[][]): ParsedPlannedActual["activityLines"] {
+/** "As per drawing status" — Sr, Tower, Activity, Unit, BOQ, GFC, Wk plan, Wk act, Total achieved */
+function parseDrawingStatusSheet(rows: unknown[][]): ParsedPlannedActual["activityLines"] {
+  const out: ParsedPlannedActual["activityLines"] = [];
+  let lastTower = "";
+  let startRow = rows.findIndex((r) => /sr\.?no/i.test(String((r as unknown[])[0]))) + 1;
+  if (startRow <= 0) startRow = 3;
+  for (let i = startRow; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    const sr = n(row[0]);
+    const activity = s(row[2], 200);
+    if (!sr || !activity) continue;
+    const towerCell = s(row[1], 80);
+    if (towerCell) lastTower = towerCell;
+    const tower = towerCell || lastTower || null;
+    const gfc = n(row[5]);
+    const totalAchieved = n(row[8]);
+    out.push({
+      srNo: sr,
+      tower,
+      activity,
+      unit: s(row[3], 20) || null,
+      plannedStart: null,
+      plannedEnd: null,
+      boqQty: n(row[4]),
+      gfcQty: gfc,
+      executedQty: totalAchieved,
+      balanceQty: gfc > 0 ? Math.max(0, gfc - totalAchieved) : 0,
+      weeklyPlanned: n(row[6]),
+      weeklyActual: n(row[7]),
+      cumulativeQty: totalAchieved,
+      status: null,
+      pctComplete: gfc > 0 ? Math.min(1.2, totalAchieved / gfc) : 0,
+    });
+  }
+  return out;
+}
+
+/** Legacy "Planned Vs Actual" sheet with date columns */
+function parseLegacyActivitySheet(rows: unknown[][]): ParsedPlannedActual["activityLines"] {
   const out: ParsedPlannedActual["activityLines"] = [];
   let lastTower = "";
   for (let i = 0; i < rows.length; i++) {
@@ -145,8 +183,9 @@ export function parsePlannedActualDashboard(buffer: Buffer): ParsedPlannedActual
   const cashSheet =
     (cashName && wb.Sheets[cashName]) || wb.Sheets["Project Cashflow "] || wb.Sheets["Project Cashflow"];
   const manSheet = wb.Sheets["Weekly Manpower"];
+  const drawSheet = wb.Sheets["As per drawing status"];
   const actName = wb.SheetNames.find((name) => /planned vs actual/i.test(name) && !/dashboard/i.test(name));
-  const actSheet = (actName && wb.Sheets[actName]) || wb.Sheets["Planned Vs Actual "] || wb.Sheets["Planned Vs Actual"];
+  const legacyActSheet = (actName && wb.Sheets[actName]) || wb.Sheets["Planned Vs Actual "] || wb.Sheets["Planned Vs Actual"];
 
   const cashRows = cashSheet
     ? (XLSX.utils.sheet_to_json<(string | number)[]>(cashSheet, { header: 1, defval: "" }) as unknown[][])
@@ -154,14 +193,21 @@ export function parsePlannedActualDashboard(buffer: Buffer): ParsedPlannedActual
   const manRows = manSheet
     ? (XLSX.utils.sheet_to_json<(string | number)[]>(manSheet, { header: 1, defval: "" }) as unknown[][])
     : [];
-  const actRows = actSheet
-    ? (XLSX.utils.sheet_to_json<(string | number)[]>(actSheet, { header: 1, defval: "" }) as unknown[][])
+  const drawRows = drawSheet
+    ? (XLSX.utils.sheet_to_json<(string | number)[]>(drawSheet, { header: 1, defval: "" }) as unknown[][])
     : [];
+  const legacyActRows = legacyActSheet
+    ? (XLSX.utils.sheet_to_json<(string | number)[]>(legacyActSheet, { header: 1, defval: "" }) as unknown[][])
+    : [];
+
+  const activityLines = drawRows.length
+    ? parseDrawingStatusSheet(drawRows)
+    : parseLegacyActivitySheet(legacyActRows);
 
   return {
     cashflow: parseCashflowSheet(cashRows),
     manpower: parseManpowerSheet(manRows),
-    activityLines: parseActivitySheet(actRows),
+    activityLines,
   };
 }
 
@@ -219,7 +265,7 @@ export function plannedActualToSheets(data: Awaited<ReturnType<typeof loadPlanne
     {
       name: "Project Cashflow ",
       rows: [
-        ["Month", "RA / Package", "Col C", "Planned", "Actual", "Variance"],
+        ["Month", "", "Budgeted work", "Planned Work ", "Actual Work", ""],
         ...cashflow.map((p) => [
           p.periodLabel,
           p.packageName,
@@ -233,52 +279,36 @@ export function plannedActualToSheets(data: Awaited<ReturnType<typeof loadPlanne
     {
       name: "Weekly Manpower",
       rows: [
-        ["Trade", "Required", "Available", "Shortage", "Shortage %", "Rank"],
+        ["Type of Manpower", "Required Manpower for week", "Available", "Shortage ", "% Shortage", "Rank"],
         ...manpower.map((m) => [m.trade, m.required, m.available, m.shortage, m.shortagePct, m.rank]),
       ],
     },
     {
-      name: "Planned Vs Actual ",
+      name: "As per drawing status",
       rows: [
+        ["Weekly Executed Plan"],
+        [],
         [
-          "Sr",
-          "Tower / Zone",
+          "Sr.No.",
+          "Tower",
           "Activity",
-          "Plan start",
-          "Plan end",
-          "Unit",
-          "BOQ Qty",
-          "GFC Qty",
-          "Executed",
-          "Balance",
-          "Wk planned",
-          "Wk actual",
-          "Cumulative",
-          "Col N",
-          "Col O",
-          "Col P",
-          "Status",
-          "% complete",
+          "Unit ",
+          "As per BOQ total Quantity",
+          "As per GFC total Quantity",
+          "Weekly planned Qty.",
+          "Weekly actual Qty.",
+          "Total Achieved Qty.",
         ],
         ...activityLines.map((a) => [
           a.srNo,
           a.tower || "",
           a.activity,
-          a.plannedStart ? fmtDate(a.plannedStart) : "",
-          a.plannedEnd ? fmtDate(a.plannedEnd) : "",
           a.unit || "",
           a.boqQty,
           a.gfcQty,
-          a.executedQty,
-          a.balanceQty,
           a.weeklyPlanned,
           a.weeklyActual,
-          a.cumulativeQty,
-          "",
-          "",
-          "",
-          a.status || "",
-          a.pctComplete,
+          a.cumulativeQty || a.executedQty,
         ]),
       ],
     },
@@ -303,7 +333,7 @@ export async function renderPlannedActualHtml(projectId: string): Promise<string
 
   return renderBrandedReportHtml({
     title: "Planned Vs. Actual Dashboard",
-    subtitle: "Cashflow · weekly manpower · activity quantity register",
+    subtitle: "Cashflow · weekly manpower · as per drawing status",
     project: { code: p.code, name: p.name, clientName: p.clientName, location: p.location },
     kpis: [
       { label: "Cashflow periods", value: data.cashflow.length },
@@ -335,17 +365,18 @@ export async function renderPlannedActualHtml(projectId: string): Promise<string
         ]),
       },
       {
-        heading: "Activity quantity register",
-        headers: ["#", "Tower", "Activity", "GFC", "Executed", "Wk plan", "Wk act", "Status"],
+        heading: "As per drawing status",
+        headers: ["#", "Tower", "Activity", "Unit", "BOQ", "GFC", "Wk plan", "Wk act", "Total achieved"],
         rows: data.activityLines.map((a) => [
           a.srNo,
           a.tower || "—",
           a.activity,
+          a.unit || "—",
+          a.boqQty,
           a.gfcQty,
-          Number(a.executedQty).toFixed(2),
           a.weeklyPlanned,
           a.weeklyActual,
-          a.status || "—",
+          a.cumulativeQty || a.executedQty,
         ]),
       },
     ],

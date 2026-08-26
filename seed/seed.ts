@@ -927,14 +927,20 @@ async function seedProjectAndCost(users: User[]) {
 
   const overviewFile = path.join(EXCEL_ROOT, "Progress Overview.xlsx");
   const mileFile = path.join(EXCEL_ROOT, "Milestone tracking.xlsx");
-  const plannedFile = path.join(EXCEL_ROOT, "Planned Vs. Actual Dashboard (1).xlsx");
+  const plannedFile =
+    [path.join(EXCEL_ROOT, "Planned Vs. Actual Dashboard (1).xlsx"), path.join(EXCEL_ROOT, "Planned Vs. Actual Dashboard.xlsx")].find(
+      (p) => fs.existsSync(p)
+    ) || path.join(EXCEL_ROOT, "Planned Vs. Actual Dashboard.xlsx");
   const monthlyFile = path.join(
     EXCEL_ROOT,
     fs.existsSync(path.join(EXCEL_ROOT, "Monthly Progress Dashboard (1).xlsx"))
       ? "Monthly Progress Dashboard (1).xlsx"
       : "Monthly Progress Dashboard.xlsx"
   );
-  const hindFile = path.join(EXCEL_ROOT, "HInderance Register Dashboard (1).xlsx");
+  const hindFile =
+    [path.join(EXCEL_ROOT, "HInderance Register Dashboard (1).xlsx"), path.join(EXCEL_ROOT, "HInderance Register Dashboard.xlsx")].find(
+      (p) => fs.existsSync(p)
+    ) || path.join(EXCEL_ROOT, "HInderance Register Dashboard.xlsx");
 
   if (!fs.existsSync(mileFile) && !fs.existsSync(overviewFile)) {
     console.warn("Missing excel:", mileFile);
@@ -1012,7 +1018,8 @@ async function seedProjectAndCost(users: User[]) {
             delayType: cellStr(row[12], 80),
             accountable: cellStr(row[13], 80),
             status: cellStr(row[14], 40) || "Open",
-            remarks: cellStr(row[15], 500),
+            resolutionDescription: cellStr(row[15], 500),
+            remarks: cellStr(row[16], 500),
           },
         });
         n++;
@@ -1021,7 +1028,51 @@ async function seedProjectAndCost(users: User[]) {
     }
   }
 
-  if (fs.existsSync(overviewFile)) {
+  const riskFile = path.join(EXCEL_ROOT, "Risk Register - Dashboard 1.xlsx");
+  const legalFile = path.join(EXCEL_ROOT, "Legal Approvals - Dashboard.xlsx");
+
+  if (fs.existsSync(riskFile)) {
+    const wb = XLSX.readFile(riskFile);
+    const sheet = wb.Sheets["Risk Register"];
+    if (sheet) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 2; i < rows.length; i++) {
+        const row = rows[i] as (string | number)[];
+        const code = cellStr(row[0], 20);
+        const name = cellStr(row[3], 200);
+        if (!code || !name || !/^R\d+/i.test(code)) continue;
+        const probability = Math.min(5, Math.max(1, Math.round(cellNum(row[5]) || 1)));
+        const consequence = Math.min(5, Math.max(1, Math.round(cellNum(row[6]) || 1)));
+        await prisma.progressRisk.create({
+          data: {
+            projectId: project.id,
+            code,
+            category: cellStr(row[1], 80),
+            opportunityThreat: cellStr(row[2], 40) || "Threat",
+            name,
+            description: cellStr(row[4], 1000),
+            probability,
+            consequence,
+            severity: cellNum(row[7]) || probability * consequence,
+            probabilityPct: cellNum(row[8]),
+            costImpact: cellNum(row[9]),
+            weeksLikely: cellNum(row[10]),
+            urgency: cellStr(row[11], 40),
+            responseCategory: cellStr(row[12], 80),
+            impactNotes: cellStr(row[13], 2000),
+            riskOwner: cellStr(row[14], 120),
+            contingencyPlan: cellStr(row[15], 2000),
+            status: cellStr(row[16], 80) || "Open",
+            dateLastUpdated: excelDate(row[17]),
+            trackingComments: cellStr(row[18], 500),
+          },
+        });
+        n++;
+      }
+      console.log("Risks seeded:", n);
+    }
+  } else if (fs.existsSync(overviewFile)) {
     const wb = XLSX.readFile(overviewFile);
     const sheet = wb.Sheets["Risk Register"];
     if (sheet) {
@@ -1052,9 +1103,12 @@ async function seedProjectAndCost(users: User[]) {
         });
         n++;
       }
-      console.log("Risks seeded:", n);
+      console.log("Risks seeded (overview fallback):", n);
     }
+  }
 
+  if (fs.existsSync(legalFile)) {
+    const wb = XLSX.readFile(legalFile);
     const legal = wb.Sheets["Legal Approval Tracker"];
     if (legal) {
       const rows = XLSX.utils.sheet_to_json<(string | number)[]>(legal, { header: 1, defval: "" }) as unknown[][];
@@ -1084,6 +1138,38 @@ async function seedProjectAndCost(users: User[]) {
         n++;
       }
       console.log("Legal approvals seeded:", n);
+    }
+  } else if (fs.existsSync(overviewFile)) {
+    const wb = XLSX.readFile(overviewFile);
+    const legal = wb.Sheets["Legal Approval Tracker"];
+    if (legal) {
+      const rows = XLSX.utils.sheet_to_json<(string | number)[]>(legal, { header: 1, defval: "" }) as unknown[][];
+      let n = 0;
+      for (let i = 3; i < rows.length; i++) {
+        const row = rows[i] as (string | number)[];
+        const approvalId = cellStr(row[0], 40);
+        const description = cellStr(row[3], 400);
+        if (!approvalId || !description) continue;
+        await prisma.progressLegalApproval.create({
+          data: {
+            projectId: project.id,
+            approvalId,
+            category: cellStr(row[1], 80),
+            authority: cellStr(row[2], 120),
+            description,
+            packageName: cellStr(row[4], 120),
+            submissionDate: excelDate(row[5]),
+            requiredBy: excelDate(row[6]),
+            receivedDate: excelDate(row[7]),
+            status: cellStr(row[8], 40) || "Submitted",
+            delayDays: cellNum(row[9]),
+            responsible: cellStr(row[10], 80),
+            remarks: cellStr(row[11], 300),
+          },
+        });
+        n++;
+      }
+      console.log("Legal approvals seeded (overview fallback):", n);
     }
   }
 
@@ -1141,13 +1227,15 @@ async function seedProjectAndCost(users: User[]) {
       console.log("Manpower rows seeded:", n);
     }
 
+    const draw = wb.Sheets["As per drawing status"];
     const actName = wb.SheetNames.find((n) => /planned vs actual/i.test(n) && !/dashboard/i.test(n));
-    const act = (actName && wb.Sheets[actName]) || wb.Sheets["Planned Vs Actual "];
+    const act = draw || (actName && wb.Sheets[actName]) || wb.Sheets["Planned Vs Actual "];
     if (act) {
       const rows = XLSX.utils.sheet_to_json<(string | number)[]>(act, { header: 1, defval: "" }) as unknown[][];
       let n = 0;
       let lastTower = "";
-      for (let i = 0; i < rows.length; i++) {
+      const startRow = draw ? 3 : 0;
+      for (let i = startRow; i < rows.length; i++) {
         const row = rows[i] as (string | number)[];
         const sr = cellNum(row[0]);
         const activity = cellStr(row[2], 200);
@@ -1155,28 +1243,50 @@ async function seedProjectAndCost(users: User[]) {
         const towerCell = cellStr(row[1], 80);
         if (towerCell) lastTower = towerCell;
         const tower = towerCell || lastTower || null;
-        const gfc = cellNum(row[7]);
-        const executed = cellNum(row[8]);
-        await prisma.progressActivityLine.create({
-          data: {
-            projectId: project.id,
-            srNo: sr,
-            tower,
-            activity,
-            unit: cellStr(row[5], 20),
-            plannedStart: excelDate(row[3]),
-            plannedEnd: excelDate(row[4]),
-            boqQty: cellNum(row[6]),
-            gfcQty: gfc,
-            executedQty: executed,
-            balanceQty: cellNum(row[9]),
-            weeklyPlanned: cellNum(row[10]),
-            weeklyActual: cellNum(row[11]),
-            cumulativeQty: cellNum(row[12]) || executed,
-            status: cellStr(row[16], 40),
-            pctComplete: gfc > 0 ? Math.min(1.2, executed / gfc) : cellNum(row[17]),
-          },
-        });
+        if (draw) {
+          const gfc = cellNum(row[5]);
+          const totalAchieved = cellNum(row[8]);
+          await prisma.progressActivityLine.create({
+            data: {
+              projectId: project.id,
+              srNo: sr,
+              tower,
+              activity,
+              unit: cellStr(row[3], 20),
+              boqQty: cellNum(row[4]),
+              gfcQty: gfc,
+              executedQty: totalAchieved,
+              balanceQty: gfc > 0 ? Math.max(0, gfc - totalAchieved) : 0,
+              weeklyPlanned: cellNum(row[6]),
+              weeklyActual: cellNum(row[7]),
+              cumulativeQty: totalAchieved,
+              pctComplete: gfc > 0 ? Math.min(1.2, totalAchieved / gfc) : 0,
+            },
+          });
+        } else {
+          const gfc = cellNum(row[7]);
+          const executed = cellNum(row[8]);
+          await prisma.progressActivityLine.create({
+            data: {
+              projectId: project.id,
+              srNo: sr,
+              tower,
+              activity,
+              unit: cellStr(row[5], 20),
+              plannedStart: excelDate(row[3]),
+              plannedEnd: excelDate(row[4]),
+              boqQty: cellNum(row[6]),
+              gfcQty: gfc,
+              executedQty: executed,
+              balanceQty: cellNum(row[9]),
+              weeklyPlanned: cellNum(row[10]),
+              weeklyActual: cellNum(row[11]),
+              cumulativeQty: cellNum(row[12]) || executed,
+              status: cellStr(row[16], 40),
+              pctComplete: gfc > 0 ? Math.min(1.2, executed / gfc) : cellNum(row[17]),
+            },
+          });
+        }
         n++;
       }
       console.log("Activity lines seeded:", n);

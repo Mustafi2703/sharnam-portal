@@ -41,19 +41,33 @@ function sheetRows(root: string, file: string, sheetName?: string | RegExp) {
   }) as unknown as unknown[][];
 }
 
+function firstExisting(root: string, names: string[]) {
+  for (const name of names) {
+    const p = path.join(root, name);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 /** Expected Progress sheet counts + key field samples from client Excel packs */
 export function readProgressExcelExpectations() {
   const root = resolveExcelRoot();
   const overview = path.join(root, "Progress Overview.xlsx");
-  const mileFile = path.join(root, "Milestone tracking.xlsx");
-  const plannedFile = path.join(root, "Planned Vs. Actual Dashboard (1).xlsx");
-  const hindFile = path.join(root, "HInderance Register Dashboard (1).xlsx");
-  const monthlyFile = path.join(
-    root,
-    fs.existsSync(path.join(root, "Monthly Progress Dashboard (1).xlsx"))
-      ? "Monthly Progress Dashboard (1).xlsx"
-      : "Monthly Progress Dashboard.xlsx"
-  );
+  const mileFile =
+    firstExisting(root, ["Milestone tracking.xlsx"]) || overview;
+  const plannedFile =
+    firstExisting(root, ["Planned Vs. Actual Dashboard (1).xlsx", "Planned Vs. Actual Dashboard.xlsx"]) || overview;
+  const hindFile =
+    firstExisting(root, [
+      "HInderance Register Dashboard (1).xlsx",
+      "HInderance Register Dashboard.xlsx",
+    ]) || overview;
+  const riskFile =
+    firstExisting(root, ["Risk Register - Dashboard 1.xlsx", "Risk Register - Dashboard.xlsx"]) || overview;
+  const legalFile =
+    firstExisting(root, ["Legal Approvals - Dashboard.xlsx", "Legal Approvals - Dashboard (1).xlsx"]) || overview;
+  const monthlyFile =
+    firstExisting(root, ["Monthly Progress Dashboard (1).xlsx", "Monthly Progress Dashboard.xlsx"]) || overview;
 
   const mileRows =
     sheetRows(root, mileFile, /data input/i) || sheetRows(root, overview, /^Milestone$/i) || [];
@@ -74,13 +88,16 @@ export function readProgressExcelExpectations() {
       };
     });
 
-  const hindRows = sheetRows(root, hindFile, /hinder/i) || sheetRows(root, overview, /hinder/i) || [];
+  const hindRows =
+    (hindFile && sheetRows(root, hindFile, /hinder/i)) || sheetRows(root, overview, /hinder/i) || [];
   const hindrances = hindRows.slice(2).filter((r) => cellStr((r as unknown[])[1])).length;
 
-  const riskRows = sheetRows(root, overview, /risk/i) || [];
+  const riskRows =
+    (riskFile && sheetRows(root, riskFile, /risk register/i)) || sheetRows(root, overview, /risk/i) || [];
   const risks = riskRows.slice(2).filter((r) => /^R\d+/i.test(cellStr((r as unknown[])[0]))).length;
 
-  const legalRows = sheetRows(root, overview, /legal/i) || [];
+  const legalRows =
+    (legalFile && sheetRows(root, legalFile, /legal/i)) || sheetRows(root, overview, /legal/i) || [];
   const legal = legalRows
     .slice(3)
     .filter((r) => cellStr((r as unknown[])[0]) && cellStr((r as unknown[])[3])).length;
@@ -88,7 +105,7 @@ export function readProgressExcelExpectations() {
     | unknown[]
     | undefined;
 
-  const cashRows = sheetRows(root, plannedFile, /cashflow/i) || [];
+  const cashRows = (plannedFile && sheetRows(root, plannedFile, /cashflow/i)) || [];
   const cashflow = cashRows
     .slice(1)
     .filter((r) => cellStr((r as unknown[])[0]) && cellNum((r as unknown[])[3]) > 0)
@@ -97,7 +114,7 @@ export function readProgressExcelExpectations() {
       return { month: cellStr(row[0]), planned: cellNum(row[3]), actual: cellNum(row[4]) };
     });
 
-  const manRows = sheetRows(root, plannedFile, /weekly manpower/i) || [];
+  const manRows = (plannedFile && sheetRows(root, plannedFile, /weekly manpower/i)) || [];
   const manpower: { trade: string; required: number; available: number }[] = [];
   for (let i = 2; i < manRows.length; i++) {
     const row = manRows[i] as unknown[];
@@ -107,23 +124,25 @@ export function readProgressExcelExpectations() {
     manpower.push({ trade, required: cellNum(row[1]), available: cellNum(row[2]) });
   }
 
-  const actRows = sheetRows(root, plannedFile, /planned vs actual/i) || [];
-  const activities = actRows.filter((r) => {
-    const row = r as unknown[];
-    return cellNum(row[0]) > 0 && cellStr(row[2]);
-  }).length;
+  const drawRows = (plannedFile && sheetRows(root, plannedFile, /as per drawing/i)) || [];
+  const activities = drawRows.length
+    ? drawRows.slice(3).filter((r) => cellNum((r as unknown[])[0]) > 0 && cellStr((r as unknown[])[2])).length
+    : ((plannedFile && sheetRows(root, plannedFile, /planned vs actual/i)) || []).filter((r) => {
+        const row = r as unknown[];
+        return cellNum(row[0]) > 0 && cellStr(row[2]);
+      }).length;
 
-  const sorRows = sheetRows(root, monthlyFile, /sor/i) || [];
+  const sorRows = (monthlyFile && sheetRows(root, monthlyFile, /sor/i)) || [];
   const sor = parseProgressSorSummaryRows(sorRows).length;
 
   return {
     excelRoot: root,
-    files: { overview, mileFile, plannedFile, hindFile, monthlyFile },
+    files: { overview, mileFile, plannedFile, hindFile, riskFile, legalFile, monthlyFile },
     milestones,
     counts: {
       milestones: milestones.length,
       hindrances,
-      risks: Math.min(risks, 40),
+      risks,
       legal,
       plannedActual: cashflow.length,
       manpower: manpower.length,

@@ -1766,12 +1766,13 @@ model ProgressHindrance {
   daysImpacted   Float     @default(0)
   baselineStart  DateTime?
   scheduleImpact Float     @default(0)
-  delayType      String?
-  status         String    @default("Open")
-  accountable    String?
-  remarks        String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @default(now()) @updatedAt
+  delayType              String?
+  status                 String    @default("Open")
+  accountable            String?
+  resolutionDescription  String?
+  remarks                String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now()) @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -1787,11 +1788,19 @@ model ProgressRisk {
   probability       Int      @default(1)
   consequence       Int      @default(1)
   severity          Int      @default(1)
-  probabilityPct    Float    @default(0)
-  costImpact        Float    @default(0)
-  status            String   @default("Open")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @default(now()) @updatedAt
+  probabilityPct     Float     @default(0)
+  costImpact         Float     @default(0)
+  weeksLikely        Float     @default(0)
+  urgency            String?
+  responseCategory   String?
+  impactNotes        String?
+  riskOwner          String?
+  contingencyPlan    String?
+  trackingComments   String?
+  dateLastUpdated    DateTime?
+  status             String    @default("Open")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

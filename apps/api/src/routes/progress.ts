@@ -238,10 +238,47 @@ progressRouter.post(
         delayType: body.delayType || null,
         status: body.status || "Open",
         accountable: body.accountable || null,
+        resolutionDescription: body.resolutionDescription || null,
         remarks: body.remarks || null,
       },
     });
     res.status(201).json(row);
+  }
+);
+
+progressRouter.patch(
+  "/:projectId/hindrances/:hindranceId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressHindrance.findFirst({
+      where: { id: req.params.hindranceId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    for (const k of [
+      "description",
+      "location",
+      "activity",
+      "correspondence",
+      "category",
+      "type",
+      "delayType",
+      "status",
+      "accountable",
+      "resolutionDescription",
+      "remarks",
+    ] as const) {
+      if (body[k] !== undefined) data[k] = body[k];
+    }
+    for (const k of ["daysImpacted", "scheduleImpact"] as const) {
+      if (body[k] != null) data[k] = Number(body[k]);
+    }
+    for (const k of ["occurredAt", "resolvedAt", "baselineStart"] as const) {
+      if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
+    }
+    const row = await prisma.progressHindrance.update({ where: { id: existing.id }, data });
+    res.json(row);
   }
 );
 
@@ -265,10 +302,58 @@ progressRouter.post(
         severity: probability * consequence,
         probabilityPct: Number(body.probabilityPct || 0),
         costImpact: Number(body.costImpact || 0),
+        weeksLikely: Number(body.weeksLikely || 0),
+        urgency: body.urgency || null,
+        responseCategory: body.responseCategory || null,
+        impactNotes: body.impactNotes || null,
+        riskOwner: body.riskOwner || null,
+        contingencyPlan: body.contingencyPlan || null,
+        trackingComments: body.trackingComments || null,
+        dateLastUpdated: body.dateLastUpdated ? new Date(body.dateLastUpdated) : null,
         status: body.status || "Open",
       },
     });
     res.status(201).json(row);
+  }
+);
+
+progressRouter.patch(
+  "/:projectId/risks/:riskId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressRisk.findFirst({
+      where: { id: req.params.riskId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    for (const k of [
+      "code",
+      "category",
+      "opportunityThreat",
+      "name",
+      "description",
+      "status",
+      "urgency",
+      "responseCategory",
+      "impactNotes",
+      "riskOwner",
+      "contingencyPlan",
+      "trackingComments",
+    ] as const) {
+      if (body[k] !== undefined) data[k] = body[k];
+    }
+    for (const k of ["probability", "consequence", "severity"] as const) {
+      if (body[k] != null) data[k] = Number(body[k]);
+    }
+    for (const k of ["probabilityPct", "costImpact", "weeksLikely"] as const) {
+      if (body[k] != null) data[k] = Number(body[k]);
+    }
+    if (body.dateLastUpdated !== undefined) {
+      data.dateLastUpdated = body.dateLastUpdated ? new Date(body.dateLastUpdated) : null;
+    }
+    const row = await prisma.progressRisk.update({ where: { id: existing.id }, data });
+    res.json(row);
   }
 );
 
@@ -298,6 +383,108 @@ progressRouter.post(
   }
 );
 
+progressRouter.patch(
+  "/:projectId/legal/:legalId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressLegalApproval.findFirst({
+      where: { id: req.params.legalId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    for (const k of [
+      "approvalId",
+      "category",
+      "authority",
+      "description",
+      "packageName",
+      "status",
+      "responsible",
+      "remarks",
+    ] as const) {
+      if (body[k] !== undefined) data[k] = body[k];
+    }
+    if (body.delayDays != null) data.delayDays = Number(body.delayDays);
+    for (const k of ["submissionDate", "requiredBy", "receivedDate"] as const) {
+      if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
+    }
+    const row = await prisma.progressLegalApproval.update({ where: { id: existing.id }, data });
+    res.json(row);
+  }
+);
+
+progressRouter.patch(
+  "/:projectId/manpower/:manpowerId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressManpower.findFirst({
+      where: { id: req.params.manpowerId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const row = await prisma.progressManpower.update({
+      where: { id: existing.id },
+      data: {
+        trade: body.trade != null ? String(body.trade) : undefined,
+        required: body.required != null ? Number(body.required) : undefined,
+        available: body.available != null ? Number(body.available) : undefined,
+        shortage: body.shortage != null ? Number(body.shortage) : undefined,
+        shortagePct: body.shortagePct != null ? Number(body.shortagePct) : undefined,
+        rank: body.rank != null ? Number(body.rank) : undefined,
+      },
+    });
+    res.json(row);
+  }
+);
+
+progressRouter.patch(
+  "/:projectId/planned-actual/:rowId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressPlannedActual.findFirst({
+      where: { id: req.params.rowId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const row = await prisma.progressPlannedActual.update({
+      where: { id: existing.id },
+      data: {
+        periodLabel: body.periodLabel != null ? String(body.periodLabel) : undefined,
+        packageName: body.packageName != null ? String(body.packageName) : undefined,
+        plannedAmount: body.plannedAmount != null ? Number(body.plannedAmount) : undefined,
+        actualAmount: body.actualAmount != null ? Number(body.actualAmount) : undefined,
+        plannedPct: body.plannedPct != null ? Number(body.plannedPct) : undefined,
+        actualPct: body.actualPct != null ? Number(body.actualPct) : undefined,
+      },
+    });
+    res.json(row);
+  }
+);
+
+/** Re-import all progress register sheets from bundled SPDC Excel packs */
+progressRouter.post(
+  "/:projectId/resync-registers",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const force = Boolean(req.body?.force);
+    const { syncProgressRegisterPack } = await import("../services/progressRegistersImport.js");
+    const { syncProgressTemplates } = await import("../services/projectSheetPack.js");
+    const registers = await syncProgressRegisterPack(project.id, { force: true });
+    const planned = await syncProgressTemplates(project.id, { force: true });
+    await audit("progress.registers.resync", {
+      userId: req.user!.id,
+      entity: "project",
+      entityId: project.id,
+      meta: { registers, planned },
+    });
+    const report = await verifyProgressProject(project.id);
+    res.json({ ok: true, registers, planned, verify: report });
+  }
+);
+
 /** Load Planned Vs. Actual + monthly SOR from bundled SPDC Excel (same as seed). */
 progressRouter.post(
   "/:projectId/planned-actual/sync-template",
@@ -307,7 +494,7 @@ progressRouter.post(
     if (!project) return res.status(404).json({ error: "Project not found" });
     try {
       const { syncProgressTemplates } = await import("../services/projectSheetPack.js");
-      const out = await syncProgressTemplates(project.id);
+      const out = await syncProgressTemplates(project.id, { force: Boolean(req.body?.force) });
       await audit("progress.syncTemplate", {
         userId: req.user!.id,
         entity: "ProgressActivityLine",
@@ -373,10 +560,15 @@ progressRouter.patch(
       where: { id: existing.id },
       data: {
         activity: body.activity != null ? String(body.activity) : undefined,
+        tower: body.tower !== undefined ? body.tower : undefined,
         unit: body.unit !== undefined ? body.unit : undefined,
+        boqQty: body.boqQty != null ? Number(body.boqQty) : undefined,
+        gfcQty: body.gfcQty != null ? Number(body.gfcQty) : undefined,
         weeklyPlanned: body.weeklyPlanned != null ? Number(body.weeklyPlanned) : undefined,
         weeklyActual: body.weeklyActual != null ? Number(body.weeklyActual) : undefined,
         executedQty: body.executedQty != null ? Number(body.executedQty) : undefined,
+        cumulativeQty: body.cumulativeQty != null ? Number(body.cumulativeQty) : undefined,
+        balanceQty: body.balanceQty != null ? Number(body.balanceQty) : undefined,
         status: body.status != null ? String(body.status) : undefined,
         pctComplete: body.pctComplete != null ? Number(body.pctComplete) : undefined,
       },

@@ -9,6 +9,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
+import { RegisterSheetCell } from "../../components/RegisterSheetCell";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 
@@ -47,6 +48,7 @@ export default function ProgressPage() {
   const [verify, setVerify] = useState<any>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [resyncBusy, setResyncBusy] = useState(false);
+  const [registerSyncBusy, setRegisterSyncBusy] = useState(false);
   const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
   const [msProject, setMsProject] = useState<any>(null);
@@ -282,9 +284,9 @@ export default function ProgressPage() {
     setPaBusy("sync");
     setMsg("");
     try {
-      const out = await api<{ activityLines: number; cashflow: number; manpower: number }>(
+      const out = await api<{ activityLines: number; cashflow: number; manpower: number; registers?: any }>(
         `/api/progress/${id}/planned-actual/sync-template`,
-        { method: "POST", token }
+        { method: "POST", token, body: JSON.stringify({ force: true }) }
       );
       setMsg(
         `Loaded Planned Vs. Actual format — ${out.activityLines} activities · ${out.cashflow} cashflow · ${out.manpower} trades (feeds DPR qty hints)`
@@ -333,6 +335,88 @@ export default function ProgressPage() {
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchMilestone(milestoneId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/milestones/${milestoneId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchHindrance(hindranceId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/hindrances/${hindranceId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchRisk(riskId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/risks/${riskId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchLegal(legalId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/legal/${legalId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchManpower(manpowerId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/manpower/${manpowerId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchPlannedActual(rowId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/planned-actual/${rowId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function loadAllProgressTemplates(force = false) {
+    if (!id || !canResyncExcel) return;
+    setRegisterSyncBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ registers?: any; planned?: any; verify?: typeof verify }>(
+        `/api/progress/${id}/resync-registers`,
+        { method: "POST", token, body: JSON.stringify({ force }) }
+      );
+      if (out.verify) setVerify(out.verify);
+      await load();
+      const reg = out.registers;
+      setMsg(
+        `Loaded SPDC progress packs — ${reg?.milestones?.imported ?? 0} milestones · ${reg?.hindrance?.imported ?? 0} hindrances · ${reg?.risk?.imported ?? 0} risks · ${reg?.legal?.imported ?? 0} legal · ${out.planned?.activityLines ?? 0} activity lines`
+      );
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Template load failed");
+    } finally {
+      setRegisterSyncBusy(false);
     }
   }
 
@@ -556,6 +640,14 @@ export default function ProgressPage() {
                 >
                   {resyncBusy ? "Resyncing…" : "Resync SOR from Excel"}
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={registerSyncBusy || verifyBusy}
+                  onClick={() => void loadAllProgressTemplates(true)}
+                >
+                  {registerSyncBusy ? "Loading…" : "Resync all progress registers"}
+                </Button>
               </div>
             )}
           </div>
@@ -685,6 +777,9 @@ export default function ProgressPage() {
             rowCount={data.milestones?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setMileAddOpen(true) : undefined}
+            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            generateLabel="Load SPDC template"
+            busy={registerSyncBusy}
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
@@ -703,42 +798,66 @@ export default function ProgressPage() {
             <table className="sheet-register__table w-full text-sm min-w-[64rem]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
-                  <th className="py-2.5 px-3">ID</th>
+                  <th className="py-2.5 px-3">Milestone ID</th>
                   <th className="py-2.5 pr-3">Phase</th>
-                  <th className="py-2.5 pr-3">Name</th>
-                  <th className="py-2.5 pr-3">Plan start</th>
-                  <th className="py-2.5 pr-3">Plan end</th>
-                  <th className="py-2.5 pr-3">P/A days</th>
-                  <th className="py-2.5 pr-3">Var</th>
-                  <th className="py-2.5 pr-3">Wt</th>
-                  <th className="py-2.5 pr-3">%</th>
+                  <th className="py-2.5 pr-3">Milestone Name</th>
+                  <th className="py-2.5 pr-3">Planned Start</th>
+                  <th className="py-2.5 pr-3">Planned End</th>
+                  <th className="py-2.5 pr-3">Planned Days</th>
+                  <th className="py-2.5 pr-3">Actual Start</th>
+                  <th className="py-2.5 pr-3">Actual End</th>
+                  <th className="py-2.5 pr-3">Actual Days</th>
+                  <th className="py-2.5 pr-3">Weightage</th>
+                  <th className="py-2.5 pr-3">% Complete</th>
                   <th className="py-2.5 pr-3">Stakeholder</th>
                   <th className="py-2.5 pr-3">Zone</th>
-                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 pr-3">Status2</th>
+                  <th className="py-2.5 px-3">Delays</th>
                 </tr>
               </thead>
               <tbody>
                 {data.milestones.map((m: any) => (
                   <tr key={m.id} className="border-b border-line/70 hover:bg-sand/40">
-                    <td className="py-2 px-3 font-mono text-xs">{m.code || "—"}</td>
-                    <td className="py-2 pr-3">{m.category || "—"}</td>
-                    <td className="py-2 pr-3 font-medium">{m.activity}</td>
+                    <td className="py-2 px-3 font-mono text-xs">
+                      <RegisterSheetCell value={m.code} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { code: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={m.category} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { category: v })} />
+                    </td>
+                    <td className="py-2 pr-3 font-medium">
+                      <RegisterSheetCell value={m.activity} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { activity: v })} />
+                    </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.plannedStart)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.plannedEnd)}</td>
                     <td className="py-2 pr-3 font-mono text-xs">
-                      {m.plannedDays}/{m.actualDays}
+                      <RegisterSheetCell type="number" value={m.plannedDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { plannedDays: Number(v) })} />
                     </td>
-                    <td className="py-2 pr-3">{m.varianceDays}</td>
-                    <td className="py-2 pr-3">{m.weightage}</td>
-                    <td className="py-2 pr-3">{pct(m.pctComplete)}</td>
-                    <td className="py-2 pr-3">{m.stakeholder || "—"}</td>
-                    <td className="py-2 pr-3">{m.zone || "—"}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.actualStart)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.actualEnd)}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">
+                      <RegisterSheetCell type="number" value={m.actualDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { actualDays: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={m.weightage} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { weightage: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={Math.round((m.pctComplete || 0) * 100)} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { pctComplete: Number(v) / 100 })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={m.stakeholder} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { stakeholder: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={m.zone} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { zone: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={m.status} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { status: v })} />
+                    </td>
                     <td className="py-2 px-3">
-                      <Badge tone={/delay/i.test(m.status) ? "danger" : /complete/i.test(m.status) ? "ok" : "warn"}>{m.status}</Badge>
+                      <RegisterSheetCell type="number" value={m.varianceDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { varianceDays: Number(v) })} />
                     </td>
                   </tr>
                 ))}
-                {!data.milestones?.length && <RegisterEmptyRow colSpan={12} />}
+                {!data.milestones?.length && <RegisterEmptyRow colSpan={16} />}
               </tbody>
             </table>
             </div>
@@ -764,7 +883,7 @@ export default function ProgressPage() {
                 : undefined
             }
             generateLabel="Load SPDC template"
-            busy={!!paBusy}
+            busy={!!paBusy || registerSyncBusy}
             message={msg}
           />
           <Card className="!p-3 shrink-0">
@@ -847,23 +966,27 @@ export default function ProgressPage() {
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
                   <th className="py-2.5 px-3">Month</th>
-                  <th className="py-2.5 pr-3">RA</th>
-                  <th className="py-2.5 pr-3 text-right">Planned</th>
-                  <th className="py-2.5 pr-3 text-right">Actual</th>
-                  <th className="py-2.5 px-3 text-right">%</th>
+                  <th className="py-2.5 pr-3">Budgeted work</th>
+                  <th className="py-2.5 pr-3 text-right">Planned Work</th>
+                  <th className="py-2.5 px-3 text-right">Actual Work</th>
                 </tr>
               </thead>
               <tbody>
                 {data.plannedActual.map((p: any) => (
                   <tr key={p.id} className="border-b border-line/70">
-                    <td className="py-2 px-3 font-medium whitespace-nowrap">{p.periodLabel}</td>
+                    <td className="py-2 px-3 font-medium whitespace-nowrap">
+                      <RegisterSheetCell value={p.periodLabel} disabled={!canEdit} onCommit={(v) => void patchPlannedActual(p.id, { periodLabel: v })} />
+                    </td>
                     <td className="py-2 pr-3 font-mono text-xs">{p.packageName}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{inr(p.plannedAmount)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{inr(p.actualAmount)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{pct(p.actualPct)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={p.plannedAmount} disabled={!canEdit} onCommit={(v) => void patchPlannedActual(p.id, { plannedAmount: Number(v) })} />
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={p.actualAmount} disabled={!canEdit} onCommit={(v) => void patchPlannedActual(p.id, { actualAmount: Number(v) })} />
+                    </td>
                   </tr>
                 ))}
-                {!data.plannedActual?.length && <RegisterEmptyRow colSpan={5} />}
+                {!data.plannedActual?.length && <RegisterEmptyRow colSpan={4} />}
               </tbody>
             </table>
             </div>
@@ -876,24 +999,30 @@ export default function ProgressPage() {
             <table className="sheet-register__table w-full text-sm min-w-[32rem]">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
-                  <th className="py-2.5 px-3">Trade</th>
-                  <th className="py-2.5 pr-3 text-right">Required</th>
+                  <th className="py-2.5 px-3">Type of Manpower</th>
+                  <th className="py-2.5 pr-3 text-right">Required Manpower for week</th>
                   <th className="py-2.5 pr-3 text-right">Available</th>
                   <th className="py-2.5 pr-3 text-right">Shortage</th>
-                  <th className="py-2.5 px-3 text-right">% shortage</th>
+                  <th className="py-2.5 pr-3 text-right">% Shortage</th>
+                  <th className="py-2.5 px-3 text-right">Rank</th>
                 </tr>
               </thead>
               <tbody>
                 {data.manpower.map((m: any) => (
                   <tr key={m.id} className="border-b border-line/70">
                     <td className="py-2 px-3">{m.trade}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{m.required}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{m.available}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={m.required} disabled={!canEdit} onCommit={(v) => void patchManpower(m.id, { required: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={m.available} disabled={!canEdit} onCommit={(v) => void patchManpower(m.id, { available: Number(v) })} />
+                    </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{m.shortage}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{pct(m.shortagePct)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{pct(m.shortagePct)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">{m.rank}</td>
                   </tr>
                 ))}
-                {!data.manpower?.length && <RegisterEmptyRow colSpan={5} />}
+                {!data.manpower?.length && <RegisterEmptyRow colSpan={6} />}
               </tbody>
             </table>
             </div>
@@ -959,48 +1088,52 @@ export default function ProgressPage() {
           </Card>
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
-              Weekly activity register ({(data.activityLines || []).length} lines) — daily qty feeds DPR
+              As per drawing status ({(data.activityLines || []).length} lines) — weekly qty feeds DPR
             </div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
-            <table className="sheet-register__table w-full text-[11px] min-w-[900px] border-collapse">
+            <table className="sheet-register__table w-full text-[11px] min-w-[1100px] border-collapse">
               <thead className="sticky top-0 z-10 bg-paper">
                 <tr className="text-left text-[10px] uppercase text-steel-muted">
-                  <th className="py-2 px-2">#</th>
-                  <th className="py-2 pr-2">Activity</th>
-                  <th className="py-2 pr-2 text-right">Wk plan</th>
-                  <th className="py-2 pr-2 text-right">Wk act (today)</th>
-                  <th className="py-2 px-2">Status</th>
+                  <th className="py-2 px-2">Sr.No.</th>
+                  <th className="py-2 pr-2">Tower</th>
+                  <th className="py-2 pr-2 min-w-[12rem]">Activity</th>
+                  <th className="py-2 pr-2">Unit</th>
+                  <th className="py-2 pr-2 text-right">As per BOQ total Qty</th>
+                  <th className="py-2 pr-2 text-right">As per GFC total Qty</th>
+                  <th className="py-2 pr-2 text-right">Weekly planned Qty.</th>
+                  <th className="py-2 pr-2 text-right">Weekly actual Qty.</th>
+                  <th className="py-2 px-2 text-right">Total Achieved Qty.</th>
                 </tr>
               </thead>
               <tbody>
                 {(data.activityLines || []).map((a: any, idx: number) => (
                   <tr key={a.id} className={idx % 2 === 0 ? "bg-paper" : "bg-sand/20"}>
                     <td className="py-1.5 px-2 border border-line font-mono">{a.srNo}</td>
-                    <td className="py-1.5 pr-2 border border-line font-medium text-ink">{a.activity}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyPlanned}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
-                      {canEdit ? (
-                        <input
-                          type="number"
-                          step="any"
-                          defaultValue={a.weeklyActual}
-                          key={`${a.id}-${a.weeklyActual}`}
-                          className="w-24 text-right bg-paper border border-line rounded px-1 py-0.5 text-ink"
-                          onBlur={(e) => {
-                            const n = Number(e.target.value);
-                            if (Number.isFinite(n) && n !== Number(a.weeklyActual || 0)) {
-                              void patchActivity(a.id, { weeklyActual: n });
-                            }
-                          }}
-                        />
-                      ) : (
-                        a.weeklyActual
-                      )}
+                    <td className="py-1.5 pr-2 border border-line">{a.tower || "—"}</td>
+                    <td className="py-1.5 pr-2 border border-line font-medium text-ink">
+                      <RegisterSheetCell value={a.activity} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { activity: v })} />
                     </td>
-                    <td className="py-1.5 px-2 border border-line">{a.status || "—"}</td>
+                    <td className="py-1.5 pr-2 border border-line">
+                      <RegisterSheetCell value={a.unit} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { unit: v })} />
+                    </td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={a.boqQty} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { boqQty: Number(v) })} />
+                    </td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={a.gfcQty} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { gfcQty: Number(v) })} />
+                    </td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={a.weeklyPlanned} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { weeklyPlanned: Number(v) })} />
+                    </td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={a.weeklyActual} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { weeklyActual: Number(v) })} />
+                    </td>
+                    <td className="py-1.5 px-2 border border-line text-right tabular-nums">
+                      <RegisterSheetCell type="number" value={a.cumulativeQty || a.executedQty} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { cumulativeQty: Number(v), executedQty: Number(v) })} />
+                    </td>
                   </tr>
                 ))}
-                {!(data.activityLines || []).length && <RegisterEmptyRow colSpan={5} />}
+                {!(data.activityLines || []).length && <RegisterEmptyRow colSpan={9} />}
               </tbody>
             </table>
             </div>
@@ -1041,11 +1174,12 @@ export default function ProgressPage() {
             <table className="sheet-register__table w-full text-sm min-w-[36rem]">
               <thead>
                 <tr>
+                  <th>Sr.no.</th>
                   <th>Observation</th>
                   <th>Total</th>
                   <th>Open</th>
-                  <th>Closed</th>
-                  <th>Closure rate</th>
+                  <th>Close</th>
+                  <th>Closure Rate</th>
                 </tr>
               </thead>
               <tbody>
@@ -1079,9 +1213,9 @@ export default function ProgressPage() {
             rowCount={data.hindrances?.length}
             canEdit={canEdit}
             onAddRow={() => setHindranceModalOpen(true)}
-            onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
-            uploadHint="Or upload Planned Vs. Actual Dashboard.xlsx — hindrance rows import with progress pack."
-            busy={!!paBusy}
+            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            generateLabel="Load SPDC template"
+            busy={registerSyncBusy || !!paBusy}
             message={msg}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
@@ -1094,40 +1228,72 @@ export default function ProgressPage() {
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
-                  <th className="py-2.5 px-3">Description</th>
+                  <th className="py-2.5 px-3">Description of Hindrance</th>
                   <th className="py-2.5 pr-3">Location</th>
-                  <th className="py-2.5 pr-3">Activity</th>
+                  <th className="py-2.5 pr-3">Critical Activity affected</th>
+                  <th className="py-2.5 pr-3">Correspondence</th>
                   <th className="py-2.5 pr-3">Category</th>
-                  <th className="py-2.5 pr-3">Type</th>
-                  <th className="py-2.5 pr-3">Occurred</th>
-                  <th className="py-2.5 pr-3">Resolved</th>
-                  <th className="py-2.5 pr-3">Days</th>
-                  <th className="py-2.5 pr-3">Delay type</th>
+                  <th className="py-2.5 pr-3">Type of Hindrance</th>
+                  <th className="py-2.5 pr-3">Date of Occurrence</th>
+                  <th className="py-2.5 pr-3">Date Resolved</th>
+                  <th className="py-2.5 pr-3">No. of Days</th>
+                  <th className="py-2.5 pr-3">Baseline Start Date</th>
+                  <th className="py-2.5 pr-3">Schedule Impact</th>
+                  <th className="py-2.5 pr-3">Delay Type</th>
                   <th className="py-2.5 pr-3">Accountable</th>
-                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 pr-3">Status</th>
+                  <th className="py-2.5 pr-3">Description of Resolution</th>
+                  <th className="py-2.5 px-3">Remarks</th>
                 </tr>
               </thead>
               <tbody>
                 {data.hindrances.map((h: any) => (
                   <tr key={h.id} className="border-b border-line/70">
-                    <td className="py-2 px-3 max-w-[220px] truncate" title={h.description}>
-                      {h.description}
+                    <td className="py-2 px-3 max-w-[220px]">
+                      <RegisterSheetCell value={h.description} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { description: v })} />
                     </td>
-                    <td className="py-2 pr-3">{h.location || "—"}</td>
-                    <td className="py-2 pr-3">{h.activity || "—"}</td>
-                    <td className="py-2 pr-3">{h.category || "—"}</td>
-                    <td className="py-2 pr-3 max-w-[160px] truncate">{h.type || "—"}</td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.location} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { location: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.activity} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { activity: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.correspondence} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { correspondence: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.category} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { category: v })} />
+                    </td>
+                    <td className="py-2 pr-3 max-w-[160px]">
+                      <RegisterSheetCell value={h.type} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { type: v })} />
+                    </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(h.occurredAt)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(h.resolvedAt)}</td>
-                    <td className="py-2 pr-3">{h.daysImpacted}</td>
-                    <td className="py-2 pr-3">{h.delayType || "—"}</td>
-                    <td className="py-2 pr-3">{h.accountable || "—"}</td>
-                    <td className="py-2 px-3">
-                      <Badge tone={h.status === "Open" ? "danger" : "ok"}>{h.status}</Badge>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={h.daysImpacted} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { daysImpacted: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(h.baselineStart)}</td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={h.scheduleImpact} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { scheduleImpact: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.delayType} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { delayType: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.accountable} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { accountable: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={h.status} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { status: v })} />
+                    </td>
+                    <td className="py-2 pr-3 max-w-[180px]">
+                      <RegisterSheetCell value={h.resolutionDescription} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { resolutionDescription: v })} />
+                    </td>
+                    <td className="py-2 px-3 max-w-[160px]">
+                      <RegisterSheetCell value={h.remarks} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { remarks: v })} />
                     </td>
                   </tr>
                 ))}
-                {!data.hindrances?.length && <RegisterEmptyRow colSpan={11} />}
+                {!data.hindrances?.length && <RegisterEmptyRow colSpan={16} />}
               </tbody>
             </table>
             </div>
@@ -1138,10 +1304,13 @@ export default function ProgressPage() {
       {tab === "risk" && (
         <div className="register-tab-body progress-page__register">
           <ReferenceSheetToolbar
-            sheetLabel="Risk register"
+            sheetLabel="Risk Register - Dashboard"
             rowCount={data.risks?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setRiskAddOpen(true) : undefined}
+            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            generateLabel="Load SPDC template"
+            busy={registerSyncBusy}
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
@@ -1156,35 +1325,64 @@ export default function ProgressPage() {
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
                   <th className="py-2.5 px-3">#</th>
                   <th className="py-2.5 pr-3">Category</th>
-                  <th className="py-2.5 pr-3">O/T</th>
-                  <th className="py-2.5 pr-3">Name</th>
-                  <th className="py-2.5 pr-3">P</th>
-                  <th className="py-2.5 pr-3">C</th>
+                  <th className="py-2.5 pr-3">Opportunity / Threat</th>
+                  <th className="py-2.5 pr-3">Risk Name</th>
+                  <th className="py-2.5 pr-3 min-w-[12rem]">Detailed Description</th>
+                  <th className="py-2.5 pr-3">P (1-5)</th>
+                  <th className="py-2.5 pr-3">C (1-5)</th>
                   <th className="py-2.5 pr-3">Severity</th>
-                  <th className="py-2.5 pr-3">Cost</th>
-                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 pr-3">Prob %</th>
+                  <th className="py-2.5 pr-3">Cost Impact</th>
+                  <th className="py-2.5 pr-3">Weeks</th>
+                  <th className="py-2.5 pr-3">Urgency</th>
+                  <th className="py-2.5 pr-3">Response</th>
+                  <th className="py-2.5 pr-3">Risk Owner</th>
+                  <th className="py-2.5 pr-3">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {data.risks.map((r: any) => (
                   <tr key={r.id} className="border-b border-line/70">
-                    <td className="py-2 px-3 font-mono text-xs">{r.code || "—"}</td>
-                    <td className="py-2 pr-3">{r.category || "—"}</td>
-                    <td className="py-2 pr-3">{r.opportunityThreat}</td>
-                    <td className="py-2 pr-3 max-w-xs">
-                      <div className="font-medium">{r.name}</div>
-                      {r.description && <div className="text-xs text-steel-muted line-clamp-2 mt-0.5">{r.description}</div>}
+                    <td className="py-2 px-3 font-mono text-xs">
+                      <RegisterSheetCell value={r.code} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { code: v })} />
                     </td>
-                    <td className="py-2 pr-3">{r.probability}</td>
-                    <td className="py-2 pr-3">{r.consequence}</td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={r.category} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { category: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={r.opportunityThreat} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { opportunityThreat: v })} />
+                    </td>
+                    <td className="py-2 pr-3 max-w-xs font-medium">
+                      <RegisterSheetCell value={r.name} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { name: v })} />
+                    </td>
+                    <td className="py-2 pr-3 max-w-[14rem] text-xs text-steel-muted">
+                      <RegisterSheetCell value={r.description} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { description: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={r.probability} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { probability: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={r.consequence} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { consequence: Number(v) })} />
+                    </td>
                     <td className="py-2 pr-3 font-semibold">{r.severity}</td>
+                    <td className="py-2 pr-3">{Math.round((r.probabilityPct || 0) * 100)}%</td>
                     <td className="py-2 pr-3">{inr(r.costImpact)}</td>
+                    <td className="py-2 pr-3">{r.weeksLikely ?? "—"}</td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={r.urgency} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { urgency: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={r.responseCategory} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { responseCategory: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={r.riskOwner} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { riskOwner: v })} />
+                    </td>
                     <td className="py-2 px-3">
-                      <Badge tone={r.status === "Open" ? "danger" : "ok"}>{r.status}</Badge>
+                      <RegisterSheetCell value={r.status} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { status: v })} />
                     </td>
                   </tr>
                 ))}
-                {!data.risks?.length && <RegisterEmptyRow colSpan={9} />}
+                {!data.risks?.length && <RegisterEmptyRow colSpan={15} />}
               </tbody>
             </table>
             </div>
@@ -1199,6 +1397,9 @@ export default function ProgressPage() {
             rowCount={data.legalApprovals?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setLegalAddOpen(true) : undefined}
+            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            generateLabel="Load SPDC template"
+            busy={registerSyncBusy}
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-3 shrink-0">
@@ -1211,38 +1412,56 @@ export default function ProgressPage() {
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line">
-                  <th className="py-2.5 px-3">ID</th>
-                  <th className="py-2.5 pr-3">Category</th>
-                  <th className="py-2.5 pr-3">Authority</th>
-                  <th className="py-2.5 pr-3">Description</th>
-                  <th className="py-2.5 pr-3">Package</th>
-                  <th className="py-2.5 pr-3">Submitted</th>
-                  <th className="py-2.5 pr-3">Required</th>
-                  <th className="py-2.5 pr-3">Received</th>
-                  <th className="py-2.5 pr-3">Delay</th>
-                  <th className="py-2.5 pr-3">Responsible</th>
-                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Approval ID</th>
+                  <th className="py-2.5 pr-3">Approval Category</th>
+                  <th className="py-2.5 pr-3">Authority Name</th>
+                  <th className="py-2.5 pr-3">Approval Description</th>
+                  <th className="py-2.5 pr-3">Applicable Building / Package</th>
+                  <th className="py-2.5 pr-3">Submission Date</th>
+                  <th className="py-2.5 pr-3">Required By</th>
+                  <th className="py-2.5 pr-3">Approval Received Date</th>
+                  <th className="py-2.5 pr-3">Status</th>
+                  <th className="py-2.5 pr-3">Delay (Days)</th>
+                  <th className="py-2.5 pr-3">Responsible Party</th>
+                  <th className="py-2.5 px-3">Remarks</th>
                 </tr>
               </thead>
               <tbody>
                 {data.legalApprovals.map((l: any) => (
                   <tr key={l.id} className="border-b border-line/70">
-                    <td className="py-2 px-3 font-mono text-xs">{l.approvalId}</td>
-                    <td className="py-2 pr-3">{l.category || "—"}</td>
-                    <td className="py-2 pr-3">{l.authority || "—"}</td>
-                    <td className="py-2 pr-3 max-w-[240px]">{l.description}</td>
-                    <td className="py-2 pr-3">{l.packageName || "—"}</td>
+                    <td className="py-2 px-3 font-mono text-xs">
+                      <RegisterSheetCell value={l.approvalId} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { approvalId: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={l.category} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { category: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={l.authority} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { authority: v })} />
+                    </td>
+                    <td className="py-2 pr-3 max-w-[240px]">
+                      <RegisterSheetCell value={l.description} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { description: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={l.packageName} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { packageName: v })} />
+                    </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(l.submissionDate)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(l.requiredBy)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(l.receivedDate)}</td>
-                    <td className="py-2 pr-3">{l.delayDays}</td>
-                    <td className="py-2 pr-3">{l.responsible || "—"}</td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={l.status} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { status: v })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell type="number" value={l.delayDays} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { delayDays: Number(v) })} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <RegisterSheetCell value={l.responsible} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { responsible: v })} />
+                    </td>
                     <td className="py-2 px-3">
-                      <Badge tone={/approved/i.test(l.status) ? "ok" : /delay/i.test(l.status) ? "danger" : "warn"}>{l.status}</Badge>
+                      <RegisterSheetCell value={l.remarks} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { remarks: v })} />
                     </td>
                   </tr>
                 ))}
-                {!data.legalApprovals?.length && <RegisterEmptyRow colSpan={11} />}
+                {!data.legalApprovals?.length && <RegisterEmptyRow colSpan={12} />}
               </tbody>
             </table>
             </div>
