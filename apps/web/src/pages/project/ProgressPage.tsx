@@ -475,7 +475,11 @@ export default function ProgressPage() {
         />
       </div>
 
-      {id && <DailySheetWorkflow projectId={id} compact />}
+      {id && (
+        <div className="shrink-0">
+          <DailySheetWorkflow projectId={id} compact />
+        </div>
+      )}
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -675,7 +679,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "milestones" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Milestone register"
             rowCount={data.milestones?.length}
@@ -743,7 +747,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "planned" && (
-        <div className={`space-y-3 w-full flex-1 min-h-0 flex flex-col ${pva === "all" ? "overflow-auto" : "overflow-hidden"}`}>
+        <div className={`register-tab-body progress-page__register gap-3 ${pva === "all" ? "register-tab-body--stack" : ""}`}>
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
             rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
@@ -817,7 +821,7 @@ export default function ProgressPage() {
             }}
           />
           {(pva === "all" || pva === "cashflow" || pva === "manpower") && (
-          <div className="grid lg:grid-cols-2 gap-4 w-full">
+          <div className="grid lg:grid-cols-2 gap-4 w-full shrink-0">
             <BarChart
               title="Cashflow planned vs actual"
               items={data.charts?.cashflow || []}
@@ -834,7 +838,7 @@ export default function ProgressPage() {
           </div>
           )}
           {(pva === "all" || pva === "cashflow") && (
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Project cashflow · Planned Vs Actual
             </div>
@@ -866,7 +870,7 @@ export default function ProgressPage() {
           </Card>
           )}
           {(pva === "all" || pva === "manpower") && (
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-sm min-w-[32rem]">
@@ -897,7 +901,7 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "activity") && (
           <>
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
               <span>
                 BOQ / monitoring register ({(data.boqLines || []).length} lines from SPDC Budget)
@@ -953,7 +957,7 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
               Weekly activity register ({(data.activityLines || []).length} lines) — daily qty feeds DPR
             </div>
@@ -1069,7 +1073,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "hindrance" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Hindrance Register Dashboard"
             rowCount={data.hindrances?.length}
@@ -1132,7 +1136,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "risk" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Risk register"
             rowCount={data.risks?.length}
@@ -1189,7 +1193,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "legal" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Legal Approval Tracker"
             rowCount={data.legalApprovals?.length}
@@ -1315,7 +1319,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "msproject" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="MS Project task register"
             rowCount={msProject?.tasks?.length}

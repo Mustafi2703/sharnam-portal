@@ -550,7 +550,11 @@ export default function CostPage() {
       />
       </div>
 
-      {id && <DailySheetWorkflow projectId={id} compact />}
+      {id && (
+        <div className="shrink-0">
+          <DailySheetWorkflow projectId={id} compact />
+        </div>
+      )}
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -795,7 +799,7 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           {canEdit && !siteBoqMode && (
             <CostSheetFlowBar
               active="monitoring"
@@ -846,7 +850,7 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           <CostSheetFlowBar active="mb" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
@@ -899,7 +903,7 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="register-tab-body flex flex-col flex-1 min-h-0 gap-2">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           <CostSheetFlowBar active="bbs" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
@@ -959,7 +963,7 @@ export default function CostPage() {
       )}
 
       {tab === "budget" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Budget WBS · upload · totals</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -1019,7 +1023,7 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}
@@ -1187,7 +1191,7 @@ export default function CostPage() {
       )}
 
       {tab === "bills" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           <Card className="!p-4 border-brand/30 bg-brand-soft/30 shrink-0">
             <h3 className="font-semibold text-sm">Commercial COP lives in Finance</h3>
             <p className="text-xs text-steel-muted mt-1">
@@ -1322,7 +1326,7 @@ export default function CostPage() {
       )}
 
       {tab === "boq" && (
-        <div className="register-tab-body">
+        <div className="register-tab-body flex flex-col flex-1 min-h-0 min-w-0 gap-2">
           <p className="text-xs text-steel-muted shrink-0">
             Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
           </p>

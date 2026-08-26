@@ -35,7 +35,7 @@ export function CostRegisterShell({ title, subtitle, sheetKind, toolbar, childre
         Scroll ↔ ↕ for full SPDC sheet · all columns shown · white cells editable · saves on blur
       </div>
       <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line">
-        <RegisterScrollArea tall className="flex-1 min-h-0">
+        <RegisterScrollArea tall className="flex-1 min-h-0 min-w-0">
           {children}
         </RegisterScrollArea>
       </div>

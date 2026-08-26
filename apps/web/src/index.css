@@ -390,11 +390,7 @@ body.is-auth-route #root {
   flex-direction: column;
   gap: var(--ui-gap);
   padding: 1rem 1.25rem 2rem;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
+  overflow: hidden;
 }
 .tool-shell > .tool-main {
   min-height: 0;
@@ -520,6 +516,7 @@ body.is-auth-route #root {
 }
 .sheet-register__scroll {
   overflow: auto;
+  min-width: 0;
   max-height: min(72vh, 880px);
 }
 .sheet-register__table {
@@ -676,6 +673,7 @@ body.is-auth-route #root {
 .sheet-register__scroll.register-sheet-viewport {
   flex: 1 1 0%;
   width: 100%;
+  min-width: 0 !important;
   min-height: 0 !important;
   overflow: auto !important;
   overscroll-behavior: contain;
@@ -778,9 +776,9 @@ body.is-auth-route #root {
 .tool-main:has(.spdc-register-page:has(.cube-page__register)) {
   overflow: hidden !important;
 }
-.tool-main:has(.qap-page) > .qap-page,
-.tool-main:has(.spdc-register-page:has(.cube-page__register)) > .spdc-register-page {
-  flex: 1 1 auto;
+.tool-main__outlet > .qap-page,
+.tool-main__outlet > .spdc-register-page:has(.cube-page__register) {
+  flex: 1 1 0%;
   min-height: 0;
   overflow: hidden;
   display: flex;
@@ -788,7 +786,7 @@ body.is-auth-route #root {
 }
 .qap-page,
 .spdc-register-page:has(.cube-page__register) {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
   overflow: hidden;
 }
@@ -858,29 +856,15 @@ body.is-auth-route #root {
 .tool-main:has(.qap-page),
 .tool-main:has(.cost-page--register),
 .tool-main:has(.progress-page--register),
-.tool-main:has(.spdc-register-page) {
+.tool-main:has(.spdc-register-page),
+.tool-main:has(.maker-shell) {
   display: flex;
   flex-direction: column;
   flex: 1 1 0%;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: hidden !important;
-  padding: 0.65rem 1rem 0.35rem;
-}
-.tool-main:has(.page-stack--register) > .page-stack--register,
-.tool-main:has(.page-stack--register) > .qap-page,
-.tool-main:has(.page-stack--register) > .spdc-register-page,
-.tool-main:has(.cost-page--register) > .cost-page--register,
-.tool-main:has(.progress-page--register) > .progress-page--register,
-.tool-main:has(.spdc-register-page) > .spdc-register-page,
-.tool-main:has(.qap-page) > .qap-page {
-  flex: 1 1 0%;
-  min-height: 0;
-  height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
+  overflow: hidden !important;
+  padding: 0;
 }
 .qap-page__register,
 .cube-page__register {
@@ -911,25 +895,18 @@ body.is-auth-route #root {
   .tool-main:has(.spdc-register-page),
   .tool-main:has(.cost-page--register),
   .tool-main:has(.progress-page--register),
-  .tool-main:has(.qap-page) {
+  .tool-main:has(.qap-page),
+  .tool-main:has(.maker-shell) {
     overflow: hidden !important;
-  }
-  .tool-main:has(.page-stack--register) > *,
-  .tool-main:has(.spdc-register-page) > .spdc-register-page,
-  .tool-main:has(.cost-page--register) > .cost-page--register,
-  .tool-main:has(.progress-page--register) > .progress-page--register,
-  .tool-main:has(.qap-page) > .qap-page {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
   }
   .page-stack--register .register-page-fill,
   .page-stack--register .cost-page__register,
   .page-stack--register .progress-page__register,
   .qap-page__register,
   .cube-page__register {
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-height: 0 !important;
+    min-width: 0;
   }
 }
 @media (min-width: 1280px) {
@@ -937,7 +914,8 @@ body.is-auth-route #root {
   .tool-main:has(.qap-page),
   .tool-main:has(.spdc-register-page),
   .tool-main:has(.cost-page--register),
-  .tool-main:has(.progress-page--register) {
+  .tool-main:has(.progress-page--register),
+  .tool-main:has(.maker-shell) {
     overflow: hidden;
   }
   .page-stack--register {
@@ -947,22 +925,26 @@ body.is-auth-route #root {
   .register-page-fill,
   .qap-page__register,
   .cube-page__register,
-  .cost-page__register {
-    flex: 1 1 auto;
+  .cost-page__register,
+  .progress-page__register {
+    flex: 1 1 0%;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
   }
   .register-panel-fill.spdc-register-panel,
   .spdc-register-panel.register-editor-panel,
   .page-stack--register .register-table-panel.spdc-register-panel {
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
   }
   .register-panel-fill .sheet-register,
   .spdc-register-panel .sheet-register.register-sheet-shell {
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
   }
 }
@@ -1005,8 +987,9 @@ body.is-auth-route #root {
 .page-stack--register .mb-entry-panel,
 .page-stack--register .bbs-entry-panel,
 .page-stack--register .budget-wbs-panel {
-  flex: 1 1 auto;
-  min-height: var(--register-sheet-min);
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
   max-height: none;
   display: flex;
   flex-direction: column;
@@ -1089,6 +1072,7 @@ body.is-auth-route #root {
 .page-stack--register .maker-table-wrap {
   flex: 1 1 0%;
   min-height: 0 !important;
+  min-width: 0 !important;
   overflow: auto !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -1113,8 +1097,9 @@ body.is-auth-route #root {
   flex-shrink: 0;
 }
 .page-stack--register .register-tab-body {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
+  height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1131,7 +1116,8 @@ body.is-auth-route #root {
 
 /* ═══ Middle column is the only app scroll region ═══
    Dashboards: outlet scrolls.
-   Sheet pages: outlet is locked; the table body (.sheet-register__scroll) scrolls. */
+   Sheet pages: outlet is locked; the table body (.sheet-register__scroll) scrolls.
+   Pages render inside .tool-main__outlet — never as direct children of .tool-main. */
 .tool-shell > .tool-main > .tool-main__outlet,
 .tool-main__outlet {
   display: flex;
@@ -1150,16 +1136,23 @@ body.is-auth-route #root {
 
 .tool-main__outlet:has(.page-stack--register),
 .tool-main__outlet:has(.qap-page),
-.tool-main__outlet:has(.spdc-register-page) {
+.tool-main__outlet:has(.spdc-register-page),
+.tool-main__outlet:has(.cost-page--register),
+.tool-main__outlet:has(.progress-page--register),
+.tool-main__outlet:has(.maker-shell) {
   overflow: hidden !important;
   padding-bottom: 0.5rem;
 }
 
 .tool-main__outlet > .page-stack--register,
 .tool-main__outlet > .qap-page,
-.tool-main__outlet > .spdc-register-page {
+.tool-main__outlet > .spdc-register-page,
+.tool-main__outlet > .cost-page--register,
+.tool-main__outlet > .progress-page--register,
+.tool-main__outlet > .maker-shell {
   flex: 1 1 0% !important;
   min-height: 0 !important;
+  min-width: 0 !important;
   height: 0 !important;
   max-height: none !important;
   overflow: hidden !important;
@@ -1175,9 +1168,16 @@ body.is-auth-route #root {
 .tool-main__outlet .register-tab-body,
 .tool-main__outlet .page-stack--register .spdc-register-panel,
 .tool-main__outlet .page-stack--register .register-sheet-shell,
+.tool-main__outlet .page-stack--register .register-table-panel,
+.tool-main__outlet .page-stack--register .sheet-register,
+.tool-main__outlet .page-stack--register .boq-editor,
+.tool-main__outlet .page-stack--register .mb-entry-panel,
+.tool-main__outlet .page-stack--register .bbs-entry-panel,
+.tool-main__outlet .page-stack--register .budget-wbs-panel,
 .tool-main__outlet .maker-shell .spdc-register-panel {
   flex: 1 1 0% !important;
   min-height: 0 !important;
+  min-width: 0 !important;
   height: 0 !important;
   overflow: hidden !important;
   display: flex !important;
@@ -1186,6 +1186,7 @@ body.is-auth-route #root {
 
 .tool-main__outlet .page-stack--register .sheet-register__scroll,
 .tool-main__outlet .page-stack--register .register-sheet-viewport,
+.tool-main__outlet .page-stack--register .register-scroll-area,
 .tool-main__outlet .page-stack--register .maker-table-wrap,
 .tool-main__outlet .maker-shell.page-stack--register .sheet-register__scroll,
 .tool-main__outlet .qap-page .register-scroll-area,
@@ -1194,6 +1195,7 @@ body.is-auth-route #root {
 .page-stack--register .register-sheet-shell > .register-scroll-area {
   flex: 1 1 0% !important;
   min-height: 0 !important;
+  min-width: 0 !important;
   height: 0 !important;
   max-height: none !important;
   overflow: auto !important;
@@ -1201,6 +1203,26 @@ body.is-auth-route #root {
   overflow-y: auto !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Stacked Progress "all" — tab body scrolls; each sheet keeps a bounded inner scroller */
+.tool-main__outlet .register-tab-body--stack {
+  overflow: auto !important;
+}
+.tool-main__outlet .register-tab-body--stack .sheet-register,
+.tool-main__outlet .register-tab-body--stack .register-table-panel,
+.tool-main__outlet .register-tab-body--stack .spdc-register-panel {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 14rem !important;
+  max-height: min(42vh, 24rem);
+}
+.tool-main__outlet .register-tab-body--stack .sheet-register__scroll,
+.tool-main__outlet .register-tab-body--stack .register-sheet-viewport {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 12rem !important;
+  max-height: min(38vh, 22rem) !important;
 }
 
 .qap-page .register-editor-pro td,
