@@ -485,13 +485,7 @@ export default function CostPage() {
         : "Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance.";
 
   return (
-    <div
-      className={`w-full min-w-0 ${
-        isRegisterView
-          ? "cost-page cost-page--register page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
-          : "space-y-5"
-      }`}
-    >
+    <div className="cost-page w-full min-w-0 space-y-5 pb-4">
       <div className="shrink-0">
       <PageHero
         title="Cost"
@@ -797,7 +791,7 @@ export default function CostPage() {
       )}
 
       {tab === "monitoring" && (
-        <div className="register-tab-body register-tab-body--sheet flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-3">
           {canEdit && !siteBoqMode && (
             <CostSheetFlowBar
               active="monitoring"
@@ -848,7 +842,7 @@ export default function CostPage() {
       )}
 
       {tab === "mb" && (
-        <div className="register-tab-body register-tab-body--sheet flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-3">
           <CostSheetFlowBar active="mb" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`MB — ${pkgFilter}`}
@@ -901,7 +895,7 @@ export default function CostPage() {
       )}
 
       {tab === "bbs" && (
-        <div className="register-tab-body register-tab-body--sheet flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-3">
           <CostSheetFlowBar active="bbs" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}
@@ -963,7 +957,7 @@ export default function CostPage() {
       )}
 
       {tab === "budget" && (
-        <div className="register-tab-body register-tab-body--sheet flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-3">
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Budget WBS · upload · totals</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -1023,7 +1017,7 @@ export default function CostPage() {
       )}
 
       {tab === "cashflow" && (
-        <div className="register-tab-body register-tab-body--stack flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-4">
           <ReferenceSheetToolbar
             sheetLabel="Cashflow Dashboard"
             rowCount={cashflowRows.length}
@@ -1172,7 +1166,7 @@ export default function CostPage() {
       )}
 
       {tab === "rates" && (
-        <div className="register-tab-body register-tab-body--sheet flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-3">
           <ReferenceSheetToolbar
             sheetLabel="Rate difference register"
             rowCount={summary.rateDiffs?.length}
@@ -1199,7 +1193,7 @@ export default function CostPage() {
       )}
 
       {tab === "bills" && (
-        <div className="register-tab-body register-tab-body--stack flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-4">
           <Card className="!p-4 border-brand/30 bg-brand-soft/30 shrink-0">
             <h3 className="font-semibold text-sm">Commercial COP lives in Finance</h3>
             <p className="text-xs text-steel-muted mt-1">
@@ -1334,7 +1328,7 @@ export default function CostPage() {
       )}
 
       {tab === "boq" && (
-        <div className="register-tab-body register-tab-body--sheet flex flex-col flex-1 min-h-0 min-w-0 gap-2">
+        <div className="cost-sheet-block space-y-3">
           <p className="text-xs text-steel-muted shrink-0">
             Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
           </p>

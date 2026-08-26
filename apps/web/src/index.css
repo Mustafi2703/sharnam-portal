@@ -1054,14 +1054,20 @@ body.is-auth-route #root {
   overflow: auto !important;
 }
 
-/* Progress module tabs — same outlet scroll as Overview; each sheet gets a tall scroll body */
-.progress-sheet-block .sheet-register {
+/* Module sheet tabs — outlet scroll like Overview; each sheet gets a tall scroll body */
+.progress-sheet-block .sheet-register,
+.cost-sheet-block .sheet-register {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .progress-sheet-block .sheet-register__scroll,
-.progress-sheet-block .register-sheet-viewport {
+.progress-sheet-block .register-sheet-viewport,
+.cost-sheet-block .sheet-register__scroll,
+.cost-sheet-block .register-sheet-viewport,
+.cost-sheet-block .register-scroll-area,
+.cost-sheet-block .cost-page__register .register-scroll-area,
+.cost-sheet-block .cost-page__register .register-sheet-viewport {
   flex: none;
   width: 100%;
   min-width: 0;
