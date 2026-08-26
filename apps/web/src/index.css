@@ -157,7 +157,6 @@ body.is-auth-route #root {
 .register-sheet-viewport,
 .progress-sheet-block .sheet-register__scroll,
 .progress-sheet-block .register-sheet-viewport,
-.cost-sheet-block .sheet-register__scroll,
 .cost-sheet-block .register-scroll-area,
 .cost-sheet-block .register-sheet-viewport,
 .register-tab-body--stack,
@@ -189,6 +188,8 @@ body.is-auth-route #root {
 .cost-sheet-block .sheet-register__scroll::-webkit-scrollbar,
 .cost-sheet-block .register-scroll-area::-webkit-scrollbar,
 .cost-sheet-block .register-sheet-viewport::-webkit-scrollbar,
+.cost-sheet-block .cost-register-shell .register-scroll-area::-webkit-scrollbar,
+.cost-sheet-block .register-sheet-shell > .register-scroll-area::-webkit-scrollbar,
 .register-tab-body--stack::-webkit-scrollbar,
 .maker-table-wrap::-webkit-scrollbar,
 .page-stack--register .sheet-register__scroll::-webkit-scrollbar,
@@ -217,6 +218,8 @@ body.is-auth-route #root {
 .cost-sheet-block .sheet-register__scroll::-webkit-scrollbar-track,
 .cost-sheet-block .register-scroll-area::-webkit-scrollbar-track,
 .cost-sheet-block .register-sheet-viewport::-webkit-scrollbar-track,
+.cost-sheet-block .cost-register-shell .register-scroll-area::-webkit-scrollbar-track,
+.cost-sheet-block .register-sheet-shell > .register-scroll-area::-webkit-scrollbar-track,
 .register-tab-body--stack::-webkit-scrollbar-track,
 .maker-table-wrap::-webkit-scrollbar-track,
 .page-stack--register .sheet-register__scroll::-webkit-scrollbar-track,
@@ -244,6 +247,8 @@ body.is-auth-route #root {
 .cost-sheet-block .sheet-register__scroll::-webkit-scrollbar-thumb,
 .cost-sheet-block .register-scroll-area::-webkit-scrollbar-thumb,
 .cost-sheet-block .register-sheet-viewport::-webkit-scrollbar-thumb,
+.cost-sheet-block .cost-register-shell .register-scroll-area::-webkit-scrollbar-thumb,
+.cost-sheet-block .register-sheet-shell > .register-scroll-area::-webkit-scrollbar-thumb,
 .register-tab-body--stack::-webkit-scrollbar-thumb,
 .maker-table-wrap::-webkit-scrollbar-thumb,
 .page-stack--register .sheet-register__scroll::-webkit-scrollbar-thumb,
@@ -273,6 +278,8 @@ body.is-auth-route #root {
 .cost-sheet-block .sheet-register__scroll::-webkit-scrollbar-thumb:hover,
 .cost-sheet-block .register-scroll-area::-webkit-scrollbar-thumb:hover,
 .cost-sheet-block .register-sheet-viewport::-webkit-scrollbar-thumb:hover,
+.cost-sheet-block .cost-register-shell .register-scroll-area::-webkit-scrollbar-thumb:hover,
+.cost-sheet-block .register-sheet-shell > .register-scroll-area::-webkit-scrollbar-thumb:hover,
 .register-tab-body--stack::-webkit-scrollbar-thumb:hover,
 .maker-table-wrap::-webkit-scrollbar-thumb:hover,
 .page-stack--register .sheet-register__scroll::-webkit-scrollbar-thumb:hover,
@@ -1231,16 +1238,41 @@ body.is-auth-route #root {
 .cost-sheet-block .sheet-register__scroll,
 .cost-sheet-block .register-sheet-viewport,
 .cost-sheet-block .register-scroll-area,
+.cost-sheet-block .register-sheet-shell > .register-scroll-area,
 .cost-sheet-block .cost-page__register .register-scroll-area,
-.cost-sheet-block .cost-page__register .register-sheet-viewport {
-  flex: none;
+.cost-sheet-block .cost-page__register .register-sheet-viewport,
+.cost-sheet-block .cost-register-shell .register-scroll-area,
+.cost-sheet-block .cost-register-shell .register-sheet-viewport,
+.cost-sheet-block .cost-register-shell .sheet-register__scroll {
+  flex: none !important;
   width: 100%;
   min-width: 0;
-  min-height: 18rem;
-  max-height: min(calc(100dvh - 11rem), 720px);
+  height: auto !important;
+  min-height: 18rem !important;
+  max-height: min(calc(100dvh - 11rem), 720px) !important;
   overflow: scroll !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+/* Cost register shells (BOQ / MB / BBS) — bounded panel so inner scroll + scrollbar shows */
+.cost-sheet-block .cost-page__register,
+.cost-sheet-block .cost-register-shell,
+.cost-sheet-block .cost-page__register > .boq-editor,
+.cost-sheet-block .cost-page__register > .mb-entry-panel,
+.cost-sheet-block .cost-page__register > .bbs-entry-panel,
+.cost-sheet-block .cost-page__register > .budget-wbs-panel,
+.cost-sheet-block .cost-page__register > div.flex.flex-col {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.cost-sheet-block .cost-register-shell .register-sheet-shell,
+.cost-sheet-block .cost-register-shell .sheet-register.register-sheet-shell {
+  flex: none !important;
+  height: auto !important;
+  overflow: visible !important;
 }
 
 /* Universal register fill — Quality · Safety · Cost · Progress · Audit */

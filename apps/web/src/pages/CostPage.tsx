@@ -34,7 +34,7 @@ function SheetTable({
   stickyFirst?: boolean;
 }) {
   return (
-    <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden w-full min-w-0">
+    <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col w-full min-w-0">
       {title && (
         <div className="sheet-register__head shrink-0">
           <span>{title}</span>
@@ -823,9 +823,9 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("boq")}
             message={msg || undefined}
           />
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
             <BoqMonitoringEditor
-              className="flex flex-col flex-1 min-h-0 overflow-hidden min-w-0"
+              className="min-w-0"
               projectId={id!}
               token={token}
               rows={monRows}
@@ -880,7 +880,7 @@ export default function CostPage() {
               <Input placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
             </form>
           </RegisterEntryModal>
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
             <MbEntryTable
               projectId={id!}
               token={token}
@@ -941,7 +941,7 @@ export default function CostPage() {
               />
             </div>
           )}
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
             <BbsEntryTable
               projectId={id!}
               token={token}
@@ -1004,7 +1004,7 @@ export default function CostPage() {
           </div>
             </div>
           </details>
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <BudgetWbsRegister
             projectId={id!}
             token={token}
@@ -1149,7 +1149,7 @@ export default function CostPage() {
           </div>
             </div>
           </details>
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <SheetTable
             title={`Cashflow · ${cfView}`}
             headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}
@@ -1173,7 +1173,7 @@ export default function CostPage() {
             onDownloadCsv={() => downloadSheet("rates")}
             message={msg || undefined}
           />
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
             <SheetTable
               title="Rate difference (Steel / Cement / Tiles)"
               headers={["Material", "Description", "Vendor", "Qty", "Basic", "Purchase", "Excess", "Saving"]}
@@ -1309,7 +1309,7 @@ export default function CostPage() {
               </form>
             </Card>
           )}
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+          <div className="cost-page__register min-w-0">
           <SheetTable
             title="COP / bill register"
             headers={["Bill no", "Vendor", "COP", "Amount", "GST", "Status", "Date"]}
@@ -1332,15 +1332,15 @@ export default function CostPage() {
           <p className="text-xs text-steel-muted shrink-0">
             Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
           </p>
-          <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
-            <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden w-full min-w-0">
+          <div className="cost-page__register min-w-0">
+            <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col w-full min-w-0">
               <div className="sheet-register__head shrink-0">
                 <span>BOQ import batches</span>
                 <span className="text-steel-muted font-normal normal-case tracking-normal">
                   {summary.boqBatches?.length ?? 0} batches
                 </span>
               </div>
-              <div className="sheet-register__scroll register-sheet-viewport register-scroll-area flex-1 min-h-0 overflow-auto p-4">
+              <div className="sheet-register__scroll register-sheet-viewport register-scroll-area scrollbars-visible flex-1 min-h-0 p-4">
                 <ul className="text-sm space-y-2">
                   {summary.boqBatches.map((b: any) => (
                     <li key={b.id} className="border border-line px-3 py-2 rounded-sm bg-paper">
