@@ -27,13 +27,17 @@ async function loadSeedModule(): Promise<{
   seedCostFromBudgetWorkbook: (prisma: typeof import("../prisma.js").prisma, projectId: string, excelRoot: string) => Promise<void>;
 }> {
   const candidates = [
-    path.join(process.cwd(), "seed", "costFromBudget.ts"),
     path.join(process.cwd(), "seed", "costFromBudget.js"),
-    path.join(process.cwd(), "..", "..", "seed", "costFromBudget.ts"),
+    path.join(process.cwd(), "seed", "costFromBudget.ts"),
     path.join(process.cwd(), "..", "..", "seed", "costFromBudget.js"),
+    path.join(process.cwd(), "..", "..", "seed", "costFromBudget.ts"),
   ];
   for (const p of candidates) {
     if (!fs.existsSync(p)) continue;
+    if (p.endsWith(".ts")) {
+      const { register } = await import("tsx/esm/api");
+      register();
+    }
     return import(pathToFileURL(p).href) as any;
   }
   throw new Error("seed/costFromBudget.ts not found");
