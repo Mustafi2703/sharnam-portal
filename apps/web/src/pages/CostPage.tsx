@@ -13,6 +13,8 @@ import { MbEntryTable } from "../components/MbEntryTable";
 import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
+import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
+import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
 
@@ -141,9 +143,22 @@ export default function CostPage() {
     height: "",
     unit: "Cmt",
   });
+  const [bbsForm, setBbsForm] = useState({
+    packageName: "Dormitory BBS",
+    barMark: "",
+    location: "",
+    diameterMm: "",
+    nos: "1",
+    shape: "",
+  });
+  const mbFormRef = useRef<HTMLFormElement>(null);
+  const bbsFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (pkgFilter !== "All") setMbForm((f) => ({ ...f, packageName: pkgFilter }));
+    if (pkgFilter !== "All") {
+      setMbForm((f) => ({ ...f, packageName: pkgFilter }));
+      setBbsForm((f) => ({ ...f, packageName: pkgFilter }));
+    }
   }, [pkgFilter]);
   const canEdit = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
   const canSiteEdit = user?.role === "site_employee";
@@ -418,6 +433,24 @@ export default function CostPage() {
 
   if (!summary) return <div className="text-steel-muted py-10">{syncing ? "Loading SPDC cost sheets…" : "Loading cost sheets…"}</div>;
 
+  async function addBbs(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    await api(`/api/cost/${id}/bbs`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({
+        ...bbsForm,
+        diameterMm: Number(bbsForm.diameterMm || 0),
+        nos: Number(bbsForm.nos || 0),
+      }),
+    });
+    setMsg("BBS line added");
+    setBbsAddOpen(false);
+    setBbsForm((f) => ({ ...f, barMark: "", location: "", diameterMm: "", nos: "1", shape: "" }));
+    await load();
+  }
+
   async function addMb(e: FormEvent) {
     e.preventDefault();
     await api(`/api/cost/${id}/mb`, {
@@ -433,6 +466,7 @@ export default function CostPage() {
       }),
     });
     setMsg("MB line added");
+    setMbAddOpen(false);
     await load();
   }
 
@@ -515,6 +549,8 @@ export default function CostPage() {
         }
       />
       </div>
+
+      {id && <DailySheetWorkflow projectId={id} compact />}
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -817,35 +853,37 @@ export default function CostPage() {
             rowCount={mbRows.length}
             canEdit={canEdit || canSiteEdit}
             onUpload={canEdit ? (f) => importCostSheet("mb", f) : undefined}
-            onAddRow={canEdit ? () => setMbAddOpen((v) => !v) : undefined}
+            onAddRow={canEdit || canSiteEdit ? () => setMbAddOpen(true) : undefined}
             onDownloadCsv={() => downloadSheet("mb")}
             message={msg || undefined}
           />
-          {canEdit && mbAddOpen && (
-            <Card className="!p-3 shrink-0">
-              <h3 className="font-semibold text-sm mb-3">Add MB line</h3>
-              <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMb}>
-                <Select value={mbForm.packageName} onChange={(e) => setMbForm({ ...mbForm, packageName: e.target.value })}>
-                  {(summary.packages || ["Dormitory Civil", "Electric", "Plumbing", "UGWT"]).map((p: string) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </Select>
-                <Input placeholder="Sr" value={mbForm.srNo} onChange={(e) => setMbForm({ ...mbForm, srNo: e.target.value })} />
-                <Input
-                  className="sm:col-span-2"
-                  placeholder="Description"
-                  value={mbForm.description}
-                  onChange={(e) => setMbForm({ ...mbForm, description: e.target.value })}
-                  required
-                />
-                <Input placeholder="Nos" value={mbForm.nos1} onChange={(e) => setMbForm({ ...mbForm, nos1: e.target.value })} />
-                <Input placeholder="Length" value={mbForm.length} onChange={(e) => setMbForm({ ...mbForm, length: e.target.value })} />
-                <Input placeholder="Width" value={mbForm.width} onChange={(e) => setMbForm({ ...mbForm, width: e.target.value })} />
-                <Input placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
-                <Button type="submit">Add to MB</Button>
-              </form>
-            </Card>
-          )}
+          <RegisterEntryModal
+            open={mbAddOpen && (canEdit || canSiteEdit)}
+            title="Add MB line"
+            onClose={() => setMbAddOpen(false)}
+            onSave={() => mbFormRef.current?.requestSubmit()}
+            saveLabel="Add to MB"
+          >
+            <form ref={mbFormRef} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMb}>
+              <Select value={mbForm.packageName} onChange={(e) => setMbForm({ ...mbForm, packageName: e.target.value })}>
+                {(summary.packages || ["Dormitory Civil", "Electric", "Plumbing", "UGWT"]).map((p: string) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </Select>
+              <Input placeholder="Sr" value={mbForm.srNo} onChange={(e) => setMbForm({ ...mbForm, srNo: e.target.value })} />
+              <Input
+                className="sm:col-span-2"
+                placeholder="Description"
+                value={mbForm.description}
+                onChange={(e) => setMbForm({ ...mbForm, description: e.target.value })}
+                required
+              />
+              <Input placeholder="Nos" value={mbForm.nos1} onChange={(e) => setMbForm({ ...mbForm, nos1: e.target.value })} />
+              <Input placeholder="Length" value={mbForm.length} onChange={(e) => setMbForm({ ...mbForm, length: e.target.value })} />
+              <Input placeholder="Width" value={mbForm.width} onChange={(e) => setMbForm({ ...mbForm, width: e.target.value })} />
+              <Input placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
+            </form>
+          </RegisterEntryModal>
           <div className="cost-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
             <MbEntryTable
               projectId={id!}
@@ -868,10 +906,30 @@ export default function CostPage() {
             rowCount={bbsRows.length}
             canEdit={canEdit || canSiteEdit}
             onUpload={canEdit ? (f) => importCostSheet("bbs", f) : undefined}
-            onAddRow={canEdit ? () => setBbsAddOpen((v) => !v) : undefined}
+            onAddRow={canEdit || canSiteEdit ? () => setBbsAddOpen(true) : undefined}
             onDownloadCsv={() => downloadSheet("bbs")}
             message={msg || undefined}
           />
+          <RegisterEntryModal
+            open={bbsAddOpen && (canEdit || canSiteEdit)}
+            title="Add BBS line"
+            onClose={() => setBbsAddOpen(false)}
+            onSave={() => bbsFormRef.current?.requestSubmit()}
+            saveLabel="Add to BBS"
+          >
+            <form ref={bbsFormRef} className="grid sm:grid-cols-2 gap-3" onSubmit={addBbs}>
+              <Select value={bbsForm.packageName} onChange={(e) => setBbsForm({ ...bbsForm, packageName: e.target.value })}>
+                {(bbsPackages.length ? bbsPackages : summary.packages || ["Dormitory BBS"]).map((p: string) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </Select>
+              <Input placeholder="Bar mark" value={bbsForm.barMark} onChange={(e) => setBbsForm({ ...bbsForm, barMark: e.target.value })} />
+              <Input placeholder="Location" value={bbsForm.location} onChange={(e) => setBbsForm({ ...bbsForm, location: e.target.value })} />
+              <Input placeholder="Dia (mm)" value={bbsForm.diameterMm} onChange={(e) => setBbsForm({ ...bbsForm, diameterMm: e.target.value })} />
+              <Input placeholder="Nos" value={bbsForm.nos} onChange={(e) => setBbsForm({ ...bbsForm, nos: e.target.value })} />
+              <Input placeholder="Shape code" value={bbsForm.shape} onChange={(e) => setBbsForm({ ...bbsForm, shape: e.target.value })} />
+            </form>
+          </RegisterEntryModal>
           {(canEdit || canSiteEdit) && (
             <CostSheetUploadPanel
               projectId={id!}

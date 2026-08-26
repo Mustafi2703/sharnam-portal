@@ -389,6 +389,18 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   });
   await mockOneDrive.ensureProjectTree(project.id);
   await audit("project.create", { userId: req.user!.id, entity: "Project", entityId: project.id });
+  try {
+    const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
+    const out = await provisionProjectSheetPack(project.id, req.user!.id);
+    await audit("project.provision_sheets", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: project.id,
+      meta: { auto: true, steps: out.steps.map((s) => ({ key: s.key, ok: s.ok, skipped: s.skipped })) },
+    });
+  } catch (err) {
+    console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
+  }
   res.status(201).json(project);
 });
 
@@ -464,6 +476,29 @@ projectsRouter.get("/:id", async (req, res) => {
   });
   if (!project) return res.status(404).json({ error: "Not found" });
   res.json(project);
+});
+
+projectsRouter.get("/:id/sheet-pack", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { verifyPackCompleteness } = await import("../services/packCompleteness.js");
+  const report = await verifyPackCompleteness(project.id);
+  res.json(report);
+});
+
+projectsRouter.post("/:id/provision-sheets", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const force = String(req.body?.force || req.query.force || "") === "1" || req.body?.force === true;
+  const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
+  const out = await provisionProjectSheetPack(project.id, req.user!.id, { force });
+  await audit("project.provision_sheets", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { force, steps: out.steps.map((s) => ({ key: s.key, ok: s.ok, skipped: s.skipped })) },
+  });
+  res.json(out);
 });
 
 projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {

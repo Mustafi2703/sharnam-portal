@@ -8,6 +8,7 @@ import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { EvidencePanel } from "../components/EvidencePanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
+import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -711,10 +712,11 @@ export default function DprMakerPage() {
       />
 
       {snap.autoFillSources?.length ? (
-        <p className="text-sm text-muted mx-1 px-3 py-2 rounded-lg bg-paper border border-line">
-          Auto-filled from: {snap.autoFillSources.join(" · ")}. Update BOQ, MB, BBS, Planned vs Actual, Safety, and Quality in their modules — then re-open this date to refresh.
+        <p className="text-sm text-steel-muted mx-1 px-3 py-2 rounded-lg bg-paper border border-line">
+          Auto-filled from: {snap.autoFillSources.join(" · ")}. Update Cost, Quality, Safety, and Progress daily — then re-open this date to refresh.
         </p>
       ) : null}
+      {projectId && <DailySheetWorkflow projectId={projectId} compact />}
 
       <ReferenceSheetToolbar
         sheetLabel={`SPDC_DPR_${discipline}_DASHBOARD`}

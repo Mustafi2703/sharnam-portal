@@ -14,6 +14,7 @@ import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
+import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 
 /** Excel register sheets — fill viewport; dashboard / QI workflow excluded */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
@@ -60,6 +61,7 @@ export default function InspectionsPage() {
   const [ncrModalBusy, setNcrModalBusy] = useState(false);
   const [ncrAddOpen, setNcrAddOpen] = useState(false);
   const [ncrAddBusy, setNcrAddBusy] = useState(false);
+  const [pack, setPack] = useState<any>(null);
   const ncrAddFormRef = useRef<HTMLFormElement>(null);
   const [cubeAddOpen, setCubeAddOpen] = useState(false);
   const [cubeSharePointUrl, setCubeSharePointUrl] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export default function InspectionsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
 
   const load = async () => {
-    const [insp, d, u, t, dashRes, projRes] = await Promise.all([
+    const [insp, d, u, t, dashRes, projRes, packRes] = await Promise.all([
       api<{ inspections: any[]; canInspect: boolean; publishedDrawings: number }>(`/api/inspections/project/${id}`, {
         token,
       }),
@@ -88,9 +90,11 @@ export default function InspectionsPage() {
       api<any[]>("/api/checklist/templates?type=QualityInspection", { token }).catch(() => []),
       api(`/api/checklist/project/${id}/quality-dashboard`, { token }).catch(() => null),
       api<QapProjectMeta>(`/api/projects/${id}`, { token }).catch(() => null),
+      api(`/api/projects/${id}/sheet-pack`, { token }).catch(() => null),
     ]);
     setData(insp);
     setDash(dashRes);
+    setPack(packRes);
     if (projRes) {
       setProject({
         id: projRes.id,
@@ -198,6 +202,7 @@ export default function InspectionsPage() {
 
       {sheetKey === "" && dash && (
         <div className="space-y-4">
+          {id && <DailySheetWorkflow projectId={id} pack={pack?.summary} checks={pack?.checks} />}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
               ["Week", dash.workbook?.dashboard?.weekLabel ?? "—"],

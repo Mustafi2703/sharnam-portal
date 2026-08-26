@@ -163,7 +163,7 @@ export async function buildDprAutoFill(
     prisma.costMonitoringLine.findMany({
       where: { projectId, packageName: { in: pkgs } },
       orderBy: { itemNo: "asc" },
-      take: 15,
+      take: 400,
     }),
     prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 200 }),
     prisma.costMbLine.findMany({ where: { projectId, packageName: { in: pkgs } }, take: 500 }),
@@ -250,39 +250,81 @@ export async function buildDprAutoFill(
   if (hindrances.length) sources.push("Hindrance register");
   if (rfisOpen.length) sources.push("Open RFIs");
 
+  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number) {
+    const wa = Number(weeklyActual || 0);
+    if (wa <= 0) return 0;
+    const suggested = Math.round((wa / 6) * 1000) / 1000;
+    if (remaining <= 0) return suggested;
+    return Math.min(suggested, remaining);
+  }
+
+  const scoredMonitoring = monitoring
+    .map((r) => {
+      const act = activityLines.find((a) => fuzzyMatch(a.activity, r.description));
+      const score =
+        (act && Number(act.weeklyActual || 0) > 0 ? 4 : 0) +
+        (act && Number(act.weeklyPlanned || 0) > 0 ? 2 : 0) +
+        (Number(r.achievedQty || 0) > 0 ? 1 : 0);
+      return { r, act, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  const pickedMonitoring = (scoredMonitoring.some((x) => x.score > 0) ? scoredMonitoring.filter((x) => x.score > 0) : scoredMonitoring).slice(
+    0,
+    40
+  );
+
   const lines: DprLine[] =
-    monitoring.length > 0
-      ? monitoring.map((r) => {
-          const act = activityLines.find((a) => fuzzyMatch(a.activity, r.description));
+    pickedMonitoring.length > 0
+      ? pickedMonitoring.map(({ r, act }) => {
           const mbQty = mbLines
             .filter((m) => fuzzyMatch(m.description, r.description))
             .reduce((s, m) => s + (m.qty || 0), 0);
           const dprCum = prev.lineCum.get(norm(r.description)) || 0;
           const cumQtyPrev = Math.max(r.achievedQty || 0, mbQty, dprCum);
+          const scopeQty = r.boqQty || r.gfcQty || act?.boqQty || 0;
+          const remaining = Math.max(0, scopeQty - cumQtyPrev);
           const plannedHint = act?.weeklyPlanned ?? act?.boqQty;
+          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining);
           return {
             srNo: undefined,
             group: r.section || act?.tower || undefined,
             description: r.description,
             unit: r.uom || act?.unit || undefined,
-            scopeQty: r.boqQty || r.gfcQty || act?.boqQty || 0,
+            scopeQty,
             rate: r.rate || 0,
             start: act?.plannedStart ? act.plannedStart.toISOString().slice(0, 10) : null,
             finish: act?.plannedEnd ? act.plannedEnd.toISOString().slice(0, 10) : null,
             cumQtyPrev,
-            qtyToday: 0,
-            remarks: plannedHint ? `Planned: ${plannedHint}${act?.weeklyActual != null ? ` · P-A actual: ${act.weeklyActual}` : ""}` : "",
+            qtyToday,
+            remarks: plannedHint
+              ? `Planned: ${plannedHint}${act?.weeklyActual != null ? ` · P-A actual: ${act.weeklyActual}` : ""}${qtyToday ? " · qty today from weekly actual / 6" : ""}`
+              : qtyToday
+                ? "Qty today from Progress weekly actual / 6"
+                : "",
           };
         })
-      : activityLines.slice(0, 15).map((a) => ({
-          group: a.tower || undefined,
-          description: a.activity,
-          unit: a.unit || undefined,
-          scopeQty: a.boqQty || a.gfcQty || 0,
-          cumQtyPrev: a.cumulativeQty || a.executedQty || prev.lineCum.get(norm(a.activity)) || 0,
-          qtyToday: 0,
-          remarks: `Planned ${a.weeklyPlanned} · Actual ${a.weeklyActual}`,
-        }));
+      : activityLines
+          .filter((a) => Number(a.weeklyActual || 0) > 0 || Number(a.weeklyPlanned || 0) > 0)
+          .slice(0, 25)
+          .map((a) => {
+            const cumQtyPrev = a.cumulativeQty || a.executedQty || prev.lineCum.get(norm(a.activity)) || 0;
+            const scopeQty = a.boqQty || a.gfcQty || 0;
+            const remaining = Math.max(0, scopeQty - cumQtyPrev);
+            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining);
+            return {
+              group: a.tower || undefined,
+              description: a.activity,
+              unit: a.unit || undefined,
+              scopeQty,
+              cumQtyPrev,
+              qtyToday,
+              remarks: `Planned ${a.weeklyPlanned} · Actual ${a.weeklyActual}${qtyToday ? " · qty today from weekly actual / 6" : ""}`,
+            };
+          });
+
+  if (lines.some((l) => Number(l.qtyToday || 0) > 0)) {
+    sources.push("Progress weekly actual → qty today");
+  }
 
   const bbsKg = bbsLines.reduce((s, b) => s + (b.weightKg || 0), 0);
   const materials: DprMaterial[] = [

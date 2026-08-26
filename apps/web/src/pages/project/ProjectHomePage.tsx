@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Stat, WorkflowStrip } from "../../components/ui";
+import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -12,6 +13,9 @@ export default function ProjectHomePage() {
   const [overview, setOverview] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
   const [safety, setSafety] = useState<any>(null);
+  const [pack, setPack] = useState<any>(null);
+  const [packBusy, setPackBusy] = useState(false);
+  const [packMsg, setPackMsg] = useState("");
   const isClient = user?.role === "client";
   const canUpload = user && user.role !== "client";
 
@@ -19,7 +23,32 @@ export default function ProjectHomePage() {
     api(`/api/directory/project/${id}/overview`, { token }).then(setOverview).catch(console.error);
     api(`/api/progress/${id}/summary`, { token }).then(setProgress).catch(() => setProgress(null));
     api(`/api/checklist/project/${id}/safety-dashboard`, { token }).then(setSafety).catch(() => setSafety(null));
+    api(`/api/projects/${id}/sheet-pack`, { token }).then(setPack).catch(() => setPack(null));
   }, [id, token]);
+
+  async function provisionSheets() {
+    if (!id) return;
+    setPackBusy(true);
+    setPackMsg("");
+    try {
+      const out = await api<{ pack: unknown; steps: { key: string; ok: boolean; error?: string }[] }>(
+        `/api/projects/${id}/provision-sheets`,
+        { method: "POST", token, body: JSON.stringify({}) }
+      );
+      setPack(out.pack);
+      const failed = out.steps.filter((s) => !s.ok);
+      setPackMsg(
+        failed.length
+          ? `Loaded with gaps: ${failed.map((s) => s.key).join(", ")}`
+          : "SPDC Cost, Quality, Safety, and Progress formats loaded for this project."
+      );
+      api(`/api/progress/${id}/summary`, { token }).then(setProgress).catch(() => null);
+    } catch (err) {
+      setPackMsg(err instanceof Error ? err.message : "Sheet load failed");
+    } finally {
+      setPackBusy(false);
+    }
+  }
 
   const s = overview?.stats || {};
   const pt = progress?.totals || {};
@@ -92,6 +121,20 @@ export default function ProjectHomePage() {
           </div>
         )}
       </div>
+
+      {!isClient && (
+        <div className="space-y-2">
+          <DailySheetWorkflow
+            projectId={id!}
+            pack={pack?.summary}
+            checks={pack?.checks}
+            canProvision={!!canUpload}
+            busy={packBusy}
+            onProvision={() => void provisionSheets()}
+          />
+          {packMsg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{packMsg}</p>}
+        </div>
+      )}
 
       <WorkflowStrip
         active={1}

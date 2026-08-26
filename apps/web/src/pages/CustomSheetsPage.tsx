@@ -466,7 +466,8 @@ export function CustomSheetEditorPage() {
     selected != null ? `${colLetter(selected.col)}${selected.row + 2}` : "";
 
   return (
-    <div className="maker-shell space-y-4 pb-24">
+    <div className="maker-shell page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2">
+      <div className="shrink-0">
       <PageHeader
         eyebrow="Sheet editor"
         title={sheet?.name || "Loading…"}
@@ -543,15 +544,16 @@ export function CustomSheetEditorPage() {
           </div>
         </>
       )}
+      </div>
 
       {!sheet ? (
         <div className="maker-section">
           <div className="maker-section__body">Loading…</div>
         </div>
       ) : (
-        <div className="maker-section maker-section--flush">
-          <div className="maker-section__head">Spreadsheet</div>
-          <div className="maker-table-wrap">
+        <div className="maker-section maker-section--flush flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="maker-section__head shrink-0">Spreadsheet</div>
+          <div className="maker-table-wrap register-sheet-viewport sheet-register__scroll flex-1 min-h-0 overflow-auto">
             <table className="maker-table">
               <thead>
                 <tr className="bg-sand/50 text-left align-top">

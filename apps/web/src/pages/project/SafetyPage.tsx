@@ -10,6 +10,7 @@ import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
+import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { HiraRegisterTable } from "../../components/HiraRegisterTable";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
@@ -231,6 +232,7 @@ export default function SafetyPage() {
 
       {!sheetView.kpiOnly && sheetKey === "" && dash && (
         <div className="space-y-4">
+          {id && <DailySheetWorkflow projectId={id} />}
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
               ["Incidents (sheet)", dash.onePager?.totalIncidents ?? dash.totals.incidents],

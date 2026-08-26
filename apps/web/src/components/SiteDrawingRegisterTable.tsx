@@ -62,8 +62,8 @@ export function SiteDrawingRegisterTable({
   projectId: string;
 }) {
   return (
-    <div className="sheet-register site-register">
-      <div className="site-register__head px-4 py-3 border-b border-line flex flex-wrap justify-between gap-2">
+    <div className="sheet-register site-register flex flex-col flex-1 min-h-0 overflow-hidden">
+      <div className="site-register__head px-4 py-3 border-b border-line flex flex-wrap justify-between gap-2 shrink-0">
         <div>
           <div className="text-sm font-semibold">Site Drawing Register</div>
           <div className="text-[11px] site-register__sub">
@@ -73,7 +73,7 @@ export function SiteDrawingRegisterTable({
         <Badge tone="neutral">{drawings.length} drawings</Badge>
       </div>
 
-      <div className="site-register__legend">
+      <div className="site-register__legend shrink-0">
         <span className="site-register__legend-item">
           <i className="site-register__swatch site-register__swatch--current" aria-hidden />
           Current revision
@@ -88,7 +88,7 @@ export function SiteDrawingRegisterTable({
         </span>
       </div>
 
-      <div className="sheet-register__scroll">
+      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="sheet-register__table site-register__table min-w-[1500px]">
           <thead>
             <tr>

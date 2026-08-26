@@ -78,7 +78,8 @@ export default function FinancePage() {
   }, [id, token]);
 
   return (
-    <div className="space-y-6">
+    <div className={active.id === "bills" ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2" : "space-y-6"}>
+      <div className="shrink-0">
       <PageHeader
         eyebrow="Finance module · commercial ledger"
         title={active.label}
@@ -115,6 +116,7 @@ export default function FinancePage() {
           />
         </Card>
       )}
+      </div>
 
       {active.id === "overview" && (
         <Overview summary={summary} pos={pos} ras={ras} cops={cops} projectId={id!} activePkg={activePkg} />

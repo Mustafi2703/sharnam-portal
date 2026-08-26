@@ -10,6 +10,7 @@ import { BarChart, PieChart } from "../../components/PieChart";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
+import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 
 type Tab =
   | "overview"
@@ -56,6 +57,9 @@ export default function ProgressPage() {
   const [mileAddOpen, setMileAddOpen] = useState(false);
   const [riskAddOpen, setRiskAddOpen] = useState(false);
   const [legalAddOpen, setLegalAddOpen] = useState(false);
+  const [actAddOpen, setActAddOpen] = useState(false);
+  const [actBusy, setActBusy] = useState(false);
+  const [actForm, setActForm] = useState({ activity: "", unit: "Cum", weeklyPlanned: "", weeklyActual: "" });
   const mileFormRef = useRef<HTMLFormElement>(null);
   const riskFormRef = useRef<HTMLFormElement>(null);
   const legalFormRef = useRef<HTMLFormElement>(null);
@@ -273,6 +277,65 @@ export default function ProgressPage() {
     }
   }
 
+  async function loadProgressTemplate() {
+    if (!id) return;
+    setPaBusy("sync");
+    setMsg("");
+    try {
+      const out = await api<{ activityLines: number; cashflow: number; manpower: number }>(
+        `/api/progress/${id}/planned-actual/sync-template`,
+        { method: "POST", token }
+      );
+      setMsg(
+        `Loaded Planned Vs. Actual format — ${out.activityLines} activities · ${out.cashflow} cashflow · ${out.manpower} trades (feeds DPR qty hints)`
+      );
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Template load failed");
+    } finally {
+      setPaBusy(null);
+    }
+  }
+
+  async function addActivityLine() {
+    if (!id || !actForm.activity.trim()) return;
+    setActBusy(true);
+    try {
+      await api(`/api/progress/${id}/activity-lines`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          activity: actForm.activity,
+          unit: actForm.unit,
+          weeklyPlanned: Number(actForm.weeklyPlanned || 0),
+          weeklyActual: Number(actForm.weeklyActual || 0),
+        }),
+      });
+      setActForm({ activity: "", unit: "Cum", weeklyPlanned: "", weeklyActual: "" });
+      setActAddOpen(false);
+      setMsg("Activity line added — DPR Maker will match it to BOQ descriptions");
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Add activity failed");
+    } finally {
+      setActBusy(false);
+    }
+  }
+
+  async function patchActivity(lineId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/activity-lines/${lineId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(patch),
+      });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
   async function syncPvaCashflowToCost() {
     if (!id) return;
     setPaBusy("sync");
@@ -411,6 +474,8 @@ export default function ProgressPage() {
           }
         />
       </div>
+
+      {id && <DailySheetWorkflow projectId={id} compact />}
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -678,16 +743,23 @@ export default function ProgressPage() {
       )}
 
       {tab === "planned" && (
-        <div className="space-y-3 w-full flex-1 min-h-0 flex flex-col">
+        <div className={`space-y-3 w-full flex-1 min-h-0 flex flex-col ${pva === "all" ? "overflow-auto" : "overflow-hidden"}`}>
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
-            rowCount={(data.plannedActual || []).length}
+            rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
             canEdit={canEdit}
             onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
             uploadHint="Upload client Excel — cashflow, manpower, and activity qty columns preserved."
+            onAddRow={canEdit ? () => setActAddOpen(true) : undefined}
             onDownloadXlsx={() => void downloadPlannedActual("xlsx")}
-            onGenerate={canEdit ? () => void syncPvaCashflowToCost() : undefined}
-            generateLabel={paBusy === "sync" ? "Syncing…" : "Sync cashflow → Cost"}
+            onGenerate={
+              canEdit
+                ? async () => {
+                    await loadProgressTemplate();
+                  }
+                : undefined
+            }
+            generateLabel="Load SPDC template"
             busy={!!paBusy}
             message={msg}
           />
@@ -727,8 +799,8 @@ export default function ProgressPage() {
               <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs font-semibold text-brand px-2 py-1">
                 Open Cost cashflow →
               </Link>
-              <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void downloadPlannedActual("pdf")}>
-                {paBusy === "pdf" ? "…" : "Print / PDF"}
+              <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void syncPvaCashflowToCost()}>
+                {paBusy === "sync" ? "…" : "Sync cashflow → Cost"}
               </Button>
             </div>
           </Card>
@@ -881,38 +953,54 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
-          {(data.activityLines || []).length > 0 && (
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col opacity-90">
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
-              Weekly activity register ({data.activityLines.length} lines from Excel import)
+              Weekly activity register ({(data.activityLines || []).length} lines) — daily qty feeds DPR
             </div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table w-full text-[11px] min-w-[900px] border-collapse">
-              <thead className="sticky top-0 z-10 bg-white">
+              <thead className="sticky top-0 z-10 bg-paper">
                 <tr className="text-left text-[10px] uppercase text-steel-muted">
                   <th className="py-2 px-2">#</th>
                   <th className="py-2 pr-2">Activity</th>
                   <th className="py-2 pr-2 text-right">Wk plan</th>
-                  <th className="py-2 pr-2 text-right">Wk act</th>
+                  <th className="py-2 pr-2 text-right">Wk act (today)</th>
                   <th className="py-2 px-2">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {data.activityLines.map((a: any, idx: number) => (
-                  <tr key={a.id} className={idx % 2 === 0 ? "bg-white" : "bg-sand/20"}>
+                {(data.activityLines || []).map((a: any, idx: number) => (
+                  <tr key={a.id} className={idx % 2 === 0 ? "bg-paper" : "bg-sand/20"}>
                     <td className="py-1.5 px-2 border border-line font-mono">{a.srNo}</td>
-                    <td className="py-1.5 pr-2 border border-line font-medium">{a.activity}</td>
+                    <td className="py-1.5 pr-2 border border-line font-medium text-ink">{a.activity}</td>
                     <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyPlanned}</td>
-                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">{a.weeklyActual}</td>
+                    <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
+                      {canEdit ? (
+                        <input
+                          type="number"
+                          step="any"
+                          defaultValue={a.weeklyActual}
+                          key={`${a.id}-${a.weeklyActual}`}
+                          className="w-24 text-right bg-paper border border-line rounded px-1 py-0.5 text-ink"
+                          onBlur={(e) => {
+                            const n = Number(e.target.value);
+                            if (Number.isFinite(n) && n !== Number(a.weeklyActual || 0)) {
+                              void patchActivity(a.id, { weeklyActual: n });
+                            }
+                          }}
+                        />
+                      ) : (
+                        a.weeklyActual
+                      )}
+                    </td>
                     <td className="py-1.5 px-2 border border-line">{a.status || "—"}</td>
                   </tr>
                 ))}
-                {!data.activityLines?.length && <RegisterEmptyRow colSpan={5} />}
+                {!(data.activityLines || []).length && <RegisterEmptyRow colSpan={5} />}
               </tbody>
             </table>
             </div>
           </Card>
-          )}
           </>
           )}
         </div>
@@ -1401,6 +1489,40 @@ export default function ProgressPage() {
             onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })}
           />
         </form>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={actAddOpen && canEdit}
+        title="Add progress activity line"
+        onClose={() => setActAddOpen(false)}
+        onSave={() => void addActivityLine()}
+        saving={actBusy}
+        saveLabel="Add line"
+      >
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input
+            className="sm:col-span-2"
+            placeholder="Activity (match BOQ description for DPR auto-fill)"
+            value={actForm.activity}
+            onChange={(e) => setActForm({ ...actForm, activity: e.target.value })}
+            required
+          />
+          <Input placeholder="UOM" value={actForm.unit} onChange={(e) => setActForm({ ...actForm, unit: e.target.value })} />
+          <Input
+            type="number"
+            step="any"
+            placeholder="Weekly planned qty"
+            value={actForm.weeklyPlanned}
+            onChange={(e) => setActForm({ ...actForm, weeklyPlanned: e.target.value })}
+          />
+          <Input
+            type="number"
+            step="any"
+            placeholder="Weekly actual qty (today)"
+            value={actForm.weeklyActual}
+            onChange={(e) => setActForm({ ...actForm, weeklyActual: e.target.value })}
+          />
+        </div>
       </RegisterEntryModal>
 
       <RegisterEntryModal

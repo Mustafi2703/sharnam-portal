@@ -99,8 +99,8 @@ export function InspectionRegisterTable({ rows, formRef, variant = "register", o
   }
 
   return (
-    <div className="overflow-x-auto border border-sand rounded-lg">
-      <table className="w-full text-xs min-w-[720px]">
+    <div className="overflow-auto max-h-[min(56vh,32rem)] border border-sand rounded-lg">
+      <table className="sheet-register__table w-full text-xs min-w-[720px]">
         <thead>
           <tr className="bg-sand/60 text-left">
             {variant === "hse" && <th className="p-2 font-semibold w-10">Sr.</th>}

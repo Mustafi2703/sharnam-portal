@@ -319,6 +319,12 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
 
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
   await mockOneDrive.ensureProjectTree(project.id);
+  try {
+    const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
+    await provisionProjectSheetPack(project.id, req.user!.id);
+  } catch (err) {
+    console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
+  }
 
   res.status(201).json({ project, leadId: lead.id });
 });
@@ -478,6 +484,12 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
     projectId = project.id;
     const { mockOneDrive } = await import("../services/mockOneDrive.js");
     await mockOneDrive.ensureProjectTree(projectId);
+    try {
+      const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
+      await provisionProjectSheetPack(projectId, req.user!.id);
+    } catch (err) {
+      console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
+    }
   }
 
   const row = await prisma.quotation.update({

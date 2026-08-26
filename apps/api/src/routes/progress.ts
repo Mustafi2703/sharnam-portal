@@ -298,7 +298,92 @@ progressRouter.post(
   }
 );
 
-/** Import Planned Vs. Actual Dashboard.xlsx (cashflow + manpower + activity register) */
+/** Load Planned Vs. Actual + monthly SOR from bundled SPDC Excel (same as seed). */
+progressRouter.post(
+  "/:projectId/planned-actual/sync-template",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    try {
+      const { syncProgressTemplates } = await import("../services/projectSheetPack.js");
+      const out = await syncProgressTemplates(project.id);
+      await audit("progress.syncTemplate", {
+        userId: req.user!.id,
+        entity: "ProgressActivityLine",
+        entityId: project.id,
+        meta: out,
+      });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : "Progress template sync failed" });
+    }
+  }
+);
+
+progressRouter.post(
+  "/:projectId/activity-lines",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const activity = String(body.activity || "").trim();
+    if (!activity) return res.status(400).json({ error: "activity required" });
+    const last = await prisma.progressActivityLine.findFirst({
+      where: { projectId: req.params.projectId },
+      orderBy: { srNo: "desc" },
+      select: { srNo: true },
+    });
+    const row = await prisma.progressActivityLine.create({
+      data: {
+        projectId: req.params.projectId,
+        srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+        tower: body.tower || null,
+        activity,
+        unit: body.unit || null,
+        boqQty: Number(body.boqQty || 0),
+        gfcQty: Number(body.gfcQty || 0),
+        executedQty: Number(body.executedQty || 0),
+        weeklyPlanned: Number(body.weeklyPlanned || 0),
+        weeklyActual: Number(body.weeklyActual || 0),
+        cumulativeQty: Number(body.cumulativeQty || body.executedQty || 0),
+        status: body.status || "In progress",
+        pctComplete: Number(body.pctComplete || 0),
+      },
+    });
+    await audit("progress.activity.create", {
+      userId: req.user!.id,
+      entity: "ProgressActivityLine",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId },
+    });
+    res.status(201).json(row);
+  }
+);
+
+progressRouter.patch(
+  "/:projectId/activity-lines/:lineId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressActivityLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const body = req.body || {};
+    const row = await prisma.progressActivityLine.update({
+      where: { id: existing.id },
+      data: {
+        activity: body.activity != null ? String(body.activity) : undefined,
+        unit: body.unit !== undefined ? body.unit : undefined,
+        weeklyPlanned: body.weeklyPlanned != null ? Number(body.weeklyPlanned) : undefined,
+        weeklyActual: body.weeklyActual != null ? Number(body.weeklyActual) : undefined,
+        executedQty: body.executedQty != null ? Number(body.executedQty) : undefined,
+        status: body.status != null ? String(body.status) : undefined,
+        pctComplete: body.pctComplete != null ? Number(body.pctComplete) : undefined,
+      },
+    });
+    res.json(row);
+  }
+);
 progressRouter.post(
   "/:projectId/planned-actual/import",
   requireRoles("admin", "office", "employee"),

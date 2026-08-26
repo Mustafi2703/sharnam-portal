@@ -7,11 +7,11 @@ type Props = {
   tall?: boolean;
 };
 
-/** Horizontal scroll wrapper for wide register tables; vertical scroll is the tool outlet. */
+/** Horizontal + vertical scroll wrapper for register tables. */
 export function RegisterScrollArea({ children, className = "", tall = false }: Props) {
   return (
     <div
-      className={`register-scroll-area${tall ? " register-scroll-area--tall" : ""} ${className}`.trim()}
+      className={`register-scroll-area register-sheet-viewport${tall ? " register-scroll-area--tall" : ""} ${className}`.trim()}
       data-register-scroll={tall ? "tall" : "default"}
     >
       {children}

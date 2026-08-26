@@ -960,7 +960,7 @@ costRouter.patch("/bills/:id", requireRoles("admin", "office"), async (req: Auth
   res.json(bill);
 });
 
-costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const nos1 = Number(req.body.nos1 || 0);
   const nos2 = Number(req.body.nos2 || 1) || 1;
   const length = Number(req.body.length || 0);
@@ -987,7 +987,7 @@ costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee"), a
   res.status(201).json(row);
 });
 
-costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const row = await prisma.costBbsLine.create({
     data: {
       projectId: req.params.projectId,

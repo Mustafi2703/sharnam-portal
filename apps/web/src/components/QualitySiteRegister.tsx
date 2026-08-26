@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { RegisterFilterBar } from "./RegisterFilterBar";
+import { ReferenceSheetToolbar } from "./ReferenceSheetToolbar";
 
 export type QualitySiteRecord = {
   id: string;
@@ -42,6 +43,7 @@ const emptyForm = (recordType: string) => ({
 export function QualitySiteRegister({ projectId, token, recordType, canEdit, onChanged }: Props) {
   const [rows, setRows] = useState<QualitySiteRecord[]>([]);
   const [form, setForm] = useState(emptyForm(recordType));
+  const [addOpen, setAddOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyForm(recordType));
@@ -76,8 +78,12 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
     });
   }, [rows, recordType, filters]);
 
-  async function createRecord(e: FormEvent) {
-    e.preventDefault();
+  async function createRecord(e?: FormEvent) {
+    e?.preventDefault();
+    if (!form.description.trim()) {
+      setMsg("Description is required");
+      return;
+    }
     setBusy(true);
     setMsg("");
     try {
@@ -90,6 +96,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
         }),
       });
       setForm(emptyForm(recordType));
+      setAddOpen(false);
       setMsg(`${recordType} logged — SOR Log totals updated.`);
       await load();
       await onChanged?.();
@@ -137,42 +144,50 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
     <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
-      {canEdit && (
-        <Card className="shrink-0">
-          <h3 className="font-semibold mb-1">Log {recordType.toLowerCase()}</h3>
-          <p className="text-xs text-steel-muted mb-3">Inline form — or use Edit on a row to open the popup editor.</p>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={createRecord}>
-            <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <Select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-              {SEVERITIES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </Select>
-            <Input placeholder="Issued to" value={form.issuedTo} onChange={(e) => setForm({ ...form, issuedTo: e.target.value })} />
-            <TextArea
-              className="sm:col-span-2 lg:col-span-3"
-              rows={2}
-              placeholder="Description / observation"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              required
-            />
-            <TextArea
-              className="sm:col-span-2"
-              rows={2}
-              placeholder="Corrective action"
-              value={form.correctiveAction}
-              onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })}
-            />
-            <Button type="submit" disabled={busy} className="sm:col-span-2 lg:col-span-3 sm:w-auto">
-              Save {recordType.toLowerCase()}
-            </Button>
-          </form>
-        </Card>
-      )}
+      <ReferenceSheetToolbar
+        sheetLabel={`${recordType} register`}
+        rowCount={filtered.length}
+        canEdit={canEdit}
+        onAddRow={canEdit ? () => setAddOpen(true) : undefined}
+        message={msg || undefined}
+      />
 
-      <Card padding={false} className="flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill">
+      <RegisterEntryModal
+        open={addOpen && canEdit}
+        title={`Log ${recordType.toLowerCase()}`}
+        onClose={() => setAddOpen(false)}
+        onSave={() => void createRecord()}
+        saving={busy}
+        saveLabel={`Save ${recordType.toLowerCase()}`}
+      >
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+          <Select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+            {SEVERITIES.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </Select>
+          <Input placeholder="Issued to" value={form.issuedTo} onChange={(e) => setForm({ ...form, issuedTo: e.target.value })} />
+          <TextArea
+            className="sm:col-span-2"
+            rows={3}
+            placeholder="Description / observation"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            required
+          />
+          <TextArea
+            className="sm:col-span-2"
+            rows={2}
+            placeholder="Corrective action"
+            value={form.correctiveAction}
+            onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })}
+          />
+        </div>
+      </RegisterEntryModal>
+
+      <Card padding={false} className="sheet-register flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill">
         <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
           <h3 className="font-semibold text-sm text-left">
             {recordType} register ({filtered.length})
@@ -247,7 +262,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
               {!filtered.length && (
                 <tr>
                   <td colSpan={canEdit ? 7 : 6} className="empty text-left">
-                    No rows — add one above or import from seed.
+                    No rows — use + Add row to log a {recordType.toLowerCase()}.
                   </td>
                 </tr>
               )}

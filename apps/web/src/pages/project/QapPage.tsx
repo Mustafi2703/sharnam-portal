@@ -7,6 +7,7 @@ import { Badge, Button, Card, Input, PageHeader, Select } from "../../components
 import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
 import { QapRegisterAddForm } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { normalizeWeekLabel, preferWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
 
 /** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
@@ -220,6 +221,8 @@ export default function QapPage() {
         }
       />
       </div>
+
+      {id && <DailySheetWorkflow projectId={id} compact />}
 
       {(qapRows.length === 0 || qapNeedsFullResync(dash?.qap || [])) && !busy && (
         <Card className="!p-3 border-amber-200 bg-amber-50 shrink-0">

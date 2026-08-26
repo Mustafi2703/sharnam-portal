@@ -54,6 +54,24 @@ Fields common to Procore-style uploads:
 - OCR drawing compare: deferred  
 - Multi-company enterprise ACL: start with project membership  
 
+## Daily sheet pack (per project)
+
+Every project loads the same SPDC Excel formats. Site teams **add lines daily**; DPR Maker auto-fills from those registers.
+
+| Layer | Master workbook | Portal | Daily update | Feeds DPR |
+|-------|-----------------|--------|--------------|-----------|
+| Cost | `SPDC_Budget_Arvind 49.xls` | Cost → Monitoring / MB / BBS | Achieved qty, MB measurements | Quantity progress |
+| Quality | QAP Week 50 · Cube register · Quality Dashboard | Quality / QAP / Cube | QI fills, NCR, cube casts | Quality block |
+| Safety | Safety Dashboard · HIRA | Safety | Toolbox, observations, NCR | HSE block |
+| Progress | Planned Vs. Actual Dashboard | Progress → Planned | Weekly actual qty, hindrance | Qty hints + delays |
+| Reports | `SPDC_DPR_*_DASHBOARD.xlsx` | DPR Maker | Publish for the day | SharePoint 07.02 |
+
+**Provision:** Creating a project auto-loads the pack. Project home → **Load SPDC sheets** (`POST /api/projects/:id/provision-sheets`) is idempotent and skips layers that already have rows. Site employees can load sheets.
+
+**Add lines:** Cost BOQ/MB/BBS, QAP, Cube, Quality site observation/instruction, Safety records, Progress activity, hindrance, milestones, risk, legal.
+
+**Daily loop:** Update Cost achieved/MB → Quality QI/NCR/cube → Safety toolbox/obs → Progress weekly actual / hindrance → DPR Maker (qty today suggested from weekly actual ÷ 6).
+
 ## When user sends system-design prompt
 
 Capture: entities, events, retention, offline site, SSO. Update this file; keep project isolation + drawing gate unchanged unless explicitly redesigned.

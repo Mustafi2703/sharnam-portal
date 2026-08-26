@@ -180,7 +180,8 @@ export function FinanceBillRegister({
   }
 
   return (
-    <div className="space-y-3 flex flex-col min-h-[420px]">
+    <div className="space-y-3 flex flex-col flex-1 min-h-0 overflow-hidden register-page-fill">
+      <div className="shrink-0">
       <ReferenceSheetToolbar
         sheetLabel={`Payment Summary · ${activePkg.sheetName}`}
         rowCount={rows.length}
@@ -196,8 +197,9 @@ export function FinanceBillRegister({
         }
         busy={busy}
       />
+      </div>
 
-      <RegisterSheetFrame title={activePkg.label} sheetLabel={activePkg.sheetName} rowCount={rows.length} className="min-h-[360px]">
+      <RegisterSheetFrame title={activePkg.label} sheetLabel={activePkg.sheetName} rowCount={rows.length}>
         <table className="register-sheet min-w-max w-full text-xs">
           <thead>
             <tr>
