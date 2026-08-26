@@ -544,7 +544,11 @@ export default function ProgressPage() {
         <PageHeader
           eyebrow="Progress module"
           title="Progress"
-          subtitle="Workday-style KPIs on Overview. Switch sub-tools using the module tabs above."
+          subtitle={
+            isProgressRegister
+              ? undefined
+              : "Workday-style KPIs on Overview. Switch sub-tools using the module tabs above."
+          }
           actions={
             <div className="flex flex-wrap gap-2 items-center">
               <Badge tone="brand">{pct(data.totals.projectProgressPct)} weighted</Badge>
@@ -559,7 +563,7 @@ export default function ProgressPage() {
         />
       </div>
 
-      {id && (
+      {!isProgressRegister && id && (
         <div className="shrink-0">
           <DailySheetWorkflow projectId={id} compact />
         </div>
@@ -567,7 +571,7 @@ export default function ProgressPage() {
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
-      {verify && (
+      {verify && (!isProgressRegister || !verify.ok) && (
         <details
           className={`shrink-0 rounded-lg border bg-paper ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
             isProgressRegister ? "" : "open"
@@ -771,7 +775,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "milestones" && (
-        <div className="register-tab-body progress-page__register">
+        <div className="register-tab-body register-tab-body--sheet progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Milestone register"
             rowCount={data.milestones?.length}
@@ -782,16 +786,6 @@ export default function ProgressPage() {
             busy={registerSyncBusy}
             message={msg || undefined}
           />
-          <div className="grid md:grid-cols-2 gap-3 shrink-0">
-            <PieChart title="Milestones by status" items={data.charts?.milestoneByStatus || []} />
-            <BarChart
-              title="Avg % complete by phase"
-              items={(data.charts?.milestoneByPhase || []).map((x: any) => ({
-                label: x.label,
-                value: Math.round((Number(x.value) || 0) * 100),
-              }))}
-            />
-          </div>
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="sheet-register__head shrink-0">Milestone register · sheet columns</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -866,7 +860,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "planned" && (
-        <div className={`register-tab-body progress-page__register gap-3 ${pva === "all" ? "register-tab-body--stack" : ""}`}>
+        <div className="register-tab-body register-tab-body--stack progress-page__register gap-3">
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
             rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
@@ -1207,7 +1201,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "hindrance" && (
-        <div className="register-tab-body progress-page__register">
+        <div className="register-tab-body register-tab-body--sheet progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Hindrance Register Dashboard"
             rowCount={data.hindrances?.length}
@@ -1218,10 +1212,6 @@ export default function ProgressPage() {
             busy={registerSyncBusy || !!paBusy}
             message={msg}
           />
-          <div className="grid md:grid-cols-2 gap-3 shrink-0">
-            <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} />
-            <BarChart title="Hindrance by critical activity" items={data.charts?.hindranceByActivity || []} />
-          </div>
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Hindrance register</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -1302,7 +1292,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "risk" && (
-        <div className="register-tab-body progress-page__register">
+        <div className="register-tab-body register-tab-body--sheet progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Risk Register - Dashboard"
             rowCount={data.risks?.length}
@@ -1313,10 +1303,6 @@ export default function ProgressPage() {
             busy={registerSyncBusy}
             message={msg || undefined}
           />
-          <div className="grid md:grid-cols-2 gap-3 shrink-0">
-            <PieChart title="Risk by status" items={data.charts?.riskByStatus || []} />
-            <BarChart title="Risk by severity" items={data.charts?.riskBySeverity || []} />
-          </div>
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Risk register</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -1391,7 +1377,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "legal" && (
-        <div className="register-tab-body progress-page__register">
+        <div className="register-tab-body register-tab-body--sheet progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="Legal Approval Tracker"
             rowCount={data.legalApprovals?.length}
@@ -1402,10 +1388,6 @@ export default function ProgressPage() {
             busy={registerSyncBusy}
             message={msg || undefined}
           />
-          <div className="grid md:grid-cols-2 gap-3 shrink-0">
-            <PieChart title="Legal by status" items={data.charts?.legalByStatus || []} />
-            <BarChart title="Legal approvals by status" items={data.charts?.legalByStatus || []} />
-          </div>
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Legal Approval Tracker</div>
             <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
@@ -1538,7 +1520,7 @@ export default function ProgressPage() {
       )}
 
       {tab === "msproject" && (
-        <div className="register-tab-body progress-page__register">
+        <div className="register-tab-body register-tab-body--sheet progress-page__register">
           <ReferenceSheetToolbar
             sheetLabel="MS Project task register"
             rowCount={msProject?.tasks?.length}
@@ -1572,11 +1554,13 @@ export default function ProgressPage() {
             busy={!!msBusy}
             message={msg}
           />
-          <Card className="!p-4 shrink-0">
-            <p className="text-sm text-steel-muted">
+          <details className="rounded border border-line bg-paper shrink-0 text-sm">
+            <summary className="cursor-pointer px-3 py-2 font-semibold text-brand-dark">Import help</summary>
+            <div className="px-3 pb-3 text-steel-muted">
               Import <strong>File → Save As → XML</strong> from Microsoft Project. MPP binary is not supported.
-            </p>
-            <input
+            </div>
+          </details>
+          <input
               ref={msImportRef}
               type="file"
               accept=".xml,.mpp"
@@ -1602,10 +1586,9 @@ export default function ProgressPage() {
                     }
                   })();
                 }
-                e.target.value = "";
-              }}
-            />
-          </Card>
+              e.target.value = "";
+            }}
+          />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Task register · % complete · baseline</div>
             {msProject?.tasks?.length ? (

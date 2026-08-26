@@ -1135,6 +1135,83 @@ body.is-auth-route #root {
   gap: 0.5rem;
   min-width: 0;
 }
+
+/* Single register sheet — toolbar + table fills middle column (Drawing-style) */
+.register-tab-body--sheet {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+.register-tab-body--sheet > .register-table-panel,
+.register-tab-body--sheet > .spdc-register-panel,
+.register-tab-body--sheet > .sheet-register,
+.register-tab-body--sheet > .cost-page__register,
+.register-tab-body--sheet > .register-page-fill,
+.register-tab-body--sheet > .boq-editor,
+.register-tab-body--sheet > .mb-entry-panel,
+.register-tab-body--sheet > .bbs-entry-panel,
+.register-tab-body--sheet > .budget-wbs-panel,
+.register-tab-body--sheet > .cost-register-shell,
+.register-tab-body--sheet > div.flex.flex-col.flex-1 {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.tool-main__outlet .register-tab-body--sheet .sheet-register__scroll,
+.tool-main__outlet .register-tab-body--sheet .register-scroll-area,
+.tool-main__outlet .register-tab-body--sheet .register-sheet-viewport {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: 0 !important;
+  overflow: auto !important;
+}
+
+/* Multi-sheet tab — scroll the tab body to reach each sheet section */
+.register-tab-body--stack {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.register-tab-body--stack > .shrink-0,
+.register-tab-body--stack > details,
+.register-tab-body--stack > .reference-sheet-toolbar,
+.register-tab-body--stack > [class*="ReferenceSheetToolbar"] {
+  flex-shrink: 0;
+}
+.register-tab-body--stack > .register-table-panel,
+.register-tab-body--stack > .spdc-register-panel,
+.register-tab-body--stack > .sheet-register,
+.register-tab-body--stack > .cost-page__register,
+.register-tab-body--stack > .cost-register-shell,
+.register-tab-body--stack > .boq-editor,
+.register-tab-body--stack > .mb-entry-panel,
+.register-tab-body--stack > .bbs-entry-panel,
+.register-tab-body--stack > .budget-wbs-panel {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: min(52vh, 30rem) !important;
+  max-height: min(62vh, 36rem) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.register-tab-body--stack .sheet-register__scroll,
+.register-tab-body--stack .register-scroll-area,
+.register-tab-body--stack .register-sheet-viewport {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 12rem !important;
+  max-height: calc(min(52vh, 30rem) - 3rem) !important;
+  overflow: auto !important;
+}
 .register-scroll-hint {
   font-size: 0.625rem;
   letter-spacing: 0.04em;
@@ -1194,7 +1271,34 @@ body.is-auth-route #root {
 .tool-main__outlet .cost-page__register,
 .tool-main__outlet .progress-page__register,
 .tool-main__outlet .register-page-fill,
-.tool-main__outlet .register-tab-body,
+.tool-main__outlet .register-tab-body:not(.register-tab-body--stack) {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-main__outlet .register-tab-body--stack {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-main__outlet .register-tab-body--sheet {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
 .tool-main__outlet .page-stack--register .spdc-register-panel,
 .tool-main__outlet .page-stack--register .register-sheet-shell,
 .tool-main__outlet .page-stack--register .register-table-panel,
@@ -1234,24 +1338,25 @@ body.is-auth-route #root {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Stacked Progress "all" — tab body scrolls; each sheet keeps a bounded inner scroller */
+/* Legacy stack aliases — keep in sync with .register-tab-body--stack above */
 .tool-main__outlet .register-tab-body--stack {
-  overflow: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 .tool-main__outlet .register-tab-body--stack .sheet-register,
 .tool-main__outlet .register-tab-body--stack .register-table-panel,
 .tool-main__outlet .register-tab-body--stack .spdc-register-panel {
-  flex: 1 1 auto !important;
+  flex: 0 0 auto !important;
   height: auto !important;
-  min-height: 14rem !important;
-  max-height: min(42vh, 24rem);
+  min-height: min(52vh, 30rem) !important;
+  max-height: min(62vh, 36rem) !important;
 }
 .tool-main__outlet .register-tab-body--stack .sheet-register__scroll,
 .tool-main__outlet .register-tab-body--stack .register-sheet-viewport {
   flex: 1 1 auto !important;
   height: auto !important;
   min-height: 12rem !important;
-  max-height: min(38vh, 22rem) !important;
+  max-height: calc(min(52vh, 30rem) - 3rem) !important;
 }
 
 .qap-page .register-editor-pro td,
