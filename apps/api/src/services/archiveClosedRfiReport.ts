@@ -47,6 +47,36 @@ export async function archiveClosedRfiReport(opts: {
   );
   uploaded.push({ kind: "rfi-register", path: reg.sharePointPath || reg.path, url: reg.sharePointUrl || reg.url });
 
+  try {
+    const all = await prisma.rfi.findMany({
+      where: { projectId: opts.projectId },
+      include: {
+        assignedTo: { select: { fullName: true } },
+        createdBy: { select: { fullName: true } },
+        drawing: { select: { drawingNumber: true, title: true, currentRev: true } },
+        vendor: { select: { name: true } },
+        responses: { include: { respondedBy: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const { buildSpdcRfiXlsxBuffer } = await import("./spdcRfiForm.js");
+    const formBuf = await buildSpdcRfiXlsxBuffer({ project, rfis: all, selectRfiId: rfi.id });
+    const formFile = await mockOneDrive.upload(
+      project.code,
+      folder,
+      `${safeName(rfi.number)}_FORM_${stamp}.xlsx`,
+      formBuf,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    uploaded.push({
+      kind: "rfi-form",
+      path: formFile.sharePointPath || formFile.path,
+      url: formFile.sharePointUrl || formFile.url,
+    });
+  } catch (err) {
+    console.warn("[RFI] SPDC form archive failed:", err instanceof Error ? err.message : err);
+  }
+
   if (!rfi.linkedAssignmentId) return { uploaded };
 
   const submission = await prisma.checklistSubmission.findFirst({
@@ -57,6 +87,20 @@ export async function archiveClosedRfiReport(opts: {
     orderBy: { createdAt: "desc" },
     include: {
       photos: true,
+      submittedBy: { select: { fullName: true } },
+      revision: {
+        select: {
+          revisionNumber: true,
+          clientSignName: true,
+          clientSignUrl: true,
+          pmcSignName: true,
+          pmcSignUrl: true,
+          siteEngineerSignName: true,
+          siteEngineerSignUrl: true,
+          contractorSignName: true,
+          contractorSignUrl: true,
+        },
+      },
       assignment: {
         include: {
           template: { include: { items: { orderBy: { sortOrder: "asc" } } } },

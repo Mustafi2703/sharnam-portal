@@ -30,28 +30,28 @@ export function rfiProgress(rfi: {
   scheduleImpact?: string | null;
   costImpact?: string | null;
   attachmentsJson?: string | null;
+  formDataJson?: string | null;
+  contractorSolution?: string;
   responses?: { isOfficialResponse?: boolean }[];
 }): RfiProgress {
   const kind = rfi.rfiKind || "RequestForInformation";
+  let form: Record<string, string> = {};
+  try {
+    form = rfi.formDataJson ? JSON.parse(rfi.formDataJson) : {};
+  } catch {
+    form = {};
+  }
+  const proposed = String(rfi.contractorSolution || form.contractorSolution || form.proposedSolution || "").trim();
   const fields: RfiFieldState[] = [
     { key: "subject", label: "Subject", done: !!String(rfi.subject || "").trim() },
-    { key: "question", label: "Question / description", done: !!String(rfi.question || "").trim() },
+    { key: "question", label: "Query raised", done: !!String(rfi.question || "").trim() },
   ];
 
   if (kind === "RequestForInformation" || kind === "Manual" || kind === "ClientConcern") {
     fields.push(
-      { key: "checklist", label: "Drawing checklist linked", done: !!rfi.linkedAssignmentId },
-      { key: "assignee", label: "Assignee", done: !!rfi.assignedToId, optional: true },
-      { key: "drawing", label: "Linked drawing", done: !!rfi.linkedDrawingId, optional: true },
-      {
-        key: "impact",
-        label: "Schedule / cost impact",
-        done:
-          (rfi.scheduleImpact && rfi.scheduleImpact !== "None") ||
-          (rfi.costImpact && rfi.costImpact !== "None") ||
-          false,
-        optional: true,
-      }
+      { key: "solution", label: "Proposed solution", done: !!proposed },
+      { key: "drawing", label: "Drawing ref + rev", done: !!(form.drawingRef || rfi.linkedDrawingId), optional: true },
+      { key: "assignee", label: "Responsible party", done: !!(form.responsibleParty || rfi.assignedToId), optional: true }
     );
   }
 
@@ -106,6 +106,7 @@ export function rfiComposeProgress(form: {
   assignedToId?: string;
   linkedDrawingId?: string;
   linkedAssignmentId?: string;
+  contractorSolution?: string;
 }): number {
   const pseudo = {
     subject: form.subject,
@@ -114,6 +115,7 @@ export function rfiComposeProgress(form: {
     assignedToId: form.assignedToId || null,
     linkedDrawingId: form.linkedDrawingId || null,
     linkedAssignmentId: form.linkedAssignmentId || null,
+    contractorSolution: form.contractorSolution,
     responses: [],
   };
   return rfiProgress(pseudo).pct;

@@ -122,7 +122,7 @@ export default function ChecklistFillPage() {
       Array.from(photos).forEach((f) => fd.append("photos", f));
     }
     if (signatureFile) {
-      fd.append("photos", signatureFile, signatureFile.name);
+      fd.append("signature", signatureFile, signatureFile.name);
     }
     Object.entries(responses).forEach(([lineId, r]) => {
       r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));

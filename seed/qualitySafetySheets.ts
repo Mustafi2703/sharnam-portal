@@ -726,6 +726,105 @@ export async function seedChecklistFillsForReports(
   console.log("Checklist fills seeded for Progress Reports (Drawing / QI / Safety / Site)");
 }
 
+/**
+ * Demo fill-pad + GFC receive/issue signatures so branded checklist downloads
+ * show Sharnam logo and the four form sign boxes (inspector / PMC / site / client).
+ */
+export async function seedDemoChecklistSignoffs(
+  prisma: PrismaClient,
+  project: { id: string; code: string }
+) {
+  const { scribbleSignaturePng } = await import("../apps/api/src/services/checklistSignoff.ts");
+  const uploadRoot = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+  const gfcDir = path.join(
+    uploadRoot,
+    "onedrive",
+    project.code,
+    "04_DESIGN_AND_ENGINEERING/04.02_Drawings_and_Specifications/Signatures"
+  );
+  fs.mkdirSync(gfcDir, { recursive: true });
+
+  const parties: Array<[string, string]> = [
+    ["client", "Client Representative"],
+    ["pmc", "SPDC PMC"],
+    ["site-engineer", "Site Engineer"],
+    ["contractor", "Contractor QC"],
+  ];
+  const urls: Record<string, string> = {};
+  for (const [role, name] of parties) {
+    const file = `${role}-sign.png`;
+    fs.writeFileSync(path.join(gfcDir, file), scribbleSignaturePng(name));
+    urls[role] =
+      `/uploads/onedrive/${project.code}/04_DESIGN_AND_ENGINEERING/04.02_Drawings_and_Specifications/Signatures/${file}`;
+  }
+
+  const revs = await prisma.drawingRevision.findMany({
+    where: { drawing: { projectId: project.id }, published: true },
+    take: 40,
+  });
+  for (const rev of revs) {
+    if (rev.clientSignUrl && rev.pmcSignUrl && rev.siteEngineerSignUrl) continue;
+    await prisma.drawingRevision.update({
+      where: { id: rev.id },
+      data: {
+        clientSignName: rev.clientSignName || "Client Representative",
+        clientSignUrl: rev.clientSignUrl || urls.client,
+        pmcSignName: rev.pmcSignName || "SPDC PMC",
+        pmcSignUrl: rev.pmcSignUrl || urls.pmc,
+        siteEngineerSignName: rev.siteEngineerSignName || "Site Engineer",
+        siteEngineerSignUrl: rev.siteEngineerSignUrl || urls["site-engineer"],
+        contractorSignName: rev.contractorSignName || "Contractor QC",
+        contractorSignUrl: rev.contractorSignUrl || urls.contractor,
+      },
+    });
+  }
+
+  const drawing = await prisma.drawing.findFirst({
+    where: { projectId: project.id, isPublished: true },
+    include: { revisions: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  const fillDir = path.join(
+    uploadRoot,
+    "onedrive",
+    project.code,
+    "08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards/Signatures"
+  );
+  fs.mkdirSync(fillDir, { recursive: true });
+
+  const fills = await prisma.checklistSubmission.findMany({
+    where: {
+      assignment: { projectId: project.id, template: { checklistType: "DrawingCheck" } },
+    },
+    include: { photos: true, submittedBy: { select: { fullName: true } } },
+  });
+  for (const fill of fills) {
+    if (!fill.drawingId && drawing) {
+      const rev = drawing.revisions[0];
+      await prisma.checklistSubmission.update({
+        where: { id: fill.id },
+        data: {
+          drawingId: drawing.id,
+          revisionId: rev?.id || null,
+          revisionNumber: rev?.revisionNumber || fill.revisionNumber,
+        },
+      });
+    }
+    if (fill.photos.some((p) => p.kind === "signature" || /signature/i.test(p.caption || ""))) continue;
+    const name = fill.submittedBy?.fullName || "Inspector";
+    const file = `signature-${fill.id.slice(0, 8)}.png`;
+    fs.writeFileSync(path.join(fillDir, file), scribbleSignaturePng(name));
+    await prisma.checklistPhoto.create({
+      data: {
+        submissionId: fill.id,
+        kind: "signature",
+        fileUrl: `/uploads/onedrive/${project.code}/08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards/Signatures/${file}`,
+        caption: `signature-${name}.png`,
+      },
+    });
+  }
+  console.log(`Demo checklist sign-offs attached (${fills.length} drawing-check fills, ${revs.length} GFC revisions)`);
+}
+
 const DEMO_SOURCE = "demo-week-seed";
 
 function dayAt(d: Date, hour = 9) {

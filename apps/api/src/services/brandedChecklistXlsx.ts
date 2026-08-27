@@ -10,6 +10,7 @@
 import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
+import { checklistLogoPath, collectChecklistSignSlots, type SignSlot } from "./checklistSignoff.js";
 
 type ResponseCell = { answer?: string; remarks?: string; remark?: string; value?: string };
 type Item = {
@@ -29,6 +30,19 @@ export type BrandedChecklistSubmission = {
   revisionNumber?: string | null;
   submittedBy?: { fullName?: string | null; email?: string | null } | null;
   drawing?: { drawingNumber?: string | null; title?: string | null } | null;
+  photos?: { kind?: string | null; fileUrl?: string | null; caption?: string | null }[];
+  reviewedAt?: Date | string | null;
+  revision?: {
+    revisionNumber?: string | null;
+    clientSignName?: string | null;
+    clientSignUrl?: string | null;
+    pmcSignName?: string | null;
+    pmcSignUrl?: string | null;
+    siteEngineerSignName?: string | null;
+    siteEngineerSignUrl?: string | null;
+    contractorSignName?: string | null;
+    contractorSignUrl?: string | null;
+  } | null;
   assignment?: {
     template?: {
       name?: string | null;
@@ -188,6 +202,7 @@ function getAnswer(
 function familyOf(type?: string | null): "activity" | "safety" | "rfi" | "ir" {
   const t = String(type || "").toLowerCase();
   if (t.includes("safety")) return "safety";
+  if (t.includes("drawing")) return "activity";
   if (t.includes("rfi") || t.includes("information") || t === "drawingchecklist") return "rfi";
   if (t.includes("qualityir") || t === "ir" || t.includes("requestforinspection")) return "ir";
   return "activity";
@@ -211,8 +226,86 @@ function drawingLabel(submission: BrandedChecklistSubmission) {
   if (!submission.drawing) return "";
   const n = submission.drawing.drawingNumber || "";
   const t = submission.drawing.title || "";
-  const rev = submission.revisionNumber ? ` Rev. ${submission.revisionNumber}` : "";
+  const revNo = submission.revisionNumber || submission.revision?.revisionNumber;
+  const rev = revNo ? ` Rev. ${revNo}` : "";
   return `${n}${t ? ` — ${t}` : ""}${rev}`.trim();
+}
+
+function embedLogo(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet) {
+  const logo = checklistLogoPath();
+  if (!logo) return;
+  try {
+    const imgId = wb.addImage({ filename: logo, extension: "png" });
+    ws.getRow(1).height = Math.max(ws.getRow(1).height || 18, 36);
+    ws.addImage(imgId, {
+      tl: { col: 0.15, row: 0.1 },
+      ext: { width: 118, height: 38 },
+      editAs: "oneCell",
+    });
+  } catch {
+    /* logo optional */
+  }
+}
+
+function applySignoff(
+  wb: ExcelJS.Workbook,
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  submission: BrandedChecklistSubmission,
+  cols: number[]
+) {
+  let r = startRow;
+  sectionBand(ws, r, cols, "8.  SIGNATURES");
+  r += 1;
+  const signs = collectChecklistSignSlots(submission);
+  const colStart = cols[0];
+  const width = Math.max(1, Math.floor(cols.length / Math.max(signs.length, 1)));
+  const roleRow = r;
+  const imgRow = r + 1;
+  const nameRow = r + 2;
+  const dateRow = r + 3;
+  ws.getRow(imgRow).height = 42;
+  signs.forEach((s: SignSlot, i: number) => {
+    const c0 = colStart + i * width;
+    const c1 = i === signs.length - 1 ? cols[cols.length - 1] : c0 + width - 1;
+    try {
+      ws.mergeCells(roleRow, c0, roleRow, c1);
+      ws.mergeCells(imgRow, c0, imgRow, c1);
+      ws.mergeCells(nameRow, c0, nameRow, c1);
+      ws.mergeCells(dateRow, c0, dateRow, c1);
+    } catch {
+      /* already merged */
+    }
+    const roleCell = ws.getCell(roleRow, c0);
+    roleCell.value = s.role;
+    roleCell.font = { bold: true, size: 8, color: { argb: "FF1F3864" } };
+    roleCell.alignment = { wrapText: true, vertical: "middle" };
+    const nameCell = ws.getCell(nameRow, c0);
+    nameCell.value = s.name;
+    nameCell.font = { size: 9, bold: true };
+    const dateCell = ws.getCell(dateRow, c0);
+    dateCell.value = s.date || "Name / Signature / Date";
+    dateCell.font = { size: 8, italic: true, color: { argb: "FF666666" } };
+    for (const row of [roleRow, imgRow, nameRow, dateRow]) {
+      for (let c = c0; c <= c1; c++) thinBorder(ws.getCell(row, c));
+    }
+    if (s.buffer) {
+      try {
+        const imgId = wb.addImage({
+          base64: s.buffer.toString("base64"),
+          extension: "png",
+        });
+        ws.addImage(imgId, {
+          tl: { col: c0 - 1 + 0.12, row: imgRow - 1 + 0.08 },
+          ext: { width: 118, height: 34 },
+          editAs: "oneCell",
+        });
+      } catch {
+        /* image optional */
+      }
+    }
+  });
+  return dateRow + 1;
 }
 
 function keepOnlySheets(wb: ExcelJS.Workbook, names: string[]) {
@@ -278,6 +371,7 @@ async function fillActivityChecklist(
   keepOnlySheets(wb, ["Checklist Format (Blank)"]);
   const ws = wb.worksheets[0];
   ws.name = "Activity Checklist";
+  embedLogo(wb, ws);
 
   const template = submission.assignment?.template;
   const items = [...(template?.items || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -347,10 +441,6 @@ async function fillActivityChecklist(
       }
     }
     ws.getRow(r).height = Math.min(48, 16 + Math.ceil(String(vals[1]).length / 42) * 10);
-    if (i === 0) {
-      const statusCell = ws.getCell(r, 7);
-      console.warn("[branded-xlsx] first status fill", statusCell.value, JSON.stringify(statusCell.fill));
-    }
     r += 1;
   }
 
@@ -399,29 +489,7 @@ async function fillActivityChecklist(
 
   // Signature block (navy band like SPDC forms)
   r += 1;
-  for (let c = 2; c <= 9; c++) {
-    const cell = ws.getCell(r, c);
-    cell.value = c === 2 ? "4.  SIGN-OFF" : "";
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    thinBorder(cell);
-  }
-  r += 1;
-  const signs = [
-    ["Contractor QC", ""],
-    ["PMC / SPDC", submission.submittedBy?.fullName || ""],
-    ["Client (if hold point)", ""],
-  ];
-  for (const [role, name] of signs) {
-    writeValue(ws, r, 2, role);
-    ws.getCell(r, 2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: LABEL } };
-    paintInput(ws, r, 3, name);
-    writeValue(ws, r, 5, "Date");
-    ws.getCell(r, 5).fill = { type: "pattern", pattern: "solid", fgColor: { argb: LABEL } };
-    paintInput(ws, r, 6, role === "PMC / SPDC" ? fmtDate(submission.createdAt) : "");
-    for (let c = 2; c <= 6; c++) thinBorder(ws.getCell(r, c));
-    r += 1;
-  }
+  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9]);
 
   return wb;
 }
@@ -439,6 +507,7 @@ async function fillSafetyChecklist(
   keepOnlySheets(wb, ["Safety Checklist (General)", "Safety IR Form", "Procedure & Legend"]);
 
   const ws = wb.getWorksheet("Safety Checklist (General)") || wb.worksheets[0];
+  embedLogo(wb, ws);
   const template = submission.assignment?.template;
   const items = [...(template?.items || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const responses = parseResponses(submission.responsesJson);
@@ -566,6 +635,9 @@ async function fillSafetyChecklist(
     r += 1;
   }
 
+  r += 1;
+  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8]);
+
   // Safety IR cover particulars
   const ir = wb.getWorksheet("Safety IR Form");
   if (ir) {
@@ -578,6 +650,8 @@ async function fillSafetyChecklist(
     paintInput(ir, 14, 5, drawingLabel(submission));
     paintInput(ir, 18, 5, submission.submittedBy?.fullName || "");
     paintInput(ir, 19, 5, submission.remarks || "");
+    embedLogo(wb, ir);
+    applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   }
 
   return wb;
@@ -612,6 +686,7 @@ async function fillInspectionRequest(
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
   const ws = wb.worksheets[0];
+  embedLogo(wb, ws);
   const template = submission.assignment?.template;
   fillIrParticulars(ws, submission, project);
 
@@ -654,6 +729,8 @@ async function fillInspectionRequest(
     }
     r += 1;
   }
+  r += 1;
+  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   return wb;
 }
 
@@ -668,6 +745,7 @@ async function fillRfiForm(
   keepOnlySheets(wb, ["03_RFI_FORM"]);
   const ws = wb.worksheets[0];
   ws.name = "RFI Form";
+  embedLogo(wb, ws);
 
   const template = submission.assignment?.template;
   const rfiNo = `SPDC-RFI-${(submission.id || "PORTAL").slice(0, 6).toUpperCase()}`;
@@ -697,6 +775,8 @@ async function fillRfiForm(
   });
   paintInput(ws, 24, 2, bodyLines.join("\n") || submission.remarks || "");
   if (submission.remarks) paintInput(ws, 31, 2, submission.remarks);
+
+  applySignoff(wb, ws, Math.max(ws.rowCount || 40, 40) + 1, submission, [2, 3, 4, 5, 6, 7, 8]);
 
   return wb;
 }
@@ -736,10 +816,23 @@ export async function buildBrandedChecklistXlsxBuffer(
     wb = await fillInspectionRequest(submission, project);
   } else {
     wb = await fillActivityChecklist(submission, project);
-    try {
-      wb = await withIrCover(wb, submission, project);
-    } catch {
-      /* IR cover is best-effort */
+    const isDrawingFill = String(type || "").toLowerCase().includes("drawing");
+    if (!isDrawingFill) {
+      try {
+        wb = await withIrCover(wb, submission, project);
+        const act = wb.getWorksheet("Activity Checklist") || wb.worksheets[wb.worksheets.length - 1];
+        if (act) {
+          embedLogo(wb, act);
+          applySignoff(wb, act, Math.max(act.rowCount || 20, 20) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9]);
+        }
+        const ir = wb.getWorksheet("IR Form");
+        if (ir) {
+          embedLogo(wb, ir);
+          applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        }
+      } catch {
+        /* IR cover is best-effort */
+      }
     }
   }
 

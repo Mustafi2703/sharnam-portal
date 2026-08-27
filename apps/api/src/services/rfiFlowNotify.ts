@@ -2,15 +2,36 @@
  * RFI lifecycle emails with portal deep links:
  * raise (+ fill link) → submit for review → office review → close.
  */
+import { prisma } from "../prisma.js";
 import { queueProjectEmail } from "./email.js";
 import {
   buildChecklistDecisionEmail,
   buildChecklistReviewEmail,
   buildRfiClosedEmail,
+  buildRfiFollowUpEmail,
   buildRfiRaisedEmail,
   buildRfiResponseEmail,
   type RfiEmailContext,
 } from "./rfiEmailFormat.js";
+
+export const RFI_TEST_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, operations@spdc.in";
+
+function splitEmails(raw?: string | null) {
+  return (raw || "")
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+}
+
+/** Merge project notification list with extra To: addresses (deduped). */
+export async function mergeRfiRecipients(projectId: string, extra?: string | null) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { notificationEmails: true },
+  });
+  const merged = [...new Set([...splitEmails(project?.notificationEmails), ...splitEmails(extra)])];
+  return merged.length ? merged.join(", ") : undefined;
+}
 
 export const RFI_FLOW_KINDS = [
   "RequestForInformation",
@@ -142,6 +163,7 @@ export async function notifyRfiRaised(
     linkedAssignmentId?: string | null;
     createdById?: string;
     toOverride?: string;
+    extraEmails?: string | null;
   } & RfiEmailContext
 ) {
   const fill =
@@ -149,6 +171,7 @@ export async function notifyRfiRaised(
       ? checklistFillUrl(opts.projectId, opts.linkedAssignmentId, opts.rfiKind)
       : null;
   const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
+  const toOverride = opts.toOverride || (await mergeRfiRecipients(opts.projectId, opts.extraEmails));
   const ctx: RfiEmailContext = {
     projectCode: opts.projectCode,
     projectName: opts.projectName,
@@ -183,7 +206,7 @@ export async function notifyRfiRaised(
     bodyHtml,
     context: "rfi.create",
     createdById: opts.createdById,
-    toOverride: opts.toOverride,
+    toOverride,
   });
 
   try {
@@ -411,5 +434,62 @@ export async function notifyRfiResponse(opts: {
     context: "rfi.respond",
     createdById: opts.createdById,
     toOverride: opts.toOverride,
+  });
+}
+
+export async function notifyRfiFollowUp(
+  opts: {
+    projectId: string;
+    rfiId: string;
+    linkedAssignmentId?: string | null;
+    createdById?: string;
+    extraEmails?: string | null;
+    note?: string | null;
+  } & RfiEmailContext
+) {
+  const fill =
+    opts.linkedAssignmentId != null
+      ? checklistFillUrl(opts.projectId, opts.linkedAssignmentId, opts.rfiKind)
+      : null;
+  const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
+  const ctx: RfiEmailContext = {
+    projectCode: opts.projectCode,
+    projectName: opts.projectName,
+    number: opts.number,
+    subject: opts.subject,
+    question: opts.question,
+    rfiKind: opts.rfiKind,
+    status: opts.status,
+    ballInCourt: opts.ballInCourt,
+    irNumber: opts.irNumber,
+    dueDate: opts.dueDate,
+    createdByName: opts.createdByName,
+    createdAt: opts.createdAt,
+    assignedToName: opts.assignedToName,
+    linkedDrawingNumber: opts.linkedDrawingNumber,
+    linkedDrawingTitle: opts.linkedDrawingTitle,
+    vendorName: opts.vendorName,
+    scheduleImpact: opts.scheduleImpact,
+    costImpact: opts.costImpact,
+    specSectionLink: opts.specSectionLink,
+    formDataJson: opts.formDataJson,
+  };
+
+  const { bodyHtml, bodyText } = buildRfiFollowUpEmail({
+    ctx,
+    registerUrl: register,
+    fillUrl: fill,
+    note: opts.note,
+  });
+
+  const toOverride = await mergeRfiRecipients(opts.projectId, opts.extraEmails);
+  return queueProjectEmail({
+    projectId: opts.projectId,
+    subject: `Follow-up — ${opts.number}: ${opts.subject}`,
+    body: bodyText,
+    bodyHtml,
+    context: "rfi.follow-up",
+    createdById: opts.createdById,
+    toOverride,
   });
 }

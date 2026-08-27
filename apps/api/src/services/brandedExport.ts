@@ -27,24 +27,39 @@ function fmtDt(d: Date | string | null | undefined) {
   return new Date(d).toLocaleString("en-IN");
 }
 
-/** Embed Sharnam logo when available on disk (local + Render monorepo layouts). */
-export function sharnamLogoDataUri(): string {
-  const candidates = [
-    path.resolve(process.cwd(), "apps/web/public/logo.png"),
-    path.resolve(process.cwd(), "../web/public/logo.png"),
-    path.resolve(process.cwd(), "../../apps/web/public/logo.png"),
-    path.resolve(process.cwd(), "public/logo.png"),
-  ];
-  for (const p of candidates) {
+const LOGO_CANDIDATES = [
+  path.resolve(process.cwd(), "apps/web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "../web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "../../apps/web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "public/logo-transparent.png"),
+  path.resolve(process.cwd(), "apps/web/public/logo.png"),
+  path.resolve(process.cwd(), "../web/public/logo.png"),
+  path.resolve(process.cwd(), "../../apps/web/public/logo.png"),
+  path.resolve(process.cwd(), "public/logo.png"),
+];
+
+/** On-disk Sharnam logo (transparent PNG preferred). */
+export function sharnamLogoPath(): string | null {
+  for (const p of LOGO_CANDIDATES) {
     try {
-      if (fs.existsSync(p)) {
-        return `data:image/png;base64,${fs.readFileSync(p).toString("base64")}`;
-      }
+      if (fs.existsSync(p)) return p;
     } catch {
       /* try next */
     }
   }
-  return "";
+  return null;
+}
+
+/** Embed Sharnam logo when available on disk (local + Render monorepo layouts). */
+export function sharnamLogoDataUri(): string {
+  const p = sharnamLogoPath();
+  if (!p) return "";
+  try {
+    const ext = path.extname(p).toLowerCase() === ".png" ? "png" : "png";
+    return `data:image/${ext};base64,${fs.readFileSync(p).toString("base64")}`;
+  } catch {
+    return "";
+  }
 }
 
 export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; projectCode?: string }): Buffer {

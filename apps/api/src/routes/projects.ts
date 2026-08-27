@@ -229,7 +229,7 @@ function storageUrl(saved: {
   url: string;
   sharePointUrl?: string | null;
 }) {
-  return saved.sharePointUrl || saved.url;
+  return saved.url || saved.sharePointUrl || "";
 }
 
 function contentTypeForFile(file: Express.Multer.File) {

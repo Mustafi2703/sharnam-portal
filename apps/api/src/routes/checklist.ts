@@ -7,8 +7,31 @@ import { audit } from "../services/audit.js";
 import { buildBrandedChecklistHtml } from "../services/brandedChecklistHtml.js";
 import { buildBrandedChecklistXlsxBuffer } from "../services/brandedChecklistXlsx.js";
 import { attachProgress, computeChecklistProgress, parseResponsesJson } from "../services/checklistProgress.js";
+import { isSignatureUploadName } from "../services/checklistSignoff.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+const BRANDED_REVISION_SELECT = {
+  revisionNumber: true,
+  clientSignName: true,
+  clientSignUrl: true,
+  pmcSignName: true,
+  pmcSignUrl: true,
+  siteEngineerSignName: true,
+  siteEngineerSignUrl: true,
+  contractorSignName: true,
+  contractorSignUrl: true,
+} as const;
+
+function checklistUploadKind(f: Express.Multer.File, scopedKind?: string) {
+  if (scopedKind) return scopedKind;
+  if (isSignatureUploadName(f.originalname, f.fieldname)) return "signature";
+  return f.mimetype?.startsWith("image/") ? "photo" : "doc";
+}
+
+function storedUploadUrl(saved: { url: string; sharePointUrl?: string | null }) {
+  return saved.url || saved.sharePointUrl || "";
+}
 
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
@@ -308,7 +331,7 @@ checklistRouter.post(
       for (const f of files) {
         const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
         const itemId = scoped?.[1] || null;
-        const kind = scoped?.[2] || (f.mimetype?.startsWith("image/") ? "photo" : "doc");
+        const kind = checklistUploadKind(f, scoped?.[2]);
         if (itemId) itemAttachCount += 1;
         const saved = await mockOneDrive.upload(
           assignment.project.code,
@@ -321,7 +344,7 @@ checklistRouter.post(
             submissionId: submission.id,
             itemId,
             kind,
-            fileUrl: saved.sharePointUrl || saved.url,
+            fileUrl: storedUploadUrl(saved),
             caption: f.originalname,
             comment: itemId ? itemComments[itemId] || null : null,
           },
@@ -474,7 +497,7 @@ checklistRouter.post(
       for (const f of files) {
         const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
         const itemId = scoped?.[1] || null;
-        const kind = scoped?.[2] || (f.mimetype?.startsWith("image/") ? "photo" : "doc");
+        const kind = checklistUploadKind(f, scoped?.[2]);
         const saved = await mockOneDrive.upload(
           assignment.project.code,
           checklistFolder,
@@ -486,7 +509,7 @@ checklistRouter.post(
             submissionId: submission.id,
             itemId,
             kind,
-            fileUrl: saved.sharePointUrl || saved.url,
+            fileUrl: storedUploadUrl(saved),
             caption: f.originalname,
           },
         });
@@ -612,6 +635,7 @@ checklistRouter.get("/submissions/:id", async (req, res) => {
       submittedBy: { select: { fullName: true, email: true } },
       drawing: true,
       photos: true,
+      revision: { select: BRANDED_REVISION_SELECT },
     },
   });
   if (!submission) return res.status(404).json({ error: "Not found" });
@@ -631,11 +655,13 @@ checklistRouter.get("/submissions/:id/branded.html", async (req, res) => {
       },
       submittedBy: { select: { fullName: true, email: true } },
       drawing: true,
+      photos: true,
+      revision: { select: BRANDED_REVISION_SELECT },
     },
   });
   if (!submission) return res.status(404).send("Not found");
   const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
-  const html = buildBrandedChecklistHtml(submission, `${webOrigin.replace(/\/$/, "")}/logo.png`);
+  const html = buildBrandedChecklistHtml(submission, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
   const safeName = (submission.assignment?.template?.name || "checklist")
     .replace(/[^\w\s-]/g, "")
     .trim()
@@ -663,6 +689,8 @@ checklistRouter.get("/submissions/:id/branded.xlsx", async (req, res) => {
       },
       submittedBy: { select: { fullName: true, email: true } },
       drawing: true,
+      photos: true,
+      revision: { select: BRANDED_REVISION_SELECT },
     },
   });
   if (!submission) return res.status(404).json({ error: "Not found" });

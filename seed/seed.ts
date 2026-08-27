@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 import { applyDatabaseUrl } from "../scripts/resolve-database-url.mjs";
 import { seedCostFromBudgetWorkbook } from "./costFromBudget.ts";
 import { seedBbsDemoShapes } from "./bbsDemoShapes.ts";
-import { seedChecklistFillsForReports, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr, seedSafetyFromWorkbooksForAllDemoProjects } from "./qualitySafetySheets.ts";
+import { seedChecklistFillsForReports, seedDemoChecklistSignoffs, seedQualitySafetyFromSheets, seedQualitySafetyDemoForDpr, seedSafetyFromWorkbooksForAllDemoProjects } from "./qualitySafetySheets.ts";
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedQuotationDemo } from "./quotationDemo.ts";
 import { seedFullDemoPack } from "./fullDemoPack.ts";
@@ -819,6 +819,7 @@ async function seedProjectAndCost(users: User[]) {
   const siteForSheets = users.find((u) => u.role === "site_employee")?.id!;
   await seedQualitySafetyFromSheets(prisma, project.id, EXCEL_ROOT, siteForSheets || officeForSheets);
   await seedChecklistFillsForReports(prisma, project.id, siteForSheets || officeForSheets);
+  await seedDemoChecklistSignoffs(prisma, { id: project.id, code: project.code });
 
   // Cost sample from cashflow packages (fallback if budget workbook missing)
   const packages = [

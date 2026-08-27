@@ -283,6 +283,47 @@ export function buildRfiRaisedEmail(opts: {
   return { bodyHtml, bodyText };
 }
 
+export function buildRfiFollowUpEmail(opts: {
+  ctx: RfiEmailContext;
+  registerUrl: string;
+  fillUrl?: string | null;
+  note?: string | null;
+}) {
+  const rows = rfiDetailRows(opts.ctx);
+  const note = (opts.note || "").trim();
+  const intro = note
+    ? `Follow-up on an open RFI. ${note}`
+    : "Follow-up: this RFI is still awaiting a response. Please reply in the portal by the due date.";
+
+  const bodyHtml = wrapRfiEmailHtml({
+    eyebrow: "Follow-up",
+    headline: `Follow-up — ${opts.ctx.number}: ${opts.ctx.subject}`,
+    intro,
+    ctx: opts.ctx,
+    primaryAction: opts.fillUrl
+      ? { href: opts.fillUrl, label: "Open checklist & fill" }
+      : { href: opts.registerUrl, label: "Open RFI register" },
+    secondaryAction: opts.fillUrl ? { href: opts.registerUrl, label: "View RFI status" } : undefined,
+    extraHtml: linkLine("RFI register:", opts.registerUrl),
+    footerNote: "Please respond on the register. Do not reply to this automated message.",
+  });
+
+  const bodyText = [
+    `FOLLOW-UP — ${opts.ctx.number}: ${opts.ctx.subject}`,
+    note,
+    "",
+    detailTableText(rows),
+    "",
+    "Question:",
+    opts.ctx.question || "—",
+    "",
+    "RFI register:",
+    opts.registerUrl,
+  ].join("\n");
+
+  return { bodyHtml, bodyText };
+}
+
 export function buildRfiClosedEmail(opts: { ctx: RfiEmailContext; registerUrl: string }) {
   const rows = rfiDetailRows({ ...opts.ctx, status: "Closed" });
   const bodyHtml = wrapRfiEmailHtml({

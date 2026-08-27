@@ -45,7 +45,46 @@ export const SPDC_RFI_SLA_DAYS: Record<string, number> = {
   CRITICAL: 3,
   HIGH: 7,
   NORMAL: 14,
+  LOW: 21,
 };
+
+export const SPDC_RFI_DISCIPLINES = [
+  "Architectural",
+  "Structural",
+  "Civil",
+  "PEB",
+  "Electrical",
+  "Plumbing",
+  "Firefighting",
+  "HVAC",
+  "External Infra",
+  "General",
+];
+
+export const SPDC_RFI_CATEGORIES = [
+  "Drawing discrepancy",
+  "Missing information",
+  "Design clarification",
+  "Specification conflict",
+  "Site constraint",
+  "Material substitution",
+  "Statutory requirement",
+  "Interface / coordination",
+];
+
+export const SPDC_RFI_RESPONSIBLE = [
+  "Architect",
+  "Structural Consultant",
+  "MEP Consultant",
+  "PEB Vendor",
+  "PMC (SPDC)",
+  "Employer",
+  "Statutory Authority",
+];
+
+export const SPDC_RFI_PACKAGES = ["P1-CIVIL", "P2-PEB", "Package A", "Package B"];
+
+export const TEST_RFI_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, operations@spdc.in";
 
 export type DrawingRfiRow = {
   id: string;
@@ -89,7 +128,7 @@ function officialResponse(r: DrawingRfiRow) {
 
 export function spdcPriority(form: Record<string, string>, dueDate?: string | null, createdAt?: string) {
   const p = (form.priority || "").trim().toUpperCase();
-  if (p === "CRITICAL" || p === "HIGH" || p === "NORMAL") return p;
+  if (p === "CRITICAL" || p === "HIGH" || p === "NORMAL" || p === "LOW") return p;
   if (dueDate && createdAt) {
     const days = daysBetween(new Date(createdAt), new Date(dueDate));
     if (days <= 3) return "CRITICAL";
@@ -253,8 +292,16 @@ export function spdcFormDataFromCompose(input: {
   priority?: string;
   contractorSolution?: string;
   responsibleParty?: string;
+  originator?: string;
   pmcRemarks?: string;
   queryRaised?: string;
+  employerClient?: string;
+  contractNo?: string;
+  costImpact?: string;
+  estCostInr?: string;
+  timeImpact?: string;
+  estDelayDays?: string;
+  attachments?: string;
 }) {
   const priority = (input.priority || "NORMAL").toUpperCase();
   return {
@@ -269,7 +316,15 @@ export function spdcFormDataFromCompose(input: {
     slaDays: String(spdcSlaDays(priority)),
     contractorSolution: input.contractorSolution || "",
     responsibleParty: input.responsibleParty || "",
+    originator: input.originator || "",
     pmcRemarks: input.pmcRemarks || "",
     queryRaised: input.queryRaised || "",
+    employerClient: input.employerClient || "",
+    contractNo: input.contractNo || "",
+    costImpact: input.costImpact || "No",
+    estCostInr: input.estCostInr || "0",
+    timeImpact: input.timeImpact || "No",
+    estDelayDays: input.estDelayDays || "0",
+    attachments: input.attachments || "",
   };
 }
