@@ -1,6 +1,8 @@
 import XLSX from "../lib/xlsx.js";
 import fs from "fs";
+import os from "os";
 import path from "path";
+import ExcelJS from "exceljs";
 import { prisma } from "../prisma.js";
 
 export type SheetSpec = {
@@ -86,11 +88,14 @@ export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; pro
 export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
   const logo = sharnamLogoPath();
   if (!logo) return buffer;
+  const tmpPath = path.join(
+    os.tmpdir(),
+    `spdc-stamp-${Date.now()}-${Math.random().toString(36).slice(2)}.xlsx`
+  );
   try {
-    const mod = await import("exceljs");
-    const ExcelJS = (mod as { default?: typeof import("exceljs") }).default ?? (mod as typeof import("exceljs"));
+    fs.writeFileSync(tmpPath, buffer);
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer as unknown as Buffer);
+    await wb.xlsx.readFile(tmpPath);
     const ws = wb.worksheets[0];
     if (!ws) return buffer;
     const imgId = wb.addImage({ filename: logo, extension: "png" });
@@ -104,6 +109,12 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
     return Buffer.from(out);
   } catch {
     return buffer;
+  } finally {
+    try {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
