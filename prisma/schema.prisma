@@ -63,6 +63,8 @@ model Project {
   clientGst               String?
   designConsultant        String?
   contractorName          String?
+  /// PMC / SPDC name shown on QAP, cube and other register headers
+  pmcName                 String?
   /// Client logo for register headers (SharePoint or local uploads URL)
   clientLogoUrl           String?
   location                String?

@@ -75,21 +75,19 @@ export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <label className="block">
               <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Week</span>
-              {weeks.length > 0 ? (
-                <Select value={form.weekLabel} onChange={(e) => set({ weekLabel: e.target.value })} required>
+              <Input
+                value={form.weekLabel}
+                onChange={(e) => set({ weekLabel: e.target.value })}
+                list="qap-week-labels"
+                placeholder="Week 50 — or type a new sheet"
+                required
+              />
+              {weeks.length > 0 && (
+                <datalist id="qap-week-labels">
                   {weeks.map((w) => (
-                    <option key={w} value={w}>
-                      {w}
-                    </option>
+                    <option key={w} value={w} />
                   ))}
-                </Select>
-              ) : (
-                <Input
-                  value={form.weekLabel}
-                  onChange={(e) => set({ weekLabel: e.target.value })}
-                  placeholder="Week 50"
-                  required
-                />
+                </datalist>
               )}
             </label>
             {form.addMode === "section" && (

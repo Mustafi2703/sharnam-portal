@@ -174,6 +174,63 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
     await onChanged();
   }
 
+  async function addGroup() {
+    const nextSr =
+      String(
+        Math.max(
+          0,
+          ...localRows.map((r) => Number(r.srNo) || 0)
+        ) + 1
+      );
+    const description = window.prompt("New cube group — footing / location", "New cube group");
+    if (!description?.trim()) return;
+    const grade = window.prompt("Grade", "M25") || "M25";
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ created: number }>(`/api/checklist/project/${projectId}/cubes/group`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          srNo: nextSr,
+          description: description.trim(),
+          grade: grade.trim() || "M25",
+          castDate: new Date().toISOString().slice(0, 10),
+        }),
+      });
+      setMsg(`Opened new cube group (${out.created} specimens)`);
+      await onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "New group failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSpecimen(id: string) {
+    if (!window.confirm("Delete this cube specimen?")) return;
+    setPatchErr("");
+    try {
+      await api(`/api/checklist/project/${projectId}/cubes/${id}`, { method: "DELETE", token });
+      await onChanged();
+    } catch (err) {
+      setPatchErr(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
+  async function deleteGroup(ids: string[]) {
+    if (!window.confirm(`Delete this cube group (${ids.length} specimens)?`)) return;
+    setPatchErr("");
+    try {
+      for (const id of ids) {
+        await api(`/api/checklist/project/${projectId}/cubes/${id}`, { method: "DELETE", token });
+      }
+      await onChanged();
+    } catch (err) {
+      setPatchErr(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -282,9 +339,14 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
             </p>
           </div>
           {canEdit && (
-            <Button type="button" variant="secondary" className="!text-xs shrink-0" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
-              Load SPDC cube template
-            </Button>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Button type="button" className="!text-xs" disabled={busy || syncing} onClick={() => void addGroup()}>
+                New cube group
+              </Button>
+              <Button type="button" variant="secondary" className="!text-xs" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
+                Load SPDC cube template
+              </Button>
+            </div>
           )}
         </div>
 
@@ -324,6 +386,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                   <th rowSpan={2} className="text-left">Strength (MPa)</th>
                   <th rowSpan={2} className="text-left">Avg Strength (MPa)</th>
                   <th rowSpan={2} className="text-left">Result</th>
+                  {canEdit && <th rowSpan={2} className="w-16" />}
                 </tr>
                 <tr>
                   <th className="spdc-th-sub text-center">7-day</th>
@@ -424,13 +487,30 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                             )}
                           </td>
                         ) : null}
+                        {canEdit && (
+                          <td className="align-top whitespace-nowrap">
+                            {isFirst && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="!text-xs !py-0.5"
+                                onClick={() => void deleteGroup(g.specimens.map((s) => s.id))}
+                              >
+                                Del group
+                              </Button>
+                            )}
+                            <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteSpecimen(c.id)}>
+                              Del
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     );
                   });
                 })}
                 {!filtered.length && (
                   <tr>
-                    <td colSpan={14} className="empty text-left p-4">
+                    <td colSpan={canEdit ? 15 : 14} className="empty text-left p-4">
                       No cube rows — Load SPDC template or add specimens with + Add row.
                     </td>
                   </tr>

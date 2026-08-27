@@ -1406,7 +1406,7 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
 
 checklistRouter.post(
   "/project/:projectId/qap",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const row = await prisma.qapActivity.create({
@@ -1432,10 +1432,94 @@ checklistRouter.post(
   }
 );
 
+checklistRouter.post(
+  "/project/:projectId/qap/new-sheet",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const weekLabel = String(req.body.weekLabel || "").trim();
+    const copyFrom = String(req.body.copyFrom || "").trim();
+    if (!weekLabel) return res.status(400).json({ error: "weekLabel is required" });
+    const existing = await prisma.qapActivity.count({ where: { projectId, weekLabel } });
+    if (existing > 0) {
+      return res.status(409).json({ error: `Sheet "${weekLabel}" already exists`, weekLabel, count: existing });
+    }
+    const source = copyFrom
+      ? await prisma.qapActivity.findMany({ where: { projectId, weekLabel: copyFrom } })
+      : await prisma.qapActivity.findMany({
+          where: { projectId },
+          orderBy: { createdAt: "desc" },
+          take: 400,
+        });
+    if (!source.length) {
+      const row = await prisma.qapActivity.create({
+        data: {
+          projectId,
+          weekLabel,
+          section: "General",
+          activity: "General",
+          description: "New QAP sheet",
+          status: "Open",
+        },
+      });
+      return res.status(201).json({ weekLabel, copied: 0, created: 1, ids: [row.id] });
+    }
+    const uniqueByKey = new Map<string, (typeof source)[number]>();
+    for (const r of source) {
+      const key = `${r.srNo || ""}|${r.section || ""}|${r.activity}|${r.description || ""}`;
+      if (!uniqueByKey.has(key)) uniqueByKey.set(key, r);
+    }
+    const rows = [...uniqueByKey.values()];
+    await prisma.qapActivity.createMany({
+      data: rows.map((r) => ({
+        projectId,
+        weekLabel,
+        srNo: r.srNo,
+        section: r.section,
+        activity: r.activity,
+        description: r.description,
+        frequency: r.frequency,
+        codeOfConformance: r.codeOfConformance,
+        testAgency: r.testAgency,
+        contractorPerformer: r.contractorPerformer,
+        contractorChecker: r.contractorChecker,
+        discipline: r.discipline,
+        pmcRole: r.pmcRole,
+        clientRole: r.clientRole,
+        records: r.records,
+        remarks: null,
+        dailyChecks: null,
+        contractorOk: false,
+        pmcOk: false,
+        clientOk: false,
+        status: "Open",
+      })),
+    });
+    res.status(201).json({ weekLabel, copied: rows.length, created: rows.length });
+  }
+);
+
+checklistRouter.delete(
+  "/project/:projectId/qap/:qapId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.qapActivity.findFirst({
+      where: { id: req.params.qapId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    await prisma.qapActivity.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
+  }
+);
+
 checklistRouter.patch(
   "/project/:projectId/qap/:qapId",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
+    const existing = await prisma.qapActivity.findFirst({
+      where: { id: req.params.qapId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
     const data: Record<string, unknown> = {};
     if (body.status != null) data.status = String(body.status);
@@ -1461,7 +1545,7 @@ checklistRouter.patch(
     if (body.status === "Done" || body.completedAt) data.completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
     if (body.status === "Open") data.completedAt = null;
     const row = await prisma.qapActivity.update({
-      where: { id: req.params.qapId },
+      where: { id: existing.id },
       data,
     });
     res.json(row);
@@ -1676,6 +1760,49 @@ checklistRouter.post(
       },
     });
     res.status(201).json(row);
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/cubes/group",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const b = req.body || {};
+    const description = String(b.description || "New cube group");
+    const grade = b.grade ? String(b.grade) : "M25";
+    const srNo = b.srNo ? String(b.srNo) : null;
+    const castDate = b.castDate ? new Date(b.castDate) : new Date();
+    const testAgency = b.testAgency ? String(b.testAgency) : null;
+    const created = await prisma.$transaction(
+      [0, 1, 2].map(() =>
+        prisma.cubeTest.create({
+          data: {
+            projectId: req.params.projectId,
+            srNo,
+            castDate,
+            description,
+            grade,
+            testAgency,
+            result: "Pending",
+            source: "portal",
+          },
+        })
+      )
+    );
+    res.status(201).json({ created: created.length, specimens: created });
+  }
+);
+
+checklistRouter.delete(
+  "/project/:projectId/cubes/:cubeId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.cubeTest.findFirst({
+      where: { id: req.params.cubeId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    await prisma.cubeTest.delete({ where: { id: existing.id } });
+    res.json({ ok: true });
   }
 );
 

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
 import { QapRegisterAddForm } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
@@ -59,6 +59,8 @@ export default function QapPage() {
           clientName: projRes.clientName,
           designConsultant: projRes.designConsultant,
           contractorName: projRes.contractorName,
+          pmcName: (projRes as { pmcName?: string | null }).pmcName,
+          location: (projRes as { location?: string | null }).location,
           clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
         });
       }
@@ -115,7 +117,7 @@ export default function QapPage() {
 
   const qapRows = useMemo(() => {
     const rows = dash?.qap || [];
-    if (!weekFilter) return rows.filter((q: any) => weekMatchesFilter(q.weekLabel, "Week 50"));
+    if (!weekFilter) return rows;
     return rows.filter((q: any) => weekMatchesFilter(q.weekLabel, weekFilter));
   }, [dash?.qap, weekFilter]);
 
@@ -201,7 +203,7 @@ export default function QapPage() {
       <PageHeader
         eyebrow="Quality module"
         title="Quality Assurance Plan"
-        subtitle="Full Week 50 register — project details fixed; scroll rows inside the sheet."
+        subtitle="Full Week 50 register — project, PMC and client are editable in the sheet header."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} open</Badge>
@@ -245,6 +247,41 @@ export default function QapPage() {
             </option>
           ))}
         </Select>
+        {canManage && (
+          <Button
+            type="button"
+            className="!text-xs"
+            disabled={busy}
+            onClick={async () => {
+              if (!id) return;
+              const next = window.prompt("New QAP week sheet name", "Week 51");
+              if (!next?.trim()) return;
+              setBusy(true);
+              try {
+                const out = await api<{ weekLabel: string; copied: number }>(
+                  `/api/checklist/project/${id}/qap/new-sheet`,
+                  {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify({
+                      weekLabel: next.trim(),
+                      copyFrom: weekFilter || preferWeekLabel(weeks) || "Week 50",
+                    }),
+                  }
+                );
+                setMsg(`Opened ${out.weekLabel} (${out.copied} lines copied)`);
+                setWeekFilter(out.weekLabel);
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "New sheet failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            New week sheet
+          </Button>
+        )}
         {canManage && (
           <Button
             type="button"

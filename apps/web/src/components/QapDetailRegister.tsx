@@ -2,9 +2,6 @@ import { useMemo, useState, useEffect, Fragment } from "react";
 import { api } from "../api";
 import {
   QAP_LEGENDS,
-  QAP_SIGN_CLIENT,
-  QAP_SIGN_CONTRACTOR,
-  QAP_SIGN_PMC,
   qapStatusRowClass,
   remarksCellClass,
 } from "../lib/inspectionRequestForms";
@@ -57,6 +54,8 @@ export type QapProjectMeta = {
   clientName?: string;
   designConsultant?: string;
   contractorName?: string;
+  pmcName?: string | null;
+  location?: string | null;
   clientLogoUrl?: string | null;
 };
 
@@ -99,7 +98,8 @@ export function QapDetailRegister({
   }, [weeks, weekFilter]);
 
   const filtered = useMemo(() => {
-    if (!showWeekFilter || !weekFilter) return localRows.filter((r) => weekMatchesFilter(r.weekLabel, "Week 50"));
+    if (!showWeekFilter) return localRows;
+    if (!weekFilter) return localRows.filter((r) => weekMatchesFilter(r.weekLabel, "Week 50"));
     return localRows.filter((r) => weekMatchesFilter(r.weekLabel, weekFilter));
   }, [localRows, weekFilter, showWeekFilter]);
 
@@ -129,14 +129,6 @@ export function QapDetailRegister({
     }
   }
 
-  function renderRoleChip(role?: string | null, fallbackOk?: boolean) {
-    const text = (role || "").trim();
-    if (text) {
-      return <span className="text-[10px] font-semibold">{text}</span>;
-    }
-    return fallbackOk ? <span className="qap-role-approve">✓</span> : <span className="qap-role-empty">·</span>;
-  }
-
   async function patchRow(id: string, body: Record<string, unknown>, refreshTotals = false) {
     const prev = localRows.find((r) => r.id === id);
     if (!prev) return;
@@ -155,7 +147,18 @@ export function QapDetailRegister({
     }
   }
 
-  const colSpan = 11 + dayLabels.length;
+  async function deleteRow(id: string) {
+    if (!window.confirm("Delete this QAP line?")) return;
+    setPatchErr("");
+    try {
+      await api(`/api/checklist/project/${projectId}/qap/${id}`, { method: "DELETE", token });
+      await onUpdated();
+    } catch (err) {
+      setPatchErr(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
+  const colSpan = 13 + dayLabels.length + (canEdit ? 1 : 0);
 
   const legend = (
     <>
@@ -256,6 +259,7 @@ export function QapDetailRegister({
                   <th rowSpan={2} className="text-left">
                     Status
                   </th>
+                  {canEdit && <th rowSpan={2} className="w-12" />}
                 </tr>
                 <tr>
                   <th className="spdc-th-contractor spdc-th-sub">Performer</th>
@@ -335,92 +339,60 @@ export function QapDetailRegister({
                           />
                         </td>
                         <td className="text-left align-top qap-col-contractor">
-                          {canEdit ? (
-                            <select
-                              className="register-sheet-cell register-sheet-cell--select min-w-[4.5rem]"
-                              value={q.contractorPerformer || ""}
-                              onChange={(e) =>
-                                void patchRow(q.id, {
-                                  contractorPerformer: e.target.value || null,
-                                  contractorOk: !!(e.target.value || q.contractorChecker),
-                                })
-                              }
-                            >
-                              {QAP_SIGN_CONTRACTOR.map((o) => (
-                                <option key={`cp-${o || "x"}`} value={o}>
-                                  {o || "—"}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            q.contractorPerformer || "—"
-                          )}
+                          <RegisterSheetCell
+                            value={q.contractorPerformer || ""}
+                            disabled={!canEdit}
+                            className="min-w-[4.5rem]"
+                            placeholder="P / C"
+                            onCommit={(v) =>
+                              void patchRow(q.id, {
+                                contractorPerformer: v || null,
+                                contractorOk: !!(v || q.contractorChecker),
+                              })
+                            }
+                          />
                         </td>
                         <td className="text-left align-top qap-col-contractor">
-                          {canEdit ? (
-                            <select
-                              className="register-sheet-cell register-sheet-cell--select min-w-[4.5rem]"
-                              value={q.contractorChecker || ""}
-                              onChange={(e) =>
-                                void patchRow(q.id, {
-                                  contractorChecker: e.target.value || null,
-                                  contractorOk: !!(e.target.value || q.contractorPerformer),
-                                })
-                              }
-                            >
-                              {QAP_SIGN_CONTRACTOR.map((o) => (
-                                <option key={`cc-${o || "x"}`} value={o}>
-                                  {o || "—"}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            q.contractorChecker || "—"
-                          )}
+                          <RegisterSheetCell
+                            value={q.contractorChecker || ""}
+                            disabled={!canEdit}
+                            className="min-w-[4.5rem]"
+                            placeholder="C"
+                            onCommit={(v) =>
+                              void patchRow(q.id, {
+                                contractorChecker: v || null,
+                                contractorOk: !!(v || q.contractorPerformer),
+                              })
+                            }
+                          />
                         </td>
                         <td className="text-left align-top qap-col-pmc">
-                          {canEdit ? (
-                            <select
-                              className="register-sheet-cell register-sheet-cell--select min-w-[4.5rem]"
-                              value={q.pmcRole || ""}
-                              onChange={(e) =>
-                                void patchRow(q.id, {
-                                  pmcRole: e.target.value || null,
-                                  pmcOk: /review|witness|yes|approve/i.test(e.target.value),
-                                })
-                              }
-                            >
-                              {QAP_SIGN_PMC.map((o) => (
-                                <option key={`pmc-${o || "x"}`} value={o}>
-                                  {o || "—"}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            renderRoleChip(q.pmcRole, q.pmcOk)
-                          )}
+                          <RegisterSheetCell
+                            value={q.pmcRole || ""}
+                            disabled={!canEdit}
+                            className="min-w-[4.5rem]"
+                            placeholder="R / W / A"
+                            onCommit={(v) =>
+                              void patchRow(q.id, {
+                                pmcRole: v || null,
+                                pmcOk: /review|witness|yes|approve/i.test(v),
+                              })
+                            }
+                          />
                         </td>
                         <td className="text-left align-top qap-col-client">
-                          {canEdit ? (
-                            <select
-                              className="register-sheet-cell register-sheet-cell--select min-w-[4.5rem]"
-                              value={q.clientRole || ""}
-                              onChange={(e) =>
-                                void patchRow(q.id, {
-                                  clientRole: e.target.value || null,
-                                  clientOk: /witness|random|yes|approve/i.test(e.target.value),
-                                })
-                              }
-                            >
-                              {QAP_SIGN_CLIENT.map((o) => (
-                                <option key={`cl-${o || "x"}`} value={o}>
-                                  {o || "—"}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            renderRoleChip(q.clientRole, q.clientOk)
-                          )}
+                          <RegisterSheetCell
+                            value={q.clientRole || ""}
+                            disabled={!canEdit}
+                            className="min-w-[4.5rem]"
+                            placeholder="W / RA"
+                            onCommit={(v) =>
+                              void patchRow(q.id, {
+                                clientRole: v || null,
+                                clientOk: /witness|random|yes|approve/i.test(v),
+                              })
+                            }
+                          />
                         </td>
                         <td className="text-left align-top border border-line px-1 py-0.5">
                           <RegisterSheetCell
@@ -471,6 +443,13 @@ export function QapDetailRegister({
                             </Button>
                           )}
                         </td>
+                        {canEdit && (
+                          <td className="align-top">
+                            <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteRow(q.id)}>
+                              Del
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     </Fragment>
                   );

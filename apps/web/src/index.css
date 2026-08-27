@@ -737,31 +737,39 @@ body.is-auth-route #root {
 }
 @media (min-width: 1024px) {
   .spdc-register-meta {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-}
-.spdc-register-meta__cell {
-  display: flex;
-  border-right: 1px solid var(--color-line);
-  font-size: 0.75rem;
-}
-.spdc-register-meta__cell:last-child {
-  border-right: 0;
 }
 .spdc-register-meta__label {
   flex-shrink: 0;
-  min-width: 7rem;
+  min-width: 5.25rem;
   padding: 0.45rem 0.55rem;
   border-right: 1px solid var(--color-line);
   background: color-mix(in srgb, var(--color-sand) 72%, white);
   font-weight: 700;
   color: #0f172a;
 }
+.spdc-register-meta__cell {
+  display: flex;
+  min-width: 0;
+  border-right: 1px solid var(--color-line);
+  font-size: 0.75rem;
+}
+.spdc-register-meta__cell:last-child {
+  border-right: 0;
+}
 .spdc-register-meta__value {
-  padding: 0.45rem 0.55rem;
+  padding: 0.2rem 0.35rem;
   color: var(--color-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+.spdc-register-meta__cell .register-sheet-cell {
+  width: 100%;
+  min-width: 0;
   white-space: nowrap;
 }
 .spdc-register-meta__cell--client .spdc-register-meta__label {
@@ -884,7 +892,7 @@ body.is-auth-route #root {
 .spdc-register-page:has(.cube-page__register) {
   --register-sheet-row-h: 1.85rem;
   --register-sheet-head-h: 3.7rem;
-  --register-rows-visible: 16;
+  --register-rows-visible: 22;
   --register-sheet-body-h: calc(
     var(--register-sheet-head-h) + var(--register-sheet-row-h) * var(--register-rows-visible)
   );
@@ -892,19 +900,19 @@ body.is-auth-route #root {
 @media (min-width: 1280px) {
   .qap-page,
   .spdc-register-page:has(.cube-page__register) {
-    --register-rows-visible: 22;
+    --register-rows-visible: 28;
   }
 }
 @media (min-width: 1440px) {
   .qap-page,
   .spdc-register-page:has(.cube-page__register) {
-    --register-rows-visible: 28;
+    --register-rows-visible: 34;
   }
 }
 @media (min-width: 1920px) {
   .qap-page,
   .spdc-register-page:has(.cube-page__register) {
-    --register-rows-visible: 34;
+    --register-rows-visible: 40;
   }
 }
 .qap-page .spdc-register-panel.register-editor-panel,
@@ -1572,6 +1580,49 @@ body.is-auth-route #root {
   overflow-y: auto !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+/* QAP + Cube — Cost-sized sheet: fixed header, tall scrollable table */
+.tool-main__outlet:has(.qap-page),
+.tool-main__outlet:has(.cube-page__register) {
+  overflow: auto !important;
+}
+.tool-main__outlet > .qap-page,
+.tool-main__outlet > .spdc-register-page:has(.cube-page__register) {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  flex: 1 1 auto !important;
+}
+.tool-main__outlet .qap-page__register,
+.tool-main__outlet .cube-page__register,
+.qap-page .qap-page__register.register-page-fill,
+.cube-page__register.register-page-fill {
+  height: auto !important;
+  min-height: min(42rem, 70vh) !important;
+  overflow: visible !important;
+  flex: 1 1 auto !important;
+}
+.qap-page .spdc-register-panel.register-editor-panel,
+.cube-page__register .spdc-register-panel.register-editor-panel,
+.qap-page .register-sheet-shell,
+.cube-page__register .register-sheet-shell {
+  height: auto !important;
+  min-height: min(36rem, 62vh) !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+.tool-main__outlet .qap-page .register-scroll-area,
+.tool-main__outlet .cube-page__register .register-scroll-area,
+.qap-page .spdc-register-panel .register-scroll-area,
+.cube-page__register .spdc-register-panel .register-scroll-area,
+.qap-page .spdc-register-panel .register-sheet-shell > .register-scroll-area,
+.cube-page__register .spdc-register-panel .register-sheet-shell > .register-scroll-area {
+  flex: none !important;
+  min-height: min(36rem, 62vh) !important;
+  max-height: min(78vh, 56rem) !important;
+  height: auto !important;
+  overflow: auto !important;
 }
 
 /* Legacy stack aliases — keep in sync with .register-tab-body--stack above */

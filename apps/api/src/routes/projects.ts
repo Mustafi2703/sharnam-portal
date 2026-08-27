@@ -501,7 +501,7 @@ projectsRouter.post("/:id/provision-sheets", requireRoles("admin", "office", "em
   res.json(out);
 });
 
-projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const {
     notificationEmails,
     notificationWhatsApp,
@@ -523,6 +523,7 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     clientGst,
     designConsultant,
     contractorName,
+    pmcName,
   } = req.body;
   const project = await prisma.project.update({
     where: { id: req.params.id },
@@ -553,6 +554,7 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
       clientGst: clientGst !== undefined ? clientGst : undefined,
       designConsultant: designConsultant !== undefined ? designConsultant : undefined,
       contractorName: contractorName !== undefined ? contractorName : undefined,
+      pmcName: pmcName !== undefined ? pmcName : undefined,
     },
   });
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });

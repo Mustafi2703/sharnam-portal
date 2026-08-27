@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { Button } from "./ui";
@@ -9,6 +9,8 @@ export type RegisterBrandProject = {
   clientName?: string;
   designConsultant?: string;
   contractorName?: string;
+  pmcName?: string | null;
+  location?: string | null;
   clientLogoUrl?: string | null;
 };
 
@@ -21,22 +23,49 @@ type Props = {
   legend?: ReactNode;
 };
 
-const pmConsultant = "Sharnam Project Management Consultants";
+const DEFAULT_PMC = "Sharnam Project Development Consultants & Co. (SPDC)";
 
-/** SPDC register header — client logo upload, editable client name, project meta band. */
+/** SPDC register header — fixed project / PMC / client band, all fields editable. */
 export function RegisterBrandHeader({ title, project, token, canEdit, onProjectUpdated, legend }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [meta, setMeta] = useState({
+    name: project?.name || "",
+    clientName: project?.clientName || "",
+    designConsultant: project?.designConsultant || "",
+    pmcName: project?.pmcName || DEFAULT_PMC,
+    contractorName: project?.contractorName || "",
+    location: project?.location || "",
+  });
 
-  async function patchClientName(name: string) {
+  useEffect(() => {
+    setMeta({
+      name: project?.name || "",
+      clientName: project?.clientName || "",
+      designConsultant: project?.designConsultant || "",
+      pmcName: project?.pmcName || DEFAULT_PMC,
+      contractorName: project?.contractorName || "",
+      location: project?.location || "",
+    });
+  }, [
+    project?.name,
+    project?.clientName,
+    project?.designConsultant,
+    project?.pmcName,
+    project?.contractorName,
+    project?.location,
+  ]);
+
+  async function patchField(key: keyof typeof meta, value: string) {
     if (!project?.id || !token) return;
     setErr("");
+    setMeta((m) => ({ ...m, [key]: value }));
     try {
       await api(`/api/projects/${project.id}/settings`, {
         method: "PATCH",
         token,
-        body: JSON.stringify({ clientName: name }),
+        body: JSON.stringify({ [key]: value || null }),
       });
       await onProjectUpdated?.();
     } catch (e) {
@@ -61,6 +90,14 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
   }
 
   const logoSrc = project?.clientLogoUrl || null;
+  const fields: Array<{ key: keyof typeof meta; label: string; highlight?: boolean; placeholder: string }> = [
+    { key: "name", label: "Project", placeholder: "Project name" },
+    { key: "clientName", label: "Client", highlight: true, placeholder: "Client / employer" },
+    { key: "designConsultant", label: "Design Consultant", placeholder: "Architect / designer" },
+    { key: "pmcName", label: "PM Consultant", placeholder: "PMC / SPDC" },
+    { key: "contractorName", label: "Contractor", placeholder: "Main contractor" },
+    { key: "location", label: "Location", placeholder: "Site / city" },
+  ];
 
   return (
     <div className="border-b border-line bg-white shrink-0">
@@ -103,30 +140,22 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
       </div>
       {err && <p className="text-xs text-danger px-4 py-1 border-b border-line">{err}</p>}
       <div className="spdc-register-meta">
-        {(
-          [
-            ["Project", project?.name || "—", false],
-            ["Client", project?.clientName || "—", true],
-            ["Design Consultant", project?.designConsultant || "—", false],
-            ["PM Consultant", pmConsultant, false],
-            ["Contractor", project?.contractorName || "—", false],
-          ] as const
-        ).map(([label, value, highlightClient]) => (
+        {fields.map((f) => (
           <div
-            key={label}
-            className={`spdc-register-meta__cell${highlightClient ? " spdc-register-meta__cell--client" : ""}`}
+            key={f.key}
+            className={`spdc-register-meta__cell${f.highlight ? " spdc-register-meta__cell--client" : ""}`}
           >
-            <span className="spdc-register-meta__label">{label}</span>
-            {highlightClient && canEdit && project?.id ? (
+            <span className="spdc-register-meta__label">{f.label}</span>
+            {canEdit && project?.id ? (
               <RegisterSheetCell
-                value={project.clientName || ""}
-                className="spdc-register-meta__value !font-semibold !text-brand-dark min-w-[8rem]"
-                placeholder="Client name"
-                onCommit={(v) => void patchClientName(v)}
+                value={meta[f.key]}
+                className="spdc-register-meta__value !font-semibold min-w-[8rem]"
+                placeholder={f.placeholder}
+                onCommit={(v) => void patchField(f.key, v)}
               />
             ) : (
-              <span className="spdc-register-meta__value" title={String(value)}>
-                {value}
+              <span className="spdc-register-meta__value" title={meta[f.key] || "—"}>
+                {meta[f.key] || "—"}
               </span>
             )}
           </div>

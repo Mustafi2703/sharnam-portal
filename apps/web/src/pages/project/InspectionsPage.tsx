@@ -103,6 +103,8 @@ export default function InspectionsPage() {
         clientName: projRes.clientName,
         designConsultant: projRes.designConsultant,
         contractorName: projRes.contractorName,
+        pmcName: (projRes as { pmcName?: string | null }).pmcName,
+        location: (projRes as { location?: string | null }).location,
         clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
       });
     }
@@ -174,7 +176,7 @@ export default function InspectionsPage() {
         dense={isQualityRegister}
         eyebrow="Quality module"
         title={pageTitle}
-        subtitle={sheetKey === "cube-test" ? "SPDC cube register — project details fixed; scroll rows inside the sheet." : pageSubtitle}
+        subtitle={sheetKey === "cube-test" ? "SPDC cube register — project, PMC and client are editable in the sheet header." : pageSubtitle}
       />
       </div>
 
