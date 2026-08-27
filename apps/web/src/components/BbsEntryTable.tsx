@@ -95,8 +95,13 @@ function rowLabel(row: BbsRow) {
 }
 
 function fmtNum(v?: number | null) {
-  if (v == null || !Number.isFinite(v) || v === 0) return "—";
-  return Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  if (v == null || !Number.isFinite(v)) return "—";
+  if (v === 0) return "0";
+  return Number(v).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+}
+
+function fmtKg(v: number) {
+  return Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload, canFullEdit, canSiteEdit, onChanged }: Props) {
@@ -192,6 +197,65 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   }
 
   const uploaded = rows.filter((r) => r.shapeDiagramPath || r.shapeDiagramUrl).length;
+  const dataRows = rows.filter((r) => bbsRowKind(r) === "data");
+  const totalNos = dataRows.reduce((s, r) => s + (Number(r.nos) || 0), 0);
+  const totalLen = dataRows.reduce((s, r) => s + (Number(r.totalLength) || 0), 0);
+  const totalWt = dataRows.reduce((s, r) => s + (Number(r.weightKg) || 0), 0);
+  const byDia = new Map<number, { nos: number; length: number; weight: number }>();
+  for (const r of dataRows) {
+    const d = Number(r.diameterMm) || 0;
+    if (d < 6) continue;
+    const cur = byDia.get(d) || { nos: 0, length: 0, weight: 0 };
+    cur.nos += Number(r.nos) || 0;
+    cur.length += Number(r.totalLength) || 0;
+    cur.weight += Number(r.weightKg) || 0;
+    byDia.set(d, cur);
+  }
+  const diaTotals = [...byDia.entries()].sort((a, b) => a[0] - b[0]);
+
+  async function addRow(kind: "section" | "subsection" | "data") {
+    const pkg =
+      singlePackage && singlePackage !== "All"
+        ? singlePackage
+        : rows[0]?.packageName || "Dormitory BBS";
+    const sectionN = rows.filter((r) => bbsRowKind(r) === "section").length;
+    const subN = rows.filter((r) => bbsRowKind(r) === "subsection").length;
+    const body =
+      kind === "section"
+        ? {
+            packageName: pkg,
+            rowKind: "section",
+            barMark: String.fromCharCode(65 + (sectionN % 26)),
+            location: "New section",
+          }
+        : kind === "subsection"
+          ? {
+              packageName: pkg,
+              rowKind: "subsection",
+              barMark: String(subN + 1),
+              location: "New subsection",
+            }
+          : {
+              packageName: pkg,
+              rowKind: "data",
+              barMark: "",
+              location: "New bar",
+              nos: 1,
+            };
+    setBusyId("new");
+    setMsg("");
+    try {
+      await api(`/api/cost/${projectId}/bbs`, { method: "POST", token, body: JSON.stringify(body) });
+      setMsg(kind === "data" ? "Bar entry added — fill dia, nos and lengths" : `${kind} added — edit the label in the sheet`);
+      onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const canMutate = canFullEdit || canSiteEdit;
 
   function bandRow(b: BbsRow) {
     const kind = bbsRowKind(b);
@@ -208,7 +272,13 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
             <span className={labelClass}>{label}</span>
           </td>
           {bbsRangeEmpty(3, 15)}
-          <td className="w-12" />
+          <td className="w-12">
+            {canMutate && (
+              <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
+                Del
+              </Button>
+            )}
+          </td>
         </tr>
       );
     }
@@ -216,15 +286,34 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
     return (
       <tr key={b.id} className={bbsRowBandClass(kind)}>
         {bbsBandEmpty(0, "p")}
-        <td className={bbsColClass(1, { extra: "text-left font-semibold font-mono" })}>{b.barMark || "\u00a0"}</td>
+        <td className={bbsColClass(1, { extra: "text-left font-semibold font-mono" })}>
+          {canMutate ? (
+            <CellInput value={b.barMark} onCommit={(v) => void patchLine(b.id, { barMark: v, rowKind: kind })} />
+          ) : (
+            b.barMark || "\u00a0"
+          )}
+        </td>
         <td className={bbsColClass(2, { sticky: true, extra: "text-left" })}>
-          <span className={labelClass}>
-            {kind === "subsection" && b.barMark ? "" : b.barMark && kind !== "section" ? `${b.barMark} · ` : ""}
-            {label}
-          </span>
+          {canMutate ? (
+            <CellInput
+              value={label === "—" ? "" : label}
+              onCommit={(v) => void patchLine(b.id, { location: v, rowKind: kind })}
+            />
+          ) : (
+            <span className={labelClass}>
+              {kind === "subsection" && b.barMark ? "" : b.barMark && kind !== "section" ? `${b.barMark} · ` : ""}
+              {label}
+            </span>
+          )}
         </td>
         {bbsRangeEmpty(3, 15)}
-        <td className="w-12" />
+        <td className="w-12">
+          {canMutate && (
+            <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
+              Del
+            </Button>
+          )}
+        </td>
       </tr>
     );
   }
@@ -234,8 +323,55 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
     <CostRegisterShell
       sheetKind="bbs"
       title={`Bar Bending Schedule (BBS)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${rows.length} lines · ${uploaded} shapes · all SPDC BBS columns including SHAPE OF BAR`}
-      footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
+      subtitle={`${rows.length} lines · ${dataRows.length} bars · ${uploaded} shapes · total ${fmtKg(totalWt)} kg`}
+      toolbar={
+        canMutate ? (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("section")}>
+              + Section
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subsection")}>
+              + Subsection
+            </Button>
+            <Button type="button" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("data")}>
+              + Bar entry
+            </Button>
+            <span className="text-[11px] text-steel-muted">
+              Section / subsection are sheet headings. Bar entry is a measured line (dia · nos · A–E · weight).
+            </span>
+          </div>
+        ) : undefined
+      }
+      footer={
+        <div className="bbs-sheet-totals px-4 py-2.5 text-sm grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel-muted">Bar entries</div>
+            <div className="font-display font-semibold">{dataRows.length}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel-muted">Total nos of bars</div>
+            <div className="font-display font-semibold tabular-nums">{fmtNum(totalNos)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel-muted">Total length</div>
+            <div className="font-display font-semibold tabular-nums">{fmtNum(totalLen)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-steel-muted">Total weight</div>
+            <div className="font-display font-semibold tabular-nums">{fmtKg(totalWt)} kg</div>
+          </div>
+          {diaTotals.length > 0 && (
+            <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap gap-2 pt-1 border-t border-line">
+              {diaTotals.map(([d, t]) => (
+                <span key={d} className="text-xs rounded border border-line bg-paper px-2 py-1 tabular-nums">
+                  Dia {d} mm · {fmtNum(t.nos)} nos · {fmtKg(t.weight)} kg
+                </span>
+              ))}
+            </div>
+          )}
+          {msg ? <p className="sm:col-span-2 lg:col-span-4 text-sm text-brand-dark">{msg}</p> : null}
+        </div>
+      }
     >
         <table className="cube-register__table register-editor-pro cost-register-table min-w-[108rem]">
           <thead className="cost-register-thead">
@@ -514,7 +650,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                     )}
                   </td>
                   <td>
-                    {canFullEdit && (
+                    {canMutate && (
                       <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
                         Del
                       </Button>
@@ -526,11 +662,47 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
             {!rows.length && (
               <tr>
                 <td colSpan={colSpan} className="empty text-left p-6">
-                  No BBS rows — upload a BBS sheet in setup or add via structure import.
+                  No BBS rows — add a section, subsection, or bar entry, or upload a BBS sheet in setup.
                 </td>
               </tr>
             )}
           </tbody>
+          {dataRows.length > 0 && (
+            <tfoot className="bbs-sheet-tfoot">
+              <tr className="boq-total-row">
+                <td className={bbsColClass(0)} />
+                <td className={bbsColClass(1)} />
+                <td className={bbsColClass(2, { extra: "text-left" })}>
+                  <span className="boq-total-label">TOTAL</span>
+                </td>
+                <td className={bbsColClass(3)} />
+                <td className={bbsColClass(4)} />
+                <td className={bbsColClass(5)} />
+                <td className={bbsColClass(6)} />
+                <td className={`${bbsColClass(7)} tabular-nums font-semibold`}>{fmtNum(totalNos)}</td>
+                {bbsRangeEmpty(8, 13)}
+                <td className={`${bbsColClass(14)} tabular-nums font-semibold`}>{fmtNum(totalLen)}</td>
+                <td className={`${bbsColClass(15)} tabular-nums font-semibold`}>{fmtKg(totalWt)}</td>
+                <td />
+              </tr>
+              {diaTotals.map(([d, t]) => (
+                <tr key={`dia-${d}`} className="boq-total-row bbs-dia-total">
+                  <td className={bbsColClass(0)} />
+                  <td className={bbsColClass(1)} />
+                  <td className={bbsColClass(2, { extra: "text-left" })}>Dia {d} mm</td>
+                  <td className={bbsColClass(3)} />
+                  <td className={`${bbsColClass(4)} tabular-nums`}>{d}</td>
+                  <td className={bbsColClass(5)} />
+                  <td className={bbsColClass(6)} />
+                  <td className={`${bbsColClass(7)} tabular-nums`}>{fmtNum(t.nos)}</td>
+                  {bbsRangeEmpty(8, 13)}
+                  <td className={`${bbsColClass(14)} tabular-nums`}>{fmtNum(t.length)}</td>
+                  <td className={`${bbsColClass(15)} tabular-nums`}>{fmtKg(t.weight)}</td>
+                  <td />
+                </tr>
+              ))}
+            </tfoot>
+          )}
         </table>
     </CostRegisterShell>
 

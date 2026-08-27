@@ -145,11 +145,20 @@ export default function CostPage() {
   });
   const [bbsForm, setBbsForm] = useState({
     packageName: "Dormitory BBS",
+    rowKind: "data" as "data" | "section" | "subsection",
     barMark: "",
     location: "",
     diameterMm: "",
     nos: "1",
+    nosPerMember: "",
+    nosOfMember: "",
     shape: "",
+    lengthMm: "",
+    shapeLenA: "",
+    shapeLenB: "",
+    shapeLenC: "",
+    shapeLenD: "",
+    shapeLenE: "",
   });
   const mbFormRef = useRef<HTMLFormElement>(null);
   const bbsFormRef = useRef<HTMLFormElement>(null);
@@ -443,11 +452,34 @@ export default function CostPage() {
         ...bbsForm,
         diameterMm: Number(bbsForm.diameterMm || 0),
         nos: Number(bbsForm.nos || 0),
+        nosPerMember: Number(bbsForm.nosPerMember || 0),
+        nosOfMember: Number(bbsForm.nosOfMember || 0),
+        lengthMm: Number(bbsForm.lengthMm || 0),
+        shapeLenA: Number(bbsForm.shapeLenA || 0),
+        shapeLenB: Number(bbsForm.shapeLenB || 0),
+        shapeLenC: Number(bbsForm.shapeLenC || 0),
+        shapeLenD: Number(bbsForm.shapeLenD || 0),
+        shapeLenE: Number(bbsForm.shapeLenE || 0),
       }),
     });
-    setMsg("BBS line added");
+    setMsg(bbsForm.rowKind === "data" ? "BBS bar entry added" : `BBS ${bbsForm.rowKind} added`);
     setBbsAddOpen(false);
-    setBbsForm((f) => ({ ...f, barMark: "", location: "", diameterMm: "", nos: "1", shape: "" }));
+    setBbsForm((f) => ({
+      ...f,
+      barMark: "",
+      location: "",
+      diameterMm: "",
+      nos: "1",
+      nosPerMember: "",
+      nosOfMember: "",
+      shape: "",
+      lengthMm: "",
+      shapeLenA: "",
+      shapeLenB: "",
+      shapeLenC: "",
+      shapeLenD: "",
+      shapeLenE: "",
+    }));
     await load();
   }
 
@@ -902,28 +934,72 @@ export default function CostPage() {
             rowCount={bbsRows.length}
             canEdit={canEdit || canSiteEdit}
             onUpload={canEdit ? (f) => importCostSheet("bbs", f) : undefined}
-            onAddRow={canEdit || canSiteEdit ? () => setBbsAddOpen(true) : undefined}
+            onAddRow={
+              canEdit || canSiteEdit
+                ? () => {
+                    setBbsForm((f) => ({ ...f, rowKind: "data" }));
+                    setBbsAddOpen(true);
+                  }
+                : undefined
+            }
             onDownloadCsv={() => downloadSheet("bbs")}
             message={msg || undefined}
           />
           <RegisterEntryModal
             open={bbsAddOpen && (canEdit || canSiteEdit)}
-            title="Add BBS line"
+            title={
+              bbsForm.rowKind === "section"
+                ? "Add BBS section"
+                : bbsForm.rowKind === "subsection"
+                  ? "Add BBS subsection"
+                  : "Add BBS bar entry"
+            }
             onClose={() => setBbsAddOpen(false)}
             onSave={() => bbsFormRef.current?.requestSubmit()}
-            saveLabel="Add to BBS"
+            saveLabel={bbsForm.rowKind === "data" ? "Add bar entry" : `Add ${bbsForm.rowKind}`}
+            size="2xl"
           >
-            <form ref={bbsFormRef} className="grid sm:grid-cols-2 gap-3" onSubmit={addBbs}>
+            <form ref={bbsFormRef} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addBbs}>
               <Select value={bbsForm.packageName} onChange={(e) => setBbsForm({ ...bbsForm, packageName: e.target.value })}>
                 {(bbsPackages.length ? bbsPackages : summary.packages || ["Dormitory BBS"]).map((p: string) => (
                   <option key={p}>{p}</option>
                 ))}
               </Select>
-              <Input placeholder="Bar mark" value={bbsForm.barMark} onChange={(e) => setBbsForm({ ...bbsForm, barMark: e.target.value })} />
-              <Input placeholder="Location" value={bbsForm.location} onChange={(e) => setBbsForm({ ...bbsForm, location: e.target.value })} />
-              <Input placeholder="Dia (mm)" value={bbsForm.diameterMm} onChange={(e) => setBbsForm({ ...bbsForm, diameterMm: e.target.value })} />
-              <Input placeholder="Nos" value={bbsForm.nos} onChange={(e) => setBbsForm({ ...bbsForm, nos: e.target.value })} />
-              <Input placeholder="Shape code" value={bbsForm.shape} onChange={(e) => setBbsForm({ ...bbsForm, shape: e.target.value })} />
+              <Select
+                value={bbsForm.rowKind}
+                onChange={(e) => setBbsForm({ ...bbsForm, rowKind: e.target.value as typeof bbsForm.rowKind })}
+              >
+                <option value="data">Bar entry</option>
+                <option value="section">Section heading</option>
+                <option value="subsection">Subsection heading</option>
+              </Select>
+              <Input
+                placeholder={bbsForm.rowKind === "data" ? "Sr / bar mark" : "Mark (A, 1, …)"}
+                value={bbsForm.barMark}
+                onChange={(e) => setBbsForm({ ...bbsForm, barMark: e.target.value })}
+              />
+              <Input
+                className="sm:col-span-2 lg:col-span-1"
+                placeholder={bbsForm.rowKind === "data" ? "Location / description" : "Section / subsection name"}
+                value={bbsForm.location}
+                onChange={(e) => setBbsForm({ ...bbsForm, location: e.target.value })}
+                required={bbsForm.rowKind !== "data"}
+              />
+              {bbsForm.rowKind === "data" && (
+                <>
+                  <Input placeholder="Dia (mm)" value={bbsForm.diameterMm} onChange={(e) => setBbsForm({ ...bbsForm, diameterMm: e.target.value })} />
+                  <Input placeholder="No per member" value={bbsForm.nosPerMember} onChange={(e) => setBbsForm({ ...bbsForm, nosPerMember: e.target.value })} />
+                  <Input placeholder="No of member" value={bbsForm.nosOfMember} onChange={(e) => setBbsForm({ ...bbsForm, nosOfMember: e.target.value })} />
+                  <Input placeholder="Total nos" value={bbsForm.nos} onChange={(e) => setBbsForm({ ...bbsForm, nos: e.target.value })} />
+                  <Input placeholder="Shape A" value={bbsForm.shapeLenA} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenA: e.target.value })} />
+                  <Input placeholder="Shape B" value={bbsForm.shapeLenB} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenB: e.target.value })} />
+                  <Input placeholder="Shape C" value={bbsForm.shapeLenC} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenC: e.target.value })} />
+                  <Input placeholder="Shape D" value={bbsForm.shapeLenD} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenD: e.target.value })} />
+                  <Input placeholder="Shape E" value={bbsForm.shapeLenE} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenE: e.target.value })} />
+                  <Input placeholder="Cutting length (m)" value={bbsForm.lengthMm} onChange={(e) => setBbsForm({ ...bbsForm, lengthMm: e.target.value })} />
+                  <Input placeholder="Shape code" value={bbsForm.shape} onChange={(e) => setBbsForm({ ...bbsForm, shape: e.target.value })} />
+                </>
+              )}
             </form>
           </RegisterEntryModal>
           {(canEdit || canSiteEdit) && (

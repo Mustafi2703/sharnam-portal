@@ -29,6 +29,87 @@ function safeFolderPart(s: string) {
   return s.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80) || "General";
 }
 
+const BBS_ROW_KINDS = new Set(["section", "subsection", "subheader", "data", "note", "total"]);
+
+function numOr(v: unknown, fallback: number) {
+  if (v == null || v === "") return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** SPDC BBS: total length = cutting × nos; weight kg = d²/162 × length (m). */
+function bbsLineCompute(
+  body: Record<string, unknown>,
+  existing?: {
+    nos?: number;
+    nosPerMember?: number;
+    nosOfMember?: number;
+    diameterMm?: number;
+    lengthMm?: number;
+    shapeLenA?: number;
+    shapeLenB?: number;
+    shapeLenC?: number;
+    shapeLenD?: number;
+    shapeLenE?: number;
+    totalLength?: number;
+    weightKg?: number;
+  }
+) {
+  const nosPerMember = numOr(body.nosPerMember, existing?.nosPerMember || 0);
+  const nosOfMember = numOr(body.nosOfMember, existing?.nosOfMember || 0);
+  const nos =
+    body.nos != null && body.nos !== ""
+      ? numOr(body.nos, 0)
+      : nosPerMember * nosOfMember || existing?.nos || 0;
+  const shapeLenA = numOr(body.shapeLenA, existing?.shapeLenA || 0);
+  const shapeLenB = numOr(body.shapeLenB, existing?.shapeLenB || 0);
+  const shapeLenC = numOr(body.shapeLenC, existing?.shapeLenC || 0);
+  const shapeLenD = numOr(body.shapeLenD, existing?.shapeLenD || 0);
+  const shapeLenE = numOr(body.shapeLenE, existing?.shapeLenE || 0);
+  const shapeSum = shapeLenA + shapeLenB + shapeLenC + shapeLenD + shapeLenE;
+  const lengthMm =
+    body.lengthMm != null && body.lengthMm !== ""
+      ? numOr(body.lengthMm, 0)
+      : shapeSum || existing?.lengthMm || 0;
+  const totalLength =
+    body.totalLength != null && body.totalLength !== ""
+      ? numOr(body.totalLength, 0)
+      : Number(((lengthMm || 0) * (nos || 0)).toFixed(4));
+  const diameterMm = numOr(body.diameterMm, existing?.diameterMm || 0);
+  const weightKg =
+    body.weightKg != null && body.weightKg !== ""
+      ? numOr(body.weightKg, 0)
+      : diameterMm >= 6 && totalLength > 0
+        ? Math.round(((diameterMm * diameterMm * totalLength) / 162) * 100) / 100
+        : existing?.weightKg || 0;
+  const rowKindRaw = body.rowKind != null ? String(body.rowKind).trim().toLowerCase() : "";
+  const rowKind = BBS_ROW_KINDS.has(rowKindRaw) ? rowKindRaw : undefined;
+  return {
+    nosPerMember,
+    nosOfMember,
+    nos,
+    shapeLenA,
+    shapeLenB,
+    shapeLenC,
+    shapeLenD,
+    shapeLenE,
+    lengthMm,
+    totalLength,
+    diameterMm,
+    weightKg,
+    rowKind,
+  };
+}
+
+async function nextBbsLineIndex(projectId: string, packageName: string) {
+  const last = await prisma.costBbsLine.findFirst({
+    where: { projectId, packageName },
+    orderBy: { lineIndex: "desc" },
+    select: { lineIndex: true },
+  });
+  return (last?.lineIndex || 0) + 1;
+}
+
 const CASHFLOW_SHEET_TOOLS = [
   { id: "chart", label: "Cash Flow Chart", source: "Cashflow - Dashboard.xlsx" },
   { id: "forecast", label: "Cash Flow Forecast", source: "Cashflow - Dashboard.xlsx" },
@@ -988,25 +1069,34 @@ costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee", "s
 });
 
 costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const packageName = String(req.body.packageName || "BBS");
+  const computed = bbsLineCompute(req.body || {});
+  const rowKind = computed.rowKind || "data";
+  const lineIndex = await nextBbsLineIndex(req.params.projectId, packageName);
   const row = await prisma.costBbsLine.create({
     data: {
       projectId: req.params.projectId,
-      packageName: req.body.packageName || "BBS",
-      barMark: req.body.barMark || null,
-      diameterMm: Number(req.body.diameterMm || 0),
-      shape: req.body.shape || null,
-      lengthMm: Number(req.body.lengthMm || 0),
-      nos: Number(req.body.nos || 0),
-      nosPerMember: Number(req.body.nosPerMember || 0),
-      nosOfMember: Number(req.body.nosOfMember || 0),
-      shapeLenA: Number(req.body.shapeLenA || 0),
-      shapeLenB: Number(req.body.shapeLenB || 0),
-      shapeLenC: Number(req.body.shapeLenC || 0),
-      shapeLenD: Number(req.body.shapeLenD || 0),
-      shapeLenE: Number(req.body.shapeLenE || 0),
-      totalLength: Number(req.body.totalLength || 0),
-      weightKg: Number(req.body.weightKg || 0),
-      location: req.body.location || null,
+      packageName,
+      barMark: req.body.barMark ? String(req.body.barMark) : null,
+      shapeCode: req.body.shapeCode ? String(req.body.shapeCode).toUpperCase() : req.body.shape ? String(req.body.shape).toUpperCase() : null,
+      itemCode: req.body.itemCode ? String(req.body.itemCode) : null,
+      sectionMark: req.body.sectionMark ? String(req.body.sectionMark) : null,
+      diameterMm: computed.diameterMm,
+      shape: req.body.shape ? String(req.body.shape) : null,
+      lengthMm: computed.lengthMm,
+      nos: computed.nos,
+      nosPerMember: computed.nosPerMember,
+      nosOfMember: computed.nosOfMember,
+      shapeLenA: computed.shapeLenA,
+      shapeLenB: computed.shapeLenB,
+      shapeLenC: computed.shapeLenC,
+      shapeLenD: computed.shapeLenD,
+      shapeLenE: computed.shapeLenE,
+      totalLength: computed.totalLength,
+      weightKg: computed.weightKg,
+      location: req.body.location ? String(req.body.location) : null,
+      rowKind,
+      lineIndex,
     },
   });
   res.status(201).json(row);
@@ -1054,7 +1144,7 @@ costRouter.patch(
 
 costRouter.delete(
   "/:projectId/mb/:lineId",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const existing = await prisma.costMbLine.findFirst({
       where: { id: req.params.lineId, projectId: req.params.projectId },
@@ -1074,37 +1164,30 @@ costRouter.patch(
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
-    const nosPerMember = body.nosPerMember != null ? Number(body.nosPerMember) : existing.nosPerMember;
-    const nosOfMember = body.nosOfMember != null ? Number(body.nosOfMember) : existing.nosOfMember;
-    const nos = body.nos != null ? Number(body.nos) : existing.nos || nosPerMember * nosOfMember;
-    const dia = body.diameterMm != null ? Number(body.diameterMm) : existing.diameterMm;
-    const totalLen = body.totalLength != null ? Number(body.totalLength) : existing.totalLength;
-    const weight =
-      body.weightKg != null
-        ? Number(body.weightKg)
-        : dia && totalLen
-          ? (Math.PI * (dia / 1000 / 2) ** 2 * totalLen * 7850) / 1000
-          : existing.weightKg;
+    const computed = bbsLineCompute(body, existing);
     const row = await prisma.costBbsLine.update({
       where: { id: existing.id },
       data: {
         ...(body.packageName != null ? { packageName: String(body.packageName) } : {}),
         ...(body.barMark !== undefined ? { barMark: body.barMark ? String(body.barMark) : null } : {}),
         ...(body.shapeCode !== undefined ? { shapeCode: body.shapeCode ? String(body.shapeCode).toUpperCase() : null } : {}),
+        ...(body.shape !== undefined ? { shape: body.shape ? String(body.shape) : null } : {}),
         ...(body.itemCode !== undefined ? { itemCode: body.itemCode ? String(body.itemCode) : null } : {}),
+        ...(body.sectionMark !== undefined ? { sectionMark: body.sectionMark ? String(body.sectionMark) : null } : {}),
         ...(body.location !== undefined ? { location: body.location ? String(body.location) : null } : {}),
-        diameterMm: dia,
-        nos,
-        nosPerMember,
-        nosOfMember,
-        ...(body.lengthMm != null ? { lengthMm: Number(body.lengthMm) } : {}),
-        ...(body.shapeLenA != null ? { shapeLenA: Number(body.shapeLenA) } : {}),
-        ...(body.shapeLenB != null ? { shapeLenB: Number(body.shapeLenB) } : {}),
-        ...(body.shapeLenC != null ? { shapeLenC: Number(body.shapeLenC) } : {}),
-        ...(body.shapeLenD != null ? { shapeLenD: Number(body.shapeLenD) } : {}),
-        ...(body.shapeLenE != null ? { shapeLenE: Number(body.shapeLenE) } : {}),
-        totalLength: totalLen,
-        weightKg: Math.round(weight * 100) / 100,
+        ...(computed.rowKind ? { rowKind: computed.rowKind } : {}),
+        diameterMm: computed.diameterMm,
+        nos: computed.nos,
+        nosPerMember: computed.nosPerMember,
+        nosOfMember: computed.nosOfMember,
+        lengthMm: computed.lengthMm,
+        shapeLenA: computed.shapeLenA,
+        shapeLenB: computed.shapeLenB,
+        shapeLenC: computed.shapeLenC,
+        shapeLenD: computed.shapeLenD,
+        shapeLenE: computed.shapeLenE,
+        totalLength: computed.totalLength,
+        weightKg: computed.weightKg,
       },
     });
 
@@ -1131,7 +1214,7 @@ costRouter.patch(
 
 costRouter.delete(
   "/:projectId/bbs/:lineId",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const existing = await prisma.costBbsLine.findFirst({
       where: { id: req.params.lineId, projectId: req.params.projectId },
