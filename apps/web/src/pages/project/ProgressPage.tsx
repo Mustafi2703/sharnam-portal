@@ -1137,7 +1137,10 @@ export default function ProgressPage() {
             sheetLabel="Monthly Progress Dashboard"
             rowCount={data.sorStats?.length}
             canEdit={canEdit}
-            uploadHint="Monthly SOR rows are loaded from the client Monthly Progress Dashboard pack at seed — use Planned vs Actual upload for cashflow/manpower."
+            onGenerate={canResyncExcel ? () => void runResyncSor() : undefined}
+            generateLabel="Load Monthly Dashboard"
+            busy={resyncBusy}
+            uploadHint="SOR Log from Monthly Progress Dashboard.xlsx — Sr.no, Observation, Total, Open, Close, Closure Rate."
             message={msg || undefined}
           />
           <div className="grid md:grid-cols-2 gap-4 shrink-0">
@@ -1156,10 +1159,10 @@ export default function ProgressPage() {
               })).filter((x: { value: number }) => x.value > 0)}
             />
           </div>
-          <Card className="overflow-x-auto !p-0 sheet-register register-table-panel flex-1 min-h-0 flex flex-col">
+          <Card className="overflow-x-auto !p-0 sheet-register register-table-panel progress-sheet-table flex-1 min-h-0 flex flex-col">
             <div className="sheet-register__head shrink-0">Monthly Progress · SOR Log</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
-            <table className="sheet-register__table w-full text-sm min-w-[36rem]">
+            <table className="sheet-register__table w-full text-sm min-w-[40rem]">
               <thead>
                 <tr>
                   <th>Sr.no.</th>
@@ -1171,8 +1174,9 @@ export default function ProgressPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.sorStats.map((s: any) => (
+                {data.sorStats.map((s: any, i: number) => (
                   <tr key={s.id} className="border-b border-line/70">
+                    <td className="py-2 px-3 font-mono text-xs">{s.srNo ?? i + 1}</td>
                     <td className="py-2 px-3 font-medium">{s.observation}</td>
                     <td className="py-2 pr-3">{s.total}</td>
                     <td className="py-2 pr-3">{s.openCount}</td>
@@ -1182,7 +1186,7 @@ export default function ProgressPage() {
                 ))}
                 {!data.sorStats.length && (
                   <tr>
-                    <td colSpan={5} className="py-6 px-3 text-steel-muted">
+                    <td colSpan={6} className="py-6 px-3 text-steel-muted">
                       No monthly SOR rows — re-seed from Monthly Progress Dashboard.
                     </td>
                   </tr>

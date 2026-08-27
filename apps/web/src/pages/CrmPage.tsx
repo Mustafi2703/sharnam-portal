@@ -145,7 +145,7 @@ export default function CrmPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/quotations/new">
-              <Button variant="secondary">+ Quotation maker</Button>
+              <Button variant="secondary">+ New proposal</Button>
             </Link>
             <Link to="/crm/bid-compare">
               <Button variant="secondary">Bid management (R2)</Button>
@@ -170,8 +170,10 @@ export default function CrmPage() {
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">
           <div>
-            <span>PMC proposals (quotations)</span>
-            <p className="text-[11px] font-normal text-steel-muted mt-0.5">Client-facing — full 63-page .docx + commercial summary</p>
+            <span>PMC proposals</span>
+            <p className="text-[11px] font-normal text-steel-muted mt-0.5">
+              New file per client in Drive — edit the .docx there, keep status in the log
+            </p>
           </div>
           <Link to="/quotations/new">
             <Button type="button" variant="secondary" className="!py-1 !text-xs">
@@ -183,21 +185,30 @@ export default function CrmPage() {
           {quotations.map((q) => (
             <li key={q.id} className="px-4 py-3 flex justify-between gap-3">
               <div>
-                <div className="font-mono text-xs text-brand">{q.quotationNo}</div>
                 <div className="font-medium">{q.clientName}</div>
-                <div className="text-xs text-steel-muted truncate max-w-md">{q.scopeSummary || "—"}</div>
+                <div className="font-mono text-xs text-steel-muted">{q.quotationNo}</div>
               </div>
               <div className="text-right space-y-1 shrink-0">
                 <Badge>{q.status}</Badge>
+                {(q.attachmentSharePointUrl || q.attachmentUrl) && (
+                  <a
+                    href={q.attachmentSharePointUrl || q.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-xs text-brand font-semibold"
+                  >
+                    Open in Drive →
+                  </a>
+                )}
                 <Link to={`/quotations/${q.id}`} className="block text-xs text-brand font-semibold">
-                  Open maker →
+                  Status log →
                 </Link>
               </div>
             </li>
           ))}
           {!quotations.length && (
             <li className="px-4 py-6 text-sm text-steel-muted">
-              No quotations yet. Run seed or create one — demo ref <strong>SPDC/26-27/INQ/78</strong> (Arvind).
+              No proposals yet. Click <strong>+ New</strong> and enter the client name.
             </li>
           )}
         </ul>

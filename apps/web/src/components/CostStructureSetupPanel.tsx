@@ -207,7 +207,7 @@ export function CostStructureSetupPanel({
   }
 
   return (
-    <Card padding={false} className="register-panel-fill overflow-visible shrink-0">
+    <Card padding={false} className="overflow-visible shrink-0">
       <div className="px-4 py-3 border-b border-line bg-sand/40 shrink-0">
         <h3 className="font-semibold text-sm text-ink">Cost sheet setup — SPDC format</h3>
         <p className="text-xs text-steel-muted mt-1 text-left max-w-4xl">

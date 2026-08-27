@@ -31,6 +31,8 @@ import {
 } from "../services/quotationExport.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
 import {
+  CRM_OFFICE_LIBRARY,
+  createClientProposalFile,
   syncProposalDocx,
   syncProposalSummaryFile,
 } from "../services/crmSharePoint.js";
@@ -329,7 +331,28 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
   res.status(201).json({ project, leadId: lead.id });
 });
 
-/* ─── Quotations (proposal maker) ─── */
+/* ─── Quotations (proposal desk — Drive file + status log) ─── */
+
+const PROPOSAL_STATUSES = ["Draft", "Editing", "Sent to client"] as const;
+
+async function quotationStatusLog(entityId: string) {
+  return prisma.auditEvent.findMany({
+    where: { entity: "Quotation", entityId },
+    orderBy: { createdAt: "desc" },
+    take: 80,
+    include: { user: { select: { fullName: true, email: true } } },
+  });
+}
+
+function resolveStoredProposalPath(attachmentUrl: string | null | undefined) {
+  if (!attachmentUrl) return null;
+  const marker = `/uploads/onedrive/${CRM_OFFICE_LIBRARY}/`;
+  const idx = attachmentUrl.indexOf(marker);
+  if (idx < 0) return null;
+  const rel = attachmentUrl.slice(idx + marker.length);
+  const abs = path.join(mockOneDrive.projectRoot(CRM_OFFICE_LIBRARY), rel);
+  return fs.existsSync(abs) ? abs : null;
+}
 
 crmRouter.get("/quotations", async (_req, res) => {
   const rows = await prisma.quotation.findMany({
@@ -337,15 +360,6 @@ crmRouter.get("/quotations", async (_req, res) => {
     orderBy: { createdAt: "desc" },
   });
   res.json(rows);
-});
-
-crmRouter.get("/quotations/:id", async (req, res) => {
-  const row = await prisma.quotation.findUnique({
-    where: { id: req.params.id },
-    include: { lead: true, project: true },
-  });
-  if (!row) return res.status(404).json({ error: "not found" });
-  res.json(row);
 });
 
 crmRouter.get("/quotations/template.docx", async (_req, res) => {
@@ -357,6 +371,16 @@ crmRouter.get("/quotations/template.docx", async (_req, res) => {
   }
 });
 
+crmRouter.get("/quotations/:id", async (req, res) => {
+  const row = await prisma.quotation.findUnique({
+    where: { id: req.params.id },
+    include: { lead: true, project: true },
+  });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const log = await quotationStatusLog(row.id);
+  res.json({ ...row, log });
+});
+
 crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
   const row = await prisma.quotation.findUnique({
     where: { id: req.params.id },
@@ -364,10 +388,12 @@ crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
   });
   if (!row) return res.status(404).json({ error: "not found" });
   try {
-    const src = resolveProposalDocxPath();
+    const stored = resolveStoredProposalPath(row.attachmentUrl);
+    const src = stored || resolveProposalDocxPath();
+    const name = proposalDocxFilename(row.quotationNo, row.clientName);
     if (row.project?.code) {
       await mockOneDrive.ensureProjectTree(row.project.id);
-      const sp = await syncProposalDocx(row.project.code, row.quotationNo);
+      const sp = await syncProposalDocx(row.project.code, row.quotationNo, row.clientName);
       if (sp.sharePointUrl && sp.sharePointUrl !== row.attachmentSharePointUrl) {
         await prisma.quotation.update({
           where: { id: row.id },
@@ -375,7 +401,7 @@ crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
         });
       }
     }
-    res.download(src, proposalDocxFilename(row.quotationNo));
+    res.download(src, name);
   } catch (e) {
     res.status(404).json({ error: e instanceof Error ? e.message : "Template not found" });
   }
@@ -420,34 +446,55 @@ crmRouter.get("/quotations/:id/download.doc", async (req, res) => {
 });
 
 crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const clientName = String(req.body.clientName || "").trim();
+  if (!clientName) return res.status(400).json({ error: "Client name is required" });
+  const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
+  let file: Awaited<ReturnType<typeof createClientProposalFile>> | null = null;
+  try {
+    file = await createClientProposalFile(clientName, quotationNo);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Could not create proposal file" });
+  }
   const row = await prisma.quotation.create({
     data: {
-      quotationNo: req.body.quotationNo || `QTN-${Date.now()}`,
-      clientName: req.body.clientName || "Client",
+      quotationNo,
+      clientName,
       clientAddress: req.body.clientAddress || null,
       clientGst: req.body.clientGst || null,
-      scopeSummary: req.body.scopeSummary || null,
+      scopeSummary: req.body.scopeSummary || `PMC proposal for ${clientName}`,
       totalValue: Number(req.body.totalValue || 0),
       currency: req.body.currency || "INR",
-      status: req.body.status || "Draft",
+      status: "Draft",
       validityDays: Number(req.body.validityDays || 30),
       quotationDate: req.body.quotationDate ? new Date(req.body.quotationDate) : new Date(),
       leadId: req.body.leadId || null,
       projectId: req.body.projectId || null,
-      sectionsJson: req.body.sections ? JSON.stringify(req.body.sections) : req.body.sectionsJson || null,
+      attachmentUrl: file.url,
+      attachmentSharePointUrl: file.sharePointUrl || null,
       createdById: req.user!.id,
     },
   });
-  res.status(201).json(row);
+  await audit("quotation.create", {
+    userId: req.user!.id,
+    entity: "Quotation",
+    entityId: row.id,
+    meta: { clientName, quotationNo, status: "Draft", file: file.sharePointUrl || file.url },
+  });
+  const log = await quotationStatusLog(row.id);
+  res.status(201).json({ ...row, log });
 });
 
-crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req, res) => {
+crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.quotation.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
+  const nextStatus = req.body.status != null ? String(req.body.status) : before.status;
+  if (req.body.status && nextStatus !== before.status && !PROPOSAL_STATUSES.includes(nextStatus as (typeof PROPOSAL_STATUSES)[number])) {
+    return res.status(400).json({ error: `Status must be one of: ${PROPOSAL_STATUSES.join(", ")}` });
+  }
   const row = await prisma.quotation.update({
     where: { id: req.params.id },
     data: {
-      status: req.body.status ?? before.status,
+      status: nextStatus,
       quotationNo: req.body.quotationNo ?? before.quotationNo,
       clientName: req.body.clientName ?? before.clientName,
       clientAddress: req.body.clientAddress ?? before.clientAddress,
@@ -455,10 +502,23 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req, 
       scopeSummary: req.body.scopeSummary ?? before.scopeSummary,
       totalValue: req.body.totalValue != null ? Number(req.body.totalValue) : before.totalValue,
       validityDays: req.body.validityDays != null ? Number(req.body.validityDays) : before.validityDays,
-      sectionsJson: req.body.sections ? JSON.stringify(req.body.sections) : req.body.sectionsJson ?? before.sectionsJson,
     },
   });
-  res.json(row);
+  if (nextStatus !== before.status || req.body.note) {
+    await audit("quotation.status", {
+      userId: req.user!.id,
+      entity: "Quotation",
+      entityId: row.id,
+      meta: {
+        from: before.status,
+        to: nextStatus,
+        note: req.body.note || null,
+        clientName: row.clientName,
+      },
+    });
+  }
+  const log = await quotationStatusLog(row.id);
+  res.json({ ...row, log });
 });
 
 /** Award the quotation → create a project (or link existing) */

@@ -14,7 +14,9 @@ export function resolveProposalDocxPath(): string {
   throw new Error("SPDC PMC proposal template (.docx) not found — add templates/SPDC-PMC-Proposal-Arvind.docx");
 }
 
-export function proposalDocxFilename(quotationNo?: string) {
+export function proposalDocxFilename(quotationNo?: string, clientName?: string) {
+  const client = (clientName || "").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  if (client) return `${client}-PMC-Proposal.docx`;
   const safe = (quotationNo || "SPDC-PMC-Proposal").replace(/[^a-zA-Z0-9._/-]+/g, "-");
   return `${safe}-Full-Proposal.docx`;
 }

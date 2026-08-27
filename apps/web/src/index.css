@@ -2051,106 +2051,52 @@ body.is-auth-route #root {
   --cost-col-ev-bg: #1e1a32;
 }
 
-/* Column group bands — header + body cells */
+/* Column group bands — body cells only (headers use one shared colour below) */
 .cost-register-shell .cost-col-group-row th.cost-col-group {
   text-align: center;
   font-size: 0.625rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.35rem 0.25rem;
-  border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line)) !important;
 }
-.cost-register-shell--monitoring .cost-col--meta th,
-.cost-register-shell--monitoring .cost-col--meta td {
+.cost-register-shell--monitoring tbody td.cost-col--meta {
   background: var(--cost-col-meta-bg);
 }
-.cost-register-shell--monitoring .cost-col--qty th,
-.cost-register-shell--monitoring .cost-col--qty td {
+.cost-register-shell--monitoring tbody td.cost-col--qty {
   background: var(--cost-col-qty-bg);
 }
-.cost-register-shell--monitoring .cost-col--qty.cost-col--achieved th,
-.cost-register-shell--monitoring .cost-col--qty.cost-col--achieved td {
+.cost-register-shell--monitoring tbody td.cost-col--qty.cost-col--achieved {
   background: var(--cost-col-qty-achieved-bg);
   box-shadow: inset 3px 0 0 var(--cost-border);
 }
-.cost-register-shell--monitoring .cost-col--cost th,
-.cost-register-shell--monitoring .cost-col--cost td {
+.cost-register-shell--monitoring tbody td.cost-col--cost {
   background: var(--cost-col-cost-bg);
 }
-.cost-register-shell--monitoring .cost-col--pct th,
-.cost-register-shell--monitoring .cost-col--pct td {
+.cost-register-shell--monitoring tbody td.cost-col--pct {
   background: var(--cost-col-pct-bg);
 }
-.cost-register-shell--monitoring .cost-col--ev th,
-.cost-register-shell--monitoring .cost-col--ev td {
+.cost-register-shell--monitoring tbody td.cost-col--ev {
   background: var(--cost-col-ev-bg);
 }
-.cost-register-shell--mb .cost-col--meta th,
-.cost-register-shell--mb .cost-col--meta td {
+.cost-register-shell--mb tbody td.cost-col--meta {
   background: var(--cost-col-meta-bg);
 }
-.cost-register-shell--mb .cost-col--dims th,
-.cost-register-shell--mb .cost-col--dims td {
+.cost-register-shell--mb tbody td.cost-col--dims {
   background: var(--cost-col-dims-bg);
 }
-.cost-register-shell--mb .cost-col--result th,
-.cost-register-shell--mb .cost-col--result td {
+.cost-register-shell--mb tbody td.cost-col--result {
   background: var(--cost-col-result-bg);
 }
-.cost-register-shell--bbs .cost-col--meta th,
-.cost-register-shell--bbs .cost-col--meta td {
+.cost-register-shell--bbs tbody td.cost-col--meta {
   background: var(--cost-col-meta-bg);
 }
-.cost-register-shell--bbs .cost-col--bar th,
-.cost-register-shell--bbs .cost-col--bar td {
+.cost-register-shell--bbs tbody td.cost-col--bar {
   background: var(--cost-col-bar-bg);
 }
-.cost-register-shell--bbs .cost-col--shape th,
-.cost-register-shell--bbs .cost-col--shape td {
+.cost-register-shell--bbs tbody td.cost-col--shape {
   background: var(--cost-col-shape-bg);
 }
-.cost-register-shell--bbs .cost-col--total th,
-.cost-register-shell--bbs .cost-col--total td {
-  background: var(--cost-col-total-bg);
-}
-.cost-register-shell--bbs .cost-col-group-row .cost-col--total {
-  background: var(--cost-col-total-bg);
-}
-
-.cost-register-shell--monitoring .cost-col-group-row .cost-col--meta {
-  background: var(--cost-col-meta-bg);
-}
-.cost-register-shell--monitoring .cost-col-group-row .cost-col--qty {
-  background: var(--cost-col-qty-bg);
-}
-.cost-register-shell--monitoring .cost-col-group-row .cost-col--cost {
-  background: var(--cost-col-cost-bg);
-}
-.cost-register-shell--monitoring .cost-col-group-row .cost-col--pct {
-  background: var(--cost-col-pct-bg);
-}
-.cost-register-shell--monitoring .cost-col-group-row .cost-col--ev {
-  background: var(--cost-col-ev-bg);
-}
-.cost-register-shell--mb .cost-col-group-row .cost-col--meta {
-  background: var(--cost-col-meta-bg);
-}
-.cost-register-shell--mb .cost-col-group-row .cost-col--dims {
-  background: var(--cost-col-dims-bg);
-}
-.cost-register-shell--mb .cost-col-group-row .cost-col--result {
-  background: var(--cost-col-result-bg);
-}
-.cost-register-shell--bbs .cost-col-group-row .cost-col--meta {
-  background: var(--cost-col-meta-bg);
-}
-.cost-register-shell--bbs .cost-col-group-row .cost-col--bar {
-  background: var(--cost-col-bar-bg);
-}
-.cost-register-shell--bbs .cost-col-group-row .cost-col--shape {
-  background: var(--cost-col-shape-bg);
-}
-.cost-register-shell--bbs .cost-col-group-row .cost-col--total {
+.cost-register-shell--bbs tbody td.cost-col--total {
   background: var(--cost-col-total-bg);
 }
 
@@ -2196,17 +2142,75 @@ body.is-auth-route #root {
   border-color: color-mix(in srgb, var(--cost-border) 35%, var(--color-line));
 }
 
-.cost-register-shell .cost-register-thead th {
-  background: var(--cost-thead-bg) !important;
-  color: var(--cost-accent);
-  border-color: color-mix(in srgb, var(--cost-border) 40%, var(--color-line)) !important;
+/* Same header colour as QAP / Cube — white on teal, every cost sheet */
+.cost-register-shell .cube-register__table thead th,
+.cost-register-shell .cost-register-thead th,
+.cost-register-shell thead th.cost-col,
+.cost-register-shell thead th.cost-col-group,
+.cost-register-shell thead th.sticky-col {
+  background: #0c4a44 !important;
+  color: #fff !important;
+  border-color: #064e3b !important;
   font-weight: 700;
   white-space: nowrap;
+  text-shadow: none;
 }
-.cost-register-shell .cost-register-thead .spdc-th-sub {
-  background: color-mix(in srgb, var(--cost-thead-bg) 85%, var(--color-paper)) !important;
+.cost-register-shell .cost-register-thead .spdc-th-sub,
+.cost-register-shell thead th.spdc-th-sub {
+  background: #083d38 !important;
+  color: #fff !important;
   font-weight: 600;
   font-size: 0.625rem;
+}
+.cost-register-shell .cube-register__table thead tr:first-child th {
+  top: 0;
+  z-index: 6;
+}
+.cost-register-shell .cube-register__table thead tr:nth-child(2) th {
+  top: 1.7rem;
+  z-index: 5;
+}
+.cost-register-shell .cube-register__table thead tr:nth-child(3) th {
+  top: 3.4rem;
+  z-index: 5;
+}
+.cost-register-shell thead th.sticky-col {
+  left: 0;
+  z-index: 7;
+}
+
+/* Live-server sheet body: usable height + inner scroll (page can still scroll) */
+.cost-page .cost-register-shell {
+  height: auto !important;
+  max-height: none !important;
+  flex: none !important;
+  overflow: hidden;
+}
+.cost-page .cost-register-shell .register-sheet-shell {
+  height: auto !important;
+  flex: 1 1 auto !important;
+  overflow: hidden;
+}
+.cost-page .cost-register-shell .cost-register-shell__viewport,
+.cost-page .cost-register-shell .register-scroll-area,
+.cost-page .cost-register-shell .register-sheet-viewport {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: min(28rem, 55vh) !important;
+  max-height: min(72vh, 52rem) !important;
+  overflow: auto !important;
+}
+
+.sheet-register.progress-sheet-table thead th,
+.progress-sheet-block .sheet-register__table thead th {
+  background: #0c4a44 !important;
+  color: #fff !important;
+  border-color: #064e3b !important;
+  font-weight: 700;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 
 .cost-register-shell .boq-section-row td {

@@ -24,7 +24,7 @@ export function CostRegisterShell({ title, subtitle, sheetKind, toolbar, childre
   return (
     <Card
       padding={false}
-      className={`cost-register-shell cost-register-shell--${sheetKind} ${PANEL_CLASS[sheetKind]} spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col w-full min-w-0`}
+      className={`cost-register-shell cost-register-shell--${sheetKind} ${PANEL_CLASS[sheetKind]} spdc-register-panel register-editor-panel relative flex flex-col w-full min-w-0`}
     >
       <div className="cost-register-shell__title-bar px-4 py-2.5 border-b shrink-0 text-left">
         <h3 className="cost-register-shell__title font-semibold text-sm">{title}</h3>
@@ -35,7 +35,7 @@ export function CostRegisterShell({ title, subtitle, sheetKind, toolbar, childre
         Scroll ↔ ↕ for full SPDC sheet · all columns shown · white cells editable · saves on blur
       </div>
       <div className="sheet-register register-sheet-shell flex flex-col w-full min-w-0 border-t border-line">
-        <RegisterScrollArea tall className="min-w-0">
+        <RegisterScrollArea tall className="cost-register-shell__viewport min-w-0">
           {children}
         </RegisterScrollArea>
       </div>

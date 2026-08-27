@@ -15,6 +15,9 @@ export const CRM_SHAREPOINT = {
   comparative: "05_PROCUREMENT_AND_CONTRACTS/05.06_Bid_Evaluation_Recommendation/Comparative_Statement",
 } as const;
 
+/** Office library for PMC proposals that are not yet tied to a project. */
+export const CRM_OFFICE_LIBRARY = "PMC-CRM";
+
 export async function syncBufferToProjectSharePoint(
   projectCode: string,
   relFolder: string,
@@ -30,13 +33,25 @@ export async function syncComparativeWorkbook(projectCode: string, revisionLabel
   return syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.comparative, fileName, buffer);
 }
 
-export async function syncProposalDocx(projectCode: string, quotationNo: string) {
+export async function syncProposalDocx(projectCode: string, quotationNo: string, clientName?: string) {
   const buffer = fs.readFileSync(resolveProposalDocxPath());
   return syncBufferToProjectSharePoint(
     projectCode,
     CRM_SHAREPOINT.pmcProposals,
-    proposalDocxFilename(quotationNo),
+    proposalDocxFilename(quotationNo, clientName),
     buffer
+  );
+}
+
+/** Copy the SPDC PMC proposal template into the office proposals folder, named for the client. */
+export async function createClientProposalFile(clientName: string, quotationNo?: string) {
+  const buffer = fs.readFileSync(resolveProposalDocxPath());
+  return mockOneDrive.upload(
+    CRM_OFFICE_LIBRARY,
+    CRM_SHAREPOINT.pmcProposals,
+    proposalDocxFilename(quotationNo, clientName),
+    buffer,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   );
 }
 
