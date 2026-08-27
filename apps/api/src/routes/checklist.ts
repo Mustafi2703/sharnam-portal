@@ -1901,10 +1901,12 @@ checklistRouter.get("/checklist-pack/inventory", requireAuth, async (_req, res) 
 checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) => {
   const week = req.query.week ? String(req.query.week) : undefined;
   const { exportQapWorkbook } = await import("../services/qapImportExport.js");
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
   const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
+  const stamped = await stampSpdcWorkbookLogo(buffer);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="QAP-${weekLabel.replace(/\s+/g, "-")}.xlsx"`);
-  res.send(buffer);
+  res.send(stamped);
 });
 
 checklistRouter.post(
@@ -1916,13 +1918,15 @@ checklistRouter.post(
     const { publishRegisterWorkbook } = await import("../services/registerWorkbookPublish.js");
     const project = await prisma.project.findUniqueOrThrow({ where: { id: req.params.projectId } });
     const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
+    const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
+    const stamped = await stampSpdcWorkbookLogo(buffer);
     const fileName = `QAP-${project.code}-${weekLabel.replace(/\s+/g, "-")}.xlsx`;
     const published = await publishRegisterWorkbook({
       projectId: req.params.projectId,
       userId: req.user!.id,
       moduleKey: "qap",
       fileName,
-      buffer,
+      buffer: stamped,
       auditAction: "qap.published",
       auditMeta: { weekLabel },
     });
@@ -1932,12 +1936,14 @@ checklistRouter.post(
 
 checklistRouter.get("/project/:projectId/cubes/download.xlsx", async (req, res) => {
   const { exportCubeWorkbook } = await import("../services/cubeRegisterImport.js");
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
   const { buffer } = await exportCubeWorkbook(req.params.projectId);
+  const stamped = await stampSpdcWorkbookLogo(buffer);
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   const code = project?.code || "export";
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="Cube-Register-${code}.xlsx"`);
-  res.send(buffer);
+  res.send(stamped);
 });
 
 checklistRouter.post(
@@ -1966,6 +1972,45 @@ checklistRouter.get("/project/:projectId/qap/download.html", async (req, res) =>
   const week = req.query.week ? String(req.query.week) : undefined;
   const { exportQapHtml } = await import("../services/qapImportExport.js");
   const html = await exportQapHtml(req.params.projectId, week);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
+checklistRouter.get("/project/:projectId/cubes/download.html", async (req, res) => {
+  const { renderBrandedReportHtml } = await import("../services/brandedExport.js");
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: req.params.projectId } });
+  const rows = await prisma.cubeTest.findMany({
+    where: { projectId: req.params.projectId },
+    orderBy: [{ srNo: "asc" }, { castDate: "asc" }],
+  });
+  if (!rows.length) return res.status(404).json({ error: "No cube rows to export" });
+  const html = renderBrandedReportHtml({
+    title: "SPDC Cube Register",
+    subtitle: `${rows.length} specimens — Print / Save as PDF`,
+    project,
+    kpis: [
+      { label: "Specimens", value: rows.length },
+      { label: "Pass", value: rows.filter((r) => /pass/i.test(r.result || "")).length },
+      { label: "Fail", value: rows.filter((r) => /fail/i.test(r.result || "")).length },
+    ],
+    sections: [
+      {
+        heading: "Cube register",
+        headers: ["Sr.", "Cast date", "Description", "Grade", "7D load", "28D load", "Avg MPa", "Result", "Agency"],
+        rows: rows.map((r) => [
+          r.srNo || "",
+          r.castDate ? r.castDate.toISOString().slice(0, 10) : "",
+          r.description,
+          r.grade || "",
+          r.load7 ?? "",
+          r.load28 ?? "",
+          r.avgStrength ?? "",
+          r.result || "Pending",
+          r.testAgency || "",
+        ]),
+      },
+    ],
+  });
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
 });

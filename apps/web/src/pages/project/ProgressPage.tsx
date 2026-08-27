@@ -21,15 +21,22 @@ type Tab =
   | "hindrance"
   | "risk"
   | "legal"
+  | "lessons"
   | "scurve"
   | "msproject";
 
-const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "milestones", "msproject"];
+const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "milestones", "monthly", "lessons", "msproject"];
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function isoDay(v?: string | null) {
+  if (!v) return "";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
 }
 
 function pct(n: number) {
@@ -60,8 +67,14 @@ export default function ProgressPage() {
   const [riskAddOpen, setRiskAddOpen] = useState(false);
   const [legalAddOpen, setLegalAddOpen] = useState(false);
   const [actAddOpen, setActAddOpen] = useState(false);
+  const [cashAddOpen, setCashAddOpen] = useState(false);
+  const [manAddOpen, setManAddOpen] = useState(false);
+  const [lessonAddOpen, setLessonAddOpen] = useState(false);
   const [actBusy, setActBusy] = useState(false);
   const [actForm, setActForm] = useState({ activity: "", unit: "Cum", weeklyPlanned: "", weeklyActual: "" });
+  const [cashForm, setCashForm] = useState({ periodLabel: "", packageName: "", plannedAmount: "", actualAmount: "" });
+  const [manForm, setManForm] = useState({ trade: "", required: "", available: "" });
+  const [lessonForm, setLessonForm] = useState({ description: "", wentWell: "", notMetExpectation: "", lessonsLearnt: "" });
   const mileFormRef = useRef<HTMLFormElement>(null);
   const riskFormRef = useRef<HTMLFormElement>(null);
   const legalFormRef = useRef<HTMLFormElement>(null);
@@ -71,7 +84,8 @@ export default function ProgressPage() {
   const canEdit =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
   const canVerify = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
-  const canResyncExcel = user?.role === "admin" || user?.role === "office";
+  const canResyncExcel =
+    user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
   const [hindranceForm, setHindranceForm] = useState({
     description: "",
@@ -529,6 +543,78 @@ export default function ProgressPage() {
     await load();
   }
 
+  async function addCashflow(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setActBusy(true);
+    try {
+      await api(`/api/progress/${id}/planned-actual`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          periodLabel: cashForm.periodLabel,
+          packageName: cashForm.packageName || "Overall",
+          plannedAmount: Number(cashForm.plannedAmount || 0),
+          actualAmount: Number(cashForm.actualAmount || 0),
+        }),
+      });
+      setCashForm({ periodLabel: "", packageName: "", plannedAmount: "", actualAmount: "" });
+      setCashAddOpen(false);
+      setMsg("Cashflow month added — sync to Cost to feed WPR");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add failed");
+    } finally {
+      setActBusy(false);
+    }
+  }
+
+  async function addManpowerRow(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setActBusy(true);
+    try {
+      await api(`/api/progress/${id}/manpower`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          trade: manForm.trade,
+          required: Number(manForm.required || 0),
+          available: Number(manForm.available || 0),
+        }),
+      });
+      setManForm({ trade: "", required: "", available: "" });
+      setManAddOpen(false);
+      setMsg("Manpower trade added");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add failed");
+    } finally {
+      setActBusy(false);
+    }
+  }
+
+  async function addLesson(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setActBusy(true);
+    try {
+      await api(`/api/closure/project/${id}/lessons`, {
+        method: "POST",
+        token,
+        body: JSON.stringify(lessonForm),
+      });
+      setLessonForm({ description: "", wentWell: "", notMetExpectation: "", lessonsLearnt: "" });
+      setLessonAddOpen(false);
+      setMsg("Lesson learnt added");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add failed");
+    } finally {
+      setActBusy(false);
+    }
+  }
+
   return (
     <div className="w-full min-w-0 space-y-5 pb-4">
       <div className="w-full shrink-0">
@@ -545,7 +631,11 @@ export default function ProgressPage() {
           }
           actions={
             <div className="flex flex-wrap gap-2 items-center">
-              <Badge tone="brand">{pct(data.totals.projectProgressPct)} weighted</Badge>
+              <Badge tone="brand">
+                {data.overviewSheet?.sheetProgressPct != null
+                  ? `${Math.round(Number(data.overviewSheet.sheetProgressPct) * 1000) / 10}% sheet`
+                  : pct(data.totals.projectProgressPct)}
+              </Badge>
               <ReportExportButtons projectId={id} kind="progress" compact />
               {canVerify && (
                 <Button type="button" variant="secondary" disabled={verifyBusy} onClick={() => void runVerify()}>
@@ -675,7 +765,20 @@ export default function ProgressPage() {
             <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ok">Workday overview</p>
-                <h3 className="font-display text-lg text-ink">Key registers at a glance</h3>
+                <h3 className="font-display text-lg text-ink">
+                  {data.overviewSheet?.title || "Key registers at a glance"}
+                </h3>
+                {data.overviewSheet && (
+                  <p className="text-xs text-steel-muted mt-1">
+                    Dates from {data.overviewSheet.source}: start {fmtDate(data.overviewSheet.startDate)} · planned end{" "}
+                    {fmtDate(data.overviewSheet.plannedEnd)} · sheet current {fmtDate(data.overviewSheet.currentDate)}
+                    {data.overviewSheet.sheetProgressPct != null
+                      ? ` · sheet progress ${Math.round(Number(data.overviewSheet.sheetProgressPct) * 1000) / 10}%`
+                      : ""}
+                    {" · "}
+                    register weighted {pct(data.totals?.projectProgressPct || 0)}
+                  </p>
+                )}
               </div>
               <Link to={`/projects/${id}/hub/progress`} className="text-sm font-semibold text-brand">
                 All Progress tools →
@@ -815,13 +918,41 @@ export default function ProgressPage() {
                     <td className="py-2 pr-3 font-medium">
                       <RegisterSheetCell value={m.activity} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { activity: v })} />
                     </td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.plannedStart)}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.plannedEnd)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <RegisterSheetCell
+                        type="date"
+                        value={isoDay(m.plannedStart)}
+                        disabled={!canEdit}
+                        onCommit={(v) => void patchMilestone(m.id, { plannedStart: v || null })}
+                      />
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <RegisterSheetCell
+                        type="date"
+                        value={isoDay(m.plannedEnd)}
+                        disabled={!canEdit}
+                        onCommit={(v) => void patchMilestone(m.id, { plannedEnd: v || null })}
+                      />
+                    </td>
                     <td className="py-2 pr-3 font-mono text-xs">
                       <RegisterSheetCell type="number" value={m.plannedDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { plannedDays: Number(v) })} />
                     </td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.actualStart)}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(m.actualEnd)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <RegisterSheetCell
+                        type="date"
+                        value={isoDay(m.actualStart)}
+                        disabled={!canEdit}
+                        onCommit={(v) => void patchMilestone(m.id, { actualStart: v || null })}
+                      />
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <RegisterSheetCell
+                        type="date"
+                        value={isoDay(m.actualEnd)}
+                        disabled={!canEdit}
+                        onCommit={(v) => void patchMilestone(m.id, { actualEnd: v || null })}
+                      />
+                    </td>
                     <td className="py-2 pr-3 font-mono text-xs">
                       <RegisterSheetCell type="number" value={m.actualDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { actualDays: Number(v) })} />
                     </td>
@@ -946,8 +1077,13 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "cashflow") && (
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">
-              Project cashflow · Planned Vs Actual
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
+              <span>Project cashflow · Planned Vs Actual</span>
+              {canEdit && (
+                <Button type="button" className="!text-xs" onClick={() => setCashAddOpen(true)}>
+                  Add cashflow month
+                </Button>
+              )}
             </div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table min-w-[36rem] w-full text-sm">
@@ -982,7 +1118,14 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "manpower") && (
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Weekly manpower</div>
+            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
+              <span>Weekly manpower</span>
+              {canEdit && (
+                <Button type="button" className="!text-xs" onClick={() => setManAddOpen(true)}>
+                  Add manpower trade
+                </Button>
+              )}
+            </div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[32rem]">
               <thead className="sticky top-0 z-10">
@@ -1449,6 +1592,52 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {tab === "lessons" && (
+        <div className="progress-sheet-block space-y-3">
+          <ReferenceSheetToolbar
+            sheetLabel="Lessons Learnt — Sharnam PMC"
+            rowCount={data.lessons?.length}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => setLessonAddOpen(true) : undefined}
+            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            generateLabel="Load SPDC template"
+            busy={registerSyncBusy}
+            message={msg || undefined}
+            uploadHint="Rows from Lessons Learnt - Sharnam PMC.xls — add site notes without changing Excel numbers."
+          />
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="sheet-register__head shrink-0">Lessons learnt register</div>
+            <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
+              <table className="sheet-register__table w-full text-sm min-w-[56rem]">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
+                    <th className="py-2.5 px-3">S.No</th>
+                    <th className="py-2.5 pr-3">Description</th>
+                    <th className="py-2.5 pr-3">What went well</th>
+                    <th className="py-2.5 pr-3">What did not meet expectations</th>
+                    <th className="py-2.5 pr-3">How it could have been done better</th>
+                    <th className="py-2.5 px-3">Value differentiator</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.lessons || []).map((l: any) => (
+                    <tr key={l.id} className="border-b border-line/70 align-top">
+                      <td className="py-2 px-3 font-mono text-xs">{l.srNo ?? "—"}</td>
+                      <td className="py-2 pr-3 font-medium">{l.description || "—"}</td>
+                      <td className="py-2 pr-3 text-sm">{l.wentWell || "—"}</td>
+                      <td className="py-2 pr-3 text-sm">{l.notMetExpectation || "—"}</td>
+                      <td className="py-2 pr-3 text-sm">{l.lessonsLearnt || "—"}</td>
+                      <td className="py-2 px-3 text-sm">{l.valueDifferentiator || "—"}</td>
+                    </tr>
+                  ))}
+                  {!data.lessons?.length && <RegisterEmptyRow colSpan={6} />}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {tab === "scurve" && (
         <div className="space-y-4">
           <Card className="!p-5">
@@ -1786,6 +1975,54 @@ export default function ProgressPage() {
           <Input type="date" value={hindranceForm.occurredAt} onChange={(e) => setHindranceForm({ ...hindranceForm, occurredAt: e.target.value })} />
           <Input placeholder="Days impacted" value={hindranceForm.daysImpacted} onChange={(e) => setHindranceForm({ ...hindranceForm, daysImpacted: e.target.value })} />
         </div>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={cashAddOpen && canEdit}
+        title="Add cashflow month"
+        onClose={() => setCashAddOpen(false)}
+        onSave={() => void addCashflow({ preventDefault: () => {} } as FormEvent)}
+        saving={actBusy}
+        saveLabel="Add month"
+      >
+        <form className="grid sm:grid-cols-2 gap-3" onSubmit={addCashflow}>
+          <Input placeholder="Month (e.g. April)" value={cashForm.periodLabel} onChange={(e) => setCashForm({ ...cashForm, periodLabel: e.target.value })} required />
+          <Input placeholder="RA / package (e.g. RA 09)" value={cashForm.packageName} onChange={(e) => setCashForm({ ...cashForm, packageName: e.target.value })} />
+          <Input type="number" step="any" placeholder="Planned work ₹" value={cashForm.plannedAmount} onChange={(e) => setCashForm({ ...cashForm, plannedAmount: e.target.value })} />
+          <Input type="number" step="any" placeholder="Actual work ₹" value={cashForm.actualAmount} onChange={(e) => setCashForm({ ...cashForm, actualAmount: e.target.value })} />
+        </form>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={manAddOpen && canEdit}
+        title="Add manpower trade"
+        onClose={() => setManAddOpen(false)}
+        onSave={() => void addManpowerRow({ preventDefault: () => {} } as FormEvent)}
+        saving={actBusy}
+        saveLabel="Add trade"
+      >
+        <form className="grid sm:grid-cols-2 gap-3" onSubmit={addManpowerRow}>
+          <Input className="sm:col-span-2" placeholder="Type of manpower" value={manForm.trade} onChange={(e) => setManForm({ ...manForm, trade: e.target.value })} required />
+          <Input type="number" placeholder="Required for week" value={manForm.required} onChange={(e) => setManForm({ ...manForm, required: e.target.value })} />
+          <Input type="number" placeholder="Available" value={manForm.available} onChange={(e) => setManForm({ ...manForm, available: e.target.value })} />
+        </form>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={lessonAddOpen && canEdit}
+        title="Add lesson learnt"
+        onClose={() => setLessonAddOpen(false)}
+        onSave={() => void addLesson({ preventDefault: () => {} } as FormEvent)}
+        saving={actBusy}
+        saveLabel="Add lesson"
+        size="xl"
+      >
+        <form className="grid gap-3" onSubmit={addLesson}>
+          <Input placeholder="Description / stage" value={lessonForm.description} onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })} required />
+          <TextArea rows={2} placeholder="What went well" value={lessonForm.wentWell} onChange={(e) => setLessonForm({ ...lessonForm, wentWell: e.target.value })} />
+          <TextArea rows={2} placeholder="What did not meet expectations" value={lessonForm.notMetExpectation} onChange={(e) => setLessonForm({ ...lessonForm, notMetExpectation: e.target.value })} />
+          <TextArea rows={2} placeholder="How it could have been done better" value={lessonForm.lessonsLearnt} onChange={(e) => setLessonForm({ ...lessonForm, lessonsLearnt: e.target.value })} />
+        </form>
       </RegisterEntryModal>
 
     </div>

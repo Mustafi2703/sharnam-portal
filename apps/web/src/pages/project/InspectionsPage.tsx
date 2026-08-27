@@ -516,6 +516,10 @@ export default function InspectionsPage() {
               if (!id) return;
               await downloadAuthFile(`/api/checklist/project/${id}/cubes/download.xlsx`, token, `Cube-Register-${project?.code || id}.xlsx`);
             }}
+            onDownloadHtml={async () => {
+              if (!id) return;
+              await downloadAuthFile(`/api/checklist/project/${id}/cubes/download.html`, token, `Cube-Register-${project?.code || id}.html`);
+            }}
             onPublishSharePoint={
               canManage
                 ? async () => {

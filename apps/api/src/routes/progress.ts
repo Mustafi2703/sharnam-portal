@@ -64,7 +64,7 @@ progressRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "e
 
 progressRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLines] =
+  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLines, lessons] =
     await Promise.all([
       prisma.progressMilestone.findMany({ where: { projectId }, orderBy: { code: "asc" } }),
       prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" } }),
@@ -79,7 +79,11 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
         orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
         take: 4000,
       }),
+      prisma.lessonLearnt.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
     ]);
+
+  const { readProgressOverviewDashboard } = await import("../services/progressRegistersImport.js");
+  const overviewSheet = readProgressOverviewDashboard();
 
   const openHindrance = hindrances.filter((h) => h.status === "Open").length;
   const openRisk = risks.filter((r) => r.status === "Open").length;
@@ -99,11 +103,13 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       activityLines: activityLines.length,
       boqLines: boqLines.length,
       projectProgressPct: weightedPct || 0,
+      sheetProgressPct: overviewSheet?.sheetProgressPct ?? null,
       avgActualPct:
         plannedActual.length > 0
           ? plannedActual.reduce((s, p) => s + p.actualPct, 0) / plannedActual.length
           : 0,
     },
+    overviewSheet,
     charts: {
       milestoneByStatus: countBy(milestones, (m) => m.status || "Unknown"),
       milestoneByPhase: countBy(milestones, (m) => m.category || "Other").map((x) => ({
@@ -146,6 +152,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     activityLines,
     boqLines,
     sorStats,
+    lessons,
   });
 });
 
@@ -190,6 +197,10 @@ progressRouter.patch(
   "/:projectId/milestones/:milestoneId",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressMilestone.findFirst({
+      where: { id: req.params.milestoneId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
     const data: Record<string, unknown> = {};
     for (const k of [
@@ -209,7 +220,7 @@ progressRouter.patch(
       if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
     }
     const row = await prisma.progressMilestone.update({
-      where: { id: req.params.milestoneId },
+      where: { id: existing.id },
       data,
     });
     res.json(row);
@@ -423,18 +434,79 @@ progressRouter.patch(
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
+    const required = body.required != null ? Number(body.required) : existing.required;
+    const available = body.available != null ? Number(body.available) : existing.available;
+    const shortage = Math.max(0, required - available);
+    const shortagePct = required > 0 ? shortage / required : 0;
     const row = await prisma.progressManpower.update({
       where: { id: existing.id },
       data: {
         trade: body.trade != null ? String(body.trade) : undefined,
-        required: body.required != null ? Number(body.required) : undefined,
-        available: body.available != null ? Number(body.available) : undefined,
-        shortage: body.shortage != null ? Number(body.shortage) : undefined,
-        shortagePct: body.shortagePct != null ? Number(body.shortagePct) : undefined,
+        required,
+        available,
+        shortage,
+        shortagePct,
         rank: body.rank != null ? Number(body.rank) : undefined,
       },
     });
     res.json(row);
+  }
+);
+
+progressRouter.post(
+  "/:projectId/planned-actual",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const plannedAmount = Number(body.plannedAmount || 0);
+    const actualAmount = Number(body.actualAmount || 0);
+    const row = await prisma.progressPlannedActual.create({
+      data: {
+        projectId: req.params.projectId,
+        periodLabel: String(body.periodLabel || "New period"),
+        packageName: String(body.packageName || "Overall"),
+        plannedAmount,
+        actualAmount,
+        plannedPct: plannedAmount > 0 ? 1 : 0,
+        actualPct: plannedAmount > 0 ? actualAmount / plannedAmount : 0,
+      },
+    });
+    await audit("progress.plannedActual.create", {
+      userId: req.user!.id,
+      entity: "ProgressPlannedActual",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId },
+    });
+    res.status(201).json(row);
+  }
+);
+
+progressRouter.post(
+  "/:projectId/manpower",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const body = req.body || {};
+    const required = Number(body.required || 0);
+    const available = Number(body.available || 0);
+    const shortage = Math.max(0, required - available);
+    const row = await prisma.progressManpower.create({
+      data: {
+        projectId: req.params.projectId,
+        trade: String(body.trade || "Trade"),
+        required,
+        available,
+        shortage,
+        shortagePct: required > 0 ? shortage / required : 0,
+        rank: Number(body.rank || 99),
+      },
+    });
+    await audit("progress.manpower.create", {
+      userId: req.user!.id,
+      entity: "ProgressManpower",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId },
+    });
+    res.status(201).json(row);
   }
 );
 
@@ -447,15 +519,18 @@ progressRouter.patch(
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
+    const plannedAmount = body.plannedAmount != null ? Number(body.plannedAmount) : existing.plannedAmount;
+    const actualAmount = body.actualAmount != null ? Number(body.actualAmount) : existing.actualAmount;
+    const actualPct = plannedAmount > 0 ? actualAmount / plannedAmount : 0;
     const row = await prisma.progressPlannedActual.update({
       where: { id: existing.id },
       data: {
         periodLabel: body.periodLabel != null ? String(body.periodLabel) : undefined,
         packageName: body.packageName != null ? String(body.packageName) : undefined,
-        plannedAmount: body.plannedAmount != null ? Number(body.plannedAmount) : undefined,
-        actualAmount: body.actualAmount != null ? Number(body.actualAmount) : undefined,
-        plannedPct: body.plannedPct != null ? Number(body.plannedPct) : undefined,
-        actualPct: body.actualPct != null ? Number(body.actualPct) : undefined,
+        plannedAmount,
+        actualAmount,
+        actualPct,
+        plannedPct: body.plannedPct != null ? Number(body.plannedPct) : existing.plannedPct,
       },
     });
     res.json(row);
@@ -465,7 +540,7 @@ progressRouter.patch(
 /** Re-import all progress register sheets from bundled SPDC Excel packs */
 progressRouter.post(
   "/:projectId/resync-registers",
-  requireRoles("admin", "office"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Project not found" });
@@ -556,6 +631,23 @@ progressRouter.patch(
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
+    const gfcQty = body.gfcQty != null ? Number(body.gfcQty) : existing.gfcQty;
+    const executedQty = body.executedQty != null ? Number(body.executedQty) : existing.executedQty;
+    const weeklyActual = body.weeklyActual != null ? Number(body.weeklyActual) : existing.weeklyActual;
+    const cumulativeQty =
+      body.cumulativeQty != null ? Number(body.cumulativeQty) : executedQty || existing.cumulativeQty;
+    const balanceQty =
+      body.balanceQty != null
+        ? Number(body.balanceQty)
+        : gfcQty > 0
+          ? Math.max(0, gfcQty - (executedQty || 0))
+          : existing.balanceQty;
+    const pctComplete =
+      body.pctComplete != null
+        ? Number(body.pctComplete)
+        : gfcQty > 0
+          ? Math.min(1.2, (executedQty || 0) / gfcQty)
+          : existing.pctComplete;
     const row = await prisma.progressActivityLine.update({
       where: { id: existing.id },
       data: {
@@ -563,14 +655,14 @@ progressRouter.patch(
         tower: body.tower !== undefined ? body.tower : undefined,
         unit: body.unit !== undefined ? body.unit : undefined,
         boqQty: body.boqQty != null ? Number(body.boqQty) : undefined,
-        gfcQty: body.gfcQty != null ? Number(body.gfcQty) : undefined,
+        gfcQty,
         weeklyPlanned: body.weeklyPlanned != null ? Number(body.weeklyPlanned) : undefined,
-        weeklyActual: body.weeklyActual != null ? Number(body.weeklyActual) : undefined,
-        executedQty: body.executedQty != null ? Number(body.executedQty) : undefined,
-        cumulativeQty: body.cumulativeQty != null ? Number(body.cumulativeQty) : undefined,
-        balanceQty: body.balanceQty != null ? Number(body.balanceQty) : undefined,
+        weeklyActual,
+        executedQty,
+        cumulativeQty,
+        balanceQty,
         status: body.status != null ? String(body.status) : undefined,
-        pctComplete: body.pctComplete != null ? Number(body.pctComplete) : undefined,
+        pctComplete,
       },
     });
     res.json(row);

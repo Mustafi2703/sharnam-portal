@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../../api";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
@@ -275,6 +276,15 @@ export default function RfisPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  void downloadAuthFile(`/api/rfis/project/${id}/register.xlsx`, token, `RFI-Register.xlsx`)
+                }
+              >
+                Download SPDC form + register
+              </Button>
               <Link to={`/projects/${id}/rfis?kind=RequestForInformation&compose=1`}>
                 <Button type="button">Ask (PMC RFI)</Button>
               </Link>
@@ -611,6 +621,34 @@ export default function RfisPage() {
                     <Badge tone="brand">Ball: {selected.ballInCourt}</Badge>
                     <Badge>{selected.status}</Badge>
                     {selected.drawing && <Badge tone="neutral">{selected.drawing.drawingNumber}</Badge>}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs"
+                      onClick={() =>
+                        void downloadAuthFile(
+                          `/api/rfis/${selected.id}/download.xlsx`,
+                          token,
+                          `${selected.number || "RFI"}.xlsx`
+                        )
+                      }
+                    >
+                      Download fill form
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs"
+                      onClick={() =>
+                        void downloadAuthFile(
+                          `/api/rfis/${selected.id}/download.html`,
+                          token,
+                          `${selected.number || "RFI"}.html`
+                        )
+                      }
+                    >
+                      Print / PDF
+                    </Button>
                   </div>
                 </div>
                 <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>

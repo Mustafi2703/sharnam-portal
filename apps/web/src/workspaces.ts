@@ -399,6 +399,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "progress",
+      label: "Lessons learnt",
+      query: "tab=lessons",
+      blurb: "Lessons learnt register from the SPDC pack — add site notes.",
+      sheet: "Lessons Learnt - Sharnam PMC.xls",
+    },
+    {
+      to: "progress",
       label: "S-curve",
       query: "tab=scurve",
       blurb: "Weekly planned vs actual % from MS Project — feeds DPR/WPR.",

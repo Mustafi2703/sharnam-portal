@@ -247,7 +247,7 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
       ["Project", project.name],
       ["Client", project.clientName || ""],
       ["Design Consultant", project.designConsultant || ""],
-      ["PM Consultant", "Sharnam Project Management Consultants"],
+      ["PM Consultant", project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)"],
       ["Contractor", project.contractorName || ""],
       ["Week", wl],
     ];
@@ -283,7 +283,7 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
     ["Project", project.name],
     ["Client", project.clientName || ""],
     ["Design Consultant", project.designConsultant || ""],
-    ["PM Consultant", "Sharnam Project Management Consultants"],
+    ["PM Consultant", project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)"],
     ["Contractor", project.contractorName || ""],
     ["Week", wl],
     [],

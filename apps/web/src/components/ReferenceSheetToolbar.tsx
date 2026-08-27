@@ -11,6 +11,7 @@ type ReferenceSheetToolbarProps = {
   uploadHint?: string;
   onDownloadCsv?: () => void;
   onDownloadXlsx?: () => void;
+  onDownloadHtml?: () => void;
   onPublishSharePoint?: () => void | Promise<void>;
   publishLabel?: string;
   sharePointUrl?: string | null;
@@ -30,6 +31,7 @@ export function ReferenceSheetToolbar({
   uploadHint,
   onDownloadCsv,
   onDownloadXlsx,
+  onDownloadHtml,
   onPublishSharePoint,
   publishLabel = "Publish to SharePoint",
   sharePointUrl,
@@ -56,6 +58,11 @@ export function ReferenceSheetToolbar({
         {onDownloadXlsx && (
           <Button type="button" variant="secondary" onClick={onDownloadXlsx} disabled={busy}>
             Download XLSX
+          </Button>
+        )}
+        {onDownloadHtml && (
+          <Button type="button" variant="secondary" onClick={onDownloadHtml} disabled={busy}>
+            Download PDF (HTML)
           </Button>
         )}
         {onPublishSharePoint && (

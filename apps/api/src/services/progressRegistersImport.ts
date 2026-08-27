@@ -31,10 +31,24 @@ function excelDate(v: unknown): Date | null {
   if (v == null || v === "") return null;
   if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
   const num = Number(v);
-  if (!Number.isFinite(num) || num < 20000) return null;
-  const ms = (num - 25569) * 86400 * 1000;
-  const d = new Date(ms);
-  return Number.isNaN(d.getTime()) ? null : d;
+  // Client packs store dates as Excel serials (≈45xxx–46xxx). Reject small integers that are not dates.
+  if (Number.isFinite(num) && num >= 30000 && num < 80000) {
+    const utc = new Date(Date.UTC(1899, 11, 30));
+    utc.setUTCDate(utc.getUTCDate() + Math.round(num));
+    return Number.isNaN(utc.getTime()) ? null : utc;
+  }
+  const t = String(v).trim();
+  if (!t || /^\d{1,4}$/.test(t)) return null;
+  const parsed = Date.parse(t);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
+function cellAsTextOrDate(v: unknown, max = 120) {
+  const asDate = excelDate(v);
+  if (asDate) {
+    return asDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  }
+  return s(v, max);
 }
 
 function sheetRows(file: string, picker: (names: string[]) => string | undefined) {
@@ -148,7 +162,7 @@ export async function syncHindranceFromTemplate(projectId: string, opts?: { forc
         description,
         location: s(row[2], 120) || null,
         activity: s(row[3], 120) || null,
-        correspondence: s(row[4], 120) || null,
+        correspondence: cellAsTextOrDate(row[4], 120) || null,
         category: s(row[5], 80) || null,
         type: s(row[6], 200) || null,
         occurredAt: excelDate(row[7]),
@@ -256,6 +270,71 @@ export async function syncLegalFromTemplate(projectId: string, opts?: { force?: 
   return { imported, skipped: false, source: path.basename(file) };
 }
 
+export function resolveLessonsPath() {
+  return firstExisting(resolveExcelRoot(), ["Lessons Learnt - Sharnam PMC.xls", "Lessons Learnt - Sharnam PMC.xlsx"]);
+}
+
+/** Timeline cells from Progress Overview.xlsx · Dashboard — values as stored in the pack. */
+export function readProgressOverviewDashboard() {
+  const file = resolveProgressOverviewPath();
+  if (!file) return null;
+  const rows = sheetRows(file, (names) => names.find((n) => /dashboard/i.test(n)) || names[0]);
+  const title = s(rows[0]?.[0], 120);
+  const pick = (label: string) => {
+    for (const row of rows.slice(0, 20)) {
+      const key = s(row?.[0], 80);
+      if (key.toLowerCase() === label.toLowerCase()) {
+        return row[3] ?? row[1] ?? row[2];
+      }
+    }
+    return undefined;
+  };
+  return {
+    source: path.basename(file),
+    title: title || "Progress Overview",
+    startDate: excelDate(pick("Project Start Date")),
+    plannedEnd: excelDate(pick("Planned End Date")),
+    currentDate: excelDate(pick("Current Date")),
+    sheetProgressPct: (() => {
+      const v = pick("Project Progress");
+      if (v == null || v === "") return null;
+      const x = Number(v);
+      return Number.isFinite(x) ? x : null;
+    })(),
+  };
+}
+
+export async function syncLessonsFromTemplate(projectId: string, opts?: { force?: boolean }) {
+  const file = resolveLessonsPath();
+  if (!file) return { imported: 0, skipped: true, source: null as string | null };
+  const existing = await prisma.lessonLearnt.count({ where: { projectId } });
+  if (existing >= 1 && !opts?.force) return { imported: 0, skipped: true, source: path.basename(file) };
+  if (opts?.force) await prisma.lessonLearnt.deleteMany({ where: { projectId } });
+
+  const rows = sheetRows(file, (names) => names.find((n) => /lesson/i.test(n)) || names[0]);
+  let imported = 0;
+  for (let i = 7; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    const srNo = n(row[0]);
+    const description = s(row[1], 400);
+    if (!description) continue;
+    await prisma.lessonLearnt.create({
+      data: {
+        projectId,
+        srNo: srNo || imported + 1,
+        description,
+        wentWell: s(row[2], 2000) || null,
+        notMetExpectation: s(row[3], 2000) || null,
+        lessonsLearnt: s(row[4], 2000) || null,
+        valueDifferentiator: s(row[5], 500) || null,
+        source: path.basename(file),
+      },
+    });
+    imported++;
+  }
+  return { imported, skipped: false, source: path.basename(file) };
+}
+
 export async function syncProgressRegisterPack(projectId: string, opts?: { force?: boolean }) {
   const milestones = await syncMilestonesFromTemplate(projectId, opts);
   const hindrance = await syncHindranceFromTemplate(projectId, opts).catch((err) => ({
@@ -266,5 +345,6 @@ export async function syncProgressRegisterPack(projectId: string, opts?: { force
   }));
   const risk = await syncRiskFromTemplate(projectId, opts);
   const legal = await syncLegalFromTemplate(projectId, opts);
-  return { milestones, hindrance, risk, legal };
+  const lessons = await syncLessonsFromTemplate(projectId, opts);
+  return { milestones, hindrance, risk, legal, lessons };
 }

@@ -82,6 +82,31 @@ export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; pro
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
+/** Stamp the SPDC / Sharnam logo on the first worksheet of an existing XLSX buffer. */
+export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
+  const logo = sharnamLogoPath();
+  if (!logo) return buffer;
+  try {
+    const mod = await import("exceljs");
+    const ExcelJS = (mod as { default?: typeof import("exceljs") }).default ?? (mod as typeof import("exceljs"));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as Buffer);
+    const ws = wb.worksheets[0];
+    if (!ws) return buffer;
+    const imgId = wb.addImage({ filename: logo, extension: "png" });
+    ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
+    ws.addImage(imgId, {
+      tl: { col: 0.1, row: 0.05 },
+      ext: { width: 118, height: 38 },
+      editAs: "oneCell",
+    });
+    const out = await wb.xlsx.writeBuffer();
+    return Buffer.from(out);
+  } catch {
+    return buffer;
+  }
+}
+
 export function renderBrandedReportHtml(opts: {
   title: string;
   subtitle?: string;

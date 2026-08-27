@@ -117,7 +117,7 @@ closureRouter.get("/project/:projectId/lessons", async (req, res) => {
 
 closureRouter.post(
   "/project/:projectId/lessons",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const row = await prisma.lessonLearnt.create({

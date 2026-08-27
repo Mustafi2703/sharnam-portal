@@ -217,7 +217,7 @@ export async function exportCubeWorkbook(projectId: string) {
       ["Project", project.name],
       ["Client", project.clientName || ""],
       ["Design Consultant", project.designConsultant || ""],
-      ["PM Consultant", "Sharnam Project Management Consultants"],
+      ["PM Consultant", project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)"],
       ["Contractor", project.contractorName || ""],
     ];
     for (let i = 0; i < metaRows.length; i++) {
@@ -249,7 +249,7 @@ export async function exportCubeWorkbook(projectId: string) {
     ["Project", project.name],
     ["Client", project.clientName || ""],
     ["Design Consultant", project.designConsultant || ""],
-    ["PM Consultant", "Sharnam Project Management Consultants"],
+    ["PM Consultant", project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)"],
     ["Contractor", project.contractorName || ""],
     [],
     header,

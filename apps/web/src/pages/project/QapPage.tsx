@@ -355,16 +355,11 @@ export default function QapPage() {
             : undefined
         }
         sharePointUrl={sharePointUrl}
-        onGenerate={
-          canManage
-            ? async () => {
-                if (!id) return;
-                const q = weekFilter ? `?week=${encodeURIComponent(weekFilter)}` : "";
-                await downloadAuthFile(`/api/checklist/project/${id}/qap/download.html${q}`, token, `QAP-${weekFilter || "export"}.html`);
-              }
-            : undefined
-        }
-        generateLabel="Print / PDF"
+        onDownloadHtml={async () => {
+          if (!id) return;
+          const q = weekFilter ? `?week=${encodeURIComponent(weekFilter)}` : "";
+          await downloadAuthFile(`/api/checklist/project/${id}/qap/download.html${q}`, token, `QAP-${weekFilter || "export"}.html`);
+        }}
       />
       </div>
 
