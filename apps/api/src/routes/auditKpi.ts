@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { seedAuditKpiFromSheets } from "../modules/audit-kpi/seedFromSheets.js";
+import { audit } from "../services/audit.js";
 
 export const auditKpiRouter = Router();
 auditKpiRouter.use(requireAuth);
@@ -352,6 +353,228 @@ auditKpiRouter.get("/project/:projectId/download/:sheet.csv", async (req, res) =
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(csv);
 });
+
+/**
+ * Sharnam-branded XLSX for every KRA/KPI sheet — same rows as the CSV endpoint but
+ * with the SPDC letterhead cover page (logo, project code, generation timestamp).
+ * Supported: findings | subjects | role-kra | site-walk | dc-interview | folder-sample.
+ */
+auditKpiRouter.get("/project/:projectId/download/:sheet.xlsx", async (req, res) => {
+  const projectId = req.params.projectId;
+  const sheetKey = req.params.sheet;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true, name: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  const { workbookBuffer } = await import("../services/brandedExport.js");
+
+  let title = "";
+  let filename = `Sharnam-${sheetKey}.xlsx`;
+  let headers: string[] = [];
+  let rows: (string | number | null | undefined)[][] = [];
+
+  if (sheetKey === "findings") {
+    const src = await prisma.auditFinding.findMany({ where: { projectId }, orderBy: { srNo: "asc" } });
+    title = "Site Audit — Findings & CAPA";
+    headers = ["#", "Finding ref", "Source", "Ref no", "Folder / location", "Finding", "Photo ref", "Severity", "Status", "Owner", "Due date", "Root cause", "Corrective action", "Closed at"];
+    rows = src.map((r) => [
+      r.srNo,
+      r.findingNo,
+      r.source,
+      r.refNo,
+      r.folderLocation,
+      r.description,
+      r.photoRef,
+      r.severity,
+      r.status,
+      r.owner,
+      r.dueDate ? new Date(r.dueDate).toLocaleDateString("en-IN") : null,
+      r.rootCause,
+      r.correctiveAction,
+      r.closedAt ? new Date(r.closedAt).toLocaleDateString("en-IN") : null,
+    ]);
+    filename = `SITE_AUDIT_FINDINGS-${project.code}.xlsx`;
+  } else if (sheetKey === "subjects") {
+    const src = await prisma.kpiSubject.findMany({ where: { projectId }, orderBy: { srNo: "asc" } });
+    title = "Master KPI — Subject Data";
+    headers = ["#", "ISO area", "Folder", "ISO clause", "Subject", "Custodian", "Records", "Open", "Closed", "Overdue", "% closed", "Oldest open (d)", "KRA score", "RAG", "Last refreshed"];
+    rows = src.map((r) => [
+      r.srNo,
+      r.isoArea,
+      r.folder,
+      r.isoClause,
+      r.name,
+      r.custodian,
+      r.recordsCount,
+      r.openCount,
+      r.closedCount,
+      r.overdueCount,
+      r.pctClosed,
+      r.oldestOpenDays,
+      r.kraScore,
+      r.rag,
+      r.lastRefreshedAt ? new Date(r.lastRefreshedAt).toLocaleString("en-IN") : null,
+    ]);
+    filename = `MASTER_KPI_SUBJECTS-${project.code}.xlsx`;
+  } else if (sheetKey === "role-kra") {
+    const src = await prisma.kpiRoleKra.findMany({ where: { projectId }, orderBy: [{ roleKey: "asc" }, { kraNo: "asc" }] });
+    title = "Master KPI — Role KRA Templates";
+    headers = ["Role", "KRA #", "Description", "Consequence", "Evidence hint", "KPI code", "Target", "Red", "Amber", "Green"];
+    rows = src.map((r) => [r.roleKey, r.kraNo, r.description, r.consequence, r.evidenceHint, r.kpiCode, r.target, r.redCount, r.amberCount, r.greenCount]);
+    filename = `MASTER_KPI_ROLE_KRA-${project.code}.xlsx`;
+  } else if (sheetKey === "site-walk" || sheetKey === "dc-interview" || sheetKey === "folder-sample") {
+    const section = sheetKey === "site-walk" ? "SiteWalk" : sheetKey === "dc-interview" ? "DcInterview" : "FolderSample";
+    const src = await prisma.auditChecklistItem.findMany({
+      where: { projectId, section },
+      orderBy: { itemNo: "asc" },
+    });
+    title = `Site Audit — ${section.replace(/([A-Z])/g, " $1").trim()}`;
+    headers = ["#", "Prompt", "Location checked", "Observed", "Score", "Photo ref", "Response", "Notes"];
+    rows = src.map((r) => [r.itemNo, r.prompt, r.locationChecked, r.observed, r.score, r.photoRef, r.response, r.notes]);
+    filename = `SITE_AUDIT_${section.toUpperCase()}-${project.code}.xlsx`;
+  } else {
+    return res.status(400).json({ error: "Unknown sheet — use findings | subjects | role-kra | site-walk | dc-interview | folder-sample" });
+  }
+
+  const buf = workbookBuffer([{ name: title.slice(0, 31), rows: [headers, ...rows] }], {
+    title,
+    projectCode: project.code,
+  });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buf);
+});
+
+/**
+ * Cross-module KRA refresh — pulls **live** counts from the portal (RFIs, NCRs, drawings
+ * overdue, checklist submissions) and rolls them into KpiSubject rows.  Any subject whose
+ * `workbookFileName` matches one of the module keys below is auto-computed.  All other
+ * subjects keep whatever was seeded from the KPI pack.
+ *
+ * Mapping (case-insensitive, prefix match on workbookFileName or name):
+ *   RFI / Request for information        → open Rfi (kind RequestForInformation)
+ *   NCR                                   → RFIs where rfiKind='QualityIR' with open status (proxy)
+ *   Drawing register / GFC / Approval     → Drawing revisions where dueDate < now and not superseded
+ *   Site Execution / Progress checklists  → ChecklistSubmission open/closed
+ *   Safety                                → RFIs where rfiKind IN ('SafetyIR','SafetyChecklist')
+ *   Cost / RA / COP                       → RaBill status counts
+ */
+auditKpiRouter.post(
+  "/project/:projectId/refresh",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const subjects = await prisma.kpiSubject.findMany({ where: { projectId } });
+    if (!subjects.length) return res.json({ ok: true, subjects: 0, updated: 0 });
+
+    const [rfis, drawings, drawingsOverdue, safetyRfis, raBills, subs] = await Promise.all([
+      prisma.rfi.findMany({ where: { projectId, rfiKind: { in: ["RequestForInformation", "Manual", "ClientConcern"] } }, select: { status: true, closedAt: true, createdAt: true, dueDate: true } }),
+      prisma.drawing.findMany({ where: { projectId }, select: { id: true } }),
+      prisma.drawingRevision.findMany({
+        where: { drawing: { projectId } },
+        select: {
+          plannedDate: true,
+          actualDate: true,
+          issuedToClientAt: true,
+          receivedDate: true,
+          published: true,
+        },
+      }),
+      prisma.rfi.findMany({ where: { projectId, rfiKind: { in: ["SafetyIR", "SafetyChecklist"] } }, select: { status: true, closedAt: true, createdAt: true, dueDate: true } }),
+      prisma.raBill.findMany({ where: { projectId }, select: { status: true, createdAt: true, invoiceDate: true } }),
+      prisma.checklistSubmission.findMany({
+        where: { assignment: { projectId } },
+        select: { status: true, createdAt: true, reviewedAt: true, assignment: { select: { template: { select: { checklistType: true } } } } },
+      }),
+    ]);
+
+    const now = Date.now();
+    const rollupRfi = (list: typeof rfis) => {
+      const open = list.filter((r) => r.status !== "Closed").length;
+      const closed = list.filter((r) => r.status === "Closed").length;
+      const overdue = list.filter((r) => r.status !== "Closed" && r.dueDate && new Date(r.dueDate).getTime() < now).length;
+      const oldest = list
+        .filter((r) => r.status !== "Closed")
+        .reduce((max, r) => Math.max(max, Math.round((now - new Date(r.createdAt).getTime()) / 86400000)), 0);
+      return { records: list.length, open, closed, overdue, oldest };
+    };
+    const rollupDrawings = () => {
+      const overdue = drawingsOverdue.filter(
+        (d) => d.plannedDate && !d.actualDate && new Date(d.plannedDate).getTime() < now
+      ).length;
+      const open = drawingsOverdue.filter((d) => !d.published).length;
+      const closed = drawingsOverdue.length - open;
+      const oldest = drawingsOverdue
+        .filter((d) => !d.published && d.plannedDate)
+        .reduce(
+          (max, d) =>
+            Math.max(max, Math.round((now - new Date(d.plannedDate as Date).getTime()) / 86400000)),
+          0
+        );
+      return { records: drawings.length, open, closed, overdue, oldest };
+    };
+    const rollupCost = () => {
+      const open = raBills.filter((r) => r.status !== "Paid" && r.status !== "Certified").length;
+      const closed = raBills.length - open;
+      return { records: raBills.length, open, closed, overdue: 0, oldest: 0 };
+    };
+    const rollupSubs = (kinds: string[]) => {
+      const list = subs.filter((s) => kinds.includes(s.assignment?.template?.checklistType || ""));
+      const open = list.filter((s) => s.status !== "Submitted" && s.status !== "Approved").length;
+      const closed = list.length - open;
+      return { records: list.length, open, closed, overdue: 0, oldest: 0 };
+    };
+
+    const rfiRoll = rollupRfi(rfis);
+    const safetyRoll = rollupRfi(safetyRfis);
+    const drawingRoll = rollupDrawings();
+    const costRoll = rollupCost();
+    const qcRoll = rollupSubs(["QualityInspection"]);
+    const seRoll = rollupSubs(["SiteExecution", "ActivityInspection"]);
+
+    function mapSubject(subjectName: string) {
+      const n = subjectName.toLowerCase();
+      if (n.includes("rfi") || n.includes("request for information")) return rfiRoll;
+      if (n.includes("safety") || n.includes("hse")) return safetyRoll;
+      if (n.includes("drawing") || n.includes("gfc") || n.includes("approval")) return drawingRoll;
+      if (n.includes("ra bill") || n.includes("cop") || n.includes("payment") || n.includes("cash")) return costRoll;
+      if (n.includes("quality") || n.includes("ncr") || n.includes("inspection")) return qcRoll;
+      if (n.includes("progress") || n.includes("dpr") || n.includes("wpr") || n.includes("site execution")) return seRoll;
+      return null;
+    }
+    function ragFor(records: number, overdue: number, open: number): string {
+      if (records === 0) return "UNUSED";
+      if (overdue > 0) return "Red";
+      if (open / Math.max(records, 1) > 0.4) return "Amber";
+      return "Green";
+    }
+
+    let updated = 0;
+    const now2 = new Date();
+    for (const s of subjects) {
+      const roll = mapSubject(`${s.workbookFileName || ""} ${s.name}`);
+      if (!roll) continue;
+      const pctClosed = roll.records > 0 ? Math.round((roll.closed / roll.records) * 100) : 0;
+      const kraScore = Math.max(0, Math.min(100, pctClosed - roll.overdue * 5));
+      await prisma.kpiSubject.update({
+        where: { id: s.id },
+        data: {
+          recordsCount: roll.records,
+          openCount: roll.open,
+          closedCount: roll.closed,
+          overdueCount: roll.overdue,
+          oldestOpenDays: roll.oldest,
+          pctClosed,
+          kraScore,
+          rag: ragFor(roll.records, roll.overdue, roll.open),
+          lastRefreshedAt: now2,
+        },
+      });
+      updated++;
+    }
+    await audit("audit_kpi.refresh", { userId: req.user!.id, entity: "KpiSubject", entityId: projectId, meta: { updated, total: subjects.length } });
+    res.json({ ok: true, subjects: subjects.length, updated, refreshedAt: now2 });
+  }
+);
 
 auditKpiRouter.post(
   "/project/:projectId/upload",

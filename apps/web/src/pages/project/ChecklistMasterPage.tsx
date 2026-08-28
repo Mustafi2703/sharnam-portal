@@ -207,11 +207,39 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
         }
         actions={
-          !id ? (
-            <Link to="/master" className="text-sm font-semibold text-brand">
-              ← Master setup
-            </Link>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-2">
+            {(effectiveLock === "Safety" || !effectiveLock) && (user?.role === "admin" || user?.role === "office") && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  if (!confirm("Seed / refresh the three SPDC HSE templates (F-01 IR, F-02 General walkthrough, F-03 Activity)? Existing SPDC/HSE templates will be updated in place.")) return;
+                  try {
+                    setMsg("");
+                    const r = await api<{ templates: { name: string; items: number; created: boolean }[] }>(
+                      "/api/checklist/safety/seed-spdc",
+                      { method: "POST", token }
+                    );
+                    setMsg(
+                      "SPDC HSE pack seeded: " +
+                        r.templates.map((t) => `${t.name.split(" · ")[0]} (${t.items} items, ${t.created ? "new" : "updated"})`).join(" · ")
+                    );
+                    const fresh = await api(`/api/checklist/templates?type=${family}`, { token });
+                    setTemplates(fresh as any);
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : String(err));
+                  }
+                }}
+              >
+                Import SPDC HSE pack
+              </Button>
+            )}
+            {!id ? (
+              <Link to="/master" className="text-sm font-semibold text-brand">
+                ← Master setup
+              </Link>
+            ) : null}
+          </div>
         }
       />
 

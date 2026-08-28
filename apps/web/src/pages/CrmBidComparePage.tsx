@@ -327,6 +327,39 @@ export default function CrmBidComparePage() {
             >
               Download R2 .xlsx
             </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                if (!confirm("Load a demo bid package (Alpha / Bharat / Concord × Civil, Electrical, Admin)?  Real bid packages are never touched.")) return;
+                setBusy(true);
+                setMsg("");
+                try {
+                  const pkg = await api<{ id: string; title: string; summary?: { lowestVendor?: string; grandTotals?: Record<string, number> } }>(
+                    "/api/crm/bid-packages/seed-demo",
+                    {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ projectId: form.projectId || undefined }),
+                    }
+                  );
+                  const totals = pkg.summary?.grandTotals || {};
+                  const totalStr = Object.entries(totals)
+                    .map(([v, n]) => `${v.split(" ")[0]}: ${formatINR(Number(n))}`)
+                    .join(" · ");
+                  setMsg(`Demo package "${pkg.title}" loaded — ${totalStr}. Lowest: ${pkg.summary?.lowestVendor ?? "—"}.`);
+                  await load();
+                  setSelectedId(pkg.id);
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Demo load failed");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Load 3-vendor demo
+            </Button>
           </div>
         }
       />

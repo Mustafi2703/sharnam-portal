@@ -229,14 +229,46 @@ export default function AuditKpiPage() {
       />
 
       {(tab === "dashboard" || tab === "kpi-dashboard") && canEdit && (
-        <ReferenceSheetToolbar
-          sheetLabel={tab === "kpi-dashboard" ? "MASTER_KPI_DASHBOARD.xlsx" : "SITE_AUDIT_Pack.xlsx"}
-          canEdit
-          onUpload={uploadSheet}
-          uploadHint="Use the exact column layout from docs/SITE_AUDIT_Pack.xlsx or MASTER_KPI_DASHBOARD.xlsx."
-          busy={busy}
-          message={msg}
-        />
+        <>
+          <ReferenceSheetToolbar
+            sheetLabel={tab === "kpi-dashboard" ? "MASTER_KPI_DASHBOARD.xlsx" : "SITE_AUDIT_Pack.xlsx"}
+            canEdit
+            onUpload={uploadSheet}
+            uploadHint="Use the exact column layout from docs/SITE_AUDIT_Pack.xlsx or MASTER_KPI_DASHBOARD.xlsx."
+            busy={busy}
+            message={msg}
+          />
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setMsg("");
+                try {
+                  const r = await api<{ updated: number; subjects: number; refreshedAt: string }>(
+                    `/api/audit-kpi/project/${id}/refresh`,
+                    { method: "POST", token }
+                  );
+                  setMsg(
+                    `KPI refresh: ${r.updated}/${r.subjects} subjects updated from RFIs, safety, drawings, cost and QC live counts.`
+                  );
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Refresh KPI from portal (RFI · Safety · Drawings · Cost · QC)
+            </Button>
+            <span className="text-xs text-steel-muted">
+              Live count for subjects whose name matches an active module — everything else keeps the last upload.
+            </span>
+          </div>
+        </>
       )}
 
       </div>
@@ -330,6 +362,8 @@ export default function AuditKpiPage() {
           onDownloadXlsx={() => {
             if (tab === "findings") dl("xlsx", "findings");
             else if (tab === "subjects") dl("xlsx", "subjects");
+            else if (tab === "role-kra") dl("xlsx", "role-kra");
+            else if (sectionForTab(tab)) dl("xlsx", tab);
           }}
           busy={busy}
           message={msg}

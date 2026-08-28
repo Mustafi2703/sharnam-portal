@@ -593,3 +593,180 @@ crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office", "vend
   const src = resolveR2TemplatePath();
   res.download(src, "Comparative-Statement-R2.xlsx");
 });
+
+/**
+ * Seed a demo bid package so the client can see a fully-populated Comparative
+ * Statement at UAT without waiting for real vendor quotes.  Creates three
+ * vendors (Alpha, Bharat, Concord), a synthetic BOQ across three disciplines,
+ * pre-computed section totals, and marks the lowest quote per line.  Safe to
+ * run multiple times — always creates a new package (never overwrites real
+ * client data).
+ */
+crmComparativeRouter.post(
+  "/bid-packages/seed-demo",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.body?.projectId ? String(req.body.projectId) : null;
+    const project = projectId
+      ? await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, code: true, name: true } })
+      : null;
+
+    const vendorSeeds = [
+      { name: "Alpha Constructions Pvt Ltd", trade: "Civil / Structural", contact: "Rajesh Mehta" },
+      { name: "Bharat Builders LLP", trade: "Civil + MEP", contact: "Suresh Iyer" },
+      { name: "Concord Infra Solutions", trade: "General Contractor", contact: "Anita Kulkarni" },
+    ];
+    const vendorRecords: { id: string; name: string }[] = [];
+    for (const v of vendorSeeds) {
+      const existing = await prisma.vendor.findFirst({ where: { name: v.name } });
+      if (existing) {
+        vendorRecords.push({ id: existing.id, name: existing.name });
+      } else {
+        const created = await prisma.vendor.create({
+          data: {
+            name: v.name,
+            partyType: "Contractor",
+            trade: v.trade,
+            primaryContactName: v.contact,
+            isPrequalified: true,
+            createdVia: "SeedDemo",
+          },
+        });
+        vendorRecords.push({ id: created.id, name: created.name });
+      }
+    }
+    const vendorNames = vendorRecords.map((v) => v.name);
+    const vendorByName = Object.fromEntries(vendorRecords.map((v) => [v.name, v.id]));
+
+    const disciplines: DisciplineDef[] = [
+      { key: "CCV", label: "Civil & Structural (CCV)", sheetName: "BOQ-CCV" },
+      { key: "ELE_LAB", label: "Electrical Lab", sheetName: "BOQ ELE. LAB" },
+      { key: "ADMIN", label: "Admin Building", sheetName: "BOQ-ADMIN" },
+    ];
+
+    /** Deterministic demo line items — realistic INR pricing with 5–15% vendor spread. */
+    type LineItem = { code: string; description: string; unit: string; qty: number; base: number; discipline: string };
+    const lines: LineItem[] = [
+      { code: "1.1", description: "PCC 1:3:6 in foundation", unit: "cum", qty: 320, base: 6800, discipline: "CCV" },
+      { code: "1.2", description: "RCC M-30 in footings and pedestals", unit: "cum", qty: 640, base: 8950, discipline: "CCV" },
+      { code: "1.3", description: "Reinforcement TMT Fe-550D — supply, cut, bend and fix", unit: "MT", qty: 128, base: 78500, discipline: "CCV" },
+      { code: "1.4", description: "Structural steel fabrication and erection (columns + purlins)", unit: "MT", qty: 92, base: 122000, discipline: "CCV" },
+      { code: "2.1", description: "LT panel — TPN 630A with digital metering, RYB indication", unit: "no", qty: 4, base: 285000, discipline: "ELE_LAB" },
+      { code: "2.2", description: "Cable trays perforated 300 x 50 x 2.0 mm hot-dip galvanised", unit: "rm", qty: 460, base: 1250, discipline: "ELE_LAB" },
+      { code: "2.3", description: "LED high-bay 150 W with driver, IP-65 body", unit: "no", qty: 48, base: 6900, discipline: "ELE_LAB" },
+      { code: "3.1", description: "Aluminium glazing — 2-track sliding, 5 mm toughened glass", unit: "sqm", qty: 210, base: 5400, discipline: "ADMIN" },
+      { code: "3.2", description: "Vitrified floor tile 800 x 800 mm with epoxy grout", unit: "sqm", qty: 640, base: 1450, discipline: "ADMIN" },
+      { code: "3.3", description: "False ceiling — mineral fibre 600 x 600 mm on GI grid", unit: "sqm", qty: 520, base: 1050, discipline: "ADMIN" },
+    ];
+    /** Vendor spread multipliers — Alpha lowest for civil, Bharat lowest for elec, Concord premium. */
+    const spread: Record<string, Record<string, number>> = {
+      CCV: { "Alpha Constructions Pvt Ltd": 1.0, "Bharat Builders LLP": 1.06, "Concord Infra Solutions": 1.09 },
+      ELE_LAB: { "Alpha Constructions Pvt Ltd": 1.08, "Bharat Builders LLP": 1.0, "Concord Infra Solutions": 1.04 },
+      ADMIN: { "Alpha Constructions Pvt Ltd": 1.05, "Bharat Builders LLP": 1.03, "Concord Infra Solutions": 1.0 },
+    };
+
+    const sectionMap = new Map<string, { title: string; totals: Record<string, number> }>();
+    for (const d of disciplines) sectionMap.set(d.key, { title: d.label, totals: Object.fromEntries(vendorNames.map((n) => [n, 0])) });
+    for (const l of lines) {
+      const rowTotals = sectionMap.get(l.discipline)!.totals;
+      for (const v of vendorNames) {
+        const rate = Math.round(l.base * (spread[l.discipline]?.[v] ?? 1.0));
+        rowTotals[v] += rate * l.qty;
+      }
+    }
+    const sectionTotals = Array.from(sectionMap.entries()).map(([section, val]) => ({
+      section,
+      title: val.title,
+      totals: val.totals,
+    }));
+    const grandTotals: Record<string, number> = Object.fromEntries(vendorNames.map((n) => [n, 0]));
+    for (const s of sectionTotals) for (const v of vendorNames) grandTotals[v] += s.totals[v];
+    const lowestVendor = vendorNames.reduce((lo, v) => (grandTotals[v] < grandTotals[lo] ? v : lo), vendorNames[0]);
+
+    // Build a canonical summary sheet the existing GET /bid-packages/:id endpoint will parse.
+    const cell = (v: string | number): SheetCell => ({ raw: String(v ?? ""), computed: v });
+
+    const summaryHeaders = ["Section", "Description", ...vendorNames, "Lowest"];
+    const summaryRows: SheetCell[][] = [];
+    for (const s of sectionTotals) {
+      const rowVals: (string | number)[] = [s.section, s.title];
+      for (const v of vendorNames) rowVals.push(s.totals[v]);
+      const lowV = vendorNames.reduce((lo, v) => (s.totals[v] < s.totals[lo] ? v : lo), vendorNames[0]);
+      rowVals.push(lowV);
+      summaryRows.push(rowVals.map(cell));
+    }
+    const grandRow: (string | number)[] = ["TOTAL", "Grand total"];
+    for (const v of vendorNames) grandRow.push(grandTotals[v]);
+    grandRow.push(lowestVendor);
+    summaryRows.push(grandRow.map(cell));
+
+    const masterHeaders = ["Section", "Item code", "Description", "Unit", "Qty", ...vendorNames, "Lowest"];
+    const masterRows: SheetCell[][] = lines.map((l) => {
+      const rates = vendorNames.map((v) => Math.round(l.base * (spread[l.discipline]?.[v] ?? 1.0)) * l.qty);
+      const idxLow = rates.reduce((iLo, val, i) => (val < rates[iLo] ? i : iLo), 0);
+      return [l.discipline, l.code, l.description, l.unit, l.qty, ...rates, vendorNames[idxLow]].map(cell);
+    });
+
+    const summarySheet = await prisma.customSheet.create({
+      data: {
+        name: `Summary — Demo Comparative (R2)`,
+        category: "CRM Comparative Summary",
+        headersJson: JSON.stringify(summaryHeaders),
+        rowsJson: JSON.stringify(summaryRows),
+        sourceFile: "seed-demo",
+        createdById: req.user!.id,
+      },
+    });
+    const masterSheet = await prisma.customSheet.create({
+      data: {
+        name: `Master BOQ Compare — Demo Comparative (R2)`,
+        category: "CRM Comparative BOQ",
+        headersJson: JSON.stringify(masterHeaders),
+        rowsJson: JSON.stringify(masterRows),
+        sourceFile: "seed-demo",
+        createdById: req.user!.id,
+      },
+    });
+
+    const title = project ? `Demo Package — ${project.code}` : "Demo Package — Sample Comparative";
+    const pkg = await prisma.crmBidPackage.create({
+      data: {
+        title,
+        projectId: project?.id ?? null,
+        revisionLabel: "R2",
+        vendorNamesJson: JSON.stringify(vendorNames),
+        disciplinesJson: JSON.stringify(disciplines),
+        notes: `Auto-generated demo · 3 vendors × 3 disciplines · lowest = ${lowestVendor}`,
+        comparativeSheetId: masterSheet.id,
+        summarySheetId: summarySheet.id,
+        vendorBoqs: {
+          create: vendorNames.flatMap((vendorLabel) =>
+            disciplines.map((d) => ({
+              vendorLabel,
+              discipline: d.key,
+              vendorId: vendorByName[vendorLabel] ?? null,
+              fileName: `${vendorLabel.split(" ")[0]}-${d.key}-demo.xlsx`,
+              uploadedAt: new Date(),
+              uploadedById: req.user!.id,
+            }))
+          ),
+        },
+      },
+      include: { vendorBoqs: true, project: { select: { id: true, code: true, name: true } } },
+    });
+
+    await audit("crm.comparative.seed_demo", {
+      userId: req.user!.id,
+      entity: "CrmBidPackage",
+      entityId: pkg.id,
+      meta: { vendorNames, disciplines: disciplines.map((d) => d.key), grandTotals, lowestVendor },
+    });
+
+    res.status(201).json({
+      ...pkg,
+      vendorNames,
+      disciplines,
+      summary: { vendorLabels: vendorNames, sectionTotals, grandTotals, lowestVendor },
+    });
+  }
+);

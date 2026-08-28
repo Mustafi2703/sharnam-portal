@@ -122,6 +122,30 @@ checklistRouter.get("/templates", async (req, res) => {
   res.json(templates);
 });
 
+/**
+ * Seed / re-seed the three SPDC HSE templates from
+ * module_prompts/Sharnam_modules_docs 2/SPDC_Safety_Inspection_Request_and_Checklists.xlsx.
+ * Idempotent — running twice keeps the same template IDs but refreshes items.
+ */
+checklistRouter.post(
+  "/safety/seed-spdc",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { seedSpdcSafetyPack } = await import("../services/safetyPackSeed.js");
+      const out = await seedSpdcSafetyPack();
+      await audit("checklist.safety.seed_spdc", {
+        userId: req.user!.id,
+        entity: "ChecklistTemplate",
+        meta: { source: out.source, templates: out.templates.map((t) => ({ name: t.name, items: t.items })) },
+      });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
+
 checklistRouter.get("/templates/:id", async (req, res) => {
   const template = await prisma.checklistTemplate.findUnique({
     where: { id: req.params.id },
