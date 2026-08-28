@@ -482,20 +482,97 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
 
 /* ────────────────────────────  5  Offers  ──────────────────────────── */
 
+const CTC_DEFAULTS = {
+  basicPctOfGross: 0.5,
+  hraPctOfBasic: 0.4,
+  restrictPfCeiling: false,
+  gratuityPctOfBasic: 0.0481,
+  ltaPctOfBasic: 0.0833,
+  conveyanceAnnual: 19200,
+  childrenEducationAnnual: 2400,
+  mediclaimAnnual: 12000,
+  performancePayPct: 0.1,
+  professionalTaxAnnual: 2400,
+};
+
+type CtcInputsForm = typeof CTC_DEFAULTS & {
+  candidateName: string;
+  designation: string;
+  fixedCtcAnnual: number;
+};
+
+type CtcBreakdown = {
+  partA: { rows: { label: string; basis: string; perAnnum: number; perMonth: number | string }[]; gross: { perAnnum: number; perMonth: number } };
+  partB: {
+    rows: { label: string; basis: string; perAnnum: number; perMonth: number | string }[];
+    total: { perAnnum: number; perMonth: number };
+    fixedCtc: { perAnnum: number; perMonth: number };
+    performancePay: { perAnnum: number; perMonth: string };
+    totalCtc: { perAnnum: number; perMonth: string };
+  };
+  partC: { rows: { label: string; basis: string; perAnnum: number; perMonth: number | string }[]; indicativeNet: { perAnnum: number; perMonth: number } };
+  validation: string[];
+};
+
 function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any) {
   const [form, setForm] = useState({ candidateId: "", offerNo: "", designation: "", department: "", ctcAnnual: "", basicMonthly: "", hraMonthly: "", otherAllowMonthly: "", variablePayPct: "", joiningDate: "", probationMonths: 6, location: "", reportingManager: "", notes: "" });
   const [file, setFile] = useState<File | null>(null);
+  const [ctc, setCtc] = useState<CtcInputsForm>({
+    candidateName: "",
+    designation: "",
+    fixedCtcAnnual: 900000,
+    ...CTC_DEFAULTS,
+  });
+  const [preview, setPreview] = useState<CtcBreakdown | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+
+  async function runPreview() {
+    setPreviewBusy(true);
+    try {
+      const b = await api<CtcBreakdown>("/api/hrm/ctc/compute", {
+        method: "POST",
+        token,
+        body: JSON.stringify(ctc),
+      });
+      setPreview(b);
+      const gross = b.partA.gross.perAnnum;
+      const basicRow = b.partA.rows.find((r) => r.label === "Basic Salary");
+      const hraRow = b.partA.rows.find((r) => r.label === "House Rent Allowance");
+      setForm((f) => ({
+        ...f,
+        ctcAnnual: String(ctc.fixedCtcAnnual),
+        basicMonthly: String(basicRow?.perMonth ?? ""),
+        hraMonthly: String(hraRow?.perMonth ?? ""),
+        otherAllowMonthly: String(Math.round((gross - Number(basicRow?.perAnnum || 0) - Number(hraRow?.perAnnum || 0)) / 12)),
+        variablePayPct: String(ctc.performancePayPct * 100),
+      }));
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "CTC preview failed");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
 
   async function add(e: FormEvent) {
     e.preventDefault();
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => v !== "" && fd.append(k, String(v)));
+      // If the calculator has been used (preview generated), attach the 12
+      // inputs so the API stores them + auto-generates Sharnam Annexure I.
+      if (preview) {
+        const candidateName = candidates.find((c: any) => c.id === form.candidateId)?.fullName || "";
+        fd.append(
+          "ctcInputsJson",
+          JSON.stringify({ ...ctc, candidateName: ctc.candidateName || candidateName, designation: ctc.designation || form.designation })
+        );
+      }
       if (file) fd.append("letter", file);
       await api("/api/hrm/offers", { method: "POST", token, body: fd });
       setForm({ candidateId: "", offerNo: "", designation: "", department: "", ctcAnnual: "", basicMonthly: "", hraMonthly: "", otherAllowMonthly: "", variablePayPct: "", joiningDate: "", probationMonths: 6, location: "", reportingManager: "", notes: "" });
       setFile(null);
-      setMsg("Offer drafted.");
+      setPreview(null);
+      setMsg(preview ? "Offer drafted + Annexure I attached." : "Offer drafted.");
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -511,6 +588,111 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
 
   return (
     <div className="space-y-3">
+      {canManage && (
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-sm">CTC calculator — 12-input Annexure I</h3>
+            <span className="text-[11px] text-steel-muted">Live from SPDC_CTC_Structure_Calculator.xlsx</span>
+          </div>
+          <div className="grid md:grid-cols-4 gap-2 mb-2">
+            <Input placeholder="Candidate name (annexure)" value={ctc.candidateName} onChange={(e) => setCtc({ ...ctc, candidateName: e.target.value })} />
+            <Input placeholder="Designation (annexure)" value={ctc.designation} onChange={(e) => setCtc({ ...ctc, designation: e.target.value })} />
+            <label className="text-xs text-steel-muted">
+              Fixed CTC p.a. (₹)
+              <Input type="number" value={ctc.fixedCtcAnnual} onChange={(e) => setCtc({ ...ctc, fixedCtcAnnual: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Basic % of Gross
+              <Input type="number" step="0.01" value={ctc.basicPctOfGross} onChange={(e) => setCtc({ ...ctc, basicPctOfGross: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              HRA % of Basic (0.4 non-metro, 0.5 metro)
+              <Input type="number" step="0.01" value={ctc.hraPctOfBasic} onChange={(e) => setCtc({ ...ctc, hraPctOfBasic: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Gratuity % of Basic
+              <Input type="number" step="0.0001" value={ctc.gratuityPctOfBasic} onChange={(e) => setCtc({ ...ctc, gratuityPctOfBasic: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              LTA % of Basic
+              <Input type="number" step="0.0001" value={ctc.ltaPctOfBasic} onChange={(e) => setCtc({ ...ctc, ltaPctOfBasic: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Conveyance p.a. (₹)
+              <Input type="number" value={ctc.conveyanceAnnual} onChange={(e) => setCtc({ ...ctc, conveyanceAnnual: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Children Edu. p.a. (₹)
+              <Input type="number" value={ctc.childrenEducationAnnual} onChange={(e) => setCtc({ ...ctc, childrenEducationAnnual: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Mediclaim / GPA p.a. (₹)
+              <Input type="number" value={ctc.mediclaimAnnual} onChange={(e) => setCtc({ ...ctc, mediclaimAnnual: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Performance Pay % of CTC
+              <Input type="number" step="0.01" value={ctc.performancePayPct} onChange={(e) => setCtc({ ...ctc, performancePayPct: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Professional Tax p.a. (₹)
+              <Input type="number" value={ctc.professionalTaxAnnual} onChange={(e) => setCtc({ ...ctc, professionalTaxAnnual: Number(e.target.value) })} />
+            </label>
+            <label className="text-xs text-steel-muted flex items-center gap-2 md:col-span-4">
+              <input type="checkbox" checked={ctc.restrictPfCeiling} onChange={(e) => setCtc({ ...ctc, restrictPfCeiling: e.target.checked })} />
+              Restrict employer PF to ₹15,000 statutory ceiling (caps employer PF at ₹21,600 p.a.)
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-2">
+            <Button type="button" variant="secondary" disabled={previewBusy || !(ctc.fixedCtcAnnual > 0)} onClick={runPreview}>
+              {previewBusy ? "Computing…" : preview ? "Recompute Annexure I preview" : "Compute Annexure I preview"}
+            </Button>
+            {preview && (
+              <span className="text-xs text-steel-muted self-center">
+                Fixed CTC ₹ {ctc.fixedCtcAnnual.toLocaleString("en-IN")} · Gross ₹ {preview.partA.gross.perAnnum.toLocaleString("en-IN")} p.a. · Retirals ₹ {preview.partB.total.perAnnum.toLocaleString("en-IN")} · Take-home ₹ {preview.partC.indicativeNet.perMonth.toLocaleString("en-IN")}/mo
+              </span>
+            )}
+          </div>
+          {preview && (
+            <div className="text-xs border border-line rounded-sm overflow-x-auto mb-2">
+              <table className="min-w-[720px] w-full">
+                <thead className="bg-paper">
+                  <tr>
+                    <th className="p-1.5 text-left">Component</th>
+                    <th className="p-1.5 text-left">Basis</th>
+                    <th className="p-1.5 text-right">Per annum</th>
+                    <th className="p-1.5 text-right">Per month</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ...preview.partA.rows,
+                    { label: "A. GROSS SALARY", basis: "Sum of Part A", perAnnum: preview.partA.gross.perAnnum, perMonth: preview.partA.gross.perMonth },
+                    ...preview.partB.rows,
+                    { label: "B. TOTAL RETIRALS", basis: "Sum of Part B", perAnnum: preview.partB.total.perAnnum, perMonth: preview.partB.total.perMonth },
+                    { label: "FIXED CTC (A + B)", basis: "", perAnnum: preview.partB.fixedCtc.perAnnum, perMonth: preview.partB.fixedCtc.perMonth },
+                    { label: "C. Performance Pay", basis: "", perAnnum: preview.partB.performancePay.perAnnum, perMonth: preview.partB.performancePay.perMonth },
+                    { label: "TOTAL CTC (A + B + C)", basis: "", perAnnum: preview.partB.totalCtc.perAnnum, perMonth: preview.partB.totalCtc.perMonth },
+                  ].map((r, i) => (
+                    <tr key={i} className={r.label.startsWith("A.") || r.label.startsWith("B.") || r.label.includes("CTC") ? "font-semibold bg-brand-soft" : "border-t border-line"}>
+                      <td className="p-1.5">{r.label}</td>
+                      <td className="p-1.5 text-steel-muted">{r.basis}</td>
+                      <td className="p-1.5 text-right">{typeof r.perAnnum === "number" ? "₹ " + r.perAnnum.toLocaleString("en-IN") : r.perAnnum}</td>
+                      <td className="p-1.5 text-right">{typeof r.perMonth === "number" ? "₹ " + r.perMonth.toLocaleString("en-IN") : r.perMonth}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="p-2 text-[11px] text-steel-muted bg-paper border-t border-line">
+                <strong>Validation:</strong> {preview.validation.join(" · ")}
+              </div>
+            </div>
+          )}
+          <p className="text-[11px] text-steel-muted">
+            "Draft offer" below stores these 12 inputs so <strong>Sharnam-branded Annexure I</strong> can be re-generated from the offer row (XLSX + printable HTML). Fixed CTC / Basic / HRA / Other on the offer are auto-filled from this preview.
+          </p>
+        </Card>
+      )}
+
       {canManage && (
         <Card>
           <h3 className="font-semibold text-sm mb-2">Draft an offer</h3>
@@ -559,7 +741,28 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
                   <td>{o.designation}</td>
                   <td className="text-right">{money(o.ctcAnnual)}</td>
                   <td>{o.joiningDate ? new Date(o.joiningDate).toLocaleDateString("en-IN") : "—"}</td>
-                  <td>{o.offerLetterUrl ? <a href={o.offerLetterUrl} target="_blank" rel="noreferrer" className="text-brand">↗ PDF</a> : "—"}</td>
+                  <td className="space-y-0.5">
+                    {o.offerLetterUrl ? <a href={o.offerLetterUrl} target="_blank" rel="noreferrer" className="text-brand block">↗ Letter PDF</a> : null}
+                    {o.ctcInputsJson || o.annexureUrl ? (
+                      <>
+                        <a
+                          href={`/api/hrm/offers/${o.id}/annexure.html?token=${encodeURIComponent(token || "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand block text-[10px]"
+                        >
+                          ↗ Annexure I (print)
+                        </a>
+                        <a
+                          href={`/api/hrm/offers/${o.id}/annexure.xlsx?token=${encodeURIComponent(token || "")}`}
+                          className="text-brand block text-[10px]"
+                        >
+                          ↓ Annexure I .xlsx
+                        </a>
+                      </>
+                    ) : null}
+                    {!o.offerLetterUrl && !o.ctcInputsJson ? "—" : null}
+                  </td>
                   <td><Badge tone={o.status === "Accepted" || o.status === "Joined" ? "ok" : o.status === "Declined" || o.status === "Withdrawn" ? "danger" : "brand"}>{o.status}</Badge></td>
                   <td>
                     {canManage && (

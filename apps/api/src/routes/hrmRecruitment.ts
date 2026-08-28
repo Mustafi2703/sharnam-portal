@@ -8,6 +8,13 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import {
+  computeCtcBreakdown,
+  buildAnnexureHtml,
+  buildAnnexureXlsx,
+  DEFAULT_CTC_INPUTS,
+  type CtcInputs,
+} from "../services/ctcAnnexure.js";
 
 export const hrmRecruitmentRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -327,22 +334,80 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office"), upload.sin
     offerLetterUrl = saved.url || `/uploads/onedrive/GLOBAL/${saved.path}`;
   }
 
+  // 12-input CTC calculator payload: HR passes ctcInputsJson to auto-generate
+  // Annexure I and persist the inputs so it can be re-computed on demand.
+  let ctcInputsJson: string | undefined;
+  let annexureUrl: string | undefined;
+  let derivedCtc = Number(req.body.ctcAnnual || 0);
+  let derivedBasicMonthly: number | null = n(req.body.basicMonthly);
+  let derivedHraMonthly: number | null = n(req.body.hraMonthly);
+  let derivedOtherMonthly: number | null = n(req.body.otherAllowMonthly);
+  let derivedVarPct: number | null = n(req.body.variablePayPct);
+  const rawInputs = req.body.ctcInputsJson;
+  if (rawInputs) {
+    try {
+      const parsed = typeof rawInputs === "string" ? JSON.parse(rawInputs) : rawInputs;
+      const inputs: CtcInputs = {
+        candidateName: String(parsed.candidateName || candidate.fullName),
+        designation: String(parsed.designation || req.body.designation || "Executive"),
+        fixedCtcAnnual: Number(parsed.fixedCtcAnnual || parsed.fixedCtcAnnual || 0),
+        basicPctOfGross: Number(parsed.basicPctOfGross ?? DEFAULT_CTC_INPUTS.basicPctOfGross),
+        hraPctOfBasic: Number(parsed.hraPctOfBasic ?? DEFAULT_CTC_INPUTS.hraPctOfBasic),
+        restrictPfCeiling: Boolean(parsed.restrictPfCeiling ?? DEFAULT_CTC_INPUTS.restrictPfCeiling),
+        gratuityPctOfBasic: Number(parsed.gratuityPctOfBasic ?? DEFAULT_CTC_INPUTS.gratuityPctOfBasic),
+        ltaPctOfBasic: Number(parsed.ltaPctOfBasic ?? DEFAULT_CTC_INPUTS.ltaPctOfBasic),
+        conveyanceAnnual: Number(parsed.conveyanceAnnual ?? DEFAULT_CTC_INPUTS.conveyanceAnnual),
+        childrenEducationAnnual: Number(parsed.childrenEducationAnnual ?? DEFAULT_CTC_INPUTS.childrenEducationAnnual),
+        mediclaimAnnual: Number(parsed.mediclaimAnnual ?? DEFAULT_CTC_INPUTS.mediclaimAnnual),
+        performancePayPct: Number(parsed.performancePayPct ?? DEFAULT_CTC_INPUTS.performancePayPct),
+        professionalTaxAnnual: Number(parsed.professionalTaxAnnual ?? DEFAULT_CTC_INPUTS.professionalTaxAnnual),
+      };
+      if (inputs.fixedCtcAnnual > 0) {
+        const breakdown = computeCtcBreakdown(inputs);
+        derivedCtc = inputs.fixedCtcAnnual;
+        derivedBasicMonthly = breakdown.partA.rows[0].perMonth as number;
+        derivedHraMonthly = breakdown.partA.rows[1].perMonth as number;
+        // Other allowance monthly = conveyance + children + LTA + special
+        derivedOtherMonthly =
+          (breakdown.partA.rows[2].perMonth as number) +
+          (breakdown.partA.rows[3].perMonth as number) +
+          (breakdown.partA.rows[4].perMonth as number) +
+          (breakdown.partA.rows[5].perMonth as number);
+        derivedVarPct = inputs.performancePayPct * 100;
+        ctcInputsJson = JSON.stringify(inputs);
+
+        const xlsx = await buildAnnexureXlsx(breakdown);
+        const savedAnnex = await mockOneDrive.upload(
+          "GLOBAL",
+          HR_STATUTORY_FOLDER,
+          `Sharnam-Annexure-I-${candidate.fullName.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}.xlsx`,
+          xlsx
+        );
+        annexureUrl = savedAnnex.url || `/uploads/onedrive/GLOBAL/${savedAnnex.path}`;
+      }
+    } catch (err) {
+      console.warn("[offers] ctcInputsJson invalid — offer created without Annexure I", err);
+    }
+  }
+
   const row = await prisma.offer.create({
     data: {
       candidateId,
       offerNo: s(req.body.offerNo) || `OFR-${Date.now()}`,
       designation: s(req.body.designation) || "Executive",
       department: s(req.body.department),
-      ctcAnnual: Number(req.body.ctcAnnual || 0),
-      basicMonthly: n(req.body.basicMonthly),
-      hraMonthly: n(req.body.hraMonthly),
-      otherAllowMonthly: n(req.body.otherAllowMonthly),
-      variablePayPct: n(req.body.variablePayPct),
+      ctcAnnual: derivedCtc,
+      basicMonthly: derivedBasicMonthly,
+      hraMonthly: derivedHraMonthly,
+      otherAllowMonthly: derivedOtherMonthly,
+      variablePayPct: derivedVarPct,
       joiningDate: req.body.joiningDate ? new Date(req.body.joiningDate) : null,
       probationMonths: req.body.probationMonths !== undefined ? Number(req.body.probationMonths) : 6,
       location: s(req.body.location),
       reportingManager: s(req.body.reportingManager),
       offerLetterUrl,
+      ctcInputsJson,
+      annexureUrl,
       notes: s(req.body.notes),
       status: "Draft",
     },
@@ -350,6 +415,74 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office"), upload.sin
   await prisma.candidate.update({ where: { id: candidateId }, data: { status: "Selected" } });
   await audit("hrms.offer.create", { userId: req.user!.id, entity: "Offer", entityId: row.id, meta: { candidateId, offerNo: row.offerNo, ctc: row.ctcAnnual } });
   res.status(201).json(row);
+});
+
+/**
+ * Live 12-input CTC calculator — HR types values in the offer form and gets
+ * the full Parts A/B/C breakdown back without saving anything.  Used by the
+ * "Preview" button on the OffersTab.
+ */
+hrmRecruitmentRouter.post("/ctc/compute", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const b = req.body || {};
+    const inputs: CtcInputs = {
+      candidateName: String(b.candidateName || "Candidate"),
+      designation: String(b.designation || "Executive"),
+      fixedCtcAnnual: Number(b.fixedCtcAnnual || 0),
+      basicPctOfGross: Number(b.basicPctOfGross ?? DEFAULT_CTC_INPUTS.basicPctOfGross),
+      hraPctOfBasic: Number(b.hraPctOfBasic ?? DEFAULT_CTC_INPUTS.hraPctOfBasic),
+      restrictPfCeiling: Boolean(b.restrictPfCeiling ?? DEFAULT_CTC_INPUTS.restrictPfCeiling),
+      gratuityPctOfBasic: Number(b.gratuityPctOfBasic ?? DEFAULT_CTC_INPUTS.gratuityPctOfBasic),
+      ltaPctOfBasic: Number(b.ltaPctOfBasic ?? DEFAULT_CTC_INPUTS.ltaPctOfBasic),
+      conveyanceAnnual: Number(b.conveyanceAnnual ?? DEFAULT_CTC_INPUTS.conveyanceAnnual),
+      childrenEducationAnnual: Number(b.childrenEducationAnnual ?? DEFAULT_CTC_INPUTS.childrenEducationAnnual),
+      mediclaimAnnual: Number(b.mediclaimAnnual ?? DEFAULT_CTC_INPUTS.mediclaimAnnual),
+      performancePayPct: Number(b.performancePayPct ?? DEFAULT_CTC_INPUTS.performancePayPct),
+      professionalTaxAnnual: Number(b.professionalTaxAnnual ?? DEFAULT_CTC_INPUTS.professionalTaxAnnual),
+    };
+    if (!(inputs.fixedCtcAnnual > 0)) {
+      return res.status(400).json({ error: "fixedCtcAnnual must be > 0" });
+    }
+    res.json(computeCtcBreakdown(inputs));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "compute failed" });
+  }
+});
+
+type AnnexureLoad =
+  | { ok: true; breakdown: ReturnType<typeof computeCtcBreakdown> }
+  | { ok: false; error: string; status: 400 | 404 };
+
+async function loadOfferForAnnexure(id: string): Promise<AnnexureLoad> {
+  const offer = await prisma.offer.findUnique({ where: { id }, include: { candidate: true } });
+  if (!offer) return { ok: false, error: "offer not found", status: 404 };
+  if (!offer.ctcInputsJson) return { ok: false, error: "offer has no CTC inputs — draft the offer with the calculator first", status: 400 };
+  const inputs = JSON.parse(offer.ctcInputsJson) as CtcInputs;
+  inputs.candidateName = inputs.candidateName || offer.candidate?.fullName || "Candidate";
+  inputs.designation = inputs.designation || offer.designation;
+  return { ok: true, breakdown: computeCtcBreakdown(inputs) };
+}
+
+hrmRecruitmentRouter.get("/offers/:id/annexure.html", async (req, res) => {
+  const out = await loadOfferForAnnexure(req.params.id);
+  if (!out.ok) return res.status(out.status).json({ error: out.error });
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(buildAnnexureHtml(out.breakdown));
+});
+
+hrmRecruitmentRouter.get("/offers/:id/annexure.xlsx", async (req, res) => {
+  const out = await loadOfferForAnnexure(req.params.id);
+  if (!out.ok) return res.status(out.status).json({ error: out.error });
+  const buf = await buildAnnexureXlsx(out.breakdown);
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="Sharnam-Annexure-I-${out.breakdown.inputs.candidateName.replace(/[^\w.-]+/g, "_")}.xlsx"`
+  );
+  res.send(buf);
 });
 
 hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

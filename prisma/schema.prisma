@@ -1148,6 +1148,11 @@ model Offer {
   location          String?
   reportingManager  String?
   offerLetterUrl    String?
+  /// 12-input CTC calculator payload (see services/ctcAnnexure.ts) so
+  /// Annexure I can be regenerated on demand without re-entering values.
+  ctcInputsJson     String?   @db.Text
+  /// URL of the generated Annexure I XLSX (Sharnam-branded, editable).
+  annexureUrl       String?
   approvedById      String?
   approvedAt        DateTime?
   sentAt            DateTime?

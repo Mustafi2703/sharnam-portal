@@ -17,6 +17,7 @@
     "db:seed": "tsx seed/seed.ts",
     "db:seed-full-demo": "tsx seed/runFullDemoPack.ts",
     "db:seed-dpr-demo": "tsx seed/dprDemoDay.ts",
+    "db:seed-week-of-dprs": "tsx scripts/seed-week-of-dprs.mts",
     "db:seed-pilot-week": "tsx seed/pilotWeekDemo.ts",
     "db:seed-quality-safety-demo": "tsx seed/qualitySafetyDemo.ts",
     "db:seed-crm-comparative": "tsx seed/crmComparativeDemo.ts",

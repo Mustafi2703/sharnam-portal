@@ -3,6 +3,8 @@
  * Built with pptxgenjs from live WPR pack data (same approach as DPR Excel fill).
  */
 import pptxgenImport from "pptxgenjs";
+import fs from "node:fs";
+import path from "node:path";
 import {
   DEFAULT_WPR_TITLES,
   type WprPackInput,
@@ -20,6 +22,7 @@ type PptxSlide = {
   addText: (text: string | string[] | unknown, opts: Record<string, unknown>) => void;
   addShape: (type: string, opts: Record<string, unknown>) => void;
   addTable: (rows: unknown[], opts: Record<string, unknown>) => void;
+  addImage: (opts: Record<string, unknown>) => void;
 };
 
 type PptxDeck = {
@@ -194,6 +197,84 @@ function tableSlide(
   footer(slide, opts.page, opts.total, opts.client);
 }
 
+/**
+ * Local (uploads/…) paths need to be resolved to on-disk absolute paths so
+ * pptxgenjs can inline them.  Remote URLs pass through untouched.
+ */
+function resolvePhotoPath(p: string): string | undefined {
+  if (!p) return undefined;
+  if (/^https?:\/\//i.test(p) || /^data:/i.test(p)) return p;
+  try {
+    const abs = path.isAbsolute(p) ? p : path.join(process.cwd(), p.replace(/^\/+/, ""));
+    return fs.existsSync(abs) ? abs : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 4-photo grid per slide for progress-pictures section — makes actual site
+ * photos land on the deck instead of URLs shown as table text.  Falls back
+ * to the caption-only tableSlide if no photos resolve.
+ */
+function photoGridSlide(
+  pptx: PptxDeck,
+  opts: {
+    title: string;
+    captions: string[];
+    photos: string[];
+    client?: string;
+    page: number;
+    total: number;
+    partLabel?: string;
+  }
+) {
+  const slide = pptx.addSlide();
+  slide.background = { color: WHITE };
+  brandBar(pptx, slide);
+  slide.addText(opts.client || "Sharnam PMC", {
+    x: 0.4, y: 0.18, w: 5, h: 0.28, fontSize: 10, color: BRAND, bold: true,
+  });
+  const title = opts.partLabel ? `${opts.title}  ·  ${opts.partLabel}` : opts.title;
+  slide.addText(title, {
+    x: 0.4, y: 0.45, w: 9.2, h: 0.4, fontSize: 18, bold: true, color: DARK,
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0.4, y: 0.88, w: 1.1, h: 0.05, fill: { color: BRAND },
+  });
+
+  // 2 × 2 grid inside the 9.2 × 4.05 content area starting y = 1.0.
+  const cellW = 4.5;
+  const cellH = 1.95;
+  const gap = 0.2;
+  const originY = 1.0;
+
+  for (let i = 0; i < 4; i++) {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = 0.4 + col * (cellW + gap);
+    const y = originY + row * (cellH + gap + 0.25); // extra 0.25 for caption
+    const src = opts.photos[i] ? resolvePhotoPath(opts.photos[i]) : undefined;
+    if (src) {
+      slide.addImage({ path: src, x, y, w: cellW, h: cellH, sizing: { type: "contain", w: cellW, h: cellH } });
+    } else {
+      slide.addShape(pptx.ShapeType.rect, {
+        x, y, w: cellW, h: cellH,
+        fill: { color: LIGHT },
+        line: { color: "E2E5EB", width: 0.5 },
+      });
+      slide.addText("(No photo)", {
+        x, y, w: cellW, h: cellH, fontSize: 10, color: MUTED, align: "center", valign: "middle",
+      });
+    }
+    slide.addText(opts.captions[i] || `Photo ${i + 1}`, {
+      x, y: y + cellH + 0.02, w: cellW, h: 0.22, fontSize: 9, color: DARK,
+    });
+  }
+
+  footer(slide, opts.page, opts.total, opts.client);
+}
+
 function siteImageSlide(
   pptx: PptxDeck,
   meta: { client?: string; projectName?: string; location?: string; page: number; total: number }
@@ -360,7 +441,16 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
     }
     const sec = ensureSection(pack, n.key);
     const natural = Math.max(1, chunkRows(sec.rows || [], ROWS_PER[n.key] || 12).length);
-    const useChunks = slidesFor(n.key, natural);
+    // Progress-pictures: 4 photos per slide when photos are provided, so the
+    // slide count grows/shrinks with the actual photo pack instead of being
+    // capped at the fixed 2 (which either padded blank slides or dropped
+    // photos past the cap when the client supplied more than 8).
+    let useChunks: number;
+    if (n.key === "progressPictures" && sec.photos && sec.photos.length) {
+      useChunks = Math.max(1, Math.ceil(sec.photos.length / 4));
+    } else {
+      useChunks = slidesFor(n.key, natural);
+    }
     for (let i = 0; i < useChunks; i++) {
       plan.push({ type: "section", key: n.key, chunk: i, chunks: useChunks });
     }
@@ -370,7 +460,11 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
 
 export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
   const pptx = createPptx();
-  pptx.layout = "LAYOUT_WIDE";
+  // LAYOUT_16x9 = 10.0 × 5.625" — matches every hard-coded coordinate in this
+  // file (x 0.4 → w 9.2, footer y 5.15).  LAYOUT_WIDE (13.33 × 7.5") pushed
+  // all content into the top-left quadrant, leaving the right and bottom of
+  // each slide empty and causing prints / photos to look truncated.
+  pptx.layout = "LAYOUT_16x9";
   pptx.author = "Sharnam PMC";
   pptx.company = "Sharnam Project Development Consultants & Co.";
   pptx.subject = `WPR ${pack.header.reportNumber || pack.header.projectCode || ""}`;
@@ -452,6 +546,29 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
     }
 
     const sec = ensureSection(pack, item.key);
+
+    // Progress-pictures: render a proper 4-photo grid per slide when the
+    // section carries any photo paths.  Falls back to the caption-only
+    // tableSlide when photos array is empty (keeps prior behaviour).
+    if (item.key === "progressPictures" && sec.photos && sec.photos.length) {
+      const perSlide = 4;
+      const start = item.chunk * perSlide;
+      const photos = sec.photos.slice(start, start + perSlide);
+      const captions = (sec.rows || []).slice(start, start + perSlide).map((r) => String(r?.[0] ?? ""));
+      if (photos.length) {
+        photoGridSlide(pptx, {
+          title: sec.title || DEFAULT_WPR_TITLES[item.key],
+          captions,
+          photos,
+          client,
+          page,
+          total,
+          partLabel: item.chunks > 1 ? `Part ${item.chunk + 1} of ${item.chunks}` : undefined,
+        });
+        continue;
+      }
+    }
+
     const per = ROWS_PER[item.key] || 12;
     const parts = chunkRows(sec.rows || [], per);
     // When we force maxChunks > natural (e.g. milestones pad), repeat last / show empty note
