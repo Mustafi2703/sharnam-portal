@@ -1,7 +1,7 @@
 /**
  * Branded HTML + plain-text bodies for RFI lifecycle emails (SPDC / Sharnam portal).
  */
-import { sharnamLogoDataUri } from "./brandedExport.js";
+import { sharnamEmailLogoHtml } from "./brandedExport.js";
 
 const BRAND_NAVY = "#1e3a5f";
 const BRAND_ORANGE = "#e4632a";
@@ -172,6 +172,61 @@ function linkLine(label: string, href: string) {
   return `<p style="margin:8px 0 0;font-size:12px;color:#64748b;">${escapeHtml(label)}<br/><a href="${escapeHtml(href)}" style="color:${BRAND_TEAL};word-break:break-all;">${escapeHtml(href)}</a></p>`;
 }
 
+/** Branded HTML shell for comms UAT plain-text steps — uses logo.png wordmark. */
+export function wrapCommsPlainEmail(opts: {
+  eyebrow: string;
+  headline: string;
+  bodyText: string;
+  primaryAction?: { href: string; label: string };
+}) {
+  const bodyParts: string[] = [];
+  for (const line of opts.bodyText.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    if (/^https?:\/\//i.test(t)) bodyParts.push(linkLine("Open in portal:", t));
+    else bodyParts.push(`<p style="margin:0 0 12px;font-size:14px;line-height:1.55;color:#334155;">${escapeHtml(t)}</p>`);
+  }
+  const action = opts.primaryAction
+    ? `<div style="margin-top:18px;">${buttonHtml(opts.primaryAction.href, opts.primaryAction.label, true)}</div>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:${BRAND_PAPER};font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND_PAPER};padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr>
+          <td style="background:${BRAND_PAPER};padding:20px 24px 12px;border:1px solid #e2e8f0;border-bottom:none;border-radius:10px 10px 0 0;">
+            ${sharnamEmailLogoHtml(172)}
+          </td>
+        </tr>
+        <tr>
+          <td style="background:${BRAND_NAVY};padding:16px 24px 20px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">Sharnam Portal · ${escapeHtml(opts.eyebrow)}</div>
+            <div style="font-size:20px;font-weight:700;color:#fff;margin-top:8px;line-height:1.35;">${escapeHtml(opts.headline)}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#fff;padding:24px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+            ${bodyParts.join("")}
+            ${action}
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f1f5f9;padding:16px 24px;border-radius:0 0 10px 10px;border:1px solid #e2e8f0;border-top:none;font-size:11px;color:#64748b;line-height:1.5;">
+            <p style="margin:0;">Automated UAT notification from the Sharnam portal — sign in to respond or update records.</p>
+            <p style="margin:8px 0 0;color:#94a3b8;">— Sharnam Project Development Consultants</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 export function wrapRfiEmailHtml(opts: {
   eyebrow: string;
   headline: string;
@@ -196,10 +251,7 @@ export function wrapRfiEmailHtml(opts: {
     .filter(Boolean)
     .join("");
 
-  const logo = sharnamLogoDataUri();
-  const logoBlock = logo
-    ? `<img src="${logo}" alt="Sharnam" width="120" height="48" style="display:block;height:48px;width:auto;max-width:140px;margin-bottom:10px;" />`
-    : `<div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.02em;">शरणम् · Sharnam</div>`;
+  const logoBlock = sharnamEmailLogoHtml(172);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -209,9 +261,13 @@ export function wrapRfiEmailHtml(opts: {
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr>
-          <td style="background:${BRAND_NAVY};padding:20px 24px;border-radius:10px 10px 0 0;">
+          <td style="background:${BRAND_PAPER};padding:20px 24px 12px;border:1px solid #e2e8f0;border-bottom:none;border-radius:10px 10px 0 0;">
             ${logoBlock}
-            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);margin-top:4px;">Sharnam Portal · ${escapeHtml(opts.eyebrow)}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:${BRAND_NAVY};padding:16px 24px 20px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">Sharnam Portal · ${escapeHtml(opts.eyebrow)}</div>
             <div style="font-size:20px;font-weight:700;color:#fff;margin-top:8px;line-height:1.35;">${escapeHtml(opts.headline)}</div>
             ${opts.ctx.projectCode ? `<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:6px;font-family:Consolas,monospace;">${escapeHtml(opts.ctx.projectCode)}${opts.ctx.number ? ` · ${escapeHtml(opts.ctx.number)}` : ""}</div>` : ""}
           </td>

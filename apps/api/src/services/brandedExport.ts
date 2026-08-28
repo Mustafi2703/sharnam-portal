@@ -2,8 +2,33 @@ import XLSX from "../lib/xlsx.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import ExcelJS from "exceljs";
 import { prisma } from "../prisma.js";
+
+const __apiDir = path.dirname(fileURLToPath(import.meta.url));
+const BUNDLED_EMAIL_LOGO = path.resolve(__apiDir, "../../assets/logo.png");
+
+const EMAIL_LOGO_CANDIDATES = [
+  BUNDLED_EMAIL_LOGO,
+  path.resolve(process.cwd(), "apps/api/assets/logo.png"),
+  path.resolve(process.cwd(), "apps/web/public/logo.png"),
+  path.resolve(process.cwd(), "../web/public/logo.png"),
+  path.resolve(process.cwd(), "../../apps/web/public/logo.png"),
+  path.resolve(process.cwd(), "public/logo.png"),
+];
+
+const BUNDLED_LOGO = path.resolve(__apiDir, "../../assets/logo-transparent.png");
+
+const LOGO_CANDIDATES = [
+  BUNDLED_LOGO,
+  path.resolve(process.cwd(), "apps/api/assets/logo-transparent.png"),
+  path.resolve(process.cwd(), "apps/web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "../web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "../../apps/web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "public/logo-transparent.png"),
+  ...EMAIL_LOGO_CANDIDATES,
+];
 
 export type SheetSpec = {
   name: string;
@@ -29,17 +54,6 @@ function fmtDt(d: Date | string | null | undefined) {
   return new Date(d).toLocaleString("en-IN");
 }
 
-const LOGO_CANDIDATES = [
-  path.resolve(process.cwd(), "apps/web/public/logo-transparent.png"),
-  path.resolve(process.cwd(), "../web/public/logo-transparent.png"),
-  path.resolve(process.cwd(), "../../apps/web/public/logo-transparent.png"),
-  path.resolve(process.cwd(), "public/logo-transparent.png"),
-  path.resolve(process.cwd(), "apps/web/public/logo.png"),
-  path.resolve(process.cwd(), "../web/public/logo.png"),
-  path.resolve(process.cwd(), "../../apps/web/public/logo.png"),
-  path.resolve(process.cwd(), "public/logo.png"),
-];
-
 /** On-disk Sharnam logo (transparent PNG preferred). */
 export function sharnamLogoPath(): string | null {
   for (const p of LOGO_CANDIDATES) {
@@ -62,6 +76,38 @@ export function sharnamLogoDataUri(): string {
   } catch {
     return "";
   }
+}
+
+/** Official Sharnam wordmark for HTML email (`apps/web/public/logo.png`). */
+export function sharnamEmailLogoPath(): string | null {
+  for (const p of EMAIL_LOGO_CANDIDATES) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+/** Logo src for HTML email — embedded base64 from logo.png, then live portal URL. */
+export function sharnamEmailLogoSrc(): string {
+  const p = sharnamEmailLogoPath();
+  if (p) {
+    try {
+      return `data:image/png;base64,${fs.readFileSync(p).toString("base64")}`;
+    } catch {
+      /* fall through */
+    }
+  }
+  const origin = (process.env.WEB_ORIGIN || "https://portal.spdc.in").replace(/\/$/, "");
+  return `${origin}/logo.png`;
+}
+
+/** Teal शरणम् wordmark — raw logo.png on paper-grey header (no white plate). */
+export function sharnamEmailLogoHtml(width = 172): string {
+  const src = sharnamEmailLogoSrc();
+  return `<img src="${src}" alt="Sharnam · शरणम्" width="${width}" style="display:block;width:${width}px;max-width:72%;height:auto;border:0;outline:none;background:transparent;margin:0;" />`;
 }
 
 export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; projectCode?: string }): Buffer {

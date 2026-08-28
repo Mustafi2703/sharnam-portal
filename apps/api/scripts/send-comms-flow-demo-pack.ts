@@ -15,6 +15,7 @@ import {
   buildRfiClosedEmail,
   buildRfiRaisedEmail,
   buildRfiResponseEmail,
+  wrapCommsPlainEmail,
 } from "../src/services/rfiEmailFormat.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,10 +49,8 @@ async function send(opts: {
   mailbox: string;
   to: string[];
   subject: string;
-  bodyHtml?: string;
-  bodyText?: string;
+  bodyHtml: string;
 }) {
-  const content = opts.bodyHtml || opts.bodyText || "";
   await opts.graphFetch(`/users/${encodeURIComponent(opts.mailbox)}/sendMail`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -59,8 +58,8 @@ async function send(opts: {
       message: {
         subject: opts.subject,
         body: {
-          contentType: opts.bodyHtml ? "HTML" : "Text",
-          content,
+          contentType: "HTML",
+          content: opts.bodyHtml,
         },
         toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
       },
@@ -69,7 +68,15 @@ async function send(opts: {
   });
 }
 
-type MailJob = { subject: string; bodyHtml?: string; bodyText?: string };
+type MailJob = { subject: string; bodyHtml: string };
+
+function plainMail(subject: string, bodyText: string, primaryAction?: { href: string; label: string }): MailJob {
+  const headline = subject.replace(/^\[[^\]]+\]\s*UAT\s+\d+\/\d+\s*—\s*/i, "").trim() || subject;
+  return {
+    subject,
+    bodyHtml: wrapCommsPlainEmail({ eyebrow: "UAT demo", headline, bodyText, primaryAction }),
+  };
+}
 
 export function buildCommsFlowDemoMails(): MailJob[] {
   const commsUrl = `${portal}/projects/${projectId}/comms?tab=matrix`;
@@ -172,71 +179,36 @@ export function buildCommsFlowDemoMails(): MailJob[] {
   });
 
   return [
-    {
-      subject: `[${projectCode}] UAT 1/15 — Comms flow overview`,
-      bodyText: [
-        "Sharnam Portal — 15-email UAT pack (automated, no human reply needed)",
-        "",
-        "Flow: Matrix → Meeting (agent) → Agenda → MoM → Follow-up → Design coordination → RFI → NCR/CAR",
-        "",
-        `Matrix: ${commsUrl}`,
-        `Portal login: ${portal}/login/office`,
-        "",
-        "Password for live team users: Demo@1234 (after db:seed-live-team)",
-        "",
-        `Sent: ${new Date().toISOString()}`,
-      ].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 2/15 — Communication matrix published`,
-      bodyText: [
-        "Technical communication matrix is live on the portal.",
-        "",
-        "Contacts: baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, operations@spdc.in",
-        "",
-        commsUrl,
-      ].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 3/15 — Meeting invitation (Teams agent)`,
-      bodyHtml: meetingInvite.bodyHtml,
-    },
-    {
-      subject: `[${projectCode}] UAT 4/15 — Agenda published before MoM`,
-      bodyText: ["Agenda published.", "", agendaUrl].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 5/15 — MoM minutes & actions recorded`,
-      bodyText: ["MoM captured.", "", momUrl].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 6/15 — MoM follow-up reminder`,
-      bodyText: ["Follow-up on open actions.", "", followUrl].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 7/15 — Design coordination issue raised`,
-      bodyText: ["AHU duct vs beam clash — Level 3", "", coordUrl].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 8/15 — Design coordination follow-up 1/5`,
-      bodyText: ["Follow-up 1 of 5 (automated).", "", coordUrl].join("\n"),
-    },
-    {
-      subject: `[${projectCode}] UAT 9/15 — Coordination → RFI escalation preview`,
-      bodyText: ["After 5 follow-ups portal escalates to RFI.", "", coordUrl, rfiUrl].join("\n"),
-    },
+    plainMail(`[${projectCode}] UAT 1/15 — Comms flow overview`, [
+      "Sharnam Portal — 15-email UAT pack (automated, no human reply needed)",
+      "",
+      "Flow: Matrix → Meeting (agent) → Agenda → MoM → Follow-up → Design coordination → RFI → NCR/CAR",
+      "",
+      `Matrix: ${commsUrl}`,
+      `Portal login: ${portal}/login/office`,
+      "",
+      "Password for live team users: Demo@1234",
+    ].join("\n"), { href: commsUrl, label: "Open comms matrix" }),
+    plainMail(`[${projectCode}] UAT 2/15 — Communication matrix published`, [
+      "Technical communication matrix is live on the portal.",
+      "",
+      "Contacts: baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, operations@spdc.in",
+      "",
+      commsUrl,
+    ].join("\n"), { href: commsUrl, label: "View matrix" }),
+    { subject: `[${projectCode}] UAT 3/15 — Meeting invitation (Teams agent)`, bodyHtml: meetingInvite.bodyHtml },
+    plainMail(`[${projectCode}] UAT 4/15 — Agenda published before MoM`, ["Agenda published for the coordination meeting.", "", agendaUrl].join("\n"), { href: agendaUrl, label: "Open agenda" }),
+    plainMail(`[${projectCode}] UAT 5/15 — MoM minutes & actions recorded`, ["Minutes of meeting captured with action owners.", "", momUrl].join("\n"), { href: momUrl, label: "Open MoM" }),
+    plainMail(`[${projectCode}] UAT 6/15 — MoM follow-up reminder`, ["Follow-up on open actions from last week's MoM.", "", followUrl].join("\n"), { href: followUrl, label: "Open follow-up" }),
+    plainMail(`[${projectCode}] UAT 7/15 — Design coordination issue raised`, ["AHU duct vs beam clash — Level 3", "", coordUrl].join("\n"), { href: coordUrl, label: "Open coordination" }),
+    plainMail(`[${projectCode}] UAT 8/15 — Design coordination follow-up 1/5`, ["Follow-up 1 of 5 (automated).", "", coordUrl].join("\n"), { href: coordUrl, label: "View issue" }),
+    plainMail(`[${projectCode}] UAT 9/15 — Coordination → RFI escalation preview`, ["After 5 follow-ups the portal escalates to RFI.", "", coordUrl, rfiUrl].join("\n"), { href: rfiUrl, label: "Open RFI register" }),
     { subject: `[${projectCode}] UAT 10/15 — RFI raised (fill remaining details)`, bodyHtml: rfiRaised.bodyHtml },
-    {
-      subject: `[${projectCode}] UAT 11/15 — RFI official response (automated)`,
-      bodyHtml: rfiResponse.bodyHtml,
-    },
+    { subject: `[${projectCode}] UAT 11/15 — RFI official response (automated)`, bodyHtml: rfiResponse.bodyHtml },
     { subject: `[${projectCode}] UAT 12/15 — NCR raised (NCR-Q-018)`, bodyHtml: ncr.bodyHtml },
     { subject: `[${projectCode}] UAT 13/15 — CAR raised (CAR-007)`, bodyHtml: car.bodyHtml },
     { subject: `[${projectCode}] UAT 14/15 — RFI closed`, bodyHtml: rfiClosed.bodyHtml },
-    {
-      subject: `[${projectCode}] UAT 15/15 — UAT pack complete`,
-      bodyText: ["15 emails sent.", "", commsUrl].join("\n"),
-    },
+    plainMail(`[${projectCode}] UAT 15/15 — UAT pack complete`, ["All 15 UAT notification emails have been sent.", "", commsUrl].join("\n"), { href: commsUrl, label: "Back to comms" }),
   ];
 }
 
