@@ -26,11 +26,13 @@ function SheetTable({
   title,
   headers,
   rows,
+  footer,
   stickyFirst = true,
 }: {
   title?: string;
   headers: string[];
   rows: (string | number | null | undefined)[][];
+  footer?: (string | number | null | undefined)[];
   stickyFirst?: boolean;
 }) {
   return (
@@ -70,6 +72,17 @@ function SheetTable({
               </tr>
             )}
           </tbody>
+          {footer && footer.length > 0 && (
+            <tfoot>
+              <tr className="font-semibold">
+                {footer.map((c, j) => (
+                  <td key={j} className={stickyFirst && j === 0 ? "sticky-col" : undefined}>
+                    {c ?? ""}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
@@ -416,6 +429,12 @@ export default function CostPage() {
     }
     return rows;
   }, [summary, cfView, cfGrain]);
+
+  const cashflowTotals = useMemo(() => {
+    const planned = cashflowRows.reduce((s, r: any) => s + (Number(r.plannedAmount) || 0), 0);
+    const actual = cashflowRows.reduce((s, r: any) => s + (Number(r.actualAmount) || 0), 0);
+    return { planned, actual, variance: actual - planned, pct: planned > 0 ? actual / planned : 0 };
+  }, [cashflowRows]);
 
   const monitoringPackageOptions = useMemo(() => {
     const fromTools = monPackages.filter(Boolean);
@@ -1144,8 +1163,8 @@ export default function CostPage() {
           )}
           <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm space-y-1">
             <div>
-              <strong>Budget ↔ Cashflow:</strong> Budget WBS ({formatINR(summary.totals.budgeted)}) · Cashflow Chart planned (
-              {formatINR(summary.totals.planned)}) · Budget certified ({formatINR(summary.totals.certified)}).
+              <strong>Budget ↔ Cashflow chart:</strong> Budget WBS ({formatINR(summary.totals.budgeted)}) · Cashflow Chart planned (
+              {formatINR(summary.totals.planned)}) · Budget certified ({formatINR(summary.totals.certified)}). Progress Planned vs Actual cashflow (RA months) lives under Progress — use Sync cashflow to overlay it here without mixing BOQ qty.
             </div>
             {summary.financeBridge && (
               <div>
@@ -1228,14 +1247,32 @@ export default function CostPage() {
           <div className="cost-page__register min-w-0">
           <SheetTable
             title={`Cashflow · ${cfView}`}
-            headers={["Period", "Package / sheet", "Planned", "Actual", "Progress"]}
-            rows={cashflowRows.map((b: any) => [
-              b.periodLabel,
-              b.packageName,
-              formatINR(b.plannedAmount),
-              formatINR(b.actualAmount),
-              `${Math.round((b.progressPct || 0) * 100)}%`,
-            ])}
+            headers={["Period", "Package / sheet", "Planned", "Actual", "Variance", "Progress"]}
+            rows={cashflowRows.map((b: any) => {
+              const planned = Number(b.plannedAmount) || 0;
+              const actual = Number(b.actualAmount) || 0;
+              const progress = planned > 0 ? actual / planned : Number(b.progressPct) || 0;
+              return [
+                b.periodLabel,
+                b.packageName,
+                formatINR(planned),
+                formatINR(actual),
+                formatINR(actual - planned),
+                `${Math.round(progress * 100)}%`,
+              ];
+            })}
+            footer={
+              cashflowRows.length
+                ? [
+                    "TOTAL",
+                    `${cashflowRows.length} periods`,
+                    formatINR(cashflowTotals.planned),
+                    formatINR(cashflowTotals.actual),
+                    formatINR(cashflowTotals.variance),
+                    `${Math.round(cashflowTotals.pct * 100)}%`,
+                  ]
+                : undefined
+            }
           />
           </div>
         </div>

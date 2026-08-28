@@ -71,16 +71,17 @@ function parseCashflowSheet(rows: unknown[][]): ParsedPlannedActual["cashflow"] 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] as unknown[];
     const month = s(row[0], 40);
+    if (!month || /total|grand/i.test(month)) continue;
     const planned = n(row[3]);
-    if (!month || !planned) continue;
     const actual = n(row[4]);
+    if (!planned && !actual) continue;
     out.push({
       periodLabel: month,
-      packageName: s(row[1], 40) || "Overall",
+      packageName: s(row[1], 40) || s(row[2], 40) || "Overall",
       plannedAmount: planned,
       actualAmount: actual,
       plannedPct: planned ? 1 : 0,
-      actualPct: planned ? Math.min(1.5, actual / planned) : 0,
+      actualPct: planned ? actual / planned : 0,
     });
   }
   return out;
@@ -92,13 +93,17 @@ function parseManpowerSheet(rows: unknown[][]): ParsedPlannedActual["manpower"] 
     const row = rows[i] as unknown[];
     const trade = s(row[0], 80);
     if (!trade || /total/i.test(trade) || /^date$/i.test(trade)) break;
-    if (!n(row[1]) && !n(row[2])) continue;
+    if (/type of manpower/i.test(trade)) continue;
+    const required = n(row[1]);
+    const available = n(row[2]);
+    if (!required && !available) continue;
+    const shortage = n(row[3]) || Math.max(0, required - available);
     out.push({
       trade,
-      required: n(row[1]),
-      available: n(row[2]),
-      shortage: n(row[3]),
-      shortagePct: n(row[4]),
+      required,
+      available,
+      shortage,
+      shortagePct: n(row[4]) || (required > 0 ? shortage / required : 0),
       rank: Math.round(n(row[5])) || out.length + 1,
     });
   }
@@ -116,6 +121,8 @@ function parseDrawingStatusSheet(rows: unknown[][]): ParsedPlannedActual["activi
     const sr = n(row[0]);
     const activity = s(row[2], 200);
     if (!sr || !activity) continue;
+    if (/average\s+achi|avreage/i.test(activity)) continue;
+    if (/^(cum|smt|sqm|mt|nos|kg|rmt|unit)$/i.test(activity)) continue;
     const towerCell = s(row[1], 80);
     if (towerCell) lastTower = towerCell;
     const tower = towerCell || lastTower || null;
@@ -142,6 +149,41 @@ function parseDrawingStatusSheet(rows: unknown[][]): ParsedPlannedActual["activi
   return out;
 }
 
+/** Lower block on "As per drawing status" — Activity / weekly planned / weekly actual (no Sr.No.). */
+function parseDrawingWeeklySums(rows: unknown[][]): ParsedPlannedActual["activityLines"] {
+  const out: ParsedPlannedActual["activityLines"] = [];
+  const start = rows.findIndex((r) => /sum of weekly planned/i.test(String((r as unknown[])[1] ?? "")));
+  if (start < 0) return out;
+  for (let i = start + 1; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    const activity = s(row[0], 200);
+    if (!activity || /total|^activity$|^manually$/i.test(activity)) continue;
+    if (/^(cum|smt|sqm|mt|nos|kg|rmt|unit)$/i.test(activity)) continue;
+    if (n(row[0])) continue;
+    const weeklyPlanned = n(row[1]);
+    const weeklyActual = n(row[2]);
+    if (!weeklyPlanned && !weeklyActual) continue;
+    out.push({
+      srNo: 0,
+      tower: null,
+      activity,
+      unit: null,
+      plannedStart: null,
+      plannedEnd: null,
+      boqQty: 0,
+      gfcQty: 0,
+      executedQty: 0,
+      balanceQty: 0,
+      weeklyPlanned,
+      weeklyActual,
+      cumulativeQty: 0,
+      status: null,
+      pctComplete: 0,
+    });
+  }
+  return out;
+}
+
 /** Legacy "Planned Vs Actual" sheet with date columns */
 function parseLegacyActivitySheet(rows: unknown[][]): ParsedPlannedActual["activityLines"] {
   const out: ParsedPlannedActual["activityLines"] = [];
@@ -151,6 +193,8 @@ function parseLegacyActivitySheet(rows: unknown[][]): ParsedPlannedActual["activ
     const sr = n(row[0]);
     const activity = s(row[2], 200);
     if (!sr || !activity) continue;
+    if (/average\s+achi|avreage/i.test(activity)) continue;
+    if (/^(cum|smt|sqm|mt|nos|kg|rmt|unit)$/i.test(activity)) continue;
     const towerCell = s(row[1], 80);
     if (towerCell) lastTower = towerCell;
     const tower = towerCell || lastTower || null;
@@ -200,15 +244,61 @@ export function parsePlannedActualDashboard(buffer: Buffer): ParsedPlannedActual
     ? (XLSX.utils.sheet_to_json<(string | number)[]>(legacyActSheet, { header: 1, defval: "" }) as unknown[][])
     : [];
 
-  const activityLines = drawRows.length
-    ? parseDrawingStatusSheet(drawRows)
-    : parseLegacyActivitySheet(legacyActRows);
+  const pvaLines = parseLegacyActivitySheet(legacyActRows);
+  const drawLines = [...parseDrawingStatusSheet(drawRows), ...parseDrawingWeeklySums(drawRows)];
+  const activityLines = mergeActivityLines(pvaLines, drawLines);
 
   return {
     cashflow: parseCashflowSheet(cashRows),
     manpower: parseManpowerSheet(manRows),
     activityLines,
   };
+}
+
+function activityKey(line: ParsedPlannedActual["activityLines"][number]) {
+  return line.activity.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** Keep every Planned Vs Actual row; fill weekly qty from drawing status; append unmatched lines. */
+function mergeActivityLines(
+  pva: ParsedPlannedActual["activityLines"],
+  draw: ParsedPlannedActual["activityLines"]
+): ParsedPlannedActual["activityLines"] {
+  if (!pva.length) return draw;
+  if (!draw.length) return pva;
+  const byActivity = new Map<string, ParsedPlannedActual["activityLines"][number]>();
+  const out: ParsedPlannedActual["activityLines"] = [];
+  for (const line of pva) {
+    const copy = { ...line };
+    out.push(copy);
+    const key = activityKey(copy);
+    if (!byActivity.has(key)) byActivity.set(key, copy);
+  }
+  let nextSr = Math.max(0, ...out.map((l) => l.srNo)) + 1;
+  for (const line of draw) {
+    const key = activityKey(line);
+    const existing = byActivity.get(key);
+    if (existing) {
+      if (line.weeklyPlanned) existing.weeklyPlanned = line.weeklyPlanned;
+      if (line.weeklyActual) existing.weeklyActual = line.weeklyActual;
+      if (!existing.boqQty && line.boqQty) existing.boqQty = line.boqQty;
+      if (!existing.gfcQty && line.gfcQty) existing.gfcQty = line.gfcQty;
+      if (!existing.executedQty && line.executedQty) {
+        existing.executedQty = line.executedQty;
+        existing.cumulativeQty = line.cumulativeQty || line.executedQty;
+      }
+      if (!existing.tower && line.tower) existing.tower = line.tower;
+      const gfc = existing.gfcQty || 0;
+      const done = existing.executedQty || existing.cumulativeQty || 0;
+      existing.balanceQty = gfc > 0 ? gfc - done : existing.balanceQty;
+      existing.pctComplete = gfc > 0 ? done / gfc : existing.pctComplete;
+      continue;
+    }
+    const copy = { ...line, srNo: line.srNo || nextSr++ };
+    out.push(copy);
+    byActivity.set(key, copy);
+  }
+  return out.sort((a, b) => a.srNo - b.srNo || a.activity.localeCompare(b.activity));
 }
 
 export async function importPlannedActualDashboard(projectId: string, buffer: Buffer) {
@@ -292,23 +382,33 @@ export function plannedActualToSheets(data: Awaited<ReturnType<typeof loadPlanne
           "Sr.No.",
           "Tower",
           "Activity",
-          "Unit ",
+          "Planned Start",
+          "Planned End",
+          "Unit",
           "As per BOQ total Quantity",
-          "As per GFC total Quantity",
+          "Total GFC Qty",
+          "Executed qty",
+          "Balance Qty.",
           "Weekly planned Qty.",
           "Weekly actual Qty.",
           "Total Achieved Qty.",
+          "% complete",
         ],
         ...activityLines.map((a) => [
           a.srNo,
           a.tower || "",
           a.activity,
+          a.plannedStart ? fmtDate(a.plannedStart) : "",
+          a.plannedEnd ? fmtDate(a.plannedEnd) : "",
           a.unit || "",
           a.boqQty,
           a.gfcQty,
+          a.executedQty,
+          a.balanceQty,
           a.weeklyPlanned,
           a.weeklyActual,
           a.cumulativeQty || a.executedQty,
+          a.pctComplete,
         ]),
       ],
     },
@@ -344,12 +444,13 @@ export async function renderPlannedActualHtml(projectId: string): Promise<string
     sections: [
       {
         heading: "Project cashflow · planned vs actual",
-        headers: ["Month", "Package", "Planned", "Actual", "Actual %"],
+        headers: ["Month", "Budgeted work", "Planned", "Actual", "Variance", "Actual %"],
         rows: data.cashflow.map((row) => [
           row.periodLabel,
           row.packageName,
           inr(row.plannedAmount),
           inr(row.actualAmount),
+          inr(row.actualAmount - row.plannedAmount),
           `${Math.round(row.actualPct * 100)}%`,
         ]),
       },
@@ -366,17 +467,21 @@ export async function renderPlannedActualHtml(projectId: string): Promise<string
       },
       {
         heading: "As per drawing status",
-        headers: ["#", "Tower", "Activity", "Unit", "BOQ", "GFC", "Wk plan", "Wk act", "Total achieved"],
+        headers: ["#", "Tower", "Activity", "Unit", "Start", "End", "BOQ", "GFC", "Executed", "Balance", "Wk plan", "Wk act", "%"],
         rows: data.activityLines.map((a) => [
           a.srNo,
           a.tower || "—",
           a.activity,
           a.unit || "—",
+          fmtDate(a.plannedStart),
+          fmtDate(a.plannedEnd),
           a.boqQty,
           a.gfcQty,
+          a.executedQty,
+          a.balanceQty,
           a.weeklyPlanned,
           a.weeklyActual,
-          a.cumulativeQty || a.executedQty,
+          `${Math.round((a.pctComplete || 0) * 100)}%`,
         ]),
       },
     ],

@@ -197,7 +197,14 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   }
 
   const uploaded = rows.filter((r) => r.shapeDiagramPath || r.shapeDiagramUrl).length;
-  const dataRows = rows.filter((r) => bbsRowKind(r) === "data");
+  const visibleRows = rows.filter((r) => {
+    const loc = String(r.location || r.sectionMark || "");
+    const mark = String(r.barMark || "");
+    if (/^\s*(grand\s*)?total\b/i.test(loc) || /^\s*(grand\s*)?total\b/i.test(mark)) return false;
+    if (/^dia\s*\d+(\.\d+)?(\s*mm)?$/i.test(loc)) return false;
+    return true;
+  });
+  const dataRows = visibleRows.filter((r) => bbsRowKind(r) === "data");
   const totalNos = dataRows.reduce((s, r) => s + (Number(r.nos) || 0), 0);
   const totalLen = dataRows.reduce((s, r) => s + (Number(r.totalLength) || 0), 0);
   const totalWt = dataRows.reduce((s, r) => s + (Number(r.weightKg) || 0), 0);
@@ -323,7 +330,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
     <CostRegisterShell
       sheetKind="bbs"
       title={`Bar Bending Schedule (BBS)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${rows.length} lines · ${dataRows.length} bars · ${uploaded} shapes · total ${fmtKg(totalWt)} kg`}
+      subtitle={`${visibleRows.length} lines · ${dataRows.length} bars · ${uploaded} shapes · total ${fmtKg(totalWt)} kg`}
       toolbar={
         canMutate ? (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2">
@@ -406,7 +413,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
             </tr>
           </thead>
           <tbody>
-            {rows.map((b) => {
+            {visibleRows.map((b) => {
               if (bbsRowKind(b) !== "data") {
                 return bandRow(b);
               }
@@ -659,7 +666,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                 </tr>
               );
             })}
-            {!rows.length && (
+            {!visibleRows.length && (
               <tr>
                 <td colSpan={colSpan} className="empty text-left p-6">
                   No BBS rows — add a section, subsection, or bar entry, or upload a BBS sheet in setup.
@@ -669,7 +676,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
           </tbody>
           {dataRows.length > 0 && (
             <tfoot className="bbs-sheet-tfoot">
-              <tr className="boq-total-row">
+              <tr className="boq-total-row bbs-grand-total">
                 <td className={bbsColClass(0)} />
                 <td className={bbsColClass(1)} />
                 <td className={bbsColClass(2, { extra: "text-left" })}>
@@ -680,27 +687,16 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                 <td className={bbsColClass(5)} />
                 <td className={bbsColClass(6)} />
                 <td className={`${bbsColClass(7)} tabular-nums font-semibold`}>{fmtNum(totalNos)}</td>
-                {bbsRangeEmpty(8, 13)}
+                <td className={bbsColClass(8)} />
+                <td className={bbsColClass(9)} />
+                <td className={bbsColClass(10)} />
+                <td className={bbsColClass(11)} />
+                <td className={bbsColClass(12)} />
+                <td className={bbsColClass(13)} />
                 <td className={`${bbsColClass(14)} tabular-nums font-semibold`}>{fmtNum(totalLen)}</td>
                 <td className={`${bbsColClass(15)} tabular-nums font-semibold`}>{fmtKg(totalWt)}</td>
                 <td />
               </tr>
-              {diaTotals.map(([d, t]) => (
-                <tr key={`dia-${d}`} className="boq-total-row bbs-dia-total">
-                  <td className={bbsColClass(0)} />
-                  <td className={bbsColClass(1)} />
-                  <td className={bbsColClass(2, { extra: "text-left" })}>Dia {d} mm</td>
-                  <td className={bbsColClass(3)} />
-                  <td className={`${bbsColClass(4)} tabular-nums`}>{d}</td>
-                  <td className={bbsColClass(5)} />
-                  <td className={bbsColClass(6)} />
-                  <td className={`${bbsColClass(7)} tabular-nums`}>{fmtNum(t.nos)}</td>
-                  {bbsRangeEmpty(8, 13)}
-                  <td className={`${bbsColClass(14)} tabular-nums`}>{fmtNum(t.length)}</td>
-                  <td className={`${bbsColClass(15)} tabular-nums`}>{fmtKg(t.weight)}</td>
-                  <td />
-                </tr>
-              ))}
             </tfoot>
           )}
         </table>

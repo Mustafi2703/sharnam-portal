@@ -70,23 +70,14 @@ export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
       const structure = s(row[1], 120);
       if (!structure || /total/i.test(structure)) continue;
       const total = n(row[header.length - 2]) || n(row[22]) || n(row[2]);
-      const firstMonth = n(row[4]) || n(row[5]);
+      if (!total) continue;
       data.push({
         periodLabel: "Forecast total",
         packageName: `Forecast · ${structure}`,
-        plannedAmount: total || firstMonth,
+        plannedAmount: total,
         actualAmount: 0,
         progressPct: 0,
       });
-      if (firstMonth) {
-        data.push({
-          periodLabel: excelMonthLabel(header[4]) || "Forecast M1",
-          packageName: `Forecast · ${structure}`,
-          plannedAmount: firstMonth,
-          actualAmount: 0,
-          progressPct: 0,
-        });
-      }
     }
   }
 

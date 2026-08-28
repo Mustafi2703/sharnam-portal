@@ -77,6 +77,9 @@ export function bbsRowKind(r: BbsLike): BbsRowKind {
   if (stored && BBS_ROW_KINDS.has(stored)) return stored;
   const mark = String(r.barMark ?? "").trim();
   const loc = String(r.location ?? r.sectionMark ?? "").trim();
+  if (/^\s*(grand\s*)?total\b/i.test(loc) || /^\s*(grand\s*)?total\b/i.test(mark) || /^dia\s*\d+/i.test(loc)) {
+    return "note";
+  }
   const hasData =
     Math.abs(Number(r.diameterMm) || 0) >= 6 ||
     Math.abs(Number(r.totalLength) || 0) > 0 ||

@@ -2293,9 +2293,15 @@ body.is-auth-route #root {
 }
 
 .cost-register-shell .bbs-sheet-tfoot {
+  position: static;
+}
+.cost-register-shell .bbs-sheet-tfoot tr.bbs-grand-total td {
   position: sticky;
   bottom: 0;
   z-index: 2;
+  background: color-mix(in srgb, var(--cost-accent) 14%, var(--color-paper)) !important;
+  font-weight: 700;
+  border-top: 2px solid color-mix(in srgb, var(--cost-border) 70%, transparent) !important;
 }
 .cost-register-shell .bbs-sheet-tfoot td {
   background: color-mix(in srgb, var(--cost-accent) 10%, var(--color-paper)) !important;

@@ -366,6 +366,8 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
     if (!description && !markRaw) continue;
     if (/name of project|bar bending schedule|project development consultancy/i.test(description)) continue;
     if (/^sr\.?\s*no$/i.test(description) || /^sr\.?\s*no$/i.test(markRaw)) continue;
+    if (/^\s*(grand\s*)?total\b/i.test(description) || /^\s*(grand\s*)?total\b/i.test(markRaw)) continue;
+    if (/^dia\s*\d+(\.\d+)?(\s*mm)?$/i.test(description)) continue;
 
     const dia = n(row[layout.dia]);
     const nosPerMember = n(row[layout.nosPerMember]);

@@ -64,7 +64,7 @@ progressRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "e
 
 progressRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLines, lessons] =
+  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLineCount, lessons] =
     await Promise.all([
       prisma.progressMilestone.findMany({ where: { projectId }, orderBy: { code: "asc" } }),
       prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" } }),
@@ -74,11 +74,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" } }),
       prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
       prisma.progressSorStat.findMany({ where: { projectId } }),
-      prisma.costMonitoringLine.findMany({
-        where: { projectId },
-        orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
-        take: 4000,
-      }),
+      prisma.costMonitoringLine.count({ where: { projectId } }),
       prisma.lessonLearnt.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
     ]);
 
@@ -101,7 +97,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       legal: legalApprovals.length,
       legalApproved: legalApprovals.filter((l) => /approved/i.test(l.status)).length,
       activityLines: activityLines.length,
-      boqLines: boqLines.length,
+      boqLines: boqLineCount,
       projectProgressPct: weightedPct || 0,
       sheetProgressPct: overviewSheet?.sheetProgressPct ?? null,
       avgActualPct:
@@ -150,7 +146,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     legalApprovals,
     manpower,
     activityLines,
-    boqLines,
+    boqLineCount,
     sorStats,
     lessons,
   });
@@ -595,6 +591,8 @@ progressRouter.post(
       orderBy: { srNo: "desc" },
       select: { srNo: true },
     });
+    const gfcQty = Number(body.gfcQty || 0);
+    const executedQty = Number(body.executedQty || body.cumulativeQty || 0);
     const row = await prisma.progressActivityLine.create({
       data: {
         projectId: req.params.projectId,
@@ -602,14 +600,17 @@ progressRouter.post(
         tower: body.tower || null,
         activity,
         unit: body.unit || null,
+        plannedStart: body.plannedStart ? new Date(body.plannedStart) : null,
+        plannedEnd: body.plannedEnd ? new Date(body.plannedEnd) : null,
         boqQty: Number(body.boqQty || 0),
-        gfcQty: Number(body.gfcQty || 0),
-        executedQty: Number(body.executedQty || 0),
+        gfcQty,
+        executedQty,
+        balanceQty: gfcQty > 0 ? gfcQty - executedQty : 0,
         weeklyPlanned: Number(body.weeklyPlanned || 0),
         weeklyActual: Number(body.weeklyActual || 0),
-        cumulativeQty: Number(body.cumulativeQty || body.executedQty || 0),
+        cumulativeQty: executedQty,
         status: body.status || "In progress",
-        pctComplete: Number(body.pctComplete || 0),
+        pctComplete: gfcQty > 0 ? executedQty / gfcQty : 0,
       },
     });
     await audit("progress.activity.create", {
@@ -632,7 +633,12 @@ progressRouter.patch(
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
     const gfcQty = body.gfcQty != null ? Number(body.gfcQty) : existing.gfcQty;
-    const executedQty = body.executedQty != null ? Number(body.executedQty) : existing.executedQty;
+    const executedQty =
+      body.executedQty != null
+        ? Number(body.executedQty)
+        : body.cumulativeQty != null
+          ? Number(body.cumulativeQty)
+          : existing.executedQty;
     const weeklyActual = body.weeklyActual != null ? Number(body.weeklyActual) : existing.weeklyActual;
     const cumulativeQty =
       body.cumulativeQty != null ? Number(body.cumulativeQty) : executedQty || existing.cumulativeQty;
@@ -640,13 +646,13 @@ progressRouter.patch(
       body.balanceQty != null
         ? Number(body.balanceQty)
         : gfcQty > 0
-          ? Math.max(0, gfcQty - (executedQty || 0))
+          ? gfcQty - (executedQty || 0)
           : existing.balanceQty;
     const pctComplete =
       body.pctComplete != null
         ? Number(body.pctComplete)
         : gfcQty > 0
-          ? Math.min(1.2, (executedQty || 0) / gfcQty)
+          ? (executedQty || 0) / gfcQty
           : existing.pctComplete;
     const row = await prisma.progressActivityLine.update({
       where: { id: existing.id },
@@ -654,6 +660,9 @@ progressRouter.patch(
         activity: body.activity != null ? String(body.activity) : undefined,
         tower: body.tower !== undefined ? body.tower : undefined,
         unit: body.unit !== undefined ? body.unit : undefined,
+        plannedStart:
+          body.plannedStart !== undefined ? (body.plannedStart ? new Date(body.plannedStart) : null) : undefined,
+        plannedEnd: body.plannedEnd !== undefined ? (body.plannedEnd ? new Date(body.plannedEnd) : null) : undefined,
         boqQty: body.boqQty != null ? Number(body.boqQty) : undefined,
         gfcQty,
         weeklyPlanned: body.weeklyPlanned != null ? Number(body.weeklyPlanned) : undefined,
