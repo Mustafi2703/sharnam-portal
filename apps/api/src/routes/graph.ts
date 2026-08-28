@@ -110,13 +110,36 @@ graphRouter.post("/test-mail", requireAuth, requireRoles("admin"), async (req: A
 /** Admin — seed live UAT team + comms matrix, meetings, NCR/CAR, RFI, QAP on SPDC-DEMO-01 */
 graphRouter.post("/seed-live-team", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
   try {
-    const { stdout, stderr } = await runRepoScript("seed/spdcLiveTeam.ts");
-    await audit("graph.seed.live.team", { userId: req.user!.id, meta: { stdout: stdout.slice(0, 500) } });
-    res.json({ ok: true, stdout, stderr: stderr || undefined });
+    const { seedSpdcLiveTeam } = await import("../services/spdcLiveTeamSeed.js");
+    const result = await seedSpdcLiveTeam();
+    await audit("graph.seed.live.team", {
+      userId: req.user!.id,
+      meta: { projectCode: result.project.code, users: Object.keys(result.userIds).length },
+    });
+    res.json({
+      ok: true,
+      project: { id: result.project.id, code: result.project.code },
+      users: Object.keys(result.userIds),
+      password: result.password,
+      meeting: result.meeting?.title,
+      rfi: result.rfi?.number,
+      notify: result.notify,
+    });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const stdout = typeof err === "object" && err && "stdout" in err ? String((err as { stdout: Buffer }).stdout) : "";
-    res.status(500).json({ ok: false, error: msg, stdout: stdout.slice(0, 2000) || undefined });
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Admin — create SPDC-UAT-LIVE with DPR week, WPR, finance COP + SharePoint upload */
+graphRouter.post("/seed-uat-live-project", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+  try {
+    const { seedUatLiveProject } = await import("../services/uatDemoProjectSeed.js");
+    const uploadCops = req.body?.uploadCops !== false;
+    const result = await seedUatLiveProject(undefined, { uploadCops });
+    await audit("graph.seed.uat.live", { userId: req.user!.id, meta: { projectCode: result.project.code } });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 });
 

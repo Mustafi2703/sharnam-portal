@@ -728,6 +728,30 @@ financeRouter.post("/:projectId/cop/:copId/save-to-dms", requireRoles("admin", "
   res.json(out);
 });
 
+/** Upload all certified COP workbooks for this project to SharePoint / DMS (09.01 Interim Bill). */
+financeRouter.post("/:projectId/cop/upload-all-to-dms", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const cops = await prisma.certificateOfPayment.findMany({
+    where: { projectId: project.id, status: { not: "Draft" } },
+    orderBy: { certificateDate: "asc" },
+  });
+  const { saveViatrixCopToDms } = await import("../modules/finance/copWorkbook.js");
+  const results: { copId: string; certificateNumber: string; ok: boolean; filename?: string; url?: string; error?: string }[] = [];
+  for (const cop of cops) {
+    try {
+      const out = await saveViatrixCopToDms(cop.id, (code, folder, name, buf) =>
+        mockOneDrive.upload(code, folder, name, buf)
+      );
+      results.push({ copId: cop.id, certificateNumber: cop.certificateNumber, ok: true, filename: out.filename, url: out.url ?? undefined });
+    } catch (err) {
+      results.push({ copId: cop.id, certificateNumber: cop.certificateNumber, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  await audit("finance.cop.upload.all", { userId: req.user!.id, entity: "Project", entityId: project.id, meta: { count: results.length } });
+  res.json({ ok: true, projectCode: project.code, uploaded: results.filter((r) => r.ok).length, results });
+});
+
 financeRouter.put("/cop/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });

@@ -19,11 +19,13 @@ import DrawingsLibraryPage from "./pages/DrawingsLibraryPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
+import CrmLayout from "./pages/crm/CrmLayout";
 import CrmPage from "./pages/CrmPage";
 import CrmBidComparePage from "./pages/CrmBidComparePage";
 import CrmVendorBidsPage from "./pages/CrmVendorBidsPage";
 import HrmPage from "./pages/HrmPage";
 import HrmsLayout from "./pages/hrms/HrmsLayout";
+import HrmsShell from "./pages/hrms/HrmsShell";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
 import ProjectHomePage from "./pages/project/ProjectHomePage";
 import VendorsPage from "./pages/project/VendorsPage";
@@ -84,6 +86,11 @@ function RedirectHrmsOnboarding() {
   return <Navigate to={`/hrm/onboarding/${offerId || ""}`} replace />;
 }
 
+function RedirectCrmBidPackage() {
+  const { id } = useParams();
+  return <Navigate to={`/crm/bids/${id || ""}`} replace />;
+}
+
 function RedirectDrawingsCoordination() {
   const { id } = useParams();
   return <Navigate to={`/projects/${id}/drawings/coordination`} replace />;
@@ -102,6 +109,7 @@ export default function App() {
       <Route path="/login/site" element={<PortalLoginPage portalKey="site" />} />
       <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
       <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
+      <Route path="/login/hr" element={<PortalLoginPage portalKey="hr" />} />
       <Route path="/login/:portalKey" element={<Navigate to="/login" replace />} />
 
       <Route
@@ -120,6 +128,28 @@ export default function App() {
           </Protected>
         }
       />
+
+      {/* HRMS — standalone portal (HR login at /login/hr) */}
+      <Route
+        path="/hrm"
+        element={
+          <Protected>
+            <HrmsShell />
+          </Protected>
+        }
+      >
+        <Route element={<HrmsLayout />}>
+          <Route index element={<HrmPage />} />
+          <Route path="recruitment" element={<RecruitmentPage />} />
+          <Route path="onboarding" element={<OnboardingPage />} />
+          <Route path="onboarding/:offerId" element={<OnboardingPage />} />
+          <Route path="payroll" element={<PayrollPage />} />
+          <Route path="attendance" element={<HrmsAttendancePage />} />
+          <Route path="leave" element={<HrmsLeavePage />} />
+          <Route path="documents" element={<HrmsDocumentsPage />} />
+          <Route path="masters" element={<HrmsMastersPage />} />
+        </Route>
+      </Route>
 
       <Route
         path="/*"
@@ -197,21 +227,18 @@ export default function App() {
                 </Route>
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />
-                <Route path="/crm" element={<CrmPage />} />
-                <Route path="/crm/bid-compare" element={<CrmBidComparePage />} />
-                <Route path="/crm/vendor-bids" element={<CrmVendorBidsPage />} />
-                <Route path="/hrm" element={<HrmsLayout />}>
-                  <Route index element={<HrmPage />} />
-                  <Route path="recruitment" element={<RecruitmentPage />} />
-                  <Route path="onboarding" element={<OnboardingPage />} />
-                  <Route path="onboarding/:offerId" element={<OnboardingPage />} />
-                  <Route path="payroll" element={<PayrollPage />} />
-                  <Route path="attendance" element={<HrmsAttendancePage />} />
-                  <Route path="leave" element={<HrmsLeavePage />} />
-                  <Route path="documents" element={<HrmsDocumentsPage />} />
-                  <Route path="masters" element={<HrmsMastersPage />} />
+                <Route path="/crm" element={<CrmLayout />}>
+                  <Route index element={<Navigate to="/crm/leads" replace />} />
+                  <Route path="leads" element={<CrmPage />} />
+                  <Route path="proposals" element={<CrmPage />} />
+                  <Route path="projects" element={<CrmPage />} />
+                  <Route path="bids" element={<CrmBidComparePage />} />
+                  <Route path="bids/:id" element={<CrmBidComparePage />} />
+                  <Route path="vendor-bids" element={<CrmVendorBidsPage />} />
                 </Route>
-                {/* Legacy HRMS URLs → unified /hrm/* */}
+                <Route path="/crm/bid-compare" element={<Navigate to="/crm/bids" replace />} />
+                <Route path="/crm/bid-compare/:id" element={<RedirectCrmBidPackage />} />
+                {/* Legacy HRMS URLs → unified /hrm/* (standalone portal) */}
                 <Route path="/hrms/recruitment" element={<Navigate to="/hrm/recruitment" replace />} />
                 <Route path="/hrms/onboarding" element={<Navigate to="/hrm/onboarding" replace />} />
                 <Route path="/hrms/onboarding/:offerId" element={<RedirectHrmsOnboarding />} />

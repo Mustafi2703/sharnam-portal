@@ -1,6 +1,7 @@
 /**
  * Branded HTML + plain-text bodies for RFI lifecycle emails (SPDC / Sharnam portal).
  */
+import { sharnamLogoDataUri } from "./brandedExport.js";
 
 const BRAND_NAVY = "#1e3a5f";
 const BRAND_ORANGE = "#e4632a";
@@ -195,6 +196,11 @@ export function wrapRfiEmailHtml(opts: {
     .filter(Boolean)
     .join("");
 
+  const logo = sharnamLogoDataUri();
+  const logoBlock = logo
+    ? `<img src="${logo}" alt="Sharnam" width="120" height="48" style="display:block;height:48px;width:auto;max-width:140px;margin-bottom:10px;" />`
+    : `<div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.02em;">शरणम् · Sharnam</div>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
@@ -204,7 +210,8 @@ export function wrapRfiEmailHtml(opts: {
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr>
           <td style="background:${BRAND_NAVY};padding:20px 24px;border-radius:10px 10px 0 0;">
-            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">Sharnam Portal · ${escapeHtml(opts.eyebrow)}</div>
+            ${logoBlock}
+            <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);margin-top:4px;">Sharnam Portal · ${escapeHtml(opts.eyebrow)}</div>
             <div style="font-size:20px;font-weight:700;color:#fff;margin-top:8px;line-height:1.35;">${escapeHtml(opts.headline)}</div>
             ${opts.ctx.projectCode ? `<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:6px;font-family:Consolas,monospace;">${escapeHtml(opts.ctx.projectCode)}${opts.ctx.number ? ` · ${escapeHtml(opts.ctx.number)}` : ""}</div>` : ""}
           </td>

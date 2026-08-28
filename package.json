@@ -25,6 +25,7 @@
     "db:seed-closure-drawings": "tsx seed/closureDrawingsDemo.ts",
     "db:seed-demo-screenshots": "tsx seed/demoScreenshotsPack.ts",
     "db:seed-live-team": "tsx seed/spdcLiveTeam.ts",
+    "db:seed-uat-live": "tsx seed/uatLiveProject.ts",
     "email:comms-uat-preview": "tsx apps/api/scripts/send-comms-flow-demo-pack.ts preview",
     "email:comms-uat-all": "tsx apps/api/scripts/send-comms-flow-demo-pack.ts all",
     "email:branded-preview": "tsx apps/api/scripts/send-spdc-branded-test-pack.ts preview",
