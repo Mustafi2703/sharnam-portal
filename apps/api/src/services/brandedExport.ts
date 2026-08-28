@@ -7,14 +7,18 @@ import ExcelJS from "exceljs";
 import { prisma } from "../prisma.js";
 
 const __apiDir = path.dirname(fileURLToPath(import.meta.url));
-const BUNDLED_EMAIL_LOGO = path.resolve(__apiDir, "../../assets/logo.png");
+const BUNDLED_EMAIL_LOGO = path.resolve(__apiDir, "../../assets/logo-transparent.png");
 
+/** Official portal wordmark — same file as AppShell / login (`/logo-transparent.png`). */
 const EMAIL_LOGO_CANDIDATES = [
   BUNDLED_EMAIL_LOGO,
-  path.resolve(process.cwd(), "apps/api/assets/logo.png"),
+  path.resolve(process.cwd(), "apps/api/assets/logo-transparent.png"),
+  path.resolve(process.cwd(), "apps/web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "../web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "../../apps/web/public/logo-transparent.png"),
+  path.resolve(process.cwd(), "public/logo-transparent.png"),
+  path.resolve(__apiDir, "../../assets/logo.png"),
   path.resolve(process.cwd(), "apps/web/public/logo.png"),
-  path.resolve(process.cwd(), "../web/public/logo.png"),
-  path.resolve(process.cwd(), "../../apps/web/public/logo.png"),
   path.resolve(process.cwd(), "public/logo.png"),
 ];
 
@@ -101,10 +105,10 @@ export function sharnamEmailLogoSrc(): string {
     }
   }
   const origin = (process.env.WEB_ORIGIN || "https://portal.spdc.in").replace(/\/$/, "");
-  return `${origin}/logo.png`;
+  return `${origin}/logo-transparent.png`;
 }
 
-/** Teal शरणम् wordmark — raw logo.png on paper-grey header (no white plate). */
+/** Official शरणम् wordmark — `logo-transparent.png` on paper-grey header. */
 export function sharnamEmailLogoHtml(width = 172): string {
   const src = sharnamEmailLogoSrc();
   return `<img src="${src}" alt="Sharnam · शरणम्" width="${width}" style="display:block;width:${width}px;max-width:72%;height:auto;border:0;outline:none;background:transparent;margin:0;" />`;
