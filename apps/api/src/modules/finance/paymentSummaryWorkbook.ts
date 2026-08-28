@@ -240,7 +240,7 @@ export async function buildPaymentSummaryWorkbook(projectId: string): Promise<Bu
     sheets.push({
       name: pkg.sheetName.slice(0, 31),
       rows: [
-        ["VIATRIX ENGINEERING & PLASTIC LLP, BAMANGAM"],
+        ["Sharnam Project Development Consultants & Co. — Payment Summary"],
         [pkg.sheetName.toUpperCase()],
         [],
         CIVIL_RA_HEADERS,
@@ -333,7 +333,7 @@ function buildMaterialSheet(
   return {
     name: pkg.sheetName.slice(0, 31),
     rows: [
-      ["VIATRIX ENGINEERING & PLASTIC LLP, BAMANGAM"],
+      ["Sharnam Project Development Consultants & Co. — Payment Summary"],
       [pkg.sheetName],
       [],
       MATERIAL_HEADERS,

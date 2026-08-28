@@ -37,7 +37,7 @@ type Props = {
   setMsg: (m: string) => void;
 };
 
-/** Viatrix Payment Summary sheet — inline editable bill register for one discipline/package. */
+/** Sharnam Payment Summary sheet — inline editable bill register for one discipline/package. */
 export function FinanceBillRegister({
   projectId,
   token,
@@ -160,7 +160,7 @@ export function FinanceBillRegister({
       <div className="space-y-4">
         <Card className="!p-4">
           <p className="text-sm text-steel-muted mb-3">
-            Select a discipline above to open its Viatrix Payment Summary sheet — Civil RA Bill, PEB Supply Material, Fire, etc.
+            Select a discipline above to open its Sharnam Payment Summary sheet — Civil RA Bill, PEB Supply Material, Fire, etc.
             Each project maintains its own bill lines; export matches the client workbook format.
           </p>
         </Card>
@@ -189,7 +189,7 @@ export function FinanceBillRegister({
         onAddRow={() => void addRow()}
         onUpload={canWrite ? uploadSheet : undefined}
         uploadTitle={`Import ${activePkg.sheetName}`}
-        uploadHint="Upload Viatrix Payment Summary .xlsx — lines merge into this project's register."
+        uploadHint="Upload Payment Summary .xlsx (Sharnam or existing Viatrix format) — lines merge into this project's register."
         onDownloadXlsx={() =>
           void downloadAuthFile(`/api/finance/${projectId}/payment-summary/download.xlsx`, token, `Payment-Summary-${activePkg.key}.xlsx`).catch((e) =>
             setMsg(e instanceof Error ? e.message : "Download failed")

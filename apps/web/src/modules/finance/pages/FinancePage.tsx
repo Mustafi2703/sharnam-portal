@@ -18,7 +18,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../
 
 const TOOLS = [
   { id: "overview", label: "Overview" },
-  { id: "bills", label: "Bill registers (Viatrix)" },
+  { id: "bills", label: "Bill registers" },
   { id: "capex", label: "Project CAPEX" },
   { id: "po", label: "Purchase Orders" },
   { id: "ra", label: "RA Bill Tracker" },
@@ -785,7 +785,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
   }
   async function downloadCop(copId: string, certNo: string) {
     try {
-      await downloadAuthFile(`/api/finance/${projectId}/cop/${copId}/download.xlsx`, token, `Viatrix-COP-${certNo.replace(/[^\w.-]+/g, "_")}.xlsx`);
+      await downloadAuthFile(`/api/finance/${projectId}/cop/${copId}/download.xlsx`, token, `Sharnam-COP-${certNo.replace(/[^\w.-]+/g, "_")}.xlsx`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Download failed");
     }
@@ -794,7 +794,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
     setBusyId(copId);
     try {
       const out = await api<any>(`/api/finance/${projectId}/cop/${copId}/save-to-dms`, { method: "POST", token });
-      setMsg(`Viatrix COP saved to DMS: ${out.filename || "09.01 folder"}`);
+      setMsg(`Sharnam COP saved to DMS: ${out.filename || "09.01 folder"}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save to DMS failed");
     } finally {
@@ -854,7 +854,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
         <div className="overflow-x-auto">
           <table className="min-w-[1100px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">COP</th><th>Type</th><th>Date</th><th>Contractor</th><th>PO</th><th>RA</th><th className="text-right">Certified</th><th className="text-right">Payable</th><th>Status</th><th>Viatrix</th></tr>
+              <tr><th className="p-2">COP</th><th>Type</th><th>Date</th><th>Contractor</th><th>PO</th><th>RA</th><th className="text-right">Certified</th><th className="text-right">Payable</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {filteredCops.map((c: any) => (
@@ -992,7 +992,7 @@ function MaterialInvoicesTab({ invoices, canWrite, reload, setMsg, projectId, to
       <Card className="!p-4">
         <p className="text-xs text-steel-muted">
           Tracks PEB supply, erection, civil steel, and fire material invoices from{" "}
-          <strong>Payment Summary - VIATRIX</strong>. Import the full workbook under Payment Summary, or add lines here.
+          <strong>Sharnam Payment Summary</strong>. Import an existing Viatrix workbook under Payment Summary, or add lines here.
         </p>
       </Card>
       {canWrite && (!activePkg || activePkg.billKind === "material") && (
@@ -1059,7 +1059,7 @@ function MaterialInvoicesTab({ invoices, canWrite, reload, setMsg, projectId, to
       ))}
       {!filtered.length && (
         <Card className="!p-6 text-center text-sm text-steel-muted">
-          No material invoices for {activePkg?.label || "this project"} — sync Viatrix Payment Summary or add lines above.
+          No material invoices for {activePkg?.label || "this project"} — sync Payment Summary or add lines above.
         </Card>
       )}
     </div>
@@ -1094,7 +1094,7 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
     setBusy(true);
     try {
       const out = await api<any>(`/api/finance/${projectId}/payment-summary/sync-template`, { method: "POST", token });
-      setMsg(`Synced from Viatrix template: ${out.raImported ?? 0} RA bills, ${out.materialImported ?? 0} material lines.`);
+      setMsg(`Synced from Payment Summary template: ${out.raImported ?? 0} RA bills, ${out.materialImported ?? 0} material lines.`);
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Sync failed");
@@ -1172,9 +1172,10 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
       )}
       <Card className="!p-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-sm">Payment Summary — VIATRIX format</h3>
+          <h3 className="font-semibold text-sm">Payment Summary · Sharnam format</h3>
           <p className="text-xs text-steel-muted mt-1">
-            Sheets: CIVIL RA Bill · Summary Civil · PEB Supply Material · PEB ERECTION · CIVIL STEEL · Karmasth Fire
+            Sheets: CIVIL RA Bill · Summary Civil · PEB Supply Material · PEB ERECTION · CIVIL STEEL · Karmasth Fire.
+            Import is compatible with existing Viatrix workbook uploads.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1182,7 +1183,7 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
           {canWrite && (
             <>
               <Button type="button" variant="secondary" disabled={busy} onClick={() => void syncTemplate()}>
-                {busy ? "Syncing…" : "Sync Viatrix template"}
+                {busy ? "Syncing…" : "Sync from Payment Summary template"}
               </Button>
             </>
           )}

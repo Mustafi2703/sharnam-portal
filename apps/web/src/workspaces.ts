@@ -567,7 +567,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
   ],
   finance: [
-    { to: "finance", label: "Bill registers", query: "tab=bills", blurb: "Viatrix Payment Summary sheets — create & edit per discipline." },
+    { to: "finance", label: "Bill registers", query: "tab=bills", blurb: "Sharnam Payment Summary sheets — create & edit per discipline." },
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
     { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Capital expenditure lines." },
     { to: "finance", label: "Purchase Orders", query: "tab=po", blurb: "Purchase order register." },

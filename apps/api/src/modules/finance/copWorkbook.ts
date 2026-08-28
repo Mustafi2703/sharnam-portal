@@ -1,10 +1,20 @@
 /**
- * Viatrix_RA BILL_COP.xlsm — fill client COP certificate layout from Finance records.
+ * Certificate of Payment workbook — Viatrix layout, Sharnam-branded.
+ *
+ * The Viatrix template (`Viatrix_RA BILL_COP.xlsm`) is loaded as the row/column
+ * skeleton (contractor block, sections A → H, amount in words at row 48).  We
+ * then strip the Viatrix images / letterhead from rows 1-5 and inject a
+ * Sharnam PMC letterhead (logo + name + address + document title).  The
+ * downloaded file is `Sharnam-COP-<cert>.xlsx` and the client sees Sharnam
+ * branding on every certificate.  If the template is missing we still emit a
+ * plain Sharnam-branded COP so nothing crashes on a fresh server.
  */
 import fs from "fs";
 import path from "path";
-import XLSX, { type WorkBook, type WorkSheet } from "../../lib/xlsx.js";
+import ExcelJS from "exceljs";
+import { type WorkSheet } from "../../lib/xlsx.js";
 import { prisma } from "../../prisma.js";
+import { sharnamLogoPath } from "../../services/brandedExport.js";
 
 const ISO_COP_FOLDER = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
 
@@ -172,29 +182,154 @@ function fillViatrixSheet(ws: WorkSheet, cop: CopBundle) {
   setCell(ws, "B48", amountInWordsInr(netPayable));
 }
 
+/**
+ * Overlay Sharnam PMC letterhead on the Viatrix template header.
+ * Strips any embedded template images, clears the top merge, writes a fresh
+ * 5-row masthead:
+ *   R1  · Sharnam logo (image, spans A1:B2)   + PMC name (merged C1:H2)
+ *   R3  · Address / consultancy tagline (merged A3:H3)
+ *   R4  · Document title "CERTIFICATE OF PAYMENT" (merged A4:H4)
+ *   R5  · Certificate number + issue date band (merged A5:H5)
+ */
+async function applySharnamLetterhead(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet, cop: CopBundle) {
+  // exceljs stores anchored images on ws._media (internal, untyped). Wipe it so
+  // the exported COP has no Viatrix template imagery left behind.
+  const internal = ws as unknown as { _media?: unknown[] };
+  if (Array.isArray(internal._media)) internal._media.length = 0;
+
+  const clearMergesInRange = (top: number, bottom: number) => {
+    // ExcelJS API for un-merge is limited; the safe path is to overwrite values
+    // in the target rows since our merges below will absorb the same cells.
+    for (let r = top; r <= bottom; r++) {
+      const row = ws.getRow(r);
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.value = null;
+      });
+    }
+  };
+  clearMergesInRange(1, 5);
+
+  const logoPath = sharnamLogoPath();
+  if (logoPath && fs.existsSync(logoPath)) {
+    try {
+      const id = wb.addImage({ filename: logoPath, extension: "png" });
+      ws.addImage(id, { tl: { col: 0.15, row: 0.15 }, ext: { width: 96, height: 44 } });
+    } catch {
+      /* logo optional */
+    }
+  }
+
+  try {
+    ws.mergeCells("C1:H2");
+  } catch {
+    /* already merged from template */
+  }
+  const nameCell = ws.getCell("C1");
+  nameCell.value = "Sharnam Project Development Consultants & Co.";
+  nameCell.font = { name: "Calibri", size: 15, bold: true, color: { argb: "FFB28C3C" } };
+  nameCell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+
+  try {
+    ws.mergeCells("A3:H3");
+  } catch {
+    /* ignore */
+  }
+  const addr = ws.getCell("A3");
+  addr.value =
+    "Project management consultancy · Ahmedabad, India · info@sharnamgroup.com · www.sharnamgroup.com";
+  addr.font = { name: "Calibri", size: 9.5, italic: true, color: { argb: "FF444444" } };
+  addr.alignment = { vertical: "middle", horizontal: "center" };
+
+  try {
+    ws.mergeCells("A4:H4");
+  } catch {
+    /* ignore */
+  }
+  const title = ws.getCell("A4");
+  title.value = "CERTIFICATE OF PAYMENT";
+  title.font = { name: "Calibri", size: 13, bold: true, color: { argb: "FF4A3A12" } };
+  title.alignment = { vertical: "middle", horizontal: "center" };
+  title.border = { top: { style: "thick", color: { argb: "FFB28C3C" } } };
+
+  try {
+    ws.mergeCells("A5:H5");
+  } catch {
+    /* ignore */
+  }
+  const band = ws.getCell("A5");
+  const certDate = cop.certificateDate
+    ? new Date(cop.certificateDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+    : "—";
+  band.value = `Ref · ${cop.certificateNumber}    ·    Date · ${certDate}    ·    Project · ${cop.project.code} — ${cop.project.name}`;
+  band.font = { name: "Calibri", size: 10, color: { argb: "FF6B5A2E" } };
+  band.alignment = { vertical: "middle", horizontal: "center" };
+  band.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDF6E3" } };
+  band.border = { bottom: { style: "thin", color: { argb: "FFB28C3C" } } };
+
+  ws.getRow(1).height = 22;
+  ws.getRow(2).height = 22;
+  ws.getRow(3).height = 14;
+  ws.getRow(4).height = 20;
+  ws.getRow(5).height = 16;
+
+  // Sharnam footer band (row 50) — signatory stamp
+  try {
+    ws.mergeCells("A50:H50");
+  } catch {
+    /* ignore */
+  }
+  const footer = ws.getCell("A50");
+  footer.value =
+    "Sharnam PMC controlled document · Prepared by Sharnam · Certified by Client Representative · Received by Contractor";
+  footer.font = { name: "Calibri", size: 9, italic: true, color: { argb: "FF6B5A2E" } };
+  footer.alignment = { horizontal: "center" };
+  footer.border = { top: { style: "thin", color: { argb: "FFB28C3C" } } };
+}
+
 export async function buildViatrixCopWorkbook(copId: string): Promise<{ buffer: Buffer; filename: string; cop: CopBundle }> {
   const cop = await loadCopBundle(copId);
   const templatePath = resolveViatrixCopTemplatePath();
-  let wb: WorkBook;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Sharnam PMC Portal";
+  wb.created = new Date();
 
-  if (templatePath) {
-    const tpl = XLSX.read(fs.readFileSync(templatePath), { type: "buffer", cellDates: true });
-    const srcName = tpl.SheetNames.find((n) => n === "02") || tpl.SheetNames[0];
-    const ws = JSON.parse(JSON.stringify(tpl.Sheets[srcName])) as WorkSheet;
-    fillViatrixSheet(ws, cop);
-    wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "COP");
+  if (templatePath && fs.existsSync(templatePath)) {
+    await wb.xlsx.readFile(templatePath);
+    // Keep only sheet "02" (single COP page) — remove the other sample tabs.
+    const keep = wb.getWorksheet("02") || wb.worksheets[0];
+    if (keep) {
+      for (const s of [...wb.worksheets]) {
+        if (s.id !== keep.id) wb.removeWorksheet(s.id);
+      }
+      keep.name = "Certificate of Payment";
+    }
   } else {
-    wb = XLSX.utils.book_new();
-    const ws: WorkSheet = {};
-    fillViatrixSheet(ws, cop);
-    ws["!ref"] = "A1:H49";
-    XLSX.utils.book_append_sheet(wb, ws, "COP");
+    wb.addWorksheet("Certificate of Payment");
   }
 
+  const ws = wb.worksheets[0];
+
+  // Fill the data cells the Viatrix template expects (rows 6+) via the
+  // existing xlsx.js filler by building a tiny XLSX proxy sheet, copying its
+  // values into ExcelJS.  This preserves the original layout without having
+  // to duplicate every setCell mapping in ExcelJS terms.
+  const proxy: WorkSheet = {};
+  fillViatrixSheet(proxy, cop);
+  for (const key of Object.keys(proxy)) {
+    if (key.startsWith("!")) continue;
+    const cell = proxy[key] as { t?: string; v?: string | number };
+    if (cell?.v !== undefined && cell?.v !== null) {
+      const target = ws.getCell(key);
+      target.value = typeof cell.v === "number" ? cell.v : String(cell.v);
+    }
+  }
+
+  await applySharnamLetterhead(wb, ws, cop);
+
   const safeCert = cop.certificateNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const filename = `Viatrix-COP-${safeCert}.xlsx`;
-  const buffer = Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+  const filename = `Sharnam-COP-${safeCert}.xlsx`;
+  const ab = await wb.xlsx.writeBuffer();
+  const buffer = Buffer.from(ab as ArrayBuffer);
   return { buffer, filename, cop };
 }
 
