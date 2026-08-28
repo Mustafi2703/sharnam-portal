@@ -381,6 +381,111 @@ financeRouter.delete("/ra/:id", requireRoles("admin", "office"), async (req: Aut
   res.json({ ok: true });
 });
 
+/* ─────────────────── RA-BILL STAGE FLOW: Submitted → Corrected → Certified ───────────────────
+ * The PMC discipline: each RA bill goes through three stages. Every click uploads a NEW file
+ * (SharePoint / mock OneDrive) — no overwrite. The bill's `status` reflects the latest stage
+ * and `attachmentUrl` always points to the freshest file so the register keeps working.
+ * Full log lives under `raBillRevisions`.
+ */
+const RA_STAGES = ["Submitted", "Corrected", "Certified"] as const;
+type RaStage = (typeof RA_STAGES)[number];
+
+/** List every stage revision on this RA bill — most recent first. */
+financeRouter.get("/ra/:id/revisions", async (req, res) => {
+  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!bill) return res.status(404).json({ error: "RA bill not found" });
+  const rows = await prisma.raBillRevision.findMany({
+    where: { raBillId: bill.id },
+    orderBy: [{ uploadedAt: "desc" }],
+  });
+  const uploaderIds = Array.from(new Set(rows.map((r) => r.uploadedById).filter(Boolean))) as string[];
+  const users = uploaderIds.length
+    ? await prisma.user.findMany({ where: { id: { in: uploaderIds } }, select: { id: true, fullName: true, email: true } })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  res.json(rows.map((r) => ({ ...r, uploadedBy: r.uploadedById ? userMap.get(r.uploadedById) || null : null })));
+});
+
+/**
+ * Log a new stage revision.
+ * Body: stage (Submitted|Corrected|Certified), notes?, amountAtStage?, file
+ * Contractors typically upload the same workbook they use in SharePoint (Excel/PDF).
+ */
+financeRouter.post(
+  "/ra/:id/stage",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const bill = await prisma.raBill.findUnique({
+      where: { id: req.params.id },
+      include: { project: { select: { id: true, code: true } } },
+    });
+    if (!bill) return res.status(404).json({ error: "RA bill not found" });
+
+    const stageRaw = s(req.body.stage);
+    const stage = (RA_STAGES as readonly string[]).includes(stageRaw) ? (stageRaw as RaStage) : null;
+    if (!stage) {
+      return res.status(400).json({ error: `stage must be one of ${RA_STAGES.join(" | ")}` });
+    }
+
+    let fileName: string | undefined;
+    let fileUrl: string | undefined;
+    let storagePath: string | undefined;
+    let sharePointUrl: string | undefined;
+    if (req.file) {
+      const safeRa = bill.raNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const saved = await mockOneDrive.upload(
+        bill.project.code,
+        "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification",
+        `RA-${safeRa}-${stage}-${Date.now()}${extOf(req.file)}`,
+        req.file.buffer
+      );
+      fileName = req.file.originalname;
+      storagePath = saved.path;
+      sharePointUrl = saved.url || undefined;
+      fileUrl = saved.url || `/uploads/onedrive/${bill.project.code}/${saved.path}`;
+    }
+
+    const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
+    const revisionNo = existing + 1;
+
+    const revision = await prisma.raBillRevision.create({
+      data: {
+        raBillId: bill.id,
+        stage,
+        revisionNo,
+        fileName: fileName || null,
+        fileUrl: fileUrl || null,
+        storagePath: storagePath || null,
+        sharePointUrl: sharePointUrl || null,
+        amountAtStage: req.body.amountAtStage != null && req.body.amountAtStage !== "" ? num(req.body.amountAtStage) : null,
+        notes: s(req.body.notes) || null,
+        uploadedById: req.user!.id,
+      },
+    });
+
+    /** Roll status forward. Once a bill is Certified, further Corrected uploads keep it Certified. */
+    const nextStatus = stage === "Certified" ? "Certified" : stage === "Corrected" ? "Under Review" : "Submitted";
+    await prisma.raBill.update({
+      where: { id: bill.id },
+      data: {
+        status: nextStatus,
+        attachmentUrl: fileUrl || bill.attachmentUrl,
+        ...(revision.amountAtStage != null ? { totalInvoiceWithoutGst: revision.amountAtStage } : {}),
+      },
+    });
+
+    await audit("finance.ra.stage", {
+      userId: req.user!.id,
+      entity: "RaBillRevision",
+      entityId: revision.id,
+      meta: { raBillId: bill.id, raNumber: bill.raNumber, stage, revisionNo },
+    });
+
+    res.status(201).json(revision);
+  }
+);
+
 /* ─────────────────────────────────────────  CERTIFICATES OF PAYMENT  ───────────────────────────────────────── */
 
 financeRouter.get("/:projectId/cop", async (req, res) => {

@@ -260,8 +260,44 @@ export default function CrmPage() {
             rowCount={leads.length}
             canEdit
             onAddRow={() => setLeadAddOpen((v) => !v)}
+            onUpload={async (file) => {
+              const fd = new FormData();
+              fd.append("file", file);
+              fd.append("sourceSheet", file.name);
+              try {
+                const out = await api<{ created: number; updated: number; skipped: number; errors: string[] }>(
+                  "/api/crm/leads/import",
+                  { method: "POST", token, body: fd },
+                );
+                setMsg(`Imported: ${out.created} created, ${out.updated} updated, ${out.skipped} skipped${out.errors.length ? `, ${out.errors.length} errors` : ""}.`);
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Import failed");
+              }
+            }}
+            uploadTitle="Upload leads sheet (Excel)"
+            uploadHint={
+              "Expected columns: Sr No · Project Name · Latest Status · Latest Sub Status · Latest Status Update · Landmark · District · State · Pin Code · Segment · Sub-Segment · Sector · Project Type · Description. Extra columns are ignored; re-uploading updates existing rows by Sr No."
+            }
             message={msg || undefined}
           />
+
+          <div className="flex flex-wrap gap-2 text-[11px] items-center">
+            <span className="text-steel-muted font-mono uppercase">Latest status ({leads.length} leads):</span>
+            {Object.entries(
+              leads.reduce((acc: Record<string, number>, l: any) => {
+                const key = String(l.latestStatus || "—");
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {}),
+            )
+              .sort((a, b) => b[1] - a[1])
+              .map(([k, v]) => (
+                <span key={k} className="px-2 py-0.5 rounded border border-line bg-white">
+                  {k}: <span className="font-semibold text-brand">{v}</span>
+                </span>
+              ))}
+          </div>
 
           {leadAddOpen && (
           <Card className="!p-3">
@@ -294,7 +330,18 @@ export default function CrmPage() {
                   {(pipeline[stage] || []).map((lead) => (
                     <li key={lead.id} className="p-3 text-sm space-y-2">
                       <div className="font-medium leading-snug">{lead.title}</div>
-                      <div className="text-xs text-steel-muted">{lead.contactName || "—"}</div>
+                      <div className="text-xs text-steel-muted">{lead.contactName || lead.district || "—"}{lead.state ? `, ${lead.state}` : ""}</div>
+                      {lead.latestStatus && (
+                        <div className="flex flex-wrap gap-1 text-[10px]">
+                          <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand font-medium">{lead.latestStatus}</span>
+                          {lead.latestSubStatus && (
+                            <span className="px-1.5 py-0.5 rounded border border-line text-steel-muted">{lead.latestSubStatus}</span>
+                          )}
+                        </div>
+                      )}
+                      {(lead.segment || lead.subSegment) && (
+                        <div className="text-[10px] text-steel-muted uppercase font-mono">{[lead.segment, lead.subSegment].filter(Boolean).join(" · ")}</div>
+                      )}
                       {lead.value != null && (
                         <div className="font-mono text-[11px] text-brand">₹{Number(lead.value).toLocaleString("en-IN")}</div>
                       )}

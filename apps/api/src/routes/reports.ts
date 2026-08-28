@@ -216,10 +216,130 @@ crmRouter.post("/leads", requireRoles("admin", "office"), async (req: AuthedRequ
       value: req.body.value != null ? Number(req.body.value) : null,
       projectId: req.body.projectId,
       ownerId: req.user!.id,
+      latestStatus: req.body.latestStatus || null,
+      latestSubStatus: req.body.latestSubStatus || null,
+      landmark: req.body.landmark || null,
+      district: req.body.district || null,
+      state: req.body.state || null,
+      pinCode: req.body.pinCode || null,
+      segment: req.body.segment || null,
+      subSegment: req.body.subSegment || null,
+      sector: req.body.sector || null,
+      projectType: req.body.projectType || null,
+      description: req.body.description || null,
     },
   });
   res.status(201).json(lead);
 });
+
+/**
+ * Bulk lead import — matches the "Data - July 2026.xlsx" master sheet the CRM team
+ * maintains. Columns expected (case-insensitive, extra columns ignored):
+ *   Sr No | Project Name | Latest Status | Latest Sub Status | Latest Status Update |
+ *   Landmark | District | State | Pin Code | Segment | Sub-Segment | Sector |
+ *   Project Type | Description
+ *
+ * Idempotent: upserts on (srNo + sourceSheet). The user can re-upload the same file
+ * and only new / changed rows will move.
+ */
+const crmUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+crmRouter.post(
+  "/leads/import",
+  requireRoles("admin", "office"),
+  crmUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "Upload an .xlsx file" });
+    const XLSX = (await import("../lib/xlsx.js")).default;
+    const wb = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
+    const sourceSheet = String(req.body.sourceSheet || req.file.originalname || "Leads sheet");
+    const sheetName = String(req.body.sheet || wb.SheetNames[0] || "");
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return res.status(400).json({ error: `Sheet "${sheetName}" not found in workbook` });
+    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+
+    const pick = (row: Record<string, unknown>, keys: string[]): string => {
+      const lowered = new Map(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      for (const k of keys) {
+        const v = lowered.get(k.toLowerCase());
+        if (v != null && String(v).trim() !== "") return String(v).trim();
+      }
+      return "";
+    };
+    const parseSrNo = (v: string) => {
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? n : null;
+    };
+    const parseDate = (v: string) => {
+      if (!v) return null;
+      const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(v);
+      if (dmy) {
+        const y = dmy[3].length === 2 ? 2000 + Number(dmy[3]) : Number(dmy[3]);
+        const d = new Date(Date.UTC(y, Number(dmy[2]) - 1, Number(dmy[1])));
+        return Number.isFinite(d.getTime()) ? d : null;
+      }
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d : null;
+    };
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const raw of rows) {
+      const title = pick(raw, ["Project Name", "Title", "Opportunity"]);
+      if (!title) {
+        skipped++;
+        continue;
+      }
+      const srNo = parseSrNo(pick(raw, ["Sr No", "S.No", "Sr.No", "Sno", "#"]));
+      const data = {
+        title,
+        srNo,
+        sourceSheet,
+        latestStatus: pick(raw, ["Latest Status", "Status"]) || null,
+        latestSubStatus: pick(raw, ["Latest Sub Status", "Sub Status", "Sub-Status"]) || null,
+        latestStatusUpdate: parseDate(pick(raw, ["Latest Status Update", "Last Update", "Updated On"])),
+        landmark: pick(raw, ["Landmark"]) || null,
+        district: pick(raw, ["District"]) || null,
+        state: pick(raw, ["State"]) || null,
+        pinCode: pick(raw, ["Pin Code", "PIN", "Pincode"]) || null,
+        segment: pick(raw, ["Segment"]) || null,
+        subSegment: pick(raw, ["Sub-Segment", "Sub Segment", "SubSegment"]) || null,
+        sector: pick(raw, ["Sector"]) || null,
+        projectType: pick(raw, ["Project Type", "Type"]) || null,
+        description: pick(raw, ["Description", "Notes", "Remarks"]) || null,
+        stage: "New" as const,
+        ownerId: req.user!.id,
+      };
+      try {
+        if (srNo != null) {
+          const existing = await prisma.lead.findFirst({ where: { srNo, sourceSheet } });
+          if (existing) {
+            await prisma.lead.update({ where: { id: existing.id }, data });
+            updated++;
+          } else {
+            await prisma.lead.create({ data });
+            created++;
+          }
+        } else {
+          await prisma.lead.create({ data });
+          created++;
+        }
+      } catch (err) {
+        errors.push(`Row "${title}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    await audit("crm.leads.import", {
+      userId: req.user!.id,
+      entity: "Lead",
+      meta: { sourceSheet, sheet: sheetName, created, updated, skipped, errorCount: errors.length },
+    });
+
+    res.json({ ok: true, sourceSheet, sheet: sheetName, created, updated, skipped, errors });
+  }
+);
 
 crmRouter.get("/deals", async (_req, res) => {
   const deals = await prisma.deal.findMany({ include: { project: true }, orderBy: { createdAt: "desc" } });
@@ -239,18 +359,36 @@ crmRouter.post("/deals", requireRoles("admin", "office"), async (req, res) => {
 });
 
 crmRouter.patch("/leads/:id", requireRoles("admin", "office"), async (req, res) => {
-  const lead = await prisma.lead.update({
-    where: { id: req.params.id },
-    data: {
-      title: req.body.title,
-      contactName: req.body.contactName,
-      email: req.body.email,
-      phone: req.body.phone,
-      stage: req.body.stage,
-      value: req.body.value != null ? Number(req.body.value) : undefined,
-    },
-  });
+  const data: Record<string, unknown> = {};
+  const setIfPresent = (key: string, transform: (v: unknown) => unknown = (v) => v) => {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) data[key] = transform(req.body[key]);
+  };
+  setIfPresent("title");
+  setIfPresent("contactName");
+  setIfPresent("email");
+  setIfPresent("phone");
+  setIfPresent("stage");
+  setIfPresent("value", (v) => (v == null || v === "" ? null : Number(v)));
+  setIfPresent("latestStatus");
+  setIfPresent("latestSubStatus");
+  setIfPresent("latestStatusUpdate", (v) => (v ? new Date(String(v)) : null));
+  setIfPresent("landmark");
+  setIfPresent("district");
+  setIfPresent("state");
+  setIfPresent("pinCode");
+  setIfPresent("segment");
+  setIfPresent("subSegment");
+  setIfPresent("sector");
+  setIfPresent("projectType");
+  setIfPresent("description");
+  const lead = await prisma.lead.update({ where: { id: req.params.id }, data });
   res.json(lead);
+});
+
+crmRouter.delete("/leads/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.lead.delete({ where: { id: req.params.id } });
+  await audit("crm.leads.delete", { userId: req.user!.id, entity: "Lead", entityId: req.params.id });
+  res.json({ ok: true });
 });
 
 /** Convert a lead into a project + optional members/vendors + Closed Won deal */
@@ -1078,6 +1216,175 @@ hrmRouter.post("/documents", requireRoles("admin", "office"), async (req, res) =
     },
   });
   res.status(201).json(row);
+});
+
+/* ─────────────────── HRMS Documents (Appointment / Relieving / Exit / Asset / Offer) ───────────────────
+ * Two ways to add:
+ *   1. Fill the form -> we build a .docx from the template stored in apps/api/formats/hrms/<kind>.docx
+ *      (branded with the Sharnam letterhead) and store both the .docx and a print-ready HTML/PDF path.
+ *   2. Upload the signed / scanned copy back -> attaches the file to the same record.
+ * All artefacts land under 06_HR_AND_ADMIN/06.01_Letters on the mock OneDrive / SharePoint tree.
+ */
+const HRMS_DOC_KINDS = [
+  "Appointment",
+  "Relieving",
+  "Exit",
+  "AssetReturn",
+  "Offer",
+  "Confirmation",
+  "Warning",
+  "Experience",
+] as const;
+type HrmsDocKind = (typeof HRMS_DOC_KINDS)[number];
+
+const HRMS_DOC_FOLDER = "06_HR_AND_ADMIN/06.01_Letters";
+
+function hrmsDocRefNo(kind: HrmsDocKind) {
+  const yy = new Date().getFullYear();
+  const yn = String(yy).slice(-2);
+  const nx = String(yy + 1).slice(-2);
+  const seq = String(Date.now()).slice(-4);
+  const codeMap: Record<HrmsDocKind, string> = {
+    Appointment: "OL",
+    Offer: "OF",
+    Relieving: "RL",
+    Exit: "EX",
+    AssetReturn: "AR",
+    Confirmation: "CF",
+    Warning: "WR",
+    Experience: "EC",
+  };
+  return `SPDC/HR/${codeMap[kind]}/${yn}-${nx}/${seq}`;
+}
+
+hrmRouter.get("/hrms-documents", async (req, res) => {
+  const rows = await prisma.hrmsDocument.findMany({
+    where: {
+      ...(req.query.kind ? { kind: String(req.query.kind) } : {}),
+      ...(req.query.employeeUserId ? { employeeUserId: String(req.query.employeeUserId) } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: Number(req.query.limit) || 200,
+  });
+  const uploaderIds = Array.from(new Set(rows.map((r) => r.createdById).filter(Boolean))) as string[];
+  const users = uploaderIds.length
+    ? await prisma.user.findMany({ where: { id: { in: uploaderIds } }, select: { id: true, fullName: true, email: true } })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  res.json(rows.map((r) => ({ ...r, createdBy: r.createdById ? userMap.get(r.createdById) || null : null })));
+});
+
+/**
+ * Create an HRMS letter — either fill the form and generate, or paste ready file URL later.
+ * Body:
+ *   kind (required), employeeName (required), employeeUserId?, designation?, department?,
+ *   effectiveDate?, data (json blob for the template placeholders)
+ */
+hrmRouter.post("/hrms-documents", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const kindRaw = String(req.body.kind || "");
+  if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
+    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+  }
+  const kind = kindRaw as HrmsDocKind;
+  const employeeName = String(req.body.employeeName || "").trim();
+  if (!employeeName) return res.status(400).json({ error: "employeeName required" });
+
+  const refNo = String(req.body.refNo || hrmsDocRefNo(kind));
+  const dataJson = req.body.data && typeof req.body.data === "object" ? JSON.stringify(req.body.data) : String(req.body.data || "{}");
+
+  const row = await prisma.hrmsDocument.create({
+    data: {
+      kind,
+      refNo,
+      employeeUserId: req.body.employeeUserId || null,
+      employeeName,
+      candidateEmail: req.body.candidateEmail || null,
+      designation: req.body.designation || null,
+      department: req.body.department || null,
+      effectiveDate: req.body.effectiveDate ? new Date(req.body.effectiveDate) : null,
+      dataJson,
+      status: "Draft",
+      createdById: req.user!.id,
+    },
+  });
+  await audit("hrm.docs.create", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind, refNo } });
+  res.status(201).json(row);
+});
+
+/**
+ * Generate the branded .docx and .pdf-ready HTML from the stored form data.
+ * Templates live in apps/api/formats/hrms/<kind>.docx (or fallback .html/.txt).
+ * Also stamps the Sharnam logo via brandedExport if the fallback path is used.
+ */
+hrmRouter.post("/hrms-documents/:id/generate", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+
+  const { generateHrmsLetter } = await import("../services/hrmsLetter.js");
+  const gen = await generateHrmsLetter(row);
+
+  const updated = await prisma.hrmsDocument.update({
+    where: { id: row.id },
+    data: {
+      generatedDocxUrl: gen.docxUrl || row.generatedDocxUrl,
+      generatedPdfUrl: gen.pdfUrl || row.generatedPdfUrl,
+      storagePath: gen.storagePath || row.storagePath,
+      sharePointUrl: gen.sharePointUrl || row.sharePointUrl,
+      status: "Generated",
+    },
+  });
+  await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
+  res.json(updated);
+});
+
+/** Upload the signed / scanned copy back and attach to the same record. */
+hrmRouter.post(
+  "/hrms-documents/:id/upload",
+  requireRoles("admin", "office"),
+  hrmUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: "not found" });
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const ext = /\.([a-zA-Z0-9]{2,5})$/.exec(req.file.originalname || "")?.[0] || ".bin";
+    const saved = await mockOneDrive.upload(
+      "_HR",
+      HRMS_DOC_FOLDER,
+      `${row.kind}-${safeRef}-signed-${Date.now()}${ext}`,
+      req.file.buffer
+    );
+    const updated = await prisma.hrmsDocument.update({
+      where: { id: row.id },
+      data: {
+        uploadedFileUrl: saved.url || `/uploads/office/${saved.path}`,
+        sharePointUrl: saved.url || row.sharePointUrl,
+        storagePath: saved.path,
+        status: "Signed",
+      },
+    });
+    await audit("hrm.docs.upload", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
+    res.json(updated);
+  }
+);
+
+hrmRouter.patch("/hrms-documents/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const before = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  const data: Record<string, unknown> = {};
+  for (const k of ["employeeName", "candidateEmail", "designation", "department", "status"] as const) {
+    if (req.body[k] != null) data[k] = req.body[k];
+  }
+  if (req.body.effectiveDate !== undefined) data.effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : null;
+  if (req.body.data && typeof req.body.data === "object") data.dataJson = JSON.stringify(req.body.data);
+  const row = await prisma.hrmsDocument.update({ where: { id: req.params.id }, data });
+  res.json(row);
+});
+
+hrmRouter.delete("/hrms-documents/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.hrmsDocument.delete({ where: { id: req.params.id } });
+  await audit("hrm.docs.delete", { userId: req.user!.id, entity: "HrmsDocument", entityId: req.params.id });
+  res.json({ ok: true });
 });
 
 hrmRouter.get("/leave", async (_req, res) => {

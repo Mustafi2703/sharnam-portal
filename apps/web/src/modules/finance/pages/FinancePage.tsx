@@ -10,6 +10,7 @@ import {
 } from "@sharnam/finance/disciplines";
 import { FinanceBillRegister } from "../components/FinanceBillRegister";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
+import { RaBillStageButtons } from "../components/RaBillStageButtons";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -658,11 +659,11 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
         <div className="overflow-x-auto">
           <table className="min-w-[1200px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>PO</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th></tr>
+              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>PO</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th><th className="min-w-[220px]">Stage uploads · SharePoint</th></tr>
             </thead>
             <tbody>
               {filteredRas.map((r: any) => (
-                <tr key={r.id} className="border-t border-line">
+                <tr key={r.id} className="border-t border-line align-top">
                   <td className="py-1.5 px-2">{r.raNumber}</td>
                   <td>{r.invoiceNumber || "—"}</td>
                   <td>{d(r.invoiceDate)}</td>
@@ -678,10 +679,19 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
                   <td className="text-right">{money(r.netAmountPayable)}</td>
                   <td className="text-right">{money(r.cumulativeBillTotal)}</td>
                   <td>{r.copNo || "—"}</td>
-                  <td><Badge tone={r.status === "Paid" ? "ok" : r.status === "Rejected" ? "danger" : "brand"}>{r.status}</Badge></td>
+                  <td><Badge tone={r.status === "Certified" || r.status === "Paid" ? "ok" : r.status === "Rejected" ? "danger" : "brand"}>{r.status}</Badge></td>
+                  <td className="py-1 pr-2">
+                    <RaBillStageButtons
+                      raBillId={r.id}
+                      raNumber={r.raNumber}
+                      token={token}
+                      canWrite={canWrite}
+                      onChange={() => void reload()}
+                    />
+                  </td>
                 </tr>
               ))}
-              {!filteredRas.length && <tr><td colSpan={16} className="py-4 text-center text-steel-muted">No RA bills for {activePkg?.label || "this project"} — add RA-01 or sync Payment Summary.</td></tr>}
+              {!filteredRas.length && <tr><td colSpan={17} className="py-4 text-center text-steel-muted">No RA bills for {activePkg?.label || "this project"} — add RA-01 or sync Payment Summary.</td></tr>}
             </tbody>
           </table>
         </div>

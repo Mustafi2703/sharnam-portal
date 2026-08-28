@@ -6,6 +6,7 @@ export const HRMS_TOOLS = [
   { to: "attendance", label: "Attendance", subtitle: "Geo check-in/out with today's roster and site assignment." },
   { to: "leave", label: "Leave", subtitle: "Request leave, view balances, and approve or reject as HR." },
   { to: "payroll", label: "Payroll", subtitle: "Pay hikes with approval workflow and monthly payslip generation." },
+  { to: "documents", label: "Letters", subtitle: "Appointment, Relieving, Exit, Asset return, Warning — branded HTML + editable .xlsx." },
   { to: "masters", label: "Masters", subtitle: "Leave types, holiday calendar, and HR reference data." },
 ] as const;
 

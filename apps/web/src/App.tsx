@@ -57,6 +57,7 @@ import WprMakerPage from "./pages/WprMakerPage";
 import HrmsAttendancePage from "./pages/HrmsAttendancePage";
 import HrmsLeavePage from "./pages/HrmsLeavePage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
+import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import UploadLabPage from "./pages/UploadLabPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 
@@ -205,6 +206,7 @@ export default function App() {
                   <Route path="payroll" element={<PayrollPage />} />
                   <Route path="attendance" element={<HrmsAttendancePage />} />
                   <Route path="leave" element={<HrmsLeavePage />} />
+                  <Route path="documents" element={<HrmsDocumentsPage />} />
                   <Route path="masters" element={<HrmsMastersPage />} />
                 </Route>
                 {/* Legacy HRMS URLs → unified /hrm/* */}
