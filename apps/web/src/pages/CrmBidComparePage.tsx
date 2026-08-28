@@ -289,6 +289,46 @@ export default function CrmBidComparePage() {
     }
   }
 
+  async function awardVendor(vendorLabel: string) {
+    if (!selectedId) return;
+    if (!window.confirm(`Award "${vendorLabel}" as the successful bidder for "${detail?.title}"? The comparative is locked and the package status moves to "Awarded".`)) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/crm/bid-packages/${selectedId}/award`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ vendorLabel }),
+      });
+      setMsg(`Awarded to ${vendorLabel}. Package locked.`);
+      await loadDetail(selectedId);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Award failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function copyVendorLink(vendorLabel: string) {
+    const link = `${window.location.origin}/crm/vendor-bids?vendor=${encodeURIComponent(vendorLabel)}&pkg=${encodeURIComponent(selectedId || "")}`;
+    void navigator.clipboard?.writeText(link).then(
+      () => setMsg(`Vendor upload link copied — send to ${vendorLabel}.`),
+      () => setMsg(`Copy failed. Share manually: ${link}`)
+    );
+  }
+
+  const uploadedPct = detail?.uploadProgress
+    ? Math.round((100 * (detail.uploadProgress.done || 0)) / Math.max(1, detail.uploadProgress.total || 0))
+    : 0;
+
+  const vendorTotals = useMemo(() => {
+    if (!detail?.summary?.grandTotals) return [] as { label: string; total: number; isLowest: boolean }[];
+    return Object.entries(detail.summary.grandTotals)
+      .map(([label, total]) => ({ label, total: Number(total || 0), isLowest: label === detail.summary!.lowestVendor }))
+      .sort((a, b) => a.total - b.total);
+  }, [detail]);
+
   if (!canManage) {
     return (
       <div className="space-y-4">
@@ -495,27 +535,60 @@ export default function CrmBidComparePage() {
           </Card>
 
           <Card padding={false}>
-            <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">Bid packages</div>
+            <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm flex items-center justify-between">
+              <span>Bid packages ({packages.length})</span>
+              {packages.length > 0 && (
+                <span className="text-[10px] text-steel-muted font-normal">
+                  {packages.reduce((s, p) => s + (p.uploadProgress?.done || 0), 0)}/
+                  {packages.reduce((s, p) => s + (p.uploadProgress?.total || 0), 0)} BOQs in
+                </span>
+              )}
+            </div>
             <ul className="divide-y">
-              {packages.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    className={`w-full text-left px-4 py-3 hover:bg-brand-soft/40 ${selectedId === p.id ? "bg-brand-soft/60" : ""}`}
-                    onClick={() => setSelectedId(p.id)}
-                  >
-                    <div className="font-medium text-sm">{p.title}</div>
-                    <div className="text-xs text-steel-muted mt-0.5">
-                      {p.project?.code ? `${p.project.code} · ` : ""}
-                      {p.revisionLabel} · {p.status}
-                    </div>
-                    <div className="text-[10px] text-steel-muted mt-1">
-                      BOQs {p.uploadProgress?.done ?? 0} / {p.uploadProgress?.total ?? 0}
-                    </div>
-                  </button>
+              {packages.map((p) => {
+                const pct = p.uploadProgress
+                  ? Math.round((100 * (p.uploadProgress.done || 0)) / Math.max(1, p.uploadProgress.total || 0))
+                  : 0;
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className={`w-full text-left px-4 py-3 hover:bg-brand-soft/40 ${selectedId === p.id ? "bg-brand-soft/60" : ""}`}
+                      onClick={() => setSelectedId(p.id)}
+                    >
+                      <div className="font-medium text-sm flex items-center gap-2">
+                        <span className="truncate">{p.title}</span>
+                        {p.status === "Awarded" && <Badge tone="ok">Awarded</Badge>}
+                      </div>
+                      <div className="text-xs text-steel-muted mt-0.5">
+                        {p.project?.code ? `${p.project.code} · ` : ""}
+                        {p.revisionLabel} · {p.status}
+                      </div>
+                      <div className="mt-1.5 h-1.5 rounded-full bg-line overflow-hidden">
+                        <div
+                          className={`h-full ${pct === 100 ? "bg-ok" : "bg-brand"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-steel-muted mt-0.5">
+                        BOQs {p.uploadProgress?.done ?? 0} / {p.uploadProgress?.total ?? 0}
+                        {pct === 100 ? " · ready to compare" : pct > 0 ? " · in progress" : " · awaiting uploads"}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+              {!packages.length && (
+                <li className="px-4 py-8 text-sm text-steel-muted text-center space-y-3">
+                  <div className="text-4xl">📊</div>
+                  <p className="font-semibold text-ink">No bid packages yet.</p>
+                  <p className="text-xs">
+                    Fill the form on the left to create your first, or click
+                    <strong> "Load 3-vendor demo" </strong>
+                    in the header for a realistic Alpha / Bharat / Concord × Civil / Electrical / Admin example.
+                  </p>
                 </li>
-              ))}
-              {!packages.length && <li className="px-4 py-6 text-sm text-steel-muted">No bid packages yet.</li>}
+              )}
             </ul>
           </Card>
         </div>
@@ -559,6 +632,32 @@ export default function CrmBidComparePage() {
                   </div>
                 </div>
 
+                {/* Package progress meter — visible at a glance so PMC knows
+                    what's still missing before the comparison can be locked. */}
+                {detail.uploadProgress && (
+                  <div className="mb-4 p-3 border border-line rounded-xl bg-paper">
+                    <div className="flex items-center justify-between mb-1.5 text-xs">
+                      <span className="font-semibold uppercase text-steel-muted">
+                        Vendor BOQ upload progress
+                      </span>
+                      <span className={`font-mono font-semibold ${uploadedPct === 100 ? "text-ok" : "text-brand"}`}>
+                        {detail.uploadProgress.done}/{detail.uploadProgress.total} · {uploadedPct}%
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-line overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${uploadedPct === 100 ? "bg-ok" : "bg-brand"}`}
+                        style={{ width: `${uploadedPct}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-steel-muted mt-1.5">
+                      {uploadedPct === 100
+                        ? "All slots filled — comparative statement is ready to lock and award."
+                        : `Send the per-vendor upload link from the matrix below to speed up the remaining ${detail.uploadProgress.total - detail.uploadProgress.done} slot(s).`}
+                    </p>
+                  </div>
+                )}
+
                 {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
                   <div className="mb-4">
                     <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Comparative statement (R2 summary tab)</h4>
@@ -567,6 +666,32 @@ export default function CrmBidComparePage() {
                       summarySheetId={detail.summarySheetId}
                       masterSheetId={detail.comparativeSheetId}
                     />
+
+                    {/* Award panel — lowest bidder is auto-flagged; PMC one-click
+                        awards to any vendor with a confirmation prompt. */}
+                    {vendorTotals.length > 1 && detail.status !== "Awarded" && (
+                      <div className="mt-3 p-3 border border-brand/30 rounded-xl bg-brand-soft/40">
+                        <p className="text-xs font-mono uppercase text-steel-muted mb-2">Award recommendation</p>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {vendorTotals.map((v) => (
+                            <div key={v.label} className="flex items-center gap-1.5">
+                              <span className={`text-xs px-2 py-1 rounded-full border ${v.isLowest ? "bg-ok text-white border-ok" : "border-line text-steel-muted"}`}>
+                                {v.label} · {formatINR(v.total)} {v.isLowest && "· L1"}
+                              </span>
+                              <Button
+                                type="button"
+                                variant={v.isLowest ? "primary" : "secondary"}
+                                className="!text-xs !py-1"
+                                disabled={busy}
+                                onClick={() => void awardVendor(v.label)}
+                              >
+                                Award
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -605,11 +730,102 @@ export default function CrmBidComparePage() {
                   </Button>
                 </div>
 
-                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor × discipline BOQ uploads</h4>
+                {/* Matrix view — the whole vendor × discipline grid at a glance
+                    so PMC sees where uploads are missing without scrolling. */}
+                {vendorMatrix.length > 0 && (
+                  <div className="mb-4 border border-line rounded-xl overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-sand/50 text-left">
+                        <tr>
+                          <th className="px-3 py-2 font-semibold sticky left-0 bg-sand/50 z-10">Vendor</th>
+                          {(detail.disciplines || disciplines).map((d) => (
+                            <th key={d.key} className="px-2 py-2 font-semibold text-center min-w-[90px]">
+                              <div>{d.label}</div>
+                              <div className="text-[9px] font-mono text-steel-muted font-normal">{d.sheetName}</div>
+                            </th>
+                          ))}
+                          <th className="px-2 py-2 font-semibold text-center">Total</th>
+                          <th className="px-2 py-2 font-semibold text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vendorMatrix.map(({ vendorLabel, slots }) => {
+                          const filled = slots.filter((s) => s.slot?.fileName).length;
+                          const total = detail.summary?.grandTotals?.[vendorLabel] || 0;
+                          const isLowest = detail.summary?.lowestVendor === vendorLabel;
+                          return (
+                            <tr key={vendorLabel} className="border-t border-line hover:bg-brand-soft/20">
+                              <td className="px-3 py-1.5 font-semibold sticky left-0 bg-white">
+                                {vendorLabel}
+                                {isLowest && <span className="ml-1.5"><Badge tone="ok">L1</Badge></span>}
+                                <div className="text-[10px] text-steel-muted font-normal">{filled}/{slots.length} BOQs</div>
+                              </td>
+                              {slots.map(({ discipline, slot }) => (
+                                <td key={discipline.key} className="px-2 py-1.5 text-center">
+                                  {slot?.fileName ? (
+                                    slot.sheetId ? (
+                                      <Link to={`/custom-sheets/${slot.sheetId}`} title={slot.fileName} className="inline-block h-5 w-5 rounded-full bg-ok text-white text-[10px] leading-5">
+                                        ✓
+                                      </Link>
+                                    ) : (
+                                      <span title={slot.fileName} className="inline-block h-5 w-5 rounded-full bg-ok text-white text-[10px] leading-5">
+                                        ✓
+                                      </span>
+                                    )
+                                  ) : slot ? (
+                                    <button
+                                      type="button"
+                                      title="Upload"
+                                      onClick={() => {
+                                        setUploadSlot(slot);
+                                        setUploadFile(null);
+                                      }}
+                                      className="inline-block h-5 w-5 rounded-full border border-warn text-warn text-[10px] leading-5 hover:bg-warn hover:text-white"
+                                    >
+                                      ↑
+                                    </button>
+                                  ) : (
+                                    <span className="text-steel-muted">—</span>
+                                  )}
+                                </td>
+                              ))}
+                              <td className="px-2 py-1.5 text-right font-mono">
+                                {total > 0 ? formatINR(total) : "—"}
+                              </td>
+                              <td className="px-2 py-1.5 text-center">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="!text-[10px] !py-0.5 !px-1.5"
+                                  onClick={() => copyVendorLink(vendorLabel)}
+                                  title="Copy per-vendor upload link"
+                                >
+                                  📋 Link
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor × discipline BOQ uploads (detail)</h4>
                 <div className="space-y-4">
                   {vendorMatrix.map(({ vendorLabel, slots }) => (
                     <div key={vendorLabel} className="border border-line rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-sand/50 font-semibold text-sm">{vendorLabel}</div>
+                      <div className="px-3 py-2 bg-sand/50 font-semibold text-sm flex items-center justify-between">
+                        <span>{vendorLabel}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="!text-[10px] !py-0.5"
+                          onClick={() => copyVendorLink(vendorLabel)}
+                        >
+                          📋 Copy upload link
+                        </Button>
+                      </div>
                       <ul className="divide-y">
                         {slots.map(({ discipline, slot }) => (
                           <li key={discipline.key} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">

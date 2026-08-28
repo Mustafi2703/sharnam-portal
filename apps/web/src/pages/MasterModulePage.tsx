@@ -7,6 +7,7 @@ import { ModuleIcon } from "../components/icons";
 import { MasterCostTemplatesPanel } from "../components/MasterCostTemplatesPanel";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import { SiteFinalIndexPanel } from "../components/SiteFinalIndexPanel";
+import SharePointStatusPanel from "../components/SharePointStatusPanel";
 import {
   WORKSPACE_PROJECT_KEY,
   setActiveWorkspace,
@@ -483,6 +484,7 @@ export default function MasterModulePage() {
 
       {masterTab === "global" && (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <SharePointStatusPanel token={token || undefined} />
           <MasterCostTemplatesPanel token={token} />
           <BbsShapeMasterPanel token={token} />
           <SiteFinalIndexPanel token={token} />

@@ -224,8 +224,10 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
   const [email, setEmail] = useState(cfg.demoEmail);
   const [password, setPassword] = useState("Demo@1234");
+  const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [capsLock, setCapsLock] = useState(false);
 
   useEffect(() => {
     setEmail(cfg.demoEmail);
@@ -286,24 +288,63 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
           />
         </label>
         <label className="auth-signin__field">
-          <span>Password</span>
+          <span className="flex items-center justify-between">
+            <span>Password</span>
+            <button
+              type="button"
+              onClick={() => setShowPwd((v) => !v)}
+              className="text-[10px] uppercase tracking-wide opacity-70 hover:opacity-100"
+              tabIndex={-1}
+              aria-label={showPwd ? "Hide password" : "Show password"}
+            >
+              {showPwd ? "Hide" : "Show"}
+            </button>
+          </span>
           <input
-            type="password"
+            type={showPwd ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyUp={(e) => setCapsLock(e.getModifierState && e.getModifierState("CapsLock"))}
             autoComplete="current-password"
             required
-            placeholder="••••••••"
+            placeholder={showPwd ? "your password" : "••••••••"}
           />
+          {capsLock && (
+            <span className="text-[10px] mt-1 opacity-70" style={{ color: "#F59E0B" }}>
+              Caps Lock is on
+            </span>
+          )}
         </label>
         {error && <p className="auth-signin__error" role="alert">{error}</p>}
         <button type="submit" className="auth-signin__submit" disabled={busy}>
           {busy ? "Signing in…" : cfg.cta}
         </button>
+
+        <button
+          type="button"
+          className="auth-signin__submit"
+          disabled
+          style={{
+            marginTop: 8,
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.18)",
+            color: "rgba(226,232,240,0.55)",
+            cursor: "not-allowed",
+          }}
+          title="Microsoft 365 SSO — coming after UAT"
+        >
+          Sign in with Microsoft 365 · coming soon
+        </button>
       </form>
 
       <p className="auth-signin__demo">
         Demo: <strong>{cfg.demoEmail}</strong> · password <strong>Demo@1234</strong>
+      </p>
+      <p className="auth-signin__demo" style={{ marginTop: 4, opacity: 0.72 }}>
+        Trouble signing in? Contact the Office admin at{" "}
+        <a href="mailto:office@sharnam.demo" style={{ color: "#99F6E4" }}>
+          office@sharnam.demo
+        </a>
       </p>
     </div>
   );

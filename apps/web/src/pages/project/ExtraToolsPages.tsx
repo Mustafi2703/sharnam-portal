@@ -245,9 +245,27 @@ export function CoordinationPage() {
           >
             <Input className="sm:col-span-2" required placeholder="Issue title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
-              {["Architecture", "Structural", "MEP", "Civil"].map((d) => (
-                <option key={d}>{d}</option>
-              ))}
+              <optgroup label="Civil / Architecture">
+                <option>Architectural</option>
+                <option>Structural</option>
+                <option>Civil</option>
+                <option>Landscape</option>
+              </optgroup>
+              <optgroup label="MEP / Services">
+                <option>MEP</option>
+                <option>Electrical</option>
+                <option>Plumbing</option>
+                <option>HVAC</option>
+                <option>Fire</option>
+                <option>ELV / IBMS</option>
+              </optgroup>
+              <optgroup label="Special">
+                <option>PEB</option>
+                <option>Interior / Finishes</option>
+                <option>Facade</option>
+                <option>Vertical Transportation</option>
+                <option>Other</option>
+              </optgroup>
             </Select>
             <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
               {["Low", "Medium", "High"].map((p) => (
