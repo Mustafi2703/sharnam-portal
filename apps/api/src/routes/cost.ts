@@ -179,6 +179,9 @@ costRouter.post("/shape-masters", requireRoles("admin", "office", "employee"), a
       description: body.description ? String(body.description) : null,
       bendInfo: body.bendInfo ? String(body.bendInfo) : null,
       packageHint: body.packageHint ? String(body.packageHint) : null,
+      parameters: body.parameters ? String(body.parameters).toUpperCase().replace(/\s+/g, "") : null,
+      cutFormula: body.cutFormula ? String(body.cutFormula) : null,
+      standardRef: body.standardRef ? String(body.standardRef) : null,
     },
   });
   res.status(201).json(row);
@@ -194,6 +197,9 @@ costRouter.patch("/shape-masters/:id", requireRoles("admin", "office", "employee
       ...(body.description !== undefined ? { description: body.description ? String(body.description) : null } : {}),
       ...(body.bendInfo !== undefined ? { bendInfo: body.bendInfo ? String(body.bendInfo) : null } : {}),
       ...(body.packageHint !== undefined ? { packageHint: body.packageHint ? String(body.packageHint) : null } : {}),
+      ...(body.parameters !== undefined ? { parameters: body.parameters ? String(body.parameters).toUpperCase().replace(/\s+/g, "") : null } : {}),
+      ...(body.cutFormula !== undefined ? { cutFormula: body.cutFormula ? String(body.cutFormula) : null } : {}),
+      ...(body.standardRef !== undefined ? { standardRef: body.standardRef ? String(body.standardRef) : null } : {}),
     },
   });
   res.json(row);
@@ -225,6 +231,55 @@ costRouter.post(
     res.json(row);
   }
 );
+
+/**
+ * Seed the 15 IS-2502 standard shapes so the client sees a fully populated
+ * master immediately.  Idempotent — re-running refreshes name / parameters /
+ * formula without touching uploaded diagrams.
+ */
+costRouter.post(
+  "/shape-masters/seed-defaults",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { seedStandardBbsShapes } = await import("../services/bbsShapeSeed.js");
+      const out = await seedStandardBbsShapes();
+      await audit("cost.bbs.seed_defaults", {
+        userId: req.user!.id,
+        entity: "BbsShapeMaster",
+        meta: out,
+      });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
+
+/** Sharnam-branded printable BBS shape information sheet — Ctrl+P → PDF. */
+costRouter.get("/shape-masters/download.html", async (_req, res) => {
+  try {
+    const { buildShapeInfoHtml } = await import("../services/bbsShapeSeed.js");
+    const html = await buildShapeInfoHtml();
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Mail-friendly XLSX of the shape master (Code · Name · Ref · Parameters · Formula · Bend · Package · Notes). */
+costRouter.get("/shape-masters/download.xlsx", async (_req, res) => {
+  try {
+    const { buildShapeInfoXlsx } = await import("../services/bbsShapeSeed.js");
+    const { buffer, filename } = await buildShapeInfoXlsx();
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
 function csvEscape(v: unknown) {
   const t = String(v ?? "");

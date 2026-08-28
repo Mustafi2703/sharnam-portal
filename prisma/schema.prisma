@@ -718,6 +718,15 @@ model BbsShapeMaster {
   packageHint String?
   diagramPath String?
   diagramUrl  String?
+  /// Comma-separated parameter labels used by the shape (e.g. "A,B,C,D").
+  /// BBS rows can then capture numeric values for each label.
+  parameters  String?
+  /// Cutting length formula in the parameter labels (e.g. "A+B+C+D" or
+  /// "A+B+2R-2D" where R = bend radius, D = bar diameter). Kept as a
+  /// display string; the BBS row keeps the actual calculated length.
+  cutFormula  String?
+  /// Master reference (IS-2502 clause, BS-8666 shape code, etc.).
+  standardRef String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
