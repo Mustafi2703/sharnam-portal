@@ -1193,6 +1193,90 @@ costRouter.post("/:projectId/bills", requireRoles("admin", "office", "employee")
   res.status(201).json(bill);
 });
 
+/**
+ * Upload one or more contractor invoices — each file becomes a VendorBill
+ * with the file dropped in 09_COMMERCIAL_AND_CHANGE/09.02_Contractor_Invoices
+ * on SharePoint (or mockOneDrive locally).  PMC picks the resulting invoices
+ * up from `/:projectId/bills/unbilled` when raising the RA bill so nothing
+ * gets re-typed.
+ */
+costRouter.post(
+  "/:projectId/bills/upload",
+  requireRoles("admin", "office", "employee"),
+  upload.array("files", 25),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "project not found" });
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    if (!files.length) return res.status(400).json({ error: "No files uploaded (field: files)" });
+
+    const vendorId = typeof req.body?.vendorId === "string" && req.body.vendorId ? req.body.vendorId : null;
+    let vendorName = typeof req.body?.vendorName === "string" ? req.body.vendorName.trim() : "";
+    if (vendorId && !vendorName) {
+      const v = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { name: true } });
+      vendorName = v?.name || "Vendor";
+    }
+    if (!vendorName) vendorName = "Vendor";
+
+    const created = [] as { id: string; billNo: string; fileName: string; attachmentUrl: string | null }[];
+    for (const f of files) {
+      const rawName = (f.originalname || "invoice").replace(/[^\w.\-]+/g, "-");
+      const billNo = `INV-${Date.now()}-${created.length + 1}`;
+      const saved = await mockOneDrive.upload(
+        project.code,
+        "09_COMMERCIAL_AND_CHANGE/09.02_Contractor_Invoices",
+        `${vendorName.replace(/[^\w-]+/g, "_").slice(0, 40)}-${billNo}-${rawName}`,
+        f.buffer
+      );
+      const attachmentUrl = saved.url || `/uploads/onedrive/${project.code}/${saved.path}`;
+
+      const bill = await prisma.vendorBill.create({
+        data: {
+          projectId: project.id,
+          vendorId,
+          vendorName,
+          billNo,
+          billDate: new Date(),
+          amount: 0,
+          gstAmount: 0,
+          status: "Submitted",
+          description: `Uploaded contractor invoice · ${rawName}`,
+          attachmentUrl,
+          createdById: req.user!.id,
+        },
+      });
+      created.push({ id: bill.id, billNo: bill.billNo, fileName: rawName, attachmentUrl });
+    }
+
+    await audit("cost.bill.upload", {
+      userId: req.user!.id,
+      entity: "VendorBill",
+      meta: { projectId: project.id, count: created.length, vendorName },
+    });
+    res.status(201).json({ ok: true, uploaded: created });
+  }
+);
+
+/**
+ * Return vendor bills that have no copNo yet — i.e. contractor invoices
+ * that PMC hasn't rolled into an RA bill.  Used by the RA bill create screen
+ * to attach existing invoices instead of forcing PMC to retype them.
+ */
+costRouter.get("/:projectId/bills/unbilled", async (req, res) => {
+  const vendorId = typeof req.query.vendorId === "string" ? req.query.vendorId : undefined;
+  const bills = await prisma.vendorBill.findMany({
+    where: {
+      projectId: req.params.projectId,
+      copNo: null,
+      ...(vendorId ? { vendorId } : {}),
+      status: { notIn: ["Rejected", "Paid"] },
+    },
+    include: { vendor: { select: { id: true, name: true } } },
+    orderBy: { billDate: "desc" },
+  });
+  res.json({ bills });
+});
+
 costRouter.patch("/:projectId/bills/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const existing = await prisma.vendorBill.findFirst({
     where: { id: req.params.id, projectId: req.params.projectId },

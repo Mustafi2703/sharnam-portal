@@ -1633,7 +1633,57 @@ export default function CostPage() {
           </Card>
           {canEdit && (
             <Card className="shrink-0">
-              <h3 className="font-semibold mb-2">Vendor / contractor bill · COP</h3>
+              <h3 className="font-semibold text-sm mb-1">Upload contractor invoices (drive-first)</h3>
+              <p className="text-xs text-steel-muted mb-2">
+                Drop invoice PDFs / photos — each becomes a Vendor Bill record with the file saved on SharePoint (09.02
+                Contractor Invoices).  PMC picks them up while raising the RA bill so nothing gets re-typed.
+              </p>
+              <form
+                className="flex flex-wrap items-end gap-2 mb-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const filesEl = form.elements.namedItem("files") as HTMLInputElement | null;
+                  const files = filesEl?.files;
+                  if (!files || !files.length) return;
+                  const fd = new FormData();
+                  if (billForm.vendorId) fd.append("vendorId", billForm.vendorId);
+                  const party = parties.find((p) => p.id === billForm.vendorId);
+                  if (party?.name) fd.append("vendorName", party.name);
+                  for (const f of Array.from(files)) fd.append("files", f);
+                  const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/cost/${id}/bills/upload`, {
+                    method: "POST",
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    body: fd,
+                  });
+                  const out = await res.json();
+                  if (!res.ok) {
+                    alert(out?.error || "Invoice upload failed");
+                    return;
+                  }
+                  form.reset();
+                  await loadBills();
+                }}
+              >
+                <Select
+                  value={billForm.vendorId}
+                  onChange={(e) => setBillForm({ ...billForm, vendorId: e.target.value })}
+                  className="min-w-[220px]"
+                >
+                  <option value="">Select contractor / vendor (optional)</option>
+                  {parties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.partyType ? `· ${p.partyType}` : ""}
+                    </option>
+                  ))}
+                </Select>
+                <input name="files" type="file" multiple accept=".pdf,image/*,.xlsx,.xls,.docx,.doc" className="text-xs" />
+                <Button type="submit">Upload invoices</Button>
+                <span className="text-[11px] text-steel-muted">
+                  Files → 09_COMMERCIAL_AND_CHANGE / 09.02 Contractor Invoices
+                </span>
+              </form>
+              <h3 className="font-semibold mb-2">Manual vendor / contractor bill entry · COP</h3>
               <p className="text-xs text-steel-muted mb-3">Select contractor or vendor and PMC from directory.</p>
               <form
                 className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"

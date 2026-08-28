@@ -626,6 +626,52 @@ export default function CommsPage() {
                             Create follow-up
                           </Button>
                         )}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() =>
+                            window.open(`/api/comms/meetings/${selected.id}/download.html?token=${encodeURIComponent(token || "")}`, "_blank", "noopener")
+                          }
+                        >
+                          Open MoM (print → PDF)
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => {
+                            const url = `/api/comms/meetings/${selected.id}/download.xlsx?token=${encodeURIComponent(token || "")}`;
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = "";
+                            a.click();
+                          }}
+                        >
+                          Download MoM .xlsx
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={async () => {
+                            const extra = prompt("Extra recipients (comma-separated, optional). Action owners already receive the MoM.");
+                            setBusy(true);
+                            setMsg("");
+                            try {
+                              const r = await api<{ to: string[] }>(`/api/comms/meetings/${selected.id}/email`, {
+                                method: "POST",
+                                token,
+                                body: JSON.stringify({ emails: extra || "" }),
+                              });
+                              setMsg(`MoM queued to ${r.to.length} recipient(s): ${r.to.join(", ") || "action owners only"}`);
+                            } catch (err) {
+                              setMsg(err instanceof Error ? err.message : String(err));
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          Email MoM to attendees
+                        </Button>
                       </div>
                     )}
                   </div>

@@ -561,13 +561,23 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
     netAmountPayable: "",
   });
   const [file, setFile] = useState<File | null>(null);
+  const [linkedInvoiceIds, setLinkedInvoiceIds] = useState<string[]>([]);
+  const [unbilledInvoices, setUnbilledInvoices] = useState<Array<{ id: string; billNo: string; vendorName: string; billDate: string; attachmentUrl: string | null; description: string | null }>>([]);
+  useEffect(() => {
+    if (!projectId) return;
+    api<{ bills: any[] }>(`/api/cost/${projectId}/bills/unbilled`, { token })
+      .then((r) => setUnbilledInvoices(r.bills || []))
+      .catch(() => setUnbilledInvoices([]));
+  }, [projectId, token, ras]);
   async function add(e: FormEvent) {
     e.preventDefault();
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, v));
       if (file) fd.append("file", file);
+      for (const bid of linkedInvoiceIds) fd.append("linkedVendorBillIds", bid);
       await api(`/api/finance/${projectId}/ra`, { method: "POST", token, body: fd });
+      setLinkedInvoiceIds([]);
       setForm({
         purchaseOrderId: "",
         raNumber: "",
@@ -644,6 +654,55 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
               Invoice attachment
               <input type="file" accept=".pdf,image/*" className="block mt-1 text-xs" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
+            <div className="md:col-span-4 border border-line rounded-lg p-2 bg-sand/30 text-xs">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-semibold text-[12px]">
+                  Link uploaded contractor invoices ({unbilledInvoices.length} unbilled)
+                </span>
+                <span className="text-steel-muted">
+                  Linked invoices are marked <em>Under review</em> and stamped with this RA number.
+                </span>
+              </div>
+              {unbilledInvoices.length === 0 ? (
+                <p className="text-steel-muted">
+                  No unbilled invoices — upload contractor bills from{" "}
+                  <Link to={`/projects/${projectId}/hub/cost?tab=bills`} className="text-brand font-semibold">
+                    Cost → Bills
+                  </Link>{" "}
+                  first.
+                </p>
+              ) : (
+                <div className="max-h-40 overflow-y-auto grid gap-1">
+                  {unbilledInvoices.map((b) => (
+                    <label key={b.id} className="flex items-center gap-2 hover:bg-white/60 px-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={linkedInvoiceIds.includes(b.id)}
+                        onChange={(e) =>
+                          setLinkedInvoiceIds((prev) =>
+                            e.target.checked ? [...prev, b.id] : prev.filter((x) => x !== b.id)
+                          )
+                        }
+                      />
+                      <span className="font-mono text-[11px] shrink-0">{b.billNo}</span>
+                      <span className="truncate flex-1">
+                        {b.vendorName} · {b.description || "—"}
+                      </span>
+                      {b.attachmentUrl && (
+                        <a
+                          href={b.attachmentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand text-[11px] hover:underline shrink-0"
+                        >
+                          Open
+                        </a>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
             <Button type="submit">Add RA bill</Button>
           </form>
         </Card>
@@ -813,6 +872,21 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
                     <div className="flex flex-wrap gap-1">
                       <Button type="button" variant="secondary" className="!py-0.5 !px-2 !text-[10px]" onClick={() => void downloadCop(c.id, c.certificateNumber)}>
                         XLSX
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!py-0.5 !px-2 !text-[10px]"
+                        onClick={() =>
+                          window.open(
+                            `/api/finance/${projectId}/cop/${c.id}/print.html?token=${encodeURIComponent(token || "")}`,
+                            "_blank",
+                            "noopener"
+                          )
+                        }
+                        title="Sharnam letterhead print view — Ctrl+P → Save as PDF"
+                      >
+                        Print
                       </Button>
                       {canWrite && (
                         <Button type="button" variant="secondary" className="!py-0.5 !px-2 !text-[10px]" disabled={busyId === c.id} onClick={() => void saveCopToDms(c.id)}>

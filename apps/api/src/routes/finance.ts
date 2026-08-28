@@ -353,6 +353,25 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
     });
   }
 
+  // Link uploaded contractor invoices to this RA bill so they no longer show as unbilled
+  const linkedIds: string[] = Array.isArray(req.body?.linkedVendorBillIds)
+    ? (req.body.linkedVendorBillIds as unknown[]).map(String).filter(Boolean)
+    : typeof req.body?.linkedVendorBillIds === "string" && req.body.linkedVendorBillIds
+      ? String(req.body.linkedVendorBillIds).split(/[,\s]+/).filter(Boolean)
+      : [];
+  if (linkedIds.length) {
+    await prisma.vendorBill.updateMany({
+      where: { id: { in: linkedIds }, projectId: req.params.projectId },
+      data: { copNo: created.raNumber, status: "Under review" },
+    });
+    await audit("finance.ra.link_invoices", {
+      userId: req.user!.id,
+      entity: "RaBill",
+      entityId: created.id,
+      meta: { linkedInvoices: linkedIds.length },
+    });
+  }
+
   await audit("finance.ra.create", { userId: req.user!.id, entity: "RaBill", entityId: created.id, meta: { raNumber } });
   res.status(201).json(created);
 });
@@ -565,6 +584,132 @@ financeRouter.get("/:projectId/cop/:copId/download.xlsx", async (req, res) => {
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(buffer);
+});
+
+/**
+ * Print-ready COP HTML — Sharnam letterhead, contract details, invoice line,
+ * amount in words, PMC / Client / Contractor signatory blocks.  Browser can
+ * print this to PDF for the client-facing signed copy.
+ */
+financeRouter.get("/:projectId/cop/:copId/print.html", async (req, res) => {
+  const cop = await prisma.certificateOfPayment.findFirst({
+    where: { id: req.params.copId, projectId: req.params.projectId },
+    include: {
+      project: { select: { code: true, name: true, location: true } },
+      purchaseOrder: { select: { poNumber: true, poDate: true, vendorName: true } },
+      raBill: { select: { raNumber: true, invoiceNumber: true, invoiceDate: true, netAmountPayable: true } },
+    },
+  });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const { amountInWordsInr } = await import("../modules/finance/copWorkbook.js");
+  const { sharnamLogoDataUri } = await import("../services/brandedExport.js");
+  const logo = sharnamLogoDataUri();
+  const esc = (v: unknown) =>
+    String(v ?? "—").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
+    );
+  const inr = (n: number) =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n || 0);
+  const dt = (d: Date | null | undefined) =>
+    d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<title>COP · ${esc(cop.certificateNumber)} · ${esc(cop.project?.code || "")}</title>
+<style>
+  @page { size: A4; margin: 12mm 14mm; }
+  body { font-family: "Inter", "Segoe UI", Arial, sans-serif; color:#111; font-size:11px; margin:0; }
+  .letterhead { display:flex; align-items:center; gap:16px; border-bottom:2px solid #b28c3c; padding-bottom:10px; margin-bottom:14px; }
+  .letterhead img { height:56px; }
+  .letterhead h1 { margin:0; font-size:15px; color:#b28c3c; letter-spacing:.4px; }
+  .letterhead .co { font-size:10px; color:#444; }
+  .letterhead .doc { text-align:right; font-size:10px; color:#555; }
+  .letterhead .doc b { font-size:12px; color:#111; }
+  h2 { color:#4a3a12; text-transform:uppercase; letter-spacing:.5px; font-size:12px; padding-bottom:3px; border-bottom:1px solid #d6c691; margin:14px 0 6px; }
+  table { border-collapse:collapse; width:100%; margin-bottom:6px; }
+  th, td { border:1px solid #cfc7ad; padding:6px 8px; vertical-align:top; }
+  th { background:#efe4c4; color:#4a3a12; font-weight:700; font-size:10px; text-align:left; }
+  td.n { text-align:right; font-variant-numeric: tabular-nums; }
+  .grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:0; }
+  .grid .k { color:#6b5a2e; text-transform:uppercase; font-size:9.5px; letter-spacing:.4px; margin-top:4px; }
+  .grid .v { font-weight:600; padding-bottom:6px; border-bottom:1px dashed #e2d9bd; }
+  .amt-band { background:#fdf6e3; border:1px solid #e0d3ac; padding:10px 14px; margin:12px 0; display:flex; justify-content:space-between; align-items:center; border-radius:4px; }
+  .amt-band .lbl { color:#6b5a2e; text-transform:uppercase; letter-spacing:.4px; font-size:10px; }
+  .amt-band .val { font-size:15px; font-weight:700; color:#111; }
+  .words { font-style: italic; color:#555; margin-top:2px; }
+  .signs { display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; margin-top:26px; }
+  .signs .b { border-top:1px solid #333; padding-top:6px; text-align:center; font-size:10px; color:#333; }
+  .footer { border-top:1px solid #eee; padding-top:6px; margin-top:18px; font-size:9.5px; color:#666; display:flex; justify-content:space-between; }
+  .stamp { display:inline-block; padding:2px 10px; border-radius:12px; font-weight:600; letter-spacing:.4px; font-size:10px; background:#efe4c4; color:#4a3a12; }
+</style></head><body>
+  <div class="letterhead">
+    ${logo ? `<img src="${logo}" alt="Sharnam" />` : ""}
+    <div style="flex:1">
+      <h1>Sharnam Project Development Consultants &amp; Co.</h1>
+      <div class="co">Project management consultancy · Ahmedabad, India · info@sharnamgroup.com</div>
+    </div>
+    <div class="doc">
+      <b>Certificate of Payment</b><br />
+      Ref · ${esc(cop.certificateNumber)}<br />
+      Status · <span class="stamp">${esc(cop.status)}</span>
+    </div>
+  </div>
+
+  <h2>Contract particulars</h2>
+  <div class="grid" style="grid-template-columns:1fr 2fr;">
+    <div class="k">Project</div><div class="v">${esc(cop.project?.code)} · ${esc(cop.project?.name)}</div>
+    <div class="k">Certificate type</div><div class="v">${esc(cop.certificateType)}</div>
+    <div class="k">Certificate date</div><div class="v">${dt(cop.certificateDate)}</div>
+    <div class="k">Contractor</div><div class="v">${esc(cop.contractor)}</div>
+    <div class="k">Work / Trade</div><div class="v">${esc(cop.workTrade)}</div>
+    <div class="k">Budget code</div><div class="v">${esc(cop.budgetCode)}</div>
+    <div class="k">Purchase order</div><div class="v">${esc(cop.purchaseOrder?.poNumber || cop.poNumberDate)} · ${dt(cop.purchaseOrder?.poDate)}</div>
+    <div class="k">Original WO value</div><div class="v">${inr(cop.originalWoValue)}</div>
+    <div class="k">Amendment no.</div><div class="v">${esc(cop.amendmentNo)} · ${inr(cop.amendedWoValue)}</div>
+    <div class="k">Invoice no. / date</div><div class="v">${esc(cop.invoiceNoDate || cop.raBill?.invoiceNumber)} · ${dt(cop.raBill?.invoiceDate)}</div>
+    <div class="k">Linked RA bill</div><div class="v">${esc(cop.raBill?.raNumber)}</div>
+    <div class="k">PAN · GST</div><div class="v">${esc(cop.panNumber)} · ${esc(cop.gstNumber)}</div>
+  </div>
+
+  <h2>Amount worked out</h2>
+  <table>
+    <thead><tr><th>Description</th><th style="width:22%">Amount (INR)</th></tr></thead>
+    <tbody>
+      <tr><td>Amount certified this bill</td><td class="n">${inr(cop.amountCertified)}</td></tr>
+      <tr><td>Add: GST as applicable</td><td class="n">${inr(cop.gstAmount)}</td></tr>
+      <tr><td>Less: Retention (as per contract)</td><td class="n">(${inr(cop.retentionAmount)})</td></tr>
+      <tr><td><b>Net payable to contractor</b></td><td class="n"><b>${inr(cop.amountPayable)}</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="amt-band">
+    <div>
+      <div class="lbl">Net payable · figures</div>
+      <div class="val">${inr(cop.amountPayable)}</div>
+      <div class="words">${esc(amountInWordsInr(cop.amountPayable))} rupees only.</div>
+    </div>
+    <div style="text-align:right">
+      <div class="lbl">Payable to</div>
+      <div class="val" style="font-size:12px;">${esc(cop.payableTo || cop.contractor)}</div>
+    </div>
+  </div>
+
+  <h2>PMC remarks</h2>
+  <div style="border:1px solid #d6c691; padding:8px 10px; min-height:44px; border-radius:4px;">${esc(cop.remarks || "—")}</div>
+
+  <div class="signs">
+    <div class="b">Prepared by · Sharnam PMC</div>
+    <div class="b">Certified by · Client Representative</div>
+    <div class="b">Received by · Contractor</div>
+  </div>
+
+  <div class="footer">
+    <span>Certificate generated ${dt(new Date())} — this is a Sharnam PMC controlled document.</span>
+    <span>Sharnam Project Development Consultants &amp; Co. · Confidential</span>
+  </div>
+</body></html>`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
 });
 
 /** Generate Viatrix COP and save to 09.01 Interim Bill folder on DMS. */

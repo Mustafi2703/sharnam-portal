@@ -474,3 +474,83 @@ commsRouter.post(
     res.json(updated);
   }
 );
+
+/**
+ * Sharnam-branded MoM one-pager · returns print-ready HTML (browser prints to PDF).
+ * Includes attendees, agenda, discussion notes, action items, open follow-ups from
+ * the parent meeting and signatory blocks for PMC / Client / Contractor.
+ */
+commsRouter.get("/meetings/:id/download.html", async (req, res) => {
+  try {
+    const { generateMomExport } = await import("../services/momExport.js");
+    const { html } = await generateMomExport(req.params.id);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Same MoM data written to a branded XLSX (Cover · Attendees · Agenda · Discussion · Actions · Open follow-ups). */
+commsRouter.get("/meetings/:id/download.xlsx", async (req, res) => {
+  try {
+    const { generateMomExport } = await import("../services/momExport.js");
+    const { xlsx, filenameBase } = await generateMomExport(req.params.id);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="MoM-${filenameBase}.xlsx"`);
+    res.send(xlsx);
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * Email the MoM to attendees as HTML.  Idempotent — same MoM sent twice will not
+ * double-count; delivery events are recorded via audit log.
+ */
+commsRouter.post(
+  "/meetings/:id/email",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { generateMomExport } = await import("../services/momExport.js");
+      const { html, filenameBase } = await generateMomExport(req.params.id);
+      const meeting = await prisma.meeting.findUnique({
+        where: { id: req.params.id },
+        include: { project: { select: { code: true, name: true } }, items: { include: { assignedTo: true } } },
+      });
+      if (!meeting) return res.status(404).json({ error: "Meeting not found" });
+
+      const bodyEmails = Array.isArray(req.body?.emails)
+        ? req.body.emails.map(String)
+        : String(req.body?.emails || "")
+            .split(/[,;\s]+/)
+            .filter(Boolean);
+      const ownerEmails = meeting.items
+        .map((it) => it.assignedTo?.email)
+        .filter((e): e is string => Boolean(e));
+      const to = Array.from(new Set([...bodyEmails, ...ownerEmails]));
+
+      const { queueProjectEmail } = await import("../services/email.js");
+      const result = await queueProjectEmail({
+        projectId: meeting.projectId,
+        subject: `MoM · ${meeting.title} · ${meeting.meetingDate.toDateString()}`,
+        body: `Please find the Minutes of Meeting for ${meeting.title} held on ${meeting.meetingDate.toDateString()}. Full MoM opens in a browser at the attached link and can be printed to PDF from there.`,
+        bodyHtml: html,
+        context: `MoM ${meeting.id}`,
+        toOverride: to.join(", "),
+        createdById: req.user!.id,
+      });
+
+      await audit("meeting.email", {
+        userId: req.user!.id,
+        entity: "Meeting",
+        entityId: meeting.id,
+        meta: { to, filenameBase, status: result },
+      });
+      res.json({ ok: true, to, result });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+);
