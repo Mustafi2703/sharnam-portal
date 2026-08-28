@@ -709,6 +709,28 @@ model CostBbsLine {
 /**
  * Global BBS bend shape library — code + diagram maintained in Master setup.
  */
+/**
+ * Site / Final Drawing Index master — global drawing index template rows.
+ * Each row is a planned drawing (Sr No · Drawing No · Title · Discipline ·
+ * Stage: Concept / Design / GFC / As-built · Status · Notes).  Reused across
+ * projects: PMC picks the relevant subset per project so nothing gets missed.
+ */
+model SiteFinalIndex {
+  id          String   @id @default(cuid())
+  srNo        Int      @default(0)
+  drawingNo   String
+  title       String
+  discipline  String   @default("Architectural")
+  stage       String   @default("Design")
+  status      String   @default("Planned")
+  packageHint String?
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([drawingNo])
+}
+
 model BbsShapeMaster {
   id          String   @id @default(cuid())
   shapeCode   String   @unique

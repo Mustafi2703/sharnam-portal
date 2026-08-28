@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from ".
 import { ModuleIcon } from "../components/icons";
 import { MasterCostTemplatesPanel } from "../components/MasterCostTemplatesPanel";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
+import { SiteFinalIndexPanel } from "../components/SiteFinalIndexPanel";
 import {
   WORKSPACE_PROJECT_KEY,
   setActiveWorkspace,
@@ -484,36 +485,55 @@ export default function MasterModulePage() {
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <MasterCostTemplatesPanel token={token} />
           <BbsShapeMasterPanel token={token} />
+          <SiteFinalIndexPanel token={token} />
           {[
             {
               to: "/master/checklists?family=DrawingCheck",
-              label: "Global checklist master",
-              hint: "Drawing check · Site · Quality · Safety — reused on all projects",
+              label: "Drawing-check master",
+              hint: "Drawing check checklists · reused on every project",
+              tag: "Checklists · Drawing",
+            },
+            {
+              to: "/master/checklists?family=QualityInspection",
+              label: "Quality (QI) checklist master",
+              hint: "QI checklist templates — reused across all projects",
+              tag: "Checklists · QI",
+            },
+            {
+              to: "/master/checklists?family=Safety",
+              label: "Safety checklist master",
+              hint: "SPDC HSE pack (F-01/F-02/F-03) seed-ready — reused across all projects",
+              tag: "Checklists · Safety",
             },
             {
               to: "/custom-sheets",
               label: "Sheet item templates",
               hint: "Formula sheets · clone · export (advanced editing)",
+              tag: "Sheets",
             },
             {
               to: dirProjectId ? `/projects/${dirProjectId}/drawings` : "/projects",
               label: "GFC drawing register",
               hint: "Per-project drawing types · R0–R5 · markup upload",
+              tag: "Project",
             },
             {
               to: dirProjectId ? `/projects/${dirProjectId}/cost?tab=boq` : "/projects",
               label: "Cost — BOQ per structure",
               hint: "Upload BOQ per project structure · MB/BBS from global master",
+              tag: "Project",
             },
             {
               to: dirProjectId ? `/projects/${dirProjectId}/dms` : "/projects",
               label: "Document management",
               hint: "ISO folder tree · SharePoint sync",
+              tag: "Project",
             },
           ].map((c) => (
             <Link key={c.label} to={c.to} className="block">
               <Card className="h-full hover:border-brand/50 transition !p-5">
-                <div className="font-display text-lg">{c.label}</div>
+                <div className="text-[10px] uppercase text-steel-muted tracking-wide">{c.tag}</div>
+                <div className="font-display text-lg mt-0.5">{c.label}</div>
                 <div className="text-sm text-steel-muted mt-1">{c.hint}</div>
                 <div className="mt-3">
                   <Badge tone="brand">Manage</Badge>

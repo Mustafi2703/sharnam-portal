@@ -145,6 +145,7 @@ export function MasterCostTemplatesPanel({ token }: Props) {
               <th className="px-3 py-2">Rows</th>
               <th className="px-3 py-2">Source file</th>
               <th className="px-3 py-2">Updated</th>
+              <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -158,11 +159,38 @@ export function MasterCostTemplatesPanel({ token }: Props) {
                 <td className="px-3 py-2 text-steel-muted text-xs">
                   {new Date(m.updatedAt).toLocaleString("en-IN")}
                 </td>
+                <td className="px-3 py-2 text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="!text-xs"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(
+                          `${(import.meta.env.VITE_API_URL || "")}/api/custom-sheets/masters/${m.id}/download.xlsx`,
+                          { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+                        );
+                        if (!res.ok) throw new Error(`Download failed (${res.status})`);
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `Sharnam-${active.label.replace(/\s+/g, "-")}-${m.name.replace(/[^\w.-]+/g, "_")}.xlsx`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (err) {
+                        setMsg(err instanceof Error ? err.message : "Download failed");
+                      }
+                    }}
+                  >
+                    Download Sharnam .xlsx
+                  </Button>
+                </td>
               </tr>
             ))}
             {!masters.length && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-steel-muted">
+                <td colSpan={5} className="px-3 py-6 text-center text-steel-muted">
                   No {active.label} uploaded yet — upload SPDC budget * {kind === "mb" ? "MB" : "BBS"} sheet here.
                 </td>
               </tr>

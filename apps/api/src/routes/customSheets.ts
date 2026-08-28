@@ -179,6 +179,35 @@ customSheetsRouter.post(
   }
 );
 
+/**
+ * Sharnam-branded XLSX download of any MB / BBS master — reuses the stored
+ * headers + rows and wraps them in the Sharnam letterhead workbook.
+ */
+customSheetsRouter.get("/masters/:masterId/download.xlsx", async (req, res) => {
+  const row = await prisma.customSheet.findFirst({
+    where: { id: req.params.masterId, projectId: null },
+  });
+  if (!row) return res.status(404).json({ error: "Master not found" });
+  const headers = JSON.parse(row.headersJson || "[]") as string[];
+  const rows = parseRowsJson(row.rowsJson);
+  const dataRows = rows.map((r) => r.map((c) => (c && typeof c === "object" ? c.computed ?? c.raw ?? "" : c ?? "")));
+  const { workbookBuffer } = await import("../services/brandedExport.js");
+  const kindLabel =
+    row.category === MASTER_CATEGORY.bbs
+      ? "BBS master"
+      : row.category === MASTER_CATEGORY.monitoring
+        ? "Monitoring master"
+        : "MB master";
+  const buf = workbookBuffer([{ name: row.name.slice(0, 31), rows: [headers, ...dataRows] }], {
+    title: `Sharnam · ${kindLabel} — ${row.name}`,
+    projectCode: "MASTER",
+  });
+  const safe = row.name.replace(/[^\w.-]+/g, "_").slice(0, 60);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Sharnam-${kindLabel.replace(/\s+/g, "-")}-${safe}.xlsx"`);
+  res.send(buf);
+});
+
 customSheetsRouter.get("/masters/:masterId/lines", async (req, res) => {
   const row = await prisma.customSheet.findFirst({
     where: { id: req.params.masterId, projectId: null },

@@ -28,6 +28,7 @@ import { dprMakerRouter } from "./routes/dprMaker.js";
 import { wprMakerRouter } from "./routes/wprMaker.js";
 import { closureRouter } from "./routes/closure.js";
 import { auditKpiRouter } from "./routes/auditKpi.js";
+import { siteIndexRouter } from "./routes/siteIndex.js";
 import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
 
 const app = express();
@@ -134,6 +135,7 @@ app.use("/api/dpr-maker", dprMakerRouter);
 app.use("/api/wpr-maker", wprMakerRouter);
 app.use("/api/closure", closureRouter);
 app.use("/api/audit-kpi", auditKpiRouter);
+app.use("/api/master/site-index", siteIndexRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {
