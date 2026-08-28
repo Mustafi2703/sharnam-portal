@@ -82,7 +82,10 @@ export function sharnamLogoDataUri(): string {
   }
 }
 
-/** Official Sharnam wordmark for HTML email (`apps/web/public/logo.png`). */
+/** Content-ID for inline logo in Graph / MIME HTML (`<img src="cid:sharnam-logo">`). */
+export const SHARNAM_EMAIL_LOGO_CID = "sharnam-logo";
+
+/** Official Sharnam wordmark for HTML email (`apps/web/public/logo-transparent.png`). */
 export function sharnamEmailLogoPath(): string | null {
   for (const p of EMAIL_LOGO_CANDIDATES) {
     try {
@@ -94,7 +97,25 @@ export function sharnamEmailLogoPath(): string | null {
   return null;
 }
 
-/** Logo src for HTML email — embedded base64 from logo.png, then live portal URL. */
+/** Inline attachment payload for Microsoft Graph sendMail. */
+export function sharnamEmailLogoInlineAttachment(): Record<string, unknown> | null {
+  const p = sharnamEmailLogoPath();
+  if (!p) return null;
+  try {
+    return {
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: "sharnam-logo-transparent.png",
+      contentType: "image/png",
+      contentBytes: fs.readFileSync(p).toString("base64"),
+      isInline: true,
+      contentId: SHARNAM_EMAIL_LOGO_CID,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Logo src for HTML previews / exports (data URI or hosted URL). */
 export function sharnamEmailLogoSrc(): string {
   const p = sharnamEmailLogoPath();
   if (p) {
@@ -108,10 +129,19 @@ export function sharnamEmailLogoSrc(): string {
   return `${origin}/logo-transparent.png`;
 }
 
-/** Official शरणम् wordmark — `logo-transparent.png` on paper-grey header. */
-export function sharnamEmailLogoHtml(width = 172): string {
-  const src = sharnamEmailLogoSrc();
+/** Official शरणम् wordmark — use CID in outbound email HTML (see graphHtmlMail.ts). */
+export function sharnamEmailLogoHtml(width = 172, forEmail = true): string {
+  const src = forEmail ? `cid:${SHARNAM_EMAIL_LOGO_CID}` : sharnamEmailLogoSrc();
   return `<img src="${src}" alt="Sharnam · शरणम्" width="${width}" style="display:block;width:${width}px;max-width:72%;height:auto;border:0;outline:none;background:transparent;margin:0;" />`;
+}
+
+/** Swap data-URI / hosted logo img tags to cid before Graph send. */
+export function ensureEmailHtmlUsesInlineLogo(html: string): string {
+  const logoTag = sharnamEmailLogoHtml(172, true);
+  let out = html.replace(/<img[^>]*alt="Sharnam[^"]*"[^>]*>/gi, logoTag);
+  out = out.replace(/src="data:image\/[^"]+"/gi, `src="cid:${SHARNAM_EMAIL_LOGO_CID}"`);
+  out = out.replace(/src="https?:\/\/[^"]*\/logo(?:-transparent)?\.png[^"]*"/gi, `src="cid:${SHARNAM_EMAIL_LOGO_CID}"`);
+  return out;
 }
 
 export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; projectCode?: string }): Buffer {

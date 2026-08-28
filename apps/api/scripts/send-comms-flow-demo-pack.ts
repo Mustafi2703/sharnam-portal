@@ -51,21 +51,8 @@ async function send(opts: {
   subject: string;
   bodyHtml: string;
 }) {
-  await opts.graphFetch(`/users/${encodeURIComponent(opts.mailbox)}/sendMail`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: {
-        subject: opts.subject,
-        body: {
-          contentType: "HTML",
-          content: opts.bodyHtml,
-        },
-        toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
-      },
-      saveToSentItems: true,
-    }),
-  });
+  const { sendGraphHtmlMail } = await import("../src/services/graphHtmlMail.js");
+  await sendGraphHtmlMail({ to: opts.to, subject: opts.subject, bodyHtml: opts.bodyHtml, mailbox: opts.mailbox });
 }
 
 type MailJob = { subject: string; bodyHtml: string };

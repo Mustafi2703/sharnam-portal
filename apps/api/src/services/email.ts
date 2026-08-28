@@ -1,5 +1,6 @@
 import { prisma } from "../prisma.js";
 import { graphConfig, graphFetch } from "./graph.js";
+import { sendGraphHtmlMail } from "./graphHtmlMail.js";
 
 function parseRecipients(raw: string): string[] {
   return raw
@@ -15,20 +16,20 @@ function graphMailEnabled() {
 }
 
 async function sendViaGraph(opts: { to: string[]; subject: string; body: string; bodyHtml?: string }) {
+  const useHtml = Boolean(opts.bodyHtml?.trim());
+  if (useHtml) {
+    await sendGraphHtmlMail({ to: opts.to, subject: opts.subject, bodyHtml: opts.bodyHtml! });
+    return;
+  }
   const cfg = graphConfig();
   if (!cfg.mailbox) throw new Error("GRAPH_MAIL_FROM not configured");
-
-  const useHtml = Boolean(opts.bodyHtml?.trim());
   await graphFetch(`/users/${encodeURIComponent(cfg.mailbox)}/sendMail`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: {
         subject: opts.subject,
-        body: {
-          contentType: useHtml ? "HTML" : "Text",
-          content: useHtml ? opts.bodyHtml! : opts.body,
-        },
+        body: { contentType: "Text", content: opts.body },
         toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
       },
       saveToSentItems: true,
