@@ -15,6 +15,7 @@ import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
+import { downloadAuthFile } from "../lib/downloadReport";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
 
@@ -102,6 +103,9 @@ export default function CostPage() {
   const [mbAddOpen, setMbAddOpen] = useState(false);
   const [bbsAddOpen, setBbsAddOpen] = useState(false);
   const [monAddOpen, setMonAddOpen] = useState(false);
+  const [monAddKind, setMonAddKind] = useState<"item" | "section" | "subsection">("item");
+  const [cfAddOpen, setCfAddOpen] = useState(false);
+  const [rateAddOpen, setRateAddOpen] = useState(false);
   const [syncSheetBusy, setSyncSheetBusy] = useState(false);
   const [verify, setVerify] = useState<any>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -147,6 +151,7 @@ export default function CostPage() {
   });
   const [mbForm, setMbForm] = useState({
     packageName: "Dormitory Civil",
+    rowKind: "data" as "data" | "item" | "description" | "subsection" | "subitem" | "note" | "total",
     srNo: "",
     description: "",
     nos1: "1",
@@ -158,7 +163,7 @@ export default function CostPage() {
   });
   const [bbsForm, setBbsForm] = useState({
     packageName: "Dormitory BBS",
-    rowKind: "data" as "data" | "section" | "subsection",
+    rowKind: "data" as "data" | "section" | "subsection" | "subheader" | "note",
     barMark: "",
     location: "",
     diameterMm: "",
@@ -173,8 +178,26 @@ export default function CostPage() {
     shapeLenD: "",
     shapeLenE: "",
   });
+  const [cfForm, setCfForm] = useState({
+    sheetKind: "chart" as "chart" | "forecast" | "tracking",
+    periodLabel: "",
+    periodDate: "",
+    structure: "",
+    plannedAmount: "",
+    actualAmount: "",
+  });
+  const [rateForm, setRateForm] = useState({
+    materialType: "Steel",
+    description: "",
+    vendorName: "",
+    qty: "",
+    basicRate: "",
+    purchaseRate: "",
+  });
   const mbFormRef = useRef<HTMLFormElement>(null);
   const bbsFormRef = useRef<HTMLFormElement>(null);
+  const cfFormRef = useRef<HTMLFormElement>(null);
+  const rateFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (pkgFilter !== "All") {
@@ -197,20 +220,16 @@ export default function CostPage() {
   };
   const loadBills = () => api<{ bills: any[]; totals: any }>(`/api/cost/${id}/bills`, { token }).then(setBillsData);
 
-  async function downloadSheet(kind: string) {
+  async function downloadSheet(kind: string, fmt: "csv" | "xlsx" = "csv") {
+    if (!id) return;
     const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
-    const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/cost/${id}/download/${kind}.csv${q}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (!res.ok) throw new Error("Download failed");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${kind}-${pkgFilter === "All" ? "all" : pkgFilter}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMsg(`Downloaded ${kind} sheet (open in Excel)`);
+    const slug = pkgFilter === "All" ? "all" : pkgFilter.replace(/[^\w.-]+/g, "_");
+    try {
+      await downloadAuthFile(`/api/cost/${id}/download/${kind}.${fmt}${q}`, token, `${kind}-${slug}.${fmt}`);
+      setMsg(`Downloaded ${kind} ${fmt.toUpperCase()} — Row kind column is included. Open and check the bands.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Download failed");
+    }
   }
 
   useEffect(() => {
@@ -516,9 +535,73 @@ export default function CostPage() {
         height: Number(mbForm.height || 0),
       }),
     });
-    setMsg("MB line added");
+    setMsg(mbForm.rowKind === "data" ? "MB measurement added" : `MB ${mbForm.rowKind} added`);
     setMbAddOpen(false);
     await load();
+  }
+
+  async function addCashflow(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      await api(`/api/cost/${id}/cashflow`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          sheetKind: cfForm.sheetKind,
+          periodLabel: cfForm.periodLabel,
+          periodDate: cfForm.periodDate || undefined,
+          structure: cfForm.structure,
+          plannedAmount: Number(cfForm.plannedAmount || 0),
+          actualAmount: Number(cfForm.actualAmount || 0),
+        }),
+      });
+      setMsg(`Cashflow ${cfForm.sheetKind} period added`);
+      setCfAddOpen(false);
+      setCfForm({
+        sheetKind: cfView === "forecast" || cfView === "tracking" ? cfView : "chart",
+        periodLabel: "",
+        periodDate: "",
+        structure: "",
+        plannedAmount: "",
+        actualAmount: "",
+      });
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add cashflow period failed");
+    }
+  }
+
+  async function addRateDiff(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      await api(`/api/cost/${id}/rate-diff`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          materialType: rateForm.materialType,
+          description: rateForm.description,
+          vendorName: rateForm.vendorName || undefined,
+          qty: Number(rateForm.qty || 0),
+          basicRate: Number(rateForm.basicRate || 0),
+          purchaseRate: Number(rateForm.purchaseRate || 0),
+        }),
+      });
+      setMsg("Rate difference line added");
+      setRateAddOpen(false);
+      setRateForm({
+        materialType: "Steel",
+        description: "",
+        vendorName: "",
+        qty: "",
+        basicRate: "",
+        purchaseRate: "",
+      });
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add rate line failed");
+    }
   }
 
   const packageTools =
@@ -860,7 +943,23 @@ export default function CostPage() {
             canEdit={canEdit}
             onUpload={canEdit ? (file) => uploadBoqOrWorkbook(file, activePkg) : undefined}
             uploadHint="Upload SPDC_Budget_Arvind 49.xls (full workbook) or a single monitoring BOQ for this package."
-            onAddRow={canEdit ? () => setMonAddOpen(true) : undefined}
+            addKinds={
+              canEdit
+                ? [
+                    { key: "section", label: "+ Section" },
+                    { key: "subsection", label: "+ Subsection" },
+                    { key: "item", label: "+ Item" },
+                  ]
+                : undefined
+            }
+            onAddKind={
+              canEdit
+                ? (key) => {
+                    setMonAddKind(key as "item" | "section" | "subsection");
+                    setMonAddOpen(true);
+                  }
+                : undefined
+            }
             onGenerate={
               canEdit
                 ? async () => {
@@ -871,7 +970,8 @@ export default function CostPage() {
             }
             generateLabel="Load SPDC template"
             busy={syncing}
-            onDownloadCsv={() => downloadSheet("boq")}
+            onDownloadCsv={() => void downloadSheet("boq")}
+            onDownloadXlsx={() => void downloadSheet("boq", "xlsx")}
             message={msg || undefined}
           />
           <div className="cost-page__register min-w-0">
@@ -885,6 +985,7 @@ export default function CostPage() {
               canSiteEdit={canSiteEdit}
               singlePackage={activePkg}
               addOpen={monAddOpen}
+              preferredAddKind={monAddKind}
               onAddClose={() => setMonAddOpen(false)}
               onChanged={() => void load()}
             />
@@ -900,16 +1001,41 @@ export default function CostPage() {
             rowCount={mbRows.length}
             canEdit={canEdit || canSiteEdit}
             onUpload={canEdit ? (f) => importCostSheet("mb", f) : undefined}
-            onAddRow={canEdit || canSiteEdit ? () => setMbAddOpen(true) : undefined}
-            onDownloadCsv={() => downloadSheet("mb")}
+            addKinds={
+              canEdit || canSiteEdit
+                ? [
+                    { key: "item", label: "+ Item" },
+                    { key: "description", label: "+ Description" },
+                    { key: "subsection", label: "+ Subsection" },
+                    { key: "subitem", label: "+ Sub-item" },
+                    { key: "data", label: "+ Measurement" },
+                    { key: "note", label: "+ Note" },
+                    { key: "total", label: "+ Total" },
+                  ]
+                : undefined
+            }
+            onAddKind={
+              canEdit || canSiteEdit
+                ? (key) => {
+                    setMbForm((f) => ({ ...f, rowKind: key as typeof f.rowKind }));
+                    setMbAddOpen(true);
+                  }
+                : undefined
+            }
+            onDownloadCsv={() => void downloadSheet("mb")}
+            onDownloadXlsx={() => void downloadSheet("mb", "xlsx")}
             message={msg || undefined}
           />
           <RegisterEntryModal
             open={mbAddOpen && (canEdit || canSiteEdit)}
-            title="Add MB line"
+            title={
+              mbForm.rowKind === "data"
+                ? "Add MB measurement"
+                : `Add MB ${mbForm.rowKind}`
+            }
             onClose={() => setMbAddOpen(false)}
             onSave={() => mbFormRef.current?.requestSubmit()}
-            saveLabel="Add to MB"
+            saveLabel={mbForm.rowKind === "data" ? "Add measurement" : `Add ${mbForm.rowKind}`}
           >
             <form ref={mbFormRef} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" onSubmit={addMb}>
               <Select value={mbForm.packageName} onChange={(e) => setMbForm({ ...mbForm, packageName: e.target.value })}>
@@ -917,18 +1043,34 @@ export default function CostPage() {
                   <option key={p}>{p}</option>
                 ))}
               </Select>
+              <Select
+                value={mbForm.rowKind}
+                onChange={(e) => setMbForm({ ...mbForm, rowKind: e.target.value as typeof mbForm.rowKind })}
+              >
+                <option value="data">Measurement (qty line)</option>
+                <option value="item">Item heading</option>
+                <option value="description">Description band</option>
+                <option value="subsection">Subsection</option>
+                <option value="subitem">Sub-item (-do)</option>
+                <option value="note">Note</option>
+                <option value="total">Total band</option>
+              </Select>
               <Input placeholder="Sr" value={mbForm.srNo} onChange={(e) => setMbForm({ ...mbForm, srNo: e.target.value })} />
               <Input
                 className="sm:col-span-2"
-                placeholder="Description"
+                placeholder={mbForm.rowKind === "data" ? "Description" : "Heading / note text"}
                 value={mbForm.description}
                 onChange={(e) => setMbForm({ ...mbForm, description: e.target.value })}
                 required
               />
-              <Input placeholder="Nos" value={mbForm.nos1} onChange={(e) => setMbForm({ ...mbForm, nos1: e.target.value })} />
-              <Input placeholder="Length" value={mbForm.length} onChange={(e) => setMbForm({ ...mbForm, length: e.target.value })} />
-              <Input placeholder="Width" value={mbForm.width} onChange={(e) => setMbForm({ ...mbForm, width: e.target.value })} />
-              <Input placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
+              {mbForm.rowKind === "data" && (
+                <>
+                  <Input placeholder="Nos" value={mbForm.nos1} onChange={(e) => setMbForm({ ...mbForm, nos1: e.target.value })} />
+                  <Input placeholder="Length" value={mbForm.length} onChange={(e) => setMbForm({ ...mbForm, length: e.target.value })} />
+                  <Input placeholder="Width" value={mbForm.width} onChange={(e) => setMbForm({ ...mbForm, width: e.target.value })} />
+                  <Input placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
+                </>
+              )}
             </form>
           </RegisterEntryModal>
           <div className="cost-page__register min-w-0">
@@ -953,15 +1095,27 @@ export default function CostPage() {
             rowCount={bbsRows.length}
             canEdit={canEdit || canSiteEdit}
             onUpload={canEdit ? (f) => importCostSheet("bbs", f) : undefined}
-            onAddRow={
+            addKinds={
               canEdit || canSiteEdit
-                ? () => {
-                    setBbsForm((f) => ({ ...f, rowKind: "data" }));
+                ? [
+                    { key: "section", label: "+ Section" },
+                    { key: "subsection", label: "+ Subsection" },
+                    { key: "subheader", label: "+ Subheader" },
+                    { key: "data", label: "+ Bar" },
+                    { key: "note", label: "+ Note" },
+                  ]
+                : undefined
+            }
+            onAddKind={
+              canEdit || canSiteEdit
+                ? (key) => {
+                    setBbsForm((f) => ({ ...f, rowKind: key as typeof f.rowKind }));
                     setBbsAddOpen(true);
                   }
                 : undefined
             }
-            onDownloadCsv={() => downloadSheet("bbs")}
+            onDownloadCsv={() => void downloadSheet("bbs")}
+            onDownloadXlsx={() => void downloadSheet("bbs", "xlsx")}
             message={msg || undefined}
           />
           <RegisterEntryModal
@@ -971,7 +1125,11 @@ export default function CostPage() {
                 ? "Add BBS section"
                 : bbsForm.rowKind === "subsection"
                   ? "Add BBS subsection"
-                  : "Add BBS bar entry"
+                  : bbsForm.rowKind === "subheader"
+                    ? "Add BBS subheader"
+                    : bbsForm.rowKind === "note"
+                      ? "Add BBS note"
+                      : "Add BBS bar entry"
             }
             onClose={() => setBbsAddOpen(false)}
             onSave={() => bbsFormRef.current?.requestSubmit()}
@@ -991,6 +1149,8 @@ export default function CostPage() {
                 <option value="data">Bar entry</option>
                 <option value="section">Section heading</option>
                 <option value="subsection">Subsection heading</option>
+                <option value="subheader">Subheader (L/B/H)</option>
+                <option value="note">Note</option>
               </Select>
               <Input
                 placeholder={bbsForm.rowKind === "data" ? "Sr / bar mark" : "Mark (A, 1, …)"}
@@ -1053,6 +1213,14 @@ export default function CostPage() {
 
       {tab === "budget" && (
         <div className="cost-sheet-block space-y-3">
+          <ReferenceSheetToolbar
+            sheetLabel="Budget WBS"
+            rowCount={summary.budget?.length}
+            canEdit={canEdit}
+            onDownloadCsv={() => void downloadSheet("budget")}
+            onDownloadXlsx={() => void downloadSheet("budget", "xlsx")}
+            message={msg || undefined}
+          />
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Budget WBS · upload · totals</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -1125,9 +1293,86 @@ export default function CostPage() {
               setMsg(`Cashflow imported — ${res.imported} periods`);
               await load();
             }}
-            onDownloadCsv={() => downloadSheet("cashflow")}
+            addKinds={
+              canEdit
+                ? [
+                    { key: "chart", label: "+ Chart period" },
+                    { key: "forecast", label: "+ Forecast" },
+                    { key: "tracking", label: "+ Tracking" },
+                  ]
+                : undefined
+            }
+            onAddKind={
+              canEdit
+                ? (key) => {
+                    setCfForm((f) => ({
+                      ...f,
+                      sheetKind: key as typeof f.sheetKind,
+                    }));
+                    setCfAddOpen(true);
+                  }
+                : undefined
+            }
+            onDownloadCsv={() => void downloadSheet("cashflow")}
+            onDownloadXlsx={() => void downloadSheet("cashflow", "xlsx")}
             message={msg || undefined}
           />
+          <RegisterEntryModal
+            open={cfAddOpen && canEdit}
+            title={
+              cfForm.sheetKind === "forecast"
+                ? "Add forecast period"
+                : cfForm.sheetKind === "tracking"
+                  ? "Add tracking period"
+                  : "Add cashflow chart period"
+            }
+            onClose={() => setCfAddOpen(false)}
+            onSave={() => cfFormRef.current?.requestSubmit()}
+            saveLabel="Add period"
+          >
+            <form ref={cfFormRef} className="grid sm:grid-cols-2 gap-3" onSubmit={addCashflow}>
+              <Select
+                value={cfForm.sheetKind}
+                onChange={(e) => setCfForm({ ...cfForm, sheetKind: e.target.value as typeof cfForm.sheetKind })}
+              >
+                <option value="chart">Cash Flow Chart</option>
+                <option value="forecast">Forecast</option>
+                <option value="tracking">Tracking</option>
+              </Select>
+              <Input
+                required
+                placeholder="Period (e.g. Apr-26)"
+                value={cfForm.periodLabel}
+                onChange={(e) => setCfForm({ ...cfForm, periodLabel: e.target.value })}
+              />
+              <Input
+                type="date"
+                value={cfForm.periodDate}
+                onChange={(e) => setCfForm({ ...cfForm, periodDate: e.target.value })}
+              />
+              {(cfForm.sheetKind === "forecast" || cfForm.sheetKind === "tracking") && (
+                <Input
+                  placeholder={cfForm.sheetKind === "forecast" ? "Structure" : "Work package"}
+                  value={cfForm.structure}
+                  onChange={(e) => setCfForm({ ...cfForm, structure: e.target.value })}
+                />
+              )}
+              <Input
+                type="number"
+                step="any"
+                placeholder="Planned ₹"
+                value={cfForm.plannedAmount}
+                onChange={(e) => setCfForm({ ...cfForm, plannedAmount: e.target.value })}
+              />
+              <Input
+                type="number"
+                step="any"
+                placeholder="Actual ₹"
+                value={cfForm.actualAmount}
+                onChange={(e) => setCfForm({ ...cfForm, actualAmount: e.target.value })}
+              />
+            </form>
+          </RegisterEntryModal>
           <details className="rounded border border-line bg-paper shrink-0">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">Cashflow charts · filters · import</summary>
             <div className="p-3 pt-0 space-y-3 border-t border-line">
@@ -1283,9 +1528,62 @@ export default function CostPage() {
           <ReferenceSheetToolbar
             sheetLabel="Rate difference register"
             rowCount={summary.rateDiffs?.length}
-            onDownloadCsv={() => downloadSheet("rates")}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => setRateAddOpen(true) : undefined}
+            onDownloadCsv={() => void downloadSheet("rates")}
+            onDownloadXlsx={() => void downloadSheet("rates", "xlsx")}
             message={msg || undefined}
           />
+          <RegisterEntryModal
+            open={rateAddOpen && canEdit}
+            title="Add rate difference"
+            onClose={() => setRateAddOpen(false)}
+            onSave={() => rateFormRef.current?.requestSubmit()}
+            saveLabel="Add rate line"
+          >
+            <form ref={rateFormRef} className="grid sm:grid-cols-2 gap-3" onSubmit={addRateDiff}>
+              <Select
+                value={rateForm.materialType}
+                onChange={(e) => setRateForm({ ...rateForm, materialType: e.target.value })}
+              >
+                <option>Steel</option>
+                <option>Cement</option>
+                <option>Tiles</option>
+              </Select>
+              <Input
+                required
+                placeholder="Description *"
+                value={rateForm.description}
+                onChange={(e) => setRateForm({ ...rateForm, description: e.target.value })}
+              />
+              <Input
+                placeholder="Vendor"
+                value={rateForm.vendorName}
+                onChange={(e) => setRateForm({ ...rateForm, vendorName: e.target.value })}
+              />
+              <Input
+                type="number"
+                step="any"
+                placeholder="Qty"
+                value={rateForm.qty}
+                onChange={(e) => setRateForm({ ...rateForm, qty: e.target.value })}
+              />
+              <Input
+                type="number"
+                step="any"
+                placeholder="Basic rate"
+                value={rateForm.basicRate}
+                onChange={(e) => setRateForm({ ...rateForm, basicRate: e.target.value })}
+              />
+              <Input
+                type="number"
+                step="any"
+                placeholder="Purchase rate"
+                value={rateForm.purchaseRate}
+                onChange={(e) => setRateForm({ ...rateForm, purchaseRate: e.target.value })}
+              />
+            </form>
+          </RegisterEntryModal>
           <div className="cost-page__register min-w-0">
             <SheetTable
               title="Rate difference (Steel / Cement / Tiles)"

@@ -6,6 +6,9 @@ type ReferenceSheetToolbarProps = {
   rowCount?: number;
   canEdit?: boolean;
   onAddRow?: () => void;
+  /** When set, shows one button per row kind instead of a single + Add row. */
+  addKinds?: { key: string; label: string }[];
+  onAddKind?: (key: string) => void;
   onUpload?: (file: File) => void | Promise<void>;
   uploadTitle?: string;
   uploadHint?: string;
@@ -27,6 +30,8 @@ export function ReferenceSheetToolbar({
   rowCount,
   canEdit,
   onAddRow,
+  addKinds,
+  onAddKind,
   onUpload,
   uploadHint,
   onDownloadCsv,
@@ -89,7 +94,16 @@ export function ReferenceSheetToolbar({
             </Button>
           </>
         )}
-        {canEdit && onAddRow && (
+        {canEdit && addKinds && addKinds.length > 0 && onAddKind && (
+          <div className="flex flex-wrap gap-1.5">
+            {addKinds.map((k) => (
+              <Button key={k.key} type="button" variant="secondary" onClick={() => onAddKind(k.key)} disabled={busy}>
+                {k.label}
+              </Button>
+            ))}
+          </div>
+        )}
+        {canEdit && onAddRow && !addKinds?.length && (
           <Button type="button" onClick={onAddRow} disabled={busy}>
             + Add row
           </Button>

@@ -1014,7 +1014,24 @@ export default function ProgressPage() {
             canEdit={canEdit}
             onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
             uploadHint="Upload client Excel — cashflow, manpower, and activity qty columns preserved."
-            onAddRow={canEdit ? () => setActAddOpen(true) : undefined}
+            addKinds={
+              canEdit
+                ? [
+                    { key: "activity", label: "+ Activity" },
+                    { key: "cashflow", label: "+ Cashflow month" },
+                    { key: "manpower", label: "+ Manpower trade" },
+                  ]
+                : undefined
+            }
+            onAddKind={
+              canEdit
+                ? (key) => {
+                    if (key === "cashflow") setCashAddOpen(true);
+                    else if (key === "manpower") setManAddOpen(true);
+                    else setActAddOpen(true);
+                  }
+                : undefined
+            }
             onDownloadXlsx={() => void downloadPlannedActual("xlsx")}
             onGenerate={
               canEdit
@@ -1257,9 +1274,16 @@ export default function ProgressPage() {
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
               <span>Planned Vs Actual qty ({(data.activityLines || []).length} lines) — weekly qty feeds DPR</span>
-              <Link to={`/projects/${id}/cost?tab=monitoring`} className="text-xs font-semibold text-brand">
-                Cost BOQ / monitoring ({data.totals?.boqLines || 0} lines) →
-              </Link>
+              <div className="flex flex-wrap items-center gap-2">
+                {canEdit && (
+                  <Button type="button" className="!text-xs" onClick={() => setActAddOpen(true)}>
+                    Add activity
+                  </Button>
+                )}
+                <Link to={`/projects/${id}/cost?tab=monitoring`} className="text-xs font-semibold text-brand">
+                  Cost BOQ / monitoring ({data.totals?.boqLines || 0} lines) →
+                </Link>
+              </div>
             </div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-[11px] min-w-[1280px] border-collapse">

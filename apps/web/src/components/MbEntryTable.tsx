@@ -61,6 +61,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const canEditDims = canFullEdit || canSiteEdit;
+  const canMutate = canEditDims;
   const colSpan = MB_DATA_COLS + 1;
 
   function bandRow(b: MbRow) {
@@ -78,7 +79,13 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
           <td className={mbColClass(9, { extra: "text-left" })}>{b.unit || "—"}</td>
           {mbBandEmpty(10, "ra")}
           {mbBandEmpty(11, "rm")}
-          <td className="w-12" />
+          <td className="w-12">
+            {canMutate && (
+              <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
+                Del
+              </Button>
+            )}
+          </td>
         </tr>
       );
     }
@@ -86,11 +93,38 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
     const descExtra = kind === "subitem" ? "pl-5" : kind === "subsection" ? "pl-2" : "";
     return (
       <tr key={b.id} className={cls}>
-        {mbBandEmpty(0, "p")}
-        <td className={mbColClass(1, { extra: "text-left font-mono" })}>{b.srNo || "\u00a0"}</td>
-        <td className={mbColClass(2, { sticky: true, extra: `text-left ${descExtra}` })}>{bandLabel(kind, b)}</td>
+        <td className={mbColClass(0, { extra: "text-left" })}>
+          {canFullEdit ? (
+            <RegisterSheetCell value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
+          ) : (
+            b.packageName
+          )}
+        </td>
+        <td className={mbColClass(1, { extra: "text-left font-mono" })}>
+          {canMutate ? (
+            <RegisterSheetCell value={b.srNo} onCommit={(v) => void patchLine(b.id, { srNo: v, rowKind: kind })} />
+          ) : (
+            b.srNo || "\u00a0"
+          )}
+        </td>
+        <td className={mbColClass(2, { sticky: true, extra: `text-left ${descExtra}` })}>
+          {canMutate ? (
+            <RegisterSheetCell
+              value={b.description}
+              onCommit={(v) => void patchLine(b.id, { description: v, rowKind: kind })}
+            />
+          ) : (
+            bandLabel(kind, b)
+          )}
+        </td>
         {mbDimEmpty(3, 11)}
-        <td className="w-12" />
+        <td className="w-12">
+          {canMutate && (
+            <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteLine(b.id)}>
+              Del
+            </Button>
+          )}
+        </td>
       </tr>
     );
   }
@@ -116,6 +150,39 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
       onChanged();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function addRow(kind: MbRowKind) {
+    const pkg =
+      singlePackage && singlePackage !== "All"
+        ? singlePackage
+        : rows[0]?.packageName || "Dormitory Civil";
+    const itemN = rows.filter((r) => mbRowKind(r) === "item").length;
+    const body =
+      kind === "data"
+        ? { packageName: pkg, rowKind: "data", description: "New measurement", nos1: 1, nos2: 1 }
+        : kind === "item"
+          ? { packageName: pkg, rowKind: "item", srNo: String(itemN + 1), description: "New item" }
+          : kind === "subitem"
+            ? { packageName: pkg, rowKind: "subitem", srNo: "", description: "-do" }
+            : kind === "subsection"
+              ? { packageName: pkg, rowKind: "subsection", description: "New subsection" }
+              : kind === "description"
+                ? { packageName: pkg, rowKind: "description", description: "Item description" }
+                : kind === "total"
+                  ? { packageName: pkg, rowKind: "total", description: "TOTAL" }
+                  : { packageName: pkg, rowKind: "note", description: "Note" };
+    setBusyId("new");
+    setMsg("");
+    try {
+      await api(`/api/cost/${projectId}/mb`, { method: "POST", token, body: JSON.stringify(body) });
+      setMsg(kind === "data" ? "Measurement line added" : `${kind} heading added — edit the label in the sheet`);
+      onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add failed");
     } finally {
       setBusyId(null);
     }
@@ -147,6 +214,36 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
       sheetKind="mb"
       title={`Measurement Book (MB)${singlePackage ? ` — ${singlePackage}` : ""}`}
       subtitle={`${rows.length} lines · SPDC MB format — Sr · Description · Nos × L × W × H · Qty · UoM · RA-Bill · Remark`}
+      toolbar={
+        canMutate ? (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("item")}>
+              + Item
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("description")}>
+              + Description
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subsection")}>
+              + Subsection
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subitem")}>
+              + Sub-item
+            </Button>
+            <Button type="button" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("data")}>
+              + Measurement
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("note")}>
+              + Note
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("total")}>
+              + Total
+            </Button>
+            <span className="text-[11px] text-steel-muted">
+              Item / subsection / description are sheet headings. Measurement is a qty line (Nos × L × W × H).
+            </span>
+          </div>
+        ) : undefined
+      }
       footer={msg ? <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2">{msg}</p> : undefined}
     >
       <table className="cube-register__table register-editor-pro cost-register-table min-w-[92rem]">

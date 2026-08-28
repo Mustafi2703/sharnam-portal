@@ -220,7 +220,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   }
   const diaTotals = [...byDia.entries()].sort((a, b) => a[0] - b[0]);
 
-  async function addRow(kind: "section" | "subsection" | "data") {
+  async function addRow(kind: "section" | "subsection" | "subheader" | "data" | "note") {
     const pkg =
       singlePackage && singlePackage !== "All"
         ? singlePackage
@@ -242,18 +242,36 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
               barMark: String(subN + 1),
               location: "New subsection",
             }
-          : {
-              packageName: pkg,
-              rowKind: "data",
-              barMark: "",
-              location: "New bar",
-              nos: 1,
-            };
+          : kind === "subheader"
+            ? {
+                packageName: pkg,
+                rowKind: "subheader",
+                barMark: "",
+                location: "L",
+              }
+            : kind === "note"
+              ? {
+                  packageName: pkg,
+                  rowKind: "note",
+                  barMark: "",
+                  location: "Note",
+                }
+              : {
+                  packageName: pkg,
+                  rowKind: "data",
+                  barMark: "",
+                  location: "New bar",
+                  nos: 1,
+                };
     setBusyId("new");
     setMsg("");
     try {
       await api(`/api/cost/${projectId}/bbs`, { method: "POST", token, body: JSON.stringify(body) });
-      setMsg(kind === "data" ? "Bar entry added — fill dia, nos and lengths" : `${kind} added — edit the label in the sheet`);
+      setMsg(
+        kind === "data"
+          ? "Bar entry added — fill dia, nos and lengths"
+          : `${kind === "subheader" ? "Subheader" : kind === "note" ? "Note" : kind} added — edit the label in the sheet`
+      );
       onChanged();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add failed");
@@ -340,11 +358,17 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
             <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subsection")}>
               + Subsection
             </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subheader")}>
+              + Subheader
+            </Button>
             <Button type="button" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("data")}>
               + Bar entry
             </Button>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("note")}>
+              + Note
+            </Button>
             <span className="text-[11px] text-steel-muted">
-              Section / subsection are sheet headings. Bar entry is a measured line (dia · nos · A–E · weight).
+              Section / subsection / subheader / note are sheet bands. Bar entry is a measured line (dia · nos · A–E · weight).
             </span>
           </div>
         ) : undefined

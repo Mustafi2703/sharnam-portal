@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, formatINR } from "../api";
-import { Button, Card, Input, TextArea } from "./ui";
+import { Button, Card, Input, Select, TextArea } from "./ui";
+import { SheetAddKindBar } from "./SheetAddKindBar";
 
 export type BudgetLine = {
   id: string;
@@ -32,6 +33,7 @@ type Props = {
 };
 
 const empty = () => ({
+  rowKind: "item" as "item" | "heading",
   srNo: "",
   description: "",
   stakeholder: "",
@@ -115,12 +117,34 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
   async function patch(id: string, patch: Record<string, unknown>) {
     setSavingId(id);
     try {
-      await api(`/api/cost/budget/${id}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await api(`/api/cost/${projectId}/budget/${id}`, { method: "PATCH", token, body: JSON.stringify(patch) });
       await onChanged();
     } catch (e: any) {
       setMsg(e?.message || "Save failed");
     } finally {
       setSavingId(null);
+    }
+  }
+
+  async function addKind(kind: "heading" | "item") {
+    setBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/cost/${projectId}/budget`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          ...empty(),
+          description: kind === "heading" ? "New heading" : "New budget line",
+          remarks: kind === "heading" ? "HEADING" : null,
+        }),
+      });
+      setMsg(kind === "heading" ? "Budget heading added — edit the label in the sheet" : "Budget line added — fill amounts in the sheet");
+      await onChanged();
+    } catch (e: any) {
+      setMsg(e?.message || "Could not add row");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -136,14 +160,24 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
         method: "POST",
         token,
         body: JSON.stringify({
-          ...form,
-          srNo: form.srNo || null,
-          stakeholder: form.stakeholder || null,
-          remarks: form.remarks || null,
+          ...(form.rowKind === "heading"
+            ? {
+                ...empty(),
+                description: form.description,
+                srNo: form.srNo || null,
+                stakeholder: form.stakeholder || null,
+                remarks: form.remarks || "HEADING",
+              }
+            : {
+                ...form,
+                srNo: form.srNo || null,
+                stakeholder: form.stakeholder || null,
+                remarks: form.remarks || null,
+              }),
         }),
       });
       setForm(empty());
-      setMsg("Budget line added");
+      setMsg(form.rowKind === "heading" ? "Budget heading added" : "Budget line added");
       await onChanged();
     } catch (e: any) {
       setMsg(e?.message || "Could not add line");
@@ -156,7 +190,7 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
     if (!confirm("Delete this budget line?")) return;
     setSavingId(id);
     try {
-      await api(`/api/cost/budget/${id}`, { method: "DELETE", token });
+      await api(`/api/cost/${projectId}/budget/${id}`, { method: "DELETE", token });
       await onChanged();
     } catch (e: any) {
       setMsg(e?.message || "Delete failed");
@@ -168,6 +202,18 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2 min-w-0">
       {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
+
+      {canEdit && (
+        <SheetAddKindBar
+          disabled={busy}
+          onAdd={(key) => void addKind(key as "heading" | "item")}
+          kinds={[
+            { key: "heading", label: "+ Heading" },
+            { key: "item", label: "+ Budget line", primary: true },
+          ]}
+          hint="Heading is a WBS band with no amounts. Budget line is a measured cost row."
+        />
+      )}
 
       {canEdit && (
         <Card className="!p-4 space-y-3 shrink-0">
@@ -184,6 +230,13 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <Select
+              value={form.rowKind}
+              onChange={(e) => setForm({ ...form, rowKind: e.target.value as "item" | "heading" })}
+            >
+              <option value="item">Budget line (amounts)</option>
+              <option value="heading">Section heading</option>
+            </Select>
             <Input placeholder="Sr No" value={form.srNo} onChange={(e) => setForm({ ...form, srNo: e.target.value })} />
             <Input
               placeholder="Stakeholder"
@@ -191,11 +244,13 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
               onChange={(e) => setForm({ ...form, stakeholder: e.target.value })}
             />
             <Input
-              className="sm:col-span-2"
-              placeholder="Description"
+              className="sm:col-span-2 lg:col-span-1"
+              placeholder={form.rowKind === "heading" ? "Heading text *" : "Description *"}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
+            {form.rowKind === "item" && (
+            <>
             {(
               [
                 ["budgetedAmount", "Budgeted"],
@@ -224,6 +279,8 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
                 />
               </label>
             ))}
+            </>
+            )}
             <TextArea
               className="sm:col-span-2 lg:col-span-4 !min-h-[3.5rem]"
               placeholder="Remarks"
@@ -232,7 +289,7 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
             />
             <div className="sm:col-span-2 lg:col-span-4">
               <Button type="button" disabled={busy} onClick={() => void addLine()}>
-                Add budget line
+                {form.rowKind === "heading" ? "Add heading" : "Add budget line"}
               </Button>
             </div>
           </div>
@@ -273,8 +330,14 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
             <tbody>
               {rows.map((b) => {
                 const busyRow = savingId === b.id;
+                const heading =
+                  !(Number(b.budgetedAmount) || 0) &&
+                  !(Number(b.workOrderAmount) || 0) &&
+                  !(Number(b.certifiedAmount) || 0) &&
+                  !(Number(b.grossTotal) || 0) &&
+                  /heading/i.test(String(b.remarks || ""));
                 return (
-                  <tr key={b.id} className={busyRow ? "opacity-60" : undefined}>
+                  <tr key={b.id} className={`${busyRow ? "opacity-60" : ""} ${heading ? "boq-section-row" : ""}`}>
                     <td className="sticky-col">{b.srNo || "—"}</td>
                     <td className="wrap">{b.description}</td>
                     <td>{b.stakeholder || "—"}</td>

@@ -11,7 +11,9 @@ import {
   isFullSpdcWorkbook,
 } from "../modules/cost/index.js";
 import { requireModuleView } from "../modules/_shared/guards.js";
+import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { audit } from "../services/audit.js";
+import { workbookBuffer } from "../services/brandedExport.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 
@@ -30,6 +32,7 @@ function safeFolderPart(s: string) {
 }
 
 const BBS_ROW_KINDS = new Set(["section", "subsection", "subheader", "data", "note", "total"]);
+const MB_ROW_KINDS = new Set(["item", "description", "subsection", "subitem", "data", "total", "note"]);
 
 function numOr(v: unknown, fallback: number) {
   if (v == null || v === "") return fallback;
@@ -53,6 +56,7 @@ function bbsLineCompute(
     shapeLenE?: number;
     totalLength?: number;
     weightKg?: number;
+    rowKind?: string | null;
   }
 ) {
   const nosPerMember = numOr(body.nosPerMember, existing?.nosPerMember || 0);
@@ -82,8 +86,28 @@ function bbsLineCompute(
       : diameterMm >= 6 && totalLength > 0
         ? Math.round(((diameterMm * diameterMm * totalLength) / 162) * 100) / 100
         : existing?.weightKg || 0;
-  const rowKindRaw = body.rowKind != null ? String(body.rowKind).trim().toLowerCase() : "";
+  const rowKindRaw =
+    body.rowKind != null
+      ? String(body.rowKind).trim().toLowerCase()
+      : String(existing?.rowKind || "");
   const rowKind = BBS_ROW_KINDS.has(rowKindRaw) ? rowKindRaw : undefined;
+  if (rowKind && rowKind !== "data") {
+    return {
+      nosPerMember: 0,
+      nosOfMember: 0,
+      nos: 0,
+      shapeLenA: 0,
+      shapeLenB: 0,
+      shapeLenC: 0,
+      shapeLenD: 0,
+      shapeLenE: 0,
+      lengthMm: 0,
+      totalLength: 0,
+      diameterMm: 0,
+      weightKg: 0,
+      rowKind,
+    };
+  }
   return {
     nosPerMember,
     nosOfMember,
@@ -110,6 +134,15 @@ async function nextBbsLineIndex(projectId: string, packageName: string) {
   return (last?.lineIndex || 0) + 1;
 }
 
+async function nextMbLineIndex(projectId: string, packageName: string) {
+  const last = await prisma.costMbLine.findFirst({
+    where: { projectId, packageName },
+    orderBy: { lineIndex: "desc" },
+    select: { lineIndex: true },
+  });
+  return (last?.lineIndex || 0) + 1;
+}
+
 const CASHFLOW_SHEET_TOOLS = [
   { id: "chart", label: "Cash Flow Chart", source: "Cashflow - Dashboard.xlsx" },
   { id: "forecast", label: "Cash Flow Forecast", source: "Cashflow - Dashboard.xlsx" },
@@ -119,6 +152,15 @@ const CASHFLOW_SHEET_TOOLS = [
 export const costRouter = Router();
 costRouter.use(requireAuth);
 costRouter.use(requireModuleView("cost"));
+costRouter.param("projectId", async (req: AuthedRequest, res, next, projectId) => {
+  try {
+    const ok = await userCanAccessProject(req, String(projectId));
+    if (!ok) return res.status(404).json({ error: "Not found" });
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** Global BBS shape code master — must register before /:projectId routes */
 costRouter.get("/shape-masters", async (_req, res) => {
@@ -192,6 +234,333 @@ function csvEscape(v: unknown) {
 
 function toCsv(headers: string[], rows: unknown[][]) {
   return [headers.map(csvEscape).join(","), ...rows.map((r) => r.map(csvEscape).join(","))].join("\n");
+}
+
+function isMonitoringHeadingRow(r: {
+  itemNo?: string | null;
+  uom?: string | null;
+  rate?: number | null;
+  boqQty?: number | null;
+  extraQty?: number | null;
+  gfcQty?: number | null;
+  achievedQty?: number | null;
+}) {
+  return (
+    !String(r.itemNo || "").trim() &&
+    !String(r.uom || "").trim() &&
+    !(Number(r.rate) || 0) &&
+    !(Number(r.boqQty) || 0) &&
+    !(Number(r.extraQty) || 0) &&
+    !(Number(r.gfcQty) || 0) &&
+    !(Number(r.achievedQty) || 0)
+  );
+}
+
+function monitoringExportKind(r: {
+  itemNo?: string | null;
+  uom?: string | null;
+  rate?: number | null;
+  boqQty?: number | null;
+  extraQty?: number | null;
+  gfcQty?: number | null;
+  achievedQty?: number | null;
+  section?: string | null;
+  description?: string;
+}) {
+  if (!isMonitoringHeadingRow(r)) return "item";
+  const sec = String(r.section || "").trim();
+  const desc = String(r.description || "").trim();
+  if (sec.includes(" › ") || (sec && desc && sec !== desc)) return "subsection";
+  return "section";
+}
+
+function cashflowExportKind(packageName: string | null | undefined) {
+  if (/^Forecast/i.test(packageName || "")) return "forecast";
+  if (/^Tracking/i.test(packageName || "")) return "tracking";
+  return "chart";
+}
+
+function budgetExportKind(r: {
+  remarks?: string | null;
+  budgetedAmount?: number | null;
+  workOrderAmount?: number | null;
+  certifiedAmount?: number | null;
+  grossTotal?: number | null;
+}) {
+  const emptyAmt =
+    !(Number(r.budgetedAmount) || 0) &&
+    !(Number(r.workOrderAmount) || 0) &&
+    !(Number(r.certifiedAmount) || 0) &&
+    !(Number(r.grossTotal) || 0);
+  if (emptyAmt && /heading/i.test(String(r.remarks || ""))) return "heading";
+  return "item";
+}
+
+async function buildCostDownload(kind: string, projectId: string, pkg: string) {
+  const where = { projectId, ...(pkg ? { packageName: pkg } : {}) };
+
+  if (kind === "monitoring" || kind === "boq") {
+    const rows = await prisma.costMonitoringLine.findMany({
+      where,
+      orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
+    });
+    return {
+      title: "BOQ / Monitoring",
+      filename: `BOQ-${pkg || "all"}`,
+      headers: [
+        "Package",
+        "Row kind",
+        "Section",
+        "ITEM NO.",
+        "Item of Work",
+        "UOM",
+        "RATE",
+        "BOQ Qty",
+        "Extra Items Qty",
+        "GFC Qty",
+        "Achieved Qty",
+        "Excess Qty",
+        "Saving Qty",
+        "Certified Qty",
+        "BOQ Cost",
+        "Extra Item Cost",
+        "GFC Cost",
+        "Achieved Cost",
+        "Excess Cost",
+        "Saving Cost",
+        "Certified Invoice Cost",
+        "% Progress BOQ",
+        "% Progress GFC",
+        "% Progress Achieved",
+        "% Progress Certified",
+        "EV BOQ",
+        "EV GFC",
+        "EV Certified",
+        "AC",
+        "CPI",
+        "CPI Status",
+        "ETC BOQ",
+        "ETC GFC",
+        "ETC Certified",
+        "EAC",
+        "VAC",
+        "Var BOQ vs GFC",
+        "Var GFC vs Achieved",
+        "Var GFC vs Certified",
+        "Overrun BOQ",
+        "Overrun GFC",
+        "Overrun Certified",
+      ],
+      rows: rows.map((r) => [
+        r.packageName,
+        monitoringExportKind(r),
+        r.section,
+        r.itemNo,
+        r.description,
+        r.uom,
+        r.rate,
+        r.boqQty,
+        r.extraQty,
+        r.gfcQty,
+        r.achievedQty,
+        r.excessQty,
+        r.savingQty,
+        r.certifiedQty,
+        r.boqCost,
+        r.extraItemCost,
+        r.gfcCost,
+        r.achievedCost,
+        r.excessCost,
+        r.savingCost,
+        r.certifiedInvoiceCost,
+        r.pctBoq,
+        r.pctGfc,
+        r.pctAchieved,
+        r.pctCertified,
+        r.evBoq,
+        r.evGfc,
+        r.evCertified,
+        r.actualCost,
+        r.cpi,
+        r.cpiStatus,
+        r.etcBoq,
+        r.etcGfc,
+        r.etcCertified,
+        r.eac,
+        r.vac,
+        r.varBoqGfc,
+        r.varGfcAchieved,
+        r.varGfcCertified,
+        r.overrunBoq,
+        r.overrunGfc,
+        r.overrunCertified,
+      ]),
+    };
+  }
+
+  if (kind === "mb") {
+    const rows = await prisma.costMbLine.findMany({
+      where,
+      orderBy: [{ packageName: "asc" }, { lineIndex: "asc" }, { srNo: "asc" }],
+    });
+    return {
+      title: "Measurement Book",
+      filename: `MB-${pkg || "all"}`,
+      headers: ["Package", "Row kind", "Sr No.", "Description", "No", "No", "Length", "Width", "Height", "Qty.", "UoM.", "RA Bill", "Remark"],
+      rows: rows.map((r) => [
+        r.packageName,
+        r.rowKind,
+        r.srNo,
+        r.description,
+        r.nos1,
+        r.nos2,
+        r.length,
+        r.width,
+        r.height,
+        r.qty,
+        r.unit,
+        r.raBill,
+        r.remark,
+      ]),
+    };
+  }
+
+  if (kind === "bbs") {
+    const rows = await prisma.costBbsLine.findMany({
+      where,
+      orderBy: [{ packageName: "asc" }, { lineIndex: "asc" }, { barMark: "asc" }],
+    });
+    return {
+      title: "Bar Bending Schedule",
+      filename: `BBS-${pkg || "all"}`,
+      headers: [
+        "Package",
+        "Row kind",
+        "SR NO",
+        "Description",
+        "Shape of bar (diagram URL)",
+        "DIA",
+        "No per member",
+        "No of member",
+        "Total nos",
+        "Shape A",
+        "Shape B",
+        "Shape C",
+        "Shape D",
+        "Shape E",
+        "Cutting Length",
+        "Total LENGTH",
+        "Weight kg",
+      ],
+      rows: rows.map((r) => [
+        r.packageName,
+        r.rowKind,
+        r.barMark,
+        r.location,
+        r.shapeDiagramUrl || r.shapeDiagramPath || "",
+        r.diameterMm,
+        r.nosPerMember,
+        r.nosOfMember,
+        r.nos,
+        r.shapeLenA,
+        r.shapeLenB,
+        r.shapeLenC,
+        r.shapeLenD,
+        r.shapeLenE,
+        r.lengthMm,
+        r.totalLength,
+        r.weightKg,
+      ]),
+    };
+  }
+
+  if (kind === "budget") {
+    const rows = await prisma.costBudgetLine.findMany({ where: { projectId } });
+    return {
+      title: "Budget WBS",
+      filename: "Budget-WBS",
+      headers: [
+        "Sr",
+        "Row kind",
+        "Description",
+        "Stakeholder",
+        "Budgeted",
+        "WO",
+        "Certified",
+        "Forecast Addition",
+        "Forecast Reduction",
+        "Non-tendered",
+        "Steel Excess",
+        "Steel Saving",
+        "Cement Excess",
+        "Cement Saving",
+        "Tiles Excess",
+        "Tiles Saving",
+        "Gross Total",
+        "Remarks",
+      ],
+      rows: rows.map((r) => [
+        r.srNo,
+        budgetExportKind(r),
+        r.description,
+        r.stakeholder,
+        r.budgetedAmount,
+        r.workOrderAmount,
+        r.certifiedAmount,
+        r.forecastedAmount,
+        r.forecastReduction,
+        r.nonTendered,
+        r.steelExcess,
+        r.steelSaving,
+        r.cementExcess,
+        r.cementSaving,
+        r.tilesExcess,
+        r.tilesSaving,
+        r.grossTotal,
+        r.remarks,
+      ]),
+    };
+  }
+
+  if (kind === "cashflow") {
+    const rows = await prisma.costCashflowPeriod.findMany({ where: { projectId } });
+    return {
+      title: "Cashflow Dashboard",
+      filename: "Cashflow",
+      headers: ["Period", "Sheet kind", "Package / sheet", "Planned", "Actual", "Variance", "Progress"],
+      rows: rows.map((r) => [
+        r.periodLabel,
+        cashflowExportKind(r.packageName),
+        r.packageName,
+        r.plannedAmount,
+        r.actualAmount,
+        (r.actualAmount || 0) - (r.plannedAmount || 0),
+        r.progressPct,
+      ]),
+    };
+  }
+
+  if (kind === "rates") {
+    const rows = await prisma.costRateDifference.findMany({ where: { projectId } });
+    return {
+      title: "Rate difference",
+      filename: "Rate-difference",
+      headers: ["Material", "Description", "Vendor", "Purchase No", "Qty", "Basic", "Purchase", "Excess", "Saving"],
+      rows: rows.map((r) => [
+        r.materialType,
+        r.description,
+        r.vendorName,
+        r.purchaseNo,
+        r.qty,
+        r.basicRate,
+        r.purchaseRate,
+        r.excessAmount,
+        r.savingAmount,
+      ]),
+    };
+  }
+
+  return null;
 }
 
 costRouter.get("/:projectId/summary", async (req, res) => {
@@ -351,260 +720,37 @@ costRouter.get("/:projectId/summary", async (req, res) => {
   });
 });
 
-/** Download BOQ / monitoring / MB / BBS as CSV (Excel-openable) */
-costRouter.get("/:projectId/download/:kind.csv", async (req, res) => {
+/** Download BOQ / monitoring / MB / BBS / cashflow — CSV or XLSX, scoped to projectId (+ optional package). */
+async function sendCostDownload(req: AuthedRequest, res: import("express").Response, fmt: "csv" | "xlsx") {
   const projectId = req.params.projectId;
   const kind = req.params.kind;
   const pkg = String(req.query.package || "").trim();
-  const where = { projectId, ...(pkg ? { packageName: pkg } : {}) };
-
-  if (kind === "monitoring" || kind === "boq") {
-    const rows = await prisma.costMonitoringLine.findMany({
-      where,
-      orderBy: [{ packageName: "asc" }, { section: "asc" }, { itemNo: "asc" }],
+  const pack = await buildCostDownload(kind, projectId, pkg);
+  if (!pack) {
+    return res.status(400).json({ error: "Unknown kind — use monitoring|boq|mb|bbs|budget|cashflow|rates" });
+  }
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+  if (fmt === "xlsx") {
+    const buf = workbookBuffer([{ name: pack.title.slice(0, 31), rows: [pack.headers, ...pack.rows] }], {
+      title: pack.title,
+      projectCode: project?.code || projectId,
     });
-    const csv = toCsv(
-      [
-        "Package",
-        "Section",
-        "ITEM NO.",
-        "Item of Work",
-        "UOM",
-        "RATE",
-        "BOQ Qty",
-        "Extra Items Qty",
-        "GFC Qty",
-        "Achieved Qty",
-        "Excess Qty",
-        "Saving Qty",
-        "Certified Qty",
-        "BOQ Cost",
-        "Extra Item Cost",
-        "GFC Cost",
-        "Achieved Cost",
-        "Excess Cost",
-        "Saving Cost",
-        "Certified Invoice Cost",
-        "% Progress BOQ",
-        "% Progress GFC",
-        "% Progress Achieved",
-        "% Progress Certified",
-        "EV BOQ",
-        "EV GFC",
-        "EV Certified",
-        "AC",
-        "CPI",
-        "CPI Status",
-        "ETC BOQ",
-        "ETC GFC",
-        "ETC Certified",
-        "EAC",
-        "VAC",
-        "Var BOQ vs GFC",
-        "Var GFC vs Achieved",
-        "Var GFC vs Certified",
-        "Overrun BOQ",
-        "Overrun GFC",
-        "Overrun Certified",
-      ],
-      rows.map((r) => [
-        r.packageName,
-        r.section,
-        r.itemNo,
-        r.description,
-        r.uom,
-        r.rate,
-        r.boqQty,
-        r.extraQty,
-        r.gfcQty,
-        r.achievedQty,
-        r.excessQty,
-        r.savingQty,
-        r.certifiedQty,
-        r.boqCost,
-        r.extraItemCost,
-        r.gfcCost,
-        r.achievedCost,
-        r.excessCost,
-        r.savingCost,
-        r.certifiedInvoiceCost,
-        r.pctBoq,
-        r.pctGfc,
-        r.pctAchieved,
-        r.pctCertified,
-        r.evBoq,
-        r.evGfc,
-        r.evCertified,
-        r.actualCost,
-        r.cpi,
-        r.cpiStatus,
-        r.etcBoq,
-        r.etcGfc,
-        r.etcCertified,
-        r.eac,
-        r.vac,
-        r.varBoqGfc,
-        r.varGfcAchieved,
-        r.varGfcCertified,
-        r.overrunBoq,
-        r.overrunGfc,
-        r.overrunCertified,
-      ])
-    );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="BOQ-${pkg || "all"}.csv"`);
-    return res.send(csv);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${pack.filename}.xlsx"`);
+    return res.send(buf);
   }
+  const csv = toCsv(pack.headers, pack.rows);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${pack.filename}.csv"`);
+  return res.send(csv);
+}
 
-  if (kind === "mb") {
-    const rows = await prisma.costMbLine.findMany({ where, orderBy: [{ packageName: "asc" }, { srNo: "asc" }] });
-    const csv = toCsv(
-      ["Package", "Sr No.", "Description", "No", "No", "Length", "Width", "Height", "Qty.", "UoM.", "RA Bill", "Remark"],
-      rows.map((r) => [
-        r.packageName,
-        r.srNo,
-        r.description,
-        r.nos1,
-        r.nos2,
-        r.length,
-        r.width,
-        r.height,
-        r.qty,
-        r.unit,
-        r.raBill,
-        r.remark,
-      ])
-    );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="MB-${pkg || "all"}.csv"`);
-    return res.send(csv);
-  }
+costRouter.get("/:projectId/download/:kind.csv", async (req: AuthedRequest, res) => {
+  await sendCostDownload(req, res, "csv");
+});
 
-  if (kind === "bbs") {
-    const rows = await prisma.costBbsLine.findMany({ where, orderBy: [{ packageName: "asc" }, { barMark: "asc" }] });
-    const csv = toCsv(
-      [
-        "Package",
-        "SR NO",
-        "Description",
-        "Shape of bar (diagram URL)",
-        "DIA",
-        "No per member",
-        "No of member",
-        "Total nos",
-        "Shape A",
-        "Shape B",
-        "Shape C",
-        "Shape D",
-        "Shape E",
-        "Cutting Length",
-        "Total LENGTH",
-        "Weight kg",
-      ],
-      rows.map((r) => [
-        r.packageName,
-        r.barMark,
-        r.location,
-        r.shapeDiagramUrl || r.shapeDiagramPath || "",
-        r.diameterMm,
-        r.nosPerMember,
-        r.nosOfMember,
-        r.nos,
-        r.shapeLenA,
-        r.shapeLenB,
-        r.shapeLenC,
-        r.shapeLenD,
-        r.shapeLenE,
-        r.lengthMm,
-        r.totalLength,
-        r.weightKg,
-      ])
-    );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="BBS-${pkg || "all"}.csv"`);
-    return res.send(csv);
-  }
-
-  if (kind === "budget") {
-    const rows = await prisma.costBudgetLine.findMany({ where: { projectId } });
-    const csv = toCsv(
-      [
-        "Sr",
-        "Description",
-        "Stakeholder",
-        "Budgeted",
-        "WO",
-        "Certified",
-        "Forecast Addition",
-        "Forecast Reduction",
-        "Non-tendered",
-        "Steel Excess",
-        "Steel Saving",
-        "Cement Excess",
-        "Cement Saving",
-        "Tiles Excess",
-        "Tiles Saving",
-        "Gross Total",
-        "Remarks",
-      ],
-      rows.map((r) => [
-        r.srNo,
-        r.description,
-        r.stakeholder,
-        r.budgetedAmount,
-        r.workOrderAmount,
-        r.certifiedAmount,
-        r.forecastedAmount,
-        r.forecastReduction,
-        r.nonTendered,
-        r.steelExcess,
-        r.steelSaving,
-        r.cementExcess,
-        r.cementSaving,
-        r.tilesExcess,
-        r.tilesSaving,
-        r.grossTotal,
-        r.remarks,
-      ])
-    );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="Budget-WBS.csv"`);
-    return res.send(csv);
-  }
-
-  if (kind === "cashflow") {
-    const rows = await prisma.costCashflowPeriod.findMany({ where: { projectId } });
-    const csv = toCsv(
-      ["Period", "Package / sheet", "Planned", "Actual", "Progress"],
-      rows.map((r) => [r.periodLabel, r.packageName, r.plannedAmount, r.actualAmount, r.progressPct])
-    );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="Cashflow.csv"`);
-    return res.send(csv);
-  }
-
-  if (kind === "rates") {
-    const rows = await prisma.costRateDifference.findMany({ where: { projectId } });
-    const csv = toCsv(
-      ["Material", "Description", "Vendor", "Purchase No", "Qty", "Basic", "Purchase", "Excess", "Saving"],
-      rows.map((r) => [
-        r.materialType,
-        r.description,
-        r.vendorName,
-        r.purchaseNo,
-        r.qty,
-        r.basicRate,
-        r.purchaseRate,
-        r.excessAmount,
-        r.savingAmount,
-      ])
-    );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="Rate-difference.csv"`);
-    return res.send(csv);
-  }
-
-  return res.status(400).json({ error: "Unknown kind — use monitoring|boq|mb|bbs|budget|cashflow|rates" });
+costRouter.get("/:projectId/download/:kind.xlsx", async (req: AuthedRequest, res) => {
+  await sendCostDownload(req, res, "xlsx");
 });
 
 costRouter.post(
@@ -692,8 +838,8 @@ costRouter.post(
 );
 
 costRouter.get("/:projectId/boq/:batchId", async (req, res) => {
-  const batch = await prisma.boqImportBatch.findUnique({
-    where: { id: req.params.batchId },
+  const batch = await prisma.boqImportBatch.findFirst({
+    where: { id: req.params.batchId, projectId: req.params.projectId },
     include: { items: true },
   });
   if (!batch) return res.status(404).json({ error: "Not found" });
@@ -727,13 +873,15 @@ costRouter.post("/:projectId/budget", requireRoles("admin", "office"), async (re
   res.status(201).json(line);
 });
 
-costRouter.patch("/budget/:lineId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const existing = await prisma.costBudgetLine.findUnique({ where: { id: req.params.lineId } });
+costRouter.patch("/:projectId/budget/:lineId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costBudgetLine.findFirst({
+    where: { id: req.params.lineId, projectId: req.params.projectId },
+  });
   if (!existing) return res.status(404).json({ error: "Not found" });
   const body = req.body || {};
   const num = (k: string) => (body[k] != null ? Number(body[k]) : undefined);
   const line = await prisma.costBudgetLine.update({
-    where: { id: req.params.lineId },
+    where: { id: existing.id },
     data: {
       ...(body.srNo !== undefined ? { srNo: body.srNo ? String(body.srNo) : null } : {}),
       ...(body.description != null ? { description: String(body.description) } : {}),
@@ -757,10 +905,12 @@ costRouter.patch("/budget/:lineId", requireRoles("admin", "office"), async (req:
   res.json(line);
 });
 
-costRouter.delete("/budget/:lineId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const existing = await prisma.costBudgetLine.findUnique({ where: { id: req.params.lineId } });
+costRouter.delete("/:projectId/budget/:lineId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costBudgetLine.findFirst({
+    where: { id: req.params.lineId, projectId: req.params.projectId },
+  });
   if (!existing) return res.status(404).json({ error: "Not found" });
-  await prisma.costBudgetLine.delete({ where: { id: req.params.lineId } });
+  await prisma.costBudgetLine.delete({ where: { id: existing.id } });
   res.json({ ok: true });
 });
 
@@ -951,12 +1101,27 @@ costRouter.post(
 );
 
 costRouter.post("/:projectId/cashflow", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const sheet = String(req.body.sheetKind || req.body.packageName || "chart").trim();
+  const extra = req.body.structure ? String(req.body.structure) : "";
+  const packageName = /^Forecast/i.test(sheet)
+    ? sheet.startsWith("Forecast")
+      ? sheet
+      : `Forecast · ${extra || "Structure"}`
+    : /^Tracking/i.test(sheet)
+      ? sheet.startsWith("Tracking")
+        ? sheet
+        : `Tracking · ${extra || "Work"}`
+      : sheet === "forecast"
+        ? `Forecast · ${extra || "Structure"}`
+        : sheet === "tracking"
+          ? `Tracking · ${extra || "Work"}`
+          : extra || String(req.body.packageName || "Project cashflow (Chart)");
   const row = await prisma.costCashflowPeriod.create({
     data: {
       projectId: req.params.projectId,
-      periodLabel: req.body.periodLabel,
+      periodLabel: String(req.body.periodLabel || "New period"),
       periodDate: req.body.periodDate ? new Date(req.body.periodDate) : null,
-      packageName: req.body.packageName,
+      packageName,
       plannedAmount: Number(req.body.plannedAmount || 0),
       actualAmount: Number(req.body.actualAmount || 0),
       progressPct: Number(req.body.progressPct || 0),
@@ -1028,9 +1193,13 @@ costRouter.post("/:projectId/bills", requireRoles("admin", "office", "employee")
   res.status(201).json(bill);
 });
 
-costRouter.patch("/bills/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+costRouter.patch("/:projectId/bills/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.vendorBill.findFirst({
+    where: { id: req.params.id, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
   const bill = await prisma.vendorBill.update({
-    where: { id: req.params.id },
+    where: { id: existing.id },
     data: {
       status: req.body.status,
       copNo: req.body.copNo,
@@ -1041,19 +1210,102 @@ costRouter.patch("/bills/:id", requireRoles("admin", "office"), async (req: Auth
   res.json(bill);
 });
 
+costRouter.delete("/:projectId/bills/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.vendorBill.findFirst({
+    where: { id: req.params.id, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.vendorBill.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+costRouter.patch("/:projectId/cashflow/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costCashflowPeriod.findFirst({
+    where: { id: req.params.id, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const row = await prisma.costCashflowPeriod.update({
+    where: { id: existing.id },
+    data: {
+      ...(body.periodLabel != null ? { periodLabel: String(body.periodLabel) } : {}),
+      ...(body.periodDate !== undefined ? { periodDate: body.periodDate ? new Date(body.periodDate) : null } : {}),
+      ...(body.packageName != null ? { packageName: String(body.packageName) } : {}),
+      ...(body.plannedAmount != null ? { plannedAmount: Number(body.plannedAmount) } : {}),
+      ...(body.actualAmount != null ? { actualAmount: Number(body.actualAmount) } : {}),
+      ...(body.progressPct != null ? { progressPct: Number(body.progressPct) } : {}),
+    },
+  });
+  res.json(row);
+});
+
+costRouter.delete("/:projectId/cashflow/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costCashflowPeriod.findFirst({
+    where: { id: req.params.id, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.costCashflowPeriod.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+costRouter.patch("/:projectId/rate-diff/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costRateDifference.findFirst({
+    where: { id: req.params.id, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const qty = body.qty != null ? Number(body.qty) : existing.qty;
+  const basic = body.basicRate != null ? Number(body.basicRate) : existing.basicRate;
+  const purchase = body.purchaseRate != null ? Number(body.purchaseRate) : existing.purchaseRate;
+  const basicAmt = basic * qty;
+  const purchaseAmt = purchase * qty;
+  const diff = purchaseAmt - basicAmt;
+  const row = await prisma.costRateDifference.update({
+    where: { id: existing.id },
+    data: {
+      ...(body.materialType != null ? { materialType: String(body.materialType) } : {}),
+      ...(body.description != null ? { description: String(body.description) } : {}),
+      ...(body.vendorName !== undefined ? { vendorName: body.vendorName ? String(body.vendorName) : null } : {}),
+      ...(body.purchaseNo !== undefined ? { purchaseNo: body.purchaseNo ? String(body.purchaseNo) : null } : {}),
+      qty,
+      basicRate: basic,
+      purchaseRate: purchase,
+      excessAmount: diff > 0 ? diff : 0,
+      savingAmount: diff < 0 ? Math.abs(diff) : 0,
+    },
+  });
+  res.json(row);
+});
+
+costRouter.delete("/:projectId/rate-diff/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.costRateDifference.findFirst({
+    where: { id: req.params.id, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.costRateDifference.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
 costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
-  const nos1 = Number(req.body.nos1 || 0);
-  const nos2 = Number(req.body.nos2 || 1) || 1;
-  const length = Number(req.body.length || 0);
-  const width = Number(req.body.width || 0);
-  const height = Number(req.body.height || 0);
-  const qty = Number(req.body.qty || nos1 * nos2 * (length || 1) * (width || 1) * (height || 1));
+  const rowKindRaw = String(req.body.rowKind || "data").trim().toLowerCase();
+  const rowKind = MB_ROW_KINDS.has(rowKindRaw) ? rowKindRaw : "data";
+  const isMeasure = rowKind === "data";
+  const nos1 = isMeasure ? Number(req.body.nos1 || 0) : 0;
+  const nos2 = isMeasure ? Number(req.body.nos2 || 1) || 1 : 0;
+  const length = isMeasure ? Number(req.body.length || 0) : 0;
+  const width = isMeasure ? Number(req.body.width || 0) : 0;
+  const height = isMeasure ? Number(req.body.height || 0) : 0;
+  const qty = isMeasure
+    ? Number(req.body.qty || nos1 * nos2 * (length || 1) * (width || 1) * (height || 1))
+    : Number(req.body.qty || 0);
+  const packageName = String(req.body.packageName || "Civil");
+  const lineIndex = await nextMbLineIndex(req.params.projectId, packageName);
   const row = await prisma.costMbLine.create({
     data: {
       projectId: req.params.projectId,
-      packageName: req.body.packageName || "Civil",
+      packageName,
       srNo: req.body.srNo || null,
-      description: String(req.body.description || "MB line"),
+      description: String(req.body.description || (rowKind === "data" ? "MB line" : "New heading")),
       nos1,
       nos2,
       length,
@@ -1063,6 +1315,8 @@ costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee", "s
       unit: req.body.unit || null,
       raBill: req.body.raBill || null,
       remark: req.body.remark || null,
+      rowKind,
+      lineIndex,
     },
   });
   res.status(201).json(row);
@@ -1116,10 +1370,15 @@ costRouter.patch(
     const length = body.length != null ? Number(body.length) : existing.length;
     const width = body.width != null ? Number(body.width) : existing.width;
     const height = body.height != null ? Number(body.height) : existing.height;
+    const rowKindRaw = body.rowKind != null ? String(body.rowKind).trim().toLowerCase() : existing.rowKind;
+    const rowKind = MB_ROW_KINDS.has(rowKindRaw) ? rowKindRaw : existing.rowKind;
+    const isMeasure = rowKind === "data";
     const qty =
       body.qty != null
         ? Number(body.qty)
-        : nos1 * nos2 * (length || 1) * (width || 1) * (height || 1);
+        : isMeasure
+          ? nos1 * nos2 * (length || 1) * (width || 1) * (height || 1)
+          : existing.qty;
     const row = await prisma.costMbLine.update({
       where: { id: existing.id },
       data: {
@@ -1132,6 +1391,7 @@ costRouter.patch(
         width,
         height,
         qty,
+        rowKind,
         ...(body.unit !== undefined ? { unit: body.unit ? String(body.unit) : null } : {}),
         ...(body.raBill !== undefined ? { raBill: body.raBill ? String(body.raBill) : null } : {}),
         ...(body.remark !== undefined ? { remark: body.remark ? String(body.remark) : null } : {}),
@@ -1356,10 +1616,12 @@ costRouter.post(
 );
 
 costRouter.patch(
-  "/monitoring/:lineId",
+  "/:projectId/monitoring/:lineId",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
-    const existing = await prisma.costMonitoringLine.findUnique({ where: { id: req.params.lineId } });
+    const existing = await prisma.costMonitoringLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
     if (!existing) return res.status(404).json({ error: "Not found" });
 
     const body = req.body || {};
@@ -1380,7 +1642,7 @@ costRouter.patch(
     });
 
     const row = await prisma.costMonitoringLine.update({
-      where: { id: req.params.lineId },
+      where: { id: existing.id },
       data: {
         ...(body.packageName != null ? { packageName: String(body.packageName) } : {}),
         ...(body.section !== undefined ? { section: body.section ? String(body.section) : null } : {}),
@@ -1459,12 +1721,14 @@ costRouter.post(
 );
 
 costRouter.delete(
-  "/monitoring/:lineId",
+  "/:projectId/monitoring/:lineId",
   requireRoles("admin", "office"),
   async (req: AuthedRequest, res) => {
-    const existing = await prisma.costMonitoringLine.findUnique({ where: { id: req.params.lineId } });
+    const existing = await prisma.costMonitoringLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
     if (!existing) return res.status(404).json({ error: "Not found" });
-    await prisma.costMonitoringLine.delete({ where: { id: req.params.lineId } });
+    await prisma.costMonitoringLine.delete({ where: { id: existing.id } });
     await audit("cost.monitoring.delete", {
       userId: req.user!.id,
       entity: "CostMonitoringLine",

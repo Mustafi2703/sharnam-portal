@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
+import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { audit } from "../services/audit.js";
 import { verifyProgressProject } from "../services/progressVerify.js";
 import {
@@ -18,6 +19,15 @@ import {
 
 export const progressRouter = Router();
 progressRouter.use(requireAuth);
+progressRouter.param("projectId", async (req: AuthedRequest, res, next, projectId) => {
+  try {
+    const ok = await userCanAccessProject(req, String(projectId));
+    if (!ok) return res.status(404).json({ error: "Not found" });
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 

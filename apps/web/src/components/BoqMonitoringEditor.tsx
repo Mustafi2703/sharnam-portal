@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Button, Input, Select, TextArea } from "./ui";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { RegisterEntryModal } from "./RegisterEntryModal";
+import { SheetAddKindBar } from "./SheetAddKindBar";
 import { MON_COLUMN_GROUPS, monitoringColClass } from "../lib/costSheetColumns";
 import { monitoringBandEmpty, MON_DATA_COLS } from "../lib/costBandRows";
 
@@ -51,6 +52,32 @@ export type MonLine = {
   overrunCertified?: number;
 };
 
+function parentSectionName(section: string) {
+  const t = (section || "").trim();
+  if (!t) return "General";
+  return t.split(" › ")[0] || t;
+}
+
+function isMonitoringHeading(b: MonLine) {
+  return (
+    !String(b.itemNo || "").trim() &&
+    !String(b.uom || "").trim() &&
+    !(Number(b.rate) || 0) &&
+    !(Number(b.boqQty) || 0) &&
+    !(Number(b.extraQty) || 0) &&
+    !(Number(b.gfcQty) || 0) &&
+    !(Number(b.achievedQty) || 0)
+  );
+}
+
+function monitoringHeadingKind(line: MonLine): "section" | "subsection" | "item" {
+  if (!isMonitoringHeading(line)) return "item";
+  const sec = String(line.section || "").trim();
+  const desc = String(line.description || "").trim();
+  if (sec.includes(" › ") || (sec && desc && sec !== desc)) return "subsection";
+  return "section";
+}
+
 type Props = {
   projectId: string;
   token: string | null;
@@ -63,12 +90,14 @@ type Props = {
   singlePackage?: string;
   addOpen?: boolean;
   onAddClose?: () => void;
+  preferredAddKind?: "item" | "section" | "subsection";
 };
 
 type Draft = ReturnType<typeof emptyDraft>;
 
 const emptyDraft = (pkg: string) => ({
   packageName: pkg || "Civil",
+  rowKind: "item" as "item" | "section" | "subsection",
   section: "",
   itemNo: "",
   description: "",
@@ -195,8 +224,10 @@ function CellInput({
 }
 
 function lineToDraft(line: MonLine): Draft {
+  const headingKind = monitoringHeadingKind(line);
   return {
     packageName: line.packageName || "Civil",
+    rowKind: headingKind === "item" ? "item" : headingKind,
     section: line.section || "",
     itemNo: line.itemNo || "",
     description: line.description || "",
@@ -428,11 +459,13 @@ export function BoqMonitoringEditor({
   singlePackage,
   addOpen = false,
   onAddClose,
+  preferredAddKind,
 }: Props) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [draft, setDraft] = useState(() => emptyDraft(packages[0] || "Civil"));
   const [adding, setAdding] = useState(false);
+  const [localAdd, setLocalAdd] = useState(false);
   const [editLine, setEditLine] = useState<MonLine | null>(null);
   const [editDraft, setEditDraft] = useState<Draft>(() => emptyDraft(packages[0] || "Civil"));
   const [editBusy, setEditBusy] = useState(false);
@@ -442,6 +475,13 @@ export function BoqMonitoringEditor({
   const canEditGfc = canFullEdit;
   const canEditAchieved = canFullEdit || canSiteEdit;
   const headers = [...MON_HEADERS];
+
+  useEffect(() => {
+    if (!addOpen) return;
+    const pkg =
+      (singlePackage && singlePackage !== "All" ? singlePackage : null) || packages[0] || "Civil";
+    setDraft({ ...emptyDraft(pkg), rowKind: preferredAddKind || "item" });
+  }, [addOpen, preferredAddKind, singlePackage, packages[0]]);
 
   const grouped = useMemo(() => {
     const groups: { key: string; section: string; items: MonLine[] }[] = [];
@@ -460,7 +500,7 @@ export function BoqMonitoringEditor({
     setSavingId(id);
     setMsg("");
     try {
-      await api(`/api/cost/monitoring/${id}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await api(`/api/cost/${projectId}/monitoring/${id}`, { method: "PATCH", token, body: JSON.stringify(patch) });
       if (reload) onChanged();
     } catch (e: any) {
       setMsg(e?.message || "Save failed");
@@ -475,7 +515,7 @@ export function BoqMonitoringEditor({
     try {
       await Promise.all(
         items.map((line) =>
-          api(`/api/cost/monitoring/${line.id}`, {
+          api(`/api/cost/${projectId}/monitoring/${line.id}`, {
             method: "PATCH",
             token,
             body: JSON.stringify({ section: next }),
@@ -485,6 +525,47 @@ export function BoqMonitoringEditor({
       onChanged();
     } catch (e: any) {
       setMsg(e?.message || "Section rename failed");
+    }
+  }
+
+  async function addKind(kind: "section" | "subsection" | "item") {
+    const pkg =
+      (singlePackage && singlePackage !== "All" ? singlePackage : null) ||
+      draft.packageName ||
+      packages[0] ||
+      "Civil";
+    if (kind === "item") {
+      setDraft({ ...emptyDraft(pkg), rowKind: "item" });
+      setLocalAdd(true);
+      return;
+    }
+    setAdding(true);
+    setMsg("");
+    try {
+      const parent = parentSectionName(grouped[grouped.length - 1]?.section || "General");
+      const label = kind === "section" ? "New section" : "New subsection";
+      await api(`/api/cost/${projectId}/monitoring`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          packageName: pkg,
+          section: kind === "section" ? label : `${parent} › ${label}`,
+          itemNo: null,
+          description: label,
+          uom: null,
+          rate: 0,
+          boqQty: 0,
+          extraQty: 0,
+          gfcQty: 0,
+          achievedQty: 0,
+        }),
+      });
+      setMsg(kind === "section" ? "Section heading added — edit the label in the sheet" : "Subsection heading added");
+      onChanged();
+    } catch (e: any) {
+      setMsg(e?.message || "Could not add heading");
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -501,21 +582,27 @@ export function BoqMonitoringEditor({
         token,
         body: JSON.stringify({
           packageName: draft.packageName || "Civil",
-          section: draft.section || null,
-          itemNo: draft.itemNo || null,
+          section:
+            draft.rowKind === "section"
+              ? draft.description || "New section"
+              : draft.rowKind === "subsection"
+                ? `${parentSectionName(draft.section || grouped[grouped.length - 1]?.section || "General")} › ${draft.description}`
+                : draft.section || null,
+          itemNo: draft.rowKind === "item" ? draft.itemNo || null : null,
           description: draft.description,
-          uom: draft.uom || null,
-          rate: Number(draft.rate || 0),
-          boqQty: Number(draft.boqQty || 0),
-          extraQty: Number(draft.extraQty || 0),
-          gfcQty: Number(draft.gfcQty || 0),
-          achievedQty: Number(draft.achievedQty || 0),
+          uom: draft.rowKind === "item" ? draft.uom || null : null,
+          rate: draft.rowKind === "item" ? Number(draft.rate || 0) : 0,
+          boqQty: draft.rowKind === "item" ? Number(draft.boqQty || 0) : 0,
+          extraQty: draft.rowKind === "item" ? Number(draft.extraQty || 0) : 0,
+          gfcQty: draft.rowKind === "item" ? Number(draft.gfcQty || 0) : 0,
+          achievedQty: draft.rowKind === "item" ? Number(draft.achievedQty || 0) : 0,
         }),
       });
       setDraft(emptyDraft(draft.packageName || packages[0] || "Civil"));
       onChanged();
       setMsg("Line added");
       onAddClose?.();
+      setLocalAdd(false);
     } catch (e: any) {
       setMsg(e?.message || "Could not add line");
     } finally {
@@ -528,7 +615,7 @@ export function BoqMonitoringEditor({
     if (!confirm("Delete this BOQ line?")) return;
     setSavingId(id);
     try {
-      await api(`/api/cost/monitoring/${id}`, { method: "DELETE", token });
+      await api(`/api/cost/${projectId}/monitoring/${id}`, { method: "DELETE", token });
       onChanged();
     } catch (e: any) {
       setMsg(e?.message || "Delete failed");
@@ -570,7 +657,7 @@ export function BoqMonitoringEditor({
           extraQty: Number(editDraft.extraQty || 0),
         });
       }
-      await api(`/api/cost/monitoring/${editLine.id}`, {
+      await api(`/api/cost/${projectId}/monitoring/${editLine.id}`, {
         method: "PATCH",
         token,
         body: JSON.stringify(patch),
@@ -611,7 +698,20 @@ export function BoqMonitoringEditor({
           )}
         </td>
         {Array.from({ length: MON_DATA_COLS - 3 }, (_, i) => monitoringBandEmpty(i + 3, `mon-b-${i + 3}`))}
-        {canTouch && <td className="boq-actions-col" />}
+        {canTouch && (
+          <td className="boq-actions-col">
+            {items.every(isMonitoringHeading) && canFullEdit ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="!text-xs !py-0.5"
+                onClick={() => items[0] && void removeLine(items[0].id)}
+              >
+                Del
+              </Button>
+            ) : null}
+          </td>
+        )}
       </tr>
     );
   }
@@ -622,13 +722,24 @@ export function BoqMonitoringEditor({
 
       {canFullEdit && (
         <RegisterEntryModal
-          open={addOpen}
-          title="Add monitoring line"
-          onClose={() => onAddClose?.()}
+          open={addOpen || localAdd}
+          title={
+            draft.rowKind === "section"
+              ? "Add monitoring section"
+              : draft.rowKind === "subsection"
+                ? "Add monitoring subsection"
+                : "Add monitoring item"
+          }
+          onClose={() => {
+            setLocalAdd(false);
+            onAddClose?.();
+          }}
           onSave={() => void addLine()}
           saving={adding}
           size="2xl"
-          saveLabel="Add line"
+          saveLabel={
+            draft.rowKind === "section" ? "Add section" : draft.rowKind === "subsection" ? "Add subsection" : "Add item"
+          }
         >
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Select
@@ -639,56 +750,85 @@ export function BoqMonitoringEditor({
                 <option key={p}>{p}</option>
               ))}
             </Select>
-            <Input
-              placeholder="Section (e.g. SECTION A — EARTH WORK)"
-              value={draft.section || ""}
-              onChange={(e) => setDraft({ ...draft, section: e.target.value })}
-            />
-            <Input
-              placeholder="Item no"
-              value={draft.itemNo || ""}
-              onChange={(e) => setDraft({ ...draft, itemNo: e.target.value })}
-            />
-            <Input
-              placeholder="UOM"
-              value={draft.uom || ""}
-              onChange={(e) => setDraft({ ...draft, uom: e.target.value })}
-            />
+            <Select
+              value={draft.rowKind}
+              onChange={(e) => setDraft({ ...draft, rowKind: e.target.value as "item" | "section" | "subsection" })}
+            >
+              <option value="item">Measured item</option>
+              <option value="section">Section heading</option>
+              <option value="subsection">Subsection heading</option>
+            </Select>
+            {draft.rowKind === "subsection" && (
+              <Input
+                placeholder="Parent section"
+                value={draft.section || ""}
+                onChange={(e) => setDraft({ ...draft, section: e.target.value })}
+              />
+            )}
+            {draft.rowKind === "item" && (
+              <>
+                <Input
+                  placeholder="Section (e.g. SECTION A — EARTH WORK)"
+                  value={draft.section || ""}
+                  onChange={(e) => setDraft({ ...draft, section: e.target.value })}
+                />
+                <Input
+                  placeholder="Item no"
+                  value={draft.itemNo || ""}
+                  onChange={(e) => setDraft({ ...draft, itemNo: e.target.value })}
+                />
+                <Input
+                  placeholder="UOM"
+                  value={draft.uom || ""}
+                  onChange={(e) => setDraft({ ...draft, uom: e.target.value })}
+                />
+              </>
+            )}
             <TextArea
               className="sm:col-span-2 lg:col-span-4 !min-h-[4.5rem]"
               rows={3}
-              placeholder="Description *"
+              placeholder={
+                draft.rowKind === "section"
+                  ? "Section heading *"
+                  : draft.rowKind === "subsection"
+                    ? "Subsection heading *"
+                    : "Description *"
+              }
               value={draft.description || ""}
               onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
-            <Input
-              type="number"
-              step="any"
-              placeholder="Rate"
-              value={String(draft.rate ?? "")}
-              onChange={(e) => setDraft({ ...draft, rate: Number(e.target.value) })}
-            />
-            <Input
-              type="number"
-              step="any"
-              placeholder="BOQ qty"
-              value={String(draft.boqQty ?? "")}
-              onChange={(e) => setDraft({ ...draft, boqQty: Number(e.target.value) })}
-            />
-            <Input
-              type="number"
-              step="any"
-              placeholder="Extra qty"
-              value={String(draft.extraQty ?? "")}
-              onChange={(e) => setDraft({ ...draft, extraQty: Number(e.target.value) })}
-            />
-            <Input
-              type="number"
-              step="any"
-              placeholder="GFC qty"
-              value={String(draft.gfcQty ?? "")}
-              onChange={(e) => setDraft({ ...draft, gfcQty: Number(e.target.value) })}
-            />
+            {draft.rowKind === "item" && (
+              <>
+                <Input
+                  type="number"
+                  step="any"
+                  placeholder="Rate"
+                  value={String(draft.rate ?? "")}
+                  onChange={(e) => setDraft({ ...draft, rate: Number(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  step="any"
+                  placeholder="BOQ qty"
+                  value={String(draft.boqQty ?? "")}
+                  onChange={(e) => setDraft({ ...draft, boqQty: Number(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  step="any"
+                  placeholder="Extra qty"
+                  value={String(draft.extraQty ?? "")}
+                  onChange={(e) => setDraft({ ...draft, extraQty: Number(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  step="any"
+                  placeholder="GFC qty"
+                  value={String(draft.gfcQty ?? "")}
+                  onChange={(e) => setDraft({ ...draft, gfcQty: Number(e.target.value) })}
+                />
+              </>
+            )}
           </div>
         </RegisterEntryModal>
       )}
@@ -700,6 +840,20 @@ export function BoqMonitoringEditor({
           siteQtyOnly
             ? `${rows.length} lines · ${grouped.length} sections · edit Achieved Qty (white cells) — all monitoring columns visible`
             : `${rows.length} lines · ${grouped.length} sections · all ${headers.length} SPDC monitoring columns visible`
+        }
+        toolbar={
+          canFullEdit ? (
+            <SheetAddKindBar
+              disabled={adding}
+              onAdd={(key) => void addKind(key as "section" | "subsection" | "item")}
+              kinds={[
+                { key: "section", label: "+ Section" },
+                { key: "subsection", label: "+ Subsection" },
+                { key: "item", label: "+ Item", primary: true },
+              ]}
+              hint="Section / subsection are headings. Item is a measured BOQ line (rate · BOQ · GFC · achieved)."
+            />
+          ) : undefined
         }
       >
           <table className="cube-register__table register-editor-pro cost-register-table boq-editor__table min-w-[128rem]">
@@ -745,6 +899,7 @@ export function BoqMonitoringEditor({
                 <Fragment key={key}>
                   {monitoringSectionRow(section, items)}
                   {items.map((b) => {
+                    if (isMonitoringHeading(b)) return null;
                     const busy = savingId === b.id;
                     const rate = Number(b.rate) || 0;
                     const boqCost = b.boqCost ?? b.boqQty * rate;
