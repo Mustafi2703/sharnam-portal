@@ -2,6 +2,7 @@
  * Branded HTML meeting invite — one email per scheduled meeting (Teams + portal MoM).
  */
 import { escapeHtml, fmtEmailDateTime } from "./rfiEmailFormat.js";
+import { sharnamEmailLogoHtml } from "./brandedExport.js";
 
 const BRAND_NAVY = "#1e3a5f";
 const BRAND_ORANGE = "#e4632a";
@@ -127,7 +128,12 @@ export function buildMeetingScheduledEmail(ctx: MeetingEmailContext) {
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr>
-          <td style="background:${BRAND_NAVY};padding:20px 24px;border-radius:10px 10px 0 0;">
+          <td style="background:${BRAND_PAPER};padding:20px 24px 12px;border:1px solid #e2e8f0;border-bottom:none;border-radius:10px 10px 0 0;">
+            ${sharnamEmailLogoHtml(172)}
+          </td>
+        </tr>
+        <tr>
+          <td style="background:${BRAND_NAVY};padding:16px 24px 20px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
             <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">Sharnam Portal · Meeting invitation</div>
             <div style="font-size:20px;font-weight:700;color:#fff;margin-top:8px;line-height:1.35;">${escapeHtml(ctx.title)}</div>
             ${ctx.projectCode ? `<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:6px;">${escapeHtml(ctx.projectCode)} · ${escapeHtml(fmtEmailDateTime(ctx.meetingDate))}</div>` : ""}
