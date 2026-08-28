@@ -17,7 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 const PREVIEW_EMAIL = "baibhabmustafi@gmail.com";
-const SPDC_TEAM = "nirav@spdc.in,operations@spdc.in";
+const SPDC_TEAM = "nirav@spdc.in,operations@spdc.in,hello@twinoxis.com,baibhabmustafi@gmail.com,admin@twinoxis.com";
 
 const portal = (process.env.WEB_ORIGIN || "https://portal.spdc.in").replace(/\/$/, "");
 const projectId = process.env.TEST_PROJECT_ID || "cmsqixpod010n55hz8gk1bba5";

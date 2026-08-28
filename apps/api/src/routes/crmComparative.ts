@@ -30,6 +30,11 @@ import {
   buildVendorDisciplineSlots,
   normalizeDisciplineKey,
 } from "../services/comparativeStatement.js";
+import {
+  ensureVendorBoqTemplateSheets,
+  recomputeBidPackageComparative,
+  vendorCanEditBoqSheet,
+} from "../services/crmBidRecompute.js";
 import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
 
 export const crmComparativeRouter = Router();
@@ -138,7 +143,7 @@ crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async
     include: {
       lead: { select: { id: true, title: true } },
       project: { select: { id: true, code: true, name: true } },
-      vendorBoqs: { select: { id: true, vendorLabel: true, discipline: true, fileName: true, uploadedAt: true } },
+      vendorBoqs: { select: { id: true, vendorLabel: true, discipline: true, fileName: true, uploadedAt: true, sheetId: true } },
     },
   });
   res.json(
@@ -146,16 +151,24 @@ crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async
       ...r,
       vendorNames: parseVendorNames(r.vendorNamesJson),
       uploadProgress: {
-        done: r.vendorBoqs.filter((b) => b.fileName).length,
+        done: r.vendorBoqs.filter((b) => b.fileName || b.uploadedAt).length,
         total: r.vendorBoqs.length,
       },
     }))
   );
 });
 
-crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), async (req, res) => {
-  const row = await loadBidPackage(req.params.id);
+crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  let row = await loadBidPackage(req.params.id);
   if (!row) return res.status(404).json({ error: "not found" });
+
+  const missingSheets = row.vendorBoqs.some((b) => !b.sheetId);
+  if (missingSheets) {
+    const vendorNames = parseVendorNames(row.vendorNamesJson);
+    const disciplines = packageDisciplines(row);
+    await ensureVendorBoqTemplateSheets(prisma, row.id, vendorNames, disciplines, req.user?.id);
+    row = (await loadBidPackage(req.params.id))!;
+  }
 
   let summary = null;
   if (row.summarySheetId) {
@@ -173,7 +186,7 @@ crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), a
     disciplines: packageDisciplines(row),
     summary,
     uploadProgress: {
-      done: row.vendorBoqs.filter((b) => b.fileName).length,
+      done: row.vendorBoqs.filter((b) => b.fileName || b.uploadedAt).length,
       total: row.vendorBoqs.length,
     },
   });
@@ -273,6 +286,8 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     }
   }
 
+  await ensureVendorBoqTemplateSheets(prisma, pkg.id, vendorNames, selectedDisciplines, req.user!.id);
+
   await audit("crm.comparative.create", {
     userId: req.user!.id,
     entity: "CrmBidPackage",
@@ -280,13 +295,19 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     meta: { title, vendorNames, summarySheetId: summarySheet.id, masterSheetId: masterSheet.id, disciplines: COMPARATIVE_DISCIPLINES.length },
   });
 
+  const pkgWithSheets = await loadBidPackage(pkg.id);
+
   res.status(201).json({
-    ...pkg,
+    ...pkgWithSheets,
     comparativeSharePointUrl,
     vendorNames,
     disciplines: selectedDisciplines,
     comparativeSheetId: masterSheet.id,
     summarySheetId: summarySheet.id,
+    uploadProgress: {
+      done: pkgWithSheets?.vendorBoqs.filter((b) => b.sheetId).length ?? 0,
+      total: pkgWithSheets?.vendorBoqs.length ?? 0,
+    },
   });
 });
 
@@ -424,6 +445,8 @@ crmComparativeRouter.post(
       },
     });
 
+    const recomputed = await recomputeBidPackageComparative(prisma, pkg.id);
+
     res.json({
       slot: updated,
       boqSheetId: boqSheet.id,
@@ -431,9 +454,80 @@ crmComparativeRouter.post(
       storagePath: saved.path,
       sharePointUrl: saved.sharePointUrl,
       projectCode: pkg.project?.code || null,
+      summary: recomputed.summary,
+      uploadProgress: { done: recomputed.filledSlots, total: recomputed.totalSlots },
     });
   }
 );
+
+/** Vendor / office — save in-portal BOQ edits (rates & amounts on R2 template). */
+crmComparativeRouter.put(
+  "/bid-packages/:id/vendor-boq/:slotId/sheet",
+  async (req: AuthedRequest, res) => {
+    const pkg = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
+    if (!pkg) return res.status(404).json({ error: "bid package not found" });
+    if (pkg.status === "Awarded") return res.status(400).json({ error: "Bid package is awarded and locked" });
+
+    const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
+    if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
+    if (!slot.sheetId) return res.status(400).json({ error: "No BOQ sheet linked to this slot" });
+
+    const canEdit = await vendorCanEditBoqSheet(prisma, req.user!.role, req.user!.email, slot.sheetId);
+    if (!canEdit) return res.status(403).json({ error: "You cannot edit this BOQ sheet" });
+
+    const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;
+    if (!rows) return res.status(400).json({ error: "rows required" });
+
+    await prisma.customSheet.update({
+      where: { id: slot.sheetId },
+      data: {
+        headersJson: req.body.headers ? JSON.stringify(req.body.headers) : undefined,
+        rowsJson: JSON.stringify(rows),
+      },
+    });
+
+    await prisma.crmVendorBoq.update({
+      where: { id: slot.id },
+      data: {
+        uploadedById: req.user!.id,
+        uploadedAt: new Date(),
+        fileName: slot.fileName || "Filled in portal",
+      },
+    });
+
+    const recomputed = await recomputeBidPackageComparative(prisma, pkg.id);
+
+    await audit("crm.vendor_boq.save", {
+      userId: req.user!.id,
+      entity: "CrmVendorBoq",
+      entityId: slot.id,
+      meta: { bidPackageId: pkg.id, sheetId: slot.sheetId },
+    });
+
+    res.json({
+      ok: true,
+      sheetId: slot.sheetId,
+      summary: recomputed.summary,
+      uploadProgress: { done: recomputed.filledSlots, total: recomputed.totalSlots },
+    });
+  }
+);
+
+/** Office — refresh comparative summary from all vendor BOQ sheets. */
+crmComparativeRouter.post("/bid-packages/:id/recompute", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const result = await recomputeBidPackageComparative(prisma, req.params.id);
+    await audit("crm.comparative.recompute", {
+      userId: req.user!.id,
+      entity: "CrmBidPackage",
+      entityId: req.params.id,
+      meta: { filledSlots: result.filledSlots, totalSlots: result.totalSlots },
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : "recompute failed" });
+  }
+});
 
 crmComparativeRouter.post("/bid-packages/:id/award", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const vendorId = String(req.body.vendorId || "").trim();

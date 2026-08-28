@@ -1,8 +1,25 @@
 import { Router } from "express";
 import multer from "multer";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import path from "path";
+import { fileURLToPath } from "url";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { graphConfig, probeSharePoint, listDriveChildren, graphFetch, ensureProjectSharePointTree, uploadToProjectLibrary, listProjectLibrary } from "../services/graph.js";
+
+const execFileAsync = promisify(execFile);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+
+async function runRepoScript(scriptRel: string, args: string[] = []) {
+  const { stdout, stderr } = await execFileAsync("npx", ["tsx", scriptRel, ...args], {
+    cwd: repoRoot,
+    env: process.env,
+    timeout: 300_000,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  return { stdout: stdout.trim(), stderr: stderr.trim() };
+}
 
 export const graphRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -87,6 +104,36 @@ graphRouter.post("/test-mail", requireAuth, requireRoles("admin"), async (req: A
     res.json({ ok: true, sent: true, from: cfg.mailbox, to });
   } catch (err) {
     res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Admin — seed live UAT team + comms matrix, meetings, NCR/CAR, RFI, QAP on SPDC-DEMO-01 */
+graphRouter.post("/seed-live-team", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+  try {
+    const { stdout, stderr } = await runRepoScript("seed/spdcLiveTeam.ts");
+    await audit("graph.seed.live.team", { userId: req.user!.id, meta: { stdout: stdout.slice(0, 500) } });
+    res.json({ ok: true, stdout, stderr: stderr || undefined });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stdout = typeof err === "object" && err && "stdout" in err ? String((err as { stdout: Buffer }).stdout) : "";
+    res.status(500).json({ ok: false, error: msg, stdout: stdout.slice(0, 2000) || undefined });
+  }
+});
+
+/** Admin — send 15-email comms UAT pack via Graph (preview = baibhab only, all = full team) */
+graphRouter.post("/send-comms-uat-pack", requireAuth, requireRoles("admin"), async (req: AuthedRequest, res) => {
+  const mode = String(req.body?.mode || "preview").trim().toLowerCase();
+  if (!["preview", "all", "team"].includes(mode)) {
+    return res.status(400).json({ error: "mode must be preview, all, or team" });
+  }
+  try {
+    const { stdout, stderr } = await runRepoScript("apps/api/scripts/send-comms-flow-demo-pack.ts", [mode]);
+    await audit("graph.send.comms.uat", { userId: req.user!.id, meta: { mode } });
+    res.json({ ok: true, mode, stdout, stderr: stderr || undefined });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stdout = typeof err === "object" && err && "stdout" in err ? String((err as { stdout: Buffer }).stdout) : "";
+    res.status(502).json({ ok: false, error: msg, stdout: stdout.slice(0, 2000) || undefined });
   }
 });
 
