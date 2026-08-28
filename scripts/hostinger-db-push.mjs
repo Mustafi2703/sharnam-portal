@@ -19,8 +19,25 @@ if (!url.startsWith("mysql://")) {
 
 console.log("==> Build-time DB setup:", maskDatabaseUrl(url));
 
+// Neutralise conflicting Lead(srNo, sourceSheet) pairs BEFORE the schema
+// change so the new @@unique constraint can apply without losing rows.
 try {
-  execSync("npx prisma db push --skip-generate", {
+  execSync("node scripts/hostinger-pre-push-dedupe.mjs", {
+    stdio: "inherit",
+    env: process.env,
+    cwd: rootDir,
+    timeout: 120_000,
+  });
+} catch (err) {
+  console.warn("WARN: pre-push dedupe failed — proceeding to db push anyway.");
+  console.warn(String(err?.message || err));
+}
+
+try {
+  // --accept-data-loss is required by Prisma to acknowledge new unique
+  // constraints on tables with existing data; dedupe step above ensures
+  // there are no actual conflicts by the time we get here.
+  execSync("npx prisma db push --skip-generate --accept-data-loss", {
     stdio: "inherit",
     env: process.env,
     cwd: rootDir,

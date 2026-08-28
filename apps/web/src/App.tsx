@@ -60,6 +60,7 @@ import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import UploadLabPage from "./pages/UploadLabPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
+import TrainingPage from "./pages/TrainingPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -129,6 +130,7 @@ export default function App() {
                 <Route path="/app" element={<HomeRedirect />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/workspace" element={<WorkspacePage />} />
+                <Route path="/training" element={<TrainingPage />} />
                 <Route path="/master" element={<MasterModulePage />} />
                 <Route path="/master/vendors" element={<GlobalVendorsPage />} />
                 <Route path="/master/checklists" element={<ChecklistMasterPage />} />

@@ -60,6 +60,12 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
     roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
   },
   { to: "/master", label: "Master setup", icon: "master", roles: ["admin", "office"] },
+  {
+    to: "/training",
+    label: "Training",
+    icon: "reports",
+    roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
+  },
 ];
 
 /** Site / field desk — attendance + mobile upload testing */
