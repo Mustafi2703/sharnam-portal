@@ -550,12 +550,17 @@ export default function MasterModulePage() {
         <Card className="!p-6">
           <h2 className="font-display text-xl mb-2">Company vendor directory</h2>
           <p className="text-sm text-steel-muted mb-4 max-w-2xl">
-            Procore-style company records — contractor, vendor, client, consultant, PMC types with GST, license,
-            prequalification flags. Create here once; assign to each project under Project → Vendors.
+            Global bidder directory — tag each contractor/vendor with R2 BOQ disciplines (CCV, Electrical Lab, Security, etc.).
+            When you open a CRM bid package, only matching companies appear in the bidder picker.
           </p>
-          <Link to="/master/vendors">
-            <Button type="button">Open company directory ({vendors.length} companies)</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/master/vendors">
+              <Button type="button">Open company directory ({vendors.length} companies)</Button>
+            </Link>
+            <Link to="/crm/bids/compare">
+              <Button type="button" variant="secondary">CRM bid packages →</Button>
+            </Link>
+          </div>
         </Card>
       )}
 

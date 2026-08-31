@@ -303,7 +303,9 @@ export default function CustomSheetsPage() {
 export function CustomSheetEditorPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
-  const canWrite = ["admin", "office", "employee"].includes(user?.role || "");
+  const officeWrite = ["admin", "office", "employee"].includes(user?.role || "");
+  const [canWrite, setCanWrite] = useState(officeWrite);
+  const [bidContext, setBidContext] = useState<{ bidPackageTitle?: string; bidPackageId?: string } | null>(null);
   const [sheet, setSheet] = useState<{
     name: string;
     headers: string[];
@@ -322,6 +324,12 @@ export function CustomSheetEditorPage() {
     const s = await api<any>(`/api/custom-sheets/${id}`, { token });
     const rows = evaluateAllRows((s.rows || []).map((row: unknown[]) => row.map((cell) => normalizeCell(cell))));
     setSheet({ name: s.name, headers: s.headers, rows, category: s.category, formulaCount: s.formulaCount });
+    setCanWrite(Boolean(s.canWrite ?? officeWrite));
+    setBidContext(
+      s.bidSlot
+        ? { bidPackageTitle: s.bidSlot.bidPackageTitle, bidPackageId: s.bidSlot.bidPackageId }
+        : null
+    );
     setDirty(false);
     setSelected(null);
     setFxValue("");
@@ -469,20 +477,36 @@ export function CustomSheetEditorPage() {
     <div className="maker-shell page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2">
       <div className="shrink-0">
       <PageHeader
-        eyebrow="Sheet editor"
+        eyebrow={bidContext ? "Bid BOQ fill" : "Sheet editor"}
         title={sheet?.name || "Loading…"}
         subtitle={
           sheet
-            ? `${sheet.headers.length} columns · ${sheet.rows.length} rows · ${formulaCount} formula(s) · ${sheet.category || "General"}${dirty ? " · unsaved changes" : ""}`
+            ? `${sheet.headers.length} columns · ${sheet.rows.length} rows · ${formulaCount} formula(s) · ${sheet.category || "General"}${dirty ? " · unsaved changes" : ""}${bidContext?.bidPackageTitle ? ` · ${bidContext.bidPackageTitle}` : ""}`
             : ""
         }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link to="/custom-sheets">
-              <Button type="button" variant="secondary">
-                Back
-              </Button>
-            </Link>
+            {bidContext?.bidPackageId ? (
+              user?.role === "vendor" ? (
+                <Link to="/crm/vendor-bids">
+                  <Button type="button" variant="secondary">
+                    ← My bids
+                  </Button>
+                </Link>
+              ) : (
+                <Link to={`/crm/bid-compare/${bidContext.bidPackageId}`}>
+                  <Button type="button" variant="secondary">
+                    ← Bid package
+                  </Button>
+                </Link>
+              )
+            ) : (
+              <Link to="/custom-sheets">
+                <Button type="button" variant="secondary">
+                  Back
+                </Button>
+              </Link>
+            )}
             {canWrite && sheet && (
               <>
                 <Button type="button" variant="secondary" onClick={addRow}>

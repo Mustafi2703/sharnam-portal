@@ -471,7 +471,7 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
 
 /* ─── Quotations (proposal desk — Drive file + status log) ─── */
 
-const PROPOSAL_STATUSES = ["Draft", "Editing", "Sent to client"] as const;
+const PROPOSAL_STATUSES = ["Draft", "Editing", "Sent to client", "Done"] as const;
 
 async function quotationStatusLog(entityId: string) {
   return prisma.auditEvent.findMany({

@@ -760,6 +760,8 @@ export default function DprMakerPage() {
       </div>
       </div>
 
+      <div className="maker-shell__scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 scrollbars-visible pr-1">
+
       {/* 1. Header */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className="maker-section">
@@ -859,12 +861,12 @@ export default function DprMakerPage() {
       {/* Legacy single S-curve block removed — included in dashboard grid above */}
 
       {/* 2. Quantity */}
-      <div className="maker-section maker-section--flush flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="maker-section maker-section--flush">
         <div className="maker-section__head maker-section__head--row shrink-0">
           <span>2. Quantity progress · BOQ item-wise</span>
           <Button variant="secondary" onClick={() => setLineModalOpen(true)}>+ Add item</Button>
         </div>
-        <div className="maker-table-wrap register-sheet-viewport flex-1 min-h-0 overflow-auto">
+        <div className="maker-table-wrap register-sheet-viewport overflow-auto">
           <table className="maker-table">
             <thead>
               <tr>
@@ -1263,14 +1265,6 @@ export default function DprMakerPage() {
         />
       </Card>
 
-      <div className="maker-sticky-bar">
-        <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
-        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>XLSX</Button>
-        <Button type="button" variant="secondary" onClick={downloadPdf} disabled={busy}>PDF</Button>
-        <Button type="button" onClick={save} disabled={busy}>Save</Button>
-        <Button type="button" variant="secondary" onClick={publish} disabled={busy}>Publish</Button>
-      </div>
-
       {recent.length > 0 && (
         <Card>
           <h3 className="font-semibold mb-2">Recent DPRs</h3>
@@ -1291,6 +1285,16 @@ export default function DprMakerPage() {
           </ul>
         </Card>
       )}
+
+      </div>
+
+      <div className="maker-sticky-bar shrink-0">
+        <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
+        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>XLSX</Button>
+        <Button type="button" variant="secondary" onClick={downloadPdf} disabled={busy}>PDF</Button>
+        <Button type="button" onClick={save} disabled={busy}>Save</Button>
+        <Button type="button" variant="secondary" onClick={publish} disabled={busy}>Publish</Button>
+      </div>
 
       <RegisterEntryModal
         open={lineModalOpen}

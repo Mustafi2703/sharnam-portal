@@ -2,9 +2,10 @@
  * WPR PPTX — full deck aligned to SPDC_Arvind Limited_WPR_50.pptx (~61 slides).
  * Built with pptxgenjs from live WPR pack data (same approach as DPR Excel fill).
  */
-import pptxgenImport from "pptxgenjs";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import pptxgenImport from "pptxgenjs";
 import {
   DEFAULT_WPR_TITLES,
   type WprPackInput,
@@ -16,6 +17,30 @@ const DARK = "1A1D26";
 const MUTED = "5C6578";
 const LIGHT = "F0F2F5";
 const WHITE = "FFFFFF";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function sharnamLogoPath(): string | null {
+  const candidates = [
+    path.resolve(__dirname, "../../assets/logo-transparent.png"),
+    path.resolve(process.cwd(), "apps/api/assets/logo-transparent.png"),
+    path.resolve(process.cwd(), "apps/web/public/logo-transparent.png"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function addSharnamLogo(slide: PptxSlide, pptx: PptxDeck) {
+  const logo = sharnamLogoPath();
+  if (!logo) return;
+  try {
+    slide.addImage({ path: logo, x: 7.15, y: 0.22, w: 2.35, h: 1.12 });
+  } catch {
+    /* optional */
+  }
+}
 
 type PptxSlide = {
   background: { color: string };
@@ -37,7 +62,11 @@ type PptxDeck = {
 };
 
 function createPptx(): PptxDeck {
-  const Ctor = pptxgenImport as unknown as new () => PptxDeck;
+  const mod: unknown = pptxgenImport;
+  const Ctor =
+    typeof mod === "function"
+      ? (mod as new () => PptxDeck)
+      : ((mod as { default: new () => PptxDeck }).default as new () => PptxDeck);
   return new Ctor();
 }
 
@@ -131,6 +160,7 @@ function tableSlide(
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
   brandBar(pptx, slide);
+  addSharnamLogo(slide, pptx);
   slide.addText(opts.client || "Sharnam PMC", {
     x: 0.4,
     y: 0.18,
@@ -489,6 +519,7 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
       const slide = pptx.addSlide();
       slide.background = { color: DARK };
       brandBar(pptx, slide);
+      addSharnamLogo(slide, pptx);
       slide.addText("WEEKLY PROGRESS REPORT", {
         x: 0.6,
         y: 1.3,
@@ -517,7 +548,7 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
         ].join("\n"),
         { x: 0.6, y: 2.9, w: 8.8, h: 1.6, fontSize: 13, color: "E2E5EB" }
       );
-      slide.addText("Generated from Sharnam Portal · live registers", {
+      slide.addText("Generated from Sharnam Portal · शरणम् PMC", {
         x: 0.6,
         y: 4.8,
         w: 8.8,

@@ -17,6 +17,7 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { audit } from "../services/audit.js";
 import { MASTER_CATEGORY } from "../services/costMasterLines.js";
+import { findVendorBoqSlotForSheet, recomputeBidPackageComparative, vendorCanEditBoqSheet } from "../services/crmBidRecompute.js";
 
 export const customSheetsRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -274,13 +275,42 @@ customSheetsRouter.post("/preview-sheets", requireRoles(...WRITE_ROLES), upload.
   res.json({ sheets: wb.SheetNames, fileName: req.file.originalname });
 });
 
-customSheetsRouter.get("/:id", async (req, res) => {
+customSheetsRouter.get("/:id", async (req: AuthedRequest, res) => {
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
+
+  const role = req.user!.role;
+  const isOffice = role === "admin" || role === "office" || role === "employee";
+  let bidSlot = null;
+  if (!isOffice && row.category === "CRM Vendor BOQ") {
+    const vendor =
+      role === "vendor"
+        ? await prisma.vendor.findFirst({ where: { email: req.user!.email }, select: { id: true } })
+        : null;
+    bidSlot = await findVendorBoqSlotForSheet(prisma, row.id, vendor?.id);
+    if (!bidSlot) return res.status(403).json({ error: "Forbidden" });
+  }
+
   const headers = JSON.parse(row.headersJson || "[]");
   const rows = parseRowsJson(row.rowsJson);
   const stats = sheetStats(rows);
-  res.json({ ...row, headers, rows, ...stats });
+  res.json({
+    ...row,
+    headers,
+    rows,
+    ...stats,
+    bidSlot: bidSlot
+      ? {
+          id: bidSlot.id,
+          bidPackageId: bidSlot.bidPackageId,
+          bidPackageTitle: bidSlot.bidPackage.title,
+          canEdit: bidSlot.bidPackage.status !== "Awarded",
+        }
+      : null,
+    canWrite:
+      isOffice ||
+      (bidSlot ? await vendorCanEditBoqSheet(prisma, role, req.user!.email, row.id) : false),
+  });
 });
 
 customSheetsRouter.post("/upload", requireRoles(...WRITE_ROLES), upload.single("file"), async (req: AuthedRequest, res) => {
@@ -394,7 +424,17 @@ customSheetsRouter.post("/:id/clone", requireRoles(...WRITE_ROLES), async (req: 
   res.status(201).json({ id: row.id, name: row.name });
 });
 
-customSheetsRouter.put("/:id", requireRoles(...WRITE_ROLES), async (req, res) => {
+customSheetsRouter.put("/:id", async (req: AuthedRequest, res) => {
+  const existing = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "not found" });
+
+  const role = req.user!.role;
+  const isOffice = (WRITE_ROLES as readonly string[]).includes(role);
+  const vendorMayEdit =
+    existing.category === "CRM Vendor BOQ" &&
+    (await vendorCanEditBoqSheet(prisma, role, req.user!.email, req.params.id));
+  if (!isOffice && !vendorMayEdit) return res.status(403).json({ error: "Forbidden" });
+
   const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;
   const row = await prisma.customSheet.update({
     where: { id: req.params.id },
@@ -405,6 +445,18 @@ customSheetsRouter.put("/:id", requireRoles(...WRITE_ROLES), async (req, res) =>
       rowsJson: rows ? JSON.stringify(rows) : undefined,
     },
   });
+
+  if (vendorMayEdit) {
+    const slot = await prisma.crmVendorBoq.findFirst({ where: { sheetId: req.params.id } });
+    if (slot) {
+      await prisma.crmVendorBoq.update({
+        where: { id: slot.id },
+        data: { uploadedAt: new Date(), uploadedById: req.user!.id, fileName: slot.fileName || "Filled in portal" },
+      });
+      await recomputeBidPackageComparative(prisma, slot.bidPackageId).catch(() => {});
+    }
+  }
+
   const headers = JSON.parse(row.headersJson || "[]");
   const parsed = rows || parseRowsJson(row.rowsJson);
   res.json({ ...row, headers, rows: parsed, ...sheetStats(parsed) });

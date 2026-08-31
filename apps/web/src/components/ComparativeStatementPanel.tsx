@@ -15,10 +15,12 @@ export function ComparativeStatementPanel({
   summary,
   summarySheetId,
   masterSheetId,
+  hideSheetLinks,
 }: {
   summary: Summary | null | undefined;
   summarySheetId?: string | null;
   masterSheetId?: string | null;
+  hideSheetLinks?: boolean;
 }) {
   if (!summary?.vendorLabels?.length) {
     return (
@@ -31,6 +33,7 @@ export function ComparativeStatementPanel({
 
   return (
     <div className="space-y-4">
+      {!hideSheetLinks && (
       <div className="flex flex-wrap gap-2">
         {summarySheetId && (
           <Link to={`/custom-sheets/${summarySheetId}`} className="text-xs font-semibold text-brand">
@@ -43,6 +46,7 @@ export function ComparativeStatementPanel({
           </Link>
         )}
       </div>
+      )}
 
       <div className="rounded-xl border border-line overflow-x-auto">
         <table className="w-full text-xs">

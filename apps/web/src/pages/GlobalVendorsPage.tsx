@@ -10,6 +10,11 @@ import {
   type VendorFormState,
   type VendorPartyType,
 } from "../lib/vendorTypes";
+import {
+  CRM_BID_DISCIPLINES,
+  formatVendorBidDisciplines,
+  parseVendorBidDisciplines,
+} from "../lib/crmBidDisciplines";
 
 type VendorRow = VendorFormState & {
   id: string;
@@ -37,7 +42,27 @@ export default function GlobalVendorsPage() {
     void load();
   }, [token, filter]);
 
+  const [filterDiscipline, setFilterDiscipline] = useState<string>("All");
+  const bidDisciplineKeys = useMemo(() => parseVendorBidDisciplines(form.trade), [form.trade]);
+
+  const filteredRows = useMemo(() => {
+    if (filterDiscipline === "All") return rows;
+    return rows.filter((v) => {
+      const keys = parseVendorBidDisciplines(v.trade);
+      if (keys.length) return keys.includes(filterDiscipline);
+      const trade = (v.trade || "").toLowerCase();
+      const def = CRM_BID_DISCIPLINES.find((d) => d.key === filterDiscipline);
+      return def?.tradeHints.some((h) => trade.includes(h));
+    });
+  }, [rows, filterDiscipline]);
+
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
+
+  function toggleBidDiscipline(key: string) {
+    const current = parseVendorBidDisciplines(form.trade);
+    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+    setForm({ ...form, trade: formatVendorBidDisciplines(next) });
+  }
 
   useEffect(() => {
     if (selected) setForm(vendorToForm(selected));
@@ -67,14 +92,17 @@ export default function GlobalVendorsPage() {
     <div className="space-y-6 max-w-6xl">
       <PageHeader
         eyebrow="Master module · company directory"
-        title="Vendors & parties"
-        subtitle="Global company records with vendor type (Procore-style). Create once here, then assign trades on each project under Project → Vendors."
+        title="Vendors & contractors"
+        subtitle="Global bidder directory for CRM comparative packages — tag each company with R2 BOQ disciplines, then pick them when opening a bid package."
         actions={
-          <Link to="/master">
-            <Button type="button" variant="secondary">
-              ← Master hub
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/crm/bids/compare">
+              <Button type="button" variant="secondary">Open bid packages →</Button>
+            </Link>
+            <Link to="/master">
+              <Button type="button" variant="secondary">← Master hub</Button>
+            </Link>
+          </div>
         }
       />
 
@@ -95,10 +123,35 @@ export default function GlobalVendorsPage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-[10px] font-mono uppercase text-steel-muted mr-1">BOQ discipline</span>
+        <button
+          type="button"
+          onClick={() => setFilterDiscipline("All")}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold border ${
+            filterDiscipline === "All" ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted"
+          }`}
+        >
+          All disciplines
+        </button>
+        {CRM_BID_DISCIPLINES.map((d) => (
+          <button
+            key={d.key}
+            type="button"
+            onClick={() => setFilterDiscipline(d.key)}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold border ${
+              filterDiscipline === d.key ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted"
+            }`}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
         <Card padding={false}>
           <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm flex justify-between">
-            <span>Company directory ({rows.length})</span>
+            <span>Company directory ({filteredRows.length})</span>
             {canEdit && (
               <button
                 type="button"
@@ -113,7 +166,7 @@ export default function GlobalVendorsPage() {
             )}
           </div>
           <ul className="divide-y divide-line max-h-[32rem] overflow-y-auto">
-            {rows.map((v) => (
+            {filteredRows.map((v) => (
               <button
                 key={v.id}
                 type="button"
@@ -125,13 +178,13 @@ export default function GlobalVendorsPage() {
                   <Badge tone="neutral">{v.partyType}</Badge>
                 </div>
                 <div className="text-xs text-steel-muted mt-1">
-                  {v.trade || "General"}
+                  {v.trade || "General — tag BOQ disciplines below"}
                   {v.city ? ` · ${v.city}` : ""}
                   {v._count?.projects ? ` · ${v._count.projects} project(s)` : ""}
                 </div>
               </button>
             ))}
-            {!rows.length && <li className="p-4 text-sm text-steel-muted">No companies yet.</li>}
+            {!filteredRows.length && <li className="p-4 text-sm text-steel-muted">No companies for this discipline filter.</li>}
           </ul>
         </Card>
 
@@ -161,7 +214,29 @@ export default function GlobalVendorsPage() {
                     </option>
                   ))}
                 </Select>
-                <Input placeholder="Trade / discipline" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
+                <Input placeholder="Trade / notes" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
+              </div>
+              <div>
+                <p className="text-[10px] font-mono uppercase text-steel-muted mb-2">Bid BOQ disciplines (R2 sheets)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {CRM_BID_DISCIPLINES.map((d) => {
+                    const on = bidDisciplineKeys.includes(d.key);
+                    return (
+                      <button
+                        key={d.key}
+                        type="button"
+                        onClick={() => toggleBidDiscipline(d.key)}
+                        className={`text-[10px] px-2 py-1 rounded-full border font-semibold ${
+                          on ? "bg-brand text-white border-brand" : "border-line text-steel-muted hover:border-brand/40"
+                        }`}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-2">
                 <Input
                   placeholder="Primary contact"
                   value={form.primaryContactName}

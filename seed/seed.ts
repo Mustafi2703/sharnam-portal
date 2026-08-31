@@ -1388,7 +1388,7 @@ async function seedProjectAndCost(users: User[]) {
     {
       name: "M/s Bhavna Infra",
       partyType: "Contractor",
-      trade: "Civil / Main Contractor",
+      trade: "Civil & Structural (CCV), Admin Building, U.G Tank + Pump Room",
       city: "Ahmedabad",
       state: "Gujarat",
       businessPhone: "+91 79 2650 1001",
@@ -1402,7 +1402,7 @@ async function seedProjectAndCost(users: User[]) {
     {
       name: "TCC Projects PVT. LTD.",
       partyType: "Contractor",
-      trade: "Civil Structural",
+      trade: "Civil & Structural (CCV), Entrance Gate",
       city: "Ahmedabad",
       state: "Gujarat",
       email: "tcc@sharnam.demo",
@@ -1413,7 +1413,7 @@ async function seedProjectAndCost(users: User[]) {
     {
       name: "Pearl Electricals",
       partyType: "Vendor",
-      trade: "Electrical",
+      trade: "Electrical Lab",
       city: "Vadodara",
       state: "Gujarat",
       businessPhone: "+91 265 240 2200",
@@ -1426,7 +1426,7 @@ async function seedProjectAndCost(users: User[]) {
     {
       name: "AquaFlow MEP",
       partyType: "Vendor",
-      trade: "Plumbing",
+      trade: "U.G Tank + Pump Room, Cooling Tower",
       city: "Surat",
       state: "Gujarat",
       email: "info@aquaflow.demo",
@@ -1437,13 +1437,35 @@ async function seedProjectAndCost(users: User[]) {
     {
       name: "SteelForm Fabricators",
       partyType: "Vendor",
-      trade: "Structural steel",
+      trade: "Entrance Gate, Civil & Structural (CCV)",
       city: "Rajkot",
       state: "Gujarat",
       email: "sales@steelform.demo",
       primaryContactName: "Nilesh Patel",
       isPrequalified: true,
       insuranceVerified: false,
+    },
+    {
+      name: "SecureGate Systems",
+      partyType: "Vendor",
+      trade: "Security, Entrance Gate",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      email: "bids@securegate.demo",
+      primaryContactName: "Vikram Mehta",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
+      name: "WeighPro India",
+      partyType: "Vendor",
+      trade: "Weigh Bridge",
+      city: "Vadodara",
+      state: "Gujarat",
+      email: "sales@weighpro.demo",
+      primaryContactName: "Sanjay Rao",
+      isPrequalified: true,
+      insuranceVerified: true,
     },
     {
       name: "Arvind Limited",
@@ -1855,6 +1877,14 @@ async function main() {
     await seedAllDemoSheetModules(prisma);
   } catch (e) {
     console.warn("seedAllDemoSheetModules failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    const { seedSpdcLiveTeam } = await import("./spdcLiveTeam.ts");
+    const live = await seedSpdcLiveTeam(prisma);
+    console.log("Live team seeded on", live.project.code);
+  } catch (e) {
+    console.warn("seedSpdcLiveTeam failed:", e instanceof Error ? e.message : e);
   }
 
   console.log("Done.");

@@ -71,11 +71,11 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   vendor: {
     key: "vendor", title: "Contractor", shortLabel: "Contractor",
     headline: "Trade partner portal.",
-    subtitle: "Assigned packages, RFI fills, and site evidence.",
+    subtitle: "Fill bid BOQs online, RFIs, and site evidence.",
     demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
-    points: ["Assigned projects", "Fill RFIs", "Checklists"],
+    points: ["My bid uploads", "Fill RFIs", "Checklists"],
     cta: "Enter Contractor", tone: "#C45C26", icon: "VN",
-    landingPath: "/workspace", workspaceKey: "drawings", group: "role",
+    landingPath: "/crm/vendor-bids", workspaceKey: "drawings", group: "role",
     policies: [],
   },
   client: {
@@ -122,13 +122,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [],
   },
   hr: {
-    key: "hr", title: "HR admin", shortLabel: "HR",
-    headline: "Recruitment · Attendance · Payroll · Audit.",
-    subtitle: "Dedicated HRMS desk for HR administrators.",
+    key: "hr", title: "HRMS", shortLabel: "HRMS",
+    headline: "Dedicated HRMS desk.",
+    subtitle: "Separate login for HR team — recruitment, attendance, payroll, and appointment letters.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office"],
-    points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Audit"],
-    cta: "Enter HR admin", tone: "#6D28D9", icon: "HR",
+    points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Letters"],
+    cta: "Enter HRMS", tone: "#0D9488", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",
     policies: [],
   },
@@ -147,7 +147,7 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "site", "vendor", "client"];
+export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "hr", "site", "vendor", "client"];
 
 /** Cinematic hero per portal — each login gets a distinct construction / PMC photo */
 const PORTAL_HERO: Record<string, string> = {
@@ -267,7 +267,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="auth-signin" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+    <div className="auth-signin auth-signin--split" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <div className="auth-signin__main">
       <div className="auth-signin__badge">
         <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
         <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
@@ -346,6 +347,18 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
           office@sharnam.demo
         </a>
       </p>
+      </div>
+      <div className="auth-signin__brand" aria-hidden>
+        <img
+          src="/logo-transparent.png?v=10"
+          alt=""
+          className="auth-signin__brand-logo"
+          width={280}
+          height={135}
+          decoding="async"
+        />
+        <p className="auth-signin__brand-tag">शरणम् · Project Management Consultants</p>
+      </div>
     </div>
   );
 }

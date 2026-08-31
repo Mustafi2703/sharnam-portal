@@ -1,10 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
-import { ComparativeStatementPanel } from "../components/ComparativeStatementPanel";
+import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
+import { CrmBidVendorMatrix } from "../components/CrmBidVendorMatrix";
+import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
+import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { downloadAuthFile } from "../lib/downloadReport";
 
 type Discipline = { key: string; label: string; sheetName: string };
@@ -53,13 +56,18 @@ function disciplineLabel(disciplines: Discipline[], key: string) {
 export default function CrmBidComparePage() {
   const { token, user } = useAuth();
   const canManage = user?.role === "admin" || user?.role === "office";
+  const { id: routePkgId } = useParams();
+  const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const setupProjectId = searchParams.get("projectId") || "";
+  const setupLeadId = searchParams.get("leadId") || "";
 
   const [packages, setPackages] = useState<BidPackage[]>([]);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [projects, setProjects] = useState<{ id: string; code: string; name: string }[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(routePkgId || null);
   const [detail, setDetail] = useState<BidPackage | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -109,15 +117,54 @@ export default function CrmBidComparePage() {
   }, [load]);
 
   useEffect(() => {
+    if (routePkgId) setSelectedId(routePkgId);
+  }, [routePkgId]);
+
+  useEffect(() => {
     if (selectedId) void loadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, loadDetail]);
+
+  function selectPackage(id: string) {
+    setSelectedId(id);
+    nav(`/crm/bids/${id}`, { replace: true });
+  }
+
+  async function recomputeComparative() {
+    if (!selectedId) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/crm/bid-packages/${selectedId}/recompute`, { method: "POST", token });
+      setMsg("Comparative statement refreshed from all vendor BOQs.");
+      await loadDetail(selectedId);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Recompute failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (disciplines.length && !form.disciplineKeys.length) {
       setForm((f) => ({ ...f, disciplineKeys: disciplines.map((d) => d.key) }));
     }
   }, [disciplines, form.disciplineKeys.length]);
+
+  useEffect(() => {
+    if (!setupProjectId && !setupLeadId) return;
+    const project = projects.find((p) => p.id === setupProjectId);
+    setForm((f) => ({
+      ...f,
+      projectId: setupProjectId || f.projectId,
+      leadId: setupLeadId || f.leadId,
+      title: f.title || (project ? `${project.name} — comparative bid` : f.title),
+    }));
+    if (setupProjectId && !routePkgId) {
+      setMsg("New project linked — select contractors and disciplines, then create the bid package.");
+    }
+  }, [setupProjectId, setupLeadId, projects, routePkgId]);
 
   useEffect(() => {
     if (!form.projectId || !canManage) return;
@@ -131,8 +178,9 @@ export default function CrmBidComparePage() {
   }, [form.projectId, token, canManage]);
 
   const vendorsByType = useMemo(() => {
+    const eligible = vendors.filter((v) => vendorMatchesBidDisciplines(v, form.disciplineKeys));
     const groups: Record<string, typeof vendors> = {};
-    for (const v of vendors) {
+    for (const v of eligible) {
       const t = v.partyType || "Vendor";
       (groups[t] ||= []).push(v);
     }
@@ -145,7 +193,7 @@ export default function CrmBidComparePage() {
           .filter((k) => !order.includes(k))
           .map((k) => ({ type: k, rows: groups[k]! }))
       );
-  }, [vendors]);
+  }, [vendors, form.disciplineKeys]);
 
   const vendorMatrix = useMemo(() => {
     if (!detail?.vendorBoqs?.length) return [];
@@ -188,7 +236,7 @@ export default function CrmBidComparePage() {
           customDisciplines: form.customDisciplines,
         }),
       });
-      setMsg(`Bid package created — ${row.uploadProgress?.total || form.disciplineKeys.length * vendorNames.length} discipline upload slots ready.`);
+      setMsg(`Bid package created — ${row.uploadProgress?.total || form.disciplineKeys.length * vendorNames.length} discipline slots ready (fill online or upload Excel).`);
       setForm({
         title: "",
         projectId: "",
@@ -199,7 +247,7 @@ export default function CrmBidComparePage() {
         customDisciplines: [],
       });
       await load();
-      setSelectedId(row.id);
+      selectPackage(row.id);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -311,7 +359,7 @@ export default function CrmBidComparePage() {
   }
 
   function copyVendorLink(vendorLabel: string) {
-    const link = `${window.location.origin}/crm/vendor-bids?vendor=${encodeURIComponent(vendorLabel)}&pkg=${encodeURIComponent(selectedId || "")}`;
+    const link = `${window.location.origin}/crm/vendor-bids?pkg=${encodeURIComponent(selectedId || "")}`;
     void navigator.clipboard?.writeText(link).then(
       () => setMsg(`Vendor upload link copied — send to ${vendorLabel}.`),
       () => setMsg(`Copy failed. Share manually: ${link}`)
@@ -331,80 +379,59 @@ export default function CrmBidComparePage() {
 
   if (!canManage) {
     return (
-      <div className="space-y-4">
-        <PageHeader eyebrow="CRM" title="Comparative analysis" subtitle="Office confidential." />
-        <Card>
-          <p className="text-sm text-steel-muted">Comparative bid analysis is available to Office / Admin only.</p>
-          <Link to="/crm" className="text-sm text-brand font-semibold mt-2 inline-block">
-            ← Back to CRM
-          </Link>
-        </Card>
-      </div>
+      <Card>
+        <p className="text-sm text-steel-muted">Comparative bid analysis is available to Office / Admin only.</p>
+        <Link to="/crm/leads" className="text-sm text-brand font-semibold mt-2 inline-block">
+          ← Back to CRM
+        </Link>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="CRM · Confidential"
-        title="Bid management — Comparative Statement R2"
-        subtitle="Not the PMC proposal (quotation). Here contractors upload discipline BOQs; office compares multiple bids project-wise using Comparative Statement - R2.xlsx."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link to="/crm">
-              <Button variant="secondary">← CRM</Button>
-            </Link>
-            <Link to="/quotations/new">
-              <Button variant="secondary">PMC proposal maker</Button>
-            </Link>
-            <Link to="/crm/vendor-bids">
-              <Button variant="secondary">Vendor uploads</Button>
-            </Link>
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-            >
-              Download R2 .xlsx
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                if (!confirm("Load a demo bid package (Alpha / Bharat / Concord × Civil, Electrical, Admin)?  Real bid packages are never touched.")) return;
-                setBusy(true);
-                setMsg("");
-                try {
-                  const pkg = await api<{ id: string; title: string; summary?: { lowestVendor?: string; grandTotals?: Record<string, number> } }>(
-                    "/api/crm/bid-packages/seed-demo",
-                    {
-                      method: "POST",
-                      token,
-                      body: JSON.stringify({ projectId: form.projectId || undefined }),
-                    }
-                  );
-                  const totals = pkg.summary?.grandTotals || {};
-                  const totalStr = Object.entries(totals)
-                    .map(([v, n]) => `${v.split(" ")[0]}: ${formatINR(Number(n))}`)
-                    .join(" · ");
-                  setMsg(`Demo package "${pkg.title}" loaded — ${totalStr}. Lowest: ${pkg.summary?.lowestVendor ?? "—"}.`);
-                  await load();
-                  setSelectedId(pkg.id);
-                } catch (err) {
-                  setMsg(err instanceof Error ? err.message : "Demo load failed");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Load 3-vendor demo
-            </Button>
-          </div>
-        }
-      />
+    <div className="page-stack--register flex flex-col flex-1 min-h-0 gap-3 pb-2">
+      <div className="flex flex-wrap gap-2 shrink-0">
+        <Link to="/crm/leads">
+          <Button variant="secondary">← Leads</Button>
+        </Link>
+        <Link to={`/quotations/new${detail?.lead?.id ? `?leadId=${detail.lead.id}` : ""}`}>
+          <Button variant="secondary">PMC proposal maker</Button>
+        </Link>
+        <Button
+          variant="secondary"
+          type="button"
+          onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
+        >
+          Download R2 .xlsx
+        </Button>
+        <Button
+          variant="secondary"
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            if (!confirm("Load demo bid package (Alpha / Bharat / Concord)? Real packages are never touched.")) return;
+            setBusy(true);
+            setMsg("");
+            try {
+              const pkg = await api<{ id: string; title: string; summary?: { lowestVendor?: string; grandTotals?: Record<string, number> } }>(
+                "/api/crm/bid-packages/seed-demo",
+                { method: "POST", token, body: JSON.stringify({ projectId: form.projectId || undefined }) }
+              );
+              setMsg(`Demo loaded — lowest: ${pkg.summary?.lowestVendor ?? "—"}.`);
+              await load();
+              selectPackage(pkg.id);
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : "Demo load failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Load 3-vendor demo
+        </Button>
+      </div>
 
-      {msg && <p className="text-sm text-ok">{msg}</p>}
+      {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
         <div className="space-y-4">
@@ -525,8 +552,8 @@ export default function CrmBidComparePage() {
                 </div>
               </div>
               <p className="text-[11px] text-steel-muted">
-                Creates {form.disciplineKeys.length || 0} discipline slot(s) per bidder. Contractors vs trade vendors
-                are grouped by party type. Comparative R2 → SharePoint 05.06; vendor BOQs → 05.05.
+                Creates {form.disciplineKeys.length || 0} discipline slot(s) per bidder. Vendors filtered by selected BOQ
+                disciplines — manage the global list under <Link to="/master/vendors" className="text-brand font-semibold">Master → Vendors</Link>.
               </p>
               <Button type="submit" disabled={busy}>
                 {busy ? "Creating…" : "Create from R2 template"}
@@ -554,7 +581,7 @@ export default function CrmBidComparePage() {
                     <button
                       type="button"
                       className={`w-full text-left px-4 py-3 hover:bg-brand-soft/40 ${selectedId === p.id ? "bg-brand-soft/60" : ""}`}
-                      onClick={() => setSelectedId(p.id)}
+                      onClick={() => selectPackage(p.id)}
                     >
                       <div className="font-medium text-sm flex items-center gap-2">
                         <span className="truncate">{p.title}</span>
@@ -619,16 +646,9 @@ export default function CrmBidComparePage() {
                         <Button variant="secondary">R2 SharePoint</Button>
                       </a>
                     )}
-                    {detail.summarySheetId && (
-                      <Link to={`/custom-sheets/${detail.summarySheetId}`}>
-                        <Button variant="secondary">Summary sheet</Button>
-                      </Link>
-                    )}
-                    {detail.comparativeSheetId && (
-                      <Link to={`/custom-sheets/${detail.comparativeSheetId}`}>
-                        <Button>Master BOQ compare</Button>
-                      </Link>
-                    )}
+                    <Button type="button" variant="secondary" disabled={busy} onClick={() => void recomputeComparative()}>
+                      Refresh comparative
+                    </Button>
                   </div>
                 </div>
 
@@ -659,18 +679,16 @@ export default function CrmBidComparePage() {
                 )}
 
                 {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Comparative statement (R2 summary tab)</h4>
-                    <ComparativeStatementPanel
+                  <div className="mb-4 space-y-3">
+                    <CrmComparativeRegister
                       summary={detail.summary}
                       summarySheetId={detail.summarySheetId}
                       masterSheetId={detail.comparativeSheetId}
+                      revisionLabel={detail.revisionLabel}
                     />
 
-                    {/* Award panel — lowest bidder is auto-flagged; PMC one-click
-                        awards to any vendor with a confirmation prompt. */}
                     {vendorTotals.length > 1 && detail.status !== "Awarded" && (
-                      <div className="mt-3 p-3 border border-brand/30 rounded-xl bg-brand-soft/40">
+                      <div className="p-3 border border-brand/30 rounded-xl bg-brand-soft/30">
                         <p className="text-xs font-mono uppercase text-steel-muted mb-2">Award recommendation</p>
                         <div className="flex flex-wrap gap-2 items-center">
                           {vendorTotals.map((v) => (
@@ -730,88 +748,23 @@ export default function CrmBidComparePage() {
                   </Button>
                 </div>
 
-                {/* Matrix view — the whole vendor × discipline grid at a glance
-                    so PMC sees where uploads are missing without scrolling. */}
                 {vendorMatrix.length > 0 && (
-                  <div className="mb-4 border border-line rounded-xl overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-sand/50 text-left">
-                        <tr>
-                          <th className="px-3 py-2 font-semibold sticky left-0 bg-sand/50 z-10">Vendor</th>
-                          {(detail.disciplines || disciplines).map((d) => (
-                            <th key={d.key} className="px-2 py-2 font-semibold text-center min-w-[90px]">
-                              <div>{d.label}</div>
-                              <div className="text-[9px] font-mono text-steel-muted font-normal">{d.sheetName}</div>
-                            </th>
-                          ))}
-                          <th className="px-2 py-2 font-semibold text-center">Total</th>
-                          <th className="px-2 py-2 font-semibold text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vendorMatrix.map(({ vendorLabel, slots }) => {
-                          const filled = slots.filter((s) => s.slot?.fileName).length;
-                          const total = detail.summary?.grandTotals?.[vendorLabel] || 0;
-                          const isLowest = detail.summary?.lowestVendor === vendorLabel;
-                          return (
-                            <tr key={vendorLabel} className="border-t border-line hover:bg-brand-soft/20">
-                              <td className="px-3 py-1.5 font-semibold sticky left-0 bg-white">
-                                {vendorLabel}
-                                {isLowest && <span className="ml-1.5"><Badge tone="ok">L1</Badge></span>}
-                                <div className="text-[10px] text-steel-muted font-normal">{filled}/{slots.length} BOQs</div>
-                              </td>
-                              {slots.map(({ discipline, slot }) => (
-                                <td key={discipline.key} className="px-2 py-1.5 text-center">
-                                  {slot?.fileName ? (
-                                    slot.sheetId ? (
-                                      <Link to={`/custom-sheets/${slot.sheetId}`} title={slot.fileName} className="inline-block h-5 w-5 rounded-full bg-ok text-white text-[10px] leading-5">
-                                        ✓
-                                      </Link>
-                                    ) : (
-                                      <span title={slot.fileName} className="inline-block h-5 w-5 rounded-full bg-ok text-white text-[10px] leading-5">
-                                        ✓
-                                      </span>
-                                    )
-                                  ) : slot ? (
-                                    <button
-                                      type="button"
-                                      title="Upload"
-                                      onClick={() => {
-                                        setUploadSlot(slot);
-                                        setUploadFile(null);
-                                      }}
-                                      className="inline-block h-5 w-5 rounded-full border border-warn text-warn text-[10px] leading-5 hover:bg-warn hover:text-white"
-                                    >
-                                      ↑
-                                    </button>
-                                  ) : (
-                                    <span className="text-steel-muted">—</span>
-                                  )}
-                                </td>
-                              ))}
-                              <td className="px-2 py-1.5 text-right font-mono">
-                                {total > 0 ? formatINR(total) : "—"}
-                              </td>
-                              <td className="px-2 py-1.5 text-center">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="!text-[10px] !py-0.5 !px-1.5"
-                                  onClick={() => copyVendorLink(vendorLabel)}
-                                  title="Copy per-vendor upload link"
-                                >
-                                  📋 Link
-                                </Button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="mb-4">
+                    <CrmBidVendorMatrix
+                      disciplines={detail.disciplines || disciplines}
+                      vendorMatrix={vendorMatrix}
+                      grandTotals={detail.summary?.grandTotals}
+                      lowestVendor={detail.summary?.lowestVendor}
+                      onOpenSlot={(slot) => setUploadSlot(slot)}
+                      onUploadSlot={(slot) => {
+                        setUploadSlot(slot);
+                        setUploadFile(null);
+                      }}
+                    />
                   </div>
                 )}
 
-                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor × discipline BOQ uploads (detail)</h4>
+                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor upload links & file detail</h4>
                 <div className="space-y-4">
                   {vendorMatrix.map(({ vendorLabel, slots }) => (
                     <div key={vendorLabel} className="border border-line rounded-xl overflow-hidden">
@@ -855,11 +808,14 @@ export default function CrmBidComparePage() {
                             </div>
                             <div className="flex gap-2 shrink-0">
                               {slot?.sheetId && (
-                                <Link to={`/custom-sheets/${slot.sheetId}`}>
-                                  <Button variant="secondary" className="!text-xs !py-1">
-                                    View
-                                  </Button>
-                                </Link>
+                                <Button
+                                  variant="secondary"
+                                  className="!text-xs !py-1"
+                                  type="button"
+                                  onClick={() => setUploadSlot(slot)}
+                                >
+                                  {slot.fileName ? "View / edit BOQ" : "Fill BOQ"}
+                                </Button>
                               )}
                               {slot && (
                                 <Button
@@ -882,12 +838,31 @@ export default function CrmBidComparePage() {
                 </div>
               </Card>
 
+              {uploadSlot && selectedId && uploadSlot.sheetId && (
+                <CrmBidBoqRegister
+                  token={token!}
+                  sheetId={uploadSlot.sheetId}
+                  bidPackageId={selectedId}
+                  slotId={uploadSlot.id}
+                  title={`${uploadSlot.vendorLabel} — ${disciplineLabel(disciplines, uploadSlot.discipline)}`}
+                  sheetLabel={disciplineLabel(disciplines, uploadSlot.discipline)}
+                  canEdit={canManage}
+                  onSaved={() => {
+                    void loadDetail(selectedId);
+                    void load();
+                  }}
+                  onClose={() => {
+                    setUploadSlot(null);
+                    setUploadFile(null);
+                  }}
+                />
+              )}
+
               {uploadSlot && (
                 <Card>
-                  <h4 className="font-semibold text-sm mb-1">Upload discipline BOQ</h4>
+                  <h4 className="font-semibold text-sm mb-1">Upload Excel BOQ (optional)</h4>
                   <p className="text-xs text-steel-muted mb-3">
-                    {uploadSlot.vendorLabel} · {disciplineLabel(disciplines, uploadSlot.discipline)} — use the matching sheet
-                    from the R2 workbook or a discipline-only export.
+                    {uploadSlot.vendorLabel} · {disciplineLabel(disciplines, uploadSlot.discipline)} — matching R2 discipline sheet.
                   </p>
                   <form className="space-y-3" onSubmit={uploadBoq}>
                     <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
@@ -905,7 +880,7 @@ export default function CrmBidComparePage() {
                           setUploadFile(null);
                         }}
                       >
-                        Cancel
+                        Close
                       </Button>
                     </div>
                   </form>

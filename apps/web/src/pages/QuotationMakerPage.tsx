@@ -1,11 +1,11 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
 import { downloadAuthFile } from "../lib/downloadReport";
 
-const STATUSES = ["Draft", "Editing", "Sent to client"] as const;
+const STATUSES = ["Draft", "Editing", "Sent to client", "Done"] as const;
 
 type LogRow = {
   id: string;
@@ -50,6 +50,8 @@ export default function QuotationMakerPage() {
   const { id } = useParams<{ id?: string }>();
   const isEditing = !!id;
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const leadIdFromUrl = searchParams.get("leadId") || "";
   const { token, user } = useAuth();
   const canWrite = ["admin", "office"].includes(user?.role || "");
 
@@ -59,6 +61,19 @@ export default function QuotationMakerPage() {
   const [saved, setSaved] = useState<Quotation | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (isEditing || !leadIdFromUrl) return;
+    (async () => {
+      try {
+        const lead = await api<{ title?: string; clientName?: string }>(`/api/crm/leads/${leadIdFromUrl}`, { token });
+        const name = (lead.clientName || lead.title || "").trim();
+        if (name) setClientName(name);
+      } catch {
+        /* optional prefill */
+      }
+    })();
+  }, [isEditing, leadIdFromUrl, token]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -83,7 +98,7 @@ export default function QuotationMakerPage() {
       const r = await api<Quotation>("/api/crm/quotations", {
         method: "POST",
         token,
-        body: JSON.stringify({ clientName: name }),
+        body: JSON.stringify({ clientName: name, leadId: leadIdFromUrl || undefined }),
       });
       setSaved(r);
       setMsg(`Proposal file created for ${name}. Open it in Drive to edit.`);
@@ -174,53 +189,64 @@ export default function QuotationMakerPage() {
       )}
 
       {isEditing && saved && (
-        <div className="grid lg:grid-cols-2 gap-4">
-          <Card>
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-steel-muted">Client</div>
-                <div className="font-display text-lg">{saved.clientName}</div>
-                <div className="font-mono text-xs text-steel-muted mt-1">{saved.quotationNo}</div>
-              </div>
-              <Badge>{saved.status}</Badge>
+        <div className="grid lg:grid-cols-[1fr_340px] gap-4">
+          <Card className="!p-0 overflow-hidden border-brand/30">
+            <div className="px-5 py-4 bg-brand/5 border-b border-line">
+              <div className="text-[10px] uppercase tracking-wider text-steel-muted mb-1">PMC proposal · Word in SharePoint</div>
+              <div className="font-display text-xl">{saved.clientName}</div>
+              <div className="font-mono text-xs text-steel-muted mt-1">{saved.quotationNo}</div>
             </div>
-            {href ? (
-              <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex">
-                <Button type="button">Open in Drive / SharePoint →</Button>
-              </a>
-            ) : (
-              <p className="text-sm text-steel-muted">File link is not stored yet — use Download .docx, then keep edits in Drive.</p>
-            )}
-            <p className="text-xs text-steel-muted mt-3">
-              Folder: <code className="font-mono">05.03 Tender Documents / PMC_Proposals</code>
-            </p>
-
-            {canWrite && (
-              <div className="mt-5 space-y-3 border-t border-line pt-4">
-                <h3 className="text-sm font-semibold">Update status</h3>
-                <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  {statusOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
-                <TextArea
-                  rows={2}
-                  placeholder="Optional note for the log (e.g. sent to client, waiting on comments)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <Button type="button" disabled={saving} onClick={() => void saveStatus()}>
-                  {saving ? "Saving…" : "Save to log"}
-                </Button>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-steel-muted">
+                Open the <strong>.docx</strong> in SharePoint, fill client details and scope inside Word, then mark status here when sent or finalised.
+              </p>
+              {href ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+                  <Button type="button" className="w-full sm:w-auto">
+                    Open proposal in SharePoint / Drive →
+                  </Button>
+                </a>
+              ) : (
+                <p className="text-sm text-warn">File link missing — use Download .docx below, then re-save to SharePoint.</p>
+              )}
+              <div className="grid sm:grid-cols-2 gap-2 text-xs text-steel-muted">
+                <div className="rounded-lg border border-line p-3 bg-sand/30">
+                  <div className="font-mono uppercase text-[10px] mb-1">Folder</div>
+                  <code className="font-mono text-[11px]">05.03 Tender Documents / PMC_Proposals</code>
+                </div>
+                <div className="rounded-lg border border-line p-3 bg-sand/30">
+                  <div className="font-mono uppercase text-[10px] mb-1">Workflow</div>
+                  Draft → edit in Word → Sent to client → Done
+                </div>
               </div>
-            )}
+
+              {canWrite && (
+                <div className="space-y-3 border-t border-line pt-4">
+                  <h3 className="text-sm font-semibold">Mark progress</h3>
+                  <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                    {statusOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Select>
+                  <TextArea
+                    rows={2}
+                    placeholder="Optional note (e.g. sent to client 12 Aug, waiting comments)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                  <Button type="button" disabled={saving} onClick={() => void saveStatus()}>
+                    {saving ? "Saving…" : "Save to status log"}
+                  </Button>
+                </div>
+              )}
+            </div>
           </Card>
 
-          <Card padding={false}>
-            <div className="px-4 py-3 border-b border-line font-semibold text-sm">Status log</div>
-            <ul className="divide-y max-h-[28rem] overflow-y-auto">
+          <Card padding={false} className="flex flex-col max-h-[32rem]">
+            <div className="px-4 py-3 border-b border-line font-semibold text-sm shrink-0">Status log</div>
+            <ul className="divide-y overflow-y-auto flex-1">
               {(saved.log || []).map((row) => (
                 <li key={row.id} className="px-4 py-3 text-sm">
                   <div className="font-medium">{logLabel(row)}</div>

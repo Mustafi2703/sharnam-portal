@@ -84,7 +84,7 @@ export default function CommsPage() {
     meetingDate: new Date().toISOString().slice(0, 16),
     location: "Site cabin / Microsoft Teams",
     durationMins: "60",
-    attendeeEmails: "hello@twinoxis.com, baibhabmustafi@gmail.com",
+    attendeeEmails: "baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, operations@spdc.in",
     createTeams: true,
   });
   const [logForm, setLogForm] = useState({ subject: "", body: "", toRoles: "client", channel: "In-App" });

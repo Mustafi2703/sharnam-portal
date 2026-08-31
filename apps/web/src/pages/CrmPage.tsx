@@ -1,16 +1,36 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Input, Select } from "../components/ui";
+import { CrmLeadsRegister } from "../components/CrmLeadsRegister";
+import { CrmProposalsRegister } from "../components/CrmProposalsRegister";
+import { CrmProjectsRegister } from "../components/CrmProjectsRegister";
+import { RegisterSheetFrame } from "../components/RegisterSheetFrame";
 import { DemoProjectsPanel } from "../components/DemoProjectsPanel";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
+import {
+  type CrmLead,
+  PIPELINE_STAGES,
+  countByField,
+  leadLocation,
+  marketStatusTone,
+} from "../lib/crmLeadUtils";
 import { sortDemoProjectsFirst } from "../lib/demoProjects";
+import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 
-const LEAD_STAGES = ["New", "Qualified", "Proposal", "Negotiation", "Converted", "Lost"];
+type LeadsView = "register" | "market" | "pipeline";
+const LEAD_STAGES = PIPELINE_STAGES;
 
 export default function CrmPage() {
   const { token, user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const section = location.pathname.includes("/proposals")
+    ? "proposals"
+    : location.pathname.includes("/projects")
+      ? "projects"
+      : "leads";
   const [tab, setTab] = useState<"leads" | "projects" | "wizard">("leads");
   const [leads, setLeads] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
@@ -47,7 +67,9 @@ export default function CrmPage() {
     ...emptyClient,
     memberIds: [] as string[],
     vendorIds: [] as string[],
+    disciplineKeys: [] as string[],
   });
+  const [bidDisciplines, setBidDisciplines] = useState<{ key: string; label: string }[]>([]);
   const [wizardStep, setWizardStep] = useState(1);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState({
@@ -60,8 +82,55 @@ export default function CrmPage() {
   const [memberRole, setMemberRole] = useState("site_employee");
   const [vendorId, setVendorId] = useState("");
   const [trade, setTrade] = useState("");
+  const [leadsView, setLeadsView] = useState<LeadsView>("register");
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (section === "projects") setTab("wizard");
+    else setTab("leads");
+  }, [section]);
 
   const canManage = user?.role === "admin" || user?.role === "office";
+
+  useEffect(() => {
+    if (!canManage || !token) return;
+    void api<{ key: string; label: string }[]>("/api/crm/disciplines", { token })
+      .then((rows) => {
+        setBidDisciplines(rows);
+        setConvertForm((f) => ({
+          ...f,
+          disciplineKeys: f.disciplineKeys.length ? f.disciplineKeys : rows.map((d) => d.key),
+        }));
+      })
+      .catch(() => {});
+  }, [token, canManage]);
+
+  function openConvert(lead: CrmLead) {
+    setConvertLead(lead);
+    setConvertForm({
+      code: `SPDC-${String(lead.srNo || Date.now()).slice(-5)}`,
+      name: lead.title,
+      ...emptyClient,
+      clientName: lead.contactName || lead.title,
+      clientContactName: lead.contactName || "",
+      clientEmail: lead.email || "",
+      clientPhone: lead.phone || "",
+      location: leadLocation(lead),
+      memberIds: [],
+      vendorIds: [],
+      disciplineKeys: bidDisciplines.map((d) => d.key),
+    });
+  }
+
+  async function updateLeadStage(leadId: string, stage: string) {
+    await api(`/api/crm/leads/${leadId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ stage }),
+    });
+    setMsg(`Pipeline stage → ${stage}`);
+    await load();
+  }
 
   const load = async () => {
     const [p, l, d, u, v, q, bp] = await Promise.all([
@@ -87,14 +156,31 @@ export default function CrmPage() {
   }, [token, canManage]);
 
   const pipeline = useMemo(() => {
-    const map: Record<string, any[]> = {};
+    const map: Record<string, CrmLead[]> = {};
     for (const s of LEAD_STAGES) map[s] = [];
     for (const lead of leads) {
-      const stage = map[lead.stage] ? lead.stage : "New";
+      const stage = map[lead.stage || "New"] ? lead.stage || "New" : "New";
       map[stage].push(lead);
     }
     return map;
   }, [leads]);
+
+  const convertEligibleVendors = useMemo(
+    () => vendors.filter((v) => vendorMatchesBidDisciplines(v, convertForm.disciplineKeys)),
+    [vendors, convertForm.disciplineKeys]
+  );
+
+  const marketPipeline = useMemo(() => {
+    const map: Record<string, CrmLead[]> = {};
+    for (const lead of leads) {
+      const key = lead.latestStatus || "Unknown";
+      if (!map[key]) map[key] = [];
+      map[key].push(lead);
+    }
+    return Object.entries(map).sort((a, b) => b[1].length - a[1].length);
+  }, [leads]);
+
+  const marketCounts = useMemo(() => countByField(leads, "latestStatus"), [leads]);
 
   async function createLead(e: FormEvent) {
     e.preventDefault();
@@ -112,14 +198,53 @@ export default function CrmPage() {
   async function runConvert(e: FormEvent) {
     e.preventDefault();
     if (!convertLead) return;
-    const res = await api<{ project: { id: string; code: string } }>(`/api/crm/leads/${convertLead.id}/convert`, {
+    const leadId = convertLead.id;
+    const res = await api<{ project: { id: string; code: string } }>(`/api/crm/leads/${leadId}/convert`, {
       method: "POST",
       token,
       body: JSON.stringify(convertForm),
     });
-    setMsg(`Converted to project ${res.project.code}`);
+
+    let bidPackageId: string | null = null;
+    if (convertForm.vendorIds.length >= 2 && convertForm.disciplineKeys.length) {
+      try {
+        const vendorNames = convertForm.vendorIds
+          .map((id) => vendors.find((v) => v.id === id)?.name)
+          .filter(Boolean) as string[];
+        const bp = await api<{ id: string }>("/api/crm/bid-packages", {
+          method: "POST",
+          token,
+          body: JSON.stringify({
+            title: `${convertForm.name} — comparative bid`,
+            projectId: res.project.id,
+            leadId,
+            revisionLabel: "R2",
+            vendorNames,
+            disciplineKeys: convertForm.disciplineKeys,
+          }),
+        });
+        bidPackageId = bp.id;
+      } catch (err) {
+        setMsg(
+          `Project ${res.project.code} created. Bid package failed: ${err instanceof Error ? err.message : "unknown"} — open Bid desk to set up manually.`,
+        );
+        setConvertLead(null);
+        navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+        await load();
+        return;
+      }
+    }
+
     setConvertLead(null);
-    setTab("projects");
+    if (bidPackageId) {
+      setMsg(`Project ${res.project.code} created with discipline-wise bid package (PEB, Civil, Fire, etc.).`);
+      navigate(`/crm/bids/${bidPackageId}`);
+    } else {
+      setMsg(
+        `Project ${res.project.code} created. Select at least 2 contractors on convert to auto-open bids — or set up from Bid desk.`,
+      );
+      navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+    }
     await load();
   }
 
@@ -137,126 +262,38 @@ export default function CrmPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="CRM"
-        title="Leads & projects"
-        subtitle="Create projects with full client card (contact, GST, consultant, contractor). Assign staff in CRM; manage the live directory in HR / project Directory."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link to="/quotations/new">
-              <Button variant="secondary">+ New proposal</Button>
-            </Link>
-            <Link to="/crm/bid-compare">
-              <Button variant="secondary">Bid management (R2)</Button>
-            </Link>
-            {canManage && (
-              <>
-                {(["leads", "wizard", "projects"] as const).map((t) => (
-                  <Button key={t} variant={tab === t ? "primary" : "secondary"} onClick={() => setTab(t)}>
-                    {t === "wizard" ? "New project" : t === "leads" ? "Leads board" : "Projects"}
-                  </Button>
-                ))}
-              </>
-            )}
-          </div>
-        }
-      />
+    <div className="space-y-6 flex flex-col flex-1 min-h-0">
+      {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
 
-      {msg && <p className="text-sm text-ok">{msg}</p>}
-
-      <DemoProjectsPanel projects={projects} />
-
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">
-          <div>
-            <span>PMC proposals</span>
-            <p className="text-[11px] font-normal text-steel-muted mt-0.5">
-              New file per client in Drive — edit the .docx there, keep status in the log
-            </p>
-          </div>
-          <Link to="/quotations/new">
-            <Button type="button" variant="secondary" className="!py-1 !text-xs">
-              + New
-            </Button>
-          </Link>
-        </div>
-        <ul className="divide-y">
-          {quotations.map((q) => (
-            <li key={q.id} className="px-4 py-3 flex justify-between gap-3">
-              <div>
-                <div className="font-medium">{q.clientName}</div>
-                <div className="font-mono text-xs text-steel-muted">{q.quotationNo}</div>
-              </div>
-              <div className="text-right space-y-1 shrink-0">
-                <Badge>{q.status}</Badge>
-                {(q.attachmentSharePointUrl || q.attachmentUrl) && (
-                  <a
-                    href={q.attachmentSharePointUrl || q.attachmentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-xs text-brand font-semibold"
-                  >
-                    Open in Drive →
-                  </a>
-                )}
-                <Link to={`/quotations/${q.id}`} className="block text-xs text-brand font-semibold">
-                  Status log →
-                </Link>
-              </div>
-            </li>
-          ))}
-          {!quotations.length && (
-            <li className="px-4 py-6 text-sm text-steel-muted">
-              No proposals yet. Click <strong>+ New</strong> and enter the client name.
-            </li>
-          )}
-        </ul>
-      </Card>
-
-      {canManage && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex justify-between items-center gap-2">
-            <div>
-              <span>Bid management — Comparative Statement R2</span>
-              <p className="text-[11px] font-normal text-steel-muted mt-0.5">
-                Contractors upload discipline BOQs · office compares multiple bids (not PMC proposal)
-              </p>
-            </div>
-            <Link to="/crm/bid-compare">
-              <Button type="button" className="!py-1 !text-xs">
-                Open bid desk
-              </Button>
-            </Link>
-          </div>
-          <ul className="divide-y">
-            {bidPackages.map((bp) => (
-              <li key={bp.id} className="px-4 py-3 flex justify-between gap-3">
-                <div>
-                  <div className="font-medium text-sm">{bp.title}</div>
-                  <div className="text-xs text-steel-muted">
-                    {bp.revisionLabel} · {bp.status} · BOQs {bp.uploadProgress?.done ?? 0}/{bp.uploadProgress?.total ?? 0}
-                  </div>
-                </div>
-                <Link to="/crm/bid-compare" className="text-xs text-brand font-semibold shrink-0">
-                  View comparative →
-                </Link>
-              </li>
-            ))}
-            {!bidPackages.length && (
-              <li className="px-4 py-6 text-sm text-steel-muted">
-                No bid packages — seeded demo: <strong>SPDC-DEMO-01 · Civil & structural — R2 demo bid</strong> after{" "}
-                <code className="text-brand">npm run db:seed</code>
-              </li>
-            )}
-          </ul>
-        </Card>
+      {section === "proposals" && (
+        <CrmProposalsRegister quotations={quotations} canWrite={canManage} />
       )}
 
-      {tab === "leads" && canManage && (
+      {section === "leads" && canManage && (
         <>
+          <DemoProjectsPanel projects={projects} />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card className="!p-4">
+              <div className="text-[10px] font-mono uppercase text-steel-muted">Total projects</div>
+              <div className="font-display text-3xl text-brand">{leads.length}</div>
+              <div className="text-xs text-steel-muted mt-1">Data - July 2026 register</div>
+            </Card>
+            <Card className="!p-4">
+              <div className="text-[10px] font-mono uppercase text-steel-muted">Under construction</div>
+              <div className="font-display text-3xl">{marketCounts["Under Construction"] || 0}</div>
+            </Card>
+            <Card className="!p-4">
+              <div className="text-[10px] font-mono uppercase text-steel-muted">Pre-construction</div>
+              <div className="font-display text-3xl">{marketCounts["Pre-Construction"] || 0}</div>
+            </Card>
+            <Card className="!p-4">
+              <div className="text-[10px] font-mono uppercase text-steel-muted">Converted to SPDC</div>
+              <div className="font-display text-3xl">{leads.filter((l) => l.projectId).length}</div>
+            </Card>
+          </div>
+
           <ReferenceSheetToolbar
-            sheetLabel="CRM leads pipeline"
+            sheetLabel="CRM market register"
             rowCount={leads.length}
             canEdit
             onAddRow={() => setLeadAddOpen((v) => !v)}
@@ -264,6 +301,7 @@ export default function CrmPage() {
               const fd = new FormData();
               fd.append("file", file);
               fd.append("sourceSheet", file.name);
+              fd.append("sheet", "Project Details");
               try {
                 const out = await api<{ created: number; updated: number; skipped: number; errors: string[] }>(
                   "/api/crm/leads/import",
@@ -275,33 +313,28 @@ export default function CrmPage() {
                 setMsg(err instanceof Error ? err.message : "Import failed");
               }
             }}
-            uploadTitle="Upload leads sheet (Excel)"
-            uploadHint={
-              "Expected columns: Sr No · Project Name · Latest Status · Latest Sub Status · Latest Status Update · Landmark · District · State · Pin Code · Segment · Sub-Segment · Sector · Project Type · Description. Extra columns are ignored; re-uploading updates existing rows by Sr No."
-            }
+            uploadTitle="Upload Data - July 2026.xlsx"
+            uploadHint="Sheet: Project Details · upserts by Sr No · includes Latest Status / Sub Status / location / segment / description."
             message={msg || undefined}
           />
 
-          <div className="flex flex-wrap gap-2 text-[11px] items-center">
-            <span className="text-steel-muted font-mono uppercase">Latest status ({leads.length} leads):</span>
-            {Object.entries(
-              leads.reduce((acc: Record<string, number>, l: any) => {
-                const key = String(l.latestStatus || "—");
-                acc[key] = (acc[key] || 0) + 1;
-                return acc;
-              }, {}),
-            )
-              .sort((a, b) => b[1] - a[1])
-              .map(([k, v]) => (
-                <span key={k} className="px-2 py-0.5 rounded border border-line bg-white">
-                  {k}: <span className="font-semibold text-brand">{v}</span>
-                </span>
-              ))}
+          <div className="flex flex-wrap gap-2 items-center">
+            {(
+              [
+                ["register", "Register (all rows)"],
+                ["market", "By market status"],
+                ["pipeline", "Sales pipeline"],
+              ] as const
+            ).map(([key, label]) => (
+              <Button key={key} variant={leadsView === key ? "primary" : "secondary"} onClick={() => setLeadsView(key)}>
+                {label}
+              </Button>
+            ))}
           </div>
 
           {leadAddOpen && (
           <Card className="!p-3">
-            <h3 className="font-semibold mb-3">Add lead</h3>
+            <h3 className="font-semibold mb-3">Add lead manually</h3>
             <form className="grid md:grid-cols-3 gap-3" onSubmit={createLead}>
               <Input required placeholder="Opportunity title" value={leadForm.title} onChange={(e) => setLeadForm({ ...leadForm, title: e.target.value })} />
               <Input placeholder="Contact name" value={leadForm.contactName} onChange={(e) => setLeadForm({ ...leadForm, contactName: e.target.value })} />
@@ -319,77 +352,117 @@ export default function CrmPage() {
           </Card>
           )}
 
-          <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-3 overflow-x-auto pb-2">
-            {LEAD_STAGES.map((stage) => (
-              <Card key={stage} padding={false} className="min-w-[180px]">
-                <div className="px-3 py-2 border-b bg-sand/50 text-xs font-semibold uppercase tracking-wide flex justify-between">
-                  <span>{stage}</span>
-                  <span className="font-mono text-brand">{pipeline[stage]?.length || 0}</span>
-                </div>
-                <ul className="divide-y max-h-[420px] overflow-y-auto">
-                  {(pipeline[stage] || []).map((lead) => (
-                    <li key={lead.id} className="p-3 text-sm space-y-2">
-                      <div className="font-medium leading-snug">{lead.title}</div>
-                      <div className="text-xs text-steel-muted">{lead.contactName || lead.district || "—"}{lead.state ? `, ${lead.state}` : ""}</div>
-                      {lead.latestStatus && (
-                        <div className="flex flex-wrap gap-1 text-[10px]">
-                          <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand font-medium">{lead.latestStatus}</span>
-                          {lead.latestSubStatus && (
-                            <span className="px-1.5 py-0.5 rounded border border-line text-steel-muted">{lead.latestSubStatus}</span>
-                          )}
-                        </div>
-                      )}
-                      {(lead.segment || lead.subSegment) && (
-                        <div className="text-[10px] text-steel-muted uppercase font-mono">{[lead.segment, lead.subSegment].filter(Boolean).join(" · ")}</div>
-                      )}
-                      {lead.value != null && (
-                        <div className="font-mono text-[11px] text-brand">₹{Number(lead.value).toLocaleString("en-IN")}</div>
-                      )}
-                      {lead.projectId ? (
-                        <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
-                          Open project →
-                        </Link>
-                      ) : stage !== "Lost" ? (
-                        <Button
-                          className="!text-xs !py-1 !px-2 w-full"
-                          onClick={() => {
-                            setConvertLead(lead);
-                            setConvertForm({
-                              code: `SPDC-${Date.now().toString().slice(-5)}`,
-                              name: lead.title,
-                              ...emptyClient,
-                              clientName: lead.contactName || "",
-                              clientContactName: lead.contactName || "",
-                              clientEmail: lead.email || "",
-                              clientPhone: lead.phone || "",
-                              memberIds: [],
-                              vendorIds: [],
-                            });
-                          }}
-                        >
-                          Convert →
-                        </Button>
-                      ) : null}
-                    </li>
-                  ))}
-                  {!pipeline[stage]?.length && <li className="p-3 text-xs text-steel-muted">Empty</li>}
-                </ul>
-              </Card>
-            ))}
-          </div>
+          {leadsView === "register" && (
+            <CrmLeadsRegister
+              leads={leads}
+              canWrite={canManage}
+              selectedId={selectedLeadId}
+              onSelect={(l) => setSelectedLeadId(l?.id || null)}
+              onConvert={openConvert}
+              onStageChange={updateLeadStage}
+            />
+          )}
+
+          {leadsView === "market" && (
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 overflow-x-auto pb-2">
+              {marketPipeline.map(([status, rows]) => (
+                <Card key={status} padding={false} className="min-w-[240px]">
+                  <div className="px-3 py-2 border-b bg-sand/50 text-xs font-semibold flex justify-between gap-2">
+                    <span className={`px-1.5 py-0.5 rounded ${marketStatusTone(status)}`}>{status}</span>
+                    <span className="font-mono text-brand">{rows.length}</span>
+                  </div>
+                  <ul className="divide-y max-h-[480px] overflow-y-auto">
+                    {rows.slice(0, 40).map((lead) => (
+                      <li key={lead.id} className="p-3 text-sm space-y-1.5">
+                        <div className="font-medium leading-snug line-clamp-2">{lead.title}</div>
+                        <div className="text-xs text-steel-muted">{leadLocation(lead)}</div>
+                        {lead.latestSubStatus && (
+                          <div className="text-[10px] text-steel-muted">{lead.latestSubStatus}</div>
+                        )}
+                        {!lead.projectId ? (
+                          <Button className="!text-xs !py-1 !px-2" onClick={() => openConvert(lead)}>
+                            Convert →
+                          </Button>
+                        ) : (
+                          <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
+                            Open project →
+                          </Link>
+                        )}
+                      </li>
+                    ))}
+                    {rows.length > 40 && (
+                      <li className="p-3 text-xs text-steel-muted">+ {rows.length - 40} more — use Register view</li>
+                    )}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {leadsView === "pipeline" && (
+            <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-3 overflow-x-auto pb-2">
+              {LEAD_STAGES.map((stage) => (
+                <Card key={stage} padding={false} className="min-w-[180px]">
+                  <div className="px-3 py-2 border-b bg-sand/50 text-xs font-semibold uppercase tracking-wide flex justify-between">
+                    <span>{stage}</span>
+                    <span className="font-mono text-brand">{pipeline[stage]?.length || 0}</span>
+                  </div>
+                  <ul className="divide-y max-h-[420px] overflow-y-auto">
+                    {(pipeline[stage] || []).slice(0, 25).map((lead) => (
+                      <li key={lead.id} className="p-3 text-sm space-y-2">
+                        <div className="font-medium leading-snug line-clamp-2">{lead.title}</div>
+                        <div className="text-xs text-steel-muted">{lead.district || "—"}{lead.state ? `, ${lead.state}` : ""}</div>
+                        {lead.latestStatus && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${marketStatusTone(lead.latestStatus)}`}>
+                            {lead.latestStatus}
+                          </span>
+                        )}
+                        {lead.projectId ? (
+                          <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
+                            Open project →
+                          </Link>
+                        ) : stage !== "Lost" ? (
+                          <Button className="!text-xs !py-1 !px-2 w-full" onClick={() => openConvert(lead)}>
+                            Convert →
+                          </Button>
+                        ) : null}
+                      </li>
+                    ))}
+                    {(pipeline[stage]?.length || 0) > 25 && (
+                      <li className="p-3 text-xs text-steel-muted">Use Register view for full list</li>
+                    )}
+                    {!pipeline[stage]?.length && <li className="p-3 text-xs text-steel-muted">Empty</li>}
+                  </ul>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {deals.length > 0 && (
-            <Card padding={false}>
-              <div className="px-4 py-3 border-b bg-sand/40 font-semibold">Deals</div>
-              <ul className="divide-y">
-                {deals.map((d) => (
-                  <li key={d.id} className="px-4 py-3 flex justify-between text-sm">
-                    <span>{d.name}</span>
-                    <Badge>{d.stage}</Badge>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+            <div className="grid xl:grid-cols-[1fr_320px] gap-3">
+              <RegisterSheetFrame title="Deals register" sheetLabel="CRM pipeline" rowCount={deals.length}>
+                <table className="sheet-register__table min-w-[640px]">
+                  <thead>
+                    <tr>
+                      <th>Deal</th>
+                      <th>Stage</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deals.map((d) => (
+                      <tr key={d.id}>
+                        <td className="font-medium">{d.name}</td>
+                        <td>
+                          <Badge>{d.stage}</Badge>
+                        </td>
+                        <td className="font-mono text-xs">{d.value != null ? `₹ ${Number(d.value).toLocaleString("en-IN")}` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </RegisterSheetFrame>
+            </div>
           )}
         </>
       )}
@@ -437,9 +510,37 @@ export default function CrmPage() {
                 </div>
               </div>
               <div>
-                <div className="text-xs font-mono uppercase text-steel-muted mb-1">Vendors</div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="text-xs font-mono uppercase text-steel-muted">Bid disciplines (PEB, Civil, Fire…)</div>
+                  <Link to="/master/vendors" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
+                    Vendor directory ↗
+                  </Link>
+                </div>
+                <div className="max-h-32 overflow-y-auto border rounded-xl p-2 grid sm:grid-cols-2 gap-1">
+                  {bidDisciplines.map((d) => (
+                    <label key={d.key} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={convertForm.disciplineKeys.includes(d.key)}
+                        onChange={(e) => {
+                          setConvertForm({
+                            ...convertForm,
+                            disciplineKeys: e.target.checked
+                              ? [...convertForm.disciplineKeys, d.key]
+                              : convertForm.disciplineKeys.filter((k) => k !== d.key),
+                          });
+                        }}
+                      />
+                      {d.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-mono uppercase text-steel-muted mb-1">Contractors / vendors for comparative bid (min 2)</div>
+                <p className="text-[10px] text-steel-muted mb-1">Office can upload BOQs later, or vendors fill online at /login/vendor.</p>
                 <div className="max-h-28 overflow-y-auto border rounded-xl p-2 space-y-1">
-                  {vendors.map((v) => (
+                  {convertEligibleVendors.map((v) => (
                     <label key={v.id} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -454,12 +555,16 @@ export default function CrmPage() {
                         }}
                       />
                       {v.name}
+                      {v.trade && <span className="text-[10px] text-steel-muted">· {v.trade}</span>}
                     </label>
                   ))}
+                  {!convertEligibleVendors.length && (
+                    <p className="text-xs text-steel-muted">No vendors tagged for selected disciplines — add them in Master → Vendors.</p>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button type="submit">Create project</Button>
+                <Button type="submit">Create project + open bids</Button>
                 <Button type="button" variant="secondary" onClick={() => setConvertLead(null)}>
                   Cancel
                 </Button>
@@ -469,8 +574,17 @@ export default function CrmPage() {
         </div>
       )}
 
-      {tab === "wizard" && canManage && (
+      {section === "projects" && (
+        <CrmProjectsRegister
+          projects={projects}
+          canWrite={canManage}
+          onEdit={(p) => setEditProject({ ...p })}
+        />
+      )}
+
+      {section === "projects" && canManage && tab === "wizard" && (
         <Card>
+          <h3 className="font-semibold mb-3">Create new project</h3>
           <div className="flex gap-2 mb-4 text-xs font-mono">
             {[1, 2, 3].map((s) => (
               <span key={s} className={`px-2 py-1 rounded ${wizardStep === s ? "bg-brand text-white" : "bg-sand"}`}>
@@ -612,42 +726,6 @@ export default function CrmPage() {
         </div>
       )}
 
-      {(tab === "projects" || !canManage) && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b bg-sand/40 font-semibold">Projects</div>
-          <ul className="divide-y">
-            {projects.map((p) => (
-              <li key={p.id} className="px-4 py-3 flex justify-between gap-3">
-                <div>
-                  <div className="font-mono text-xs text-brand">{p.code}</div>
-                  <div className="font-medium">{p.name}</div>
-                  <div className="text-xs text-steel-muted">
-                    {p.clientName || "—"} · {p.clientContactName || "—"} · {p.location || "—"}
-                  </div>
-                  {(p.designConsultant || p.contractorName) && (
-                    <div className="text-[11px] text-steel-muted mt-0.5">
-                      Consultant: {p.designConsultant || "—"} · Contractor: {p.contractorName || "—"}
-                    </div>
-                  )}
-                </div>
-                <div className="text-right space-y-1">
-                  <Badge>{p.status}</Badge>
-                  <div className="flex flex-col gap-1 items-end">
-                    {canManage && (
-                      <button type="button" className="text-xs text-steel-muted hover:text-brand" onClick={() => setEditProject({ ...p })}>
-                        Edit client card
-                      </button>
-                    )}
-                    <Link to={`/projects/${p.id}`} className="text-xs text-brand font-semibold">
-                      Open tools
-                    </Link>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
     </div>
   );
 }

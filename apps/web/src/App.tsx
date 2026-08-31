@@ -24,6 +24,7 @@ import CrmPage from "./pages/CrmPage";
 import CrmBidComparePage from "./pages/CrmBidComparePage";
 import CrmVendorBidsPage from "./pages/CrmVendorBidsPage";
 import HrmPage from "./pages/HrmPage";
+import HrmsProtected from "./pages/hrms/HrmsProtected";
 import HrmsLayout from "./pages/hrms/HrmsLayout";
 import HrmsShell from "./pages/hrms/HrmsShell";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
@@ -134,7 +135,9 @@ export default function App() {
         path="/hrm"
         element={
           <Protected>
-            <HrmsShell />
+            <HrmsProtected>
+              <HrmsShell />
+            </HrmsProtected>
           </Protected>
         }
       >

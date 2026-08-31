@@ -36,7 +36,8 @@ export default function ReportsPage() {
   const project = (tab === "dpr" ? dpr : wpr)?.project;
 
   return (
-    <div className="space-y-6">
+    <div className="page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden pb-2">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbars-visible space-y-6 pr-1">
       <div>
         <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
           ← Project
@@ -270,6 +271,7 @@ export default function ReportsPage() {
       )}
 
       {(!dpr || !wpr) && <p className="text-sm text-steel-muted">Loading dashboard…</p>}
+      </div>
     </div>
   );
 }

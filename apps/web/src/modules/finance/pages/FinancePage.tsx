@@ -4,7 +4,6 @@ import {
   FINANCE_PACKAGES,
   copMatchesPackage,
   materialMatchesPackage,
-  poMatchesPackage,
   raMatchesPackage,
   resolveFinancePackage,
 } from "@sharnam/finance/disciplines";
@@ -20,7 +19,6 @@ const TOOLS = [
   { id: "overview", label: "Overview" },
   { id: "bills", label: "Bill registers" },
   { id: "capex", label: "Project CAPEX" },
-  { id: "po", label: "Purchase Orders" },
   { id: "ra", label: "RA Bill Tracker" },
   { id: "cop", label: "COP (Certificate of Payment)" },
   { id: "invoices", label: "Material / Tax invoices" },
@@ -52,24 +50,21 @@ export default function FinancePage() {
 
   const [summary, setSummary] = useState<any>(null);
   const [capex, setCapex] = useState<any[]>([]);
-  const [pos, setPos] = useState<any[]>([]);
   const [ras, setRas] = useState<any[]>([]);
   const [cops, setCops] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
 
   const reload = async () => {
-    const [sum, cx, po, ra, cop, inv] = await Promise.all([
+    const [sum, cx, ra, cop, inv] = await Promise.all([
       api<any>(`/api/finance/${id}/summary`, { token }),
       api<any[]>(`/api/finance/${id}/capex`, { token }),
-      api<any[]>(`/api/finance/${id}/po`, { token }),
       api<any[]>(`/api/finance/${id}/ra`, { token }),
       api<any[]>(`/api/finance/${id}/cop`, { token }),
       api<any[]>(`/api/finance/${id}/material-invoices`, { token }),
     ]);
     setSummary(sum);
     setCapex(cx);
-    setPos(po);
     setRas(ra);
     setCops(cop);
     setInvoices(inv);
@@ -87,7 +82,7 @@ export default function FinancePage() {
         subtitle={
           activePkg
             ? `${activePkg.label} · ${activePkg.billKind === "ra" ? "RA bills & COP" : "Material / tax invoices"}`
-            : "CAPEX · PO · RA Bill · COP · discipline-wise Payment Summary"
+            : "CAPEX · RA Bill (3 stages) · COP · discipline-wise Payment Summary"
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -106,7 +101,7 @@ export default function FinancePage() {
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {["overview", "bills", "po", "ra", "cop", "invoices", "summary"].includes(active.id) && (
+      {["overview", "bills", "ra", "cop", "invoices", "summary"].includes(active.id) && (
         <Card className="!p-4">
           <div className="text-[10px] uppercase tracking-wide text-steel-muted mb-2">Discipline / package</div>
           <FinanceDisciplineStrip
@@ -120,7 +115,7 @@ export default function FinancePage() {
       </div>
 
       {active.id === "overview" && (
-        <Overview summary={summary} pos={pos} ras={ras} cops={cops} projectId={id!} activePkg={activePkg} />
+        <Overview summary={summary} ras={ras} cops={cops} projectId={id!} activePkg={activePkg} />
       )}
 
       {active.id === "bills" && (
@@ -147,14 +142,10 @@ export default function FinancePage() {
         />
       )}
 
-      {active.id === "po" && (
-        <PoTab pos={pos} canWrite={canWrite} reload={reload} setMsg={setMsg} projectId={id!} token={token || ""} activePkg={activePkg} />
-      )}
 
       {active.id === "ra" && (
         <RaTab
           ras={ras}
-          pos={pos}
           canWrite={canWrite}
           reload={reload}
           setMsg={setMsg}
@@ -168,7 +159,6 @@ export default function FinancePage() {
       {active.id === "cop" && (
         <CopTab
           cops={cops}
-          pos={pos}
           ras={ras}
           canWrite={canWrite}
           reload={reload}
@@ -220,14 +210,12 @@ export default function FinancePage() {
 
 function Overview({
   summary,
-  pos,
   ras,
   cops,
   projectId,
   activePkg,
 }: {
   summary: any;
-  pos: any[];
   ras: any[];
   cops: any[];
   projectId: string;
@@ -235,14 +223,10 @@ function Overview({
 }) {
   const t = summary?.totals || {};
   const disciplineRows: any[] = summary?.byDiscipline || [];
-  const filteredPos = activePkg ? pos.filter((p) => poMatchesPackage(p, activePkg)) : pos;
   const filteredRas = activePkg ? ras.filter((r) => raMatchesPackage(r, activePkg)) : ras;
   const filteredCops = activePkg ? cops.filter((c) => copMatchesPackage(c, activePkg)) : cops;
   const cards = [
     ["CAPEX budgeted", money(t.capexBudgeted)],
-    ["PO original value", money(t.poOriginal)],
-    ["Billed (w/o GST)", money(t.poBilledWithoutGst)],
-    ["Certified", money(t.poCertified)],
     ["RA gross", money(t.raGross)],
     ["RA net payable", money(t.raNetPayable)],
     ["Retention held", money(t.raRetention)],
@@ -255,7 +239,7 @@ function Overview({
       {!activePkg && disciplineRows.length > 0 && (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {disciplineRows
-            .filter((d) => d.raCount + d.materialCount + d.poCount > 0)
+            .filter((d) => d.raCount + d.materialCount > 0)
             .map((d) => (
               <Link key={d.key} to={`/projects/${projectId}/finance?tab=summary&discipline=${d.key}`}>
                 <Card className="!p-4 hover:border-brand/40 transition-colors h-full">
@@ -328,13 +312,13 @@ function Overview({
         <Card>
           <h3 className="font-semibold text-sm mb-2">COPs by status</h3>
           <table className="w-full text-xs">
-            <thead className="text-left text-steel-muted"><tr><th>COP</th><th>Contractor</th><th>PO</th><th className="text-right">Payable</th><th>Status</th></tr></thead>
+            <thead className="text-left text-steel-muted"><tr><th>COP</th><th>Contractor</th><th>WO ref</th><th className="text-right">Payable</th><th>Status</th></tr></thead>
             <tbody>
               {filteredCops.slice(0, 8).map((c) => (
                 <tr key={c.id} className="border-t border-line">
                   <td className="py-1.5">{c.certificateNumber}</td>
                   <td>{c.contractor}</td>
-                  <td>{c.purchaseOrder?.poNumber || "—"}</td>
+                  <td>{c.poNumberDate || "—"}</td>
                   <td className="text-right">{money(c.amountPayable)}</td>
                   <td><Badge tone={c.status === "Paid" ? "ok" : c.status === "Rejected" ? "danger" : "brand"}>{c.status}</Badge></td>
                 </tr>
@@ -344,34 +328,6 @@ function Overview({
           </table>
         </Card>
       </div>
-      <Card>
-        <h3 className="font-semibold text-sm mb-2">Open POs — {filteredPos.length}</h3>
-        <table className="w-full text-xs">
-          <thead className="text-left text-steel-muted">
-            <tr>
-              <th>PO No</th><th>Vendor</th><th>Trade</th>
-              <th className="text-right">Original</th>
-              <th className="text-right">Billed (w/o GST)</th>
-              <th className="text-right">Balance</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPos.map((p) => (
-              <tr key={p.id} className="border-t border-line">
-                <td className="py-1.5">{p.poNumber}</td>
-                <td>{p.vendorName}</td>
-                <td>{p.workTrade || "—"}</td>
-                <td className="text-right">{money(p.originalValue)}</td>
-                <td className="text-right">{money(p.totalBilledWithoutGst)}</td>
-                <td className="text-right">{money(Math.max(0, (p.amendedValue || p.originalValue) - p.totalBilledWithoutGst))}</td>
-                <td><Badge tone={p.status === "Closed" ? "ok" : "brand"}>{p.status}</Badge></td>
-              </tr>
-            ))}
-            {!filteredPos.length && <tr><td colSpan={7} className="py-4 text-center text-steel-muted">No POs yet.</td></tr>}
-          </tbody>
-        </table>
-      </Card>
     </div>
   );
 }
@@ -433,116 +389,13 @@ function CapexTab({ capex, canWrite, reload, setMsg, projectId, token }: any) {
   );
 }
 
-/* ─────────────────────────── Purchase Orders ─────────────────────────── */
-
-function PoTab({ pos, canWrite, reload, setMsg, projectId, token, activePkg }: any) {
-  const filtered = activePkg ? pos.filter((p: any) => poMatchesPackage(p, activePkg)) : pos;
-  const [form, setForm] = useState({
-    poNumber: "",
-    poDate: "",
-    vendorName: "",
-    workTrade: activePkg?.discipline || "",
-    packageName: activePkg ? `${activePkg.discipline} package` : "",
-    originalValue: "",
-    amendedValue: "",
-    retentionPct: "5",
-    advancePct: "0",
-    panNumber: "",
-    gstNumber: "",
-    payableTo: "",
-  });
-  const [file, setFile] = useState<File | null>(null);
-  async function add(e: FormEvent) {
-    e.preventDefault();
-    try {
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => v && fd.append(k, v));
-      if (file) fd.append("file", file);
-      await api(`/api/finance/${projectId}/po`, { method: "POST", token, body: fd });
-      setForm({
-        poNumber: "",
-        poDate: "",
-        vendorName: "",
-        workTrade: activePkg?.discipline || "",
-        packageName: activePkg ? `${activePkg.discipline} package` : "",
-        originalValue: "",
-        amendedValue: "",
-        retentionPct: "5",
-        advancePct: "0",
-        panNumber: "",
-        gstNumber: "",
-        payableTo: "",
-      });
-      setFile(null);
-      setMsg("PO added; attachment (if any) saved to 09.01 folder.");
-      await reload();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Add failed");
-    }
-  }
-  return (
-    <div className="space-y-3">
-      {canWrite && (
-        <Card>
-          <h3 className="font-semibold text-sm mb-2">Add Purchase Order</h3>
-          <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
-            <Input placeholder="PO Number" value={form.poNumber} onChange={(e) => setForm({ ...form, poNumber: e.target.value })} required />
-            <Input placeholder="PO Date" type="date" value={form.poDate} onChange={(e) => setForm({ ...form, poDate: e.target.value })} />
-            <Input placeholder="Vendor name" value={form.vendorName} onChange={(e) => setForm({ ...form, vendorName: e.target.value })} required />
-            <Input placeholder="Work / Trade" value={form.workTrade} onChange={(e) => setForm({ ...form, workTrade: e.target.value })} />
-            <Input placeholder="Package (Civil, PEB, MEP…)" value={form.packageName} onChange={(e) => setForm({ ...form, packageName: e.target.value })} />
-            <Input placeholder="Original value (₹)" type="number" value={form.originalValue} onChange={(e) => setForm({ ...form, originalValue: e.target.value })} required />
-            <Input placeholder="Amended value (₹)" type="number" value={form.amendedValue} onChange={(e) => setForm({ ...form, amendedValue: e.target.value })} />
-            <Input placeholder="Retention %" type="number" value={form.retentionPct} onChange={(e) => setForm({ ...form, retentionPct: e.target.value })} />
-            <Input placeholder="Advance %" type="number" value={form.advancePct} onChange={(e) => setForm({ ...form, advancePct: e.target.value })} />
-            <Input placeholder="PAN" value={form.panNumber} onChange={(e) => setForm({ ...form, panNumber: e.target.value })} />
-            <Input placeholder="GST No." value={form.gstNumber} onChange={(e) => setForm({ ...form, gstNumber: e.target.value })} />
-            <Input placeholder="Payable to" value={form.payableTo} onChange={(e) => setForm({ ...form, payableTo: e.target.value })} />
-            <label className="md:col-span-3 text-xs text-steel-muted">
-              PO attachment (PDF / scan)
-              <input type="file" accept=".pdf,image/*" className="block mt-1 text-xs" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </label>
-            <Button type="submit">Add PO</Button>
-          </form>
-        </Card>
-      )}
-      <Card>
-        <h3 className="font-semibold text-sm mb-2">Purchase Orders</h3>
-        <table className="w-full text-xs">
-          <thead className="text-left text-steel-muted">
-            <tr><th>PO</th><th>Date</th><th>Vendor</th><th>Trade</th><th className="text-right">Original</th><th className="text-right">Amended</th><th className="text-right">Billed</th><th>RAs</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            {filtered.map((p: any) => (
-              <tr key={p.id} className="border-t border-line">
-                <td className="py-1.5">{p.poNumber}</td>
-                <td>{d(p.poDate)}</td>
-                <td>{p.vendorName}</td>
-                <td>{p.workTrade || "—"}</td>
-                <td className="text-right">{money(p.originalValue)}</td>
-                <td className="text-right">{money(p.amendedValue)}</td>
-                <td className="text-right">{money(p.totalBilledWithoutGst)}</td>
-                <td>{p._count?.raBills ?? 0}</td>
-                <td><Badge tone={p.status === "Closed" ? "ok" : "brand"}>{p.status}</Badge></td>
-              </tr>
-            ))}
-            {!filtered.length && <tr><td colSpan={9} className="py-4 text-center text-steel-muted">No POs for this discipline yet.</td></tr>}
-          </tbody>
-        </table>
-      </Card>
-    </div>
-  );
-}
-
 /* ─────────────────────────── RA Bill ─────────────────────────── */
 
-function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg, disciplineKey }: any) {
+function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, disciplineKey }: any) {
   const raPackages = FINANCE_PACKAGES.filter((p) => p.billKind === "ra");
   const defaultDiscipline = activePkg?.billKind === "ra" ? activePkg.discipline : raPackages[0]?.discipline || "Civil";
-  const filteredPos = activePkg ? pos.filter((p: any) => poMatchesPackage(p, activePkg)) : pos;
   const filteredRas = activePkg?.billKind === "ra" ? ras.filter((r: any) => raMatchesPackage(r, activePkg)) : activePkg ? [] : ras;
   const [form, setForm] = useState({
-    purchaseOrderId: "",
     raNumber: "",
     invoiceNumber: "",
     invoiceDate: "",
@@ -579,7 +432,6 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
       await api(`/api/finance/${projectId}/ra`, { method: "POST", token, body: fd });
       setLinkedInvoiceIds([]);
       setForm({
-        purchaseOrderId: "",
         raNumber: "",
         invoiceNumber: "",
         invoiceDate: "",
@@ -627,12 +479,6 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
             >
               {raPackages.map((p) => (
                 <option key={p.key} value={p.key}>{p.label}</option>
-              ))}
-            </Select>
-            <Select value={form.purchaseOrderId} onChange={(e) => setForm({ ...form, purchaseOrderId: e.target.value })}>
-              <option value="">Link PO (optional)</option>
-              {filteredPos.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.poNumber} · {p.vendorName}</option>
               ))}
             </Select>
             <Input placeholder="RA number (RA-01)" value={form.raNumber} onChange={(e) => setForm({ ...form, raNumber: e.target.value })} required />
@@ -718,7 +564,7 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
         <div className="overflow-x-auto">
           <table className="min-w-[1200px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>PO</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th><th className="min-w-[220px]">Stage uploads · SharePoint</th></tr>
+              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>Vendor</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th><th className="min-w-[220px]">Stage uploads · SharePoint</th></tr>
             </thead>
             <tbody>
               {filteredRas.map((r: any) => (
@@ -726,7 +572,7 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
                   <td className="py-1.5 px-2">{r.raNumber}</td>
                   <td>{r.invoiceNumber || "—"}</td>
                   <td>{d(r.invoiceDate)}</td>
-                  <td>{r.purchaseOrder?.poNumber || "—"}</td>
+                  <td>{r.vendorName || "—"}</td>
                   <td>{r.discipline || "—"}</td>
                   <td className="text-right">{money(r.previousBillTotal)}</td>
                   <td className="text-right">{money(r.againstBillRaised)}</td>
@@ -761,11 +607,10 @@ function RaTab({ ras, pos, canWrite, reload, setMsg, projectId, token, activePkg
 
 /* ─────────────────────────── COP ─────────────────────────── */
 
-function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, activePkg }: any) {
+function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activePkg }: any) {
   const filteredCops = activePkg ? cops.filter((c: any) => copMatchesPackage(c, activePkg)) : cops;
-  const filteredPos = activePkg ? pos.filter((p: any) => poMatchesPackage(p, activePkg)) : pos;
   const filteredRas = activePkg?.billKind === "ra" ? ras.filter((r: any) => raMatchesPackage(r, activePkg)) : ras;
-  const [form, setForm] = useState({ certificateNumber: "", certificateType: "Against - RA", certificateDate: "", contractor: "", workTrade: activePkg?.discipline || "", budgetCode: "", purchaseOrderId: "", poNumberDate: "", originalWoValue: "", amendmentNo: "", amendedWoValue: "", invoiceNoDate: "", raBillId: "", amountCertified: "", amountPayable: "", gstAmount: "", retentionAmount: "", panNumber: "", gstNumber: "", payableTo: "", remarks: "" });
+  const [form, setForm] = useState({ certificateNumber: "", certificateType: "Against - RA", certificateDate: "", contractor: "", workTrade: activePkg?.discipline || "", budgetCode: "", poNumberDate: "", originalWoValue: "", amendmentNo: "", amendedWoValue: "", invoiceNoDate: "", raBillId: "", amountCertified: "", amountPayable: "", gstAmount: "", retentionAmount: "", panNumber: "", gstNumber: "", payableTo: "", remarks: "" });
   const [file, setFile] = useState<File | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   async function add(e: FormEvent) {
@@ -775,7 +620,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, v));
       if (file) fd.append("file", file);
       await api(`/api/finance/${projectId}/cop`, { method: "POST", token, body: fd });
-      setForm({ certificateNumber: "", certificateType: "Against - RA", certificateDate: "", contractor: "", workTrade: "", budgetCode: "", purchaseOrderId: "", poNumberDate: "", originalWoValue: "", amendmentNo: "", amendedWoValue: "", invoiceNoDate: "", raBillId: "", amountCertified: "", amountPayable: "", gstAmount: "", retentionAmount: "", panNumber: "", gstNumber: "", payableTo: "", remarks: "" });
+      setForm({ certificateNumber: "", certificateType: "Against - RA", certificateDate: "", contractor: "", workTrade: "", budgetCode: "", poNumberDate: "", originalWoValue: "", amendmentNo: "", amendedWoValue: "", invoiceNoDate: "", raBillId: "", amountCertified: "", amountPayable: "", gstAmount: "", retentionAmount: "", panNumber: "", gstNumber: "", payableTo: "", remarks: "" });
       setFile(null);
       setMsg("COP created; attachment (if any) saved to 09.01; RA linked if you selected one.");
       await reload();
@@ -813,13 +658,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
             <Input placeholder="Contractor" value={form.contractor} onChange={(e) => setForm({ ...form, contractor: e.target.value })} required />
             <Input placeholder="Work / Trade" value={form.workTrade} onChange={(e) => setForm({ ...form, workTrade: e.target.value })} />
             <Input placeholder="Budget code" value={form.budgetCode} onChange={(e) => setForm({ ...form, budgetCode: e.target.value })} />
-            <Select value={form.purchaseOrderId} onChange={(e) => setForm({ ...form, purchaseOrderId: e.target.value })}>
-              <option value="">Link PO</option>
-              {filteredPos.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.poNumber} · {p.vendorName}</option>
-              ))}
-            </Select>
-            <Input placeholder="PO No. & date (text)" value={form.poNumberDate} onChange={(e) => setForm({ ...form, poNumberDate: e.target.value })} />
+            <Input placeholder="WO / contract ref & date" value={form.poNumberDate} onChange={(e) => setForm({ ...form, poNumberDate: e.target.value })} />
             <Input placeholder="Original WO value" type="number" value={form.originalWoValue} onChange={(e) => setForm({ ...form, originalWoValue: e.target.value })} />
             <Input placeholder="Amendment no." value={form.amendmentNo} onChange={(e) => setForm({ ...form, amendmentNo: e.target.value })} />
             <Input placeholder="Amended WO value" type="number" value={form.amendedWoValue} onChange={(e) => setForm({ ...form, amendedWoValue: e.target.value })} />
@@ -854,7 +693,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
         <div className="overflow-x-auto">
           <table className="min-w-[1100px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">COP</th><th>Type</th><th>Date</th><th>Contractor</th><th>PO</th><th>RA</th><th className="text-right">Certified</th><th className="text-right">Payable</th><th>Status</th><th>Actions</th></tr>
+              <tr><th className="p-2">COP</th><th>Type</th><th>Date</th><th>Contractor</th><th>WO ref</th><th>RA</th><th className="text-right">Certified</th><th className="text-right">Payable</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {filteredCops.map((c: any) => (
@@ -863,7 +702,7 @@ function CopTab({ cops, pos, ras, canWrite, reload, setMsg, projectId, token, ac
                   <td>{c.certificateType || "—"}</td>
                   <td>{d(c.certificateDate)}</td>
                   <td>{c.contractor}</td>
-                  <td>{c.purchaseOrder?.poNumber || "—"}</td>
+                  <td>{c.poNumberDate || "—"}</td>
                   <td>{c.raBill?.raNumber || "—"}</td>
                   <td className="text-right">{money(c.amountCertified)}</td>
                   <td className="text-right">{money(c.amountPayable)}</td>
@@ -1073,7 +912,7 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
   const rows: any[] = summary?.paymentSummary || [];
   const disciplineRows: any[] = summary?.byDiscipline || [];
   const filteredRows = activePkg
-    ? rows.filter((r) => poMatchesPackage({ packageName: r.workTrade, workTrade: r.workTrade }, activePkg))
+    ? rows.filter((r) => String(r.workTrade || "").toLowerCase().includes(activePkg.discipline.toLowerCase()))
     : rows;
   const activeRollup = activePkg ? disciplineRows.find((d) => d.key === activePkg.key) : null;
   const totalOriginal = filteredRows.reduce((s, r) => s + Number(r.originalValue || 0), 0);
@@ -1203,13 +1042,13 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
       )}
       <Card padding={false}>
       <div className="px-4 py-3 border-b border-line bg-sand/40 flex justify-between">
-        <span className="font-semibold text-sm">Payment Summary — per PO / vendor {activePkg ? `· ${activePkg.label}` : ""}</span>
-        <span className="text-[11px] text-steel-muted">{filteredRows.length} POs</span>
+        <span className="font-semibold text-sm">Payment Summary — per vendor / trade {activePkg ? `· ${activePkg.label}` : ""}</span>
+        <span className="text-[11px] text-steel-muted">{filteredRows.length} vendors</span>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-[1100px] w-full text-xs">
           <thead className="text-left text-steel-muted bg-white">
-            <tr><th className="p-2">PO</th><th>Vendor</th><th>Trade</th><th className="text-right">Original</th><th className="text-right">Amended</th><th className="text-right">Billed (w/o GST)</th><th className="text-right">Billed (w GST)</th><th className="text-right">Net Payable</th><th className="text-right">Retention</th><th className="text-right">Adv. adjusted</th><th className="text-right">Balance</th><th>RA count</th></tr>
+            <tr><th className="p-2">Ref</th><th>Vendor</th><th>Trade</th><th className="text-right">Original</th><th className="text-right">Amended</th><th className="text-right">Billed (w/o GST)</th><th className="text-right">Billed (w GST)</th><th className="text-right">Net Payable</th><th className="text-right">Retention</th><th className="text-right">Adv. adjusted</th><th className="text-right">Balance</th><th>RA count</th></tr>
           </thead>
           <tbody>
             {filteredRows.map((r) => (
@@ -1239,7 +1078,7 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
                 <td></td>
               </tr>
             )}
-            {!filteredRows.length && <tr><td colSpan={12} className="py-4 text-center text-steel-muted">Add POs & bills for {activePkg?.label || "this discipline"} to see the Payment Summary.</td></tr>}
+            {!filteredRows.length && <tr><td colSpan={12} className="py-4 text-center text-steel-muted">Add RA bills for {activePkg?.label || "this discipline"} to see the Payment Summary.</td></tr>}
           </tbody>
         </table>
       </div>

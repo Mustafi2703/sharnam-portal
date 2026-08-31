@@ -1,10 +1,11 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, PageHeader } from "../components/ui";
+import { Badge, Button, Card } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
-import { ComparativeStatementPanel } from "../components/ComparativeStatementPanel";
+import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
+import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { downloadAuthFile } from "../lib/downloadReport";
 
 type BidSlot = {
@@ -56,18 +57,20 @@ function VendorPackageCard({
   pkgId,
   pkgSlots,
   summary,
+  highlighted,
   onUpload,
 }: {
   pkgId: string;
   pkgSlots: BidSlot[];
   summary?: PackageSummary;
+  highlighted?: boolean;
   onUpload: (slot: BidSlot) => void;
 }) {
   const head = pkgSlots[0];
-  const done = pkgSlots.filter((s) => s.fileName).length;
+  const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
 
   return (
-    <Card>
+    <Card className={highlighted ? "ring-2 ring-brand" : undefined}>
       <div className="mb-3">
         <h3 className="font-semibold">{head?.bidPackageTitle}</h3>
         <p className="text-xs text-steel-muted mt-0.5">
@@ -99,11 +102,7 @@ function VendorPackageCard({
           <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">
             Comparative statement (R2 summary — all bidders)
           </h4>
-          <ComparativeStatementPanel
-            summary={summary.summary}
-            summarySheetId={summary.summarySheetId}
-            masterSheetId={summary.comparativeSheetId}
-          />
+          <CrmComparativeRegister summary={summary.summary} revisionLabel={head?.revisionLabel || "R2"} />
         </div>
       )}
 
@@ -131,15 +130,13 @@ function VendorPackageCard({
               )}
             </div>
             <div className="flex gap-2 shrink-0">
-              {s.sheetId && (
-                <Link to={`/custom-sheets/${s.sheetId}`}>
-                  <Button variant="secondary" className="!text-xs !py-1">
-                    View BOQ
-                  </Button>
-                </Link>
-              )}
+              {s.sheetId ? (
+                <Button type="button" variant="primary" className="!text-xs !py-1" onClick={() => onUpload(s)}>
+                  {s.fileName ? "Edit BOQ" : "Fill BOQ online"}
+                </Button>
+              ) : null}
               <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => onUpload(s)}>
-                {s.fileName ? "Replace" : "Upload"}
+                Upload Excel
               </Button>
             </div>
           </li>
@@ -151,6 +148,8 @@ function VendorPackageCard({
 
 export default function CrmVendorBidsPage() {
   const { token, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const focusPkgId = searchParams.get("pkg") || "";
   const [slots, setSlots] = useState<BidSlot[]>([]);
   const [summaries, setSummaries] = useState<Record<string, PackageSummary>>({});
   const [msg, setMsg] = useState("");
@@ -227,58 +226,50 @@ export default function CrmVendorBidsPage() {
 
   if (user?.role !== "vendor") {
     return (
-      <div className="space-y-4">
-        <PageHeader eyebrow="CRM" title="Vendor bid uploads" subtitle="Contractors upload discipline BOQs here." />
-        <Card>
-          <p className="text-sm text-steel-muted">
-            Sign in as a vendor user to see seeded R2 demo BOQs and the comparative statement.
-          </p>
-          <ul className="text-xs text-steel-muted mt-2 space-y-1">
-            <li>
-              <strong>vendor@sharnam.demo</strong> — M/s Bhavna Infra
-            </li>
-            <li>
-              <strong>tcc@sharnam.demo</strong> — TCC Projects
-            </li>
-            <li>
-              <strong>pearl@sharnam.demo</strong> — Pearl Electricals
-            </li>
-          </ul>
-          <Link to="/crm/bid-compare" className="text-sm text-brand font-semibold mt-2 inline-block">
-            Office: open bid management →
-          </Link>
-        </Card>
-      </div>
+      <Card>
+        <p className="text-sm text-steel-muted">
+          Sign in via the <strong>Contractor</strong> portal to fill bid BOQs here.
+        </p>
+        <ul className="text-xs text-steel-muted mt-2 space-y-1">
+          <li>
+            <strong>vendor@sharnam.demo</strong> — M/s Bhavna Infra
+          </li>
+          <li>
+            <strong>tcc@sharnam.demo</strong> — TCC Projects
+          </li>
+          <li>
+            <strong>pearl@sharnam.demo</strong> — Pearl Electricals
+          </li>
+        </ul>
+        <Link to="/login/vendor" className="text-sm text-brand font-semibold mt-2 inline-block">
+          Contractor login →
+        </Link>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="CRM · Vendor"
-        title="My bid uploads"
-        subtitle="Pre-seeded demo BOQs from Comparative Statement R2 — view your sheets, compare totals, or replace uploads per discipline."
-        actions={
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-          >
-            Download R2 .xlsx
-          </Button>
-        }
-      />
+    <div className="space-y-4 flex flex-col flex-1 min-h-0">
+      <div className="flex flex-wrap gap-2 shrink-0">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
+        >
+          Download R2 .xlsx
+        </Button>
+      </div>
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
 
       {!slots.length && (
         <Card>
           <p className="text-sm text-steel-muted">
-            No bid slots assigned to your vendor account yet. Office links vendors when creating a bid package on{" "}
-            <Link to="/crm/bid-compare" className="text-brand font-semibold">
+            No bid slots yet. Office creates a package under{" "}
+            <Link to="/crm/bids" className="text-brand font-semibold">
               Bid management
             </Link>
-            . After seed, log in as vendor@ / tcc@ / pearl@ @sharnam.demo.
+            .
           </p>
         </Card>
       )}
@@ -298,17 +289,31 @@ export default function CrmVendorBidsPage() {
               pkgId={pkgId}
               pkgSlots={pkgSlots}
               summary={summaries[pkgId]}
+              highlighted={focusPkgId === pkgId}
               onUpload={setUploadSlot}
             />
           ))}
         </div>
       ))}
 
+      {uploadSlot && uploadSlot.sheetId && (
+        <CrmBidBoqRegister
+          token={token!}
+          sheetId={uploadSlot.sheetId}
+          bidPackageId={uploadSlot.bidPackageId}
+          slotId={uploadSlot.id}
+          title={`${uploadSlot.disciplineLabel}${uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}`}
+          sheetLabel={uploadSlot.disciplineLabel}
+          canEdit
+          onSaved={() => void load()}
+          onClose={() => setUploadSlot(null)}
+        />
+      )}
+
       {uploadSlot && (
         <Card>
           <h4 className="font-semibold text-sm mb-2">
-            Upload {uploadSlot.disciplineLabel}
-            {uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}
+            Upload Excel — {uploadSlot.disciplineLabel}
           </h4>
           <p className="text-xs text-steel-muted mb-3">
             Use the matching discipline sheet from Comparative Statement R2 (CCV, Admin, Security, …).
