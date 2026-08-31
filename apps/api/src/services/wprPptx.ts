@@ -10,7 +10,13 @@ import {
   DEFAULT_WPR_TITLES,
   type WprPackInput,
   type WprSection,
+  type WprSections,
 } from "./wprXlsx.js";
+import {
+  renderWprChartSlide,
+  type WprChartSlideKey,
+} from "./wprPptxCharts.js";
+import { mergeWprChartsForExport } from "./wprChartMerge.js";
 
 const BRAND = "0F766E";
 const DARK = "1A1D26";
@@ -48,6 +54,7 @@ type PptxSlide = {
   addShape: (type: string, opts: Record<string, unknown>) => void;
   addTable: (rows: unknown[], opts: Record<string, unknown>) => void;
   addImage: (opts: Record<string, unknown>) => void;
+  addChart: (type: string, data: unknown[], opts?: Record<string, unknown>) => void;
 };
 
 type PptxDeck = {
@@ -57,8 +64,21 @@ type PptxDeck = {
   subject: string;
   title: string;
   ShapeType: { rect: string };
+  ChartType: { bar: string; line: string; doughnut: string };
   addSlide: () => PptxSlide;
   write: (opts: { outputType: "nodebuffer" }) => Promise<Buffer | Uint8Array>;
+};
+
+/** Native chart slides inserted after matching table sections (client WPR deck). */
+const CHART_AFTER: Partial<Record<keyof WprSections, WprChartSlideKey[]>> = {
+  projectDashboard: ["dashboardKpis"],
+  milestones: ["scurve", "milestones"],
+  manpowerHistogram: ["manpower"],
+  cashflow: ["cashflow"],
+  drawingRegister: ["drawingDci"],
+  quality: ["quality"],
+  safety: ["safety"],
+  plannedVsActual: ["plannedVsActual"],
 };
 
 function createPptx(): PptxDeck {
@@ -416,7 +436,8 @@ type PlanItem =
   | { type: "cover" }
   | { type: "divider"; title: string; no: string }
   | { type: "siteImage" }
-  | { type: "section"; key: keyof typeof DEFAULT_WPR_TITLES; chunk: number; chunks: number };
+  | { type: "section"; key: keyof typeof DEFAULT_WPR_TITLES; chunk: number; chunks: number }
+  | { type: "chart"; key: WprChartSlideKey };
 
 function buildPlan(pack: WprPackInput): PlanItem[] {
   const plan: PlanItem[] = [{ type: "cover" }];
@@ -484,11 +505,22 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
     for (let i = 0; i < useChunks; i++) {
       plan.push({ type: "section", key: n.key, chunk: i, chunks: useChunks });
     }
+    if (pack.charts) {
+      for (const ck of CHART_AFTER[n.key] || []) {
+        plan.push({ type: "chart", key: ck });
+      }
+    }
   }
   return plan;
 }
 
 export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
+  const rangeStart = pack.header.weekStart?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const rangeEnd = pack.header.weekEnd?.slice(0, 10) || rangeStart;
+  const charts =
+    pack.charts ?? mergeWprChartsForExport(pack.sections, null, rangeStart, rangeEnd);
+  const fullPack: WprPackInput = { ...pack, charts };
+
   const pptx = createPptx();
   // LAYOUT_16x9 = 10.0 × 5.625" — matches every hard-coded coordinate in this
   // file (x 0.4 → w 9.2, footer y 5.15).  LAYOUT_WIDE (13.33 × 7.5") pushed
@@ -497,19 +529,19 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
   pptx.layout = "LAYOUT_16x9";
   pptx.author = "Sharnam PMC";
   pptx.company = "Sharnam Project Development Consultants & Co.";
-  pptx.subject = `WPR ${pack.header.reportNumber || pack.header.projectCode || ""}`;
-  pptx.title = `Weekly Progress Report — ${pack.header.projectName || "Project"}`;
+  pptx.subject = `WPR ${fullPack.header.reportNumber || fullPack.header.projectCode || ""}`;
+  pptx.title = `Weekly Progress Report — ${fullPack.header.projectName || "Project"}`;
 
-  const client = pack.header.clientName || pack.header.projectName || "Project";
-  const weekLabel = pack.header.weekEnd
-    ? new Date(pack.header.weekEnd).toLocaleDateString("en-IN", {
+  const client = fullPack.header.clientName || fullPack.header.projectName || "Project";
+  const weekLabel = fullPack.header.weekEnd
+    ? new Date(fullPack.header.weekEnd).toLocaleDateString("en-IN", {
         day: "2-digit",
         month: "short",
         year: "numeric",
       })
     : "—";
-  const reportNo = pack.header.reportNumber || "—";
-  const plan = buildPlan(pack);
+  const reportNo = fullPack.header.reportNumber || "—";
+  const plan = buildPlan(fullPack);
   const total = plan.length;
   let page = 0;
 
@@ -529,7 +561,7 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
         color: "99F6E4",
         bold: true,
       });
-      slide.addText(pack.header.projectName || "Project", {
+      slide.addText(fullPack.header.projectName || "Project", {
         x: 0.6,
         y: 1.9,
         w: 8.8,
@@ -542,9 +574,9 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
         [
           `REPORT NO.  ${reportNo}`,
           `Week ending  ${weekLabel}`,
-          `Client  ${pack.header.clientName || "—"}`,
-          `Contractor  ${pack.header.contractorName || "—"}`,
-          `PMC  ${pack.header.pmc || "Sharnam Project Development Consultants & Co."}`,
+          `Client  ${fullPack.header.clientName || "—"}`,
+          `Contractor  ${fullPack.header.contractorName || "—"}`,
+          `PMC  ${fullPack.header.pmc || "Sharnam Project Development Consultants & Co."}`,
         ].join("\n"),
         { x: 0.6, y: 2.9, w: 8.8, h: 1.6, fontSize: 13, color: "E2E5EB" }
       );
@@ -568,15 +600,22 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
     if (item.type === "siteImage") {
       siteImageSlide(pptx, {
         client,
-        projectName: pack.header.projectName,
-        location: pack.header.location,
+        projectName: fullPack.header.projectName,
+        location: fullPack.header.location,
         page,
         total,
       });
       continue;
     }
 
-    const sec = ensureSection(pack, item.key);
+    if (item.type === "chart" && fullPack.charts) {
+      renderWprChartSlide(pptx, item.key, fullPack.charts, { client, page, total });
+      continue;
+    }
+
+    if (item.type !== "section") continue;
+
+    const sec = ensureSection(fullPack, item.key);
 
     // Progress-pictures: render a proper 4-photo grid per slide when the
     // section carries any photo paths.  Falls back to the caption-only

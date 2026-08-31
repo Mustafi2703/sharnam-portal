@@ -403,7 +403,7 @@ export default function WprMakerPage() {
     setBusy(true);
     try {
       await downloadWithAuth(url, token, fname);
-      setMsg("WPR PowerPoint downloaded — matches SPDC section list (24 slides).");
+      setMsg("WPR PowerPoint downloaded — includes native charts (S-curve, milestones, manpower, cashflow, quality, safety).");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Download failed");
     } finally {

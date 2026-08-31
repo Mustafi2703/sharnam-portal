@@ -14,6 +14,8 @@ import { portalForRole } from "../packages/shared/src/index.ts";
 import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
 import { buildWprWorkbook, type WprHeader, type WprSections } from "../apps/api/src/services/wprXlsx.ts";
 import { buildWprPptx } from "../apps/api/src/services/wprPptx.ts";
+import { loadWprChartPack } from "../apps/api/src/services/wprCharts.ts";
+import { mergeWprChartsForExport } from "../apps/api/src/services/wprChartMerge.ts";
 import { seedDemoMsProject } from "../apps/api/src/services/msProjectSchedule.ts";
 import { seedQualitySafetyDemoForDpr } from "./qualitySafetySheets.ts";
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
@@ -229,8 +231,11 @@ export async function seedPilotWeekDemo(db: PrismaClientType, opts: { weekEnd?: 
   const wprRoot = path.join(process.cwd(), "uploads", "onedrive", project.code, wprFolder);
   fs.mkdirSync(wprRoot, { recursive: true });
   const endStr = weekEnd.toISOString().slice(0, 10);
+  const startStr = weekStart.toISOString().slice(0, 10);
+  const chartsRaw = await loadWprChartPack(prisma, project.id, weekStart, weekEnd);
+  const charts = mergeWprChartsForExport(sections, chartsRaw, startStr, endStr);
   fs.writeFileSync(path.join(wprRoot, `WPR-${project.code}-${endStr}.xlsx`), await buildWprWorkbook({ header, sections }));
-  fs.writeFileSync(path.join(wprRoot, `WPR-${project.code}-${endStr}.pptx`), await buildWprPptx({ header, sections }));
+  fs.writeFileSync(path.join(wprRoot, `WPR-${project.code}-${endStr}.pptx`), await buildWprPptx({ header, sections, charts }));
 
   console.log(`
 Done — ${PILOT_CODE}

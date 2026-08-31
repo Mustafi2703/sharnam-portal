@@ -32,6 +32,7 @@ import { buildWprPptx } from "../services/wprPptx.js";
 import { seedWprSections } from "../services/wprSeedSections.js";
 import { snapWeekEnding } from "../services/wprDemoSeed.js";
 import { loadWprChartPack } from "../services/wprCharts.js";
+import { mergeWprChartsForExport } from "../services/wprChartMerge.js";
 
 export type WprDateRange = { start: Date; end: Date; weekEnd: Date; preset: string };
 
@@ -292,7 +293,14 @@ wprMakerRouter.get("/:projectId/download.pptx", async (req, res) => {
   const sections: WprSections = existing
     ? JSON.parse(existing.sectionsJson || "{}")
     : await seedSections(projectId, weekStart, weekEnd);
-  const buf = await buildWprPptx({ header, sections });
+  const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const charts = mergeWprChartsForExport(
+    sections,
+    chartsRaw,
+    weekStart.toISOString().slice(0, 10),
+    weekEnd.toISOString().slice(0, 10)
+  );
+  const buf = await buildWprPptx({ header, sections, charts });
   const fname = `WPR-${project.code}-${weekEnd.toISOString().slice(0, 10)}.pptx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
@@ -331,11 +339,22 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
   const dateStr = weekEnd.toISOString().slice(0, 10);
   const fname = `WPR-${project.code}-${dateStr}.xlsx`;
   const clientFname = `WPR-ClientPack-${project.code}-${dateStr}.xlsx`;
+  const pptxFname = `WPR-${project.code}-${dateStr}.pptx`;
   const folder = MODULE_TO_ISO_FOLDER.wpr;
   const saved = await mockOneDrive.upload(project.code, folder, fname, buf);
   const { buildWprClientWorkbook } = await import("../services/wprClientPack.js");
   const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
   await mockOneDrive.upload(project.code, folder, clientFname, clientBuf);
+
+  const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const charts = mergeWprChartsForExport(
+    sections,
+    chartsRaw,
+    weekStart.toISOString().slice(0, 10),
+    dateStr
+  );
+  const pptxBuf = await buildWprPptx({ header, sections, charts });
+  const pptxSaved = await mockOneDrive.upload(project.code, folder, pptxFname, pptxBuf);
 
   const updated = await prisma.wprSnapshot.update({
     where: { id: existing.id },
@@ -346,7 +365,7 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
     userId: req.user!.id,
     entity: "WprSnapshot",
     entityId: existing.id,
-    meta: { weekEnding: dateStr, path: saved.path, provider: saved.provider },
+    meta: { weekEnding: dateStr, path: saved.path, pptxPath: pptxSaved.path, provider: saved.provider },
   });
 
   res.json({
@@ -355,6 +374,8 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
     status: updated.status,
     publishedAt: updated.publishedAt,
     publishedPath: updated.publishedPath,
+    pptxPath: pptxSaved.path,
+    pptxUrl: pptxSaved.url,
     provider: saved.provider,
     url: saved.url,
   });

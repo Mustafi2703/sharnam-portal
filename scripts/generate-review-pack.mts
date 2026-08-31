@@ -21,6 +21,8 @@ import { seedWprDemoWeek } from "../apps/api/src/services/wprDemoSeed.ts";
 import { buildDprWorkbook, type DprHeader, type DprLine } from "../apps/api/src/services/dprXlsx.ts";
 import { buildWprWorkbook, type WprSections } from "../apps/api/src/services/wprXlsx.ts";
 import { buildWprPptx } from "../apps/api/src/services/wprPptx.ts";
+import { mergeWprChartsForExport } from "../apps/api/src/services/wprChartMerge.ts";
+import { loadWprChartPack } from "../apps/api/src/services/wprCharts.ts";
 import { buildWprClientWorkbook } from "../apps/api/src/services/wprClientPack.ts";
 import { renderDprSnapshotHtml } from "../apps/api/src/services/dprSnapshotExport.ts";
 import { buildDprChartPack, loadDprScurveHistory } from "../apps/api/src/services/dprCharts.ts";
@@ -131,11 +133,13 @@ async function main() {
 
     const { header, sections } = buildOfflineWprPack(weekEnd);
     const wEndStr = weekEnd.toISOString().slice(0, 10);
+    const wStartStr = new Date(weekEnd.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+    const charts = mergeWprChartsForExport(sections, null, wStartStr, wEndStr);
     const spdcXlsx = `WPR-${projectCode}-${wEndStr}.xlsx`;
     fs.writeFileSync(path.join(wprDir, spdcXlsx), buildWprWorkbook({ header, sections }));
     files.push({ label: "WPR SPDC workbook", rel: `wpr/${spdcXlsx}`, kind: "xlsx" });
     const pptxName = `WPR-${projectCode}-${wEndStr}.pptx`;
-    fs.writeFileSync(path.join(wprDir, pptxName), await buildWprPptx({ header, sections }));
+    fs.writeFileSync(path.join(wprDir, pptxName), await buildWprPptx({ header, sections, charts }));
     files.push({ label: "WPR PPTX (Sharnam branded)", rel: `wpr/${pptxName}`, kind: "pptx" });
     console.log(`  ✓ ${spdcXlsx}, ${pptxName}`);
 
@@ -271,7 +275,9 @@ async function main() {
       files.push({ label: "WPR client workbook", rel: `wpr/${clientXlsx}`, kind: "xlsx" });
 
       const pptxName = `WPR-${project.code}-${wEndStr}.pptx`;
-      fs.writeFileSync(path.join(wprDir, pptxName), await buildWprPptx({ header, sections }));
+      const chartsRaw = await loadWprChartPack(prisma, project.id, weekStart, weekEndDate);
+      const charts = mergeWprChartsForExport(sections, chartsRaw, weekStart.toISOString().slice(0, 10), wEndStr);
+      fs.writeFileSync(path.join(wprDir, pptxName), await buildWprPptx({ header, sections, charts }));
       files.push({ label: "WPR PPTX (Sharnam branded)", rel: `wpr/${pptxName}`, kind: "pptx" });
       console.log(`  ✓ ${spdcXlsx}, ${clientXlsx}, ${pptxName}`);
     } else {

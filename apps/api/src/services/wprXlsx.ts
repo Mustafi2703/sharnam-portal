@@ -60,9 +60,13 @@ export type WprHeader = {
   pmc?: string;
 };
 
+import type { WprChartPack } from "./wprCharts.js";
+
 export type WprPackInput = {
   header: WprHeader;
   sections: WprSections;
+  /** Merged chart pack — when set, PPTX export adds native editable chart slides. */
+  charts?: WprChartPack;
 };
 
 export const SECTION_ORDER: (keyof WprSections)[] = [
