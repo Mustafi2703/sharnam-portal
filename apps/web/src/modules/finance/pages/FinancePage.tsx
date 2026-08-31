@@ -10,6 +10,7 @@ import {
 import { FinanceBillRegister } from "../components/FinanceBillRegister";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
 import { RaBillStageButtons } from "../components/RaBillStageButtons";
+import { RaBillAttachments } from "../components/RaBillAttachments";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -413,7 +414,7 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
     otherRecoveries: "",
     netAmountPayable: "",
   });
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [linkedInvoiceIds, setLinkedInvoiceIds] = useState<string[]>([]);
   const [unbilledInvoices, setUnbilledInvoices] = useState<Array<{ id: string; billNo: string; vendorName: string; billDate: string; attachmentUrl: string | null; description: string | null }>>([]);
   useEffect(() => {
@@ -427,7 +428,7 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, v));
-      if (file) fd.append("file", file);
+      for (const f of files) fd.append("files", f);
       for (const bid of linkedInvoiceIds) fd.append("linkedVendorBillIds", bid);
       await api(`/api/finance/${projectId}/ra`, { method: "POST", token, body: fd });
       setLinkedInvoiceIds([]);
@@ -449,8 +450,8 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
         otherRecoveries: "",
         netAmountPayable: "",
       });
-      setFile(null);
-      setMsg("RA bill added; cumulative recomputed; attachment saved to 09.01 folder.");
+      setFiles([]);
+      setMsg("RA bill added — documents filed in 09.01/RA folder.");
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add failed");
@@ -497,8 +498,17 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
             <Input placeholder="Other recoveries" type="number" value={form.otherRecoveries} onChange={(e) => setForm({ ...form, otherRecoveries: e.target.value })} />
             <Input placeholder="Net payable" type="number" value={form.netAmountPayable} onChange={(e) => setForm({ ...form, netAmountPayable: e.target.value })} />
             <label className="md:col-span-3 text-xs text-steel-muted">
-              Invoice attachment
-              <input type="file" accept=".pdf,image/*" className="block mt-1 text-xs" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+              Contractor documents (multiple allowed)
+              <input
+                type="file"
+                multiple
+                accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx,image/*"
+                className="block mt-1 text-xs"
+                onChange={(e) => setFiles(Array.from(e.target.files || []))}
+              />
+              {files.length > 0 && (
+                <span className="block mt-1 text-[11px] text-brand">{files.length} file(s) selected</span>
+              )}
             </label>
             <div className="md:col-span-4 border border-line rounded-lg p-2 bg-sand/30 text-xs">
               <div className="flex items-center justify-between mb-1">
@@ -564,7 +574,7 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
         <div className="overflow-x-auto">
           <table className="min-w-[1200px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>Vendor</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th><th className="min-w-[220px]">Stage uploads · SharePoint</th></tr>
+              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>Vendor</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th><th className="min-w-[280px]">Documents · stage uploads</th></tr>
             </thead>
             <tbody>
               {filteredRas.map((r: any) => (
@@ -585,7 +595,15 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
                   <td className="text-right">{money(r.cumulativeBillTotal)}</td>
                   <td>{r.copNo || "—"}</td>
                   <td><Badge tone={r.status === "Certified" || r.status === "Paid" ? "ok" : r.status === "Rejected" ? "danger" : "brand"}>{r.status}</Badge></td>
-                  <td className="py-1 pr-2">
+                  <td className="py-1 pr-2 space-y-1">
+                    <RaBillAttachments
+                      raBillId={r.id}
+                      raNumber={r.raNumber}
+                      token={token}
+                      canWrite={canWrite}
+                      initialAttachments={r.attachments || []}
+                      onChange={() => void reload()}
+                    />
                     <RaBillStageButtons
                       raBillId={r.id}
                       raNumber={r.raNumber}

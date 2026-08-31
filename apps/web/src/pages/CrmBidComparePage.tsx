@@ -404,31 +404,6 @@ export default function CrmBidComparePage() {
         >
           Download R2 .xlsx
         </Button>
-        <Button
-          variant="secondary"
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            if (!confirm("Load demo bid package (Alpha / Bharat / Concord)? Real packages are never touched.")) return;
-            setBusy(true);
-            setMsg("");
-            try {
-              const pkg = await api<{ id: string; title: string; summary?: { lowestVendor?: string; grandTotals?: Record<string, number> } }>(
-                "/api/crm/bid-packages/seed-demo",
-                { method: "POST", token, body: JSON.stringify({ projectId: form.projectId || undefined }) }
-              );
-              setMsg(`Demo loaded — lowest: ${pkg.summary?.lowestVendor ?? "—"}.`);
-              await load();
-              selectPackage(pkg.id);
-            } catch (err) {
-              setMsg(err instanceof Error ? err.message : "Demo load failed");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          Load 3-vendor demo
-        </Button>
       </div>
 
       {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
@@ -610,9 +585,7 @@ export default function CrmBidComparePage() {
                   <div className="text-4xl">📊</div>
                   <p className="font-semibold text-ink">No bid packages yet.</p>
                   <p className="text-xs">
-                    Fill the form on the left to create your first, or click
-                    <strong> "Load 3-vendor demo" </strong>
-                    in the header for a realistic Alpha / Bharat / Concord × Civil / Electrical / Admin example.
+                    Fill the form on the left to create your first bid package, then invite vendors to upload discipline BOQs.
                   </p>
                 </li>
               )}

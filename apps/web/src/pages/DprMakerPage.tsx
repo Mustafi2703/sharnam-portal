@@ -216,7 +216,6 @@ export default function DprMakerPage() {
   const { id: projectId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const { token, user } = useAuth();
-  const canSeedDemo = user?.role === "admin" || user?.role === "office";
   const [logDate, setLogDate] = useState<string>(
     () => searchParams.get("date") || new Date().toISOString().slice(0, 10)
   );
@@ -663,30 +662,6 @@ export default function DprMakerPage() {
     }
   }
 
-  async function seedDemoDay() {
-    if (!projectId || !canSeedDemo) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const out = await api<{
-        logDate: string;
-        disciplines: { discipline: string; qtyToday: number; signatures: number }[];
-      }>(`/api/dpr-maker/${projectId}/seed-demo-day`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ logDate }),
-      });
-      setMsg(
-        `Demo day ready — ${out.disciplines.length} published DPRs on ${out.logDate} (qty + signatures + XLSX/PDF on disk). Pick any discipline to screenshot.`
-      );
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Demo seed failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!snap) {
     return (
       <div className="maker-shell dpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
@@ -752,11 +727,6 @@ export default function DprMakerPage() {
             </Select>
           </div>
           <div className="maker-toolbar__actions">
-            {canSeedDemo && (
-              <Button onClick={seedDemoDay} disabled={busy} variant="secondary" title="Publish all 7 disciplines with demo qty and signatures">
-                Prepare demo day (all 7)
-              </Button>
-            )}
             <Button onClick={save} disabled={busy}>Save draft</Button>
           </div>
         </div>

@@ -1744,9 +1744,6 @@ export default function ProgressPage() {
               </div>
               {canEdit && (
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={!!msBusy} onClick={() => void seedMsProjectDemo()}>
-                    {msBusy === "seed" ? "Seeding…" : "Seed demo MS Project + S-curve"}
-                  </Button>
                   <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
                     {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
                   </Button>
@@ -1783,7 +1780,7 @@ export default function ProgressPage() {
               </>
             ) : (
               <p className="text-sm text-steel-muted py-8 text-center border border-dashed border-line rounded-lg">
-                No S-curve yet — click <strong>Seed demo MS Project + S-curve</strong> or import a client XML export from Microsoft Project.
+                No S-curve yet — import a client XML export from Microsoft Project (File → Save As → XML).
               </p>
             )}
           </Card>
@@ -1828,8 +1825,6 @@ export default function ProgressPage() {
                 : undefined
             }
             uploadHint="Import File → Save As → XML from Microsoft Project."
-            onGenerate={canEdit ? () => void seedMsProjectDemo() : undefined}
-            generateLabel={msBusy === "seed" ? "Seeding…" : "Seed demo schedule"}
             onDownloadCsv={() => void downloadMsProjectXml()}
             busy={!!msBusy}
             message={msg}
@@ -1904,7 +1899,7 @@ export default function ProgressPage() {
               </div>
             ) : (
               <p className="text-sm text-steel-muted py-8 text-center">
-                No MS Project tasks — seed demo or import client XML.
+                No MS Project tasks — import client XML from Microsoft Project.
               </p>
             )}
           </Card>

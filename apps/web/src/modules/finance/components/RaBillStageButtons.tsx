@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
+import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 
 const STAGES: Array<{ key: "Submitted" | "Corrected" | "Certified"; label: string; hint: string }> = [
   { key: "Submitted", label: "+ Submitted", hint: "Contractor drops the first RA bill workbook" },
@@ -41,6 +42,7 @@ export function RaBillStageButtons({
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState("");
+  const [preview, setPreview] = useState<{ url: string; title: string; fileName: string } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pendingStageRef = useRef<string | null>(null);
 
@@ -119,15 +121,17 @@ export function RaBillStageButtons({
         </button>
       </div>
       {latest && (
-        <a
-          href={latest.sharePointUrl || latest.fileUrl || "#"}
-          target="_blank"
-          rel="noreferrer"
-          className="text-[10px] text-brand underline truncate max-w-[200px]"
+        <button
+          type="button"
+          onClick={() => {
+            const url = latest.sharePointUrl || latest.fileUrl;
+            if (url) setPreview({ url, title: `${raNumber} · ${latest.stage}`, fileName: latest.fileName || "file" });
+          }}
+          className="text-[10px] text-brand underline truncate max-w-[200px] text-left"
           title={latest.fileName || ""}
         >
           Latest ({latest.stage} R{latest.revisionNo}) →
-        </a>
+        </button>
       )}
       {msg && <span className="text-[10px] text-steel-muted">{msg}</span>}
       <input
@@ -158,15 +162,17 @@ export function RaBillStageButtons({
                   {r.stage} R{r.revisionNo}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <a
-                    href={r.sharePointUrl || r.fileUrl || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-brand underline truncate block"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = r.sharePointUrl || r.fileUrl;
+                      if (url) setPreview({ url, title: `${raNumber} · ${r.stage}`, fileName: r.fileName || "file" });
+                    }}
+                    className="text-brand underline truncate block text-left"
                     title={r.fileName || ""}
                   >
                     {r.fileName || "file"}
-                  </a>
+                  </button>
                   <div className="text-steel-muted text-[10px]">
                     {new Date(r.uploadedAt).toLocaleString("en-IN")}
                     {r.uploadedBy?.fullName ? ` · ${r.uploadedBy.fullName}` : ""}
@@ -176,6 +182,14 @@ export function RaBillStageButtons({
             ))}
           </ul>
         </div>
+      )}
+      {preview && (
+        <DocumentPreviewModal
+          title={preview.title}
+          url={preview.url}
+          fileName={preview.fileName}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );

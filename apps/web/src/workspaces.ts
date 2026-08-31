@@ -812,7 +812,7 @@ export function resolveStoredProjectId(list: { id: string; code?: string }[]): s
   try {
     const stored = localStorage.getItem(WORKSPACE_PROJECT_KEY);
     if (stored && list.some((p) => p.id === stored)) return stored;
-    const preferred = list.find((p) => p.code === "SPDC-DEMO-01") || list.find((p) => p.code === "SPDC-PILOT-02") || list[0];
+    const preferred = list[0];
     if (preferred) {
       localStorage.setItem(WORKSPACE_PROJECT_KEY, preferred.id);
       return preferred.id;

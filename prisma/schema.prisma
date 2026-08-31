@@ -2059,9 +2059,29 @@ model RaBill {
   purchaseOrder PurchaseOrder?         @relation(fields: [purchaseOrderId], references: [id])
   certificates  CertificateOfPayment[]
   revisions     RaBillRevision[]
+  attachments   RaBillAttachment[]
 
   @@index([projectId, purchaseOrderId])
   @@index([projectId, discipline])
+}
+
+/** Contractor documents filed per RA bill — multiple files per entry (workbooks, scans, supporting docs). */
+model RaBillAttachment {
+  id            String   @id @default(cuid())
+  raBillId      String
+  fileName      String
+  fileUrl       String?
+  storagePath   String?
+  sharePointUrl String?
+  /// contractor_doc | supporting | stage
+  kind          String   @default("contractor_doc")
+  notes         String?
+  uploadedById  String?
+  uploadedAt    DateTime @default(now())
+
+  raBill RaBill @relation(fields: [raBillId], references: [id], onDelete: Cascade)
+
+  @@index([raBillId, uploadedAt])
 }
 
 /**

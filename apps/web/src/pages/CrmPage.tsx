@@ -7,7 +7,6 @@ import { CrmLeadsRegister } from "../components/CrmLeadsRegister";
 import { CrmProposalsRegister } from "../components/CrmProposalsRegister";
 import { CrmProjectsRegister } from "../components/CrmProjectsRegister";
 import { RegisterSheetFrame } from "../components/RegisterSheetFrame";
-import { DemoProjectsPanel } from "../components/DemoProjectsPanel";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import {
   type CrmLead,
@@ -16,7 +15,6 @@ import {
   leadLocation,
   marketStatusTone,
 } from "../lib/crmLeadUtils";
-import { sortDemoProjectsFirst } from "../lib/demoProjects";
 import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 
 type LeadsView = "register" | "market" | "pipeline";
@@ -142,7 +140,7 @@ export default function CrmPage() {
       api<any[]>("/api/crm/quotations", { token }).catch(() => []),
       canManage ? api<any[]>("/api/crm/bid-packages", { token }).catch(() => []) : Promise.resolve([]),
     ]);
-    setProjects(sortDemoProjectsFirst(p));
+    setProjects(p);
     setLeads(l);
     setDeals(d);
     setUsers(u);
@@ -271,12 +269,11 @@ export default function CrmPage() {
 
       {section === "leads" && canManage && (
         <>
-          <DemoProjectsPanel projects={projects} />
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Card className="!p-4">
               <div className="text-[10px] font-mono uppercase text-steel-muted">Total projects</div>
               <div className="font-display text-3xl text-brand">{leads.length}</div>
-              <div className="text-xs text-steel-muted mt-1">Data - July 2026 register</div>
+              <div className="text-xs text-steel-muted mt-1">Active pipeline register</div>
             </Card>
             <Card className="!p-4">
               <div className="text-[10px] font-mono uppercase text-steel-muted">Under construction</div>

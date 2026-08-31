@@ -184,45 +184,66 @@ function fillViatrixSheet(ws: WorkSheet, cop: CopBundle) {
 
 /**
  * Overlay Sharnam PMC letterhead on the Viatrix template header.
- * Strips any embedded template images, clears the top merge, writes a fresh
- * 5-row masthead:
- *   R1  · Sharnam logo (image, spans A1:B2)   + PMC name (merged C1:H2)
- *   R3  · Address / consultancy tagline (merged A3:H3)
- *   R4  · Document title "CERTIFICATE OF PAYMENT" (merged A4:H4)
- *   R5  · Certificate number + issue date band (merged A5:H5)
+ * Clears conflicting template merges/images in rows 1–5 before writing masthead.
  */
+function unmergeRowsInRange(ws: ExcelJS.Worksheet, top: number, bottom: number) {
+  const model = ws as unknown as { model?: { merges?: string[] } };
+  const merges = [...(model.model?.merges || [])];
+  for (const range of merges) {
+    const m = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    if (!m) continue;
+    const r1 = parseInt(m[2], 10);
+    const r2 = parseInt(m[4], 10);
+    if (r2 >= top && r1 <= bottom) {
+      try {
+        ws.unMergeCells(range);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 async function applySharnamLetterhead(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet, cop: CopBundle) {
-  // exceljs stores anchored images on ws._media (internal, untyped). Wipe it so
-  // the exported COP has no Viatrix template imagery left behind.
   const internal = ws as unknown as { _media?: unknown[] };
   if (Array.isArray(internal._media)) internal._media.length = 0;
 
-  const clearMergesInRange = (top: number, bottom: number) => {
-    // ExcelJS API for un-merge is limited; the safe path is to overwrite values
-    // in the target rows since our merges below will absorb the same cells.
-    for (let r = top; r <= bottom; r++) {
-      const row = ws.getRow(r);
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        cell.value = null;
-      });
-    }
-  };
-  clearMergesInRange(1, 5);
+  unmergeRowsInRange(ws, 1, 5);
+  unmergeRowsInRange(ws, 50, 50);
+
+  for (let r = 1; r <= 5; r++) {
+    const row = ws.getRow(r);
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.value = null;
+      cell.style = {};
+    });
+  }
+
+  ws.getRow(1).height = 18;
+  ws.getRow(2).height = 18;
+  ws.getRow(3).height = 14;
+  ws.getRow(4).height = 20;
+  ws.getRow(5).height = 16;
 
   const logoPath = sharnamLogoPath();
   if (logoPath && fs.existsSync(logoPath)) {
     try {
       const id = wb.addImage({ filename: logoPath, extension: "png" });
-      ws.addImage(id, { tl: { col: 0.15, row: 0.15 }, ext: { width: 96, height: 44 } });
+      ws.addImage(id, { tl: { col: 0.1, row: 0.1 }, ext: { width: 64, height: 30 } });
     } catch {
       /* logo optional */
     }
   }
 
   try {
+    ws.mergeCells("A1:B2");
+  } catch {
+    /* ignore */
+  }
+  try {
     ws.mergeCells("C1:H2");
   } catch {
-    /* already merged from template */
+    /* ignore */
   }
   const nameCell = ws.getCell("C1");
   nameCell.value = "Sharnam Project Development Consultants & Co.";
@@ -266,13 +287,7 @@ async function applySharnamLetterhead(wb: ExcelJS.Workbook, ws: ExcelJS.Workshee
   band.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDF6E3" } };
   band.border = { bottom: { style: "thin", color: { argb: "FFB28C3C" } } };
 
-  ws.getRow(1).height = 22;
-  ws.getRow(2).height = 22;
-  ws.getRow(3).height = 14;
-  ws.getRow(4).height = 20;
-  ws.getRow(5).height = 16;
-
-  // Sharnam footer band (row 50) — signatory stamp
+  // Sharnam footer band — below amount-in-words (row 48)
   try {
     ws.mergeCells("A50:H50");
   } catch {

@@ -38,6 +38,36 @@ function iso(d: Date | null | undefined) {
   return d ? new Date(d).toISOString() : "";
 }
 
+const RA_ISO_ROOT = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
+
+function safeRaFolder(raNumber: string): string {
+  return `RA-${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+}
+
+function raBillFolder(raNumber: string): string {
+  return `${RA_ISO_ROOT}/${safeRaFolder(raNumber)}`;
+}
+
+function extOf(file: Express.Multer.File): string {
+  const m = /\.([a-zA-Z0-9]{2,5})$/.exec(file.originalname || "");
+  if (m) return `.${m[1].toLowerCase()}`;
+  if (file.mimetype === "application/pdf") return ".pdf";
+  if (file.mimetype === "image/png") return ".png";
+  if (file.mimetype === "image/jpeg") return ".jpg";
+  return "";
+}
+
+async function saveRaBillFile(
+  projectCode: string,
+  raNumber: string,
+  fileName: string,
+  buffer: Buffer
+) {
+  const saved = await mockOneDrive.upload(projectCode, raBillFolder(raNumber), fileName, buffer);
+  const fileUrl = saved.url || `/uploads/onedrive/${projectCode}/${saved.path}`;
+  return { ...saved, fileUrl, fileName };
+}
+
 /* ─────────────────────────────────────────  SUMMARY  ───────────────────────────────────────── */
 
 financeRouter.get("/:projectId/summary", async (req, res) => {
@@ -267,13 +297,17 @@ financeRouter.get("/:projectId/ra", async (req, res) => {
     include: {
       purchaseOrder: { select: { id: true, poNumber: true, vendorName: true, packageName: true, workTrade: true } },
       certificates: { select: { id: true, certificateNumber: true, status: true } },
+      attachments: { orderBy: { uploadedAt: "desc" } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
   });
   res.json(pkg ? rows.filter((r) => raMatchesPackage(r, pkg)) : rows);
 });
 
-financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
+financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fields([
+  { name: "files", maxCount: 25 },
+  { name: "file", maxCount: 1 },
+]), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "not found" });
 
@@ -281,14 +315,23 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
   const pkg = resolveFinancePackage(s(req.body.discipline) || s(req.body.packageKey) || "");
   const discipline = pkg?.discipline || s(req.body.discipline) || "Civil";
   let attachmentUrl: string | undefined;
-  if (req.file) {
-    const saved = await mockOneDrive.upload(
+  const fieldFiles = req.files as { files?: Express.Multer.File[]; file?: Express.Multer.File[] } | undefined;
+  const uploadedFiles = [...(fieldFiles?.files || []), ...(fieldFiles?.file || [])];
+  const attachmentRows: { fileName: string; fileUrl: string; storagePath?: string; sharePointUrl?: string }[] = [];
+  for (const f of uploadedFiles) {
+    const saved = await saveRaBillFile(
       project.code,
-      "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification",
-      `RA-${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}${extOf(req.file)}`,
-      req.file.buffer
+      raNumber,
+      `${Date.now()}-${f.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+      f.buffer
     );
-    attachmentUrl = saved.url || `/uploads/onedrive/${project.code}/${saved.path}`;
+    attachmentRows.push({
+      fileName: f.originalname,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path,
+      sharePointUrl: saved.url || undefined,
+    });
+    if (!attachmentUrl) attachmentUrl = saved.fileUrl;
   }
 
   // cumulative = previous cumulative + this net
@@ -372,8 +415,26 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.sin
     });
   }
 
+  if (attachmentRows.length) {
+    await prisma.raBillAttachment.createMany({
+      data: attachmentRows.map((a) => ({
+        raBillId: created.id,
+        fileName: a.fileName,
+        fileUrl: a.fileUrl,
+        storagePath: a.storagePath || null,
+        sharePointUrl: a.sharePointUrl || null,
+        kind: "contractor_doc",
+        uploadedById: req.user!.id,
+      })),
+    });
+  }
+
   await audit("finance.ra.create", { userId: req.user!.id, entity: "RaBill", entityId: created.id, meta: { raNumber } });
-  res.status(201).json(created);
+  const withAttachments = await prisma.raBill.findUnique({
+    where: { id: created.id },
+    include: { attachments: { orderBy: { uploadedAt: "desc" } } },
+  });
+  res.status(201).json(withAttachments || created);
 });
 
 financeRouter.put("/ra/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -425,6 +486,67 @@ financeRouter.get("/ra/:id/revisions", async (req, res) => {
   res.json(rows.map((r) => ({ ...r, uploadedBy: r.uploadedById ? userMap.get(r.uploadedById) || null : null })));
 });
 
+/** List all contractor documents filed under this RA bill folder. */
+financeRouter.get("/ra/:id/attachments", async (req, res) => {
+  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!bill) return res.status(404).json({ error: "RA bill not found" });
+  const rows = await prisma.raBillAttachment.findMany({
+    where: { raBillId: bill.id },
+    orderBy: { uploadedAt: "desc" },
+  });
+  res.json(rows);
+});
+
+/** Upload one or more contractor documents to the RA bill folder (09.01/RA-xx/). */
+financeRouter.post(
+  "/ra/:id/attachments",
+  requireRoles("admin", "office"),
+  upload.array("files", 25),
+  async (req: AuthedRequest, res) => {
+    const bill = await prisma.raBill.findUnique({
+      where: { id: req.params.id },
+      include: { project: { select: { code: true } } },
+    });
+    if (!bill) return res.status(404).json({ error: "RA bill not found" });
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) return res.status(400).json({ error: "no files uploaded" });
+
+    const created = [];
+    let latestUrl: string | undefined;
+    for (const f of files) {
+      const saved = await saveRaBillFile(
+        bill.project.code,
+        bill.raNumber,
+        `${Date.now()}-${f.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+        f.buffer
+      );
+      const row = await prisma.raBillAttachment.create({
+        data: {
+          raBillId: bill.id,
+          fileName: f.originalname,
+          fileUrl: saved.fileUrl,
+          storagePath: saved.path,
+          sharePointUrl: saved.url || null,
+          kind: s(req.body.kind) || "contractor_doc",
+          uploadedById: req.user!.id,
+        },
+      });
+      created.push(row);
+      latestUrl = saved.fileUrl;
+    }
+    if (latestUrl) {
+      await prisma.raBill.update({ where: { id: bill.id }, data: { attachmentUrl: latestUrl } });
+    }
+    await audit("finance.ra.attachments", {
+      userId: req.user!.id,
+      entity: "RaBill",
+      entityId: bill.id,
+      meta: { count: created.length },
+    });
+    res.status(201).json(created);
+  }
+);
+
 /**
  * Log a new stage revision.
  * Body: stage (Submitted|Corrected|Certified), notes?, amountAtStage?, file
@@ -447,26 +569,25 @@ financeRouter.post(
       return res.status(400).json({ error: `stage must be one of ${RA_STAGES.join(" | ")}` });
     }
 
+    const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
+    const revisionNo = existing + 1;
+
     let fileName: string | undefined;
     let fileUrl: string | undefined;
     let storagePath: string | undefined;
     let sharePointUrl: string | undefined;
     if (req.file) {
-      const safeRa = bill.raNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const saved = await mockOneDrive.upload(
+      const saved = await saveRaBillFile(
         bill.project.code,
-        "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification",
-        `RA-${safeRa}-${stage}-${Date.now()}${extOf(req.file)}`,
+        bill.raNumber,
+        `${stage}-R${revisionNo}-${Date.now()}${extOf(req.file)}`,
         req.file.buffer
       );
       fileName = req.file.originalname;
       storagePath = saved.path;
       sharePointUrl = saved.url || undefined;
-      fileUrl = saved.url || `/uploads/onedrive/${bill.project.code}/${saved.path}`;
+      fileUrl = saved.fileUrl;
     }
-
-    const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
-    const revisionNo = existing + 1;
 
     const revision = await prisma.raBillRevision.create({
       data: {
@@ -493,6 +614,20 @@ financeRouter.post(
         ...(revision.amountAtStage != null ? { totalInvoiceWithoutGst: revision.amountAtStage } : {}),
       },
     });
+
+    if (fileUrl && fileName) {
+      await prisma.raBillAttachment.create({
+        data: {
+          raBillId: bill.id,
+          fileName,
+          fileUrl,
+          storagePath: storagePath || null,
+          sharePointUrl: sharePointUrl || null,
+          kind: "stage",
+          uploadedById: req.user!.id,
+        },
+      });
+    }
 
     await audit("finance.ra.stage", {
       userId: req.user!.id,
@@ -948,14 +1083,3 @@ financeRouter.post("/:projectId/payment-summary/import", requireRoles("admin", "
   const out = await importPaymentSummaryWorkbook(req.params.projectId, req.file.buffer, req.body.replace === "1", s(req.body.discipline) || undefined);
   res.json(out);
 });
-
-/* ─────────────────────────────────────────  helpers  ───────────────────────────────────────── */
-
-function extOf(f: Express.Multer.File): string {
-  const m = /\.([a-zA-Z0-9]{2,5})$/.exec(f.originalname || "");
-  if (m) return `.${m[1].toLowerCase()}`;
-  if (f.mimetype === "application/pdf") return ".pdf";
-  if (f.mimetype === "image/png") return ".png";
-  if (f.mimetype === "image/jpeg") return ".jpg";
-  return "";
-}
