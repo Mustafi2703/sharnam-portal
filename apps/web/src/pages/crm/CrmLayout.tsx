@@ -25,7 +25,7 @@ export default function CrmLayout() {
 
   return (
     <div
-      className="page-stack--register page-scroll-full flex flex-col flex-1 min-h-0 gap-4"
+      className="crm-module flex flex-col gap-4 pb-8 min-w-0 w-full"
       style={
         {
           ["--module-accent" as string]: CRM_ACCENT,
@@ -35,6 +35,7 @@ export default function CrmLayout() {
     >
       <div className="shrink-0 space-y-3">
         <PageHeader
+          dense
           eyebrow={isVendor ? "CRM · Contractor" : "CRM · Market intelligence"}
           title={
             onBidDetail
@@ -50,7 +51,7 @@ export default function CrmLayout() {
         />
 
         <nav
-          className="tool-strip px-2 sm:px-3 py-2 border border-line rounded-xl bg-paper flex gap-2 overflow-x-auto scrollbars-visible"
+          className="tool-strip relative z-[2] px-2 sm:px-3 py-2 border border-line rounded-xl bg-paper flex gap-2 overflow-x-auto scrollbars-visible"
           aria-label="CRM tools"
         >
           {tools.map((t) => {
@@ -80,7 +81,7 @@ export default function CrmLayout() {
         </nav>
       </div>
 
-      <div className="crm-outlet min-w-0 w-full">
+      <div className="crm-outlet min-w-0 w-full relative z-[1]">
         <Outlet />
       </div>
     </div>

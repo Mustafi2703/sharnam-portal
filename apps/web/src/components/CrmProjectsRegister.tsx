@@ -76,7 +76,7 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit }: Props) {
   const selected = projects.find((p) => p.id === selectedId) || null;
 
   return (
-    <div className="space-y-3 flex flex-col flex-1 min-h-0">
+    <div className="space-y-3 pb-2">
       <div className="grid lg:grid-cols-[1fr_auto] gap-3 items-end shrink-0">
         <div className="grid sm:grid-cols-2 gap-2">
           <Input
@@ -107,7 +107,7 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit }: Props) {
         </span>
       </div>
 
-      <div className="grid xl:grid-cols-[1fr_360px] gap-3 flex-1 min-h-0">
+      <div className="grid xl:grid-cols-[1fr_360px] gap-3">
         <RegisterSheetFrame
           title="SPDC projects register"
           sheetLabel="Client card · team & vendors"

@@ -1499,7 +1499,49 @@ body.is-auth-route #root {
   scrollbar-gutter: stable;
 }
 
-/* Full-page scroll — header + body scroll together (DPR/WPR, CRM, HRMS) */
+/* CRM module — do not use page-stack--register (collapses sheet-register to height:0) */
+.tool-main__outlet:has(.crm-module) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.tool-main__outlet > .crm-module {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.crm-module .crm-outlet,
+.crm-module .sheet-register,
+.crm-module .register-sheet-frame,
+.crm-module .register-panel-fill,
+.crm-module .register-table-panel,
+.crm-module .spdc-register-panel {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.crm-module .sheet-register.register-sheet-frame {
+  min-height: min(420px, 55vh) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.crm-module .sheet-register__scroll,
+.crm-module .register-scroll-area {
+  flex: 1 1 auto !important;
+  min-height: 240px !important;
+  height: auto !important;
+  max-height: min(68vh, 560px) !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+}
+
+/* Full-page scroll — header + body scroll together (DPR/WPR, HRMS) */
 .tool-main__outlet:has(.page-scroll-full) {
   overflow-x: hidden !important;
   overflow-y: auto !important;

@@ -60,7 +60,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
   const driveUrl = detail?.attachmentSharePointUrl || detail?.attachmentUrl || selected?.attachmentSharePointUrl || selected?.attachmentUrl;
 
   return (
-    <div className="space-y-3 flex flex-col flex-1 min-h-0">
+    <div className="space-y-3 pb-2">
       <div className="grid lg:grid-cols-[1fr_auto] gap-3 items-end shrink-0">
         <div className="grid sm:grid-cols-2 gap-2">
           <Input
@@ -100,7 +100,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
         </div>
       </div>
 
-      <div className="grid xl:grid-cols-[1fr_360px] gap-3 flex-1 min-h-0">
+      <div className="grid xl:grid-cols-[1fr_360px] gap-3">
         <RegisterSheetFrame
           title="PMC proposals register"
           sheetLabel="Quotation desk · Drive + status log"
