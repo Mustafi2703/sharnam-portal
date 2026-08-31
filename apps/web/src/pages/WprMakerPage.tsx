@@ -413,20 +413,19 @@ export default function WprMakerPage() {
 
   if (!pack) {
     return (
-      <div className="maker-shell wpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
-        <div className="maker-shell__chrome shrink-0 pb-2 border-b border-line/80 bg-sand/30">
+      <div className="maker-shell wpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
+        <div className="maker-shell__body space-y-4 px-0.5 py-3 pb-6">
           <MakerToolHeader eyebrow="WPR Maker" title="Weekly Progress Report" description="Loading report pack…" busy />
-        </div>
-        <div className="maker-shell__form flex items-center justify-center">
-          <p className="text-sm text-steel-muted">Loading…</p>
+          <p className="text-sm text-steel-muted text-center py-8">Loading…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="maker-shell wpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
-      <div className="maker-shell__chrome shrink-0 space-y-2 pb-2 border-b border-line/80 bg-sand/30">
+    <div className="maker-shell wpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
+      <div className="maker-shell__body space-y-5 scrollbars-visible px-0.5 py-3 pb-6">
+      <div className="space-y-2 pb-2 border-b border-line/80 bg-sand/30 -mx-0.5 px-1 pt-1 rounded-lg">
       <MakerToolHeader
         eyebrow="WPR Maker · SPDC pack"
         title="Weekly Progress Report"
@@ -499,8 +498,6 @@ export default function WprMakerPage() {
         </div>
       </div>
       </div>
-
-      <div className="maker-shell__form flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-5 scrollbars-visible px-0.5 py-3">
 
       {viewTab === "dashboard" ? (
         <div className="maker-section p-4 min-h-[320px]">
@@ -715,8 +712,6 @@ export default function WprMakerPage() {
         </div>
       )}
 
-      </div>
-
       <div className="maker-sticky-bar shrink-0">
         <Button onClick={refreshFromLive} disabled={busy}>Regenerate</Button>
         <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
@@ -724,6 +719,8 @@ export default function WprMakerPage() {
         <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export SPDC pack</Button>
         <Button type="button" variant="secondary" onClick={downloadClientXlsx} disabled={busy}>Export client workbook</Button>
         <Button type="button" variant="secondary" onClick={downloadPptx} disabled={busy}>Export PPTX</Button>
+      </div>
+
       </div>
     </div>
   );

@@ -262,7 +262,7 @@ export default function CrmPage() {
   }
 
   return (
-    <div className="space-y-6 flex flex-col flex-1 min-h-0">
+    <div className="space-y-6 pb-4">
       {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
 
       {section === "proposals" && (

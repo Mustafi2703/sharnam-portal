@@ -47,7 +47,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
         </div>
       </header>
 
-      <main className="hrms-portal-shell__main flex-1 flex flex-col min-h-0 max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-4 overflow-hidden">
+      <main className="hrms-portal-shell__main flex-1 flex flex-col min-h-0 max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-4">
         {children ?? <Outlet />}
       </main>
 

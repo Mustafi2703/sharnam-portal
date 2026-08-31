@@ -389,7 +389,7 @@ export default function CrmBidComparePage() {
   }
 
   return (
-    <div className="page-stack--register flex flex-col flex-1 min-h-0 gap-3 pb-2">
+    <div className="space-y-4 pb-4">
       <div className="flex flex-wrap gap-2 shrink-0">
         <Link to="/crm/leads">
           <Button variant="secondary">← Leads</Button>

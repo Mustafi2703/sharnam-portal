@@ -1499,6 +1499,29 @@ body.is-auth-route #root {
   scrollbar-gutter: stable;
 }
 
+/* Full-page scroll — header + body scroll together (DPR/WPR, CRM, HRMS) */
+.tool-main__outlet:has(.page-scroll-full) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+.tool-main__outlet > .page-scroll-full,
+.tool-main__outlet > .maker-shell.page-scroll-full {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.page-scroll-full .register-page-fill,
+.page-scroll-full .maker-shell__body {
+  flex: none !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
 .tool-main__outlet:has(.page-stack--register),
 .tool-main__outlet:has(.qap-page),
 .tool-main__outlet:has(.spdc-register-page),
@@ -1510,6 +1533,12 @@ body.is-auth-route #root {
   overflow: hidden !important;
   padding-bottom: 0.5rem;
   scrollbar-gutter: auto;
+}
+.tool-main__outlet:has(.page-scroll-full) {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 0.5rem;
+  scrollbar-gutter: stable;
 }
 
 .tool-main__outlet > .page-stack--register,
@@ -1542,6 +1571,27 @@ body.is-auth-route #root {
   display: flex !important;
   flex-direction: column !important;
 }
+
+/* page-scroll-full — must come after register height:0 rules */
+.tool-main__outlet > .page-stack--register.page-scroll-full,
+.tool-main__outlet > .page-scroll-full.page-stack--register {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.tool-main__outlet .page-scroll-full .crm-outlet,
+.tool-main__outlet .page-scroll-full .register-page-fill,
+.tool-main__outlet .page-scroll-full .page-stack--register,
+.tool-main__outlet .page-scroll-full .maker-shell__body {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
 .tool-main__outlet .register-tab-body--stack {
   flex: 1 1 0% !important;
   min-height: 0 !important;
@@ -5411,21 +5461,30 @@ body {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
-/* DPR / WPR maker — chrome fixed, form body scrolls inside the tool outlet */
+/* DPR / WPR maker — single page scroll (header scrolls with form) */
 .maker-shell.dpr-maker,
 .maker-shell.wpr-maker {
   gap: 0;
-  padding-bottom: 0;
-  max-height: 100%;
-  flex: 1 1 0%;
+  padding-bottom: 1rem;
+  max-height: none;
+  flex: none;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
+.maker-shell.dpr-maker.page-scroll-full,
+.maker-shell.wpr-maker.page-scroll-full {
+  overflow: visible;
+}
+.maker-shell__body {
+  flex: none;
+  min-width: 0;
+  overflow: visible;
+}
 .maker-shell__chrome {
   flex-shrink: 0;
-  z-index: 2;
+  z-index: 1;
   position: relative;
   min-width: 0;
 }
@@ -5433,14 +5492,10 @@ body {
   min-width: 0;
 }
 .maker-shell__form {
-  flex: 1 1 0%;
+  flex: none;
   min-height: 0;
   min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 .maker-shell__form .maker-section--flush {
   flex: none !important;
@@ -7307,6 +7362,9 @@ body {
 .hrms-portal-shell__main {
   flex: 1 1 0%;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 .hrms-tool-rail {
   display: flex;
