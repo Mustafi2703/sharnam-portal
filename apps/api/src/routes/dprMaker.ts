@@ -43,7 +43,7 @@ import {
 } from "../services/dprXlsx.js";
 import { audit } from "../services/audit.js";
 import { buildDprAutoFill } from "../services/dprIntegrations.js";
-import { buildDprChartPack, loadDprScurveHistory } from "../services/dprCharts.js";
+import { buildDprChartPack, loadDprScurveHistory, normalizeScurveEntries } from "../services/dprCharts.js";
 import { renderDprSnapshotHtml } from "../services/dprSnapshotExport.js";
 import { seedDprDemoDay } from "../services/dprDemoDaySeed.js";
 
@@ -98,6 +98,7 @@ type DprExtras = {
   photos?: DprPhoto[];
   attachments?: DprPhoto[];
   signatures?: DprPhoto[];
+  scurveEntries?: { date: string; label?: string; planned: number; actual: number }[];
 };
 
 function splitExtras(headerJsonStr: string | null): { header: DprHeader; extras: DprExtras } {
@@ -256,7 +257,13 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     safety: extras.safety,
     delays: extras.delays,
   };
-  const scurve = await loadDprScurveHistory(projectId, discipline, logDate, snapForCharts);
+  const scurve = await loadDprScurveHistory(
+    projectId,
+    discipline,
+    logDate,
+    snapForCharts,
+    normalizeScurveEntries(extras.scurveEntries)
+  );
   const charts = buildDprChartPack(snapForCharts, scurve);
 
   res.json({
@@ -281,6 +288,7 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     photos: extras.photos || [],
     attachments: extras.attachments || [],
     signatures: extras.signatures || [],
+    scurveEntries: extras.scurveEntries || [],
     status: existing?.status || "Draft",
     publishedPath: existing?.publishedPath || null,
     publishedAt: existing?.publishedAt || null,
@@ -315,6 +323,14 @@ dprMakerRouter.post("/:projectId/save", async (req: AuthedRequest, res) => {
     photos:       Array.isArray(req.body.photos)       ? req.body.photos       : [],
     attachments:  Array.isArray(req.body.attachments)  ? req.body.attachments  : [],
     signatures:   Array.isArray(req.body.signatures)   ? req.body.signatures   : [],
+    scurveEntries: Array.isArray(req.body.scurveEntries)
+      ? req.body.scurveEntries.map((p: { date?: string; label?: string; planned?: number; actual?: number }) => ({
+          date: String(p.date || "").slice(0, 10),
+          label: p.label ? String(p.label) : undefined,
+          planned: Number(p.planned) || 0,
+          actual: Number(p.actual) || 0,
+        }))
+      : undefined,
   };
 
   const saved = await prisma.dprSnapshot.upsert({
@@ -502,7 +518,7 @@ dprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
       attachments: extras.attachments,
       signatures: extras.signatures,
     },
-    { projectId, logDate }
+    { projectId, logDate, scurveEntries: extras.scurveEntries }
   );
   const fname = `DPR-${project.code}-${discipline}-${logDate.toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -527,7 +543,13 @@ dprMakerRouter.get("/:projectId/download.html", async (req, res) => {
     safety: extras.safety,
     delays: extras.delays,
   };
-  const scurve = await loadDprScurveHistory(projectId, discipline, logDate, snapForCharts);
+  const scurve = await loadDprScurveHistory(
+    projectId,
+    discipline,
+    logDate,
+    snapForCharts,
+    normalizeScurveEntries(extras.scurveEntries)
+  );
   const charts = buildDprChartPack(snapForCharts, scurve);
   const html = renderDprSnapshotHtml({
     project: { code: project.code, name: project.name, clientName: project.clientName, location: project.location },
@@ -615,7 +637,7 @@ dprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
       attachments: extras.attachments,
       signatures: extras.signatures,
     },
-    { projectId, logDate }
+    { projectId, logDate, scurveEntries: extras.scurveEntries }
   );
 
   const dateStr = logDate.toISOString().slice(0, 10);

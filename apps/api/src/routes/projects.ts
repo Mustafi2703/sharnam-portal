@@ -164,6 +164,9 @@ async function syncMasterRegisterFromRevision(opts: {
   projectId: string;
   drawingId: string;
   drawingNumber: string;
+  title?: string;
+  discipline?: string | null;
+  buildingArea?: string | null;
   revisionNumber: string;
   revisionLabel?: string | null;
   plannedDate?: Date | null;
@@ -172,10 +175,37 @@ async function syncMasterRegisterFromRevision(opts: {
   copiesReceived?: number | null;
   issuedToContractorAt?: Date | null;
 }) {
-  const line = await prisma.drawingRegisterLine.findUnique({
+  let line = await prisma.drawingRegisterLine.findUnique({
     where: { projectId_drawingNumber: { projectId: opts.projectId, drawingNumber: opts.drawingNumber } },
   });
-  if (!line) return;
+  if (!line) {
+    const maxSr = await prisma.drawingRegisterLine.aggregate({
+      where: { projectId: opts.projectId },
+      _max: { srNo: true },
+    });
+    line = await prisma.drawingRegisterLine.create({
+      data: {
+        projectId: opts.projectId,
+        srNo: (maxSr._max.srNo ?? 0) + 1,
+        drawingNumber: opts.drawingNumber,
+        drawingTitle: opts.title || opts.drawingNumber,
+        discipline: opts.discipline || "Architecture",
+        building: opts.buildingArea || null,
+        drawingType: "Good For Construction (GFC)",
+        revisionNumber: opts.revisionNumber,
+        latestRevision: "Yes",
+        source: "GFC register",
+        drawingId: opts.drawingId,
+        plannedSubmissionDate: opts.plannedDate,
+        actualSubmissionDate: opts.actualDate,
+        revisionDate: opts.actualDate,
+        copiesCount: opts.copiesReceived,
+        issueDate: opts.issuedToContractorAt,
+        remarks: opts.issueRemarks,
+      },
+    });
+    return;
+  }
   const planned = opts.plannedDate ?? line.plannedSubmissionDate;
   const actual = opts.actualDate ?? line.actualSubmissionDate;
   let submissionDelayDays = line.submissionDelayDays;
@@ -196,6 +226,8 @@ async function syncMasterRegisterFromRevision(opts: {
       copiesCount: opts.copiesReceived ?? line.copiesCount,
       issueDate: opts.issuedToContractorAt ?? line.issueDate,
       remarks: opts.issueRemarks ?? line.remarks,
+      discipline: opts.discipline || line.discipline,
+      building: opts.buildingArea || line.building,
     },
   });
 }
@@ -946,6 +978,9 @@ drawingsRouter.post(
         projectId: project.id,
         drawingId: fresh.id,
         drawingNumber: fresh.drawingNumber,
+        title: fresh.title,
+        discipline: fresh.discipline,
+        buildingArea: fresh.buildingArea,
         revisionNumber: latestRev.revisionNumber,
         revisionLabel: latestRev.revisionLabel,
         plannedDate: latestRev.plannedDate,
@@ -1004,6 +1039,15 @@ drawingsRouter.post(
       entity: "Drawing",
       entityId: drawing.id,
       meta: { drawingNumber, title, discipline },
+    });
+    await syncMasterRegisterFromRevision({
+      projectId: project.id,
+      drawingId: drawing.id,
+      drawingNumber: drawing.drawingNumber,
+      title: drawing.title,
+      discipline: drawing.discipline,
+      buildingArea: drawing.buildingArea,
+      revisionNumber: rev,
     });
     res.status(201).json(drawing);
   }
@@ -1159,6 +1203,9 @@ drawingsRouter.patch(
       projectId: rev.drawing.projectId,
       drawingId: rev.drawingId,
       drawingNumber: rev.drawing.drawingNumber,
+      title: rev.drawing.title,
+      discipline: rev.drawing.discipline,
+      buildingArea: rev.drawing.buildingArea,
       revisionNumber: rev.revisionNumber,
       revisionLabel: updated.revisionLabel,
       plannedDate: updated.plannedDate,
@@ -1245,6 +1292,9 @@ drawingsRouter.patch(
       projectId: rev.drawing.projectId,
       drawingId: rev.drawingId,
       drawingNumber: rev.drawing.drawingNumber,
+      title: rev.drawing.title,
+      discipline: rev.drawing.discipline,
+      buildingArea: rev.drawing.buildingArea,
       revisionNumber: rev.revisionNumber,
       revisionLabel: updated.revisionLabel,
       plannedDate: updated.plannedDate,
@@ -1541,6 +1591,9 @@ drawingsRouter.post(
       projectId: drawing.projectId,
       drawingId: drawing.id,
       drawingNumber: drawing.drawingNumber,
+      title: drawing.title,
+      discipline: drawing.discipline,
+      buildingArea: drawing.buildingArea,
       revisionNumber,
       revisionLabel: rev.revisionLabel,
       plannedDate: rev.plannedDate,

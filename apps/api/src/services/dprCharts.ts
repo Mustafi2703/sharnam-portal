@@ -14,6 +14,22 @@ import {
 import type ExcelJS from "exceljs";
 
 export type DprChartPoint = { date: string; label: string; planned: number; actual: number };
+export type DprScurveEntryInput = { date: string; label?: string; planned: number; actual: number };
+
+export function normalizeScurveEntries(
+  entries?: DprScurveEntryInput[]
+): DprChartPoint[] | undefined {
+  if (!entries?.length) return undefined;
+  return entries
+    .map((p) => ({
+      date: p.date.slice(0, 10),
+      label: p.label || p.date.slice(0, 10),
+      planned: Number(p.planned) || 0,
+      actual: Number(p.actual) || 0,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-13);
+}
 export type DprBarPoint = { label: string; planned: number; actual: number };
 export type DprChartPack = {
   summary: {
@@ -55,8 +71,23 @@ export async function loadDprScurveHistory(
   projectId: string,
   discipline: string,
   logDate: Date,
-  currentSnap: DprSnapshot
+  currentSnap: DprSnapshot,
+  manualEntries?: DprScurveEntryInput[]
 ): Promise<DprChartPoint[]> {
+  const manual = normalizeScurveEntries(manualEntries);
+  if (manual?.length) return manual;
+
+  let msPlannedByDate = new Map<string, number>();
+  try {
+    const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
+    const ms = await loadMsProjectSummary(projectId);
+    for (const p of ms.scurve || []) {
+      msPlannedByDate.set(p.date.slice(0, 10), p.plannedPct);
+    }
+  } catch {
+    /* MS Project schedule optional */
+  }
+
   const end = new Date(logDate);
   end.setHours(23, 59, 59, 999);
   const prior = await prisma.dprSnapshot.findMany({
@@ -71,10 +102,13 @@ export async function loadDprScurveHistory(
     snap.discipline = discipline;
     snap.header.dataDate = row.logDate.toISOString();
     const computed = computeDpr(snap);
+    const dateKey = row.logDate.toISOString().slice(0, 10);
     points.push({
-      date: row.logDate.toISOString().slice(0, 10),
+      date: dateKey,
       label: row.logDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      planned: Math.round(computed.kpis.plannedPct * 1000) / 10,
+      planned: msPlannedByDate.has(dateKey)
+        ? msPlannedByDate.get(dateKey)!
+        : Math.round(computed.kpis.plannedPct * 1000) / 10,
       actual: Math.round(computed.kpis.actualPct * 1000) / 10,
     });
   }
@@ -82,15 +116,30 @@ export async function loadDprScurveHistory(
   const hasToday = points.some((p) => p.date === logDate.toISOString().slice(0, 10));
   if (!hasToday) {
     const computed = computeDpr(currentSnap);
+    const dateKey = logDate.toISOString().slice(0, 10);
     points.push({
-      date: logDate.toISOString().slice(0, 10),
+      date: dateKey,
       label: logDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      planned: Math.round(computed.kpis.plannedPct * 1000) / 10,
+      planned: msPlannedByDate.has(dateKey)
+        ? msPlannedByDate.get(dateKey)!
+        : Math.round(computed.kpis.plannedPct * 1000) / 10,
       actual: Math.round(computed.kpis.actualPct * 1000) / 10,
     });
   }
 
   return points.slice(-13);
+}
+
+/** Map MS Project S-curve export → DPR chart points (for manual override after XML import). */
+export async function msProjectScurveToDprPoints(projectId: string): Promise<DprChartPoint[]> {
+  const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
+  const ms = await loadMsProjectSummary(projectId);
+  return (ms.scurve || []).map((p) => ({
+    date: p.date.slice(0, 10),
+    label: p.periodLabel || p.date.slice(0, 10),
+    planned: p.plannedPct,
+    actual: p.actualPct,
+  }));
 }
 
 export function buildDprChartPack(snap: DprSnapshot, scurve: DprChartPoint[] = []): DprChartPack {

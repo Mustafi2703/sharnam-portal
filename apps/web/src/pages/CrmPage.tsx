@@ -17,7 +17,7 @@ import {
 } from "../lib/crmLeadUtils";
 import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 
-type LeadsView = "register" | "market" | "pipeline";
+type LeadsView = "register" | "market" | "pipeline" | "converted";
 const LEAD_STAGES = PIPELINE_STAGES;
 
 export default function CrmPage() {
@@ -103,7 +103,16 @@ export default function CrmPage() {
       .catch(() => {});
   }, [token, canManage]);
 
+  function openSetupBids(lead: CrmLead) {
+    if (!lead.projectId) return;
+    navigate(`/crm/bids?projectId=${lead.projectId}&leadId=${lead.id}`);
+  }
+
   function openConvert(lead: CrmLead) {
+    if (lead.projectId) {
+      openSetupBids(lead);
+      return;
+    }
     setConvertLead(lead);
     setConvertForm({
       code: `SPDC-${String(lead.srNo || Date.now()).slice(-5)}`,
@@ -153,15 +162,28 @@ export default function CrmPage() {
     void load();
   }, [token, canManage]);
 
+  const bidPackagesByLeadId = useMemo(() => {
+    const map: Record<string, typeof bidPackages> = {};
+    for (const bp of bidPackages) {
+      const leadId = bp.leadId || bp.lead?.id;
+      if (!leadId) continue;
+      (map[leadId] ||= []).push(bp);
+    }
+    return map;
+  }, [bidPackages]);
+
+  const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
+  const pipelineLeads = useMemo(() => leads.filter((l) => !l.projectId), [leads]);
+
   const pipeline = useMemo(() => {
     const map: Record<string, CrmLead[]> = {};
     for (const s of LEAD_STAGES) map[s] = [];
-    for (const lead of leads) {
+    for (const lead of pipelineLeads) {
       const stage = map[lead.stage || "New"] ? lead.stage || "New" : "New";
       map[stage].push(lead);
     }
     return map;
-  }, [leads]);
+  }, [pipelineLeads]);
 
   const convertEligibleVendors = useMemo(
     () => vendors.filter((v) => vendorMatchesBidDisciplines(v, convertForm.disciplineKeys)),
@@ -197,11 +219,22 @@ export default function CrmPage() {
     e.preventDefault();
     if (!convertLead) return;
     const leadId = convertLead.id;
-    const res = await api<{ project: { id: string; code: string } }>(`/api/crm/leads/${leadId}/convert`, {
+    const res = await api<{ project: { id: string; code: string }; alreadyConverted?: boolean }>(
+      `/api/crm/leads/${leadId}/convert`,
+      {
       method: "POST",
       token,
       body: JSON.stringify(convertForm),
-    });
+      },
+    );
+
+    if (res.alreadyConverted) {
+      setConvertLead(null);
+      setMsg(`Lead already linked to ${res.project.code} — opening bid setup.`);
+      navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+      await load();
+      return;
+    }
 
     let bidPackageId: string | null = null;
     if (convertForm.vendorIds.length >= 2 && convertForm.disciplineKeys.length) {
@@ -319,8 +352,9 @@ export default function CrmPage() {
             {(
               [
                 ["register", "Register (all rows)"],
-                ["market", "By market status"],
                 ["pipeline", "Sales pipeline"],
+                ["converted", "Converted + bid setup"],
+                ["market", "By market status"],
               ] as const
             ).map(([key, label]) => (
               <Button key={key} variant={leadsView === key ? "primary" : "secondary"} onClick={() => setLeadsView(key)}>
@@ -356,7 +390,23 @@ export default function CrmPage() {
               selectedId={selectedLeadId}
               onSelect={(l) => setSelectedLeadId(l?.id || null)}
               onConvert={openConvert}
+              onSetupBids={openSetupBids}
               onStageChange={updateLeadStage}
+              bidPackagesByLeadId={bidPackagesByLeadId}
+            />
+          )}
+
+          {leadsView === "converted" && (
+            <CrmLeadsRegister
+              leads={leads}
+              canWrite={canManage}
+              selectedId={selectedLeadId}
+              onSelect={(l) => setSelectedLeadId(l?.id || null)}
+              onConvert={openConvert}
+              onSetupBids={openSetupBids}
+              onStageChange={updateLeadStage}
+              bidPackagesByLeadId={bidPackagesByLeadId}
+              defaultConversion="converted"
             />
           )}
 
@@ -381,9 +431,18 @@ export default function CrmPage() {
                             Convert →
                           </Button>
                         ) : (
-                          <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
-                            Open project →
-                          </Link>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="text-xs text-brand font-semibold"
+                              onClick={() => openSetupBids(lead)}
+                            >
+                              Setup bids →
+                            </button>
+                            <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
+                              Project →
+                            </Link>
+                          </div>
                         )}
                       </li>
                     ))}
@@ -415,9 +474,18 @@ export default function CrmPage() {
                           </span>
                         )}
                         {lead.projectId ? (
-                          <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
-                            Open project →
-                          </Link>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="text-xs text-brand font-semibold"
+                              onClick={() => openSetupBids(lead)}
+                            >
+                              Setup bids →
+                            </button>
+                            <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
+                              Project →
+                            </Link>
+                          </div>
                         ) : stage !== "Lost" ? (
                           <Button className="!text-xs !py-1 !px-2 w-full" onClick={() => openConvert(lead)}>
                             Convert →

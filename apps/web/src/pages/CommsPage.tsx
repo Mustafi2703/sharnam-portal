@@ -264,24 +264,6 @@ export default function CommsPage() {
             {canEdit && (
               <Button
                 type="button"
-                variant="ghost"
-                className="!text-sm"
-                onClick={async () => {
-                  await api(`/api/comms/contacts/${id}/seed-demo`, {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify({ matrixKind }),
-                  });
-                  setMsg(`${matrixKind} matrix seeded from project client / PMC / consultant / contractor.`);
-                  await load();
-                }}
-              >
-                Seed BPCL-style rows
-              </Button>
-            )}
-            {canEdit && (
-              <Button
-                type="button"
                 variant="secondary"
                 className="!text-sm"
                 onClick={async () => {

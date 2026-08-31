@@ -309,21 +309,24 @@ crmRouter.post(
         sector: pick(raw, ["Sector"]) || null,
         projectType: pick(raw, ["Project Type", "Type"]) || null,
         description: pick(raw, ["Description", "Notes", "Remarks"]) || null,
-        stage: "New" as const,
-        ownerId: req.user!.id,
       };
       try {
         if (srNo != null) {
-          const existing = await prisma.lead.findFirst({ where: { srNo, sourceSheet } });
+          const existing = await prisma.lead.findUnique({
+            where: { srNo_sourceSheet: { srNo, sourceSheet } },
+          });
           if (existing) {
-            await prisma.lead.update({ where: { id: existing.id }, data });
+            await prisma.lead.update({
+              where: { id: existing.id },
+              data: existing.projectId ? data : { ...data, stage: "New" },
+            });
             updated++;
           } else {
-            await prisma.lead.create({ data });
+            await prisma.lead.create({ data: { ...data, stage: "New", ownerId: req.user!.id } });
             created++;
           }
         } else {
-          await prisma.lead.create({ data });
+          await prisma.lead.create({ data: { ...data, stage: "New", ownerId: req.user!.id } });
           created++;
         }
       } catch (err) {
@@ -391,11 +394,54 @@ crmRouter.delete("/leads/:id", requireRoles("admin", "office"), async (req: Auth
   res.json({ ok: true });
 });
 
+async function resolveBidDisciplinesJson(body: { disciplineKeys?: unknown; customDisciplines?: unknown }) {
+  const { resolveDisciplinesForPackage, normalizeDisciplineKey } = await import("../services/comparativeStatement.js");
+  const disciplineKeys = Array.isArray(body.disciplineKeys)
+    ? body.disciplineKeys.map((x: unknown) => normalizeDisciplineKey(String(x))).filter(Boolean)
+    : undefined;
+  const customDisciplines = Array.isArray(body.customDisciplines)
+    ? (body.customDisciplines
+        .map((d: { key?: string; label?: string; sheetName?: string }) => {
+          const label = String(d.label || "").trim();
+          if (!label) return null;
+          return {
+            key: normalizeDisciplineKey(d.key || label),
+            label,
+            sheetName: String(d.sheetName || label).trim(),
+          };
+        })
+        .filter(Boolean) as { key: string; label: string; sheetName: string }[])
+    : undefined;
+  const disciplines = resolveDisciplinesForPackage({ disciplineKeys, customDisciplines });
+  return disciplines.length ? JSON.stringify(disciplines) : undefined;
+}
+
 /** Convert a lead into a project + optional members/vendors + Closed Won deal */
 crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
   if (!lead) return res.status(404).json({ error: "Lead not found" });
-  if (lead.projectId) return res.status(400).json({ error: "Lead already converted" });
+
+  const bidDisciplinesJson = await resolveBidDisciplinesJson(req.body);
+
+  if (lead.projectId) {
+    const project = await prisma.project.findUnique({ where: { id: lead.projectId } });
+    if (!project) return res.status(404).json({ error: "Linked project not found" });
+
+    if (bidDisciplinesJson) {
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { bidDisciplinesJson },
+      });
+    }
+    if (lead.stage !== "Converted") {
+      await prisma.lead.update({ where: { id: lead.id }, data: { stage: "Converted" } });
+    }
+
+    const updated = bidDisciplinesJson
+      ? await prisma.project.findUnique({ where: { id: project.id } })
+      : project;
+    return res.json({ project: updated, leadId: lead.id, alreadyConverted: true });
+  }
 
   const code = String(req.body.code || "").trim();
   const name = String(req.body.name || lead.title).trim();
@@ -415,6 +461,7 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
       clientGst: req.body.clientGst || undefined,
       designConsultant: req.body.designConsultant || undefined,
       contractorName: req.body.contractorName || undefined,
+      bidDisciplinesJson,
     },
   });
 

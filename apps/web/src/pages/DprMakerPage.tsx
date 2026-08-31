@@ -117,6 +117,8 @@ type Approval = { refNo: string; description?: string; raisedOn?: string | null;
 type Issue = { description: string; severity?: "Critical" | "High" | "Medium" | "Low"; owner?: string };
 type Photo = { path: string; caption?: string; takenAt?: string | null; kind?: "photo" | "signature" | "pdf" };
 
+type ScurveEntry = { date: string; label?: string; planned: number; actual: number };
+
 type Snap = {
   projectId: string;
   projectCode: string;
@@ -143,6 +145,7 @@ type Snap = {
   publishedPath?: string | null;
   publishedAt?: string | null;
   autoFillSources?: string[];
+  scurveEntries?: ScurveEntry[];
   charts?: {
     summary: {
       plannedPct: number;
@@ -209,6 +212,7 @@ function buildSavePayload(snap: Snap, logDate: string, discipline: string) {
     photos: snap.photos,
     attachments: snap.attachments,
     signatures: snap.signatures,
+    scurveEntries: snap.scurveEntries || [],
   };
 }
 
@@ -331,16 +335,23 @@ export default function DprMakerPage() {
             }));
 
     const scurve =
-      api?.scurve?.length
-        ? api.scurve
-        : [
-            {
-              date: logDate,
-              label: new Date(logDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-              planned: Math.round(computed.plannedPct * 1000) / 10,
-              actual: Math.round(computed.actualPct * 1000) / 10,
-            },
-          ];
+      snap.scurveEntries?.length
+        ? snap.scurveEntries.map((p) => ({
+            date: p.date,
+            label: p.label || p.date,
+            planned: num(p.planned),
+            actual: num(p.actual),
+          }))
+        : api?.scurve?.length
+          ? api.scurve
+          : [
+              {
+                date: logDate,
+                label: new Date(logDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+                planned: Math.round(computed.plannedPct * 1000) / 10,
+                actual: Math.round(computed.actualPct * 1000) / 10,
+              },
+            ];
 
     return {
       summary: api?.summary ?? {
@@ -800,9 +811,9 @@ export default function DprMakerPage() {
       {displayCharts ? (
         <div className="maker-section shrink-0">
           <div className="maker-section__head">DPR dashboard · matches Excel DASHBOARD sheet</div>
-          <div className="maker-section__body grid lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            <Card className="!p-4 lg:col-span-2 xl:col-span-1">
-              <p className="text-[10px] uppercase font-semibold text-steel-muted mb-2">Planned vs actual progress</p>
+          <div className="maker-section__body grid lg:grid-cols-2 gap-4">
+            <Card className="!p-4 lg:col-span-2">
+              <p className="text-[10px] uppercase font-semibold text-steel-muted mb-2">Planned vs actual progress (S-curve)</p>
               <DprScurveChart points={displayCharts.scurve} />
             </Card>
             {displayCharts.boqProgress.length > 0 ? (
@@ -827,40 +838,190 @@ export default function DprMakerPage() {
             )}
           </div>
           <p className="text-xs text-steel-muted mt-2 px-4 pb-4">
-            Charts feed the SPDC DASHBOARD sheet on XLSX publish · data also saved to DMS{" "}
-            <code className="font-mono text-[10px]">07.02_Daily_Site_Records</code>.
+            Charts feed the SPDC DASHBOARD sheet on XLSX publish · S-curve rows written to INPUT 125–137.
           </p>
         </div>
       ) : null}
 
-      {/* S-curve history register — mirrors Excel INPUT rows 125–137 / DASHBOARD chart */}
-      {displayCharts && displayCharts.scurve.length > 0 && (
+      {/* S-curve register — manual entry or MS Project XML import (no MS Project license needed on server) */}
+      {snap && (
         <div className="maker-section">
           <div className="maker-section__head maker-section__head--row">
-            <span>S-curve history register · planned vs actual %</span>
-            <span className="maker-section__meta">Auto-calculated from BOQ lines + dates · written to XLSX on publish</span>
+            <span>S-curve entries · planned vs actual %</span>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                type="button"
+                className="!text-xs"
+                onClick={() => {
+                  if (!snap) return;
+                  const entries = displayCharts?.scurve?.length
+                    ? displayCharts.scurve.map((p) => ({
+                        date: (p as { date?: string }).date || logDate,
+                        label: p.label,
+                        planned: p.planned,
+                        actual: p.actual,
+                      }))
+                    : [{ date: logDate, label: "Today", planned: 0, actual: 0 }];
+                  setSnap({ ...snap, scurveEntries: entries });
+                  setMsg("S-curve loaded from BOQ / history — edit rows or import MS Project XML.");
+                }}
+              >
+                Recalc from BOQ
+              </Button>
+              <label className="inline-flex cursor-pointer items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60">
+                <input
+                  type="file"
+                  accept=".xml,application/xml,text/xml"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file || !projectId) return;
+                    setBusy(true);
+                    setMsg("");
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      const out = await api<{ scurvePoints: number }>(
+                        `/api/progress/${projectId}/ms-project/import`,
+                        { method: "POST", token, body: fd }
+                      );
+                      const sc = await api<{ scurve: { date: string; periodLabel: string; plannedPct: number; actualPct: number }[] }>(
+                        `/api/progress/${projectId}/ms-project/scurve`,
+                        { token }
+                      );
+                      const entries: ScurveEntry[] = (sc.scurve || []).map((p) => ({
+                        date: p.date.slice(0, 10),
+                        label: p.periodLabel,
+                        planned: p.plannedPct,
+                        actual: p.actualPct,
+                      }));
+                      setSnap((s) => (s ? { ...s, scurveEntries: entries.slice(-13) } : s));
+                      setMsg(`MS Project XML imported — ${out.scurvePoints || entries.length} S-curve points loaded into DPR.`);
+                    } catch (err) {
+                      setMsg(err instanceof Error ? err.message : "MS Project import failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+                Import MS Project XML
+              </label>
+              <Button
+                variant="secondary"
+                type="button"
+                className="!text-xs"
+                onClick={() => {
+                  if (!snap) return;
+                  setSnap({
+                    ...snap,
+                    scurveEntries: [
+                      ...(snap.scurveEntries || []),
+                      { date: logDate, label: "", planned: 0, actual: 0 },
+                    ],
+                  });
+                }}
+              >
+                + Add row
+              </Button>
+            </div>
           </div>
+          <p className="text-xs text-steel-muted px-4 pt-2">
+            Export schedule from MS Project (File → Save As → XML) and import here. Manual rows override auto-calculated BOQ curve on publish.
+          </p>
           <div className="maker-table-wrap overflow-x-auto">
             <table className="maker-table">
               <thead>
                 <tr>
-                  <th>Period</th>
+                  <th>Date</th>
+                  <th>Label</th>
                   <th>Planned %</th>
                   <th>Actual %</th>
-                  <th>Variance</th>
+                  <th className="w-8" />
                 </tr>
               </thead>
               <tbody>
-                {displayCharts.scurve.map((p, i) => (
-                  <tr key={`${p.label}-${i}`} className="border-t border-line">
-                    <td className="p-2 text-sm font-medium">{p.label}</td>
-                    <td className="p-2 text-sm tabular-nums">{p.planned}%</td>
-                    <td className="p-2 text-sm tabular-nums">{p.actual}%</td>
-                    <td className={`p-2 text-sm tabular-nums ${p.actual >= p.planned ? "text-ok" : "text-warn"}`}>
-                      {(p.actual - p.planned).toFixed(1)}%
+                {(snap.scurveEntries?.length ? snap.scurveEntries : displayCharts?.scurve || []).map((p, i) => (
+                  <tr key={`sc-${i}`} className="border-t border-line">
+                    <td className="p-1">
+                      <Input
+                        type="date"
+                        value={toDateInput((p as ScurveEntry).date || logDate)}
+                        onChange={(e) => {
+                          if (!snap.scurveEntries?.length) return;
+                          const rows = [...snap.scurveEntries];
+                          rows[i] = { ...rows[i], date: e.target.value };
+                          setSnap({ ...snap, scurveEntries: rows });
+                        }}
+                        disabled={!snap.scurveEntries?.length}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        value={(p as ScurveEntry).label || ""}
+                        onChange={(e) => {
+                          if (!snap.scurveEntries?.length) return;
+                          const rows = [...snap.scurveEntries];
+                          rows[i] = { ...rows[i], label: e.target.value };
+                          setSnap({ ...snap, scurveEntries: rows });
+                        }}
+                        disabled={!snap.scurveEntries?.length}
+                        placeholder="Week label"
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={(p as ScurveEntry).planned ?? 0}
+                        onChange={(e) => {
+                          if (!snap.scurveEntries?.length) return;
+                          const rows = [...snap.scurveEntries];
+                          rows[i] = { ...rows[i], planned: Number(e.target.value) };
+                          setSnap({ ...snap, scurveEntries: rows });
+                        }}
+                        disabled={!snap.scurveEntries?.length}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={(p as ScurveEntry).actual ?? 0}
+                        onChange={(e) => {
+                          if (!snap.scurveEntries?.length) return;
+                          const rows = [...snap.scurveEntries];
+                          rows[i] = { ...rows[i], actual: Number(e.target.value) };
+                          setSnap({ ...snap, scurveEntries: rows });
+                        }}
+                        disabled={!snap.scurveEntries?.length}
+                      />
+                    </td>
+                    <td>
+                      {snap.scurveEntries?.length ? (
+                        <button
+                          type="button"
+                          className="maker-table__remove-row"
+                          onClick={() => {
+                            const rows = snap.scurveEntries!.filter((_, j) => j !== i);
+                            setSnap({ ...snap, scurveEntries: rows });
+                          }}
+                          aria-label="Remove"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
+                {!snap.scurveEntries?.length && !(displayCharts?.scurve?.length) && (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-sm text-steel-muted">
+                      Click <b>Recalc from BOQ</b>, <b>Import MS Project XML</b>, or <b>+ Add row</b> to maintain the S-curve.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1366,21 +1527,26 @@ export default function DprMakerPage() {
 }
 
 function DprScurveChart({ points }: { points: { label: string; planned: number; actual: number }[] }) {
-  if (!points.length) return <p className="text-sm text-steel-muted">Add qty + dates on BOQ lines to build S-curve.</p>;
-  const w = 320;
-  const h = 140;
-  const pad = 24;
+  if (!points.length) return <p className="text-sm text-steel-muted">Add S-curve rows below or import MS Project XML.</p>;
+  const w = 640;
+  const h = 220;
+  const pad = 32;
   const maxY = Math.max(10, ...points.flatMap((p) => [p.planned, p.actual])) * 1.15;
   const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
   const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
   const planned = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.planned)}`).join(" ");
   const actual = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.actual)}`).join(" ");
   return (
-    <div>
+    <div className="min-h-[240px]">
       <div className="text-sm font-semibold mb-2">S-curve · cumulative %</div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-md" role="img" aria-label="S-curve chart">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-h-[200px]" role="img" aria-label="S-curve chart">
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
+        {points.map((p, i) => (
+          <text key={`xl-${i}`} x={pad + i * step} y={h - 8} textAnchor="middle" fontSize="9" fill="var(--color-steel-muted,#5c6578)">
+            {p.label.slice(0, 8)}
+          </text>
+        ))}
         <path d={planned} fill="none" stroke="#2563EB" strokeWidth="2.5" />
         <path d={actual} fill="none" stroke="#0F766E" strokeWidth="2.5" />
       </svg>

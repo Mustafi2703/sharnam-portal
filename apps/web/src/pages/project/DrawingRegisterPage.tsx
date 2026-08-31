@@ -47,6 +47,12 @@ export default function DrawingRegisterPage() {
     void load();
   }, [id, token, sheetKey]);
 
+  useEffect(() => {
+    if (filterDiscipline !== "All") {
+      setForm((f) => ({ ...f, discipline: filterDiscipline, drawingType: "Good For Construction (GFC)" }));
+    }
+  }, [filterDiscipline]);
+
   async function addLine(e: FormEvent) {
     e.preventDefault();
     try {

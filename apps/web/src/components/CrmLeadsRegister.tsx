@@ -18,28 +18,37 @@ import { Button, Input, Select } from "./ui";
 
 const PAGE_SIZE = 50;
 
+type BidPackageSummary = { id: string; status: string; uploadProgress?: { done: number; total: number } };
+
 type Props = {
   leads: CrmLead[];
   canWrite: boolean;
   onConvert: (lead: CrmLead) => void;
+  onSetupBids: (lead: CrmLead) => void;
   onStageChange: (leadId: string, stage: string) => Promise<void>;
   selectedId: string | null;
   onSelect: (lead: CrmLead | null) => void;
+  bidPackagesByLeadId?: Record<string, BidPackageSummary[]>;
+  defaultConversion?: "all" | "pipeline" | "converted";
 };
 
 export function CrmLeadsRegister({
   leads,
   canWrite,
   onConvert,
+  onSetupBids,
   onStageChange,
   selectedId,
   onSelect,
+  bidPackagesByLeadId = {},
+  defaultConversion = "all",
 }: Props) {
   const [q, setQ] = useState("");
   const [marketStatus, setMarketStatus] = useState("all");
   const [state, setState] = useState("all");
   const [segment, setSegment] = useState("all");
   const [pipelineStage, setPipelineStage] = useState("all");
+  const [conversion, setConversion] = useState<"all" | "pipeline" | "converted">(defaultConversion);
   const [page, setPage] = useState(0);
 
   const marketOptions = useMemo(
@@ -56,8 +65,8 @@ export function CrmLeadsRegister({
   );
 
   const filtered = useMemo(
-    () => filterLeads(leads, { q, marketStatus, state, segment, pipelineStage }),
-    [leads, q, marketStatus, state, segment, pipelineStage],
+    () => filterLeads(leads, { q, marketStatus, state, segment, pipelineStage, conversion }),
+    [leads, q, marketStatus, state, segment, pipelineStage, conversion],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -68,7 +77,7 @@ export function CrmLeadsRegister({
   return (
     <div className="space-y-3 pb-2">
       <div className="grid lg:grid-cols-[1fr_auto] gap-3 items-end shrink-0">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2">
           <Input
             placeholder="Search project, district, status…"
             value={q}
@@ -77,6 +86,17 @@ export function CrmLeadsRegister({
               setPage(0);
             }}
           />
+          <Select
+            value={conversion}
+            onChange={(e) => {
+              setConversion(e.target.value as "all" | "pipeline" | "converted");
+              setPage(0);
+            }}
+          >
+            <option value="all">All leads</option>
+            <option value="pipeline">Pipeline only</option>
+            <option value="converted">Converted only</option>
+          </Select>
           <Select
             value={marketStatus}
             onChange={(e) => {
@@ -158,11 +178,12 @@ export function CrmLeadsRegister({
                 <th>Segment</th>
                 <th>Description</th>
                 <th>Pipeline</th>
+                <th>Bids</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {!pageRows.length && <RegisterEmptyRow colSpan={10} message="No leads match filters." />}
+              {!pageRows.length && <RegisterEmptyRow colSpan={11} message="No leads match filters." />}
               {pageRows.map((lead) => (
                 <tr
                   key={lead.id}
@@ -200,17 +221,44 @@ export function CrmLeadsRegister({
                   </td>
                   <td>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${pipelineStageTone(lead.stage)}`}>
-                      {lead.stage || "New"}
+                      {lead.projectId ? "Converted" : lead.stage || "New"}
                     </span>
                   </td>
+                  <td className="text-xs whitespace-nowrap">
+                    {lead.projectId ? (
+                      (() => {
+                        const pkgs = bidPackagesByLeadId[lead.id] || [];
+                        if (!pkgs.length) return <span className="text-amber-700 font-semibold">Setup needed</span>;
+                        const awarded = pkgs.some((p) => p.status === "Awarded");
+                        const inProgress = pkgs.some((p) => (p.uploadProgress?.done || 0) < (p.uploadProgress?.total || 1));
+                        if (awarded) return <span className="text-emerald-700 font-semibold">Awarded</span>;
+                        if (inProgress) return <span className="text-brand font-semibold">In progress</span>;
+                        return <span className="text-steel-muted">{pkgs.length} pkg(s)</span>;
+                      })()
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="whitespace-nowrap">
+                    {lead.projectId ? (
+                      <button
+                        type="button"
+                        className="text-[10px] font-semibold text-brand mr-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSetupBids(lead);
+                        }}
+                      >
+                        Setup bids →
+                      </button>
+                    ) : null}
                     {lead.projectId ? (
                       <Link
                         to={`/projects/${lead.projectId}`}
                         className="text-[10px] font-semibold text-brand"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        Open →
+                        Project →
                       </Link>
                     ) : canWrite ? (
                       <button
@@ -278,9 +326,14 @@ export function CrmLeadsRegister({
                     ))}
                   </Select>
                   {selected.projectId ? (
-                    <Link to={`/projects/${selected.projectId}`} className="inline-flex text-sm font-semibold text-brand">
-                      Open converted project →
-                    </Link>
+                    <>
+                      <Link to={`/projects/${selected.projectId}`} className="inline-flex text-sm font-semibold text-brand">
+                        Open converted project →
+                      </Link>
+                      <Button type="button" className="w-full" variant="secondary" onClick={() => onSetupBids(selected)}>
+                        Setup comparative bids →
+                      </Button>
+                    </>
                   ) : (
                     <Button type="button" className="w-full" onClick={() => onConvert(selected)}>
                       Convert to SPDC project

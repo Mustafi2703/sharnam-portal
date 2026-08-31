@@ -27,6 +27,8 @@ type BidPackage = {
   title: string;
   status: string;
   revisionLabel: string;
+  projectId?: string | null;
+  leadId?: string | null;
   comparativeSheetId?: string | null;
   summarySheetId?: string | null;
   comparativeSharePointUrl?: string | null;
@@ -86,6 +88,29 @@ export default function CrmBidComparePage() {
   const [customDiscLabel, setCustomDiscLabel] = useState("");
   const [customDiscSheet, setCustomDiscSheet] = useState("");
   const [addDiscKeys, setAddDiscKeys] = useState<string[]>([]);
+  const [deskFilter, setDeskFilter] = useState<"converted" | "all">("converted");
+
+  const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
+  const convertedProjectIds = useMemo(
+    () => new Set(convertedLeads.map((l) => l.projectId).filter(Boolean) as string[]),
+    [convertedLeads],
+  );
+  const convertedProjects = useMemo(
+    () => projects.filter((p) => convertedProjectIds.has(p.id)),
+    [projects, convertedProjectIds],
+  );
+  const packagesForDesk = useMemo(() => {
+    if (deskFilter === "all") return packages;
+    return packages.filter((p) => p.project?.id || p.projectId);
+  }, [packages, deskFilter]);
+  const pendingBidSetup = useMemo(
+    () =>
+      convertedLeads.filter((l) => {
+        const linked = packages.some((p) => p.lead?.id === l.id || p.leadId === l.id);
+        return !linked;
+      }),
+    [convertedLeads, packages],
+  );
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -408,6 +433,54 @@ export default function CrmBidComparePage() {
 
       {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
 
+      {pendingBidSetup.length > 0 && deskFilter === "converted" && !routePkgId && (
+        <Card className="!p-4 border-amber-200 bg-amber-50/60">
+          <h3 className="font-semibold text-sm mb-2">Converted leads — bid setup pending ({pendingBidSetup.length})</h3>
+          <p className="text-xs text-steel-muted mb-3">
+            These SPDC projects were created from CRM leads but do not have a comparative bid package yet.
+          </p>
+          <ul className="divide-y border rounded-xl bg-white/80 max-h-48 overflow-y-auto">
+            {pendingBidSetup.slice(0, 12).map((l) => (
+              <li key={l.id} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="font-medium line-clamp-1">{l.title}</span>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-brand shrink-0"
+                  onClick={() => {
+                    setForm((f) => ({
+                      ...f,
+                      projectId: l.projectId || "",
+                      leadId: l.id,
+                      title: f.title || `${l.title} — comparative bid`,
+                    }));
+                    setMsg(`Select contractors and disciplines for ${l.title}, then create the bid package.`);
+                  }}
+                >
+                  Setup bids →
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className="flex flex-wrap gap-2 items-center shrink-0">
+        <Button
+          variant={deskFilter === "converted" ? "primary" : "secondary"}
+          type="button"
+          onClick={() => setDeskFilter("converted")}
+        >
+          Converted projects ({packagesForDesk.length})
+        </Button>
+        <Button
+          variant={deskFilter === "all" ? "primary" : "secondary"}
+          type="button"
+          onClick={() => setDeskFilter("all")}
+        >
+          All packages ({packages.length})
+        </Button>
+      </div>
+
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
         <div className="space-y-4">
           <Card>
@@ -425,11 +498,19 @@ export default function CrmBidComparePage() {
                 onChange={(e) => setForm({ ...form, projectId: e.target.value })}
               >
                 <option value="">Select project (required for SharePoint + vendor portal)</option>
-                {projects.map((p) => (
+                {convertedProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.code} · {p.name}
                   </option>
                 ))}
+                {deskFilter === "all" &&
+                  projects
+                    .filter((p) => !convertedProjectIds.has(p.id))
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} · {p.name} (non-CRM)
+                      </option>
+                    ))}
               </Select>
               {form.projectId && (
                 <Button type="button" variant="secondary" className="!text-xs" onClick={() => void saveProjectDisciplines()}>
@@ -438,7 +519,7 @@ export default function CrmBidComparePage() {
               )}
               <Select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })}>
                 <option value="">Link to lead (optional)</option>
-                {leads.map((l) => (
+                {convertedLeads.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.title}
                   </option>
@@ -538,16 +619,16 @@ export default function CrmBidComparePage() {
 
           <Card padding={false}>
             <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm flex items-center justify-between">
-              <span>Bid packages ({packages.length})</span>
-              {packages.length > 0 && (
+              <span>Bid packages ({packagesForDesk.length})</span>
+              {packagesForDesk.length > 0 && (
                 <span className="text-[10px] text-steel-muted font-normal">
-                  {packages.reduce((s, p) => s + (p.uploadProgress?.done || 0), 0)}/
-                  {packages.reduce((s, p) => s + (p.uploadProgress?.total || 0), 0)} BOQs in
+                  {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.done || 0), 0)}/
+                  {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.total || 0), 0)} BOQs in
                 </span>
               )}
             </div>
             <ul className="divide-y">
-              {packages.map((p) => {
+              {packagesForDesk.map((p) => {
                 const pct = p.uploadProgress
                   ? Math.round((100 * (p.uploadProgress.done || 0)) / Math.max(1, p.uploadProgress.total || 0))
                   : 0;

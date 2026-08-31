@@ -37,7 +37,7 @@
 import ExcelJS from "exceljs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { fillScurveHistorySheet, loadDprScurveHistory } from "./dprCharts.js";
+import { fillScurveHistorySheet, loadDprScurveHistory, normalizeScurveEntries } from "./dprCharts.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -462,7 +462,7 @@ function buildSafetyRowsFromLegacy(s?: DprSafety): DprSafetyRow[] {
  */
 export async function buildDprWorkbook(
   snap: DprSnapshot,
-  opts?: { projectId?: string; logDate?: Date }
+  opts?: { projectId?: string; logDate?: Date; scurveEntries?: { date: string; label?: string; planned: number; actual: number }[] }
 ): Promise<Buffer> {
   const templateName = TEMPLATE_FILE[snap.discipline] || TEMPLATE_FILE.CIVIL;
   const templatePath = path.join(TEMPLATE_DIR, templateName);
@@ -477,7 +477,13 @@ export async function buildDprWorkbook(
   fillInputSheet(inputSheet, snap);
 
   if (opts?.projectId && opts.logDate) {
-    const history = await loadDprScurveHistory(opts.projectId, snap.discipline, opts.logDate, snap);
+    const history = await loadDprScurveHistory(
+      opts.projectId,
+      snap.discipline,
+      opts.logDate,
+      snap,
+      normalizeScurveEntries(opts.scurveEntries)
+    );
     fillScurveHistorySheet(inputSheet, history);
   }
 

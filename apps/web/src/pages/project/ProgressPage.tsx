@@ -494,26 +494,6 @@ export default function ProgressPage() {
     }
   }
 
-  async function seedMsProjectDemo() {
-    if (!id || !canEdit) return;
-    setMsBusy("seed");
-    setMsg("");
-    try {
-      const out = await api<{ taskCount: number; scurvePoints: number; fileUrl: string }>(
-        `/api/progress/${id}/ms-project/seed-demo`,
-        { method: "POST", token, body: "{}" }
-      );
-      setMsg(
-        `MS Project demo seeded — ${out.taskCount} tasks · ${out.scurvePoints} S-curve weeks · XML saved to OneDrive`
-      );
-      await Promise.all([load(), loadMsProject()]);
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "MS Project seed failed");
-    } finally {
-      setMsBusy(null);
-    }
-  }
-
   async function importMsProject(file: File) {
     if (!id || !canEdit) return;
     setMsBusy("import");

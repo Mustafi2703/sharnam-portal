@@ -32,6 +32,19 @@ import {
   gfcRevisionsByNumber,
   normalizeRevNumber,
 } from "../../lib/gfcRegister";
+import { MASTER_REGISTER_DISCIPLINES } from "../../lib/masterDrawingRegister";
+
+const GFC_DISCIPLINE_TABS = [
+  "Architecture",
+  "Structural",
+  "MEPF",
+  "Civil",
+  "Facade",
+  "Interior",
+  "Fire",
+  "Electrical",
+  "Mechanical",
+] as const;
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -83,6 +96,14 @@ export default function DrawingsPage() {
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [dumpBusy, setDumpBusy] = useState(false);
+  const [addRowOpen, setAddRowOpen] = useState(false);
+  const [addRowForm, setAddRowForm] = useState({
+    drawingNumber: "",
+    title: "",
+    discipline: "Architecture",
+    buildingArea: "",
+    tlNo: "",
+  });
   const canUpload = canManageDrawings(user?.role);
   const clientOnly = isClientViewOnly(user?.role);
 
@@ -126,7 +147,54 @@ export default function DrawingsPage() {
     }
   }
 
-  const disciplines = ["All", ...Array.from(new Set(drawings.map((d) => d.discipline)))];
+  const disciplines = useMemo(
+    () => [
+      "All",
+      ...Array.from(
+        new Set([
+          ...GFC_DISCIPLINE_TABS,
+          ...MASTER_REGISTER_DISCIPLINES,
+          ...drawings.map((d) => d.discipline).filter(Boolean),
+        ])
+      ),
+    ],
+    [drawings]
+  );
+
+  async function addGfcRow(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setBusy(true);
+    setFormError("");
+    try {
+      await api(`/api/drawings/project/${id}/register-line`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          drawingNumber: addRowForm.drawingNumber.trim(),
+          title: addRowForm.title.trim(),
+          discipline: addRowForm.discipline,
+          buildingArea: addRowForm.buildingArea.trim() || undefined,
+          tlNo: addRowForm.tlNo.trim() || undefined,
+          revisionNumber: "R0",
+        }),
+      });
+      setMsg(`GFC row ${addRowForm.drawingNumber} added — also synced to master register. Upload PDF/DWG when ready.`);
+      setAddRowOpen(false);
+      setAddRowForm({
+        drawingNumber: "",
+        title: "",
+        discipline: filter !== "All" ? filter : "Architecture",
+        buildingArea: "",
+        tlNo: "",
+      });
+      await load();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to add row");
+    } finally {
+      setBusy(false);
+    }
+  }
   const filtered = useMemo(
     () => (filter === "All" ? drawings : drawings.filter((d) => d.discipline === filter)),
     [drawings, filter]
@@ -432,6 +500,15 @@ export default function DrawingsPage() {
               >
                 Master register →
               </Link>
+              <Button type="button" variant="secondary" onClick={() => {
+                setAddRowForm((f) => ({
+                  ...f,
+                  discipline: filter !== "All" ? filter : f.discipline,
+                }));
+                setAddRowOpen(true);
+              }}>
+                + Add row
+              </Button>
               <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
                 Upload GFC
               </Button>
@@ -510,6 +587,52 @@ export default function DrawingsPage() {
           <Button type="button" className="mt-3" onClick={() => startUploadFlow()}>
             Re-open checklist
           </Button>
+        </Card>
+      )}
+
+      {canUpload && addRowOpen && (
+        <Card className="border-brand/30">
+          <h3 className="font-semibold mb-1">Add GFC register row (no file yet)</h3>
+          <p className="text-xs text-steel-muted mb-3">
+            Creates a discipline line on GFC register and mirrors it on the master drawing register. Upload PDF/DWG later via Drawing Check.
+          </p>
+          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addGfcRow}>
+            <Input
+              required
+              placeholder="DWG / drawing number"
+              value={addRowForm.drawingNumber}
+              onChange={(e) => setAddRowForm({ ...addRowForm, drawingNumber: e.target.value })}
+            />
+            <Input
+              required
+              placeholder="Drawing title"
+              value={addRowForm.title}
+              onChange={(e) => setAddRowForm({ ...addRowForm, title: e.target.value })}
+            />
+            <Select
+              value={addRowForm.discipline}
+              onChange={(e) => setAddRowForm({ ...addRowForm, discipline: e.target.value })}
+            >
+              {[...GFC_DISCIPLINE_TABS, ...MASTER_REGISTER_DISCIPLINES.filter((d) => !GFC_DISCIPLINE_TABS.includes(d as typeof GFC_DISCIPLINE_TABS[number]))].map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </Select>
+            <Input
+              placeholder="Building / area"
+              value={addRowForm.buildingArea}
+              onChange={(e) => setAddRowForm({ ...addRowForm, buildingArea: e.target.value })}
+            />
+            <Input
+              placeholder="TL No"
+              value={addRowForm.tlNo}
+              onChange={(e) => setAddRowForm({ ...addRowForm, tlNo: e.target.value })}
+            />
+            <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
+              <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save row"}</Button>
+              <Button type="button" variant="secondary" onClick={() => setAddRowOpen(false)}>Cancel</Button>
+            </div>
+          </form>
+          {formError && <p className="text-sm text-danger mt-2">{formError}</p>}
         </Card>
       )}
 

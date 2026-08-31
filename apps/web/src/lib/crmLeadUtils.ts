@@ -74,10 +74,13 @@ export function filterLeads(
     state: string;
     segment: string;
     pipelineStage: string;
+    conversion?: "all" | "pipeline" | "converted";
   },
 ): CrmLead[] {
   const q = opts.q.trim().toLowerCase();
   return leads.filter((l) => {
+    if (opts.conversion === "pipeline" && l.projectId) return false;
+    if (opts.conversion === "converted" && !l.projectId) return false;
     if (opts.marketStatus && opts.marketStatus !== "all" && l.latestStatus !== opts.marketStatus) return false;
     if (opts.state && opts.state !== "all" && l.state !== opts.state) return false;
     if (opts.segment && opts.segment !== "all" && l.segment !== opts.segment) return false;
