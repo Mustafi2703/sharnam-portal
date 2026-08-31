@@ -67,10 +67,9 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
   },
 ];
 
-/** Site / field desk — attendance + mobile upload testing */
+/** Site / field desk — attendance first */
 const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/attendance", label: "Attendance punch", icon: "field" },
-  { to: "/upload-lab", label: "Upload lab · test", icon: "reports" },
 ];
 
 /** Contractor portal — discipline BOQ uploads per project */
@@ -94,7 +93,6 @@ const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/quotations/new", label: "PMC proposal", icon: "reports" },
   { to: "/login/hr", label: "HR portal", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
-  { to: "/upload-lab", label: "Upload lab", icon: "reports" },
   { to: "/roles", label: "Access · Users", icon: "master" },
   { to: "/audit", label: "Audit trail", icon: "reports" },
 ];
@@ -523,9 +521,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="hidden sm:flex items-center gap-1.5">
                 <Link to="/attendance" className="app-topbar__chip hover:border-brand">
                   Attendance
-                </Link>
-                <Link to="/upload-lab" className="app-topbar__chip hover:border-brand">
-                  Upload lab
                 </Link>
                 {user?.role === "vendor" && (
                   <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">

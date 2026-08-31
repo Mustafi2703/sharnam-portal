@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { OfficeClockInCard } from "../components/OfficeClockInCard";
 import { Badge, Button, Card, PageHero } from "../components/ui";
 import { PieChart } from "../components/PieChart";
 import { ReportExportButtons } from "../components/ReportExportButtons";
@@ -91,6 +92,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5">
+      <OfficeClockInCard />
       <PageHero
         accent="graphite"
         title={`Analytics · ${firstName}`}

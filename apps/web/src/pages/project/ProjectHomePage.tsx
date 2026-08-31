@@ -80,7 +80,6 @@ export default function ProjectHomePage() {
         ["rfis", "RFIs + checklist", "Anyone raises · matrix responds", "RFI", "#0B6A78"],
         ["submittals", "Submittals", "Draft → review → approve", "SUB", "#C24D1A"],
         ["photos", "Photos", "Albums · upload field images", "PIC", "#1C4A5A"],
-        ["site-pilot", "Site pilot (test)", "Photo · signature · GPS → SharePoint", "SP", "#0B6A78"],
         ["safety", "Safety", "Observations & incidents", "SAF", "#1C4A5A"],
         ["cost", "Cost / COP / bills", "Measurement + vendor bill tracker", "₹", "#2F6F4E"],
         ["directory", "Directory", "Assign people to project", "DIR", "#3D4450"],

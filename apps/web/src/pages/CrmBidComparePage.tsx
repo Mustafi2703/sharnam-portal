@@ -89,6 +89,9 @@ export default function CrmBidComparePage() {
   const [customDiscSheet, setCustomDiscSheet] = useState("");
   const [addDiscKeys, setAddDiscKeys] = useState<string[]>([]);
   const [deskFilter, setDeskFilter] = useState<"converted" | "all">("converted");
+  const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
+  const [showSetup, setShowSetup] = useState(true);
+  const [dueDate, setDueDate] = useState("");
 
   const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
   const convertedProjectIds = useMemo(
@@ -101,8 +104,11 @@ export default function CrmBidComparePage() {
   );
   const packagesForDesk = useMemo(() => {
     if (deskFilter === "all") return packages;
-    return packages.filter((p) => p.project?.id || p.projectId);
-  }, [packages, deskFilter]);
+    return packages.filter((p) => {
+      const pid = p.project?.id || p.projectId;
+      return pid && convertedProjectIds.has(pid);
+    });
+  }, [packages, deskFilter, convertedProjectIds]);
   const pendingBidSetup = useMemo(
     () =>
       convertedLeads.filter((l) => {
@@ -152,6 +158,8 @@ export default function CrmBidComparePage() {
 
   function selectPackage(id: string) {
     setSelectedId(id);
+    setShowSetup(false);
+    setActiveDiscipline("all");
     nav(`/crm/bids/${id}`, { replace: true });
   }
 
@@ -202,35 +210,54 @@ export default function CrmBidComparePage() {
       .catch(() => {});
   }, [form.projectId, token, canManage]);
 
-  const vendorsByType = useMemo(() => {
-    const eligible = vendors.filter((v) => vendorMatchesBidDisciplines(v, form.disciplineKeys));
-    const groups: Record<string, typeof vendors> = {};
-    for (const v of eligible) {
-      const t = v.partyType || "Vendor";
-      (groups[t] ||= []).push(v);
-    }
-    const order = ["Contractor", "Vendor", "Consultant", "Client", "PMC"];
-    return order
-      .filter((k) => groups[k]?.length)
-      .map((k) => ({ type: k, rows: groups[k]! }))
-      .concat(
-        Object.keys(groups)
-          .filter((k) => !order.includes(k))
-          .map((k) => ({ type: k, rows: groups[k]! }))
-      );
-  }, [vendors, form.disciplineKeys]);
+  const allBidders = useMemo(
+    () => vendors.filter((v) => vendorMatchesBidDisciplines(v, form.disciplineKeys)),
+    [vendors, form.disciplineKeys],
+  );
+
+  const detailDisciplines = detail?.disciplines || disciplines;
+  const matrixDisciplines = useMemo(() => {
+    if (activeDiscipline === "all") return detailDisciplines;
+    return detailDisciplines.filter((d) => d.key === activeDiscipline);
+  }, [detailDisciplines, activeDiscipline]);
 
   const vendorMatrix = useMemo(() => {
     if (!detail?.vendorBoqs?.length) return [];
     const vendorNames = [...new Set(detail.vendorBoqs.map((b) => b.vendorLabel))];
+    const discList = matrixDisciplines.length ? matrixDisciplines : detailDisciplines;
     return vendorNames.map((vendorLabel) => ({
       vendorLabel,
-      slots: (detail.disciplines || disciplines).map((d) => {
+      slots: discList.map((d) => {
         const slot = detail.vendorBoqs!.find((b) => b.vendorLabel === vendorLabel && b.discipline === d.key);
         return { discipline: d, slot };
       }),
     }));
-  }, [detail, disciplines]);
+  }, [detail, detailDisciplines, matrixDisciplines]);
+
+  async function openBidPackage() {
+    if (!selectedId) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ package: BidPackage; notify: { notified: number; total: number } }>(
+        `/api/crm/bid-packages/${selectedId}/open`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({ dueDate: dueDate || undefined }),
+        },
+      );
+      setMsg(
+        `Bid opened — emailed ${out.notify.notified}/${out.notify.total} bidder(s). They can upload BOQs at /crm/vendor-bids.`,
+      );
+      await loadDetail(selectedId);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Open bid failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function createPackage(e: FormEvent) {
     e.preventDefault();
@@ -256,12 +283,15 @@ export default function CrmBidComparePage() {
           projectId: form.projectId || undefined,
           leadId: form.leadId || undefined,
           revisionLabel: form.revisionLabel,
+          dueDate: dueDate || undefined,
           vendorNames,
           disciplineKeys: form.disciplineKeys,
           customDisciplines: form.customDisciplines,
         }),
       });
-      setMsg(`Bid package created — ${row.uploadProgress?.total || form.disciplineKeys.length * vendorNames.length} discipline slots ready (fill online or upload Excel).`);
+      setMsg(
+        `Bid package created (Draft) — ${row.uploadProgress?.total || form.disciplineKeys.length * vendorNames.length} BOQ slots. Open the bid to email bidders.`,
+      );
       setForm({
         title: "",
         projectId: "",
@@ -483,8 +513,16 @@ export default function CrmBidComparePage() {
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm">Setup new bid (R2 template)</h3>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowSetup((v) => !v)}>
+              {showSetup ? "Hide setup" : "Show setup"}
+            </Button>
+          </div>
+          {showSetup && (
           <Card>
-            <h3 className="font-semibold text-sm mb-3">New bid package</h3>
+            <h3 className="font-semibold text-sm mb-1">1 · Project & package</h3>
+            <p className="text-xs text-steel-muted mb-3">Comparative Statement R2 — summary + discipline BOQ tabs (CCV, Electrical Lab, Admin, …)</p>
             <form className="space-y-3" onSubmit={createPackage}>
               <Input
                 required
@@ -530,9 +568,15 @@ export default function CrmBidComparePage() {
                 value={form.revisionLabel}
                 onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
               />
+              <Input
+                type="date"
+                placeholder="Bid due date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
               <div>
                 <p className="text-xs font-mono uppercase text-steel-muted mb-1">
-                  Discipline BOQ sheets ({form.disciplineKeys.length} selected)
+                  2 · Discipline BOQ sheets ({form.disciplineKeys.length} selected)
                 </p>
                 <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1 mb-2">
                   {disciplines.map((d) => (
@@ -580,42 +624,45 @@ export default function CrmBidComparePage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-mono uppercase text-steel-muted mb-1">Bidders to compare (min 2)</p>
-                <div className="max-h-40 overflow-y-auto border rounded-xl p-2 space-y-3">
-                  {vendorsByType.map(({ type, rows }) => (
-                    <div key={type}>
-                      <p className="text-[10px] font-bold uppercase text-steel-muted mb-1">{type}</p>
-                      {rows.map((v) => (
-                        <label key={v.id} className="flex items-center gap-2 text-sm py-0.5">
-                          <input
-                            type="checkbox"
-                            checked={form.vendorIds.includes(v.id)}
-                            onChange={(e) => {
-                              setForm({
-                                ...form,
-                                vendorIds: e.target.checked
-                                  ? [...form.vendorIds, v.id]
-                                  : form.vendorIds.filter((x) => x !== v.id),
-                              });
-                            }}
-                          />
-                          <span>{v.name}</span>
-                          {v.trade && <span className="text-[10px] text-steel-muted">· {v.trade}</span>}
-                        </label>
-                      ))}
-                    </div>
+                <p className="text-xs font-mono uppercase text-steel-muted mb-1">3 · Bidders to compare (min 2)</p>
+                <p className="text-[10px] text-steel-muted mb-1">Contractors and vendors are both bidders — same R2 comparative flow.</p>
+                <div className="max-h-44 overflow-y-auto border rounded-xl p-2 space-y-1">
+                  {allBidders.map((v) => (
+                    <label key={v.id} className="flex items-center gap-2 text-sm py-0.5">
+                      <input
+                        type="checkbox"
+                        checked={form.vendorIds.includes(v.id)}
+                        onChange={(e) => {
+                          setForm({
+                            ...form,
+                            vendorIds: e.target.checked
+                              ? [...form.vendorIds, v.id]
+                              : form.vendorIds.filter((x) => x !== v.id),
+                          });
+                        }}
+                      />
+                      <span>{v.name}</span>
+                      {v.trade && <span className="text-[10px] text-steel-muted">· {v.trade}</span>}
+                      {v.partyType && v.partyType !== "Vendor" && (
+                        <span className="text-[10px] text-steel-muted">· {v.partyType}</span>
+                      )}
+                    </label>
                   ))}
+                  {!allBidders.length && (
+                    <p className="text-xs text-steel-muted">No bidders tagged for selected disciplines — add in Master → Vendors.</p>
+                  )}
                 </div>
               </div>
               <p className="text-[11px] text-steel-muted">
-                Creates {form.disciplineKeys.length || 0} discipline slot(s) per bidder. Vendors filtered by selected BOQ
-                disciplines — manage the global list under <Link to="/master/vendors" className="text-brand font-semibold">Master → Vendors</Link>.
+                Creates {form.disciplineKeys.length || 0} discipline slot(s) per bidder from{" "}
+                <strong>Comparative Statement - R2.xlsx</strong>. After create, click <strong>Open bid & notify</strong> to email bidders.
               </p>
               <Button type="submit" disabled={busy}>
-                {busy ? "Creating…" : "Create from R2 template"}
+                {busy ? "Creating…" : "Create draft package"}
               </Button>
             </form>
           </Card>
+          )}
 
           <Card padding={false}>
             <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm flex items-center justify-between">
@@ -642,6 +689,8 @@ export default function CrmBidComparePage() {
                       <div className="font-medium text-sm flex items-center gap-2">
                         <span className="truncate">{p.title}</span>
                         {p.status === "Awarded" && <Badge tone="ok">Awarded</Badge>}
+                        {p.status === "Draft" && <Badge tone="warn">Draft</Badge>}
+                        {p.status === "Evaluation" && <Badge tone="brand">Evaluation</Badge>}
                       </div>
                       <div className="text-xs text-steel-muted mt-0.5">
                         {p.project?.code ? `${p.project.code} · ` : ""}
@@ -695,6 +744,11 @@ export default function CrmBidComparePage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {(detail.status === "Draft" || detail.status === "Open") && (
+                      <Button type="button" disabled={busy} onClick={() => void openBidPackage()}>
+                        {detail.status === "Draft" ? "Open bid & notify bidders" : "Resend bid invites"}
+                      </Button>
+                    )}
                     {detail.comparativeSharePointUrl && (
                       <a href={detail.comparativeSharePointUrl} target="_blank" rel="noopener noreferrer">
                         <Button variant="secondary">R2 SharePoint</Button>
@@ -804,8 +858,35 @@ export default function CrmBidComparePage() {
 
                 {vendorMatrix.length > 0 && (
                   <div className="mb-4">
+                    <div className="flex flex-wrap gap-1 mb-3" role="tablist" aria-label="Discipline BOQ">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDiscipline === "all"}
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border ${
+                          activeDiscipline === "all" ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
+                        }`}
+                        onClick={() => setActiveDiscipline("all")}
+                      >
+                        All disciplines
+                      </button>
+                      {detailDisciplines.map((d) => (
+                        <button
+                          key={d.key}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeDiscipline === d.key}
+                          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border max-w-[180px] truncate ${
+                            activeDiscipline === d.key ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
+                          }`}
+                          onClick={() => setActiveDiscipline(d.key)}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
                     <CrmBidVendorMatrix
-                      disciplines={detail.disciplines || disciplines}
+                      disciplines={matrixDisciplines.length ? matrixDisciplines : detailDisciplines}
                       vendorMatrix={vendorMatrix}
                       grandTotals={detail.summary?.grandTotals}
                       lowestVendor={detail.summary?.lowestVendor}

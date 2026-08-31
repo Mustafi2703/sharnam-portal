@@ -99,9 +99,6 @@ export default function ReportsPage() {
               <Link to={`/projects/${id}/wpr-maker`}>
                 <Button type="button" variant="secondary">Open WPR maker</Button>
               </Link>
-              <Link to={`/projects/${id}/site-pilot`}>
-                <Button type="button" variant="secondary">Site check-in</Button>
-              </Link>
             </div>
           </div>
         </Card>

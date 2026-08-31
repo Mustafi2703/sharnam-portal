@@ -12,7 +12,45 @@ import {
   renderDprHtml,
   renderWprHtml,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, istStartOfDay } from "@sharnam/shared";
+import { formatIstTimeHHMM, istStartOfDay, IST_TIMEZONE } from "@sharnam/shared";
+
+/** Auto clock-out at 18:00 IST for open punches (same day after EOD, or any prior day). */
+const EOD_CLOCK_OUT = "18:00";
+
+function istHourMinute(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: IST_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  return {
+    hour: parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10),
+    minute: parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10),
+  };
+}
+
+async function applyAutoEodClockOut() {
+  const today = istStartOfDay();
+  const { hour } = istHourMinute();
+  const pastEodToday = hour >= 18;
+
+  const openRows = await prisma.attendance.findMany({
+    where: { checkIn: { not: null }, checkOut: null, date: { lte: today } },
+  });
+
+  for (const row of openRows) {
+    const rowDay = istStartOfDay(row.date);
+    const isPastDay = rowDay.getTime() < today.getTime();
+    if (!isPastDay && !pastEodToday) continue;
+
+    const note = row.notes?.includes("Auto EOD") ? row.notes : [row.notes, "Auto EOD clock-out"].filter(Boolean).join("; ");
+    await prisma.attendance.update({
+      where: { id: row.id },
+      data: { checkOut: EOD_CLOCK_OUT, notes: note },
+    });
+  }
+}
 import {
   analyticsToHtml,
   analyticsToSheets,
@@ -939,7 +977,33 @@ hrmRouter.post("/assign", requireRoles("admin", "office"), async (req, res) => {
   res.json(member);
 });
 
+hrmRouter.get("/attendance/today", async (req: AuthedRequest, res) => {
+  await applyAutoEodClockOut();
+  const date = istStartOfDay();
+  const row = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: req.user!.id, date } },
+    include: {
+      user: { select: { fullName: true, role: true, email: true } },
+    },
+  });
+  if (!row) return res.json(null);
+  let project = null;
+  if (row.projectId) {
+    project = await prisma.project.findUnique({
+      where: { id: row.projectId },
+      select: { id: true, code: true, name: true, location: true },
+    });
+  }
+  res.json({
+    ...row,
+    project,
+    inPhotoUrl: row.inPhotoUrl ? publicPhotoUrl(row.id, "in") : row.inPhotoUrl,
+    outPhotoUrl: row.outPhotoUrl ? publicPhotoUrl(row.id, "out") : row.outPhotoUrl,
+  });
+});
+
 hrmRouter.get("/attendance", async (req, res) => {
+  await applyAutoEodClockOut();
   const date = req.query.date ? new Date(String(req.query.date)) : istStartOfDay();
   if (req.query.date) date.setHours(0, 0, 0, 0);
   const rows = await prisma.attendance.findMany({
@@ -984,6 +1048,12 @@ hrmRouter.post(
       return res.status(400).json({ error: "GPS location required — allow location access on your device" });
     }
 
+    const isSiteEmployee = req.user!.role === "site_employee";
+    if (isSiteEmployee && !projectId) {
+      return res.status(400).json({ error: "Select the site / project for check-in" });
+    }
+
+    await applyAutoEodClockOut();
     const date = istStartOfDay();
     const timeStr = formatIstTimeHHMM();
 
@@ -1097,9 +1167,11 @@ hrmRouter.post(
 );
 
 hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+  await applyAutoEodClockOut();
   const date = new Date(req.body.date || Date.now());
   date.setHours(0, 0, 0, 0);
   const kind: "in" | "out" = req.body.kind === "out" ? "out" : "in";
+  const timeStr = formatIstTimeHHMM();
   const geo = req.body.geo || {};
   const lat = typeof geo.lat === "number" ? geo.lat : req.body.lat;
   const lng = typeof geo.lng === "number" ? geo.lng : req.body.lng;
@@ -1123,8 +1195,8 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "
       userId: req.user!.id,
       date,
       status: req.body.status || "Present",
-      checkIn: kind === "in" ? req.body.checkIn || new Date().toISOString() : undefined,
-      checkOut: kind === "out" ? req.body.checkOut || new Date().toISOString() : undefined,
+      checkIn: kind === "in" ? req.body.checkIn || timeStr : undefined,
+      checkOut: kind === "out" ? req.body.checkOut || timeStr : undefined,
       inLat: kind === "in" ? lat ?? null : null,
       inLng: kind === "in" ? lng ?? null : null,
       inAccuracy: kind === "in" ? acc ?? null : null,
@@ -1144,7 +1216,7 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "
       kind === "in"
         ? {
             status: req.body.status || undefined,
-            checkIn: req.body.checkIn || new Date().toISOString(),
+            checkIn: req.body.checkIn || timeStr,
             inLat: lat ?? undefined,
             inLng: lng ?? undefined,
             inAccuracy: acc ?? undefined,
@@ -1155,7 +1227,7 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "
           }
         : {
             status: req.body.status || undefined,
-            checkOut: req.body.checkOut || new Date().toISOString(),
+            checkOut: req.body.checkOut || timeStr,
             outLat: lat ?? undefined,
             outLng: lng ?? undefined,
             outAccuracy: acc ?? undefined,

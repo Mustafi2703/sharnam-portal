@@ -429,7 +429,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Site execution fill log",
       blurb: "Closed site checklists — branded sheet report.",
     },
-    { to: "site-pilot", label: "Site check-in", blurb: "Photo · GPS · PDF markup · signature → SharePoint.", sheet: "SitePilot" },
   ],
   comms: [
     {

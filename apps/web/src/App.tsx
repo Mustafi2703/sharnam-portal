@@ -49,7 +49,6 @@ import ChecklistAssignPage from "./pages/project/ChecklistAssignPage";
 import ModuleHubPage from "./pages/project/ModuleHubPage";
 import QapPage from "./pages/project/QapPage";
 import DrawingPreCheckPage from "./pages/DrawingPreCheckPage";
-import SitePilotPage from "./pages/SitePilotPage";
 import QuotationMakerPage from "./pages/QuotationMakerPage";
 import CustomSheetsPage, { CustomSheetEditorPage } from "./pages/CustomSheetsPage";
 import RecruitmentPage from "./pages/RecruitmentPage";
@@ -63,9 +62,9 @@ import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
 import HrmsVendorsPage from "./pages/hrms/HrmsVendorsPage";
-import UploadLabPage from "./pages/UploadLabPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 import TrainingPage from "./pages/TrainingPage";
+import { SiteAttendanceGate } from "./components/SiteAttendanceGate";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -81,6 +80,8 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function HomeRedirect() {
+  const { user } = useAuth();
+  if (user?.role === "site_employee") return <Navigate to="/attendance" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -162,6 +163,7 @@ export default function App() {
         path="/*"
         element={
           <Protected>
+            <SiteAttendanceGate>
             <AppShell>
               <Routes>
                 <Route path="/app" element={<HomeRedirect />} />
@@ -228,7 +230,6 @@ export default function App() {
                   <Route path="finance" element={<FinancePage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route path="audit-kpi" element={<AuditKpiPage />} />
-                  <Route path="site-pilot" element={<SitePilotPage />} />
                   <Route path="dpr-maker" element={<DprMakerPage />} />
                   <Route path="wpr-maker" element={<WprMakerPage />} />
                 </Route>
@@ -257,10 +258,10 @@ export default function App() {
                 <Route path="/quotations/:id" element={<QuotationMakerPage />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
-                <Route path="/upload-lab" element={<UploadLabPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />
               </Routes>
             </AppShell>
+            </SiteAttendanceGate>
           </Protected>
         }
       />

@@ -51,7 +51,7 @@ export function CrmBidVendorMatrix({
       <table className="sheet-register__table min-w-[900px]">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-inherit min-w-[140px]">Vendor</th>
+            <th className="sticky left-0 z-10 bg-inherit min-w-[140px]">Bidder</th>
             {disciplines.map((d) => (
               <th key={d.key} className="text-center min-w-[100px]">
                 <div className="font-semibold">{d.label}</div>

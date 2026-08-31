@@ -129,32 +129,58 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
   const [msg, setMsg] = useState("");
   const [geoHint, setGeoHint] = useState("");
   const [attendance, setAttendance] = useState<any[]>([]);
-  const isSite = user?.role === "site_employee" || user?.role === "employee";
+  const isSite = user?.role === "site_employee";
 
   const load = useCallback(async () => {
-    const [a, p] = await Promise.all([
-      api<any[]>("/api/hrm/attendance", { token }).catch(() => []),
+    const [today, roster, p] = await Promise.all([
+      api<any>("/api/hrm/attendance/today", { token }).catch(() => null),
+      showRoster ? api<any[]>("/api/hrm/attendance", { token }).catch(() => []) : Promise.resolve([]),
       api<any[]>("/api/projects", { token }).catch(() => []),
     ]);
-    setAttendance(a);
+    setAttendance(showRoster ? roster : today ? [today] : []);
     setProjects(p);
     if (!projectId && p.length === 1) setProjectId(p[0].id);
-  }, [token, projectId]);
+  }, [token, projectId, showRoster]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const myToday = attendance.find((a) => a.userId === user?.id || a.user?.email === user?.email);
+  const myToday =
+    attendance.find((a) => a.userId === user?.id || a.user?.email === user?.email) ||
+    (!showRoster ? attendance[0] : undefined);
+
+  async function punchSimple(kind: "in" | "out") {
+    setBusy(true);
+    setMsg("");
+    try {
+      const row = await api<any>("/api/hrm/attendance", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ kind }),
+      });
+      const punchTime = kind === "in" ? row.checkIn : row.checkOut;
+      setMsg(`${kind === "in" ? "Checked in" : "Checked out"} at ${formatIstPunchTime(punchTime)}`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Punch failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function punch(kind: "in" | "out") {
-    if (!selfie[0]) {
-      setMsg("Take a selfie first — tap Camera (rear lens on phone).");
-      return;
-    }
-    if (isSite && !projectId) {
-      setMsg("Select the site / project you are checking in at.");
-      return;
+    if (isSite) {
+      if (!selfie[0]) {
+        setMsg("Take a selfie first — tap Camera (front lens on phone).");
+        return;
+      }
+      if (!projectId) {
+        setMsg("Select the site / project you are checking in at.");
+        return;
+      }
+    } else {
+      return punchSimple(kind);
     }
     setBusy(true);
     setMsg("");
@@ -196,13 +222,16 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
           {variant === "full" ? "Site attendance" : "Punch in / out"}
         </h2>
         <p className="text-xs text-steel-muted mb-3">
-          Allow <strong>camera</strong> and <strong>location</strong> when prompted. Selfie + GPS are required for every punch.
+          {isSite
+            ? "Allow camera and location when prompted. Selfie + GPS are required for every site punch."
+            : "Office punch — one tap check-in/out. Auto clock-out at 18:00 IST if you forget to check out."}
         </p>
 
+        {isSite && (
         <label className="text-xs font-semibold uppercase tracking-widest text-steel-muted block mb-1">
           Site / project
           <Select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="mt-1">
-            <option value="">{isSite ? "Select site…" : "Office (no project)"}</option>
+            <option value="">Select site…</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} — {p.name}
@@ -210,7 +239,9 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
             ))}
           </Select>
         </label>
+        )}
 
+        {isSite && (
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-steel-muted mb-2">Selfie</p>
           <PhotoCapture
@@ -222,6 +253,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
             onChange={setSelfie}
           />
         </div>
+        )}
 
         {geoHint && <p className="text-xs text-steel-muted mt-2">{geoHint}</p>}
         {msg && (

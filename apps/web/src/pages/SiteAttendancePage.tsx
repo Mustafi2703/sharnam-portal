@@ -8,7 +8,7 @@ export default function SiteAttendancePage() {
       <PageHeader
         eyebrow="HRMS · Field"
         title="Attendance punch"
-        subtitle="Open camera, take a selfie, allow location — then check in or out. Photos save to SharePoint under Resources & Productivity."
+        subtitle="Your first step each day: take a selfie, allow GPS, pick your site, then check in. Location and photo are saved to your attendance record."
       />
       <AttendancePunchPanel variant="full" showRoster={false} />
     </div>

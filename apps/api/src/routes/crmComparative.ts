@@ -9,6 +9,7 @@ import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
+import { notifyBidPackageOpened } from "../services/crmBidNotify.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
   CRM_SHAREPOINT,
@@ -248,6 +249,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
       leadId: req.body.leadId ? String(req.body.leadId) : null,
       projectId: project?.id ?? null,
       revisionLabel: rev,
+      status: "Draft",
       vendorNamesJson: JSON.stringify(vendorNames),
       disciplinesJson: JSON.stringify(selectedDisciplines),
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
@@ -529,6 +531,42 @@ crmComparativeRouter.post("/bid-packages/:id/recompute", requireRoles("admin", "
   }
 });
 
+crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: req.params.id },
+    include: { project: { select: { id: true, code: true } } },
+  });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+  if (!pkg.projectId) return res.status(400).json({ error: "Link a project before opening the bid" });
+
+  const dueDate = req.body.dueDate ? new Date(String(req.body.dueDate)) : pkg.dueDate;
+
+  await prisma.crmBidPackage.update({
+    where: { id: pkg.id },
+    data: {
+      status: "Open",
+      dueDate,
+      notes: req.body.notes ? String(req.body.notes) : pkg.notes,
+    },
+  });
+
+  const notify = await notifyBidPackageOpened({
+    bidPackageId: pkg.id,
+    openedByUserId: req.user!.id,
+    dueDate,
+  });
+
+  await audit("crm.comparative.open", {
+    userId: req.user!.id,
+    entity: "CrmBidPackage",
+    entityId: pkg.id,
+    meta: { notified: notify.notified, total: notify.total },
+  });
+
+  const updated = await loadBidPackage(pkg.id);
+  res.json({ package: updated, notify });
+});
+
 crmComparativeRouter.post("/bid-packages/:id/award", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const vendorId = String(req.body.vendorId || "").trim();
   const vendorLabel = String(req.body.vendorLabel || "").trim();
@@ -564,7 +602,9 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
   }
 
   const slots = await prisma.crmVendorBoq.findMany({
-    where: vendorId ? { vendorId } : undefined,
+    where: vendorId
+      ? { vendorId, bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } } }
+      : { bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } } },
     include: {
       bidPackage: {
         select: {

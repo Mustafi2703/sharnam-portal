@@ -278,7 +278,13 @@ export async function recomputeBidPackageComparative(
   await prisma.crmBidPackage.update({
     where: { id: pkgId },
     data: {
-      status: hasAnyTotal && filledSlots >= pkg.vendorBoqs.length ? "Ready to compare" : pkg.status === "Awarded" ? "Awarded" : "Open",
+      status: hasAnyTotal && filledSlots >= pkg.vendorBoqs.length
+        ? "Evaluation"
+        : pkg.status === "Awarded"
+          ? "Awarded"
+          : pkg.status === "Draft"
+            ? "Draft"
+            : "Open",
       updatedAt: new Date(),
     },
   });
