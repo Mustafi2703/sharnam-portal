@@ -61,6 +61,8 @@ import HrmsAttendancePage from "./pages/HrmsAttendancePage";
 import HrmsLeavePage from "./pages/HrmsLeavePage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
+import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
+import HrmsVendorsPage from "./pages/hrms/HrmsVendorsPage";
 import UploadLabPage from "./pages/UploadLabPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 import TrainingPage from "./pages/TrainingPage";
@@ -151,6 +153,8 @@ export default function App() {
           <Route path="leave" element={<HrmsLeavePage />} />
           <Route path="documents" element={<HrmsDocumentsPage />} />
           <Route path="masters" element={<HrmsMastersPage />} />
+          <Route path="users" element={<HrmsUsersPage />} />
+          <Route path="vendors" element={<HrmsVendorsPage />} />
         </Route>
       </Route>
 

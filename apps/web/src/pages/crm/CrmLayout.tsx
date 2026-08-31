@@ -80,8 +80,10 @@ export default function CrmLayout() {
         </nav>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
-        <Outlet />
+      <div className="register-page-fill flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
+        <div className="register-scroll-area flex-1 min-h-0 overflow-y-auto scrollbars-visible pb-4">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

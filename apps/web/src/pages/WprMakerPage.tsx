@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Input, Select } from "../components/ui";
+import { MakerToolHeader } from "../components/MakerToolHeader";
 import { FilePickButton } from "../components/FilePickButton";
 import { SignaturePad } from "../components/SignaturePad";
 import { WprDashboardCharts, type WprCharts } from "../components/WprDashboardCharts";
@@ -412,19 +413,26 @@ export default function WprMakerPage() {
 
   if (!pack) {
     return (
-      <div className="maker-shell space-y-4">
-        <PageHeader eyebrow="WPR Maker" title="Weekly Progress Report" subtitle="Loading…" />
+      <div className="maker-shell wpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
+        <div className="maker-shell__chrome shrink-0 pb-2 border-b border-line/80 bg-sand/30">
+          <MakerToolHeader eyebrow="WPR Maker" title="Weekly Progress Report" description="Loading report pack…" busy />
+        </div>
+        <div className="maker-shell__form flex items-center justify-center">
+          <p className="text-sm text-steel-muted">Loading…</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="maker-shell wpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
-      <div className="maker-shell__chrome shrink-0 space-y-3 pb-2 border-b border-line/80 bg-sand/30">
-      <PageHeader
+      <div className="maker-shell__chrome shrink-0 space-y-2 pb-2 border-b border-line/80 bg-sand/30">
+      <MakerToolHeader
         eyebrow="WPR Maker · SPDC pack"
-        title={`Weekly Progress Report — ${pack.header.projectName || pack.projectCode}`}
-        subtitle="Dashboard charts match the client PPT. Regenerate from live data, filter any week or day range, then export XLSX / PPTX."
+        title="Weekly Progress Report"
+        meta={pack.header.projectName || pack.projectCode}
+        description="Dashboard charts match the client PPT. Regenerate from live data, filter any week or day range, then export XLSX / PPTX."
+        busy={busy}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>

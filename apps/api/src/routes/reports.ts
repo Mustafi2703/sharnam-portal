@@ -803,6 +803,8 @@ hrmRouter.get("/dashboard", async (_req, res) => {
     punchesToday,
     openReqs,
     activeCandidates,
+    onboardedUsers,
+    onboardingInProgress,
   ] = await Promise.all([
     prisma.user.count({ where: { role: { not: "admin" } } }),
     prisma.offer.count({ where: { status: { in: ["Draft", "Approved", "Sent"] } } }),
@@ -812,6 +814,8 @@ hrmRouter.get("/dashboard", async (_req, res) => {
     }),
     prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "PendingHR", "Approved"] } } }),
     prisma.candidate.count({ where: { status: { in: ["New", "Screened", "Shortlisted", "Interview", "Selected"] } } }),
+    prisma.offer.count({ where: { status: "Joined" } }),
+    prisma.onboardingChecklist.count({ where: { userId: { not: null } } }),
   ]);
 
   res.json({
@@ -821,6 +825,8 @@ hrmRouter.get("/dashboard", async (_req, res) => {
     punchesToday,
     openReqs,
     activeCandidates,
+    onboardedUsers,
+    onboardingInProgress,
   });
 });
 

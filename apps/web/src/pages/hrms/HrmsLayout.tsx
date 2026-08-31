@@ -1,5 +1,6 @@
 import { type CSSProperties } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../../auth";
 import { PageHeader } from "../../components/ui";
 import { HRMS_ACCENT, HRMS_SOFT, HRMS_TOOLS } from "./hrmsNav";
 
@@ -11,7 +12,11 @@ const tabClass = (on: boolean) =>
 /** HRMS module shell — same tool-strip pattern as project modules. */
 export default function HrmsLayout() {
   const loc = useLocation();
-  const activeTool = HRMS_TOOLS.find((t) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "office";
+  const tools = HRMS_TOOLS.filter((t) => !("adminOnly" in t && t.adminOnly) || isAdmin);
+
+  const activeTool = tools.find((t) => {
     const base = t.to ? `/hrm/${t.to}` : "/hrm";
     const exact = "end" in t && t.end;
     return exact ? loc.pathname === base || loc.pathname === `${base}/` : loc.pathname.startsWith(base);
@@ -19,7 +24,7 @@ export default function HrmsLayout() {
 
   return (
     <div
-      className="page-stack--register flex flex-col flex-1 min-h-0 gap-4"
+      className="page-stack--register flex flex-col flex-1 min-h-0 gap-3 overflow-hidden"
       style={
         {
           ["--module-accent" as string]: HRMS_ACCENT,
@@ -29,11 +34,12 @@ export default function HrmsLayout() {
     >
       <div className="shrink-0 space-y-3">
         <PageHeader
+          dense
           eyebrow="HRMS · शरणम्"
           title={activeTool?.label === "Dashboard" ? "Human Resources desk" : activeTool?.label || "HRMS"}
           subtitle={
             activeTool?.subtitle ||
-            "Recruitment → onboarding → attendance → leave → payroll — standalone HR portal at /login/hr. Employee directory stays in Office → Access."
+            "Recruitment → onboarding → attendance → leave → payroll — standalone HR portal."
           }
         />
 
@@ -41,7 +47,7 @@ export default function HrmsLayout() {
           className="tool-strip px-2 sm:px-3 py-2 border border-line rounded-xl bg-paper flex gap-2 overflow-x-auto scrollbars-visible"
           aria-label="HRMS tools"
         >
-          {HRMS_TOOLS.map((t) => (
+          {tools.map((t) => (
             <NavLink
               key={t.to || "home"}
               to={t.to ? `/hrm/${t.to}` : "/hrm"}
@@ -57,8 +63,10 @@ export default function HrmsLayout() {
         </nav>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
-        <Outlet />
+      <div className="register-page-fill flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
+        <div className="register-scroll-area flex-1 min-h-0 overflow-y-auto scrollbars-visible pb-4">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

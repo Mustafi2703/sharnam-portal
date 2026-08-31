@@ -1509,6 +1509,7 @@ body.is-auth-route #root {
 .tool-main__outlet:has(.maker-shell) {
   overflow: hidden !important;
   padding-bottom: 0.5rem;
+  scrollbar-gutter: auto;
 }
 
 .tool-main__outlet > .page-stack--register,
@@ -5426,14 +5427,20 @@ body {
   flex-shrink: 0;
   z-index: 2;
   position: relative;
+  min-width: 0;
+}
+.maker-tool-header {
+  min-width: 0;
 }
 .maker-shell__form {
   flex: 1 1 0%;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 .maker-shell__form .maker-section--flush {
   flex: none !important;
@@ -7294,6 +7301,13 @@ body {
 /* End of auth surface */
 
 /* HRMS integrated desk */
+.hrms-portal-shell {
+  min-height: 100dvh;
+}
+.hrms-portal-shell__main {
+  flex: 1 1 0%;
+  min-height: 0;
+}
 .hrms-tool-rail {
   display: flex;
   gap: 0.35rem;

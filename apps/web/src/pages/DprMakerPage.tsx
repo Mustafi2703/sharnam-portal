@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
+import { Badge, Button, Card, Input, Select } from "../components/ui";
+import { MakerToolHeader } from "../components/MakerToolHeader";
 import { BarChart } from "../components/PieChart";
 import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { EvidencePanel } from "../components/EvidencePanel";
@@ -688,8 +689,13 @@ export default function DprMakerPage() {
 
   if (!snap) {
     return (
-      <div className="space-y-4">
-        <PageHeader eyebrow="DPR Maker" title="Daily Progress Report" subtitle="Loading…" />
+      <div className="maker-shell dpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
+        <div className="maker-shell__chrome shrink-0 pb-2 border-b border-line/80 bg-sand/30">
+          <MakerToolHeader eyebrow="DPR Maker" title="Daily Progress Report" description="Loading report…" busy />
+        </div>
+        <div className="maker-shell__form flex items-center justify-center">
+          <p className="text-sm text-steel-muted">Loading…</p>
+        </div>
       </div>
     );
   }
@@ -698,10 +704,12 @@ export default function DprMakerPage() {
   return (
     <div className="maker-shell dpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
       <div className="maker-shell__chrome shrink-0 space-y-2 pb-2 border-b border-line/80 bg-sand/30">
-      <PageHeader
-        eyebrow="DPR Maker · SPDC template output"
-        title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
-        subtitle="Header · quantity · manpower · equipment · material · quality · HSE · delay · photos · sign-off. Publishes SPDC XLSX to SharePoint."
+      <MakerToolHeader
+        eyebrow="DPR Maker · SPDC template"
+        title="Daily Progress Report"
+        meta={DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}
+        description="Header, quantities, manpower, equipment, material, quality, HSE, delays, photos, and sign-off. Publishes SPDC XLSX to SharePoint."
+        busy={busy}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
