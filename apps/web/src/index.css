@@ -1489,6 +1489,8 @@ body.is-auth-route #root {
 .tool-main__outlet:has(.spdc-register-page),
 .tool-main__outlet:has(.cost-page--register),
 .tool-main__outlet:has(.progress-page--register),
+.tool-main__outlet:has(.dpr-maker),
+.tool-main__outlet:has(.wpr-maker),
 .tool-main__outlet:has(.maker-shell) {
   overflow: hidden !important;
   padding-bottom: 0.5rem;
@@ -5393,10 +5395,47 @@ body {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
-/* Middle body scroll — sections stack vertically; do not trap height in one table block */
+/* DPR / WPR maker — chrome fixed, form body scrolls inside the tool outlet */
+.maker-shell.dpr-maker,
+.maker-shell.wpr-maker {
+  gap: 0;
+  padding-bottom: 0;
+  max-height: 100%;
+}
+.maker-shell__chrome {
+  flex-shrink: 0;
+  z-index: 2;
+}
+.maker-shell__form {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.maker-shell__form .maker-section--flush {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: block !important;
+}
+.maker-shell__form .maker-section--flush .maker-table-wrap {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.page-stack--register .maker-shell__form .maker-section--flush {
+  flex: none !important;
+  height: auto !important;
+}
+/* Legacy alias */
 .maker-shell__scroll {
   flex: 1 1 0%;
   min-height: 0;
+  height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -5410,7 +5449,7 @@ body {
   display: block !important;
 }
 .maker-shell__scroll .maker-section--flush .maker-table-wrap.register-sheet-viewport {
-  max-height: min(28rem, 55vh);
+  max-height: none;
 }
 .page-stack--register .maker-shell__scroll .maker-section--flush {
   flex: none !important;

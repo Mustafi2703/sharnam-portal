@@ -696,8 +696,8 @@ export default function DprMakerPage() {
 
   const h = snap.header;
   return (
-    <div className="maker-shell page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2 safe-bottom">
-      <div className="shrink-0 space-y-2">
+    <div className="maker-shell dpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
+      <div className="maker-shell__chrome shrink-0 space-y-2 pb-2 border-b border-line/80 bg-sand/30">
       <PageHeader
         eyebrow="DPR Maker · SPDC template output"
         title={`Daily Progress Report — ${DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}`}
@@ -760,7 +760,7 @@ export default function DprMakerPage() {
       </div>
       </div>
 
-      <div className="maker-shell__scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 scrollbars-visible pr-1">
+      <div className="maker-shell__form flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 scrollbars-visible px-0.5 py-3">
 
       {/* 1. Header */}
       <div className="grid md:grid-cols-2 gap-4">
@@ -866,7 +866,7 @@ export default function DprMakerPage() {
           <span>2. Quantity progress · BOQ item-wise</span>
           <Button variant="secondary" onClick={() => setLineModalOpen(true)}>+ Add item</Button>
         </div>
-        <div className="maker-table-wrap register-sheet-viewport overflow-auto">
+        <div className="maker-table-wrap overflow-x-auto">
           <table className="maker-table">
             <thead>
               <tr>

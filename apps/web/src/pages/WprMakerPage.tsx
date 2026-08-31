@@ -413,8 +413,8 @@ export default function WprMakerPage() {
   }
 
   return (
-    <div className="maker-shell page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2 safe-bottom">
-      <div className="shrink-0 space-y-5">
+    <div className="maker-shell wpr-maker page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-0 pb-0 safe-bottom">
+      <div className="maker-shell__chrome shrink-0 space-y-3 pb-2 border-b border-line/80 bg-sand/30">
       <PageHeader
         eyebrow="WPR Maker · SPDC pack"
         title={`Weekly Progress Report — ${pack.header.projectName || pack.projectCode}`}
@@ -486,7 +486,7 @@ export default function WprMakerPage() {
       </div>
       </div>
 
-      <div className="maker-shell__scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-5 scrollbars-visible pr-1 pb-4">
+      <div className="maker-shell__form flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-5 scrollbars-visible px-0.5 py-3">
 
       {viewTab === "dashboard" ? (
         <div className="maker-section p-4">
