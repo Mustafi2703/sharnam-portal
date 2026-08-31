@@ -597,8 +597,23 @@ body.is-auth-route #root {
   height: 100%;
   max-height: 100%;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 0%;
   overflow: hidden;
+}
+.tool-workspace:has(.dpr-maker) .tool-chrome,
+.tool-workspace:has(.wpr-maker) .tool-chrome {
+  position: relative;
+  top: auto;
+  flex-shrink: 0;
+}
+.tool-shell.has-right .tool-main {
+  min-width: 0;
+  width: 100%;
+}
+.tool-shell.has-right .dpr-maker,
+.tool-shell.has-right .wpr-maker {
+  min-width: 0;
+  width: 100%;
 }
 
 .logo-plate {
@@ -5401,15 +5416,20 @@ body {
   gap: 0;
   padding-bottom: 0;
   max-height: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .maker-shell__chrome {
   flex-shrink: 0;
   z-index: 2;
+  position: relative;
 }
 .maker-shell__form {
   flex: 1 1 0%;
   min-height: 0;
-  height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -5846,9 +5866,25 @@ body {
   backdrop-filter: blur(10px);
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
 }
+.maker-shell.dpr-maker .maker-sticky-bar,
+.maker-shell.wpr-maker .maker-sticky-bar {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 3;
+  flex-shrink: 0;
+  margin-top: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
 @media (min-width: 1025px) {
   .maker-sticky-bar {
     display: none;
+  }
+  .maker-shell.dpr-maker .maker-sticky-bar,
+  .maker-shell.wpr-maker .maker-sticky-bar {
+    display: flex;
   }
 }
 .evidence-panel__block {

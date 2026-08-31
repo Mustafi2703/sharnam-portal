@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./ui";
 
 type Props = {
@@ -17,7 +18,7 @@ const MODAL_PANEL = { md: "register-modal__panel--md", lg: "register-modal__pane
 
 export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "xl", saveLabel = "Save", children }: Props) {
   if (!open) return null;
-  return (
+  return createPortal(
     <div
       className="register-modal"
       role="dialog"
@@ -44,6 +45,7 @@ export function RegisterEntryModal({ open, title, onClose, onSave, saving, size 
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

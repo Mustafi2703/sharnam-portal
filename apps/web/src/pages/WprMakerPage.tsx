@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
@@ -7,6 +7,7 @@ import { FilePickButton } from "../components/FilePickButton";
 import { SignaturePad } from "../components/SignaturePad";
 import { WprDashboardCharts, type WprCharts } from "../components/WprDashboardCharts";
 import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
+import { mergeWprCharts } from "../lib/wprChartFallback";
 
 /**
  * WPR Maker — editable weekly progress report per project × weekEnding.
@@ -177,6 +178,11 @@ export default function WprMakerPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const displayCharts = useMemo(
+    () => (pack ? mergeWprCharts(pack, charts) : null),
+    [pack, charts]
+  );
 
   function updateSection(key: string, patch: Partial<Section>) {
     if (!pack) return;
@@ -489,13 +495,23 @@ export default function WprMakerPage() {
       <div className="maker-shell__form flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-5 scrollbars-visible px-0.5 py-3">
 
       {viewTab === "dashboard" ? (
-        <div className="maker-section p-4">
-          {charts ? (
-            <WprDashboardCharts charts={charts} />
+        <div className="maker-section p-4 min-h-[320px]">
+          {displayCharts ? (
+            <WprDashboardCharts charts={displayCharts} emptyHint={!charts?.scurve?.length && !charts?.milestones?.length} />
           ) : (
             <div className="text-sm text-steel-muted space-y-3">
-              <p>Loading charts… or click <strong>Regenerate from live data</strong> to build the WPR dashboard from DPR, Progress, Cost, Quality and Safety.</p>
-              <Button onClick={refreshFromLive} disabled={busy}>Regenerate from live data</Button>
+              <p>Loading WPR dashboard…</p>
+            </div>
+          )}
+          {!charts?.scurve?.length && (
+            <div className="mt-4 p-3 rounded-lg border border-brand/30 bg-brand/5 text-sm">
+              <p className="font-semibold text-brand mb-1">Charts need live data</p>
+              <p className="text-steel-muted mb-2">
+                Publish DPRs for this week, then click <strong>Regenerate from live data</strong> to fill milestone, manpower, and S-curve charts.
+              </p>
+              <Button onClick={refreshFromLive} disabled={busy} variant="secondary">
+                Regenerate from live data
+              </Button>
             </div>
           )}
         </div>

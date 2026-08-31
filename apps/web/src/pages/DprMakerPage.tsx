@@ -858,7 +858,39 @@ export default function DprMakerPage() {
         </div>
       ) : null}
 
-      {/* Legacy single S-curve block removed — included in dashboard grid above */}
+      {/* S-curve history register — mirrors Excel INPUT rows 125–137 / DASHBOARD chart */}
+      {displayCharts && displayCharts.scurve.length > 0 && (
+        <div className="maker-section">
+          <div className="maker-section__head maker-section__head--row">
+            <span>S-curve history register · planned vs actual %</span>
+            <span className="maker-section__meta">Auto-calculated from BOQ lines + dates · written to XLSX on publish</span>
+          </div>
+          <div className="maker-table-wrap overflow-x-auto">
+            <table className="maker-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Planned %</th>
+                  <th>Actual %</th>
+                  <th>Variance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayCharts.scurve.map((p, i) => (
+                  <tr key={`${p.label}-${i}`} className="border-t border-line">
+                    <td className="p-2 text-sm font-medium">{p.label}</td>
+                    <td className="p-2 text-sm tabular-nums">{p.planned}%</td>
+                    <td className="p-2 text-sm tabular-nums">{p.actual}%</td>
+                    <td className={`p-2 text-sm tabular-nums ${p.actual >= p.planned ? "text-ok" : "text-warn"}`}>
+                      {(p.actual - p.planned).toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* 2. Quantity */}
       <div className="maker-section maker-section--flush">

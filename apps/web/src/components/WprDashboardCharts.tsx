@@ -28,10 +28,7 @@ export type WprCharts = {
 };
 
 function ScurveChart({ points }: { points: { label: string; planned: number; actual: number }[] }) {
-  const rows = points.filter((p) => p.actual > 0 || p.planned > 0);
-  if (!rows.length) {
-    return <p className="text-sm text-steel-muted">Publish DPRs in this window to build the progress curve.</p>;
-  }
+  const rows = points.length ? points : [{ label: "—", planned: 0, actual: 0 }];
   const w = 360;
   const h = 160;
   const pad = 28;
@@ -40,10 +37,14 @@ function ScurveChart({ points }: { points: { label: string; planned: number; act
   const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
   const planned = rows.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.planned)}`).join(" ");
   const actual = rows.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.actual)}`).join(" ");
+  const hasData = rows.some((p) => p.planned > 0 || p.actual > 0);
   return (
     <div>
-      <div className="text-sm font-semibold mb-2">Progress trend · actual % (DPR rollup)</div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-lg" role="img" aria-label="WPR progress curve">
+      <div className="text-sm font-semibold mb-2">Progress trend · planned vs actual % (DPR rollup)</div>
+      {!hasData ? (
+        <p className="text-sm text-steel-muted mb-2">Publish DPRs in this window — or use section table data below after Regenerate.</p>
+      ) : null}
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-lg min-h-[140px]" role="img" aria-label="WPR progress curve">
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         {planned.includes("L") ? (
@@ -86,13 +87,18 @@ function KpiTile({ label, value, tone }: { label: string; value: string | number
   );
 }
 
-export function WprDashboardCharts({ charts }: { charts: WprCharts }) {
+export function WprDashboardCharts({ charts, emptyHint }: { charts: WprCharts; emptyHint?: boolean }) {
   const s = charts.summary;
   const spiTone = s.spi >= 0.95 ? "ok" : s.spi < 0.85 ? "warn" : undefined;
   const varTone = s.variancePct < -5 ? "warn" : s.variancePct >= 0 ? "ok" : undefined;
 
   return (
     <div className="space-y-5">
+      {emptyHint && (
+        <p className="text-xs text-warn bg-warn/10 border border-warn/30 rounded-lg px-3 py-2">
+          Showing section-table preview — click <strong>Regenerate from live data</strong> for full DPR-linked charts.
+        </p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
         <KpiTile label="Planned %" value={s.plannedPct ? `${s.plannedPct}%` : "—"} />
         <KpiTile label="Actual %" value={s.actualPct ? `${s.actualPct}%` : "—"} tone={varTone} />
@@ -125,7 +131,7 @@ export function WprDashboardCharts({ charts }: { charts: WprCharts }) {
             compareKey="planned"
           />
         ) : (
-          <Card className="p-4 text-sm text-steel-muted">No manpower data — fill Progress → Planned vs Actual or DPR.</Card>
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">No manpower data — fill Progress → Planned vs Actual or DPR.</Card>
         )}
         {charts.milestones.length > 0 ? (
           <BarChart
@@ -134,7 +140,9 @@ export function WprDashboardCharts({ charts }: { charts: WprCharts }) {
             valueKey="actual"
             compareKey="planned"
           />
-        ) : null}
+        ) : (
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">No milestones — open <strong>24 report sections</strong> tab or Regenerate.</Card>
+        )}
         {charts.cashflow.length > 0 ? (
           <BarChart
             title="Project cashflow overview (₹ lakh)"
@@ -142,10 +150,14 @@ export function WprDashboardCharts({ charts }: { charts: WprCharts }) {
             valueKey="actual"
             compareKey="planned"
           />
-        ) : null}
+        ) : (
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Cashflow chart fills from Cost module periods.</Card>
+        )}
         {charts.drawingDci.length > 0 ? (
           <PieChart title="Drawing register · DCI by discipline" items={charts.drawingDci} />
-        ) : null}
+        ) : (
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Drawing DCI pie — populate Drawing Register section.</Card>
+        )}
         {charts.plannedVsActual.length > 0 ? (
           <BarChart
             title="Planned vs actual · weekly qty"
@@ -153,13 +165,19 @@ export function WprDashboardCharts({ charts }: { charts: WprCharts }) {
             valueKey="actual"
             compareKey="planned"
           />
-        ) : null}
+        ) : (
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Planned vs actual — from Progress activity lines.</Card>
+        )}
         {charts.quality.length > 0 ? (
           <PieChart title="Weekly quality updates · QAP status" items={charts.quality} />
-        ) : null}
+        ) : (
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Quality pie — from QAP / cube tests in period.</Card>
+        )}
         {charts.safety.some((x) => x.previous > 0 || x.current > 0) ? (
           <SafetyCompareChart items={charts.safety} />
-        ) : null}
+        ) : (
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Safety compare — log toolbox talks / incidents in Safety module.</Card>
+        )}
       </div>
     </div>
   );
