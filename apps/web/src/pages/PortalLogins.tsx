@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
+import { HUB_POLICIES, SHARNAM_PORTAL_POLICIES } from "../lib/portalPolicies";
 
 /** Sharnam login — hub /login · per-portal /login/:key */
 
@@ -36,7 +37,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Projects · modules", "Directory · access", "Master documents"],
     cta: "Enter Master", tone: "#1E3A8A", icon: "MS",
     landingPath: "/master", workspaceKey: null, group: "master",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Master desk configures projects, modules, and global templates."],
   },
   office: {
     key: "office", title: "Office", shortLabel: "Office",
@@ -46,7 +47,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Access & roles", "All modules", "Reports · Audit"],
     cta: "Enter Office", tone: "#0B6A78", icon: "OF",
     landingPath: "/dashboard", workspaceKey: null, group: "role",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Office users may assign people to projects and open comparative bids."],
   },
   site: {
     key: "site", title: "Site", shortLabel: "Site",
@@ -56,7 +57,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Day log", "Checklist fills", "Photos · Site RFI"],
     cta: "Enter Site", tone: "#15803D", icon: "ST",
     landingPath: "/attendance", workspaceKey: "comms", group: "role",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before using other site tools."],
   },
   employee: {
     key: "employee", title: "Employee", shortLabel: "Employee",
@@ -66,7 +67,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Projects", "Drawings", "Self-service"],
     cta: "Enter Employee", tone: "#64748B", icon: "EM",
     landingPath: "/dashboard", group: "role",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES],
   },
   vendor: {
     key: "vendor", title: "Contractor", shortLabel: "Contractor",
@@ -76,7 +77,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["My bid uploads", "Fill RFIs", "Checklists"],
     cta: "Enter Contractor", tone: "#C45C26", icon: "VN",
     landingPath: "/crm/vendor-bids", workspaceKey: "drawings", group: "role",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to — comparative data is confidential."],
   },
   client: {
     key: "client", title: "Client", shortLabel: "Client",
@@ -86,7 +87,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Published drawings", "Progress", "Concerns"],
     cta: "Enter Client", tone: "#1E40AF", icon: "CL",
     landingPath: "/dashboard", workspaceKey: "progress", group: "role",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Client view is read-only on published GFC and reports unless raising a concern."],
   },
   drawings: {
     key: "drawings", title: "Drawings", shortLabel: "Drawings",
@@ -97,7 +98,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["GFC register", "Checklist manager", "Ask"],
     cta: "Enter Drawings", tone: "#1D4ED8", icon: "DW",
     landingPath: "/workspace", workspaceKey: "drawings", group: "module",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES],
   },
   quality: {
     key: "quality", title: "Quality", shortLabel: "Quality",
@@ -108,7 +109,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["QI dashboard", "NCR / CAR", "Cube · QAP"],
     cta: "Enter Quality", tone: "#15803D", icon: "QA",
     landingPath: "/workspace", workspaceKey: "quality", group: "module",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES],
   },
   comms: {
     key: "comms", title: "Communications", shortLabel: "Comms",
@@ -119,7 +120,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Matrix", "MoM", "Ask · Outlook"],
     cta: "Enter Comms", tone: "#2563EB", icon: "CM",
     landingPath: "/workspace", workspaceKey: "comms", group: "module",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES],
   },
   hr: {
     key: "hr", title: "HRMS", shortLabel: "HRMS",
@@ -130,7 +131,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Letters"],
     cta: "Enter HRMS", tone: "#0D9488", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",
-    policies: [],
+    policies: [...SHARNAM_PORTAL_POLICIES, "HRMS data — payroll, offers, attendance — is restricted to authorised HR staff."],
   },
 };
 
@@ -220,6 +221,29 @@ function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   );
 }
 
+function AuthLeftPanel({ cfg, policies }: { cfg: PortalConfig; policies: readonly string[] }) {
+  return (
+    <div className="auth-left-panel">
+      <span className="auth-layout__portal-chip">{cfg.icon}</span>
+      <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
+      <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
+      <ul className="auth-layout__portal-points">
+        {cfg.points.map((p) => (
+          <li key={p}>{p}</li>
+        ))}
+      </ul>
+      <div className="auth-policies">
+        <p className="auth-policies__title">Portal policies</p>
+        <ul className="auth-policies__list">
+          {policies.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
   const [email, setEmail] = useState(cfg.demoEmail);
@@ -267,67 +291,76 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="auth-signin auth-signin--clean" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
-      <AuthLogo size="sm" />
-      <div className="auth-signin__badge">
-        <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
-        <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
-      </div>
-      <h2 className="auth-signin__title">{cfg.headline}</h2>
-      <p className="auth-signin__sub">{cfg.subtitle}</p>
+    <div className="auth-signin auth-signin--split auth-signin--light" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <div className="auth-signin__main">
+        <div className="auth-signin__badge">
+          <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
+          <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
+        </div>
+        <h2 className="auth-signin__title">Sign in</h2>
+        <p className="auth-signin__sub">{cfg.subtitle}</p>
 
-      <form className="auth-signin__form" onSubmit={onSubmit}>
-        <label className="auth-signin__field">
-          <span>Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="username"
-            required
-            placeholder="you@company.com"
-          />
-        </label>
-        <label className="auth-signin__field">
-          <span className="flex items-center justify-between">
-            <span>Password</span>
-            <button
-              type="button"
-              onClick={() => setShowPwd((v) => !v)}
-              className="text-[10px] uppercase tracking-wide opacity-70 hover:opacity-100"
-              tabIndex={-1}
-              aria-label={showPwd ? "Hide password" : "Show password"}
-            >
-              {showPwd ? "Hide" : "Show"}
-            </button>
-          </span>
-          <input
-            type={showPwd ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyUp={(e) => setCapsLock(e.getModifierState && e.getModifierState("CapsLock"))}
-            autoComplete="current-password"
-            required
-            placeholder={showPwd ? "your password" : "••••••••"}
-          />
-          {capsLock && (
-            <span className="text-[10px] mt-1 opacity-70" style={{ color: "#B45309" }}>
-              Caps Lock is on
+        <form className="auth-signin__form" onSubmit={onSubmit}>
+          <label className="auth-signin__field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              required
+              placeholder="you@company.com"
+            />
+          </label>
+          <label className="auth-signin__field">
+            <span className="flex items-center justify-between">
+              <span>Password</span>
+              <button
+                type="button"
+                onClick={() => setShowPwd((v) => !v)}
+                className="text-[10px] uppercase tracking-wide opacity-70 hover:opacity-100"
+                tabIndex={-1}
+                aria-label={showPwd ? "Hide password" : "Show password"}
+              >
+                {showPwd ? "Hide" : "Show"}
+              </button>
             </span>
-          )}
-        </label>
-        {error && <p className="auth-signin__error" role="alert">{error}</p>}
-        <button type="submit" className="auth-signin__submit" disabled={busy}>
-          {busy ? "Signing in…" : cfg.cta}
-        </button>
-      </form>
+            <input
+              type={showPwd ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyUp={(e) => setCapsLock(e.getModifierState && e.getModifierState("CapsLock"))}
+              autoComplete="current-password"
+              required
+              placeholder={showPwd ? "your password" : "••••••••"}
+            />
+            {capsLock && (
+              <span className="text-[10px] mt-1 text-amber-700">Caps Lock is on</span>
+            )}
+          </label>
+          {error && <p className="auth-signin__error" role="alert">{error}</p>}
+          <button type="submit" className="auth-signin__submit" disabled={busy}>
+            {busy ? "Signing in…" : cfg.cta}
+          </button>
+        </form>
 
-      <p className="auth-signin__demo">
-        Demo: <strong>{cfg.demoEmail}</strong> · password <strong>Demo@1234</strong>
-      </p>
-      <Link to="/login" className="auth-signin__back">
-        ← All portals
-      </Link>
+        <p className="auth-signin__demo">
+          Demo: <strong>{cfg.demoEmail}</strong> · password <strong>Demo@1234</strong>
+        </p>
+        <div className="auth-policies auth-policies--mobile">
+          <p className="auth-policies__title">Policies</p>
+          <ul className="auth-policies__list">
+            {(cfg.policies.length ? cfg.policies : SHARNAM_PORTAL_POLICIES).slice(0, 3).map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="auth-signin__brand auth-signin__brand--light">
+        <AuthLogo size="md" />
+        <p className="auth-signin__brand-tag">शरणम् · Project Management Consultants</p>
+        <div className="auth-brand__accent" aria-hidden />
+      </div>
     </div>
   );
 }
@@ -371,13 +404,26 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!cfg) return <Navigate to="/login" replace />;
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
+  const policies = cfg.policies.length ? cfg.policies : SHARNAM_PORTAL_POLICIES;
+
   return (
     <div
-      className="auth-layout auth-layout--clean auth-layout--portal-clean"
+      className="auth-layout auth-layout--portal auth-layout--graphite"
       data-portal={portalKey}
       style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
     >
-      <main className="auth-layout__main auth-layout__main--clean">
+      <AuthMobileNav backTo="/login" />
+      <aside className="auth-layout__brand auth-layout__brand--portal auth-layout__brand--graphite">
+        <AuthLeftPanel cfg={cfg} policies={policies} />
+        <Link to="/login" className="auth-layout__back">
+          ← All portals
+        </Link>
+      </aside>
+      <main className="auth-layout__main auth-layout__main--portal auth-layout__main--graphite">
+        <div className="auth-mobile-intro auth-mobile-intro--portal auth-mobile-intro--graphite">
+          <span className="auth-layout__portal-chip">{cfg.icon}</span>
+          <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
+        </div>
         <SignInCard cfg={cfg} />
       </main>
     </div>
@@ -409,21 +455,33 @@ export function LoginHubPage() {
 
   return (
     <div
-      className="auth-layout auth-layout--clean auth-layout--hub-clean"
+      className="auth-layout auth-layout--hub auth-layout--graphite"
       style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}
     >
-      <main className="auth-layout__main auth-layout__main--clean auth-layout__main--hub-clean">
-        <div className="auth-hub-clean">
-          <AuthLogo size="md" />
-          <header className="auth-hub__header">
-            <h1 className="auth-hub__title">Choose your portal</h1>
-            <p className="auth-hub__sub">Office · HR · Site · Contractor · Client — one Sharnam workspace.</p>
-          </header>
-          <div className="auth-hub__grid">
-            {HUB_PORTALS.map((k) => (
-              <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
+      <AuthMobileNav logoSize="md" />
+      <aside className="auth-layout__brand auth-layout__brand--hub auth-layout__brand--graphite">
+        <BrandMark />
+        <p className="auth-layout__hero-copy">
+          Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
+        </p>
+        <div className="auth-policies auth-policies--hub">
+          <p className="auth-policies__title">Portal policies</p>
+          <ul className="auth-policies__list">
+            {HUB_POLICIES.map((p) => (
+              <li key={p}>{p}</li>
             ))}
-          </div>
+          </ul>
+        </div>
+      </aside>
+      <main className="auth-layout__main auth-layout__main--hub auth-layout__main--graphite">
+        <header className="auth-hub__header auth-hub__header--graphite">
+          <h1 className="auth-hub__title">Choose your portal</h1>
+          <p className="auth-hub__sub">Select the desk that matches your role on the project.</p>
+        </header>
+        <div className="auth-hub__grid">
+          {HUB_PORTALS.map((k) => (
+            <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
+          ))}
         </div>
       </main>
     </div>

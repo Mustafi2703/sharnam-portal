@@ -8544,7 +8544,7 @@ body {
 }
 
 @media (min-width: 640px) {
-  .auth-signin__brand {
+  .auth-signin__brand--light {
     display: flex;
   }
 }
@@ -8905,138 +8905,223 @@ body {
   }
 }
 
-/* Clean auth — no background photos, Sharnam logo on card */
-.auth-layout--clean {
-  background: linear-gradient(165deg, #f0f2f4 0%, #e6f4f6 42%, #f5f7f8 100%);
-  color: #121417;
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 1.5rem;
+/* Graphite auth — split layout, black/gray, no photo backgrounds */
+.auth-layout--graphite {
+  background: linear-gradient(135deg, #0a0c0e 0%, #121417 38%, #1a1f24 100%);
 }
 
-.auth-layout--clean .auth-scene {
+.auth-layout--graphite .auth-scene,
+.auth-layout--graphite .auth-scene__photo {
   display: none;
 }
 
-.auth-layout__main--clean {
+.auth-layout--graphite .auth-layout__brand::before,
+.auth-layout--graphite .auth-layout__brand::after {
+  display: none;
+}
+
+.auth-layout__brand--graphite {
+  background: linear-gradient(180deg, #0a0c0e 0%, #121417 100%);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 4px 0 0 var(--portal-accent, #0b6a78);
+  align-items: flex-start;
+  text-align: left;
+  justify-content: flex-start;
+  padding-top: clamp(2rem, 5vw, 3rem);
+}
+
+.auth-layout__main--graphite {
+  background: linear-gradient(180deg, #e8eaed 0%, #f0f2f4 55%, #e6e8eb 100%);
+}
+
+.auth-left-panel {
   width: 100%;
-  max-width: 440px;
-  margin: 0 auto;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  max-width: 420px;
+  text-align: left;
 }
 
-.auth-layout__main--hub-clean {
-  max-width: 720px;
-}
-
-.auth-hub-clean {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.25rem;
-  width: 100%;
-}
-
-.auth-signin--clean {
-  background: #ffffff;
-  border: 1px solid #c5cdd2;
-  border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(11, 106, 120, 0.08);
-  padding: 1.75rem 1.5rem 1.5rem;
-  color: #121417;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  width: 100%;
-}
-
-.auth-signin--clean .auth-logo {
-  margin-bottom: 0.75rem;
-}
-
-.auth-signin--clean .auth-signin__badge {
-  background: var(--auth-brand-soft, #e6f4f6);
-  color: var(--portal-accent, #0b6a78);
-  border: 1px solid rgba(11, 106, 120, 0.15);
-}
-
-.auth-signin--clean .auth-signin__title {
-  color: #121417;
-  font-size: 1.15rem;
-  margin: 0.5rem 0 0.35rem;
-}
-
-.auth-signin--clean .auth-signin__sub {
-  color: #5c6570;
-  font-size: 0.82rem;
-  margin-bottom: 1rem;
-  max-width: 34ch;
-}
-
-.auth-signin--clean .auth-signin__form {
+.auth-policies {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
   width: 100%;
   text-align: left;
 }
 
-.auth-signin--clean .auth-signin__field span {
+.auth-policies--hub {
+  max-width: 420px;
+}
+
+.auth-policies__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.55);
+}
+
+.auth-policies__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.auth-policies__list li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.auth-policies__list li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--portal-accent, #0b6a78);
+  font-weight: 700;
+}
+
+.auth-layout--graphite .auth-layout__portal-points {
+  text-align: left;
+  margin-bottom: 0;
+}
+
+.auth-layout--graphite .auth-layout__portal-headline,
+.auth-layout--graphite .auth-layout__portal-sub {
+  text-align: left;
+}
+
+.auth-signin--light {
+  background: #ffffff;
+  border: 1px solid #c5cdd2;
+  box-shadow: 0 20px 48px rgba(18, 20, 23, 0.12);
+  color: #121417;
+  max-width: min(680px, 96vw);
+}
+
+.auth-signin--light .auth-signin__title {
+  color: #121417;
+}
+
+.auth-signin--light .auth-signin__sub {
+  color: #5c6570;
+}
+
+.auth-signin--light .auth-signin__field span {
   color: #3d4450;
 }
 
-.auth-signin--clean .auth-signin__field input {
+.auth-signin--light .auth-signin__field input {
   background: #fff;
   border: 1px solid #c5cdd2;
   color: #121417;
 }
 
-.auth-signin--clean .auth-signin__submit {
+.auth-signin--light .auth-signin__submit {
   background: var(--portal-accent, #0b6a78);
   color: #fff;
-  width: 100%;
 }
 
-.auth-signin--clean .auth-signin__demo {
+.auth-signin--light .auth-signin__demo {
   color: #5c6570;
-  font-size: 0.72rem;
-  margin-top: 1rem;
 }
 
-.auth-signin--clean .auth-signin__back {
-  margin-top: 0.75rem;
-  font-size: 0.78rem;
-  font-weight: 600;
+.auth-signin--light .auth-signin__badge {
+  background: #e6f4f6;
   color: var(--portal-accent, #0b6a78);
+  border: 1px solid rgba(11, 106, 120, 0.2);
 }
 
-.auth-layout--clean .auth-hub__title {
+.auth-signin__brand--light {
+  display: flex;
+  border-left: 1px solid #e2e5eb;
+  background: linear-gradient(180deg, #fafbfc 0%, #f0f2f4 100%);
+}
+
+.auth-signin__brand--light .auth-signin__brand-tag {
+  color: #5c6570;
+}
+
+.auth-signin__brand--light .auth-logo__img {
+  filter: none;
+}
+
+.auth-hub__header--graphite {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #c5cdd2;
+  box-shadow: 0 8px 24px rgba(18, 20, 23, 0.06);
+}
+
+.auth-hub__header--graphite .auth-hub__title {
   color: #121417;
 }
 
-.auth-layout--clean .auth-hub__sub {
+.auth-hub__header--graphite .auth-hub__sub {
   color: #5c6570;
 }
 
-.auth-layout--clean .auth-hub-card {
-  background: #fff;
+.auth-layout--graphite .auth-hub-card {
+  background: #ffffff;
   border: 1px solid #c5cdd2;
   color: #121417;
-  box-shadow: 0 4px 16px rgba(18, 20, 23, 0.04);
+  box-shadow: 0 8px 24px rgba(18, 20, 23, 0.08);
+  backdrop-filter: none;
 }
 
-.auth-layout--clean .auth-hub-card__headline {
+.auth-layout--graphite .auth-hub-card:hover {
+  background: #fff;
+  border-color: var(--portal-accent, #0b6a78);
+  box-shadow: 0 12px 32px rgba(11, 106, 120, 0.14);
+}
+
+.auth-layout--graphite .auth-hub-card__label {
   color: #121417;
 }
 
-.auth-layout--clean .auth-hub-card__hint {
+.auth-layout--graphite .auth-hub-card__headline {
   color: #5c6570;
 }
 
-.auth-layout--clean .auth-hub-card:hover {
-  border-color: var(--portal-accent, #0b6a78);
-  box-shadow: 0 8px 24px rgba(11, 106, 120, 0.12);
+.auth-layout--graphite .auth-hub-card__hint {
+  color: #94a3b8;
+}
+
+.auth-mobile-intro--graphite .auth-layout__portal-headline {
+  color: #121417;
+}
+
+@media (max-width: 899px) {
+  .auth-policies--mobile {
+    display: block;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e5eb;
+  }
+
+  .auth-policies--mobile .auth-policies__title {
+    color: #5c6570;
+  }
+
+  .auth-policies--mobile .auth-policies__list li {
+    color: #5c6570;
+    font-size: 0.72rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .auth-policies--mobile {
+    display: none;
+  }
+
+  .auth-layout--graphite.auth-layout--portal .auth-layout__brand--graphite,
+  .auth-layout--graphite.auth-layout--hub .auth-layout__brand--graphite {
+    align-items: flex-start;
+    text-align: left;
+  }
 }
 
