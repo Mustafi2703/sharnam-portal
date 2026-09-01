@@ -309,6 +309,16 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 
   return (
     <div className="auth-signin auth-signin--solo auth-signin--futura" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <div className="auth-signin__mark">
+        <img
+          src="/logo-transparent.png?v=10"
+          alt="शरणम्"
+          className="auth-signin__mark-logo"
+          width={168}
+          height={81}
+          decoding="async"
+        />
+      </div>
       <div className="auth-signin__badge auth-signin__badge--futura">
         <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
         <span>{portalDisplayName(cfg.key, cfg.shortLabel)}</span>

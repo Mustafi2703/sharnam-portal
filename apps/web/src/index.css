@@ -8753,14 +8753,18 @@ body {
 
 @media (min-width: 640px) {
   .auth-hub__grid {
-    grid-template-columns: 1fr;
-    gap: 0.55rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
   }
 }
 
 @media (min-width: 900px) {
   .auth-layout {
     grid-template-columns: minmax(360px, 46%) minmax(0, 1fr);
+  }
+
+  .auth-layout--futura {
+    grid-template-columns: 1fr 1fr;
   }
 
   .auth-layout--portal .auth-layout__brand,
@@ -9255,7 +9259,7 @@ body {
 }
 
 .auth-signin--futura {
-  max-width: min(400px, 96vw);
+  max-width: min(480px, 94vw);
   background: rgba(12, 14, 18, 0.55);
   backdrop-filter: blur(28px) saturate(1.25);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -9264,7 +9268,7 @@ body {
     0 24px 64px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   color: #f1f5f9;
-  padding: clamp(1.25rem, 3vw, 1.75rem);
+  padding: clamp(1.5rem, 3.5vw, 2.1rem);
 }
 
 .auth-signin--futura .auth-signin__title {
@@ -9403,8 +9407,8 @@ body {
 @media (min-width: 900px) {
   .auth-layout--futura.auth-layout--portal .auth-layout__brand--futura,
   .auth-layout--futura.auth-layout--hub .auth-layout__brand--futura {
-    align-items: flex-start;
-    text-align: left;
+    align-items: center;
+    text-align: center;
   }
 }
 
@@ -9428,8 +9432,23 @@ body {
 }
 
 .auth-brand__logo--hero {
-  width: min(100%, 380px);
+  width: min(100%, 440px);
   margin-inline: auto;
+}
+
+.auth-signin__mark {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.85rem;
+}
+
+.auth-signin__mark-logo {
+  display: block;
+  width: min(100%, 152px);
+  height: auto;
+  object-fit: contain;
+  opacity: 0.96;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.28));
 }
 
 .auth-brand--center .auth-brand__tagline {
@@ -9445,8 +9464,8 @@ body {
   align-items: center;
   text-align: center;
   width: 100%;
-  max-width: 400px;
-  gap: 1rem;
+  max-width: 460px;
+  gap: 1.1rem;
 }
 
 .auth-brand-panel__copy {
@@ -9506,27 +9525,39 @@ body {
 }
 
 .auth-hub__stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
   width: 100%;
-  max-width: 420px;
+  max-width: 100%;
 }
 
-.auth-hub__header--futura {
-  padding: 0.65rem 0.85rem;
-  margin-bottom: 0.75rem;
+@media (min-width: 520px) {
+  .auth-hub__stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
 }
 
-.auth-hub__header--futura .auth-hub__title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+.auth-hub-card--futura {
+  min-height: 4.25rem;
+}
+
+.auth-hub-card__body {
+  min-width: 0;
+}
+
+.auth-hub-card__hint {
+  font-size: 0.72rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .auth-signin--solo {
-  max-width: min(400px, 96vw);
+  max-width: min(480px, 94vw);
   display: flex;
   flex-direction: column;
   text-align: left;
@@ -9548,6 +9579,29 @@ body {
   margin-bottom: 1rem;
 }
 
+.auth-hub__header--futura {
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+}
+
+.auth-hub__header--futura .auth-hub__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.auth-layout__main--hub {
+  width: 100%;
+}
+
+.auth-layout__main--hub .auth-hub__header--futura,
+.auth-layout__main--hub .auth-hub__stack {
+  max-width: min(580px, 100%);
+}
+
 @media (min-width: 900px) {
   .auth-layout--futura.auth-layout--portal .auth-layout__brand--futura,
   .auth-layout--futura.auth-layout--hub .auth-layout__brand--futura {
@@ -9557,7 +9611,16 @@ body {
   }
 
   .auth-brand__logo--hero {
-    width: min(100%, 420px);
+    width: min(100%, 540px);
+  }
+
+  .auth-brand-panel {
+    max-width: 500px;
+  }
+
+  .auth-layout__main--hub .auth-hub__header--futura,
+  .auth-layout__main--hub .auth-hub__stack {
+    max-width: min(620px, 100%);
   }
 }
 
@@ -9569,7 +9632,7 @@ body {
   }
 
   .auth-mobile-brand .auth-brand__logo--hero {
-    width: min(100%, 300px);
+    width: min(100%, 360px);
   }
 
   .auth-mobile-brand .auth-brand-panel__copy {
