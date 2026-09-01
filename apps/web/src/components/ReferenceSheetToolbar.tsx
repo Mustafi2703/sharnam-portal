@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { FilePickButton } from "./FilePickButton";
 import { Button } from "./ui";
 
 type ReferenceSheetToolbarProps = {
@@ -45,8 +45,6 @@ export function ReferenceSheetToolbar({
   busy,
   message,
 }: ReferenceSheetToolbarProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
-
   return (
     <div className="sheet-actions-bar shrink-0 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
       <div className="min-w-0 text-left">
@@ -76,23 +74,17 @@ export function ReferenceSheetToolbar({
           </Button>
         )}
         {canEdit && onUpload && (
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              title={uploadHint || "Upload sheet"}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) void onUpload(file);
-              }}
-            />
-            <Button type="button" variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy}>
-              Upload sheet
-            </Button>
-          </>
+          <FilePickButton
+            accept=".xlsx,.xls,.csv"
+            variant="primary"
+            disabled={busy}
+            onPick={(files) => {
+              const file = files[0];
+              if (file) void onUpload(file);
+            }}
+          >
+            Upload sheet
+          </FilePickButton>
         )}
         {canEdit && addKinds && addKinds.length > 0 && onAddKind && (
           <div className="flex flex-wrap gap-1.5">

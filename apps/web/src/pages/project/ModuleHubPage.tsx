@@ -4,7 +4,7 @@ import { MODULE_TOOLS, MODULE_META, type WorkspaceKey } from "../../workspaces";
 import { formatUiText } from "../../lib/formatUiText";
 import { useAuth } from "../../auth";
 
-/** Module hub — one card per sheet-backed tool (live or ready for sheet drop) */
+/** Module hub — numbered tool cards with workflow hints (Procore-style desk). */
 export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }) {
   const { id } = useParams();
   const { user } = useAuth();
@@ -14,22 +14,39 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
   );
 
   return (
-    <div className="space-y-6 min-w-0">
-      <div className="border border-line bg-paper rounded-[var(--ui-radius)] p-5 sm:p-6">
-        <div className="flex items-start gap-3">
+    <div className="module-hub space-y-5 min-w-0" style={{ ["--module-accent" as string]: meta.accent }}>
+      <div className="module-hub__hero border border-line bg-paper rounded-xl overflow-hidden">
+        <div className="module-hub__hero-bar h-1" style={{ background: meta.accent }} aria-hidden />
+        <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-start gap-4">
           <span
-            className="h-10 w-10 rounded-lg grid place-items-center text-white text-sm font-display shrink-0"
+            className="module-hub__icon h-12 w-12 rounded-xl grid place-items-center text-white text-base font-display shrink-0 shadow-sm"
             style={{ background: meta.accent }}
           >
             {meta.icon}
           </span>
           <div className="min-w-0 flex-1">
             <PageHeader
-              eyebrow={`${meta.title} module`}
+              eyebrow={`${meta.title} module · Project desk`}
               title={meta.title}
-              subtitle={`${meta.desc} ${formatUiText("Each card is a separate tool. Ready cards wait for the next client sheet.")}`}
+              subtitle={formatUiText(
+                `${meta.desc} Pick a tool below — each card opens a dedicated register or form. Upload sheets through modals; data saves to this project only.`
+              )}
             />
           </div>
+        </div>
+        <div className="module-hub__workflow border-t border-line bg-sand/80 px-5 sm:px-6 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
+          <span>
+            <strong className="text-ink font-semibold">1.</strong> Select tool
+          </span>
+          <span>
+            <strong className="text-ink font-semibold">2.</strong> Enter / upload data
+          </span>
+          <span>
+            <strong className="text-ink font-semibold">3.</strong> Review register
+          </span>
+          <span>
+            <strong className="text-ink font-semibold">4.</strong> Export or distribute
+          </span>
         </div>
       </div>
 
@@ -42,32 +59,42 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
               : `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}`;
           const ready = t.status === "ready";
           return (
-            <Link key={`${t.to}-${t.query || ""}-${t.label}`} to={href} className="block group">
+            <Link key={`${t.to}-${t.query || ""}-${t.label}`} to={href} className="module-hub__card group block h-full">
               <div
-                className={`h-full rounded-[var(--ui-radius)] border bg-paper p-4 sm:p-5 transition hover:border-brand ${
-                  ready ? "border-dashed border-line" : "border-line"
+                className={`h-full rounded-xl border bg-paper p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 ${
+                  ready ? "border-dashed border-line opacity-90" : "border-line hover:border-brand/50"
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-steel-muted">
-                    {String(i + 1).padStart(2, "0")} · Tool
-                  </div>
+                <div className="flex items-center justify-between gap-2 mb-3">
                   <span
-                    className={`text-[10px] font-mono uppercase tracking-wide shrink-0 ${
-                      ready ? "text-warn" : "text-brand"
+                    className="module-hub__step text-[11px] font-bold uppercase tracking-[0.12em] px-2 py-0.5 rounded-md"
+                    style={{ background: `${meta.accent}18`, color: meta.accent }}
+                  >
+                    Step {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono uppercase tracking-wide shrink-0 px-2 py-0.5 rounded-full border ${
+                      ready ? "text-warn border-warn/30 bg-warn/5" : "text-brand border-brand/25 bg-brand-soft/40"
                     }`}
                   >
-                    {ready ? "Ready" : t.sheet ? "Sheet" : "Live"}
+                    {ready ? "Placeholder" : t.sheet ? "Sheet-backed" : "Live"}
                   </span>
                 </div>
-                <div className="font-display text-base font-semibold text-ink group-hover:text-brand">{formatUiText(t.label)}</div>
-                {t.blurb && <p className="text-sm text-steel-muted mt-1.5 leading-relaxed">{t.blurb}</p>}
+                <div className="font-display text-base font-semibold text-ink group-hover:text-brand leading-snug">
+                  {formatUiText(t.label)}
+                </div>
+                {t.blurb && (
+                  <p className="text-sm text-steel-muted mt-2 leading-relaxed line-clamp-3">{formatUiText(t.blurb)}</p>
+                )}
                 {t.sheet && (
-                  <p className="mt-2 text-[11px] font-mono text-steel-muted truncate" title={t.sheet}>
-                    ← {t.sheet}
+                  <p className="mt-2.5 text-[11px] font-mono text-steel-muted truncate rounded-md bg-sand px-2 py-1" title={t.sheet}>
+                    Template: {t.sheet}
                   </p>
                 )}
-                <div className="mt-4 text-sm font-semibold text-brand">{ready ? "Open placeholder →" : "Open →"}</div>
+                <div className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold text-brand flex items-center justify-between gap-2">
+                  <span>{ready ? "Open placeholder" : "Open tool"}</span>
+                  <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">→</span>
+                </div>
               </div>
             </Link>
           );

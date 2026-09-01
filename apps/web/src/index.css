@@ -2290,6 +2290,112 @@ body.is-auth-route #root {
   color: white;
 }
 
+/* File dropzone — cost / register uploads */
+.file-dropzone-wrap {
+  width: 100%;
+}
+.file-dropzone-wrap--compact {
+  max-width: 20rem;
+}
+.file-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1.5px dashed var(--color-line);
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, var(--color-paper) 0%, var(--color-sand) 100%);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.file-dropzone:hover,
+.file-dropzone:focus-visible {
+  border-color: color-mix(in srgb, var(--color-brand) 55%, var(--color-line));
+  background: var(--color-brand-soft);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 12%, transparent);
+}
+.file-dropzone.is-dragover {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 18%, transparent);
+}
+.file-dropzone.has-file {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-brand) 35%, var(--color-line));
+  background: var(--color-paper);
+}
+.file-dropzone--compact {
+  padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+}
+.file-dropzone__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-brand) 10%, var(--color-paper));
+  color: var(--color-brand);
+}
+.file-dropzone--compact .file-dropzone__icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+.file-dropzone--compact .file-dropzone__icon svg {
+  width: 16px;
+  height: 16px;
+}
+.file-dropzone__body {
+  flex: 1;
+  min-width: 0;
+}
+.file-dropzone__filename {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-dropzone--compact .file-dropzone__filename {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.file-dropzone__hint {
+  margin: 0.125rem 0 0;
+  font-size: 0.6875rem;
+  color: var(--color-steel-muted);
+  line-height: 1.35;
+}
+.file-dropzone__action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-brand-dark);
+  background: var(--color-paper);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 25%, var(--color-line));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+.file-dropzone:hover .file-dropzone__action,
+.file-dropzone.is-dragover .file-dropzone__action {
+  background: var(--color-brand);
+  color: #fff;
+  border-color: var(--color-brand);
+}
+.file-dropzone--compact .file-dropzone__action {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+}
+
 .cost-register-shell__title-bar {
   background: var(--cost-head-bg);
   border-color: color-mix(in srgb, var(--cost-border) 45%, var(--color-line));
@@ -9721,6 +9827,358 @@ body {
   .auth-signin--solo {
     max-width: none;
     width: 100%;
+  }
+}
+
+/* ═══ HRMS portal — left nav desk ═══ */
+.hrms-portal-shell__frame {
+  min-height: 100dvh;
+}
+
+.hrms-portal-shell__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.hrms-portal-shell__menu {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.hrms-side-nav {
+  width: 268px;
+  flex-shrink: 0;
+  background: #1c222b;
+  border-right: 1px solid #2e3642;
+  border-top: 3px solid var(--hrms-accent, #0d9488);
+  color: #e8ecf0;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  position: relative;
+}
+
+.hrms-side-nav--drawer {
+  width: min(88vw, 300px) !important;
+  min-height: 100%;
+  max-height: 100%;
+  box-shadow: 0 16px 48px rgba(18, 20, 23, 0.28);
+}
+
+.hrms-side-nav__close {
+  color: #e8ecf0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.hrms-side-nav__inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.hrms-side-nav__head {
+  padding: 1rem 1rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hrms-side-nav__brand {
+  display: block;
+}
+
+.hrms-side-nav__logo {
+  display: block;
+  width: min(100%, 168px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+}
+
+.hrms-side-nav__desk {
+  margin: 0.65rem 0 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(153, 246, 228, 0.85);
+}
+
+.hrms-side-nav__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.hrms-side-nav__section-head {
+  padding: 0 0.35rem 0.35rem;
+}
+
+.hrms-side-nav__label {
+  margin: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.hrms-side-nav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.hrms-side-nav__item {
+  display: block;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.88);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.hrms-side-nav__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+}
+
+.hrms-side-nav__item.is-active {
+  background: color-mix(in srgb, var(--hrms-accent, #0d9488) 22%, transparent);
+  border-color: color-mix(in srgb, var(--hrms-accent, #0d9488) 45%, transparent);
+  color: #ccfbf1;
+}
+
+.hrms-side-nav__foot {
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.hrms-side-nav__foot-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(153, 246, 228, 0.9);
+  text-decoration: none;
+}
+
+.hrms-side-nav__foot-link:hover {
+  text-decoration: underline;
+}
+
+.hrms-side-nav__user {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(148, 163, 184, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hrms-side-nav__signout {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.75);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hrms-side-nav__signout:hover {
+  color: #f8fafc;
+}
+
+.hrms-module__outlet {
+  min-width: 0;
+}
+
+/* Training desk — catalog + detail */
+.training-desk__frame {
+  min-height: min(72vh, 720px);
+}
+
+.training-desk__pill {
+  font-size: 0.65rem;
+  font-weight: 650;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  color: var(--color-steel-muted);
+}
+
+.training-desk__pill.is-on {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #fff;
+}
+
+.training-desk__list {
+  max-height: min(52vh, 480px);
+}
+
+.training-desk__item {
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.training-desk__item:hover {
+  background: var(--color-sand);
+}
+
+.training-desk__item.is-active {
+  background: var(--color-brand-soft);
+  border-color: color-mix(in srgb, var(--color-brand) 25%, var(--color-line));
+}
+
+.training-desk__item-group {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-steel-muted);
+  margin-bottom: 0.15rem;
+}
+
+.training-desk__item-title {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1.35;
+}
+
+.training-desk__section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-steel-muted);
+}
+
+.training-desk__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.training-desk__steps li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.training-desk__step-num {
+  flex-shrink: 0;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 22%, transparent);
+}
+
+.training-desk__step-text {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--color-steel);
+  padding-top: 0.1rem;
+}
+
+.training-desk__inputs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.training-desk__inputs li {
+  position: relative;
+  padding: 0.65rem 0.75rem 0.65rem 1.75rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--color-steel);
+  background: var(--color-sand);
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+}
+
+.training-desk__inputs li::before {
+  content: "⌨";
+  position: absolute;
+  left: 0.55rem;
+  top: 0.65rem;
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.training-desk__tips {
+  padding: 1rem;
+  border-radius: 0.65rem;
+  background: var(--color-brand-soft);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 22%, var(--color-line));
+}
+
+.training-desk__tips ul {
+  margin: 0;
+  padding: 0 0 0 1rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--color-steel);
+}
+
+.module-hub__hero-bar {
+  width: 100%;
+}
+
+.module-hub__workflow strong {
+  font-weight: 650;
+}
+
+@media (min-width: 1024px) {
+  .hrms-portal-shell__main {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .training-desk__list {
+    max-height: 240px;
   }
 }
 

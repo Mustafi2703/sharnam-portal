@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { formatUiText } from "../lib/formatUiText";
 
 function fmt(children: ReactNode): ReactNode {
@@ -238,37 +238,161 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   );
 }
 
-/** Styled file picker — replaces bare browser "Choose file" control */
+/** Styled file picker — dropzone + browse (replaces bare browser file input) */
 export function FileField({
-  label = "Choose file",
+  label = "Browse file",
   accept,
   file,
   onChange,
   hint,
+  compact,
 }: {
   label?: string;
   accept?: string;
   file: File | null;
   onChange: (file: File | null) => void;
   hint?: string;
+  compact?: boolean;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  function pickFromList(list: FileList | null) {
+    onChange(list?.[0] || null);
+  }
+
   return (
-    <div className="space-y-1.5">
-      <label className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-dashed border-line bg-sand/40 px-3 py-3 cursor-pointer hover:border-brand/50 hover:bg-brand-soft/40 transition">
-        <span className="inline-flex items-center justify-center rounded-sm bg-black text-white text-xs font-medium px-3 py-1.5 shrink-0">
-          {fmt(label)}
-        </span>
-        <span className="text-sm text-steel-muted truncate" data-preserve-case>
-          {file ? file.name : fmt("PDF, DWG, or image — no file selected")}
-        </span>
+    <div className={`file-dropzone-wrap ${compact ? "file-dropzone-wrap--compact" : ""}`}>
+      <div
+        className={`file-dropzone ${dragOver ? "is-dragover" : ""} ${file ? "has-file" : ""} ${compact ? "file-dropzone--compact" : ""}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          pickFromList(e.dataTransfer.files);
+        }}
+      >
+        <div className="file-dropzone__icon" aria-hidden>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <path d="M12 16V4m0 0L8 8m4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 17v1a3 3 0 003 3h10a3 3 0 003-3v-1" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div className="file-dropzone__body min-w-0">
+          <p className="file-dropzone__filename" data-preserve-case>
+            {file ? file.name : compact ? "Drop file or browse" : "Drop spreadsheet here or browse"}
+          </p>
+          <p className="file-dropzone__hint">{hint ? fmt(hint) : fmt("XLSX · XLS · CSV")}</p>
+        </div>
+        <span className="file-dropzone__action">{fmt(label)}</span>
         <input
+          ref={inputRef}
           type="file"
           className="sr-only"
           accept={accept}
-          onChange={(e) => onChange(e.target.files?.[0] || null)}
+          onChange={(e) => pickFromList(e.target.files)}
         />
-      </label>
-      {hint && <p className="text-[11px] text-steel-muted">{fmt(hint)}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Multi-file dropzone for invoice / batch uploads */
+export function FilesDropzone({
+  label = "Browse files",
+  accept,
+  files,
+  onChange,
+  hint,
+}: {
+  label?: string;
+  accept?: string;
+  files: File[];
+  onChange: (files: File[]) => void;
+  hint?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  function pickFromList(list: FileList | null) {
+    if (!list?.length) return;
+    onChange(Array.from(list));
+  }
+
+  const summary =
+    files.length === 0
+      ? "Drop files here or browse"
+      : files.length === 1
+        ? files[0].name
+        : `${files.length} files selected`;
+
+  return (
+    <div className="file-dropzone-wrap">
+      <div
+        className={`file-dropzone ${dragOver ? "is-dragover" : ""} ${files.length ? "has-file" : ""}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          pickFromList(e.dataTransfer.files);
+        }}
+      >
+        <div className="file-dropzone__icon" aria-hidden>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <path d="M12 16V4m0 0L8 8m4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 17v1a3 3 0 003 3h10a3 3 0 003-3v-1" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div className="file-dropzone__body min-w-0">
+          <p className="file-dropzone__filename" data-preserve-case>
+            {summary}
+          </p>
+          <p className="file-dropzone__hint">{hint ? fmt(hint) : fmt("PDF · images · Excel")}</p>
+        </div>
+        <span className="file-dropzone__action">{fmt(label)}</span>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="sr-only"
+          accept={accept}
+          onChange={(e) => pickFromList(e.target.files)}
+        />
+      </div>
     </div>
   );
 }

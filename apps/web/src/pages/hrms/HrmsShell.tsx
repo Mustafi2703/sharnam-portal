@@ -1,62 +1,58 @@
-import { type ReactNode } from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
-import { useAuth } from "../../auth";
-import { BrandMark } from "../../components/Brand";
+import { useState, type ReactNode } from "react";
+import { Outlet } from "react-router-dom";
+import { IconClose, IconMenu } from "../../components/icons";
+import HrmsSideNav from "./HrmsSideNav";
 import { HRMS_ACCENT } from "./hrmsNav";
 
-/** Standalone HRMS portal shell — matches office portal sand/paper theme. */
+/** Standalone HRMS portal — left nav desk matching office / CRM module feel. */
 export default function HrmsShell({ children }: { children?: ReactNode }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <div
       className="hrms-portal-shell min-h-dvh flex flex-col bg-sand"
-      style={{ ["--module-accent" as string]: HRMS_ACCENT }}
+      style={{ ["--module-accent" as string]: HRMS_ACCENT, ["--hrms-accent" as string]: HRMS_ACCENT }}
     >
-      <header className="shrink-0 border-b border-line bg-paper shadow-sm">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <Link to="/hrm" className="shrink-0">
-              <BrandMark size="md" showTag={false} compact />
-            </Link>
-            <div className="min-w-0 hidden sm:block border-l border-line pl-4">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-brand">HRMS Portal</div>
-              <div className="text-sm font-semibold text-ink truncate">Recruitment · Attendance · Payroll</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <Link
-              to="/dashboard"
-              className="hidden md:inline text-xs text-steel-muted hover:text-brand border border-line rounded-md px-2.5 py-1.5 bg-paper"
-            >
-              Office portal ↗
-            </Link>
-            <span className="text-xs text-steel-muted hidden lg:inline truncate max-w-[160px]">{user?.fullName}</span>
+      <div className="hrms-portal-shell__frame flex flex-1 min-h-0 w-full">
+        <aside className="hrms-side-nav hidden lg:flex" aria-label="HRMS navigation">
+          <HrmsSideNav />
+        </aside>
+
+        <div className="hrms-portal-shell__body flex flex-col flex-1 min-w-0 min-h-0">
+          <header className="hrms-portal-shell__topbar shrink-0 lg:hidden border-b border-line bg-paper px-3 py-2.5 flex items-center gap-3">
             <button
               type="button"
-              className="text-xs font-semibold border border-line rounded-md px-3 py-1.5 hover:bg-sand bg-paper"
-              onClick={() => {
-                logout();
-                navigate("/login/hr");
-              }}
+              className="hrms-portal-shell__menu"
+              aria-label="Open HR menu"
+              onClick={() => setDrawerOpen(true)}
             >
-              Sign out
+              <IconMenu />
             </button>
-          </div>
+            <span className="text-sm font-semibold text-ink">HRMS</span>
+          </header>
+
+          <main className="hrms-portal-shell__main flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 max-w-[1440px] w-full mx-auto">
+            {children ?? <Outlet />}
+          </main>
         </div>
-      </header>
+      </div>
 
-      <main className="hrms-portal-shell__main flex-1 flex flex-col min-h-0 max-w-[1440px] mx-auto w-full px-4 sm:px-6 py-4">
-        {children ?? <Outlet />}
-      </main>
-
-      <footer className="shrink-0 border-t border-line py-3 text-center text-[11px] text-steel-muted bg-paper">
-        HR team portal · Office admins manage users &amp; vendors under HRMS → Users / Vendors ·{" "}
-        <Link to="/login/office" className="text-brand">
-          Office login
-        </Link>
-      </footer>
+      {drawerOpen && (
+        <div className="app-mobile-drawer lg:hidden" role="dialog" aria-modal="true" aria-label="HRMS menu">
+          <button type="button" className="app-mobile-drawer__backdrop" aria-label="Close menu" onClick={() => setDrawerOpen(false)} />
+          <aside className="hrms-side-nav hrms-side-nav--drawer">
+            <button
+              type="button"
+              className="hrms-side-nav__close absolute right-3 top-3 z-10 h-9 w-9 rounded-lg grid place-items-center"
+              aria-label="Close menu"
+              onClick={() => setDrawerOpen(false)}
+            >
+              <IconClose />
+            </button>
+            <HrmsSideNav onNavigate={() => setDrawerOpen(false)} />
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

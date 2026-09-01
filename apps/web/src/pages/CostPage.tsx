@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, formatINR } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
+import { Badge, Button, Card, FileField, FilesDropzone, Input, PageHero, Select } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { BoqMonitoringEditor } from "../components/BoqMonitoringEditor";
 import { BudgetWbsRegister } from "../components/BudgetWbsRegister";
@@ -194,6 +194,9 @@ export default function CostPage() {
     basicRate: "",
     purchaseRate: "",
   });
+  const [budgetFile, setBudgetFile] = useState<File | null>(null);
+  const [cfFile, setCfFile] = useState<File | null>(null);
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const mbFormRef = useRef<HTMLFormElement>(null);
   const bbsFormRef = useRef<HTMLFormElement>(null);
   const cfFormRef = useRef<HTMLFormElement>(null);
@@ -848,20 +851,19 @@ export default function CostPage() {
             </Select>
           </label>
           {canEdit && (
-            <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted">
-              Upload BOQ
-              <input
-                type="file"
+            <div className="min-w-[240px] flex-1 sm:flex-none">
+              <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted mb-1">Upload BOQ</p>
+              <FileField
+                compact
+                label="Browse"
                 accept=".xls,.xlsx,.csv"
-                disabled={syncing}
-                className="mt-1 block max-w-xs text-xs file:mr-2 file:rounded-sm file:border file:border-line file:bg-sand file:px-2 file:py-1 file:text-xs file:font-medium"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) void uploadBoqOrWorkbook(file, activePkg);
+                file={null}
+                onChange={(f) => {
+                  if (f && !syncing) void uploadBoqOrWorkbook(f, activePkg);
                 }}
+                hint={syncing ? "Importing…" : "SPDC workbook or package BOQ"}
               />
-            </label>
+            </div>
           )}
           <p className="text-xs text-steel-muted pb-0.5 ml-auto max-w-md">
             {siteBoqMode
@@ -1232,22 +1234,29 @@ export default function CostPage() {
                 <code className="font-mono">SPDC_Budget_Arvind 49.xls</code>.
               </p>
               <form
-                className="flex flex-wrap gap-3 items-center"
+                className="space-y-3"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  const input = (e.target as HTMLFormElement).elements.namedItem("budgetFile") as HTMLInputElement;
-                  const f = input.files?.[0];
-                  if (!f) return;
+                  if (!budgetFile) return;
                   const fd = new FormData();
-                  fd.append("file", f);
+                  fd.append("file", budgetFile);
                   fd.append("replace", "1");
                   await api(`/api/cost/${id}/budget/import`, { method: "POST", token, body: fd });
+                  setBudgetFile(null);
                   setMsg("Budget WBS imported");
                   await load();
                 }}
               >
-                <input name="budgetFile" type="file" accept=".xlsx,.xls" required />
-                <Button type="submit">Import budget sheet</Button>
+                <FileField
+                  file={budgetFile}
+                  onChange={setBudgetFile}
+                  accept=".xlsx,.xls"
+                  label="Browse spreadsheet"
+                  hint="Budget WBS · XLSX or XLS"
+                />
+                <Button type="submit" disabled={!budgetFile} className="w-full sm:w-auto">
+                  Import budget sheet
+                </Button>
               </form>
             </Card>
           )}
@@ -1383,26 +1392,33 @@ export default function CostPage() {
                 <code className="font-mono">Cashflow - Dashboard.xlsx</code> — Chart (INR), Forecast, Tracking sheets.
               </p>
               <form
-                className="flex flex-wrap gap-3 items-center"
+                className="space-y-3"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  const input = (e.target as HTMLFormElement).elements.namedItem("cfFile") as HTMLInputElement;
-                  const f = input.files?.[0];
-                  if (!f) return;
+                  if (!cfFile) return;
                   const fd = new FormData();
-                  fd.append("file", f);
+                  fd.append("file", cfFile);
                   fd.append("replace", "1");
                   const res = await api<{ imported: number }>(`/api/cost/${id}/cashflow/import`, {
                     method: "POST",
                     token,
                     body: fd,
                   });
+                  setCfFile(null);
                   setMsg(`Cashflow imported — ${res.imported} periods`);
                   await load();
                 }}
               >
-                <input name="cfFile" type="file" accept=".xlsx,.xls" required />
-                <Button type="submit">Import cashflow dashboard</Button>
+                <FileField
+                  file={cfFile}
+                  onChange={setCfFile}
+                  accept=".xlsx,.xls"
+                  label="Browse spreadsheet"
+                  hint="Cashflow Dashboard · Chart, Forecast, Tracking"
+                />
+                <Button type="submit" disabled={!cfFile} className="w-full sm:w-auto">
+                  Import cashflow dashboard
+                </Button>
               </form>
             </Card>
           )}
@@ -1639,18 +1655,15 @@ export default function CostPage() {
                 Contractor Invoices).  PMC picks them up while raising the RA bill so nothing gets re-typed.
               </p>
               <form
-                className="flex flex-wrap items-end gap-2 mb-4"
+                className="space-y-3 mb-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const filesEl = form.elements.namedItem("files") as HTMLInputElement | null;
-                  const files = filesEl?.files;
-                  if (!files || !files.length) return;
+                  if (!invoiceFiles.length) return;
                   const fd = new FormData();
                   if (billForm.vendorId) fd.append("vendorId", billForm.vendorId);
                   const party = parties.find((p) => p.id === billForm.vendorId);
                   if (party?.name) fd.append("vendorName", party.name);
-                  for (const f of Array.from(files)) fd.append("files", f);
+                  for (const f of invoiceFiles) fd.append("files", f);
                   const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/cost/${id}/bills/upload`, {
                     method: "POST",
                     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -1661,14 +1674,14 @@ export default function CostPage() {
                     alert(out?.error || "Invoice upload failed");
                     return;
                   }
-                  form.reset();
+                  setInvoiceFiles([]);
                   await loadBills();
                 }}
               >
                 <Select
                   value={billForm.vendorId}
                   onChange={(e) => setBillForm({ ...billForm, vendorId: e.target.value })}
-                  className="min-w-[220px]"
+                  className="max-w-md"
                 >
                   <option value="">Select contractor / vendor (optional)</option>
                   {parties.map((p) => (
@@ -1677,11 +1690,21 @@ export default function CostPage() {
                     </option>
                   ))}
                 </Select>
-                <input name="files" type="file" multiple accept=".pdf,image/*,.xlsx,.xls,.docx,.doc" className="text-xs" />
-                <Button type="submit">Upload invoices</Button>
-                <span className="text-[11px] text-steel-muted">
-                  Files → 09_COMMERCIAL_AND_CHANGE / 09.02 Contractor Invoices
-                </span>
+                <FilesDropzone
+                  files={invoiceFiles}
+                  onChange={setInvoiceFiles}
+                  accept=".pdf,image/*,.xlsx,.xls,.docx,.doc"
+                  label="Browse invoices"
+                  hint="PDF · photos · Excel · Word — saved to 09.02 Contractor Invoices"
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="submit" disabled={!invoiceFiles.length}>
+                    Upload invoices
+                  </Button>
+                  <span className="text-[11px] text-steel-muted">
+                    Files → 09_COMMERCIAL_AND_CHANGE / 09.02 Contractor Invoices
+                  </span>
+                </div>
               </form>
               <h3 className="font-semibold mb-2">Manual vendor / contractor bill entry · COP</h3>
               <p className="text-xs text-steel-muted mb-3">Select contractor or vendor and PMC from directory.</p>

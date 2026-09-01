@@ -10,9 +10,9 @@
  * DMS · Quality · Safety · Progress · Cost · Finance · Comms · CRM · HRMS ·
  * Reports · Master · Audit) and searchable across title, roles, and steps.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
+import { Badge, Card, Input, PageHeader } from "../components/ui";
 import { useAuth } from "../auth";
 
 type Role = "admin" | "office" | "site_employee" | "employee" | "vendor" | "client";
@@ -39,6 +39,7 @@ type Guide = {
   who: Role[];
   when: string;
   steps: string[];
+  inputs?: string[];
   tips?: string[];
   openTo?: string;
   openLabel?: string;
@@ -90,6 +91,10 @@ const G: Guide[] = [
       "Fill Code (SPDC-XXX), Name, Client, Location, Type — Code is used everywhere as the project handle.",
       "Save. The portal auto-creates the ISO document tree in DMS, seeds default drawing types, and creates an empty vendor list.",
       "Open the project and go through the module hub tiles to configure who has access, drop initial drawings, and pick BOQ / MB / BBS templates from the global Master.",
+    ],
+    inputs: [
+      "Code (SPDC-XXX), project name, client, location, project type.",
+      "Optional: start date, PMC lead, enabled module checklist.",
     ],
     tips: [
       "Only admin or office roles can create / archive projects.",
@@ -334,6 +339,11 @@ const G: Guide[] = [
       "Click 'Make offer' on the selected candidate — pick the CTC template, fill 12 salary inputs, portal generates Annexure I + offer letter (Sharnam letterhead).",
       "Candidate accepts (magic link email) → HRMS → Onboarding page auto-opens for document collection.",
     ],
+    inputs: [
+      "Requisition: department, designation, headcount, budget band, reporting manager.",
+      "Candidate: name, email, phone, résumé PDF, expected CTC.",
+      "Offer: 12 salary components from CTC calculator template, joining date, notice buy-out if any.",
+    ],
   },
   {
     id: "hrms-onboard",
@@ -347,6 +357,11 @@ const G: Guide[] = [
       "Assign an employee code (auto-suggested from department).",
       "Once every task is ticked, click 'Onboard' — employee is added to Directory and gets portal access at their assigned role.",
     ],
+    inputs: [
+      "Employee code, department, designation, reporting manager, project assignment.",
+      "Documents: PAN, Aadhaar, bank proof, education certificates, prior relieving letter.",
+      "IT asset request: laptop model, phone, ID card photo.",
+    ],
   },
   {
     id: "hrms-attend",
@@ -359,6 +374,11 @@ const G: Guide[] = [
       "Leave → 'Apply for leave' → pick type, dates, reason → routes to reporting manager.",
       "HR: HRMS → Masters → set holidays, leave policies per band, and shift patterns.",
       "Payroll → month-end cycle uses attendance + leave + CTC to run payslips (Sharnam-branded).",
+    ],
+    inputs: [
+      "Punch: date/time (auto), geo location for site roles, optional selfie.",
+      "Leave: type, from–to dates, reason, attachment if sick leave.",
+      "Masters: holiday list, leave quotas per band, shift start/end.",
     ],
   },
   {
@@ -470,6 +490,7 @@ export default function TrainingPage() {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<Guide["group"] | "All">("All");
   const [roleOnly, setRoleOnly] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>(G[0]?.id ?? "");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -483,6 +504,7 @@ export default function TrainingPage() {
         g.when,
         g.who.map((r) => ROLE_LABEL[r]).join(" "),
         g.steps.join(" "),
+        (g.inputs || []).join(" "),
         (g.tips || []).join(" "),
       ]
         .join(" ")
@@ -491,132 +513,137 @@ export default function TrainingPage() {
     });
   }, [query, group, roleOnly, user]);
 
+  useEffect(() => {
+    if (!filtered.some((g) => g.id === selectedId)) {
+      setSelectedId(filtered[0]?.id ?? "");
+    }
+  }, [filtered, selectedId]);
+
+  const selected = filtered.find((g) => g.id === selectedId) ?? filtered[0] ?? null;
+
   return (
-    <div className="mx-auto max-w-6xl w-full py-6 px-4 sm:px-6 space-y-6">
+    <div className="training-desk mx-auto max-w-[1440px] w-full py-4 sm:py-6 px-4 sm:px-6">
       <PageHeader
         eyebrow="How to · in-app training"
-        title="Sharnam Portal — Training & tool guides"
-        subtitle="Every module explained step-by-step, with exact button labels, roles, and direct links. Search a module or paste any keyword to jump straight to the walkthrough."
+        title="Training & module walkthroughs"
+        subtitle="Pick a module on the left — each guide shows who it’s for, numbered steps, and the data you need to enter."
       />
 
-      <Card className="!p-4 space-y-3">
-        <div className="flex flex-wrap gap-2 items-center">
-          <Input
-            placeholder="Search — try 'RA bill', 'MoM', 'DPR', 'BBS shape', 'onboarding'…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-w-[280px] flex-1"
-          />
-          <label className="inline-flex items-center gap-2 text-sm text-steel-muted border border-line rounded-sm px-3 py-1.5">
-            <input
-              type="checkbox"
-              checked={roleOnly}
-              onChange={(e) => setRoleOnly(e.target.checked)}
-            />
-            Only my role ({user ? ROLE_LABEL[user.role as Role] || user.role : "guest"})
-          </label>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {(["All", ...GROUPS] as const).map((g) => (
-            <Button
-              key={g}
-              type="button"
-              variant={group === g ? "primary" : "ghost"}
-              className="!text-xs !py-1 !px-2.5"
-              onClick={() => setGroup(g)}
-            >
-              {g}
-            </Button>
-          ))}
-        </div>
-
-        <p className="text-xs text-steel-muted">
-          {filtered.length} of {G.length} guides shown.
-        </p>
-      </Card>
-
-      <div className="space-y-4">
-        {GROUPS.filter((g) => filtered.some((x) => x.group === g)).map((g) => {
-          const rows = filtered.filter((x) => x.group === g);
-          return (
-            <section key={g} className="space-y-3">
-              <h2 className="font-display text-lg text-steel">
-                {g}
-                <span className="text-steel-muted text-sm font-mono ml-2">
-                  ({rows.length})
-                </span>
-              </h2>
-              <div className="grid gap-3 md:grid-cols-2">
-                {rows.map((r) => (
-                  <Card key={r.id} className="!p-5 space-y-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge tone="brand">{r.group}</Badge>
-                        {r.who.map((role) => (
-                          <Badge key={role} tone="neutral">
-                            {ROLE_LABEL[role]}
-                          </Badge>
-                        ))}
-                      </div>
-                      <h3 className="font-display text-base leading-snug">{r.title}</h3>
-                      <p className="text-xs text-steel-muted italic">Use when: {r.when}</p>
-                    </div>
-
-                    <ol className="text-sm space-y-1.5 list-decimal ml-5">
-                      {r.steps.map((s, i) => (
-                        <li key={i} className="text-steel">{s}</li>
-                      ))}
-                    </ol>
-
-                    {r.tips && r.tips.length > 0 && (
-                      <div className="text-xs bg-brand-soft border border-brand/20 rounded-sm p-2.5 space-y-1">
-                        <div className="font-semibold text-brand uppercase tracking-wide text-[10px]">
-                          Tips
-                        </div>
-                        {r.tips.map((t, i) => (
-                          <div key={i} className="text-steel">• {t}</div>
-                        ))}
-                      </div>
-                    )}
-
-                    {r.openTo && (
-                      <Link
-                        to={r.openTo}
-                        className="inline-block text-xs font-semibold text-brand hover:underline"
-                      >
-                        {r.openLabel || "Open"} →
-                      </Link>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            </section>
-          );
-        })}
-
-        {!filtered.length && (
-          <Card className="!p-6 text-center text-steel-muted">
-            No guides match your filters. Try clearing the search or picking another group.
+      <div className="training-desk__frame flex flex-col lg:flex-row gap-4 lg:gap-5 min-h-[min(72vh,720px)]">
+        <aside className="training-desk__nav shrink-0 lg:w-[300px] xl:w-[320px]">
+          <Card className="!p-0 overflow-hidden h-full flex flex-col border-line">
+            <div className="p-3 border-b border-line space-y-2 bg-sand/50">
+              <Input
+                placeholder="Search guides…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="!text-sm"
+              />
+              <label className="inline-flex items-center gap-2 text-xs text-steel-muted">
+                <input type="checkbox" checked={roleOnly} onChange={(e) => setRoleOnly(e.target.checked)} />
+                My role only
+              </label>
+            </div>
+            <div className="p-2 border-b border-line flex flex-wrap gap-1">
+              {(["All", ...GROUPS] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  className={`training-desk__pill ${group === g ? "is-on" : ""}`}
+                  onClick={() => setGroup(g)}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+            <div className="training-desk__list flex-1 overflow-y-auto p-2 space-y-0.5">
+              {filtered.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={`training-desk__item w-full text-left ${selected?.id === g.id ? "is-active" : ""}`}
+                  onClick={() => setSelectedId(g.id)}
+                >
+                  <span className="training-desk__item-group">{g.group}</span>
+                  <span className="training-desk__item-title">{g.title}</span>
+                </button>
+              ))}
+              {!filtered.length && (
+                <p className="text-xs text-steel-muted p-3 text-center">No guides match.</p>
+              )}
+            </div>
+            <p className="text-[10px] text-steel-muted px-3 py-2 border-t border-line">
+              {filtered.length} of {G.length} guides
+            </p>
           </Card>
-        )}
-      </div>
+        </aside>
 
-      <Card className="!p-5 text-sm text-steel-muted space-y-2 border-brand/30">
-        <div className="font-semibold text-steel">Something missing?</div>
-        <p>
-          These guides are versioned with the app. If a tool changed and the steps look stale, or a
-          feature is missing from the list, ping the PMC dev team — updates go live within the same
-          deploy cycle.
-        </p>
-        <p>
-          For anything not covered here, the raw workflow specs live in{" "}
-          <code className="font-mono text-xs bg-paper px-1 py-0.5 rounded-sm">
-            module_prompts/Sharnam_modules_docs 2/
-          </code>{" "}
-          in the source repo.
-        </p>
-      </Card>
+        <main className="training-desk__detail flex-1 min-w-0">
+          {!selected ? (
+            <Card className="!p-8 text-center text-steel-muted h-full grid place-items-center">
+              Select a guide from the list.
+            </Card>
+          ) : (
+            <Card className="!p-0 overflow-hidden h-full flex flex-col border-line">
+              <div className="training-desk__detail-head p-5 sm:p-6 border-b border-line bg-paper">
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <Badge tone="brand">{selected.group}</Badge>
+                  {selected.who.map((role) => (
+                    <Badge key={role} tone="neutral">
+                      {ROLE_LABEL[role]}
+                    </Badge>
+                  ))}
+                </div>
+                <h2 className="font-display text-xl sm:text-2xl text-ink leading-snug">{selected.title}</h2>
+                <p className="text-sm text-steel-muted mt-2">
+                  <span className="font-semibold text-steel">When:</span> {selected.when}
+                </p>
+                {selected.openTo && (
+                  <Link to={selected.openTo} className="inline-block mt-3 text-sm font-semibold text-brand hover:underline">
+                    {selected.openLabel || "Open tool"} →
+                  </Link>
+                )}
+              </div>
+
+              <div className="training-desk__detail-body flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+                <section>
+                  <h3 className="training-desk__section-title">Steps</h3>
+                  <ol className="training-desk__steps">
+                    {selected.steps.map((s, i) => (
+                      <li key={i}>
+                        <span className="training-desk__step-num">{i + 1}</span>
+                        <span className="training-desk__step-text">{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+
+                {selected.inputs && selected.inputs.length > 0 && (
+                  <section>
+                    <h3 className="training-desk__section-title">Data to enter</h3>
+                    <ul className="training-desk__inputs">
+                      {selected.inputs.map((row) => (
+                        <li key={row}>{row}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {selected.tips && selected.tips.length > 0 && (
+                  <section className="training-desk__tips">
+                    <h3 className="training-desk__section-title">Tips</h3>
+                    <ul>
+                      {selected.tips.map((t) => (
+                        <li key={t}>{t}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            </Card>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

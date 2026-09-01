@@ -3,7 +3,7 @@
  */
 import { FormEvent, useMemo, useState } from "react";
 import { api, apiBase } from "../api";
-import { Button, Card, Input, Select } from "./ui";
+import { Button, Card, FileField, Input, Select } from "./ui";
 import { FilePickButton } from "./FilePickButton";
 import PdfMarkup from "./PdfMarkup";
 import ImageMarkup from "./ImageMarkup";
@@ -168,12 +168,14 @@ export function CostSheetUploadPanel({
                 <input type="checkbox" checked={replacePkg} onChange={(e) => setReplacePkg(e.target.checked)} />
                 Replace existing lines for this package before import
               </label>
-              <input
-                type="file"
+              <FileField
+                label="Browse spreadsheet"
                 accept=".xlsx,.xls,.csv"
-                onChange={(e) => setSheetFile(e.target.files?.[0] || null)}
+                file={sheetFile}
+                onChange={setSheetFile}
+                hint={`Import ${kind.toUpperCase()} · ${folderHint}`}
               />
-              <Button type="submit" disabled={!sheetFile || busy}>
+              <Button type="submit" disabled={!sheetFile || busy} className="w-full sm:w-auto">
                 {busy ? "Importing…" : `Import ${kind.toUpperCase()} sheet`}
               </Button>
             </form>
@@ -199,7 +201,7 @@ export function CostSheetUploadPanel({
                   value={barMark}
                   onChange={(e) => setBarMark(e.target.value)}
                 />
-                <FilePickButton accept="image/*,application/pdf" onPick={onPickShape}>
+                <FilePickButton accept="image/*,application/pdf" onPick={onPickShape} variant="primary">
                   Pick PDF / image
                 </FilePickButton>
               </div>

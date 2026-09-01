@@ -1,22 +1,13 @@
 import { type CSSProperties } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "../../auth";
+import { Outlet, useLocation } from "react-router-dom";
 import { PageHeader } from "../../components/ui";
 import { HRMS_ACCENT, HRMS_SOFT, HRMS_TOOLS } from "./hrmsNav";
 
-const tabClass = (on: boolean) =>
-  `tool-strip__tab shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold border transition whitespace-nowrap ${
-    on ? "is-on text-white border-transparent" : "bg-paper border-line text-steel-muted hover:text-ink"
-  }`;
-
-/** HRMS module shell — same tool-strip pattern as project modules. */
+/** HRMS content shell — page header only; navigation lives in HrmsSideNav. */
 export default function HrmsLayout() {
   const loc = useLocation();
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "office";
-  const tools = HRMS_TOOLS.filter((t) => !("adminOnly" in t && t.adminOnly) || isAdmin);
 
-  const activeTool = tools.find((t) => {
+  const activeTool = HRMS_TOOLS.find((t) => {
     const base = t.to ? `/hrm/${t.to}` : "/hrm";
     const exact = "end" in t && t.end;
     return exact ? loc.pathname === base || loc.pathname === `${base}/` : loc.pathname.startsWith(base);
@@ -24,7 +15,7 @@ export default function HrmsLayout() {
 
   return (
     <div
-      className="page-stack--register page-scroll-full flex flex-col flex-1 min-h-0 gap-3"
+      className="hrms-module page-stack--register flex flex-col flex-1 min-h-0 gap-4 pb-6"
       style={
         {
           ["--module-accent" as string]: HRMS_ACCENT,
@@ -32,38 +23,17 @@ export default function HrmsLayout() {
         } as CSSProperties
       }
     >
-      <div className="shrink-0 space-y-3">
-        <PageHeader
-          dense
-          eyebrow="HRMS · शरणम्"
-          title={activeTool?.label === "Dashboard" ? "Human Resources desk" : activeTool?.label || "HRMS"}
-          subtitle={
-            activeTool?.subtitle ||
-            "Recruitment → onboarding → attendance → leave → payroll — standalone HR portal."
-          }
-        />
+      <PageHeader
+        dense
+        eyebrow="HRMS · शरणम्"
+        title={activeTool?.label === "Dashboard" ? "Human Resources desk" : activeTool?.label || "HRMS"}
+        subtitle={
+          activeTool?.subtitle ||
+          "Recruitment → onboarding → attendance → leave → payroll — standalone HR portal."
+        }
+      />
 
-        <nav
-          className="tool-strip px-2 sm:px-3 py-2 border border-line rounded-xl bg-paper flex gap-2 overflow-x-auto scrollbars-visible"
-          aria-label="HRMS tools"
-        >
-          {tools.map((t) => (
-            <NavLink
-              key={t.to || "home"}
-              to={t.to ? `/hrm/${t.to}` : "/hrm"}
-              end={"end" in t ? t.end : false}
-              className={({ isActive }) => tabClass(isActive)}
-              style={({ isActive }) =>
-                isActive ? { background: HRMS_ACCENT, borderColor: HRMS_ACCENT } : undefined
-              }
-            >
-              {t.label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
-
-      <div className="min-w-0">
+      <div className="hrms-module__outlet min-w-0 flex-1">
         <Outlet />
       </div>
     </div>
