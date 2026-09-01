@@ -1,13 +1,13 @@
-/** Default portal policies shown on the left panel of every login screen. */
+/** Default portal policies — kept short for the left panel. */
 export const SHARNAM_PORTAL_POLICIES = [
-  "All project data, drawings, and reports are confidential — distribute only through this portal.",
-  "Access is role-based (Office, Site, Contractor, Client) and every action is audit-logged.",
-  "File uploads — GFC sheets, BOQs, checklists — are versioned and attributed to your account.",
-  "Site attendance may require selfie and GPS where enabled by your organisation.",
-  "Do not share passwords. Contact the Sharnam office admin if your access needs to change.",
+  "Project data is confidential — share only through this portal.",
+  "Access is role-based and every action is audit-logged.",
+  "Uploads are versioned and tied to your account.",
+  "Do not share passwords — contact Sharnam admin for access changes.",
 ] as const;
 
 export const HUB_POLICIES = [
-  ...SHARNAM_PORTAL_POLICIES,
-  "Choose the portal that matches your role on the project — each desk shows only the tools you need.",
+  "Choose the portal that matches your role on the project.",
+  "Each desk shows only the tools you need.",
+  ...SHARNAM_PORTAL_POLICIES.slice(0, 2),
 ] as const;

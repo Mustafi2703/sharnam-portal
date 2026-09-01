@@ -41,23 +41,23 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   },
   office: {
     key: "office", title: "Office & Admin", shortLabel: "Office & Admin",
-    headline: "Sharnam office & admin control desk.",
-    subtitle: "Full PMC delivery — CRM, projects, master setup, bids, reports, and user access.",
+    headline: "Office & admin desk",
+    subtitle: "CRM, projects, bids, reports, and user access.",
     demoEmail: "office@sharnam.demo", allowedRoles: ["office", "admin"],
-    points: ["Admin & office roles", "CRM · Master · All modules", "Access · Audit"],
-    cta: "Enter Office / Admin", tone: "#0B6A78", icon: "OF",
+    points: ["Full PMC modules", "Master setup & CRM", "Roles & audit"],
+    cta: "Sign in", tone: "#0B6A78", icon: "OF",
     landingPath: "/dashboard", workspaceKey: null, group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Admin and office users may assign people to projects and open comparative bids."],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Admin and office users may assign people and open bids."],
   },
   site: {
     key: "site", title: "Site", shortLabel: "Site",
-    headline: "Field tools for site teams.",
-    subtitle: "Day logs, checklist fills, photos, and site RFIs.",
+    headline: "Site field desk",
+    subtitle: "Attendance, day logs, checklists, and site RFIs.",
     demoEmail: "site@sharnam.demo", allowedRoles: ["site_employee"],
-    points: ["Day log", "Checklist fills", "Photos · Site RFI"],
-    cta: "Enter Site", tone: "#15803D", icon: "ST",
+    points: ["Selfie + GPS check-in", "Day logs & checklists", "Photos & RFIs"],
+    cta: "Sign in", tone: "#15803D", icon: "ST",
     landingPath: "/attendance", workspaceKey: "comms", group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before using other site tools."],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before other site tools."],
   },
   employee: {
     key: "employee", title: "Employee", shortLabel: "Employee",
@@ -71,36 +71,36 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   },
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
-    headline: "Vendor & contractor portal.",
-    subtitle: "Trade partners — comparative bid BOQs, RFIs, checklists, and site evidence.",
+    headline: "Vendor portal",
+    subtitle: "Bid BOQs, RFIs, checklists, and site evidence.",
     demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
-    points: ["Bid BOQ uploads", "Fill RFIs", "Site checklists"],
-    cta: "Enter Vendor portal", tone: "#C45C26", icon: "VN",
+    points: ["Comparative bid BOQs", "RFI responses", "Site checklists"],
+    cta: "Sign in", tone: "#C45C26", icon: "VN",
     landingPath: "/crm/vendor-bids", workspaceKey: "drawings", group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to — comparative data is confidential."],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to."],
   },
   client: {
     key: "client", title: "Client", shortLabel: "Client",
-    headline: "Owner clarity on every sheet.",
+    headline: "Client portal",
     subtitle: "Published GFC, progress, reports, and concerns.",
     demoEmail: "client@sharnam.demo", allowedRoles: ["client"],
-    points: ["Published drawings", "Progress", "Concerns"],
-    cta: "Enter Client", tone: "#1E40AF", icon: "CL",
+    points: ["Published drawings", "Progress reports", "Raise concerns"],
+    cta: "Sign in", tone: "#1E40AF", icon: "CL",
     landingPath: "/dashboard", workspaceKey: "progress", group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Client view is read-only on published GFC and reports unless raising a concern."],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Read-only on published GFC unless raising a concern."],
   },
   stakeholder: {
     key: "stakeholder", title: "Stakeholders", shortLabel: "Stakeholders",
-    headline: "Partner PMC & consultant desk.",
-    subtitle: "External PMC firms and consultants — coordination, GFC review, meetings, RFIs.",
+    headline: "Stakeholder desk",
+    subtitle: "Partner PMC — coordination, GFC review, meetings, RFIs.",
     demoEmail: "pmc@sharnam.demo", allowedRoles: ["employee"],
-    points: ["Design coordination", "Meetings · MoM", "GFC · Ask RFI"],
-    cta: "Enter Stakeholder desk", tone: "#6366F1", icon: "PM",
+    points: ["Design coordination", "Meetings & MoM", "GFC · RFI"],
+    cta: "Sign in", tone: "#6366F1", icon: "PM",
     landingPath: "/stakeholder", workspaceKey: "drawings", group: "role",
     policies: [
       ...SHARNAM_PORTAL_POLICIES,
-      "Partner PMC access is limited to projects you are explicitly assigned to.",
-      "Coordination comments and RFIs are attributed and visible to the delivery team.",
+      "Access limited to projects you are assigned to.",
+      "Comments and RFIs are attributed to your account.",
     ],
   },
   drawings: {
@@ -138,14 +138,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   },
   hr: {
     key: "hr", title: "HR Team", shortLabel: "HR Team",
-    headline: "Dedicated HRMS desk.",
-    subtitle: "HR team only — recruitment, geo-attendance, leave, payroll, and appointment letters.",
+    headline: "HRMS desk",
+    subtitle: "Recruitment, attendance, leave, payroll, and letters.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office"],
-    points: ["Recruit → Offer → Onboard", "Attendance · Leave", "Payroll · Letters"],
-    cta: "Enter HR portal", tone: "#0D9488", icon: "HR",
+    points: ["Recruit to onboard", "Attendance & leave", "Payroll & letters"],
+    cta: "Sign in", tone: "#0D9488", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "HRMS data — payroll, offers, attendance — is restricted to authorised HR staff."],
+    policies: [...SHARNAM_PORTAL_POLICIES, "HRMS data is restricted to authorised HR staff."],
   },
 };
 
@@ -162,16 +162,11 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-/** Portals shown on /login hub — internal + external desks */
+/** Portals shown on /login hub */
 export const HUB_PORTAL_GROUPS: { label: string; keys: (keyof typeof PORTAL_LOGINS)[] }[] = [
-  {
-    label: "Sharnam internal",
-    keys: ["office", "hr"],
-  },
-  {
-    label: "Project partners",
-    keys: ["stakeholder", "vendor", "client"],
-  },
+  { label: "Sharnam internal", keys: ["office", "hr"] },
+  { label: "Project partners", keys: ["stakeholder", "vendor", "client"] },
+  { label: "Site field teams", keys: ["site"] },
 ];
 
 /** Flat list (legacy) */
@@ -181,6 +176,7 @@ export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
   "stakeholder",
   "vendor",
   "client",
+  "site",
 ];
 
 /** Cinematic hero per portal — each login gets a distinct construction / PMC photo */
@@ -237,9 +233,9 @@ function AuthScene() {
   );
 }
 
-function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
+function BrandMark({ showTagline = true, compact = false }: { showTagline?: boolean; compact?: boolean }) {
   return (
-    <div className="auth-brand">
+    <div className={`auth-brand auth-brand--left${compact ? " auth-brand--compact" : ""}`}>
       <img
         src="/logo-transparent.png?v=10"
         alt="शरणम् — Sharnam Project Management Consultants"
@@ -257,6 +253,35 @@ function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   );
 }
 
+function AuthBulletList({ items, className = "" }: { items: readonly string[]; className?: string }) {
+  return (
+    <ul className={`auth-bullets ${className}`.trim()}>
+      {items.map((p) => (
+        <li key={p}>{p}</li>
+      ))}
+    </ul>
+  );
+}
+
+function AuthLeftPanel({ cfg, policies }: { cfg: PortalConfig; policies: readonly string[] }) {
+  const panelPolicies = policies.slice(0, 4);
+  return (
+    <div className="auth-left-panel auth-left-panel--futura">
+      <BrandMark compact />
+      <div className="auth-left-panel__portal">
+        <span className="auth-layout__portal-chip auth-layout__portal-chip--futura">{cfg.icon}</span>
+        <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
+        <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
+      </div>
+      <AuthBulletList items={cfg.points} className="auth-bullets--features" />
+      <div className="auth-policies auth-policies--futura auth-policies--compact">
+        <p className="auth-policies__title">Policies</p>
+        <AuthBulletList items={panelPolicies} className="auth-bullets--policies" />
+      </div>
+    </div>
+  );
+}
+
 function AuthFuturisticBackdrop() {
   return (
     <div className="auth-fx" aria-hidden>
@@ -265,30 +290,6 @@ function AuthFuturisticBackdrop() {
       <div className="auth-fx__orb auth-fx__orb--a" />
       <div className="auth-fx__orb auth-fx__orb--b" />
       <div className="auth-fx__orb auth-fx__orb--c" />
-    </div>
-  );
-}
-
-function AuthLeftPanel({ cfg, policies }: { cfg: PortalConfig; policies: readonly string[] }) {
-  return (
-    <div className="auth-left-panel auth-left-panel--futura">
-      <p className="auth-fx__eyebrow">Sharnam secure portal</p>
-      <span className="auth-layout__portal-chip auth-layout__portal-chip--futura">{cfg.icon}</span>
-      <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
-      <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
-      <ul className="auth-layout__portal-points auth-layout__portal-points--futura">
-        {cfg.points.map((p) => (
-          <li key={p}>{p}</li>
-        ))}
-      </ul>
-      <div className="auth-policies auth-policies--futura">
-        <p className="auth-policies__title">Portal policies</p>
-        <ul className="auth-policies__list">
-          {policies.map((p) => (
-            <li key={p}>{p}</li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 }
@@ -340,16 +341,15 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="auth-signin auth-signin--split auth-signin--futura" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
-      <div className="auth-signin__main">
-        <div className="auth-signin__badge auth-signin__badge--futura">
-          <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
-          <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
-        </div>
-        <h2 className="auth-signin__title">Authenticate</h2>
-        <p className="auth-signin__sub">Secure access · encrypted session · audit trail enabled</p>
+    <div className="auth-signin auth-signin--solo auth-signin--futura" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <div className="auth-signin__badge auth-signin__badge--futura">
+        <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
+        <span>{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
+      </div>
+      <h2 className="auth-signin__title">Sign in</h2>
+      <p className="auth-signin__sub">Secure session · audit trail enabled</p>
 
-        <form className="auth-signin__form" onSubmit={onSubmit}>
+      <form className="auth-signin__form" onSubmit={onSubmit}>
           <label className="auth-signin__field">
             <span>Email</span>
             <input
@@ -394,29 +394,28 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
         </form>
 
         <p className="auth-signin__demo">
-          Demo: <strong>{cfg.demoEmail}</strong>
+          <span className="auth-signin__demo-row">
+            <span>Demo</span>
+            <strong>{cfg.demoEmail}</strong>
+          </span>
           {cfg.key === "office" && (
-            <> · admin: <strong>admin@sharnam.demo</strong></>
+            <span className="auth-signin__demo-row">
+              <span>Admin</span>
+              <strong>admin@sharnam.demo</strong>
+            </span>
           )}
-          {" "}· password <strong>Demo@1234</strong>
+          <span className="auth-signin__demo-row">
+            <span>Password</span>
+            <strong>Demo@1234</strong>
+          </span>
         </p>
-        <div className="auth-policies auth-policies--mobile">
+        <div className="auth-policies auth-policies--mobile auth-policies--compact">
           <p className="auth-policies__title">Policies</p>
-          <ul className="auth-policies__list">
-            {(cfg.policies.length ? cfg.policies : SHARNAM_PORTAL_POLICIES).slice(0, 3).map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
+          <AuthBulletList
+            items={(cfg.policies.length ? cfg.policies : SHARNAM_PORTAL_POLICIES).slice(0, 3)}
+            className="auth-bullets--policies"
+          />
         </div>
-      </div>
-      <div className="auth-signin__brand auth-signin__brand--futura">
-        <div className="auth-signin__logo-ring">
-          <AuthLogo size="md" />
-        </div>
-        <p className="auth-signin__brand-tag">शरणम्</p>
-        <p className="auth-signin__brand-sub">Project Management Consultants</p>
-        <div className="auth-brand__accent auth-brand__accent--futura" aria-hidden />
-      </div>
     </div>
   );
 }
@@ -480,6 +479,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
         <div className="auth-mobile-intro auth-mobile-intro--portal auth-mobile-intro--futura">
           <span className="auth-layout__portal-chip">{cfg.icon}</span>
           <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
+          <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
         </div>
         <SignInCard cfg={cfg} />
       </main>
@@ -497,8 +497,7 @@ function PortalHubCard({ cfg }: { cfg: PortalConfig }) {
       <span className="auth-hub-card__icon auth-hub-card__icon--futura" aria-hidden>{cfg.icon}</span>
       <div className="auth-hub-card__body">
         <span className="auth-hub-card__label">{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
-        <span className="auth-hub-card__headline">{cfg.headline}</span>
-        <span className="auth-hub-card__hint">{cfg.points[0]}</span>
+        <span className="auth-hub-card__hint">{cfg.subtitle}</span>
       </div>
       <span className="auth-hub-card__arrow auth-hub-card__arrow--futura" aria-hidden>→</span>
     </Link>
@@ -520,26 +519,28 @@ export function LoginHubPage() {
       <aside className="auth-layout__brand auth-layout__brand--hub auth-layout__brand--futura">
         <BrandMark />
         <p className="auth-layout__hero-copy auth-layout__hero-copy--futura">
-          Enterprise PMC workspace — drawings, quality, site execution, cost, CRM, and stakeholder collaboration in one secure portal.
+          One secure workspace for drawings, quality, site execution, CRM, and stakeholder collaboration.
         </p>
-        <div className="auth-policies auth-policies--hub auth-policies--futura">
-          <p className="auth-policies__title">Portal policies</p>
-          <ul className="auth-policies__list">
-            {HUB_POLICIES.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
+        <AuthBulletList
+          items={["Office, HR, site & partner portals", "Role-based access on every project", "Audit-logged actions & versioned uploads"]}
+          className="auth-bullets--features auth-bullets--hub"
+        />
+        <div className="auth-policies auth-policies--hub auth-policies--futura auth-policies--compact">
+          <p className="auth-policies__title">Policies</p>
+          <AuthBulletList items={HUB_POLICIES} className="auth-bullets--policies" />
         </div>
       </aside>
       <main className="auth-layout__main auth-layout__main--hub auth-layout__main--futura">
         <header className="auth-hub__header auth-hub__header--futura">
-          <p className="auth-fx__eyebrow auth-fx__eyebrow--hub">Select access lane</p>
-          <h1 className="auth-hub__title">Choose your portal</h1>
-          <p className="auth-hub__sub">Office & Admin · HR · Stakeholders · Vendors · Clients</p>
+          <p className="auth-fx__eyebrow auth-fx__eyebrow--hub">Select portal</p>
+          <h1 className="auth-hub__title">Choose your access</h1>
         </header>
         <div className="auth-hub__sections">
           {HUB_PORTAL_GROUPS.map((group) => (
-            <section key={group.label} className="auth-hub__section">
+            <section
+              key={group.label}
+              className={`auth-hub__section${group.keys.length === 1 ? " auth-hub__section--solo" : ""}`}
+            >
               <h2 className="auth-hub__section-title">{group.label}</h2>
               <div className="auth-hub__grid">
                 {group.keys.map((k) => (
@@ -549,12 +550,6 @@ export function LoginHubPage() {
             </section>
           ))}
         </div>
-        <p className="auth-hub__site-link">
-          Site field teams:{" "}
-          <Link to="/login/site" className="text-brand font-semibold">
-            Site portal →
-          </Link>
-        </p>
       </main>
     </div>
   );
