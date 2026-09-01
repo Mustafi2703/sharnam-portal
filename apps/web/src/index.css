@@ -9414,3 +9414,33 @@ body {
   }
 }
 
+.auth-hub__sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 640px;
+}
+
+.auth-hub__section-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(153, 246, 228, 0.75);
+}
+
+.auth-hub__site-link {
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.85);
+  text-align: center;
+  width: 100%;
+  max-width: 640px;
+}
+
+.auth-hub__site-link a {
+  color: #99f6e4;
+}
+

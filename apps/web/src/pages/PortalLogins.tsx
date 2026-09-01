@@ -40,14 +40,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [...SHARNAM_PORTAL_POLICIES, "Master desk configures projects, modules, and global templates."],
   },
   office: {
-    key: "office", title: "Office", shortLabel: "Office",
-    headline: "Full control desk.",
-    subtitle: "Master, CRM, HRMS, cost, and every project module.",
+    key: "office", title: "Office & Admin", shortLabel: "Office & Admin",
+    headline: "Sharnam office & admin control desk.",
+    subtitle: "Full PMC delivery — CRM, projects, master setup, bids, reports, and user access.",
     demoEmail: "office@sharnam.demo", allowedRoles: ["office", "admin"],
-    points: ["Access & roles", "All modules", "Reports · Audit"],
-    cta: "Enter Office", tone: "#0B6A78", icon: "OF",
+    points: ["Admin & office roles", "CRM · Master · All modules", "Access · Audit"],
+    cta: "Enter Office / Admin", tone: "#0B6A78", icon: "OF",
     landingPath: "/dashboard", workspaceKey: null, group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Office users may assign people to projects and open comparative bids."],
+    policies: [...SHARNAM_PORTAL_POLICIES, "Admin and office users may assign people to projects and open comparative bids."],
   },
   site: {
     key: "site", title: "Site", shortLabel: "Site",
@@ -70,12 +70,12 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [...SHARNAM_PORTAL_POLICIES],
   },
   vendor: {
-    key: "vendor", title: "Contractor", shortLabel: "Contractor",
-    headline: "Trade partner portal.",
-    subtitle: "Fill bid BOQs online, RFIs, and site evidence.",
+    key: "vendor", title: "Vendor", shortLabel: "Vendor",
+    headline: "Vendor & contractor portal.",
+    subtitle: "Trade partners — comparative bid BOQs, RFIs, checklists, and site evidence.",
     demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
-    points: ["My bid uploads", "Fill RFIs", "Checklists"],
-    cta: "Enter Contractor", tone: "#C45C26", icon: "VN",
+    points: ["Bid BOQ uploads", "Fill RFIs", "Site checklists"],
+    cta: "Enter Vendor portal", tone: "#C45C26", icon: "VN",
     landingPath: "/crm/vendor-bids", workspaceKey: "drawings", group: "role",
     policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to — comparative data is confidential."],
   },
@@ -90,12 +90,12 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [...SHARNAM_PORTAL_POLICIES, "Client view is read-only on published GFC and reports unless raising a concern."],
   },
   stakeholder: {
-    key: "stakeholder", title: "Stakeholders", shortLabel: "Partner PMC",
+    key: "stakeholder", title: "Stakeholders", shortLabel: "Stakeholders",
     headline: "Partner PMC & consultant desk.",
-    subtitle: "External PMC firms — coordination, GFC review, meetings, and RFIs on assigned projects.",
-    demoEmail: "pmc@sharnam.demo", allowedRoles: ["employee", "office"],
+    subtitle: "External PMC firms and consultants — coordination, GFC review, meetings, RFIs.",
+    demoEmail: "pmc@sharnam.demo", allowedRoles: ["employee"],
     points: ["Design coordination", "Meetings · MoM", "GFC · Ask RFI"],
-    cta: "Enter Partner desk", tone: "#6366F1", icon: "PM",
+    cta: "Enter Stakeholder desk", tone: "#6366F1", icon: "PM",
     landingPath: "/stakeholder", workspaceKey: "drawings", group: "role",
     policies: [
       ...SHARNAM_PORTAL_POLICIES,
@@ -137,13 +137,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [...SHARNAM_PORTAL_POLICIES],
   },
   hr: {
-    key: "hr", title: "HRMS", shortLabel: "HRMS",
+    key: "hr", title: "HR Team", shortLabel: "HR Team",
     headline: "Dedicated HRMS desk.",
-    subtitle: "Separate login for HR team — recruitment, attendance, payroll, and appointment letters.",
+    subtitle: "HR team only — recruitment, geo-attendance, leave, payroll, and appointment letters.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office"],
-    points: ["Recruit → Offer → Onboard", "Geo-attendance · Leave", "Payroll · Letters"],
-    cta: "Enter HRMS", tone: "#0D9488", icon: "HR",
+    points: ["Recruit → Offer → Onboard", "Attendance · Leave", "Payroll · Letters"],
+    cta: "Enter HR portal", tone: "#0D9488", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",
     policies: [...SHARNAM_PORTAL_POLICIES, "HRMS data — payroll, offers, attendance — is restricted to authorised HR staff."],
   },
@@ -162,11 +162,23 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
+/** Portals shown on /login hub — internal + external desks */
+export const HUB_PORTAL_GROUPS: { label: string; keys: (keyof typeof PORTAL_LOGINS)[] }[] = [
+  {
+    label: "Sharnam internal",
+    keys: ["office", "hr"],
+  },
+  {
+    label: "Project partners",
+    keys: ["stakeholder", "vendor", "client"],
+  },
+];
+
+/** Flat list (legacy) */
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
   "office",
   "hr",
   "stakeholder",
-  "site",
   "vendor",
   "client",
 ];
@@ -193,8 +205,10 @@ function portalHero(key: string) {
 }
 
 function portalDisplayName(key: string, shortLabel: string) {
-  if (key === "vendor") return "Contractor";
-  if (key === "stakeholder") return "Partner PMC";
+  if (key === "vendor") return "Vendor";
+  if (key === "stakeholder") return "Stakeholders";
+  if (key === "office") return "Office & Admin";
+  if (key === "hr") return "HR Team";
   return shortLabel;
 }
 
@@ -380,7 +394,11 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
         </form>
 
         <p className="auth-signin__demo">
-          Demo: <strong>{cfg.demoEmail}</strong> · password <strong>Demo@1234</strong>
+          Demo: <strong>{cfg.demoEmail}</strong>
+          {cfg.key === "office" && (
+            <> · admin: <strong>admin@sharnam.demo</strong></>
+          )}
+          {" "}· password <strong>Demo@1234</strong>
         </p>
         <div className="auth-policies auth-policies--mobile">
           <p className="auth-policies__title">Policies</p>
@@ -517,13 +535,26 @@ export function LoginHubPage() {
         <header className="auth-hub__header auth-hub__header--futura">
           <p className="auth-fx__eyebrow auth-fx__eyebrow--hub">Select access lane</p>
           <h1 className="auth-hub__title">Choose your portal</h1>
-          <p className="auth-hub__sub">Office · HR · Partner PMC · Site · Contractor · Client</p>
+          <p className="auth-hub__sub">Office & Admin · HR · Stakeholders · Vendors · Clients</p>
         </header>
-        <div className="auth-hub__grid">
-          {HUB_PORTALS.map((k) => (
-            <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
+        <div className="auth-hub__sections">
+          {HUB_PORTAL_GROUPS.map((group) => (
+            <section key={group.label} className="auth-hub__section">
+              <h2 className="auth-hub__section-title">{group.label}</h2>
+              <div className="auth-hub__grid">
+                {group.keys.map((k) => (
+                  <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
+        <p className="auth-hub__site-link">
+          Site field teams:{" "}
+          <Link to="/login/site" className="text-brand font-semibold">
+            Site portal →
+          </Link>
+        </p>
       </main>
     </div>
   );

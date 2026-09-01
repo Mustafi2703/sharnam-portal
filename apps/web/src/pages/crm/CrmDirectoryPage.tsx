@@ -284,11 +284,12 @@ function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdi
           <Input required placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
           <Input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            <option value="vendor">Contractor / vendor</option>
+            <option value="admin">Admin (office portal)</option>
+            <option value="office">Office team</option>
+            <option value="employee">Stakeholder / partner PMC</option>
+            <option value="vendor">Vendor / contractor</option>
             <option value="client">Client</option>
-            <option value="office">Office</option>
             <option value="site_employee">Site employee</option>
-            <option value="employee">Employee</option>
           </Select>
           <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           {canEdit && <Button type="submit">Create login</Button>}
