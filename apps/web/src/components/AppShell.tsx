@@ -90,7 +90,6 @@ const ROLE_LABELS: Record<string, string> = {
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/crm", label: "CRM", icon: "modules" },
   { to: "/crm/bids", label: "Bid management", icon: "cost" },
-  { to: "/quotations/new", label: "PMC proposal", icon: "reports" },
   { to: "/login/hr", label: "HR portal", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
   { to: "/roles", label: "Access · Users", icon: "master" },

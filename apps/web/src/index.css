@@ -8905,3 +8905,138 @@ body {
   }
 }
 
+/* Clean auth — no background photos, Sharnam logo on card */
+.auth-layout--clean {
+  background: linear-gradient(165deg, #f0f2f4 0%, #e6f4f6 42%, #f5f7f8 100%);
+  color: #121417;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.auth-layout--clean .auth-scene {
+  display: none;
+}
+
+.auth-layout__main--clean {
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.auth-layout__main--hub-clean {
+  max-width: 720px;
+}
+
+.auth-hub-clean {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.auth-signin--clean {
+  background: #ffffff;
+  border: 1px solid #c5cdd2;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(11, 106, 120, 0.08);
+  padding: 1.75rem 1.5rem 1.5rem;
+  color: #121417;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+
+.auth-signin--clean .auth-logo {
+  margin-bottom: 0.75rem;
+}
+
+.auth-signin--clean .auth-signin__badge {
+  background: var(--auth-brand-soft, #e6f4f6);
+  color: var(--portal-accent, #0b6a78);
+  border: 1px solid rgba(11, 106, 120, 0.15);
+}
+
+.auth-signin--clean .auth-signin__title {
+  color: #121417;
+  font-size: 1.15rem;
+  margin: 0.5rem 0 0.35rem;
+}
+
+.auth-signin--clean .auth-signin__sub {
+  color: #5c6570;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+  max-width: 34ch;
+}
+
+.auth-signin--clean .auth-signin__form {
+  width: 100%;
+  text-align: left;
+}
+
+.auth-signin--clean .auth-signin__field span {
+  color: #3d4450;
+}
+
+.auth-signin--clean .auth-signin__field input {
+  background: #fff;
+  border: 1px solid #c5cdd2;
+  color: #121417;
+}
+
+.auth-signin--clean .auth-signin__submit {
+  background: var(--portal-accent, #0b6a78);
+  color: #fff;
+  width: 100%;
+}
+
+.auth-signin--clean .auth-signin__demo {
+  color: #5c6570;
+  font-size: 0.72rem;
+  margin-top: 1rem;
+}
+
+.auth-signin--clean .auth-signin__back {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--portal-accent, #0b6a78);
+}
+
+.auth-layout--clean .auth-hub__title {
+  color: #121417;
+}
+
+.auth-layout--clean .auth-hub__sub {
+  color: #5c6570;
+}
+
+.auth-layout--clean .auth-hub-card {
+  background: #fff;
+  border: 1px solid #c5cdd2;
+  color: #121417;
+  box-shadow: 0 4px 16px rgba(18, 20, 23, 0.04);
+}
+
+.auth-layout--clean .auth-hub-card__headline {
+  color: #121417;
+}
+
+.auth-layout--clean .auth-hub-card__hint {
+  color: #5c6570;
+}
+
+.auth-layout--clean .auth-hub-card:hover {
+  border-color: var(--portal-accent, #0b6a78);
+  box-shadow: 0 8px 24px rgba(11, 106, 120, 0.12);
+}
+

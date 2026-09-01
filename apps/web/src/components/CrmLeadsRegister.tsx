@@ -311,7 +311,7 @@ export function CrmLeadsRegister({
 
               {canWrite && (
                 <div className="space-y-2 border-t border-line pt-3">
-                  <Link to={`/quotations/new?leadId=${selected.id}`} className="inline-flex text-sm font-semibold text-brand">
+                  <Link to={`/crm/proposals/new?leadId=${selected.id}`} className="inline-flex text-sm font-semibold text-brand">
                     Create PMC proposal (Word in SharePoint) →
                   </Link>
                   <label className="text-[10px] font-mono uppercase text-steel-muted">Internal pipeline stage</label>

@@ -267,13 +267,13 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="auth-signin auth-signin--split" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
-      <div className="auth-signin__main">
+    <div className="auth-signin auth-signin--clean" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+      <AuthLogo size="sm" />
       <div className="auth-signin__badge">
         <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
         <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
       </div>
-      <h2 className="auth-signin__title">Sign in</h2>
+      <h2 className="auth-signin__title">{cfg.headline}</h2>
       <p className="auth-signin__sub">{cfg.subtitle}</p>
 
       <form className="auth-signin__form" onSubmit={onSubmit}>
@@ -311,7 +311,7 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
             placeholder={showPwd ? "your password" : "••••••••"}
           />
           {capsLock && (
-            <span className="text-[10px] mt-1 opacity-70" style={{ color: "#F59E0B" }}>
+            <span className="text-[10px] mt-1 opacity-70" style={{ color: "#B45309" }}>
               Caps Lock is on
             </span>
           )}
@@ -320,45 +320,14 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
         <button type="submit" className="auth-signin__submit" disabled={busy}>
           {busy ? "Signing in…" : cfg.cta}
         </button>
-
-        <button
-          type="button"
-          className="auth-signin__submit"
-          disabled
-          style={{
-            marginTop: 8,
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.18)",
-            color: "rgba(226,232,240,0.55)",
-            cursor: "not-allowed",
-          }}
-          title="Microsoft 365 SSO — coming after UAT"
-        >
-          Sign in with Microsoft 365 · coming soon
-        </button>
       </form>
 
       <p className="auth-signin__demo">
         Demo: <strong>{cfg.demoEmail}</strong> · password <strong>Demo@1234</strong>
       </p>
-      <p className="auth-signin__demo" style={{ marginTop: 4, opacity: 0.72 }}>
-        Trouble signing in? Contact the Office admin at{" "}
-        <a href="mailto:office@sharnam.demo" style={{ color: "#99F6E4" }}>
-          office@sharnam.demo
-        </a>
-      </p>
-      </div>
-      <div className="auth-signin__brand" aria-hidden>
-        <img
-          src="/logo-transparent.png?v=10"
-          alt=""
-          className="auth-signin__brand-logo"
-          width={280}
-          height={135}
-          decoding="async"
-        />
-        <p className="auth-signin__brand-tag">शरणम् · Project Management Consultants</p>
-      </div>
+      <Link to="/login" className="auth-signin__back">
+        ← All portals
+      </Link>
     </div>
   );
 }
@@ -404,41 +373,11 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 
   return (
     <div
-      className="auth-layout auth-layout--portal"
+      className="auth-layout auth-layout--clean auth-layout--portal-clean"
       data-portal={portalKey}
-      style={
-        {
-          ["--portal-accent" as string]: cfg.tone,
-          ["--auth-hero" as string]: `url(${portalHero(portalKey)})`,
-        } as CSSProperties
-      }
+      style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
     >
-      <AuthScene />
-      <AuthMobileNav backTo="/login" />
-      <aside
-        className="auth-layout__brand auth-layout__brand--portal"
-      >
-        <BrandMark showTagline={false} />
-        <div className="auth-layout__portal-intro">
-          <span className="auth-layout__portal-chip">{cfg.icon}</span>
-          <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
-          <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
-          <ul className="auth-layout__portal-points">
-            {cfg.points.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
-        </div>
-        <Link to="/login" className="auth-layout__back">
-          ← All portals
-        </Link>
-      </aside>
-      <main className="auth-layout__main auth-layout__main--portal">
-        <div className="auth-mobile-intro auth-mobile-intro--portal">
-          <span className="auth-layout__portal-chip">{cfg.icon}</span>
-          <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
-          <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
-        </div>
+      <main className="auth-layout__main auth-layout__main--clean">
         <SignInCard cfg={cfg} />
       </main>
     </div>
@@ -470,31 +409,21 @@ export function LoginHubPage() {
 
   return (
     <div
-      className="auth-layout auth-layout--hub"
-      style={
-        {
-          ["--portal-accent" as string]: "#0B6A78",
-          ["--auth-hero" as string]: `url(${portalHero("hub")})`,
-        } as CSSProperties
-      }
+      className="auth-layout auth-layout--clean auth-layout--hub-clean"
+      style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}
     >
-      <AuthScene />
-      <AuthMobileNav logoSize="md" />
-      <aside className="auth-layout__brand auth-layout__brand--hub">
-        <BrandMark />
-        <p className="auth-layout__hero-copy">
-          Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
-        </p>
-      </aside>
-      <main className="auth-layout__main auth-layout__main--hub">
-        <header className="auth-hub__header">
-          <h1 className="auth-hub__title">Choose your portal</h1>
-          <p className="auth-hub__sub">Select the desk that matches your role on the project.</p>
-        </header>
-        <div className="auth-hub__grid">
-          {HUB_PORTALS.map((k) => (
-            <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
-          ))}
+      <main className="auth-layout__main auth-layout__main--clean auth-layout__main--hub-clean">
+        <div className="auth-hub-clean">
+          <AuthLogo size="md" />
+          <header className="auth-hub__header">
+            <h1 className="auth-hub__title">Choose your portal</h1>
+            <p className="auth-hub__sub">Office · HR · Site · Contractor · Client — one Sharnam workspace.</p>
+          </header>
+          <div className="auth-hub__grid">
+            {HUB_PORTALS.map((k) => (
+              <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
+            ))}
+          </div>
         </div>
       </main>
     </div>

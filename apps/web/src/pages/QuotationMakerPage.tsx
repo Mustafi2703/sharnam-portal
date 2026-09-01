@@ -102,7 +102,7 @@ export default function QuotationMakerPage() {
       });
       setSaved(r);
       setMsg(`Proposal file created for ${name}. Open it in Drive to edit.`);
-      nav(`/quotations/${r.id}`, { replace: true });
+      nav(`/crm/proposals/${r.id}`, { replace: true });
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not create proposal");
     } finally {
@@ -144,7 +144,7 @@ export default function QuotationMakerPage() {
       />
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/crm">
+        <Link to="/crm/proposals">
           <Button type="button" variant="secondary">
             ← CRM list
           </Button>

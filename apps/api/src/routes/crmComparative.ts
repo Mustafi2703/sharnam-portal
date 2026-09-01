@@ -364,6 +364,77 @@ crmComparativeRouter.post("/bid-packages/:id/disciplines", requireRoles("admin",
   res.json({ disciplines: merged, added: toAdd, slotsCreated: created.count });
 });
 
+/** Add bidders to an existing package (Draft or Open) — creates BOQ slots and optionally notifies. */
+crmComparativeRouter.post("/bid-packages/:id/vendors", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: req.params.id },
+    include: { vendorBoqs: { select: { vendorLabel: true, discipline: true } } },
+  });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+  const vendorIds = Array.isArray(req.body.vendorIds) ? req.body.vendorIds.map(String).filter(Boolean) : [];
+  if (!vendorIds.length) return res.status(400).json({ error: "vendorIds required" });
+
+  const vendors = await prisma.vendor.findMany({
+    where: { id: { in: vendorIds } },
+    select: { id: true, name: true, email: true },
+  });
+  if (!vendors.length) return res.status(400).json({ error: "No matching vendors found" });
+
+  const existingNames = parseVendorNames(pkg.vendorNamesJson);
+  const toAdd = vendors.filter((v) => !existingNames.includes(v.name));
+  if (!toAdd.length) return res.status(400).json({ error: "All selected vendors are already on this package" });
+
+  const disciplines = packageDisciplines(pkg);
+  if (!disciplines.length) return res.status(400).json({ error: "Package has no disciplines" });
+
+  const mergedNames = [...existingNames, ...toAdd.map((v) => v.name)];
+  await prisma.crmBidPackage.update({
+    where: { id: pkg.id },
+    data: { vendorNamesJson: JSON.stringify(mergedNames) },
+  });
+
+  const created = await prisma.crmVendorBoq.createMany({
+    data: toAdd.flatMap((v) =>
+      disciplines.map((d) => ({
+        bidPackageId: pkg.id,
+        vendorLabel: v.name,
+        discipline: d.key,
+        vendorId: v.id,
+      }))
+    ),
+    skipDuplicates: true,
+  });
+
+  await ensureVendorBoqTemplateSheets(
+    prisma,
+    pkg.id,
+    toAdd.map((v) => v.name),
+    disciplines,
+    req.user!.id
+  );
+
+  let notify = null;
+  if (pkg.status === "Open" || pkg.status === "Evaluation") {
+    notify = await notifyBidPackageOpened({
+      bidPackageId: pkg.id,
+      openedByUserId: req.user!.id,
+      vendorLabelsOnly: toAdd.map((v) => v.name),
+      createLogins: req.body.createLogins !== false,
+    });
+  }
+
+  await audit("crm.comparative.add_vendors", {
+    userId: req.user!.id,
+    entity: "CrmBidPackage",
+    entityId: pkg.id,
+    meta: { added: toAdd.map((v) => v.name), slots: created.count, notified: notify?.notified ?? 0 },
+  });
+
+  const updated = await loadBidPackage(pkg.id);
+  res.json({ package: updated, added: toAdd.map((v) => v.name), slotsCreated: created.count, notify });
+});
+
 /** Upload vendor BOQ for a specific discipline (office or matching vendor). */
 crmComparativeRouter.post(
   "/bid-packages/:id/vendor-boq/:slotId",
@@ -554,6 +625,7 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
     bidPackageId: pkg.id,
     openedByUserId: req.user!.id,
     dueDate,
+    createLogins: req.body.createLogins !== false,
   });
 
   await audit("crm.comparative.open", {

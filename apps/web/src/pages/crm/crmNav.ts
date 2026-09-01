@@ -1,14 +1,61 @@
-/** CRM desk tool rail — same pattern as project module strips. */
+/** CRM desk — pipeline, bids, directories, and quotation tools in one shell. */
 export const CRM_ACCENT = "#0B6A78";
 export const CRM_SOFT = "#E6F4F6";
 
-export const CRM_TOOLS = [
-  { to: "leads", label: "Leads register", end: false, subtitle: "530+ market projects · filter · convert to SPDC delivery." },
-  { to: "bids", label: "Bid management", end: false, subtitle: "R2 comparative — open bid per project, discipline BOQs, L1 award." },
-  { to: "proposals", label: "PMC proposals", end: false, subtitle: "Client quotation maker and status log." },
-  { to: "projects", label: "New project", end: false, subtitle: "Wizard to spin up a delivery project from a CRM win." },
-] as const;
+export type CrmTool = {
+  to: string;
+  label: string;
+  end?: boolean;
+  subtitle: string;
+};
+
+export type CrmSection = {
+  id: string;
+  label: string;
+  tools: CrmTool[];
+};
+
+export const CRM_SECTIONS: CrmSection[] = [
+  {
+    id: "pipeline",
+    label: "Pipeline",
+    tools: [
+      { to: "leads", label: "Leads", subtitle: "Market register · filter · convert to SPDC delivery project." },
+      { to: "proposals", label: "Proposals", subtitle: "PMC quotation register, status log, and letter export." },
+      { to: "projects", label: "Project setup", subtitle: "Spin up delivery project from a CRM win." },
+    ],
+  },
+  {
+    id: "bids",
+    label: "Bid management",
+    tools: [
+      {
+        to: "bids",
+        label: "Comparative bids",
+        subtitle: "R2 discipline BOQs · open bid · L1 award · add bidders after deploy.",
+      },
+    ],
+  },
+  {
+    id: "directories",
+    label: "Directories",
+    tools: [
+      { to: "directory/vendors", label: "Vendors", subtitle: "Contractors & suppliers for comparative packages." },
+      { to: "directory/clients", label: "Clients", subtitle: "Owner organisations · portal logins." },
+      { to: "directory/stakeholders", label: "Stakeholders", subtitle: "Consultants, designers, and PMC partners." },
+      { to: "directory/people", label: "People & access", subtitle: "Office, site, vendor, and client portal accounts." },
+    ],
+  },
+];
+
+/** Flat list for subtitle lookup */
+export const CRM_TOOLS = CRM_SECTIONS.flatMap((s) => s.tools);
 
 export const CRM_VENDOR_TOOLS = [
-  { to: "vendor-bids", label: "My bid uploads", end: true, subtitle: "Fill discipline BOQs online or upload Excel — comparative updates for PMC." },
+  {
+    to: "vendor-bids",
+    label: "My bid uploads",
+    end: true,
+    subtitle: "Fill discipline BOQs online or upload Excel — comparative updates for PMC.",
+  },
 ] as const;

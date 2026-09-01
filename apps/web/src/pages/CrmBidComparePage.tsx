@@ -88,6 +88,7 @@ export default function CrmBidComparePage() {
   const [customDiscLabel, setCustomDiscLabel] = useState("");
   const [customDiscSheet, setCustomDiscSheet] = useState("");
   const [addDiscKeys, setAddDiscKeys] = useState<string[]>([]);
+  const [addVendorIds, setAddVendorIds] = useState<string[]>([]);
   const [deskFilter, setDeskFilter] = useState<"converted" | "all">("converted");
   const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
   const [showSetup, setShowSetup] = useState(true);
@@ -356,12 +357,53 @@ export default function CrmBidComparePage() {
         token,
         body: JSON.stringify({ disciplineKeys: addDiscKeys }),
       });
-      setMsg(`Added ${addDiscKeys.length} discipline(s) to package.`);
       setAddDiscKeys([]);
+      setMsg("Discipline BOQ slots added for all bidders on this package.");
       await loadDetail(selectedId);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add disciplines failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const packageVendorNames = useMemo(
+    () => [...new Set(detail?.vendorBoqs?.map((b) => b.vendorLabel) || [])],
+    [detail],
+  );
+
+  const vendorsNotOnPackage = useMemo(
+    () =>
+      vendors.filter(
+        (v) =>
+          !packageVendorNames.includes(v.name) &&
+          (v.partyType === "Contractor" || v.partyType === "Vendor" || !v.partyType),
+      ),
+    [vendors, packageVendorNames],
+  );
+
+  async function addVendorsToPackage() {
+    if (!selectedId || !addVendorIds.length) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ added: string[]; notify: { notified: number; total: number } | null }>(
+        `/api/crm/bid-packages/${selectedId}/vendors`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({ vendorIds: addVendorIds, createLogins: true }),
+        },
+      );
+      setAddVendorIds([]);
+      const notifyPart =
+        out.notify != null ? ` · emailed ${out.notify.notified}/${out.notify.total} new bidder(s)` : "";
+      setMsg(`Added ${out.added.join(", ")}${notifyPart}. Portal logins created when email is on file.`);
+      await loadDetail(selectedId);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add bidders failed");
     } finally {
       setBusy(false);
     }
@@ -449,8 +491,11 @@ export default function CrmBidComparePage() {
         <Link to="/crm/leads">
           <Button variant="secondary">← Leads</Button>
         </Link>
-        <Link to={`/quotations/new${detail?.lead?.id ? `?leadId=${detail.lead.id}` : ""}`}>
-          <Button variant="secondary">PMC proposal maker</Button>
+        <Link to="/crm/proposals/new">
+          <Button variant="secondary">New PMC proposal</Button>
+        </Link>
+        <Link to="/crm/directory/vendors">
+          <Button variant="secondary">Bidder directory</Button>
         </Link>
         <Button
           variant="secondary"
@@ -825,8 +870,48 @@ export default function CrmBidComparePage() {
                   <p className="text-xs text-steel-muted mb-3 border-l-2 border-brand pl-2">{detail.notes}</p>
                 )}
 
-                <div className="mb-4 p-3 border border-dashed border-line rounded-xl">
-                  <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add discipline BOQ slots</p>
+                <div className="mb-4 p-3 border border-dashed border-line rounded-xl space-y-4">
+                  <div>
+                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add bidders (after deploy)</p>
+                    <p className="text-[11px] text-steel-muted mb-2">
+                      Pick from{" "}
+                      <Link to="/crm/directory/vendors" className="text-brand font-semibold">
+                        CRM vendor directory
+                      </Link>
+                      . If the bid is already Open, new bidders are emailed and get portal logins when email is set.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mb-2 max-h-28 overflow-y-auto">
+                      {vendorsNotOnPackage.map((v) => (
+                        <label key={v.id} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1 bg-paper">
+                          <input
+                            type="checkbox"
+                            checked={addVendorIds.includes(v.id)}
+                            onChange={(e) =>
+                              setAddVendorIds((prev) =>
+                                e.target.checked ? [...prev, v.id] : prev.filter((x) => x !== v.id),
+                              )
+                            }
+                          />
+                          {v.name}
+                        </label>
+                      ))}
+                      {!vendorsNotOnPackage.length && (
+                        <span className="text-xs text-steel-muted">All directory vendors are already on this package.</span>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs"
+                      disabled={!addVendorIds.length || busy}
+                      onClick={() => void addVendorsToPackage()}
+                    >
+                      Add selected bidders
+                    </Button>
+                  </div>
+
+                  <div className="border-t border-line pt-3">
+                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add discipline BOQ slots</p>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {disciplines
                       .filter((d) => !(detail.disciplines || []).some((x) => x.key === d.key))
@@ -854,6 +939,7 @@ export default function CrmBidComparePage() {
                   >
                     Add selected disciplines to package
                   </Button>
+                  </div>
                 </div>
 
                 {vendorMatrix.length > 0 && (

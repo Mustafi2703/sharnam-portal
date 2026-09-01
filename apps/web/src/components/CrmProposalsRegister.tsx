@@ -88,7 +88,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {canWrite && (
-            <Link to="/quotations/new">
+            <Link to="/crm/proposals/new">
               <Button type="button" variant="secondary" className="!py-1.5 !text-xs">
                 + New proposal
               </Button>
@@ -149,7 +149,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                   <td className="font-mono text-[10px]">{row.project?.code || "—"}</td>
                   <td className="whitespace-nowrap">
                     <Link
-                      to={`/quotations/${row.id}`}
+                      to={`/crm/proposals/${row.id}`}
                       className="text-[10px] font-semibold text-brand"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -197,10 +197,10 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                     Open in Drive →
                   </a>
                 )}
-                <Link to={`/quotations/${selected.id}`} className="text-sm font-semibold text-brand">
+                <Link to={`/crm/proposals/${selected.id}`} className="text-sm font-semibold text-brand">
                   Full status log →
                 </Link>
-                  <Link to={`/quotations/new?leadId=${selected.id}`} className="text-sm font-semibold text-brand">
+                  <Link to={`/crm/proposals/new?leadId=${selected.id}`} className="text-sm font-semibold text-brand">
                     Create PMC proposal (Word in SharePoint) →
                   </Link>
               </div>

@@ -62,6 +62,7 @@ import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
 import HrmsVendorsPage from "./pages/hrms/HrmsVendorsPage";
+import CrmDirectoryPage from "./pages/crm/CrmDirectoryPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 import TrainingPage from "./pages/TrainingPage";
 import { SiteAttendanceGate } from "./components/SiteAttendanceGate";
@@ -83,6 +84,11 @@ function HomeRedirect() {
   const { user } = useAuth();
   if (user?.role === "site_employee") return <Navigate to="/attendance" replace />;
   return <Navigate to="/dashboard" replace />;
+}
+
+function RedirectCrmQuotation() {
+  const { id } = useParams();
+  return <Navigate to={`/crm/proposals/${id || ""}`} replace />;
 }
 
 function RedirectHrmsOnboarding() {
@@ -238,8 +244,12 @@ export default function App() {
                 <Route path="/crm" element={<CrmLayout />}>
                   <Route index element={<Navigate to="/crm/leads" replace />} />
                   <Route path="leads" element={<CrmPage />} />
+                  <Route path="proposals/new" element={<QuotationMakerPage />} />
+                  <Route path="proposals/:id" element={<QuotationMakerPage />} />
                   <Route path="proposals" element={<CrmPage />} />
                   <Route path="projects" element={<CrmPage />} />
+                  <Route path="directory/:tab" element={<CrmDirectoryPage />} />
+                  <Route path="directory" element={<Navigate to="/crm/directory/vendors" replace />} />
                   <Route path="bids" element={<CrmBidComparePage />} />
                   <Route path="bids/:id" element={<CrmBidComparePage />} />
                   <Route path="vendor-bids" element={<CrmVendorBidsPage />} />
@@ -254,8 +264,8 @@ export default function App() {
                 <Route path="/hrms/attendance" element={<Navigate to="/hrm/attendance" replace />} />
                 <Route path="/hrms/leave" element={<Navigate to="/hrm/leave" replace />} />
                 <Route path="/hrms/masters" element={<Navigate to="/hrm/masters" replace />} />
-                <Route path="/quotations/new" element={<QuotationMakerPage />} />
-                <Route path="/quotations/:id" element={<QuotationMakerPage />} />
+                <Route path="/quotations/new" element={<Navigate to="/crm/proposals/new" replace />} />
+                <Route path="/quotations/:id" element={<RedirectCrmQuotation />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />

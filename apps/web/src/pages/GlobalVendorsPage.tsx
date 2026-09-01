@@ -96,7 +96,7 @@ export default function GlobalVendorsPage() {
         subtitle="Global bidder directory for CRM comparative packages — tag each company with R2 BOQ disciplines, then pick them when opening a bid package."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link to="/crm/bids/compare">
+            <Link to="/crm/bids">
               <Button type="button" variant="secondary">Open bid packages →</Button>
             </Link>
             <Link to="/master">
