@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
-import { HUB_POLICIES, SHARNAM_PORTAL_POLICIES } from "../lib/portalPolicies";
+import { HUB_LEFT_BULLETS, HUB_LEFT_TAGLINE, SHARNAM_PORTAL_POLICIES } from "../lib/portalPolicies";
 
 /** Sharnam login — hub /login · per-portal /login/:key */
 
@@ -162,14 +162,7 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-/** Portals shown on /login hub */
-export const HUB_PORTAL_GROUPS: { label: string; keys: (keyof typeof PORTAL_LOGINS)[] }[] = [
-  { label: "Sharnam internal", keys: ["office", "hr"] },
-  { label: "Project partners", keys: ["stakeholder", "vendor", "client"] },
-  { label: "Site field teams", keys: ["site"] },
-];
-
-/** Flat list (legacy) */
+/** Portals shown on /login hub — single vertical stack */
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
   "office",
   "hr",
@@ -208,38 +201,13 @@ function portalDisplayName(key: string, shortLabel: string) {
   return shortLabel;
 }
 
-function AuthLogo({ size = "md" }: { size?: "xs" | "sm" | "md" | "lg" }) {
-  const widths = { xs: 132, sm: 168, md: 240, lg: 360 };
+function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   return (
-    <div className={`auth-logo auth-logo--${size}`}>
-      <img
-        src="/logo-transparent.png?v=10"
-        alt="शरणम्"
-        className="auth-logo__img"
-        width={widths[size]}
-        height={Math.round(widths[size] * 0.48)}
-        decoding="async"
-      />
-    </div>
-  );
-}
-
-function AuthScene() {
-  return (
-    <div className="auth-scene" aria-hidden>
-      <div className="auth-scene__photo" />
-      <div className="auth-scene__shade" />
-    </div>
-  );
-}
-
-function BrandMark({ showTagline = true, compact = false }: { showTagline?: boolean; compact?: boolean }) {
-  return (
-    <div className={`auth-brand auth-brand--left${compact ? " auth-brand--compact" : ""}`}>
+    <div className="auth-brand auth-brand--center">
       <img
         src="/logo-transparent.png?v=10"
         alt="शरणम् — Sharnam Project Management Consultants"
-        className="auth-brand__logo"
+        className="auth-brand__logo auth-brand__logo--hero"
         width={820}
         height={400}
         decoding="async"
@@ -248,7 +216,6 @@ function BrandMark({ showTagline = true, compact = false }: { showTagline?: bool
       {showTagline ? (
         <p className="auth-brand__tagline">Project Management Consultants</p>
       ) : null}
-      <div className="auth-brand__accent" aria-hidden />
     </div>
   );
 }
@@ -256,29 +223,29 @@ function BrandMark({ showTagline = true, compact = false }: { showTagline?: bool
 function AuthBulletList({ items, className = "" }: { items: readonly string[]; className?: string }) {
   return (
     <ul className={`auth-bullets ${className}`.trim()}>
-      {items.map((p) => (
+      {items.slice(0, 3).map((p) => (
         <li key={p}>{p}</li>
       ))}
     </ul>
   );
 }
 
-function AuthLeftPanel({ cfg, policies }: { cfg: PortalConfig; policies: readonly string[] }) {
-  const panelPolicies = policies.slice(0, 4);
+function AuthBrandPanel({ tagline, bullets }: { tagline: string; bullets: readonly string[] }) {
   return (
-    <div className="auth-left-panel auth-left-panel--futura">
-      <BrandMark compact />
-      <div className="auth-left-panel__portal">
-        <span className="auth-layout__portal-chip auth-layout__portal-chip--futura">{cfg.icon}</span>
-        <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
-        <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
-      </div>
-      <AuthBulletList items={cfg.points} className="auth-bullets--features" />
-      <div className="auth-policies auth-policies--futura auth-policies--compact">
-        <p className="auth-policies__title">Policies</p>
-        <AuthBulletList items={panelPolicies} className="auth-bullets--policies" />
-      </div>
+    <div className="auth-brand-panel">
+      <BrandMark />
+      <p className="auth-brand-panel__copy">{tagline}</p>
+      <AuthBulletList items={bullets} className="auth-bullets--panel" />
     </div>
+  );
+}
+
+function AuthLeftPanel({ cfg }: { cfg: PortalConfig }) {
+  return (
+    <AuthBrandPanel
+      tagline={cfg.subtitle}
+      bullets={cfg.points.slice(0, 3)}
+    />
   );
 }
 
@@ -296,18 +263,18 @@ function AuthFuturisticBackdrop() {
 
 function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
-  const [email, setEmail] = useState(cfg.demoEmail);
-  const [password, setPassword] = useState("Demo@1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
 
   useEffect(() => {
-    setEmail(cfg.demoEmail);
-    setPassword("Demo@1234");
+    setEmail("");
+    setPassword("");
     setError("");
-  }, [cfg.key, cfg.demoEmail]);
+  }, [cfg.key]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -347,7 +314,6 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
         <span>{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
       </div>
       <h2 className="auth-signin__title">Sign in</h2>
-      <p className="auth-signin__sub">Secure session · audit trail enabled</p>
 
       <form className="auth-signin__form" onSubmit={onSubmit}>
           <label className="auth-signin__field">
@@ -392,49 +358,17 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
             {busy ? "Signing in…" : cfg.cta}
           </button>
         </form>
-
-        <p className="auth-signin__demo">
-          <span className="auth-signin__demo-row">
-            <span>Demo</span>
-            <strong>{cfg.demoEmail}</strong>
-          </span>
-          {cfg.key === "office" && (
-            <span className="auth-signin__demo-row">
-              <span>Admin</span>
-              <strong>admin@sharnam.demo</strong>
-            </span>
-          )}
-          <span className="auth-signin__demo-row">
-            <span>Password</span>
-            <strong>Demo@1234</strong>
-          </span>
-        </p>
-        <div className="auth-policies auth-policies--mobile auth-policies--compact">
-          <p className="auth-policies__title">Policies</p>
-          <AuthBulletList
-            items={(cfg.policies.length ? cfg.policies : SHARNAM_PORTAL_POLICIES).slice(0, 3)}
-            className="auth-bullets--policies"
-          />
-        </div>
     </div>
   );
 }
 
-function AuthMobileNav({
-  backTo,
-  logoSize = "sm",
-}: {
-  backTo?: string;
-  logoSize?: "xs" | "sm" | "md";
-}) {
+function AuthMobileNav({ backTo }: { backTo?: string }) {
+  if (!backTo) return null;
   return (
-    <nav className={`auth-mobile-nav${backTo ? "" : " auth-mobile-nav--center"}`} aria-label="Login navigation">
-      {backTo ? (
-        <Link to={backTo} className="auth-mobile-nav__back">
-          ← All portals
-        </Link>
-      ) : null}
-      <AuthLogo size={logoSize} />
+    <nav className="auth-mobile-nav" aria-label="Login navigation">
+      <Link to={backTo} className="auth-mobile-nav__back">
+        ← All portals
+      </Link>
     </nav>
   );
 }
@@ -459,8 +393,6 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!cfg) return <Navigate to="/login" replace />;
   if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
 
-  const policies = cfg.policies.length ? cfg.policies : SHARNAM_PORTAL_POLICIES;
-
   return (
     <div
       className="auth-layout auth-layout--portal auth-layout--futura"
@@ -470,16 +402,14 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
       <AuthFuturisticBackdrop />
       <AuthMobileNav backTo="/login" />
       <aside className="auth-layout__brand auth-layout__brand--portal auth-layout__brand--futura">
-        <AuthLeftPanel cfg={cfg} policies={policies} />
+        <AuthLeftPanel cfg={cfg} />
         <Link to="/login" className="auth-layout__back">
           ← All portals
         </Link>
       </aside>
       <main className="auth-layout__main auth-layout__main--portal auth-layout__main--futura">
-        <div className="auth-mobile-intro auth-mobile-intro--portal auth-mobile-intro--futura">
-          <span className="auth-layout__portal-chip">{cfg.icon}</span>
-          <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
-          <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
+        <div className="auth-mobile-brand auth-mobile-brand--portal">
+          <AuthBrandPanel tagline={cfg.subtitle} bullets={cfg.points.slice(0, 3)} />
         </div>
         <SignInCard cfg={cfg} />
       </main>
@@ -515,39 +445,20 @@ export function LoginHubPage() {
       style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}
     >
       <AuthFuturisticBackdrop />
-      <AuthMobileNav logoSize="md" />
+      <AuthMobileNav />
       <aside className="auth-layout__brand auth-layout__brand--hub auth-layout__brand--futura">
-        <BrandMark />
-        <p className="auth-layout__hero-copy auth-layout__hero-copy--futura">
-          One secure workspace for drawings, quality, site execution, CRM, and stakeholder collaboration.
-        </p>
-        <AuthBulletList
-          items={["Office, HR, site & partner portals", "Role-based access on every project", "Audit-logged actions & versioned uploads"]}
-          className="auth-bullets--features auth-bullets--hub"
-        />
-        <div className="auth-policies auth-policies--hub auth-policies--futura auth-policies--compact">
-          <p className="auth-policies__title">Policies</p>
-          <AuthBulletList items={HUB_POLICIES} className="auth-bullets--policies" />
-        </div>
+        <AuthBrandPanel tagline={HUB_LEFT_TAGLINE} bullets={HUB_LEFT_BULLETS} />
       </aside>
       <main className="auth-layout__main auth-layout__main--hub auth-layout__main--futura">
+        <div className="auth-mobile-brand auth-mobile-brand--hub">
+          <AuthBrandPanel tagline={HUB_LEFT_TAGLINE} bullets={HUB_LEFT_BULLETS} />
+        </div>
         <header className="auth-hub__header auth-hub__header--futura">
-          <p className="auth-fx__eyebrow auth-fx__eyebrow--hub">Select portal</p>
-          <h1 className="auth-hub__title">Choose your access</h1>
+          <h1 className="auth-hub__title">Choose your portal</h1>
         </header>
-        <div className="auth-hub__sections">
-          {HUB_PORTAL_GROUPS.map((group) => (
-            <section
-              key={group.label}
-              className={`auth-hub__section${group.keys.length === 1 ? " auth-hub__section--solo" : ""}`}
-            >
-              <h2 className="auth-hub__section-title">{group.label}</h2>
-              <div className="auth-hub__grid">
-                {group.keys.map((k) => (
-                  <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
-                ))}
-              </div>
-            </section>
+        <div className="auth-hub__stack">
+          {HUB_PORTALS.map((k) => (
+            <PortalHubCard key={k} cfg={PORTAL_LOGINS[k]} />
           ))}
         </div>
       </main>
