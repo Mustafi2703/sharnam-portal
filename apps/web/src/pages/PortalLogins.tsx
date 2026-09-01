@@ -263,18 +263,18 @@ function AuthFuturisticBackdrop() {
 
 function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(cfg.demoEmail);
+  const [password, setPassword] = useState("Demo@1234");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
 
   useEffect(() => {
-    setEmail("");
-    setPassword("");
+    setEmail(cfg.demoEmail);
+    setPassword("Demo@1234");
     setError("");
-  }, [cfg.key]);
+  }, [cfg.key, cfg.demoEmail]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
