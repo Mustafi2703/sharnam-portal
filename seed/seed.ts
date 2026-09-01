@@ -145,6 +145,7 @@ async function seedUsers() {
     { email: "site@sharnam.demo", fullName: "Site Engineer", role: "site_employee" },
     { email: "client@sharnam.demo", fullName: "Client Viewer", role: "client" },
     { email: "employee@sharnam.demo", fullName: "Demo Employee", role: "employee" },
+    { email: "pmc@sharnam.demo", fullName: "Partner PMC Lead", role: "employee" },
     { email: "mep@sharnam.demo", fullName: "MEP Design Engineer", role: "employee" },
     { email: "struct@sharnam.demo", fullName: "Structural Reviewer", role: "employee" },
     { email: "vendor@sharnam.demo", fullName: "Vendor Partner", role: "vendor" },

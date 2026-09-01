@@ -9125,3 +9125,292 @@ body {
   }
 }
 
+/* ═══ Futuristic auth — mesh, glass, teal glow (no photo backgrounds) ═══ */
+.auth-layout--futura {
+  background: #050608;
+  overflow: hidden;
+}
+
+.auth-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.auth-fx__mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(11, 106, 120, 0.35) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 75%, rgba(99, 102, 241, 0.18) 0%, transparent 50%),
+    linear-gradient(145deg, #050608 0%, #0f1218 40%, #121417 100%);
+}
+
+.auth-fx__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, black 20%, transparent 75%);
+}
+
+.auth-fx__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  animation: auth-orb-drift 18s ease-in-out infinite alternate;
+}
+
+.auth-fx__orb--a {
+  width: 320px;
+  height: 320px;
+  top: -8%;
+  left: -5%;
+  background: rgba(11, 106, 120, 0.45);
+}
+
+.auth-fx__orb--b {
+  width: 240px;
+  height: 240px;
+  bottom: 10%;
+  right: 5%;
+  background: rgba(228, 99, 42, 0.15);
+  animation-delay: -6s;
+}
+
+.auth-fx__orb--c {
+  width: 180px;
+  height: 180px;
+  top: 45%;
+  left: 42%;
+  background: rgba(99, 102, 241, 0.2);
+  animation-delay: -12s;
+}
+
+@keyframes auth-orb-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(24px, -18px) scale(1.08); }
+}
+
+.auth-fx__eyebrow {
+  margin: 0 0 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(11, 106, 120, 0.95);
+}
+
+.auth-fx__eyebrow--hub {
+  color: rgba(153, 246, 228, 0.85);
+  text-align: center;
+}
+
+.auth-layout__brand--futura {
+  background: rgba(8, 10, 12, 0.72);
+  backdrop-filter: blur(20px) saturate(1.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 4px 0 0 var(--portal-accent, #0b6a78);
+}
+
+.auth-layout__brand--futura::before,
+.auth-layout__brand--futura::after {
+  display: none;
+}
+
+.auth-layout__main--futura {
+  background: transparent;
+}
+
+.auth-layout__portal-chip--futura {
+  background: rgba(11, 106, 120, 0.15);
+  border: 1px solid rgba(11, 106, 120, 0.45);
+  box-shadow: 0 0 24px rgba(11, 106, 120, 0.2);
+}
+
+.auth-layout__portal-points--futura li {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.auth-policies--futura {
+  border-top-color: rgba(11, 106, 120, 0.35);
+}
+
+.auth-layout__hero-copy--futura {
+  color: rgba(226, 232, 240, 0.82);
+  max-width: 420px;
+}
+
+.auth-signin--futura {
+  max-width: min(720px, 96vw);
+  background: rgba(12, 14, 18, 0.55);
+  backdrop-filter: blur(28px) saturate(1.25);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(11, 106, 120, 0.15),
+    0 24px 64px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.auth-signin--futura .auth-signin__title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+
+.auth-signin--futura .auth-signin__sub {
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 0.78rem;
+}
+
+.auth-signin__badge--futura {
+  background: rgba(11, 106, 120, 0.2);
+  border: 1px solid rgba(11, 106, 120, 0.45);
+  color: #99f6e4;
+}
+
+.auth-signin--futura .auth-signin__field span {
+  color: rgba(203, 213, 225, 0.9);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.auth-signin--futura .auth-signin__field input {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  border-radius: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-signin--futura .auth-signin__field input:focus {
+  outline: none;
+  border-color: var(--portal-accent, #0b6a78);
+  box-shadow: 0 0 0 3px rgba(11, 106, 120, 0.25);
+}
+
+.auth-signin--futura .auth-signin__submit {
+  background: linear-gradient(135deg, var(--portal-accent, #0b6a78) 0%, #085560 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 28px rgba(11, 106, 120, 0.35);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.auth-signin--futura .auth-signin__submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 32px rgba(11, 106, 120, 0.45);
+}
+
+.auth-signin--futura .auth-signin__demo {
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.auth-signin__brand--futura {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(11, 106, 120, 0.08) 0%, rgba(0, 0, 0, 0.2) 100%);
+  padding: 1.25rem;
+}
+
+.auth-signin__logo-ring {
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(11, 106, 120, 0.35);
+  box-shadow: 0 0 40px rgba(11, 106, 120, 0.2), inset 0 0 24px rgba(11, 106, 120, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  margin-bottom: 0.75rem;
+}
+
+.auth-signin__brand-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.auth-brand__accent--futura {
+  margin-top: 1rem;
+  opacity: 1;
+  box-shadow: 0 0 12px rgba(11, 106, 120, 0.5);
+}
+
+.auth-hub__header--futura {
+  background: rgba(12, 14, 18, 0.65);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.auth-hub__header--futura .auth-hub__title {
+  color: #f8fafc;
+}
+
+.auth-hub__header--futura .auth-hub__sub {
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.auth-hub-card--futura {
+  background: rgba(12, 14, 18, 0.55);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-hub-card--futura:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--portal-accent) 55%, white);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4), 0 0 24px color-mix(in srgb, var(--portal-accent) 25%, transparent);
+}
+
+.auth-hub-card__icon--futura {
+  box-shadow: 0 0 20px color-mix(in srgb, var(--portal-accent) 30%, transparent);
+}
+
+.auth-mobile-intro--futura .auth-layout__portal-headline {
+  color: #f8fafc;
+}
+
+@media (min-width: 640px) {
+  .auth-signin__brand--futura {
+    display: flex;
+  }
+}
+
+@media (min-width: 900px) {
+  .auth-layout--futura.auth-layout--portal .auth-layout__brand--futura,
+  .auth-layout--futura.auth-layout--hub .auth-layout__brand--futura {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 899px) {
+  .auth-policies--mobile .auth-policies__list li {
+    color: rgba(148, 163, 184, 0.9);
+  }
+
+  .auth-policies--mobile .auth-policies__title {
+    color: rgba(153, 246, 228, 0.7);
+  }
+}
+

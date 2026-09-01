@@ -3,7 +3,8 @@ import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
 import MasterModulePage from "./pages/MasterModulePage";
 import GlobalVendorsPage from "./pages/GlobalVendorsPage";
-import { LoginHubPage, PortalLoginPage } from "./pages/PortalLogins";
+import { LoginHubPage, PortalLoginPage, DynamicPortalLoginRoute } from "./pages/PortalLogins";
+import StakeholderDeskPage from "./pages/StakeholderDeskPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ChecklistPage from "./pages/ChecklistPage";
@@ -120,7 +121,8 @@ export default function App() {
       <Route path="/login/vendor" element={<PortalLoginPage portalKey="vendor" />} />
       <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
       <Route path="/login/hr" element={<PortalLoginPage portalKey="hr" />} />
-      <Route path="/login/:portalKey" element={<Navigate to="/login" replace />} />
+      <Route path="/login/stakeholder" element={<PortalLoginPage portalKey="stakeholder" />} />
+      <Route path="/login/:portalKey" element={<DynamicPortalLoginRoute />} />
 
       <Route
         path="/projects/:id/checklist/fill/:assignmentId"
@@ -268,6 +270,7 @@ export default function App() {
                 <Route path="/quotations/:id" element={<RedirectCrmQuotation />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
+                <Route path="/stakeholder" element={<StakeholderDeskPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />
               </Routes>
             </AppShell>

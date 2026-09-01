@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
@@ -89,6 +89,20 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/dashboard", workspaceKey: "progress", group: "role",
     policies: [...SHARNAM_PORTAL_POLICIES, "Client view is read-only on published GFC and reports unless raising a concern."],
   },
+  stakeholder: {
+    key: "stakeholder", title: "Stakeholders", shortLabel: "Partner PMC",
+    headline: "Partner PMC & consultant desk.",
+    subtitle: "External PMC firms — coordination, GFC review, meetings, and RFIs on assigned projects.",
+    demoEmail: "pmc@sharnam.demo", allowedRoles: ["employee", "office"],
+    points: ["Design coordination", "Meetings · MoM", "GFC · Ask RFI"],
+    cta: "Enter Partner desk", tone: "#6366F1", icon: "PM",
+    landingPath: "/stakeholder", workspaceKey: "drawings", group: "role",
+    policies: [
+      ...SHARNAM_PORTAL_POLICIES,
+      "Partner PMC access is limited to projects you are explicitly assigned to.",
+      "Coordination comments and RFIs are attributed and visible to the delivery team.",
+    ],
+  },
   drawings: {
     key: "drawings", title: "Drawings", shortLabel: "Drawings",
     headline: "GFC register and project Documents.",
@@ -148,7 +162,14 @@ export function consumeLoginLanding(fallback = "/dashboard") {
   return fallback;
 }
 
-export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = ["office", "hr", "site", "vendor", "client"];
+export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
+  "office",
+  "hr",
+  "stakeholder",
+  "site",
+  "vendor",
+  "client",
+];
 
 /** Cinematic hero per portal — each login gets a distinct construction / PMC photo */
 const PORTAL_HERO: Record<string, string> = {
@@ -173,6 +194,7 @@ function portalHero(key: string) {
 
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Contractor";
+  if (key === "stakeholder") return "Partner PMC";
   return shortLabel;
 }
 
@@ -221,18 +243,31 @@ function BrandMark({ showTagline = true }: { showTagline?: boolean }) {
   );
 }
 
+function AuthFuturisticBackdrop() {
+  return (
+    <div className="auth-fx" aria-hidden>
+      <div className="auth-fx__mesh" />
+      <div className="auth-fx__grid" />
+      <div className="auth-fx__orb auth-fx__orb--a" />
+      <div className="auth-fx__orb auth-fx__orb--b" />
+      <div className="auth-fx__orb auth-fx__orb--c" />
+    </div>
+  );
+}
+
 function AuthLeftPanel({ cfg, policies }: { cfg: PortalConfig; policies: readonly string[] }) {
   return (
-    <div className="auth-left-panel">
-      <span className="auth-layout__portal-chip">{cfg.icon}</span>
+    <div className="auth-left-panel auth-left-panel--futura">
+      <p className="auth-fx__eyebrow">Sharnam secure portal</p>
+      <span className="auth-layout__portal-chip auth-layout__portal-chip--futura">{cfg.icon}</span>
       <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
       <p className="auth-layout__portal-sub">{cfg.subtitle}</p>
-      <ul className="auth-layout__portal-points">
+      <ul className="auth-layout__portal-points auth-layout__portal-points--futura">
         {cfg.points.map((p) => (
           <li key={p}>{p}</li>
         ))}
       </ul>
-      <div className="auth-policies">
+      <div className="auth-policies auth-policies--futura">
         <p className="auth-policies__title">Portal policies</p>
         <ul className="auth-policies__list">
           {policies.map((p) => (
@@ -291,14 +326,14 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   }
 
   return (
-    <div className="auth-signin auth-signin--split auth-signin--light" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
+    <div className="auth-signin auth-signin--split auth-signin--futura" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
       <div className="auth-signin__main">
-        <div className="auth-signin__badge">
+        <div className="auth-signin__badge auth-signin__badge--futura">
           <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
           <span>{portalDisplayName(cfg.key, cfg.shortLabel)} portal</span>
         </div>
-        <h2 className="auth-signin__title">Sign in</h2>
-        <p className="auth-signin__sub">{cfg.subtitle}</p>
+        <h2 className="auth-signin__title">Authenticate</h2>
+        <p className="auth-signin__sub">Secure access · encrypted session · audit trail enabled</p>
 
         <form className="auth-signin__form" onSubmit={onSubmit}>
           <label className="auth-signin__field">
@@ -356,10 +391,13 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
           </ul>
         </div>
       </div>
-      <div className="auth-signin__brand auth-signin__brand--light">
-        <AuthLogo size="md" />
-        <p className="auth-signin__brand-tag">शरणम् · Project Management Consultants</p>
-        <div className="auth-brand__accent" aria-hidden />
+      <div className="auth-signin__brand auth-signin__brand--futura">
+        <div className="auth-signin__logo-ring">
+          <AuthLogo size="md" />
+        </div>
+        <p className="auth-signin__brand-tag">शरणम्</p>
+        <p className="auth-signin__brand-sub">Project Management Consultants</p>
+        <div className="auth-brand__accent auth-brand__accent--futura" aria-hidden />
       </div>
     </div>
   );
@@ -408,19 +446,20 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
 
   return (
     <div
-      className="auth-layout auth-layout--portal auth-layout--graphite"
+      className="auth-layout auth-layout--portal auth-layout--futura"
       data-portal={portalKey}
       style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
     >
+      <AuthFuturisticBackdrop />
       <AuthMobileNav backTo="/login" />
-      <aside className="auth-layout__brand auth-layout__brand--portal auth-layout__brand--graphite">
+      <aside className="auth-layout__brand auth-layout__brand--portal auth-layout__brand--futura">
         <AuthLeftPanel cfg={cfg} policies={policies} />
         <Link to="/login" className="auth-layout__back">
           ← All portals
         </Link>
       </aside>
-      <main className="auth-layout__main auth-layout__main--portal auth-layout__main--graphite">
-        <div className="auth-mobile-intro auth-mobile-intro--portal auth-mobile-intro--graphite">
+      <main className="auth-layout__main auth-layout__main--portal auth-layout__main--futura">
+        <div className="auth-mobile-intro auth-mobile-intro--portal auth-mobile-intro--futura">
           <span className="auth-layout__portal-chip">{cfg.icon}</span>
           <h1 className="auth-layout__portal-headline">{cfg.headline}</h1>
         </div>
@@ -434,16 +473,16 @@ function PortalHubCard({ cfg }: { cfg: PortalConfig }) {
   return (
     <Link
       to={`/login/${cfg.key}`}
-      className="auth-hub-card"
+      className="auth-hub-card auth-hub-card--futura"
       style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
     >
-      <span className="auth-hub-card__icon" aria-hidden>{cfg.icon}</span>
+      <span className="auth-hub-card__icon auth-hub-card__icon--futura" aria-hidden>{cfg.icon}</span>
       <div className="auth-hub-card__body">
         <span className="auth-hub-card__label">{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
         <span className="auth-hub-card__headline">{cfg.headline}</span>
         <span className="auth-hub-card__hint">{cfg.points[0]}</span>
       </div>
-      <span className="auth-hub-card__arrow" aria-hidden>→</span>
+      <span className="auth-hub-card__arrow auth-hub-card__arrow--futura" aria-hidden>→</span>
     </Link>
   );
 }
@@ -455,16 +494,17 @@ export function LoginHubPage() {
 
   return (
     <div
-      className="auth-layout auth-layout--hub auth-layout--graphite"
+      className="auth-layout auth-layout--hub auth-layout--futura"
       style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}
     >
+      <AuthFuturisticBackdrop />
       <AuthMobileNav logoSize="md" />
-      <aside className="auth-layout__brand auth-layout__brand--hub auth-layout__brand--graphite">
+      <aside className="auth-layout__brand auth-layout__brand--hub auth-layout__brand--futura">
         <BrandMark />
-        <p className="auth-layout__hero-copy">
-          Drawings, quality, site logs, meetings, cost, and reports — one workspace for every role on your project.
+        <p className="auth-layout__hero-copy auth-layout__hero-copy--futura">
+          Enterprise PMC workspace — drawings, quality, site execution, cost, CRM, and stakeholder collaboration in one secure portal.
         </p>
-        <div className="auth-policies auth-policies--hub">
+        <div className="auth-policies auth-policies--hub auth-policies--futura">
           <p className="auth-policies__title">Portal policies</p>
           <ul className="auth-policies__list">
             {HUB_POLICIES.map((p) => (
@@ -473,10 +513,11 @@ export function LoginHubPage() {
           </ul>
         </div>
       </aside>
-      <main className="auth-layout__main auth-layout__main--hub auth-layout__main--graphite">
-        <header className="auth-hub__header auth-hub__header--graphite">
+      <main className="auth-layout__main auth-layout__main--hub auth-layout__main--futura">
+        <header className="auth-hub__header auth-hub__header--futura">
+          <p className="auth-fx__eyebrow auth-fx__eyebrow--hub">Select access lane</p>
           <h1 className="auth-hub__title">Choose your portal</h1>
-          <p className="auth-hub__sub">Select the desk that matches your role on the project.</p>
+          <p className="auth-hub__sub">Office · HR · Partner PMC · Site · Contractor · Client</p>
         </header>
         <div className="auth-hub__grid">
           {HUB_PORTALS.map((k) => (
@@ -486,4 +527,10 @@ export function LoginHubPage() {
       </main>
     </div>
   );
+}
+
+export function DynamicPortalLoginRoute() {
+  const { portalKey } = useParams();
+  if (!portalKey || !(portalKey in PORTAL_LOGINS)) return <Navigate to="/login" replace />;
+  return <PortalLoginPage portalKey={portalKey as keyof typeof PORTAL_LOGINS} />;
 }
