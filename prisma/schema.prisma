@@ -127,6 +127,7 @@ model Project {
   legalApprovals          ProgressLegalApproval[]
   manpowerRows            ProgressManpower[]
   activityLines           ProgressActivityLine[]
+  scurvePoints            ProgressScurvePoint[]
   sorStats                ProgressSorStat[]
   qapActivities           QapActivity[]
   cubeTests               CubeTest[]
@@ -634,7 +635,8 @@ model CostMonitoringLine {
   overrunCertified     Float    @default(0)
   createdAt            DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project              Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  progressActivityLines ProgressActivityLine[]
 }
 
 /**
@@ -1880,6 +1882,25 @@ model ProgressPlannedActual {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
+/** Per-discipline S-curve register — feeds DPR INPUT rows and WPR charts. */
+model ProgressScurvePoint {
+  id          String   @id @default(cuid())
+  projectId   String
+  discipline  String   @default("OVERALL")
+  periodDate  DateTime
+  periodLabel String?
+  plannedPct  Float    @default(0)
+  actualPct   Float    @default(0)
+  source      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, discipline, periodDate])
+  @@index([projectId, discipline])
+}
+
 /**
  * Legal Approval Tracker (Progress Overview)
  */
@@ -1923,25 +1944,29 @@ model ProgressManpower {
  * Planned Vs Actual activity quantity register
  */
 model ProgressActivityLine {
-  id            String    @id @default(cuid())
-  projectId     String
-  srNo          Int       @default(0)
-  tower         String?
-  activity      String
-  unit          String?
-  plannedStart  DateTime?
-  plannedEnd    DateTime?
-  boqQty        Float     @default(0)
-  gfcQty        Float     @default(0)
-  executedQty   Float     @default(0)
-  balanceQty    Float     @default(0)
-  weeklyPlanned Float     @default(0)
-  weeklyActual  Float     @default(0)
-  cumulativeQty Float     @default(0)
-  status        String?
-  pctComplete   Float     @default(0)
+  id                   String    @id @default(cuid())
+  projectId            String
+  srNo                 Int       @default(0)
+  tower                String?
+  activity             String
+  unit                 String?
+  discipline           String?
+  packageName          String?
+  costMonitoringLineId String?
+  plannedStart         DateTime?
+  plannedEnd           DateTime?
+  boqQty               Float     @default(0)
+  gfcQty               Float     @default(0)
+  executedQty          Float     @default(0)
+  balanceQty           Float     @default(0)
+  weeklyPlanned        Float     @default(0)
+  weeklyActual         Float     @default(0)
+  cumulativeQty        Float     @default(0)
+  status               String?
+  pctComplete          Float     @default(0)
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costMonitoringLine CostMonitoringLine? @relation(fields: [costMonitoringLineId], references: [id], onDelete: SetNull)
 }
 
 /**

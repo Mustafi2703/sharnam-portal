@@ -208,6 +208,17 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                     <td className="text-right">{money(p.totalDeductions)}</td>
                     <td className="text-right font-semibold">{money(p.netPay)}</td>
                     <td>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-brand underline mr-2"
+                        onClick={() => {
+                          const base = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "") || window.location.origin;
+                          const q = token ? `?token=${encodeURIComponent(token)}` : "";
+                          window.open(`${base}/api/hrm/payslips/${p.id}/file.html${q}`, "_blank");
+                        }}
+                      >
+                        View slip
+                      </button>
                       {canWrite ? (
                         <Select value={p.status} onChange={(e) => transition(p.id, e.target.value)} className="!py-1">
                           {["Generated", "Approved", "Released", "Paid"].map((s) => <option key={s}>{s}</option>)}

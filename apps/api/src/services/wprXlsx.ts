@@ -198,5 +198,41 @@ export function buildWprWorkbook(input: WprPackInput): Buffer {
     XLSX.utils.book_append_sheet(wb, ws, sheetName(label));
     idx += 1;
   }
+  // -------------------- Dashboard charts (when chart pack supplied) --------------------
+  if (input.charts) {
+    const c = input.charts;
+    const dash: (string | number | null)[][] = [
+      ["WPR Dashboard · chart data"],
+      [`Period`, `${c.rangeStart} → ${c.rangeEnd}`],
+      [],
+      ["Summary KPI", "Value"],
+      ...c.dashboardKpis.map(([k, v]) => [k, v]),
+      [],
+      ["S-curve · Date", "Planned %", "Actual %"],
+      ...c.scurve.map((p) => [p.label || p.date, p.planned, p.actual]),
+      [],
+      ["Manpower · Trade", "Required", "Available"],
+      ...c.manpowerHistogram.map((p) => [p.label, p.planned, p.actual]),
+      [],
+      ["Cashflow · Period", "Planned (Lakh)", "Actual (Lakh)"],
+      ...c.cashflow.map((p) => [p.label, p.planned, p.actual]),
+      [],
+      ["Milestones", "Planned days", "Actual days"],
+      ...c.milestones.map((p) => [p.label, p.planned, p.actual]),
+      [],
+      ["Planned vs Actual qty", "Planned", "Actual"],
+      ...c.plannedVsActual.map((p) => [p.label, p.planned, p.actual]),
+      [],
+      ["Quality status", "Count"],
+      ...c.quality.map((p) => [p.label, p.value]),
+      [],
+      ["Safety · Indicator", "Previous week", "Current week"],
+      ...c.safety.map((p) => [p.label, p.previous, p.current]),
+    ];
+    const wsDash = XLSX.utils.aoa_to_sheet(dash);
+    wsDash["!cols"] = [{ wch: 28 }, { wch: 16 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsDash, sheetName("Charts Dashboard"));
+  }
+
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }

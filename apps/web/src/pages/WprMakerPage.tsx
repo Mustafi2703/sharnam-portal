@@ -369,7 +369,9 @@ export default function WprMakerPage() {
 
   async function downloadXlsx() {
     if (!pack) return;
-    const url = `${apiBase()}/api/wpr-maker/${projectId}/download.xlsx?end=${weekEnd}`;
+    const qs = new URLSearchParams({ end: weekEnd, preset: rangePreset });
+    if (rangePreset === "custom" && pack.weekStart) qs.set("start", pack.weekStart.slice(0, 10));
+    const url = `${apiBase()}/api/wpr-maker/${projectId}/download.xlsx?${qs}`;
     const fname = `WPR-${pack.projectCode}-${weekEnd}.xlsx`;
     setBusy(true);
     try {
@@ -383,7 +385,9 @@ export default function WprMakerPage() {
 
   async function downloadClientXlsx() {
     if (!pack) return;
-    const url = `${apiBase()}/api/wpr-maker/${projectId}/download-client.xlsx?end=${weekEnd}`;
+    const qs = new URLSearchParams({ end: weekEnd, preset: rangePreset });
+    if (rangePreset === "custom" && pack.weekStart) qs.set("start", pack.weekStart.slice(0, 10));
+    const url = `${apiBase()}/api/wpr-maker/${projectId}/download-client.xlsx?${qs}`;
     const fname = `WPR-ClientPack-${pack.projectCode}-${weekEnd}.xlsx`;
     setBusy(true);
     try {
@@ -398,7 +402,9 @@ export default function WprMakerPage() {
 
   async function downloadPptx() {
     if (!pack) return;
-    const url = `${apiBase()}/api/wpr-maker/${projectId}/download.pptx?end=${weekEnd}`;
+    const qs = new URLSearchParams({ end: weekEnd, preset: rangePreset });
+    if (rangePreset === "custom" && pack.weekStart) qs.set("start", pack.weekStart.slice(0, 10));
+    const url = `${apiBase()}/api/wpr-maker/${projectId}/download.pptx?${qs}`;
     const fname = `WPR-${pack.projectCode}-${weekEnd}.pptx`;
     setBusy(true);
     try {

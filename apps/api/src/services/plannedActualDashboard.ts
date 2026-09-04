@@ -415,6 +415,62 @@ export function plannedActualToSheets(data: Awaited<ReturnType<typeof loadPlanne
   ];
 }
 
+export async function syncActivityLinesFromCostBoq(projectId: string) {
+  const boqLines = await prisma.costMonitoringLine.findMany({
+    where: { projectId },
+    orderBy: [{ packageName: "asc" }, { createdAt: "asc" }],
+  });
+  if (!boqLines.length) throw new Error("No BOQ monitoring lines — import Cost monitoring first");
+
+  const existing = await prisma.progressActivityLine.findMany({ where: { projectId } });
+  const byBoqId = new Map(existing.filter((e) => e.costMonitoringLineId).map((e) => [e.costMonitoringLineId!, e]));
+
+  let created = 0;
+  let updated = 0;
+  let sr = Math.max(0, ...existing.map((e) => e.srNo)) + 1;
+
+  await prisma.$transaction(async (tx) => {
+    for (const line of boqLines) {
+      const gfc = Number(line.gfcQty || line.boqQty || 0);
+      const achieved = Number(line.achievedQty || 0);
+      const payload = {
+        projectId,
+        activity: line.description,
+        unit: line.uom || null,
+        discipline: line.packageName || null,
+        packageName: line.packageName || null,
+        costMonitoringLineId: line.id,
+        boqQty: Number(line.boqQty || 0),
+        gfcQty: gfc,
+        executedQty: achieved,
+        balanceQty: gfc > 0 ? Math.max(0, gfc - achieved) : 0,
+        pctComplete: gfc > 0 ? achieved / gfc : Number(line.pctAchieved || 0),
+        weeklyPlanned: 0,
+        weeklyActual: 0,
+        cumulativeQty: achieved,
+      };
+      const hit = byBoqId.get(line.id);
+      if (hit) {
+        await tx.progressActivityLine.update({
+          where: { id: hit.id },
+          data: {
+            ...payload,
+            srNo: hit.srNo,
+            weeklyPlanned: hit.weeklyPlanned || payload.weeklyPlanned,
+            weeklyActual: hit.weeklyActual || payload.weeklyActual,
+          },
+        });
+        updated++;
+      } else {
+        await tx.progressActivityLine.create({ data: { ...payload, srNo: sr++ } });
+        created++;
+      }
+    }
+  });
+
+  return { created, updated, total: boqLines.length };
+}
+
 export async function buildPlannedActualWorkbook(projectId: string): Promise<Buffer> {
   const data = await loadPlannedActualExportData(projectId);
   return workbookBuffer(plannedActualToSheets(data), {

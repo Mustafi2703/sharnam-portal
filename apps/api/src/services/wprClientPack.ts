@@ -80,6 +80,8 @@ export async function buildWprClientWorkbook(
     safetyWeek,
     safetyAll,
     dprSnaps,
+    activityLines,
+    sorStats,
   ] = await Promise.all([
     prisma.drawingRegisterLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
     prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" }, take: 50 }),
@@ -109,6 +111,8 @@ export async function buildWprClientWorkbook(
       where: { projectId, logDate: { gte: weekStart, lte: weekEnd } },
       orderBy: { logDate: "asc" },
     }),
+    prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 120 }),
+    prisma.progressSorStat.findMany({ where: { projectId }, take: 40 }),
   ]);
 
   const masterKey = findSheet(wb, /Master Drawing Register/i);
@@ -310,6 +314,63 @@ export async function buildWprClientWorkbook(
       }
       if (rows.length) writeRows(wb.Sheets[dprKey], 2, rows);
     }
+    const sorKey = findSheet(wb, /^SOR Log$/i);
+    if (sorKey && sorStats.length) {
+      writeRows(
+        wb.Sheets[sorKey],
+        2,
+        sorStats.map((s, i) => [
+          i + 1,
+          s.observation ?? "",
+          s.total ?? 0,
+          s.openCount ?? 0,
+          s.closedCount ?? 0,
+          s.closureRate ?? 0,
+        ])
+      );
+    }
+  }
+
+  const siteKey = findSheet(wb, /Site Drawing Register/i);
+  if (siteKey && registerLines.length) {
+    const siteLines = registerLines.filter((l) => /site|issued|gfc/i.test(String(l.drawingType || l.remarks || "")));
+    const rows = (siteLines.length ? siteLines : registerLines).slice(0, 40);
+    writeRows(
+      wb.Sheets[siteKey],
+      3,
+      rows.map((l, i) => [
+        i + 1,
+        l.drawingTitle ?? "",
+        l.discipline ?? "",
+        l.drawingNumber ?? "",
+        l.revisionNumber ?? "",
+        l.issueDate ? isoDate(l.issueDate) : "",
+        l.issuedTo ?? "",
+        l.remarks ?? "",
+      ])
+    );
+  }
+
+  const drawStatusKey = findSheet(wb, /As per drawing status/i);
+  if (drawStatusKey && activityLines.length) {
+    writeRows(
+      wb.Sheets[drawStatusKey],
+      3,
+      activityLines.map((a) => [
+        a.srNo ?? "",
+        a.tower ?? "",
+        a.activity ?? "",
+        a.unit ?? "",
+        a.boqQty ?? 0,
+        a.gfcQty ?? 0,
+        a.executedQty ?? 0,
+        a.balanceQty ?? 0,
+        a.weeklyPlanned ?? 0,
+        a.weeklyActual ?? 0,
+        a.cumulativeQty ?? a.executedQty ?? 0,
+        a.pctComplete ?? 0,
+      ])
+    );
   }
 
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;

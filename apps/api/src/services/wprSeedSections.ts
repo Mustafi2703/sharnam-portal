@@ -35,6 +35,7 @@ export async function seedWprSections(
     qap,
     cubes,
     safety,
+    safetyPrev,
     ncrs,
     weeklyDiaries,
     dprSnaps,
@@ -95,6 +96,16 @@ export async function seedWprSections(
     }),
     prisma.safetyRecord.findMany({
       where: { projectId, occurredAt: { gte: weekStart, lte: weekEnd } },
+      take: 40,
+    }),
+    prisma.safetyRecord.findMany({
+      where: {
+        projectId,
+        occurredAt: {
+          gte: new Date(weekStart.getTime() - (weekEnd.getTime() - weekStart.getTime()) - 86400000),
+          lt: weekStart,
+        },
+      },
       take: 40,
     }),
     prisma.qualityNcr.findMany({
@@ -394,14 +405,20 @@ export async function seedWprSections(
     inductions: safety.filter((s: any) => (s.recordType || "").toLowerCase().includes("induct")).length,
     other: safety.length,
   };
+  const safetyPrevIndicators = {
+    tbt: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("tool")).length,
+    incidents: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("incident")).length,
+    inductions: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("induct")).length,
+    other: safetyPrev.length,
+  };
   const safetySec: WprSection = {
     title: DEFAULT_WPR_TITLES.safety,
     headers: ["HSE indicator", "Previous week (PW)", "Current week (CW)", "Cumulative"],
     rows: [
-      ["Toolbox Talk", 0, safetyIndicators.tbt, safetyIndicators.tbt],
-      ["HSE Inductions", 0, safetyIndicators.inductions, safetyIndicators.inductions],
-      ["Incidents / Accidents", 0, safetyIndicators.incidents, safetyIndicators.incidents],
-      ["Total safety events", 0, safetyIndicators.other, safetyIndicators.other],
+      ["Toolbox Talk", safetyPrevIndicators.tbt, safetyIndicators.tbt, safetyIndicators.tbt],
+      ["HSE Inductions", safetyPrevIndicators.inductions, safetyIndicators.inductions, safetyIndicators.inductions],
+      ["Incidents / Accidents", safetyPrevIndicators.incidents, safetyIndicators.incidents, safetyIndicators.incidents],
+      ["Total safety events", safetyPrevIndicators.other, safetyIndicators.other, safetyIndicators.other],
     ],
     notes: ncrs.length ? `${ncrs.length} NCR/CAR items open — please review.` : "No open NCRs recorded.",
   };

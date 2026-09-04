@@ -83,6 +83,33 @@ export async function loadWprChartPack(
   const spanMs = end.getTime() - start.getTime();
   prevStart.setTime(start.getTime() - spanMs - 86400000);
 
+  /** Planned % by date — MS Project XML, ProgressScurvePoint, or PVA register. */
+  const plannedByDate = new Map<string, number>();
+  try {
+    const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
+    const ms = await loadMsProjectSummary(projectId);
+    for (const p of ms.scurve || []) {
+      plannedByDate.set(p.date.slice(0, 10), Number(p.plannedPct) || 0);
+    }
+  } catch {
+    /* MS Project optional */
+  }
+  const scurveRegister = await prisma.progressScurvePoint.findMany({
+    where: { projectId, discipline: "OVERALL", periodDate: { gte: start, lte: end } },
+    orderBy: { periodDate: "asc" },
+  });
+  for (const p of scurveRegister) {
+    plannedByDate.set(p.periodDate.toISOString().slice(0, 10), Number(p.plannedPct) || 0);
+  }
+  const msPva = await prisma.progressPlannedActual.findMany({
+    where: { projectId, packageName: { contains: "S-curve" } },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const row of msPva) {
+    const key = (row.periodLabel || "").slice(0, 10);
+    if (key.length >= 8) plannedByDate.set(key, Number(row.plannedPct) * (row.plannedPct <= 1 ? 100 : 1));
+  }
+
   const [
     dprSnaps,
     dailyLogs,
@@ -165,7 +192,7 @@ export async function loadWprChartPack(
       scurve.push({
         date,
         label: dayLabel(d),
-        planned: 0,
+        planned: plannedByDate.get(date) ?? 0,
         actual: avgActualPct(snaps),
       });
     }
@@ -184,9 +211,17 @@ export async function loadWprChartPack(
       scurve.push({
         date: key,
         label: dayLabel(d),
-        planned: 0,
+        planned: plannedByDate.get(key) ?? 0,
         actual: snaps.length ? avgActualPct(snaps) : 0,
       });
+    }
+  }
+
+  if (scurve.length && scurve.every((p) => !p.planned)) {
+    const pvaRow = plannedActual.filter((r) => !/S-curve/i.test(r.packageName || "")).at(-1);
+    const fallbackPlanned = Number(pvaRow?.plannedPct || 0) * (Number(pvaRow?.plannedPct || 0) <= 1 ? 100 : 1);
+    if (fallbackPlanned) {
+      for (const pt of scurve) pt.planned = fallbackPlanned;
     }
   }
 

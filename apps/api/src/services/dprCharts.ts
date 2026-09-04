@@ -77,6 +77,25 @@ export async function loadDprScurveHistory(
   const manual = normalizeScurveEntries(manualEntries);
   if (manual?.length) return manual;
 
+  const disciplineKey = discipline.toUpperCase();
+  const registerPoints = await prisma.progressScurvePoint.findMany({
+    where: {
+      projectId,
+      discipline: { in: [disciplineKey, "OVERALL"] },
+      periodDate: { lte: logDate },
+    },
+    orderBy: { periodDate: "asc" },
+    take: 13,
+  });
+  if (registerPoints.length) {
+    return registerPoints.map((p) => ({
+      date: p.periodDate.toISOString().slice(0, 10),
+      label: p.periodLabel || p.periodDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      planned: Number(p.plannedPct) || 0,
+      actual: Number(p.actualPct) || 0,
+    }));
+  }
+
   let msPlannedByDate = new Map<string, number>();
   try {
     const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
@@ -191,12 +210,14 @@ export function fillScurveHistorySheet(ws: ExcelJS.Worksheet, history: DprChartP
     if (!p) {
       ws.getCell(`A${row}`).value = null;
       ws.getCell(`B${row}`).value = null;
+      ws.getCell(`C${row}`).value = null;
       continue;
     }
     const d = new Date(p.date);
     d.setHours(0, 0, 0, 0);
     ws.getCell(`A${row}`).value = d;
-    ws.getCell(`B${row}`).value = p.actual / 100;
+    ws.getCell(`B${row}`).value = p.planned / 100;
+    ws.getCell(`C${row}`).value = p.actual / 100;
   }
 }
 

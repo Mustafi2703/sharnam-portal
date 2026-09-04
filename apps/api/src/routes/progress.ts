@@ -9,6 +9,7 @@ import {
   buildPlannedActualWorkbook,
   importPlannedActualDashboard,
   renderPlannedActualHtml,
+  syncActivityLinesFromCostBoq,
 } from "../services/plannedActualDashboard.js";
 import {
   importMsProjectToProgress,
@@ -773,6 +774,82 @@ progressRouter.patch(
       },
     });
     res.json(project);
+  }
+);
+
+/** Sync Progress activity register from Cost BOQ monitoring lines (per package). */
+progressRouter.post(
+  "/:projectId/activity-lines/sync-from-boq",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    try {
+      const result = await syncActivityLinesFromCostBoq(project.id);
+      await audit("progress.activityLines.syncBoq", {
+        userId: req.user!.id,
+        entity: "ProgressActivityLine",
+        entityId: project.id,
+        meta: result,
+      });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Sync failed" });
+    }
+  }
+);
+
+/** Per-discipline S-curve register — feeds DPR INPUT and WPR charts. */
+progressRouter.get("/:projectId/scurve-points", async (req, res) => {
+  const discipline = String(req.query.discipline || "OVERALL").toUpperCase();
+  const rows = await prisma.progressScurvePoint.findMany({
+    where: { projectId: req.params.projectId, discipline },
+    orderBy: { periodDate: "asc" },
+    take: 52,
+  });
+  res.json(rows);
+});
+
+progressRouter.post(
+  "/:projectId/scurve-points",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const discipline = String(req.body.discipline || "OVERALL").toUpperCase();
+    const periodDate = new Date(String(req.body.periodDate || req.body.date));
+    if (Number.isNaN(periodDate.getTime())) return res.status(400).json({ error: "periodDate required" });
+    const row = await prisma.progressScurvePoint.upsert({
+      where: {
+        projectId_discipline_periodDate: { projectId, discipline, periodDate },
+      },
+      create: {
+        projectId,
+        discipline,
+        periodDate,
+        periodLabel: req.body.periodLabel ? String(req.body.periodLabel) : null,
+        plannedPct: Number(req.body.plannedPct) || 0,
+        actualPct: Number(req.body.actualPct) || 0,
+        source: req.body.source ? String(req.body.source) : "manual",
+      },
+      update: {
+        periodLabel: req.body.periodLabel != null ? String(req.body.periodLabel) : undefined,
+        plannedPct: req.body.plannedPct != null ? Number(req.body.plannedPct) : undefined,
+        actualPct: req.body.actualPct != null ? Number(req.body.actualPct) : undefined,
+        source: req.body.source ? String(req.body.source) : undefined,
+      },
+    });
+    res.json(row);
+  }
+);
+
+progressRouter.delete(
+  "/:projectId/scurve-points/:pointId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    await prisma.progressScurvePoint.deleteMany({
+      where: { id: req.params.pointId, projectId: req.params.projectId },
+    });
+    res.json({ ok: true });
   }
 );
 

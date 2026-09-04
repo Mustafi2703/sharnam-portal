@@ -772,6 +772,21 @@ hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"),
   res.status(201).json(row);
 });
 
+hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const row = await prisma.payslip.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  if (req.user!.role !== "admin" && req.user!.role !== "office" && req.user!.id !== row.userId) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const user = await prisma.user.findUnique({ where: { id: row.userId } });
+  if (!user) return res.status(404).json({ error: "user not found" });
+  const profile = await prisma.employeeProfile.findFirst({ where: { userId: row.userId } });
+  const { buildPayslipHtml } = await import("../services/payslipPdf.js");
+  const html = buildPayslipHtml({ payslip: row, user, profile });
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
 hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.payslip.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });

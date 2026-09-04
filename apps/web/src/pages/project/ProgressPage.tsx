@@ -56,7 +56,7 @@ export default function ProgressPage() {
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [resyncBusy, setResyncBusy] = useState(false);
   const [registerSyncBusy, setRegisterSyncBusy] = useState(false);
-  const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | null>(null);
+  const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | "boq" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
   const [msProject, setMsProject] = useState<any>(null);
   const [msBusy, setMsBusy] = useState<"seed" | "import" | "xml" | null>(null);
@@ -453,6 +453,24 @@ export default function ProgressPage() {
       setMsg(e instanceof Error ? e.message : "Template load failed");
     } finally {
       setRegisterSyncBusy(false);
+    }
+  }
+
+  async function syncActivityFromBoq() {
+    if (!id) return;
+    setPaBusy("boq");
+    setMsg("");
+    try {
+      const out = await api<{ created: number; updated: number; total: number }>(
+        `/api/progress/${id}/activity-lines/sync-from-boq`,
+        { method: "POST", token }
+      );
+      setMsg(`BOQ synced to Planned vs Actual — ${out.created} new · ${out.updated} updated · ${out.total} BOQ lines`);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "BOQ sync failed");
+    } finally {
+      setPaBusy(null);
     }
   }
 
@@ -1062,6 +1080,9 @@ export default function ProgressPage() {
               <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs font-semibold text-brand px-2 py-1">
                 Open Cost cashflow →
               </Link>
+              <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void syncActivityFromBoq()}>
+                {paBusy === "boq" ? "…" : "Sync from Cost BOQ"}
+              </Button>
               <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void syncPvaCashflowToCost()}>
                 {paBusy === "sync" ? "…" : "Sync cashflow → Cost"}
               </Button>
