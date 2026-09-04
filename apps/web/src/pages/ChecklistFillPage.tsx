@@ -8,6 +8,9 @@ import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../
 
 type Item = { id: string; itemCode?: string; description: string; section?: string };
 type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[]; evidenceLinks: string[] };
+type FillMeta = { reportNo: string; location: string; refDrawing: string; quantity: string };
+
+const emptyMeta = (): FillMeta => ({ reportNo: "", location: "", refDrawing: "", quantity: "" });
 
 /** Spacious Procore-style fill form: pick drawing → pick revision → fill lines with evidence */
 export default function ChecklistFillPage() {
@@ -20,6 +23,7 @@ export default function ChecklistFillPage() {
   const [drawingId, setDrawingId] = useState("");
   const [revisionId, setRevisionId] = useState("");
   const [responses, setResponses] = useState<Record<string, LineResponse>>({});
+  const [fillMeta, setFillMeta] = useState<FillMeta>(emptyMeta);
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<FileList | null>(null);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
@@ -51,11 +55,22 @@ export default function ChecklistFillPage() {
       setRemarks(draft.remarks || "");
       if (draft.drawingId) setDrawingId(draft.drawingId);
       if (draft.revisionId) setRevisionId(draft.revisionId);
-      let saved: Record<string, { answer?: string; remarks?: string; evidenceLinks?: string[] }> = {};
+      let saved: Record<string, { answer?: string; remarks?: string; evidenceLinks?: string[] } & Partial<FillMeta>> = {};
       try {
         saved = JSON.parse(draft.responsesJson || "{}");
       } catch {
         saved = {};
+      }
+      const metaRaw = saved._meta as Partial<FillMeta> | undefined;
+      if (metaRaw && typeof metaRaw === "object") {
+        setFillMeta({
+          reportNo: metaRaw.reportNo || "",
+          location: metaRaw.location || "",
+          refDrawing: metaRaw.refDrawing || "",
+          quantity: metaRaw.quantity || "",
+        });
+      } else {
+        setFillMeta(emptyMeta());
       }
       Object.keys(init).forEach((itemId) => {
         const row = saved[itemId] || {};
@@ -66,6 +81,9 @@ export default function ChecklistFillPage() {
           evidenceLinks: Array.isArray(row.evidenceLinks) ? row.evidenceLinks : [],
         };
       });
+    } else {
+      setDraftId(null);
+      setFillMeta(emptyMeta());
     }
     setResponses(init);
   };
@@ -95,7 +113,7 @@ export default function ChecklistFillPage() {
   const selectedRev = revs.find((r: any) => r.id === revisionId);
 
   function buildPayload() {
-    const payload: Record<string, { answer: string; remarks: string; evidenceLinks?: string[] }> = {};
+    const payload: Record<string, { answer: string; remarks: string; evidenceLinks?: string[] } | FillMeta> = {};
     const itemComments: Record<string, string> = {};
     Object.entries(responses).forEach(([lineId, r]) => {
       payload[lineId] = {
@@ -105,6 +123,7 @@ export default function ChecklistFillPage() {
       };
       if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
     });
+    payload._meta = { ...fillMeta };
     return { payload, itemComments };
   }
 
@@ -294,6 +313,52 @@ export default function ChecklistFillPage() {
             />
 
             {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+
+            <Card className="!p-5">
+              <h3 className="font-semibold text-sm mb-3">Sheet header (SPDC)</h3>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <label className="block text-sm">
+                  <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Report no.</span>
+                  <Input
+                    className="mt-1"
+                    placeholder="CL/CIV/104"
+                    value={fillMeta.reportNo}
+                    onChange={(e) => setFillMeta((m) => ({ ...m, reportNo: e.target.value }))}
+                    disabled={!canFill}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Location</span>
+                  <Input
+                    className="mt-1"
+                    placeholder="Grid C4 / Level +0.00"
+                    value={fillMeta.location}
+                    onChange={(e) => setFillMeta((m) => ({ ...m, location: e.target.value }))}
+                    disabled={!canFill}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Ref. drawing</span>
+                  <Input
+                    className="mt-1"
+                    placeholder="SPDC-STR-104 Rev. 2"
+                    value={fillMeta.refDrawing}
+                    onChange={(e) => setFillMeta((m) => ({ ...m, refDrawing: e.target.value }))}
+                    disabled={!canFill}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Quantity</span>
+                  <Input
+                    className="mt-1"
+                    placeholder="3.2 cum"
+                    value={fillMeta.quantity}
+                    onChange={(e) => setFillMeta((m) => ({ ...m, quantity: e.target.value }))}
+                    disabled={!canFill}
+                  />
+                </label>
+              </div>
+            </Card>
 
             <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
               <aside className="space-y-5 sticky top-20">

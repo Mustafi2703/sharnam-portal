@@ -808,19 +808,15 @@ export default function CostPage() {
       </>
       )}
 
-      {isRegisterView && canEdit && (
-        <details className="rounded border border-line bg-paper shrink-0" open={tab === "boq"}>
-          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-brand-dark">
-            Admin · cost sheet setup (structures · MB · BBS · bulk upload)
-          </summary>
-          <div className="border-t border-line">
+      {isRegisterView && canEdit && tab === "boq" && (
         <CostStructureSetupPanel
           projectId={id!}
           token={token}
           structures={summary.structures || []}
           canEdit={!!canEdit}
           busy={syncing}
-          message={tab === "boq" ? msg : undefined}
+          primary
+          message={msg}
           onMessage={setMsg}
           onChanged={load}
           onOpenTab={(t, pkg) => setTab(t, pkg || "All")}
@@ -828,8 +824,16 @@ export default function CostPage() {
             await syncFullTemplate();
           }}
         />
-          </div>
-        </details>
+      )}
+
+      {isRegisterView && canEdit && tab !== "boq" && (
+        <div className="rounded border border-line bg-paper px-4 py-2.5 text-sm shrink-0 flex flex-wrap items-center gap-2">
+          <span className="text-steel-muted">Add structures or upload MB/BBS workbooks on the</span>
+          <button type="button" className="text-brand font-semibold" onClick={() => setTab("boq")}>
+            Structure upload
+          </button>
+          <span className="text-steel-muted">tab.</span>
+        </div>
       )}
 
       {tab === "monitoring" && (
@@ -851,19 +855,9 @@ export default function CostPage() {
             </Select>
           </label>
           {canEdit && (
-            <div className="min-w-[240px] flex-1 sm:flex-none">
-              <p className="text-xs font-semibold uppercase tracking-wider text-steel-muted mb-1">Upload BOQ</p>
-              <FileField
-                compact
-                label="Browse"
-                accept=".xls,.xlsx,.csv"
-                file={null}
-                onChange={(f) => {
-                  if (f && !syncing) void uploadBoqOrWorkbook(f, activePkg);
-                }}
-                hint={syncing ? "Importing…" : "SPDC workbook or package BOQ"}
-              />
-            </div>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setTab("boq")}>
+              Upload structure / BOQ
+            </Button>
           )}
           <p className="text-xs text-steel-muted pb-0.5 ml-auto max-w-md">
             {siteBoqMode
@@ -1813,9 +1807,6 @@ export default function CostPage() {
 
       {tab === "boq" && (
         <div className="cost-sheet-block space-y-3">
-          <p className="text-xs text-steel-muted shrink-0">
-            Use the <strong>Cost sheet setup</strong> panel above to load SPDC template or add structures. Import batches below.
-          </p>
           <div className="cost-page__register min-w-0">
             <div className="sheet-register spdc-register-panel register-panel-fill flex flex-col w-full min-w-0">
               <div className="sheet-register__head shrink-0">

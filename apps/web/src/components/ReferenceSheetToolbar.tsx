@@ -50,7 +50,8 @@ export function ReferenceSheetToolbar({
       <div className="min-w-0 text-left">
         <strong className="text-sm text-ink">{sheetLabel}</strong>
         {rowCount != null && <span className="text-xs text-steel-muted ml-2">{rowCount} rows</span>}
-        {message && <p className="text-xs text-steel-muted mt-0.5">{message}</p>}
+        {uploadHint && <p className="text-xs text-steel-muted mt-0.5 max-w-xl">{uploadHint}</p>}
+        {message && <p className="text-xs text-brand-dark mt-0.5">{message}</p>}
         {sharePointUrl && (
           <a href={sharePointUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand font-semibold ml-2">
             Open in SharePoint ↗

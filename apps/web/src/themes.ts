@@ -3,6 +3,7 @@ export type ColorMode = "light" | "dark";
 
 export const COLOR_MODE_KEY = "sharnam_color_mode";
 export const SIDEBAR_HIDDEN_KEY = "sharnam_sidebar_hidden";
+export const HRMS_SIDEBAR_HIDDEN_KEY = "sharnam_hrms_sidebar_hidden";
 
 /** Matches logo cyan/teal + construction amber */
 const LIGHT: Record<string, string> = {

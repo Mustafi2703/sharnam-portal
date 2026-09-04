@@ -1,3 +1,5 @@
+import type { ModuleIconKey } from "../../components/icons";
+
 /** HRMS desk — grouped left nav (mirrors CRM sections pattern). */
 export const HRMS_ACCENT = "#0D9488";
 export const HRMS_SOFT = "#CCFBF1";
@@ -8,6 +10,7 @@ export type HrmsTool = {
   end?: boolean;
   subtitle: string;
   adminOnly?: boolean;
+  icon: ModuleIconKey;
 };
 
 export type HrmsSection = {
@@ -25,16 +28,19 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         to: "",
         label: "Dashboard",
         end: true,
+        icon: "dashboard",
         subtitle: "Headcount, onboarded users, punches, leave queue, and quick links.",
       },
       {
         to: "recruitment",
         label: "Recruitment",
+        icon: "comms",
         subtitle: "Requisition → posting → screening → interview scorecard → offer letter.",
       },
       {
         to: "onboarding",
         label: "Onboarding",
+        icon: "field",
         subtitle: "Pre-join checklist, document collection, and Day 1 joining formalities.",
       },
     ],
@@ -46,16 +52,19 @@ export const HRMS_SECTIONS: HrmsSection[] = [
       {
         to: "attendance",
         label: "Attendance",
+        icon: "field",
         subtitle: "Geo check-in/out with today's roster and site assignment.",
       },
       {
         to: "leave",
         label: "Leave",
+        icon: "reports",
         subtitle: "Request leave, view balances, and approve or reject as HR.",
       },
       {
         to: "payroll",
         label: "Payroll",
+        icon: "finance",
         subtitle: "Pay hikes with approval workflow and monthly payslip generation.",
       },
     ],
@@ -67,11 +76,13 @@ export const HRMS_SECTIONS: HrmsSection[] = [
       {
         to: "documents",
         label: "Letters",
+        icon: "dms",
         subtitle: "Appointment, Relieving, Exit, Asset return, Warning — branded HTML + .xlsx.",
       },
       {
         to: "masters",
         label: "Masters",
+        icon: "master",
         subtitle: "Leave types, holiday calendar, and HR reference data.",
       },
     ],
@@ -83,12 +94,14 @@ export const HRMS_SECTIONS: HrmsSection[] = [
       {
         to: "users",
         label: "Users",
+        icon: "master",
         subtitle: "Create logins, activate accounts, and assign employees to projects.",
         adminOnly: true,
       },
       {
         to: "vendors",
         label: "Vendors",
+        icon: "cost",
         subtitle: "Office vendor directory for CRM bids and project assignment.",
         adminOnly: true,
       },

@@ -187,6 +187,19 @@ function parseResponses(responsesJson?: string): Record<string, ResponseCell | s
   }
 }
 
+function parseFillMetaFromResponses(responsesJson?: string) {
+  const all = parseResponses(responsesJson);
+  const raw = all._meta;
+  if (!raw || typeof raw !== "object") return {};
+  const m = raw as Record<string, unknown>;
+  return {
+    reportNo: String(m.reportNo || "").trim(),
+    location: String(m.location || "").trim(),
+    refDrawing: String(m.refDrawing || "").trim(),
+    quantity: String(m.quantity || "").trim(),
+  };
+}
+
 function getAnswer(
   responses: Record<string, ResponseCell | string>,
   item: Item
@@ -376,7 +389,8 @@ async function fillActivityChecklist(
   const template = submission.assignment?.template;
   const items = [...(template?.items || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const responses = parseResponses(submission.responsesJson);
-  const checklistNo = (submission.id || "").slice(0, 10).toUpperCase() || "CL-PORTAL";
+  const fillMeta = parseFillMetaFromResponses(submission.responsesJson);
+  const checklistNo = fillMeta.reportNo || (submission.id || "").slice(0, 10).toUpperCase() || "CL-PORTAL";
 
   paintInput(ws, 6, 5, project?.name || project?.code || "");
   paintInput(ws, 6, 9, checklistNo);
@@ -386,11 +400,11 @@ async function fillActivityChecklist(
   paintInput(ws, 8, 9, "");
   paintInput(ws, 9, 5, template?.name || "");
   paintInput(ws, 9, 9, template?.category || template?.checklistType || "");
-  paintInput(ws, 10, 5, project?.location || "");
+  paintInput(ws, 10, 5, fillMeta.location || project?.location || "");
   paintInput(ws, 10, 9, "");
-  paintInput(ws, 11, 5, drawingLabel(submission));
+  paintInput(ws, 11, 5, fillMeta.refDrawing || drawingLabel(submission));
   paintInput(ws, 11, 9, "");
-  paintInput(ws, 12, 5, "");
+  paintInput(ws, 12, 5, fillMeta.quantity || "");
   paintInput(ws, 12, 9, submission.status || "");
 
   // Replace blank A–H skeleton with live filled lines (preserve header styling).

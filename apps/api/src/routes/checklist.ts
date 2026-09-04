@@ -29,6 +29,10 @@ function checklistUploadKind(f: Express.Multer.File, scopedKind?: string) {
   return f.mimetype?.startsWith("image/") ? "photo" : "doc";
 }
 
+function requiresDrawingGateForFamily(checklistType: string) {
+  return checklistType === "QualityInspection" || checklistType === "DrawingCheck" || checklistType === "QualityIR";
+}
+
 function storedUploadUrl(saved: { url: string; sharePointUrl?: string | null }) {
   return saved.url || saved.sharePointUrl || "";
 }
@@ -155,6 +159,32 @@ checklistRouter.get("/templates/:id", async (req, res) => {
   res.json(template);
 });
 
+/** Reload line items from seed/checklist-pack workbook matching template name. */
+checklistRouter.post(
+  "/templates/:id/sync-pack",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { refreshTemplateItemsFromPack } = await import("../services/checklistPackImport.js");
+      const out = await refreshTemplateItemsFromPack(req.params.id);
+      await audit("checklist.template.sync_pack", {
+        userId: req.user!.id,
+        entity: "ChecklistTemplate",
+        entityId: req.params.id,
+        meta: out,
+      });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Sync failed" });
+    }
+  }
+);
+
+checklistRouter.get("/pack-inventory", requireRoles("admin", "office"), async (_req, res) => {
+  const { loadChecklistPackInventory } = await import("../services/checklistPackPaths.js");
+  res.json(loadChecklistPackInventory());
+});
+
 checklistRouter.get("/project/:projectId", async (req, res) => {
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const assignments = await prisma.checklistAssignment.findMany({
@@ -227,9 +257,15 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
       };
     })
   );
+  const userRole = (req as AuthedRequest).user?.role;
+  const requiresDrawingGate =
+    type === "QualityInspection" || type === "DrawingCheck" || type === "QualityIR";
+  const canSubmit =
+    userRole === "admin" || userRole === "office" || !requiresDrawingGate || published > 0;
+
   res.json({
     assignments: enriched,
-    canSubmit: true,
+    canSubmit,
     publishedDrawings: published,
     checklistType: type || "all",
     fillRfis,
@@ -308,6 +344,31 @@ checklistRouter.post(
     }
 
     const submitStatus = status || "Submitted";
+    if (submitStatus === "Submitted") {
+      const parsed = parseResponsesJson(typeof responses === "string" ? responses : JSON.stringify(responses));
+      const itemIds = await prisma.checklistItem.findMany({
+        where: { templateId: assignment.templateId },
+        select: { id: true },
+      });
+      const answered = itemIds.filter((it) => {
+        const row = parsed[it.id];
+        return row?.answer && String(row.answer).trim();
+      }).length;
+      if (itemIds.length > 0 && answered < itemIds.length) {
+        return res.status(400).json({
+          error: `All checklist lines must be answered before submit (${answered}/${itemIds.length}).`,
+        });
+      }
+      if (requiresDrawingGateForFamily(assignment.template.checklistType) && req.user!.role !== "admin" && req.user!.role !== "office") {
+        const pub = await prisma.drawing.count({
+          where: { projectId: assignment.projectId, isPublished: true },
+        });
+        if (pub === 0) {
+          return res.status(400).json({ error: "Publish at least one drawing before submitting this checklist." });
+        }
+      }
+    }
+
     const existingDraft = await prisma.checklistSubmission.findFirst({
       where: { assignmentId: assignment.id, submittedById: req.user!.id, status: "Draft" },
     });

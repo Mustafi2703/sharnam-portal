@@ -8,6 +8,26 @@ export type LineResponsePayload = {
   evidenceLinks?: string[];
 };
 
+export type ChecklistFillMeta = {
+  reportNo?: string;
+  location?: string;
+  refDrawing?: string;
+  quantity?: string;
+};
+
+export function parseFillMeta(responsesJson?: string | null): ChecklistFillMeta {
+  const all = parseResponsesJson(responsesJson);
+  const raw = all._meta;
+  if (!raw || typeof raw !== "object") return {};
+  const m = raw as Record<string, unknown>;
+  return {
+    reportNo: String(m.reportNo || "").trim() || undefined,
+    location: String(m.location || "").trim() || undefined,
+    refDrawing: String(m.refDrawing || "").trim() || undefined,
+    quantity: String(m.quantity || "").trim() || undefined,
+  };
+}
+
 export function parseResponsesJson(raw?: string | null): Record<string, LineResponsePayload> {
   try {
     const parsed = JSON.parse(raw || "{}");
@@ -23,7 +43,9 @@ export function computeChecklistProgress(
   fileEvidenceCount = 0
 ) {
   const responses = parseResponsesJson(responsesJson);
-  const entries = Object.values(responses);
+  const entries = Object.entries(responses)
+    .filter(([key]) => key !== "_meta")
+    .map(([, v]) => v);
   const answered = entries.filter((r) => String(r.answer || r.value || "").trim()).length;
   const linkEvidence = entries.reduce(
     (s, r) => s + (Array.isArray(r.evidenceLinks) ? r.evidenceLinks.filter((u) => String(u).trim()).length : 0),

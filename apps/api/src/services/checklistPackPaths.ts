@@ -66,7 +66,18 @@ export function indexChecklistWorkbooks(): Map<string, string> {
 export function findChecklistWorkbook(catalogName: string): string | null {
   const index = indexChecklistWorkbooks();
   const key = catalogName.trim();
-  return index.get(key) || index.get(key.replace(/^Checklist For\s+/i, "")) || null;
+  const norm = key
+    .replace(/\u00fb/g, "-")
+    .replace(/\u2013|\u2014/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^Checklist For\s+/i, "")
+    .trim();
+  const candidates = [key, norm, `Checklist For ${norm}`, key.replace(/^PD\s+/i, ""), key.replace(/^PC\s+/i, "")];
+  for (const c of candidates) {
+    const hit = index.get(c);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export type ChecklistPackFolder = { name: string; fileCount: number };

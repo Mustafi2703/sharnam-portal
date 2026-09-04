@@ -15,7 +15,7 @@ export default function HrmsLayout() {
 
   return (
     <div
-      className="hrms-module page-stack--register flex flex-col flex-1 min-h-0 gap-4 pb-6"
+      className="hrms-module page-scroll-full flex flex-col gap-4 pb-8 min-w-0 w-full"
       style={
         {
           ["--module-accent" as string]: HRMS_ACCENT,
@@ -33,7 +33,7 @@ export default function HrmsLayout() {
         }
       />
 
-      <div className="hrms-module__outlet min-w-0 flex-1">
+      <div className="hrms-module__outlet min-w-0 w-full">
         <Outlet />
       </div>
     </div>

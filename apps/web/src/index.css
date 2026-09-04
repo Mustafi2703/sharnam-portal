@@ -1541,6 +1541,24 @@ body.is-auth-route #root {
   overscroll-behavior: contain;
 }
 
+/* HRMS module — never use page-stack--register (height:0 collapse) */
+.hrms-module {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.hrms-module__outlet {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.hrms-portal-shell.app-frame {
+  min-height: 100dvh;
+  height: 100dvh;
+}
+
 /* Full-page scroll — header + body scroll together (DPR/WPR, HRMS) */
 .tool-main__outlet:has(.page-scroll-full) {
   overflow-x: hidden !important;

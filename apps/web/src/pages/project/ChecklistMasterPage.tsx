@@ -69,6 +69,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
+  const [syncPackBusy, setSyncPackBusy] = useState(false);
   const [catalog, setCatalog] = useState<{ srNo: number; name: string; category: string }[]>([]);
 
   const load = async () => {
@@ -506,6 +507,33 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   disabled={!canEdit}
                 />
                 {canEdit && <Button type="submit" variant="secondary">Save header</Button>}
+                {canEdit && detail && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={syncPackBusy}
+                    onClick={async () => {
+                      setSyncPackBusy(true);
+                      setMsg("");
+                      try {
+                        const out = await api<{ itemCount: number; workbookPath?: string }>(
+                          `/api/checklist/templates/${detail.id}/sync-pack`,
+                          { method: "POST", token }
+                        );
+                        setMsg(`Synced ${out.itemCount} lines from pack workbook.`);
+                        const fresh = await api(`/api/checklist/templates/${detail.id}`, { token });
+                        setDetail(fresh);
+                        await load();
+                      } catch (err) {
+                        setMsg(err instanceof Error ? err.message : "Pack sync failed");
+                      } finally {
+                        setSyncPackBusy(false);
+                      }
+                    }}
+                  >
+                    {syncPackBusy ? "Syncing…" : "Sync lines from pack xlsx"}
+                  </Button>
+                )}
               </form>
 
               <div className="border-t border-line pt-3">

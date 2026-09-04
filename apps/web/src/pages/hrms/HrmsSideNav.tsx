@@ -1,5 +1,8 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth";
+import { ModuleIcon, IconMoon, IconSun } from "../../components/icons";
+import { formatUiText } from "../../lib/formatUiText";
+import type { ColorMode } from "../../themes";
 import { HRMS_ACCENT, HRMS_SECTIONS } from "./hrmsNav";
 
 function toolPath(to: string) {
@@ -12,31 +15,42 @@ function isToolActive(pathname: string, to: string, end?: boolean) {
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
-export default function HrmsSideNav({ onNavigate }: { onNavigate?: () => void }) {
+export default function HrmsSideNav({
+  onNavigate,
+  colorMode,
+  onToggleTheme,
+}: {
+  onNavigate?: () => void;
+  colorMode: ColorMode;
+  onToggleTheme: () => void;
+}) {
   const loc = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "office";
+  const dark = colorMode === "dark";
 
   return (
-    <div className="hrms-side-nav__inner">
-      <div className="hrms-side-nav__head">
-        <Link to="/hrm" className="hrms-side-nav__brand" onClick={onNavigate} aria-label="HRMS home">
-          <img src="/logo-transparent.png" alt="Sharnam" className="hrms-side-nav__logo" width={200} height={96} />
+    <div className="side-nav__inner">
+      <div className="side-nav__head">
+        <Link to="/hrm" className="side-nav__brand" onClick={onNavigate} aria-label="HRMS home">
+          <img src="/logo-transparent.png" alt="Sharnam" className="side-nav__logo" width={240} height={116} />
         </Link>
-        <p className="hrms-side-nav__desk">HR team portal</p>
+        <span className="side-nav__role-badge" aria-label="HR desk">
+          HR desk
+        </span>
       </div>
 
-      <div className="hrms-side-nav__scroll">
+      <div className="side-nav__scroll">
         {HRMS_SECTIONS.map((section) => {
           const tools = section.tools.filter((t) => !t.adminOnly || isAdmin);
           if (!tools.length) return null;
           return (
-            <section key={section.id} className="hrms-side-nav__section">
-              <div className="hrms-side-nav__section-head">
-                <p className="hrms-side-nav__label">{section.label}</p>
+            <section key={section.id} className="side-nav__section" aria-label={section.label}>
+              <div className="side-nav__section-head">
+                <p className="side-nav__label">{formatUiText(section.label)}</p>
               </div>
-              <nav className="hrms-side-nav__group" aria-label={section.label}>
+              <nav className="side-nav__group">
                 {tools.map((t) => {
                   const to = toolPath(t.to);
                   const active = isToolActive(loc.pathname, t.to, t.end);
@@ -46,9 +60,14 @@ export default function HrmsSideNav({ onNavigate }: { onNavigate?: () => void })
                       to={to}
                       end={t.end}
                       onClick={onNavigate}
-                      className={`hrms-side-nav__item${active ? " is-active" : ""}`}
+                      className={`side-nav__item side-nav__item--module${active ? " is-active" : ""}`}
+                      style={{ ["--item-accent" as string]: HRMS_ACCENT }}
                     >
-                      {t.label}
+                      <span className="side-nav__icon-wrap" style={{ color: HRMS_ACCENT }}>
+                        <ModuleIcon name={t.icon} size={18} />
+                      </span>
+                      <span className="min-w-0 truncate">{formatUiText(t.label)}</span>
+                      {active ? <span className="side-nav__item-live" aria-hidden /> : null}
                     </NavLink>
                   );
                 })}
@@ -58,16 +77,22 @@ export default function HrmsSideNav({ onNavigate }: { onNavigate?: () => void })
         })}
       </div>
 
-      <div className="hrms-side-nav__foot">
-        <Link to="/dashboard" className="hrms-side-nav__foot-link" onClick={onNavigate}>
-          Office portal ↗
+      <div className="side-nav__foot">
+        <Link to="/dashboard" className="side-nav__item" onClick={onNavigate}>
+          <ModuleIcon name="modules" size={18} />
+          <span>Office portal</span>
         </Link>
-        <p className="hrms-side-nav__user" title={user?.fullName}>
+        <button type="button" className="side-nav__item w-full" onClick={onToggleTheme}>
+          {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
+          <span>{dark ? "Light mode" : "Dark mode"}</span>
+        </button>
+        <div className="side-nav__user" title={user?.fullName}>
           {user?.fullName}
-        </p>
+          <span className="side-nav__user-role"> · Office</span>
+        </div>
         <button
           type="button"
-          className="hrms-side-nav__signout"
+          className="side-nav__signout"
           onClick={() => {
             logout();
             navigate("/login/hr");

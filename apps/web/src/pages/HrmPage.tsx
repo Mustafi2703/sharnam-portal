@@ -10,22 +10,47 @@ export default function HrmPage() {
   const canManage = user?.role === "admin" || user?.role === "office";
   const [employees, setEmployees] = useState<any[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
-    const [e, dash] = await Promise.all([
-      api<any[]>("/api/hrm/employees", { token }).catch(() => []),
-      api<any>("/api/hrm/dashboard", { token }).catch(() => null),
-    ]);
-    setEmployees(e);
-    setDashboard(dash);
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [e, dash] = await Promise.all([
+        api<any[]>("/api/hrm/employees", { token }),
+        api<any>("/api/hrm/dashboard", { token }),
+      ]);
+      setEmployees(e);
+      setDashboard(dash);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load HR dashboard");
+      setEmployees([]);
+      setDashboard(null);
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-line bg-paper px-6 py-12 text-center text-steel-muted">
+        Loading HR dashboard…
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
+      {loadError ? (
+        <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
+          {loadError}
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
         <Stat label="Headcount" value={String(dashboard?.headcount ?? employees.length)} />
         <Stat label="Onboarded" value={String(dashboard?.onboardedUsers ?? 0)} />
