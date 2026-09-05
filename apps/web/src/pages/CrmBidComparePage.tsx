@@ -541,30 +541,11 @@ export default function CrmBidComparePage() {
   }
 
   return (
-    <div className="space-y-4 pb-4">
-      <div className="flex flex-wrap gap-2 shrink-0">
-        <Link to="/crm/leads">
-          <Button variant="secondary">← Leads</Button>
-        </Link>
-        <Link to="/crm/proposals/new">
-          <Button variant="secondary">New PMC proposal</Button>
-        </Link>
-        <Link to="/crm/directory/vendors">
-          <Button variant="secondary">Bidder directory</Button>
-        </Link>
-        <Button
-          variant="secondary"
-          type="button"
-          onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-        >
-          Download R2 .xlsx
-        </Button>
-      </div>
+    <div className="crm-bid-page">
+      {msg && <p className="text-sm text-ok shrink-0 px-0.5">{msg}</p>}
 
-      {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
-
-      {pendingBidSetup.length > 0 && deskFilter === "converted" && !routePkgId && (
-        <Card className="!p-4 border-amber-200 bg-amber-50/60">
+      {pendingBidSetup.length > 0 && deskFilter === "converted" && !routePkgId && deskView === "packages" && (
+        <Card className="!p-4 border-amber-200 bg-amber-50/60 shrink-0">
           <h3 className="font-semibold text-sm mb-2">Converted leads — bid setup pending ({pendingBidSetup.length})</h3>
           <p className="text-xs text-steel-muted mb-3">
             These SPDC projects were created from CRM leads but do not have a comparative bid package yet.
@@ -596,28 +577,14 @@ export default function CrmBidComparePage() {
         </Card>
       )}
 
-      <div className="flex flex-wrap gap-2 items-center shrink-0">
-        <Button
-          variant={deskView === "packages" ? "primary" : "secondary"}
-          type="button"
-          onClick={() => setDeskView("packages")}
-        >
-          Bid packages
-        </Button>
-        <Button
-          variant={deskView === "setup" ? "primary" : "secondary"}
-          type="button"
-          onClick={() => setDeskView("setup")}
-        >
-          New bid setup
-        </Button>
-        <span className="text-xs text-steel-muted ml-1">
-          {deskFilter === "converted" ? "Converted CRM projects" : "All packages"} · {packagesForDesk.length} package(s)
-        </span>
-      </div>
-
       {deskView === "setup" ? (
-        <Card>
+        <Card className="max-w-4xl w-full mx-auto">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h2 className="font-semibold text-sm">New comparative bid (R2 template)</h2>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setDeskView("packages")}>
+              ← Back to packages
+            </Button>
+          </div>
           <div className="flex flex-wrap gap-2 mb-4">
             {[
               { n: 1, label: "Project" },
@@ -789,37 +756,45 @@ export default function CrmBidComparePage() {
             </form>
         </Card>
       ) : (
-      <div className="grid lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-4 items-start">
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant={deskFilter === "converted" ? "primary" : "secondary"}
-              type="button"
-              className="!text-xs"
-              onClick={() => setDeskFilter("converted")}
-            >
-              Converted
-            </Button>
-            <Button
-              variant={deskFilter === "all" ? "primary" : "secondary"}
-              type="button"
-              className="!text-xs"
-              onClick={() => setDeskFilter("all")}
-            >
-              All
-            </Button>
-          </div>
-          <Card padding={false}>
-            <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm flex items-center justify-between">
-              <span>Packages ({packagesForDesk.length})</span>
-              {packagesForDesk.length > 0 && (
-                <span className="text-[10px] text-steel-muted font-normal">
-                  {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.done || 0), 0)}/
-                  {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.total || 0), 0)} BOQs
-                </span>
-              )}
+      <div className="crm-bid-desk">
+        <aside className="crm-bid-desk__rail">
+          <div className="crm-bid-desk__rail-head space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" className="!text-xs flex-1" onClick={() => setDeskView("setup")}>
+                + New bid
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                className="!text-xs"
+                onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
+              >
+                R2 .xlsx
+              </Button>
             </div>
-            <ul className="divide-y max-h-[min(70vh,640px)] overflow-y-auto">
+            <div className="flex gap-1">
+              <Button
+                variant={deskFilter === "converted" ? "primary" : "secondary"}
+                type="button"
+                className="!text-xs flex-1"
+                onClick={() => setDeskFilter("converted")}
+              >
+                Converted
+              </Button>
+              <Button
+                variant={deskFilter === "all" ? "primary" : "secondary"}
+                type="button"
+                className="!text-xs flex-1"
+                onClick={() => setDeskFilter("all")}
+              >
+                All
+              </Button>
+            </div>
+            <p className="text-[10px] text-steel-muted font-mono uppercase tracking-wide">
+              {packagesForDesk.length} package(s)
+            </p>
+          </div>
+          <ul className="crm-bid-desk__rail-list divide-y">
               {packagesForDesk.map((p) => {
                 const pct = p.uploadProgress
                   ? Math.round((100 * (p.uploadProgress.done || 0)) / Math.max(1, p.uploadProgress.total || 0))
@@ -864,11 +839,25 @@ export default function CrmBidComparePage() {
                   </Button>
                 </li>
               )}
-            </ul>
-          </Card>
-        </div>
+          </ul>
+        </aside>
 
-        <div className="space-y-4 min-w-0">
+        <div className="crm-bid-desk__main">
+          <div className="crm-bid-desk__toolbar">
+            <Link to="/crm/directory/vendors">
+              <Button variant="secondary" className="!text-xs">
+                Bidder directory
+              </Button>
+            </Link>
+            {detail?.project?.id && (
+              <Link to={`/master?project=${detail.project.id}`}>
+                <Button variant="secondary" className="!text-xs">
+                  Project desk
+                </Button>
+              </Link>
+            )}
+          </div>
+          <div className="space-y-4">
           {detail ? (
             <>
               <Card>
@@ -1051,7 +1040,7 @@ export default function CrmBidComparePage() {
                 </details>
 
                 {vendorMatrix.length > 0 && (
-                  <div className="mb-4">
+                  <div className="mb-4 w-full min-w-0 overflow-x-auto">
                     <div className="flex flex-wrap gap-1 mb-3" role="tablist" aria-label="Discipline BOQ">
                       <button
                         type="button"
@@ -1171,6 +1160,7 @@ export default function CrmBidComparePage() {
               </p>
             </Card>
           )}
+          </div>
         </div>
       </div>
       )}

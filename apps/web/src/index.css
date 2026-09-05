@@ -446,6 +446,96 @@ body.is-auth-route #root {
   flex-shrink: 0;
 }
 
+/* CRM workspace — full-bleed desk like project modules */
+.crm-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+.crm-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 0.75rem 1rem 1rem;
+}
+.crm-nav-divider {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--color-line);
+  margin: 0 0.125rem;
+  align-self: center;
+  flex-shrink: 0;
+}
+.crm-bid-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.crm-bid-desk {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: var(--ui-radius, 12px);
+  overflow: hidden;
+  background: var(--color-paper);
+}
+.crm-bid-desk__rail {
+  width: min(300px, 32vw);
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-sand) 55%, var(--color-paper));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.crm-bid-desk__rail-head {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-paper);
+}
+.crm-bid-desk__rail-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.crm-bid-desk__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.75rem 1rem 1rem;
+}
+.crm-bid-desk__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-paper);
+}
+@media (max-width: 1023px) {
+  .crm-bid-desk {
+    flex-direction: column;
+  }
+  .crm-bid-desk__rail {
+    width: 100%;
+    max-height: min(38vh, 320px);
+    border-right: none;
+    border-bottom: 1px solid var(--color-line);
+  }
+}
+
 .tool-strip {
   display: block;
   width: 100%;
