@@ -10,6 +10,7 @@ import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { CrmBidProjectSetupSection } from "../components/CrmBidProjectSetupSection";
 
 type Discipline = { key: string; label: string; sheetName: string };
 
@@ -227,8 +228,8 @@ export default function CrmBidComparePage() {
     }));
     if (setupProjectId && !routePkgId) {
       setDeskView("setup");
-      setSetupStep(2);
-      setMsg("Step 2 — pick discipline BOQ sheets, then select bidders and create the package.");
+      setSetupStep(1);
+      setMsg("Step 1 — confirm project directory, team names, and packages before disciplines & bidders.");
     }
   }, [setupProjectId, setupLeadId, projects, routePkgId]);
 
@@ -649,6 +650,13 @@ export default function CrmBidComparePage() {
                     />
                     <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                   </div>
+                  {form.projectId && token && (
+                    <CrmBidProjectSetupSection
+                      projectId={form.projectId}
+                      token={token}
+                      onMsg={setMsg}
+                    />
+                  )}
                   <Button type="button" onClick={() => setSetupStep(2)} disabled={!form.projectId || !form.title.trim()}>
                     Next: disciplines →
                   </Button>

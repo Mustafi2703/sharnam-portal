@@ -100,26 +100,36 @@ body.is-auth-route #root {
 }
 
 /* Standalone popup forms (NCR/CAR, checklist fill) — body scroll, not page lock */
-html.is-standalone-form,
-body.is-standalone-form {
-  overflow-x: hidden;
-  overflow-y: auto;
-  height: auto;
+html.is-standalone-form {
+  height: auto !important;
   min-height: 100%;
   min-height: 100dvh;
   min-height: 100svh;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: auto;
   touch-action: pan-y;
 }
-body.is-standalone-form #root {
-  overflow-x: hidden;
-  overflow-y: visible;
-  height: auto;
+
+html.is-standalone-form body {
+  height: auto !important;
   min-height: 100%;
   min-height: 100dvh;
   min-height: 100svh;
-  max-height: none;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  max-height: none !important;
+}
+
+html.is-standalone-form #root {
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: 100svh;
+  max-height: none !important;
+  display: block;
 }
 
 #root {
@@ -10476,29 +10486,180 @@ body {
 }
 
 /* Standalone popup forms — checklist fill + NCR/CAR (no project module chrome) */
-.checklist-fill-standalone {
-  min-height: 100vh;
-  background: var(--paper, #faf9f7);
-}
-
-.ncr-form-standalone {
-  min-height: 100vh;
+.standalone-form-page {
   min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: var(--paper, #faf9f7);
+  background: var(--color-sand, #f0f2f4);
 }
 
-.ncr-form-standalone > header {
+.standalone-form-page--paper {
+  background: var(--color-paper, #faf9f7);
+}
+
+.standalone-form-header {
   position: sticky;
   top: 0;
+  z-index: 40;
+  background: var(--color-paper);
+  border-bottom: 1px solid var(--color-line);
+  box-shadow: 0 1px 0 rgb(18 20 23 / 0.04);
+}
+
+.standalone-form-header--navy {
+  background: var(--color-procore-navy, #2c3340);
+  border-bottom-color: rgb(255 255 255 / 0.1);
+  color: #fff;
+}
+
+.standalone-form-header__inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.standalone-form-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.standalone-form-header__logo {
+  height: 2.35rem;
+  width: auto;
+  max-width: 8.75rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.standalone-form-header--navy .standalone-form-header__logo {
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+}
+
+.standalone-form-header__org {
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-brand, #0b6a78);
+  line-height: 1.3;
+}
+
+.standalone-form-header--navy .standalone-form-header__org {
+  color: rgb(255 255 255 / 0.85);
+}
+
+.standalone-form-header__tag {
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  color: var(--color-steel-muted);
+  margin-top: 0.1rem;
+}
+
+.standalone-form-header--navy .standalone-form-header__tag {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.standalone-form-header__eyebrow {
+  margin-top: 0.35rem;
+  font-size: 0.625rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-steel-muted);
+}
+
+.standalone-form-header--navy .standalone-form-header__eyebrow {
+  color: rgb(255 255 255 / 0.65);
+}
+
+.standalone-form-header__title {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+  line-height: 1.35;
+}
+
+.standalone-form-header--navy .standalone-form-header__title {
+  color: #fff;
+}
+
+.standalone-form-header__subtitle {
+  font-size: 0.7rem;
+  color: var(--color-steel-muted);
+  margin-top: 0.15rem;
+  line-height: 1.4;
+}
+
+.standalone-form-header--navy .standalone-form-header__subtitle {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.standalone-form-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.standalone-form-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-paper);
+  box-shadow: 0 -4px 20px rgb(0 0 0 / 0.06);
+}
+
+.standalone-form-page__main {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2rem;
+}
+
+.standalone-form-page__main--narrow {
+  max-width: 56rem;
+}
+
+/* Force scroll on standalone popups — overrides global body/#root lock */
+html.is-standalone-form,
+html.is-standalone-form body,
+html.is-standalone-form #root {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100dvh;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.is-standalone-form body {
+  overflow-y: visible !important;
+}
+
+html.is-standalone-form #root {
+  overflow: visible !important;
+  display: block !important;
+}
+
+/* Legacy class aliases */
+.checklist-fill-standalone,
+.ncr-form-standalone {
+  min-height: 100dvh;
+  background: var(--paper, #faf9f7);
+}
+
+.ncr-form-standalone > header,
+.ncr-form-standalone > footer {
+  position: sticky;
 }
 
 .ncr-form-standalone__scroll {
-  flex: 1 1 auto;
-}
-
-.ncr-form-standalone > footer {
-  position: sticky;
-  bottom: 0;
+  /* body scroll — no inner trap */
 }

@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHeader, TextArea } from "../components/ui";
-import { BrandMark } from "../components/Brand";
+import { StandaloneFormHeader } from "../components/StandaloneFormHeader";
+import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string; instruction?: string };
 
@@ -16,6 +17,7 @@ const UNLOCK_KEY = (projectId: string) => `sharnam_drawing_unlock_${projectId}`;
 export default function DrawingPreCheckPage() {
   const { id: projectId } = useParams();
   const { token } = useAuth();
+  useStandaloneFormPage();
   const [template, setTemplate] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, { answer: string; remarks: string }>>({});
   const [busy, setBusy] = useState(false);
@@ -75,20 +77,19 @@ export default function DrawingPreCheckPage() {
   const answered = items.filter((i) => answers[i.id]?.answer).length;
 
   return (
-    <div className="min-h-screen bg-sand">
-      <header className="sticky top-0 z-30 bg-ink text-white border-b border-white/10">
-        <div className="max-w-4xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <BrandMark size="sm" tagTone="dark" compact showTag={false} />
-            <span className="text-sm truncate">Drawing Check Master · fill before upload</span>
-          </div>
+    <div className="standalone-form-page">
+      <StandaloneFormHeader
+        eyebrow="Drawings · pre-upload gate"
+        title="Drawing Check Master"
+        subtitle="Fill before GFC upload unlocks"
+        metaRight={
           <Badge tone="warn">
             {answered}/{items.length}
           </Badge>
-        </div>
-      </header>
+        }
+      />
 
-      <main className="max-w-4xl mx-auto px-5 py-8 space-y-6">
+      <main className="standalone-form-page__main standalone-form-page__main--narrow space-y-6">
         {done ? (
           <Card className="!p-8 text-center space-y-4">
             <div className="text-sm font-semibold uppercase tracking-wider text-brand">Unlocked</div>

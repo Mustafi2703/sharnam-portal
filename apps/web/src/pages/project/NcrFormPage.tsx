@@ -3,7 +3,9 @@ import { useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { StandaloneFormHeader } from "../../components/StandaloneFormHeader";
 import { downloadAuthFile } from "../../lib/downloadReport";
+import { useStandaloneFormPage } from "../../lib/useStandaloneFormPage";
 import {
   parseFormData,
   qualityNcrCloseMissingFields,
@@ -79,14 +81,7 @@ export default function NcrFormPage() {
     void load();
   }, [id, recordId, token, isQuality]);
 
-  useEffect(() => {
-    document.documentElement.classList.add("is-standalone-form");
-    document.body.classList.add("is-standalone-form");
-    return () => {
-      document.documentElement.classList.remove("is-standalone-form");
-      document.body.classList.remove("is-standalone-form");
-    };
-  }, []);
+  useStandaloneFormPage();
 
   const missing = useMemo(() => {
     if (!row) return [];
@@ -253,8 +248,11 @@ export default function NcrFormPage() {
 
   if (!row) {
     return (
-      <div className="ncr-form-standalone min-h-screen bg-paper p-6">
-        <p className="text-steel-muted">Loading NCR form…</p>
+      <div className="standalone-form-page standalone-form-page--paper">
+        <StandaloneFormHeader eyebrow="Loading…" title="NCR / CAR form" />
+        <main className="standalone-form-page__main standalone-form-page__main--narrow">
+          <p className="text-steel-muted">Loading form…</p>
+        </main>
       </div>
     );
   }
@@ -266,21 +264,16 @@ export default function NcrFormPage() {
   const recordLabel = isQuality ? (isCar ? "CAR" : "NCR") : "Safety NCR";
 
   return (
-    <div className="ncr-form-standalone">
-      <header className="z-20 bg-procore-navy text-white border-b border-white/10 shadow-sm shrink-0">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-mono uppercase tracking-wider text-white/70">
-              {isQuality ? (isCar ? "Quality · Corrective Action Request" : "Quality · Non-conformance") : "Safety · NCR"}
-            </div>
-            <div className="font-mono text-sm truncate">{row.number || row.ncrNumber || recordLabel}</div>
-          </div>
-          <Badge tone={row.status === "Open" ? "warn" : "ok"}>{row.status}</Badge>
-        </div>
-      </header>
+    <div className="standalone-form-page standalone-form-page--paper">
+      <StandaloneFormHeader
+        variant="navy"
+        eyebrow={isQuality ? (isCar ? "Quality · Corrective Action Request" : "Quality · Non-conformance") : "Safety · NCR"}
+        title={row.number || row.ncrNumber || recordLabel}
+        subtitle={templateName}
+        metaRight={<Badge tone={row.status === "Open" ? "warn" : "ok"}>{row.status}</Badge>}
+      />
 
-      <main className="ncr-form-standalone__scroll">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4 w-full pb-6">
+      <main className="standalone-form-page__main standalone-form-page__main--narrow space-y-4">
         <PageHeader
           eyebrow={templateName}
           title={row.description?.slice(0, 100) || "Non-conformance report"}
@@ -576,11 +569,10 @@ export default function NcrFormPage() {
             <TextArea rows={2} placeholder="Long-term corrective action" value={row.longTermAction || ""} onChange={(e) => setRow({ ...row, longTermAction: e.target.value })} />
           </Card>
         )}
-      </div>
       </main>
 
-      <footer className="z-20 border-t border-line bg-paper shadow-[0_-4px_20px_rgba(0,0,0,0.06)] shrink-0">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
+      <footer className="standalone-form-footer">
+        <div className="standalone-form-page__main standalone-form-page__main--narrow py-3 flex flex-wrap items-center gap-2">
           <Button type="button" disabled={busy} onClick={() => void saveDraft()}>
             {busy ? "Saving…" : "Save form"}
           </Button>

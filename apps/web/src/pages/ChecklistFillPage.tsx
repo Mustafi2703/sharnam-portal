@@ -4,7 +4,9 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
 import { SignaturePad } from "../components/SignaturePad";
+import { StandaloneFormHeader } from "../components/StandaloneFormHeader";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
+import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
 type Item = { id: string; itemCode?: string; description: string; section?: string; instruction?: string; requirePhoto?: boolean };
 type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[]; evidenceLinks: string[] };
@@ -92,14 +94,7 @@ export default function ChecklistFillPage() {
     void load();
   }, [assignmentId, projectId, token]);
 
-  useEffect(() => {
-    document.documentElement.classList.add("is-standalone-form");
-    document.body.classList.add("is-standalone-form");
-    return () => {
-      document.documentElement.classList.remove("is-standalone-form");
-      document.body.classList.remove("is-standalone-form");
-    };
-  }, []);
+  useStandaloneFormPage();
 
   const selectedDrawing = drawings.find((d) => d.id === drawingId);
   const revs = useMemo(() => {
@@ -263,40 +258,42 @@ export default function ChecklistFillPage() {
   }
 
 
+  const familyLabel =
+    family === "QualityInspection"
+      ? "Quality inspection checklist"
+      : family === "Safety"
+        ? "Safety checklist"
+        : family === "ActivityInspection"
+          ? "Activity inspection"
+          : family === "DrawingCheck"
+            ? "Drawing check"
+            : "Site execution checklist";
+
   return (
-    <div className="checklist-fill-standalone min-h-screen bg-sand">
-      <header className="sticky top-0 z-30 bg-paper border-b border-line text-ink shadow-sm">
-        <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <img src="/logo.png" alt="Sharnam" className="h-9 w-auto max-w-[9rem] object-contain" width={160} height={76} />
-            <span className="text-xs text-steel-muted truncate">
-              {assignment?.project?.code || "Project"} · Checklist fill window
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge tone="brand">
-              {family === "QualityInspection"
-                ? "Quality IR"
-                : family === "Safety"
-                  ? "Safety checklist"
-                  : family === "ActivityInspection"
-                    ? "Activity inspection"
-                    : family === "DrawingCheck"
-                      ? "Drawing check"
-                      : "Site execution (Quality)"}
-            </Badge>
+    <div className="standalone-form-page">
+      <StandaloneFormHeader
+        eyebrow={assignment?.project?.code || "Project"}
+        title={familyLabel}
+        subtitle={assignment?.template?.name}
+        metaRight={
+          <>
+            <Badge tone="brand">{familyLabel}</Badge>
             {draftId && <Badge tone="warn">Draft</Badge>}
+          </>
+        }
+        actions={
+          <>
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => void saveDraft()} disabled={savingDraft || !canFill}>
               {savingDraft ? "Saving…" : "Save draft"}
             </Button>
             <Button type="button" variant="ghost" className="!text-xs" onClick={() => window.close()}>
-              Close window
+              Close
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      <main className="max-w-6xl mx-auto px-5 py-8 space-y-8 portal-fill-layout">
+      <main className="standalone-form-page__main space-y-8 portal-fill-layout">
         {!assignment ? (
           <p className="text-sm text-steel-muted">Loading…</p>
         ) : (

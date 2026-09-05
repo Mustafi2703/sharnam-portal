@@ -531,6 +531,9 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
       clientName: true,
       bidDisciplinesJson: true,
       enabledModules: true,
+      location: true,
+      clientContactName: true,
+      clientEmail: true,
     },
   });
   if (!project) return res.status(404).json({ error: "Not found" });
@@ -1162,7 +1165,7 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
     prisma.drawingRegisterLine.findMany({
       where: { projectId },
       orderBy: { srNo: "asc" },
-      include: { drawing: { select: { id: true, isPublished: true, currentRev: true, drawingNo: true } } },
+      include: { drawing: { select: { id: true, isPublished: true, currentRev: true, drawingNumber: true } } },
     }),
     Promise.resolve(loadDrawingRegisterDashboard()),
   ]);
