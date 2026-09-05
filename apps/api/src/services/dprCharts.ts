@@ -84,11 +84,14 @@ export async function loadDprScurveHistory(
       discipline: { in: [disciplineKey, "OVERALL"] },
       periodDate: { lte: logDate },
     },
-    orderBy: { periodDate: "asc" },
+    orderBy: { periodDate: "desc" },
     take: 13,
   });
   if (registerPoints.length) {
-    return registerPoints.map((p) => ({
+    return registerPoints
+      .slice()
+      .reverse()
+      .map((p) => ({
       date: p.periodDate.toISOString().slice(0, 10),
       label: p.periodLabel || p.periodDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
       planned: Number(p.plannedPct) || 0,

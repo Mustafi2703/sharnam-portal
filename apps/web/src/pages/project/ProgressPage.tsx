@@ -192,6 +192,10 @@ export default function ProgressPage() {
 
   if (!data) return <div className="text-steel-muted py-10">Loading progress sheets…</div>;
 
+  const pvaCashflowRows = (data.plannedActual || []).filter(
+    (p: { packageName?: string }) => p.packageName !== "MS Project S-curve"
+  );
+
   async function addHindrance(e: FormEvent) {
     e.preventDefault();
     setMsg("");
@@ -527,6 +531,24 @@ export default function ProgressPage() {
       await Promise.all([load(), loadMsProject()]);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "MS Project import failed");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  async function seedDemoSchedule() {
+    if (!id || !canEdit) return;
+    setMsBusy("seed");
+    setMsg("");
+    try {
+      const out = await api<{ taskCount: number; scurvePoints: number }>(
+        `/api/progress/${id}/ms-project/seed-demo`,
+        { method: "POST", token }
+      );
+      setMsg(`Demo schedule loaded — ${out.taskCount} tasks · ${out.scurvePoints} S-curve weeks (feeds DPR + WPR).`);
+      await Promise.all([load(), loadMsProject()]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Demo schedule load failed");
     } finally {
       setMsBusy(null);
     }
@@ -1006,6 +1028,27 @@ export default function ProgressPage() {
 
       {tab === "planned" && (
         <div className="progress-sheet-block space-y-4">
+          <Card className="!p-3 shrink-0 border-brand/25 bg-brand-soft/30">
+            <div className="text-sm font-semibold text-ink">Demo flow — Planned vs Actual → DPR → WPR</div>
+            <ol className="mt-2 text-xs text-steel-muted space-y-1.5 list-decimal pl-4 max-w-3xl">
+              <li>
+                <strong className="text-ink">Cost</strong> — load SPDC budget, then use{" "}
+                <strong className="text-ink">Sync from Cost BOQ</strong> below (activity qty from monitoring).
+              </li>
+              <li>
+                <strong className="text-ink">S-curve tab</strong> — <strong className="text-ink">Load demo schedule</strong> or import MS Project XML.
+              </li>
+              <li>
+                <strong className="text-ink">This tab</strong> — load SPDC template or import client Excel; optional sync cashflow to Cost.
+              </li>
+              <li>
+                <strong className="text-ink">DPR maker</strong> — save per discipline; charts read BOQ progress + S-curve register.
+              </li>
+              <li>
+                <strong className="text-ink">WPR maker</strong> — export for week ending; charts pull DPR history + PvA cashflow.
+              </li>
+            </ol>
+          </Card>
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
             rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
@@ -1140,7 +1183,7 @@ export default function ProgressPage() {
                 </tr>
               </thead>
               <tbody>
-                {(data.plannedActual || []).map((p: any) => {
+                {pvaCashflowRows.map((p: any) => {
                   const planned = Number(p.plannedAmount) || 0;
                   const actual = Number(p.actualAmount) || 0;
                   const variance = actual - planned;
@@ -1166,29 +1209,29 @@ export default function ProgressPage() {
                   </tr>
                   );
                 })}
-                {!data.plannedActual?.length && <RegisterEmptyRow colSpan={6} />}
+                {!pvaCashflowRows.length && <RegisterEmptyRow colSpan={6} />}
               </tbody>
-              {(data.plannedActual || []).length > 0 && (
+              {pvaCashflowRows.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-ink/20 bg-sand/40 font-semibold">
                     <td className="py-2 px-3" colSpan={2}>TOTAL</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
-                      {inr((data.plannedActual || []).reduce((s: number, p: any) => s + (Number(p.plannedAmount) || 0), 0))}
+                      {inr(pvaCashflowRows.reduce((s: number, p: any) => s + (Number(p.plannedAmount) || 0), 0))}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
-                      {inr((data.plannedActual || []).reduce((s: number, p: any) => s + (Number(p.actualAmount) || 0), 0))}
+                      {inr(pvaCashflowRows.reduce((s: number, p: any) => s + (Number(p.actualAmount) || 0), 0))}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {inr(
-                        (data.plannedActual || []).reduce((s: number, p: any) => s + (Number(p.actualAmount) || 0), 0) -
-                          (data.plannedActual || []).reduce((s: number, p: any) => s + (Number(p.plannedAmount) || 0), 0)
+                        pvaCashflowRows.reduce((s: number, p: any) => s + (Number(p.actualAmount) || 0), 0) -
+                          pvaCashflowRows.reduce((s: number, p: any) => s + (Number(p.plannedAmount) || 0), 0)
                       )}
                     </td>
                     <td className="py-2 px-3 text-right tabular-nums">
                       {pct(
                         (() => {
-                          const pl = (data.plannedActual || []).reduce((s: number, p: any) => s + (Number(p.plannedAmount) || 0), 0);
-                          const ac = (data.plannedActual || []).reduce((s: number, p: any) => s + (Number(p.actualAmount) || 0), 0);
+                          const pl = pvaCashflowRows.reduce((s: number, p: any) => s + (Number(p.plannedAmount) || 0), 0);
+                          const ac = pvaCashflowRows.reduce((s: number, p: any) => s + (Number(p.actualAmount) || 0), 0);
                           return pl > 0 ? ac / pl : 0;
                         })()
                       )}
@@ -1745,6 +1788,9 @@ export default function ProgressPage() {
               </div>
               {canEdit && (
                 <div className="flex flex-wrap gap-2">
+                  <Button type="button" disabled={!!msBusy} onClick={() => void seedDemoSchedule()}>
+                    {msBusy === "seed" ? "Loading…" : "Load demo schedule"}
+                  </Button>
                   <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
                     {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
                   </Button>
@@ -1780,9 +1826,16 @@ export default function ProgressPage() {
                 </p>
               </>
             ) : (
-              <p className="text-sm text-steel-muted py-8 text-center border border-dashed border-line rounded-lg">
-                No S-curve yet — import a client XML export from Microsoft Project (File → Save As → XML).
-              </p>
+              <div className="text-center py-8 border border-dashed border-line rounded-lg space-y-3">
+                <p className="text-sm text-steel-muted px-4">
+                  No S-curve yet. For the demo, click <strong>Load demo schedule</strong> — or import client XML (File → Save As → XML in MS Project).
+                </p>
+                {canEdit && (
+                  <Button type="button" onClick={() => void seedDemoSchedule()} disabled={!!msBusy}>
+                    {msBusy === "seed" ? "Loading…" : "Load demo schedule"}
+                  </Button>
+                )}
+              </div>
             )}
           </Card>
           <Card className="!p-4">
@@ -1839,7 +1892,7 @@ export default function ProgressPage() {
           <input
               ref={msImportRef}
               type="file"
-              accept=".xml,.mpp"
+              accept=".xml,application/xml,text/xml"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];

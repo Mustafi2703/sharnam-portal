@@ -5,6 +5,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { computeDpr, type DprLine, type DprSnapshot } from "./dprXlsx.js";
+import { MS_PROJECT_SCURVE_PACKAGE } from "./msProjectSchedule.js";
 
 export type WprBarPoint = { label: string; planned: number; actual: number };
 export type WprScurvePoint = { date: string; label: string; planned: number; actual: number };
@@ -141,7 +142,10 @@ export async function loadWprChartPack(
       orderBy: { periodDate: "asc" },
       take: 24,
     }),
-    prisma.progressPlannedActual.findMany({ where: { projectId }, take: 24 }),
+    prisma.progressPlannedActual.findMany({
+      where: { projectId, NOT: { packageName: MS_PROJECT_SCURVE_PACKAGE } },
+      take: 24,
+    }),
     prisma.progressActivityLine.findMany({
       where: { projectId },
       orderBy: { srNo: "asc" },
@@ -253,7 +257,8 @@ export async function loadWprChartPack(
     }
   }
 
-  const cashRows = cashflow.length > 0 ? cashflow : plannedActual;
+  const pvaCashflow = plannedActual.filter((r) => r.packageName !== MS_PROJECT_SCURVE_PACKAGE);
+  const cashRows = cashflow.length > 0 ? cashflow : pvaCashflow;
   const cashflowChart: WprBarPoint[] = cashRows.slice(-12).map((c) => ({
     label: (c.periodLabel || c.packageName || "Period").slice(0, 20),
     planned: Math.round(Number(c.plannedAmount || 0) / 100000) / 10,
@@ -324,7 +329,7 @@ export async function loadWprChartPack(
     },
   ];
 
-  const pvaRow = plannedActual[plannedActual.length - 1];
+  const pvaRow = pvaCashflow.at(-1);
   const plannedPct = Math.round(Number(pvaRow?.plannedPct || 0) * 1000) / 10;
   const actualPct = Math.round(Number(pvaRow?.actualPct || 0) * 1000) / 10;
   const variancePct = Math.round((actualPct - plannedPct) * 10) / 10;

@@ -18,6 +18,7 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
+import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 import { audit } from "../services/audit.js";
@@ -64,6 +65,15 @@ export function parseWprDateRange(query: {
 
 export const wprMakerRouter = Router();
 wprMakerRouter.use(requireAuth);
+wprMakerRouter.param("projectId", async (req: AuthedRequest, res, next, projectId) => {
+  try {
+    const ok = await userCanAccessProject(req, String(projectId));
+    if (!ok) return res.status(404).json({ error: "Not found" });
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 

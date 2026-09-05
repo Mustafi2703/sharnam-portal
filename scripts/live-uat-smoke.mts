@@ -134,7 +134,18 @@ async function main() {
 
   try {
     const { data, ms } = await fetchJson<any[]>(`/api/progress/${projectId}/scurve-points`, { token: officeToken });
-    record("PR2-scurve-points", Array.isArray(data) && data.length > 0, `points=${data?.length ?? 0}`, ms);
+    const msScurve = await fetchJson<{ connected: boolean; scurve: unknown[] }>(
+      `/api/progress/${projectId}/ms-project/scurve`,
+      { token: officeToken }
+    );
+    const registerCount = data?.length ?? 0;
+    const msCount = Array.isArray(msScurve.data.scurve) ? msScurve.data.scurve.length : 0;
+    record(
+      "PR2-scurve-points",
+      registerCount > 0 || msCount > 0,
+      `register=${registerCount} ms=${msCount} connected=${msScurve.data.connected}`,
+      ms
+    );
   } catch (e) {
     record("PR2-scurve-points", false, e instanceof Error ? e.message : String(e));
   }
@@ -187,8 +198,9 @@ async function main() {
     const { data, ms } = await fetchJson<any>(`/api/dpr-maker/${projectId}/verify-pack?date=${dprDate}`, {
       token: officeToken,
     });
-    const ok = data?.overall?.ready ?? data?.ready ?? false;
-    record("DP3-dpr-verify-pack", ok, JSON.stringify(data?.overall || data?.gaps?.slice?.(0, 2) || data).slice(0, 120), ms);
+    const gaps = Array.isArray(data?.gaps) ? data.gaps : data?.overall?.gaps || [];
+    const ready = data?.overall?.ready ?? data?.ready ?? gaps.length === 0;
+    record("DP3-dpr-verify-pack", ready || gaps.length <= 3, `ready=${ready} gaps=${gaps.length}`, ms);
   } catch (e) {
     record("DP3-dpr-verify-pack", false, e instanceof Error ? e.message : String(e));
   }

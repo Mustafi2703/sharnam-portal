@@ -4,10 +4,11 @@
  * Does not touch COP-* rows (those come from Finance COP sync).
  */
 import { prisma } from "../prisma.js";
+import { MS_PROJECT_SCURVE_PACKAGE } from "./msProjectSchedule.js";
 
 export async function syncProgressCashflowToCost(projectId: string) {
   const rows = await prisma.progressPlannedActual.findMany({
-    where: { projectId },
+    where: { projectId, NOT: { packageName: MS_PROJECT_SCURVE_PACKAGE } },
     orderBy: { createdAt: "asc" },
   });
 

@@ -16,6 +16,7 @@ import {
   loadMsProjectSummary,
   seedDemoMsProject,
   generateDemoMsProjectXml,
+  MS_PROJECT_SCURVE_PACKAGE,
 } from "../services/msProjectSchedule.js";
 
 export const progressRouter = Router();
@@ -99,6 +100,8 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     milestones.reduce((s, m) => s + (m.weightage || 0) * (m.pctComplete || 0), 0) /
     Math.max(1, milestones.reduce((s, m) => s + (m.weightage || 0), 0));
 
+  const cashflowPvA = plannedActual.filter((p) => p.packageName !== MS_PROJECT_SCURVE_PACKAGE);
+
   res.json({
     totals: {
       milestones: milestones.length,
@@ -112,8 +115,8 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       projectProgressPct: weightedPct || 0,
       sheetProgressPct: overviewSheet?.sheetProgressPct ?? null,
       avgActualPct:
-        plannedActual.length > 0
-          ? plannedActual.reduce((s, p) => s + p.actualPct, 0) / plannedActual.length
+        cashflowPvA.length > 0
+          ? cashflowPvA.reduce((s, p) => s + p.actualPct, 0) / cashflowPvA.length
           : 0,
     },
     overviewSheet,
@@ -131,7 +134,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       legalByStatus: countBy(legalApprovals, (l) => l.status || "Unknown"),
       riskByStatus: countBy(risks, (r) => r.status || "Unknown"),
       riskBySeverity: countBy(risks, (r) => String(r.severity || "0")),
-      cashflow: plannedActual.map((p) => ({
+      cashflow: cashflowPvA.map((p) => ({
         label: p.periodLabel,
         planned: p.plannedAmount,
         actual: p.actualAmount,

@@ -24,6 +24,7 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
+import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 import {
@@ -49,6 +50,15 @@ import { seedDprDemoDay } from "../services/dprDemoDaySeed.js";
 
 export const dprMakerRouter = Router();
 dprMakerRouter.use(requireAuth);
+dprMakerRouter.param("projectId", async (req: AuthedRequest, res, next, projectId) => {
+  try {
+    const ok = await userCanAccessProject(req, String(projectId));
+    if (!ok) return res.status(404).json({ error: "Not found" });
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** Completeness of sheet-backed registers for DPR/WPR generation */
 dprMakerRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "employee"), async (req, res) => {

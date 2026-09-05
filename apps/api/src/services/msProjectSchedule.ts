@@ -33,6 +33,50 @@ export const MS_PROJECT_SCURVE_PACKAGE = "MS Project S-curve";
 const MS_SOURCE = MS_PROJECT_SOURCE;
 const SCURVE_PACKAGE = MS_PROJECT_SCURVE_PACKAGE;
 
+/** Parse "01 Jun 2025" style labels from MS import. */
+function parsePeriodLabelDate(label: string, fallback: Date): string {
+  const parsed = new Date(label);
+  if (!Number.isNaN(parsed.getTime())) return isoDate(parsed);
+  return isoDate(fallback);
+}
+
+/** Mirror MS weekly S-curve into ProgressScurvePoint for DPR/WPR register reads. */
+export async function upsertScurveRegisterPoints(
+  projectId: string,
+  scurve: ScurvePoint[],
+  source = MS_SOURCE,
+  discipline = "OVERALL"
+) {
+  await prisma.progressScurvePoint.deleteMany({
+    where: { projectId, discipline, source },
+  });
+  for (const p of scurve) {
+    const periodDate = new Date(p.date);
+    if (Number.isNaN(periodDate.getTime())) continue;
+    periodDate.setHours(0, 0, 0, 0);
+    await prisma.progressScurvePoint.upsert({
+      where: {
+        projectId_discipline_periodDate: { projectId, discipline, periodDate },
+      },
+      create: {
+        projectId,
+        discipline,
+        periodDate,
+        periodLabel: p.periodLabel,
+        plannedPct: p.plannedPct,
+        actualPct: p.actualPct,
+        source,
+      },
+      update: {
+        periodLabel: p.periodLabel,
+        plannedPct: p.plannedPct,
+        actualPct: p.actualPct,
+        source,
+      },
+    });
+  }
+}
+
 function tagValue(block: string, tag: string): string {
   const m = block.match(new RegExp(`<${tag}>([^<]*)</${tag}>`, "i"));
   return m ? m[1].trim() : "";
@@ -233,6 +277,7 @@ async function clearMsProjectRows(projectId: string) {
   await prisma.progressMilestone.deleteMany({ where: { projectId, category: MS_SOURCE } });
   await prisma.progressPlannedActual.deleteMany({ where: { projectId, packageName: SCURVE_PACKAGE } });
   await prisma.progressActivityLine.deleteMany({ where: { projectId, status: MS_SOURCE } });
+  await prisma.progressScurvePoint.deleteMany({ where: { projectId, source: MS_SOURCE } });
 }
 
 export async function importMsProjectToProgress(
@@ -306,6 +351,8 @@ export async function importMsProjectToProgress(
     });
   }
 
+  await upsertScurveRegisterPoints(projectId, scurve, MS_SOURCE, "OVERALL");
+
   const saved = await mockOneDrive.upload(project.code, MS_PROJECT_FOLDER, fileName, xmlBuffer);
 
   return {
@@ -329,7 +376,7 @@ export async function seedDemoMsProject(projectId: string): Promise<Awaited<Retu
 }
 
 export async function loadMsProjectSummary(projectId: string) {
-  const [milestones, scurveRows, activityLines, project] = await Promise.all([
+  const [milestones, scurveRows, registerPoints, activityLines, project] = await Promise.all([
     prisma.progressMilestone.findMany({
       where: { projectId, category: MS_SOURCE },
       orderBy: { code: "asc" },
@@ -338,6 +385,10 @@ export async function loadMsProjectSummary(projectId: string) {
       where: { projectId, packageName: SCURVE_PACKAGE },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.progressScurvePoint.findMany({
+      where: { projectId, discipline: "OVERALL" },
+      orderBy: { periodDate: "asc" },
+    }),
     prisma.progressActivityLine.findMany({
       where: { projectId, status: MS_SOURCE },
       orderBy: { srNo: "asc" },
@@ -345,12 +396,19 @@ export async function loadMsProjectSummary(projectId: string) {
     prisma.project.findUnique({ where: { id: projectId } }),
   ]);
 
-  const scurve: ScurvePoint[] = scurveRows.map((r) => ({
-    periodLabel: r.periodLabel,
-    date: r.createdAt.toISOString().slice(0, 10),
-    plannedPct: pct((r.plannedPct || 0) * 100),
-    actualPct: pct((r.actualPct || 0) * 100),
-  }));
+  const scurve: ScurvePoint[] = registerPoints.length
+    ? registerPoints.map((r) => ({
+        periodLabel: r.periodLabel || weekLabel(r.periodDate),
+        date: isoDate(r.periodDate),
+        plannedPct: pct(Number(r.plannedPct) || 0),
+        actualPct: pct(Number(r.actualPct) || 0),
+      }))
+    : scurveRows.map((r) => ({
+        periodLabel: r.periodLabel,
+        date: parsePeriodLabelDate(r.periodLabel, r.createdAt),
+        plannedPct: pct((r.plannedPct || 0) * 100),
+        actualPct: pct((r.actualPct || 0) * 100),
+      }));
 
   const tasks: MsProjectTask[] = milestones.map((m) => ({
     uid: Number(String(m.code || "").replace(/\D/g, "")) || 0,
