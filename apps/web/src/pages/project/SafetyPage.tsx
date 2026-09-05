@@ -10,6 +10,7 @@ import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { HiraRegisterTable } from "../../components/HiraRegisterTable";
 
@@ -164,6 +165,9 @@ export default function SafetyPage() {
       setActive(row.id);
       setMsg(`${form.recordType} logged — feeds Safety dashboard and DPR/WPR safety block.`);
       await load();
+      if (form.recordType === "NCR" && id) {
+        openNcrFormWindow(id, "safety", row.id);
+      }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -507,14 +511,30 @@ export default function SafetyPage() {
                     {canEdit && (
                       <td className="text-left" onClick={(e) => e.stopPropagation()}>
                         {n.status === "Open" && n.recordType === "NCR" ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="!py-1 !px-2 !text-xs"
-                            onClick={() => id && openNcrFormWindow(id, "safety", n.id)}
-                          >
-                            Fill NCR form
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!py-1 !px-2 !text-xs"
+                              onClick={() => id && openNcrFormWindow(id, "safety", n.id)}
+                            >
+                              Fill NCR form
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!py-1 !px-2 !text-xs"
+                              onClick={() =>
+                                void downloadAuthFile(
+                                  `/api/safety/${n.id}/export.xlsx`,
+                                  token,
+                                  `${n.ncrNumber || n.title || "Safety-NCR"}.xlsx`
+                                )
+                              }
+                            >
+                              XLSX
+                            </Button>
+                          </>
                         ) : n.status === "Open" ? (
                           <Button
                             type="button"

@@ -132,10 +132,16 @@ export default function InspectionsPage() {
     if (!id) return;
     setNcrAddBusy(true);
     try {
-      await api(`/api/checklist/project/${id}/ncr`, {
+      const created = await api<any>(`/api/checklist/project/${id}/ncr`, {
         method: "POST",
         token,
-        body: JSON.stringify(ncrForm),
+        body: JSON.stringify({
+          ...ncrForm,
+          formDataJson: {
+            toParty: ncrForm.contractor,
+            actionRequired: "",
+          },
+        }),
       });
       setNcrForm({
         kind: ncrForm.kind,
@@ -146,8 +152,9 @@ export default function InspectionsPage() {
         contractor: "",
       });
       setNcrAddOpen(false);
-      setMsg(`${ncrForm.kind} raised — feeds DPR quality block and WPR quality slide`);
+      setMsg(`${created.number || ncrForm.kind} raised — opening fill form`);
       await load();
+      openNcrFormWindow(id, "quality", created.id);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -337,16 +344,20 @@ export default function InspectionsPage() {
                         >
                           {n.status === "Open" ? "Fill form" : "View form"}
                         </Button>
-                        {n.status === "Open" ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="!py-1 !px-2 !text-xs"
-                            onClick={() => id && openNcrFormWindow(id, "quality", n.id)}
-                          >
-                            Close via form
-                          </Button>
-                        ) : null}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!py-1 !px-2 !text-xs"
+                          onClick={() =>
+                            void downloadAuthFile(
+                              `/api/checklist/project/${id}/ncr/${n.id}/export.xlsx`,
+                              token,
+                              `${n.number || "NCR"}.xlsx`
+                            )
+                          }
+                        >
+                          XLSX
+                        </Button>
                       </td>
                     )}
                   </tr>

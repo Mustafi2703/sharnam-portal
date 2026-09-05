@@ -1667,6 +1667,19 @@ checklistRouter.post(
     const body = req.body || {};
     const kind = String(body.kind || "NCR").toUpperCase();
     const autoNo = kind === "CAR" ? `CAR-${Date.now().toString().slice(-6)}` : `NCR-${Date.now().toString().slice(-6)}`;
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { name: true, code: true, clientName: true, contractorName: true },
+    });
+    const initialForm =
+      body.formDataJson && typeof body.formDataJson === "object"
+        ? body.formDataJson
+        : {
+            projectName: project?.name || project?.code || "",
+            fromParty: "Sharnam Project Development Consultant",
+            toParty: body.contractor ? String(body.contractor) : project?.contractorName || "",
+            actionRequired: body.actionRequired ? String(body.actionRequired) : "",
+          };
     const row = await prisma.qualityNcr.create({
       data: {
         projectId: req.params.projectId,
@@ -1680,11 +1693,9 @@ checklistRouter.post(
         status: String(body.status || "Open").slice(0, 40),
         source: "portal",
         formDataJson:
-          body.formDataJson && typeof body.formDataJson === "object"
-            ? JSON.stringify(body.formDataJson)
-            : typeof body.formDataJson === "string"
-              ? body.formDataJson
-              : null,
+          typeof body.formDataJson === "string"
+            ? body.formDataJson
+            : JSON.stringify(initialForm),
       },
     });
     await audit("quality.ncr.create", {
@@ -1703,9 +1714,26 @@ checklistRouter.post(
       createdById: req.user!.id,
       event: "created",
     });
+    if (project?.code) {
+      try {
+        const { syncQualityNcrToDrive } = await import("../services/syncNcrToDrive.js");
+        const drive = await syncQualityNcrToDrive(project, row);
+        return res.status(201).json({ ...row, sharePointExports: drive.exports });
+      } catch {
+        /* optional */
+      }
+    }
     res.status(201).json(row);
   }
 );
+
+checklistRouter.get("/project/:projectId/ncr/:ncrId", async (req, res) => {
+  const row = await prisma.qualityNcr.findFirst({
+    where: { id: req.params.ncrId, projectId: req.params.projectId },
+  });
+  if (!row) return res.status(404).json({ error: "NCR not found" });
+  res.json(row);
+});
 
 checklistRouter.patch(
   "/project/:projectId/ncr/:ncrId",
@@ -1766,7 +1794,21 @@ checklistRouter.patch(
       createdById: req.user!.id,
       event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
     });
-    res.json(row);
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { name: true, code: true, clientName: true },
+    });
+    let sharePointExports: { kind: string; path: string; url?: string | null }[] = [];
+    if (project?.code) {
+      try {
+        const { syncQualityNcrToDrive } = await import("../services/syncNcrToDrive.js");
+        const drive = await syncQualityNcrToDrive(project, row);
+        sharePointExports = drive.exports;
+      } catch {
+        /* optional */
+      }
+    }
+    res.json({ ...row, sharePointExports });
   }
 );
 
@@ -1779,12 +1821,28 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req, re
     where: { id: req.params.projectId },
     select: { name: true, code: true, clientName: true },
   });
-  const { buildQualityNcrXlsxBuffer } = await import("../services/ncrFormExport.js");
-  const buf = buildQualityNcrXlsxBuffer(row, project || undefined);
+  const { buildQualityNcrXlsxFromTemplate } = await import("../services/ncrFormExport.js");
+  const buf = await buildQualityNcrXlsxFromTemplate(row, project || undefined);
   const name = `${row.number || "NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
   res.send(buf);
+});
+
+checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req, res) => {
+  const row = await prisma.qualityNcr.findFirst({
+    where: { id: req.params.ncrId, projectId: req.params.projectId },
+  });
+  if (!row) return res.status(404).json({ error: "NCR not found" });
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  const { buildQualityNcrHtml } = await import("../services/ncrFormExport.js");
+  const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
+  const html = buildQualityNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
 });
 
 /** Quality site observation / site instruction — feeds SOR Log */

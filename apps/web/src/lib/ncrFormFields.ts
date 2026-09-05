@@ -94,3 +94,33 @@ export function openNcrFormWindow(projectId: string, scope: "quality" | "safety"
   const url = `/projects/${projectId}/ncr-form/${scope}/${recordId}`;
   window.open(url, `ncr-${recordId}`, "width=980,height=860,scrollbars=yes,resizable=yes");
 }
+
+/** Open branded NCR HTML for Print → Save as PDF */
+export async function openNcrPrintPdf(
+  path: string,
+  token: string | null,
+  filename = "NCR.html"
+) {
+  const API_BASE = import.meta.env.VITE_API_URL || "";
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(await res.text().catch(() => "Print failed"));
+  const html = await res.text();
+  const blobUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+  const w = window.open(blobUrl, "_blank", "noopener,noreferrer");
+  if (w) {
+    w.addEventListener("load", () => {
+      try {
+        w.print();
+      } catch {
+        /* manual */
+      }
+    });
+  }
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+}

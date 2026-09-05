@@ -9,6 +9,7 @@ import {
   qualityNcrCloseMissingFields,
   qualityNcrMissingFields,
   safetyNcrMissingFields,
+  openNcrPrintPdf,
   type QualityNcrFormData,
 } from "../../lib/ncrFormFields";
 
@@ -22,7 +23,7 @@ const SAFETY_CATEGORIES = [
   "Other",
 ];
 
-/** Standalone NCR / CAR form window — no project module chrome (Quality Dashboard · NCR 01). */
+/** Standalone NCR / CAR form — SPDC NCR 01 · Safety NCR.xlsx */
 export default function NcrFormPage() {
   const { id, scope, recordId } = useParams();
   const { token, user } = useAuth();
@@ -35,13 +36,27 @@ export default function NcrFormPage() {
   const load = async () => {
     if (!id || !recordId) return;
     if (isQuality) {
-      const dash = await api<any>(`/api/checklist/project/${id}/quality-dashboard`, { token });
-      const found = (dash.ncrs || []).find((n: any) => n.id === recordId);
-      setRow(found || null);
-      setFormData(parseFormData(found?.formDataJson));
+      const found = await api<any>(`/api/checklist/project/${id}/ncr/${recordId}`, { token });
+      setRow(found);
+      const parsed = parseFormData<QualityNcrFormData>(found?.formDataJson);
+      setFormData({
+        projectName: parsed.projectName || "",
+        toParty: parsed.toParty || found?.contractor || "",
+        fromParty: parsed.fromParty || "Sharnam Project Development Consultant",
+        actionRequired: parsed.actionRequired || "",
+        workCarriedOutNote: parsed.workCarriedOutNote || "",
+        signedContractor: parsed.signedContractor || "",
+        positionContractor: parsed.positionContractor || "",
+        followUpEffective: parsed.followUpEffective || "",
+        signedReviewer: parsed.signedReviewer || "",
+        positionReviewer: parsed.positionReviewer || "",
+        environmentalIssues: parsed.environmentalIssues || "",
+        otherCause: parsed.otherCause || "",
+        actionResultOf: parsed.actionResultOf || "",
+        furtherAction: parsed.furtherAction || "",
+      });
     } else {
-      const payload = await api<any>(`/api/safety/project/${id}`, { token });
-      const found = (payload.records || []).find((r: any) => r.id === recordId);
+      const found = await api<any>(`/api/safety/${recordId}`, { token });
       setRow(found || null);
     }
   };
@@ -78,7 +93,7 @@ export default function NcrFormPage() {
     });
   }, [row, formData, isQuality, missing]);
 
-  async function save(patch: Record<string, unknown>) {
+  async function saveDraft() {
     if (!id || !recordId) return;
     setBusy(true);
     setMsg("");
@@ -88,21 +103,34 @@ export default function NcrFormPage() {
           method: "PATCH",
           token,
           body: JSON.stringify({
-            ...patch,
+            description: row.description,
+            contractor: row.contractor,
+            location: row.location,
+            ncrType: row.ncrType,
+            plannedClosure: row.plannedClosure || null,
+            actualClosure: row.actualClosure || null,
             formDataJson: formData,
           }),
         });
         setRow(updated);
+        const sp =
+          updated.sharePointExports?.length > 0
+            ? " Branded XLSX + HTML saved to SharePoint."
+            : "";
+        setMsg(`Saved${sp}`);
       } else {
         const updated = await api<any>(`/api/safety/${recordId}`, {
           method: "PATCH",
           token,
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ ...row }),
         });
         setRow(updated);
+        const sp =
+          updated.sharePointExports?.length > 0
+            ? " Branded XLSX + HTML saved to SharePoint."
+            : "";
+        setMsg(`Saved${sp}`);
       }
-      setMsg("Saved — register row updated");
-      await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -110,13 +138,58 @@ export default function NcrFormPage() {
     }
   }
 
-  async function download() {
+  async function downloadXlsx() {
     if (!recordId) return;
     const path = isQuality
       ? `/api/checklist/project/${id}/ncr/${recordId}/export.xlsx`
       : `/api/safety/${recordId}/export.xlsx`;
     const name = `${row?.number || row?.ncrNumber || "NCR"}.xlsx`;
     await downloadAuthFile(path, token, name);
+  }
+
+  function openPrintPdf() {
+    const path = isQuality
+      ? `/api/checklist/project/${id}/ncr/${recordId}/export.html`
+      : `/api/safety/${recordId}/export.html`;
+    void openNcrPrintPdf(path, token, `${row?.number || row?.ncrNumber || "NCR"}.html`).catch((err) =>
+      setMsg(err instanceof Error ? err.message : "Print failed")
+    );
+  }
+
+  async function closeRecord() {
+    if (!id || !recordId || !canClose) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      if (isQuality) {
+        await api(`/api/checklist/project/${id}/ncr/${recordId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({
+            status: "Closed",
+            description: row.description,
+            contractor: row.contractor,
+            location: row.location,
+            ncrType: row.ncrType,
+            plannedClosure: row.plannedClosure || null,
+            actualClosure: row.actualClosure || new Date().toISOString().slice(0, 10),
+            formDataJson: formData,
+          }),
+        });
+      } else {
+        await api(`/api/safety/${recordId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({ ...row, status: "Closed" }),
+        });
+      }
+      setMsg("Closed — register updated · branded forms synced · notification sent");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Cannot close — complete required fields first");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!row) {
@@ -129,10 +202,11 @@ export default function NcrFormPage() {
 
   const canClose = isQuality ? closeMissing.length === 0 : missing.length === 0;
   const templateName = isQuality ? "NCR 01 .xlsx · Quality Dashboard" : "Safety NCR.xlsx";
+  const closeBlockers = isQuality ? closeMissing : missing;
 
   return (
-    <div className="ncr-form-standalone min-h-screen bg-paper">
-      <header className="sticky top-0 z-20 bg-procore-navy text-white border-b border-white/10 shadow-sm">
+    <div className="ncr-form-standalone min-h-screen bg-paper flex flex-col">
+      <header className="sticky top-0 z-20 bg-procore-navy text-white border-b border-white/10 shadow-sm shrink-0">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-mono uppercase tracking-wider text-white/70">
@@ -140,32 +214,26 @@ export default function NcrFormPage() {
             </div>
             <div className="font-mono text-sm truncate">{row.number || row.ncrNumber || "NCR"}</div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge tone={row.status === "Open" ? "warn" : "ok"}>{row.status}</Badge>
-            <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void download()}>
-              Download XLSX
-            </Button>
-            <Button type="button" variant="ghost" className="!text-xs !text-white/90" onClick={() => window.close()}>
-              Close
-            </Button>
-          </div>
+          <Badge tone={row.status === "Open" ? "warn" : "ok"}>{row.status}</Badge>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      <div className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4 w-full pb-28">
         <PageHeader
           eyebrow={templateName}
-          title={row.subject || row.description?.slice(0, 80) || "Non-conformance report"}
-          subtitle="Complete all fields per SPDC template. Partial save anytime; close when follow-up is recorded."
+          title={row.description?.slice(0, 100) || "Non-conformance report"}
+          subtitle="1) Fill all fields from the register row · 2) Save form · 3) Download branded XLSX/PDF · 4) Close when complete."
         />
 
-        {missing.length > 0 && (
+        {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+
+        {row.status === "Open" && closeBlockers.length > 0 && (
           <Card className="!p-3 bg-amber-50 border-amber-200">
             <p className="text-xs font-semibold text-amber-900 mb-1">
-              {missing.length} required field{missing.length === 1 ? "" : "s"} before close
+              Required before close ({closeBlockers.length})
             </p>
             <ul className="text-xs text-amber-800 list-disc pl-4">
-              {missing.map((m) => (
+              {closeBlockers.map((m) => (
                 <li key={m}>{m}</li>
               ))}
             </ul>
@@ -182,12 +250,18 @@ export default function NcrFormPage() {
                 onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
               />
               <Input
-                placeholder="To (party)"
+                placeholder="NCR / CAR number"
+                value={row.number || ""}
+                readOnly
+                className="bg-sand/40"
+              />
+              <Input
+                placeholder="To (party / contractor)"
                 value={formData.toParty || ""}
                 onChange={(e) => setFormData({ ...formData, toParty: e.target.value })}
               />
               <Input
-                placeholder="From (party)"
+                placeholder="From (PMC)"
                 value={formData.fromParty || ""}
                 onChange={(e) => setFormData({ ...formData, fromParty: e.target.value })}
               />
@@ -220,7 +294,7 @@ export default function NcrFormPage() {
               />
             </div>
             <TextArea
-              rows={3}
+              rows={4}
               placeholder="Description of the problem which requires rectification"
               value={row.description || ""}
               onChange={(e) => setRow({ ...row, description: e.target.value })}
@@ -262,22 +336,6 @@ export default function NcrFormPage() {
                 onChange={(e) => setFormData({ ...formData, signedReviewer: e.target.value })}
               />
             </div>
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void save({
-                  description: row.description,
-                  contractor: row.contractor,
-                  location: row.location,
-                  ncrType: row.ncrType,
-                  plannedClosure: row.plannedClosure || null,
-                  actualClosure: row.actualClosure || null,
-                })
-              }
-            >
-              Save form
-            </Button>
           </Card>
         ) : (
           <Card className="space-y-3">
@@ -331,59 +389,36 @@ export default function NcrFormPage() {
             <TextArea rows={2} placeholder="Contributing factors" value={row.contributingFactors || ""} onChange={(e) => setRow({ ...row, contributingFactors: e.target.value })} />
             <TextArea rows={2} placeholder="Immediate action taken" value={row.immediateAction || ""} onChange={(e) => setRow({ ...row, immediateAction: e.target.value })} />
             <TextArea rows={2} placeholder="Long-term corrective action" value={row.longTermAction || ""} onChange={(e) => setRow({ ...row, longTermAction: e.target.value })} />
-            <Button type="button" disabled={busy} onClick={() => void save({ ...row })}>
-              Save form
-            </Button>
           </Card>
         )}
+      </div>
 
-        <div className="flex flex-wrap gap-2 pt-2 border-t border-line">
+      <footer className="sticky bottom-0 z-20 border-t border-line bg-paper/95 backdrop-blur-sm shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
+          <Button type="button" disabled={busy} onClick={() => void saveDraft()}>
+            {busy ? "Saving…" : "Save form"}
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => void downloadXlsx()}>
+            Download XLSX
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={openPrintPdf}>
+            Print / PDF
+          </Button>
           {row.status === "Open" && (
             <Button
               type="button"
               disabled={!canClose || busy || !user}
-              onClick={async () => {
-                setBusy(true);
-                setMsg("");
-                try {
-                  if (isQuality) {
-                    await api(`/api/checklist/project/${id}/ncr/${recordId}`, {
-                      method: "PATCH",
-                      token,
-                      body: JSON.stringify({
-                        status: "Closed",
-                        description: row.description,
-                        contractor: row.contractor,
-                        location: row.location,
-                        ncrType: row.ncrType,
-                        plannedClosure: row.plannedClosure || null,
-                        actualClosure: row.actualClosure || new Date().toISOString().slice(0, 10),
-                        formDataJson: formData,
-                      }),
-                    });
-                  } else {
-                    await api(`/api/safety/${recordId}`, {
-                      method: "PATCH",
-                      token,
-                      body: JSON.stringify({ ...row, status: "Closed" }),
-                    });
-                  }
-                  setMsg("Closed — register updated · notification sent");
-                  await load();
-                } catch (err) {
-                  setMsg(err instanceof Error ? err.message : "Cannot close — complete form first");
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              onClick={() => void closeRecord()}
+              title={!canClose ? `Complete: ${closeBlockers.join(", ")}` : undefined}
             >
               Close NCR / CAR
             </Button>
           )}
+          <Button type="button" variant="ghost" className="!text-xs ml-auto" onClick={() => window.close()}>
+            Close window
+          </Button>
         </div>
-
-        {msg && <p className="text-sm text-brand-dark">{msg}</p>}
-      </div>
+      </footer>
     </div>
   );
 }

@@ -1143,10 +1143,35 @@ safetyRouter.post(
         createdById: req.user!.id,
         event: "created",
       });
+      const project = await prisma.project.findUnique({
+        where: { id: req.params.projectId },
+        select: { name: true, code: true, clientName: true },
+      });
+      if (project?.code) {
+        try {
+          const { syncSafetyNcrToDrive } = await import("../services/syncNcrToDrive.js");
+          const drive = await syncSafetyNcrToDrive(project, row);
+          return res.status(201).json({ ...row, sharePointExports: drive.exports });
+        } catch {
+          /* optional */
+        }
+      }
     }
     res.status(201).json(row);
   }
 );
+
+safetyRouter.get("/:id", async (req, res) => {
+  const row = await prisma.safetyRecord.findUnique({
+    where: { id: req.params.id },
+    include: {
+      reportedBy: { select: { fullName: true } },
+      assignedTo: { select: { fullName: true } },
+    },
+  });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  res.json(row);
+});
 
 safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const body = req.body || {};
@@ -1191,7 +1216,21 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
       event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
     });
   }
-  res.json(row);
+  const project = await prisma.project.findUnique({
+    where: { id: row.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  let sharePointExports: { kind: string; path: string; url?: string | null }[] = [];
+  if (row.recordType === "NCR" && project?.code) {
+    try {
+      const { syncSafetyNcrToDrive } = await import("../services/syncNcrToDrive.js");
+      const drive = await syncSafetyNcrToDrive(project, row);
+      sharePointExports = drive.exports;
+    } catch {
+      /* optional */
+    }
+  }
+  res.json({ ...row, sharePointExports });
 });
 
 safetyRouter.get("/:id/export.xlsx", async (req, res) => {
@@ -1201,10 +1240,24 @@ safetyRouter.get("/:id/export.xlsx", async (req, res) => {
     where: { id: row.projectId },
     select: { name: true, code: true, clientName: true },
   });
-  const { buildSafetyNcrXlsxBuffer } = await import("../services/ncrFormExport.js");
-  const buf = buildSafetyNcrXlsxBuffer(row, project || undefined);
+  const { buildSafetyNcrXlsxFromTemplate } = await import("../services/ncrFormExport.js");
+  const buf = await buildSafetyNcrXlsxFromTemplate(row, project || undefined);
   const name = `${row.ncrNumber || row.title || "Safety-NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
   res.send(buf);
+});
+
+safetyRouter.get("/:id/export.html", async (req, res) => {
+  const row = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  const project = await prisma.project.findUnique({
+    where: { id: row.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  const { buildSafetyNcrHtml } = await import("../services/ncrFormExport.js");
+  const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
+  const html = buildSafetyNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
 });
