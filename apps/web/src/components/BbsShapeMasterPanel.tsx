@@ -30,6 +30,8 @@ const PACKAGE_HINTS = [
 
 type Props = {
   token?: string | null;
+  /** full = add/edit + diagram upload on Cost → BBS */
+  mode?: "full" | "catalog";
 };
 
 function diagramHref(row: ShapeMaster) {
@@ -40,7 +42,7 @@ function diagramHref(row: ShapeMaster) {
   return `${apiBase()}/uploads/onedrive/${u}`;
 }
 
-export function BbsShapeMasterPanel({ token }: Props) {
+export function BbsShapeMasterPanel({ token, mode = "full" }: Props) {
   const [rows, setRows] = useState<ShapeMaster[]>([]);
   const [form, setForm] = useState({
     shapeCode: "",
@@ -52,6 +54,7 @@ export function BbsShapeMasterPanel({ token }: Props) {
     cutFormula: "",
     standardRef: "",
   });
+  const canEdit = mode === "full";
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -162,8 +165,9 @@ export function BbsShapeMasterPanel({ token }: Props) {
         <div>
           <h2 className="font-display text-xl">BBS shape code master</h2>
           <p className="text-sm text-steel-muted mt-1">
-            Master reference sheet for bar-bending shapes — code, parameters (A/B/C…), cutting-length formula and bend
-            diagram. BBS rows pick a code and the portal auto-computes cutting length using the parameter values.
+            {mode === "full"
+              ? "Project BBS shape library — pick codes when filling bar entries; upload bend diagrams per shape. Seed IS-2502 defaults once, then customise per project package."
+              : "Reference catalogue for IS-2502 bar shapes — manage shapes and diagrams on Cost → BBS."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -181,6 +185,7 @@ export function BbsShapeMasterPanel({ token }: Props) {
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
+      {canEdit && (
       <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end" onSubmit={onAdd}>
         <Input
           required
@@ -226,8 +231,9 @@ export function BbsShapeMasterPanel({ token }: Props) {
           onChange={(e) => setForm({ ...form, description: e.target.value })}
         />
       </form>
+      )}
 
-      <div className="border border-line rounded-sm overflow-x-auto">
+      <div className="border border-line rounded-sm overflow-x-auto max-h-[min(52vh,520px)] overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="bg-paper text-left text-xs uppercase text-steel-muted">
             <tr>
@@ -263,7 +269,7 @@ export function BbsShapeMasterPanel({ token }: Props) {
                         type="file"
                         accept="image/*,application/pdf"
                         className="text-[10px] w-16"
-                        disabled={uploadId === r.id}
+                        disabled={uploadId === r.id || !canEdit}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           if (f) void uploadDiagram(r.id, f);
@@ -284,9 +290,11 @@ export function BbsShapeMasterPanel({ token }: Props) {
                     {r.packageHint ? <Badge tone="neutral">{r.packageHint}</Badge> : <span className="text-[10px]">All</span>}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    {canEdit && (
                     <Button type="button" variant="ghost" className="!text-xs" onClick={() => void removeRow(r.id)}>
                       Del
                     </Button>
+                    )}
                   </td>
                 </tr>
               );
@@ -294,8 +302,14 @@ export function BbsShapeMasterPanel({ token }: Props) {
             {!rows.length && (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-steel-muted">
-                  Shape master is empty — click <strong>Seed 15 IS-2502 shapes</strong> to load the standard catalogue,
-                  then upload your own bend diagrams per shape.
+                  {canEdit ? (
+                    <>
+                      Shape master is empty — click <strong>Seed 15 IS-2502 shapes</strong> to load the standard catalogue,
+                      then upload bend diagrams per shape.
+                    </>
+                  ) : (
+                    <>No shapes seeded yet — open Cost → BBS on a project to seed the catalogue.</>
+                  )}
                 </td>
               </tr>
             )}

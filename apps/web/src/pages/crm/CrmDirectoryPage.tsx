@@ -58,7 +58,9 @@ const TAB_META: Record<
   },
 };
 
-function DirectoryCompaniesPanel({
+export const DIRECTORY_TAB_META = TAB_META;
+
+export function DirectoryCompaniesPanel({
   tab,
   token,
   canEdit,
@@ -247,7 +249,7 @@ function DirectoryCompaniesPanel({
   );
 }
 
-function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdit: boolean }) {
+export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdit: boolean }) {
   const [people, setPeople] = useState<PersonRow[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
   const [form, setForm] = useState({ fullName: "", email: "", role: "vendor", phone: "" });

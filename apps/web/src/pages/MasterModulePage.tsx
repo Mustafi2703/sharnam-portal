@@ -1,18 +1,16 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
-import { SearchableSelect } from "../components/SearchableSelect";
 import { ModuleIcon } from "../components/icons";
-import { MasterCostTemplatesPanel } from "../components/MasterCostTemplatesPanel";
-import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
-import { SiteFinalIndexPanel } from "../components/SiteFinalIndexPanel";
-import { MasterProjectSetupPanel } from "../components/MasterProjectSetupPanel";
-import SharePointStatusPanel from "../components/SharePointStatusPanel";
+import {
+  DirectoryCompaniesPanel,
+  DirectoryPeoplePanel,
+  DIRECTORY_TAB_META,
+} from "./crm/CrmDirectoryPage";
 import {
   WORKSPACE_PROJECT_KEY,
-  setActiveWorkspace,
   WORKSPACES,
   DEFAULT_ENABLED_MODULES,
   type WorkspaceKey,
@@ -26,77 +24,79 @@ type Project = {
   clientName?: string;
   location?: string;
   enabledModules?: string;
-  workPackages?: string;
   _count?: { drawings: number; members: number };
 };
 
-type UserRow = { id: string; fullName: string; email: string; role: string; portal?: string };
-type VendorRow = { id: string; name: string; trade?: string; partyType?: string };
-
-const MASTER_TOOLS = [
+const DIRECTORY_TABS = [
+  { id: "people", label: "People & portal" },
+  { id: "clients", label: "Clients" },
+  { id: "vendors", label: "Vendors & contractors" },
+  { id: "stakeholders", label: "Stakeholders" },
   { id: "projects", label: "Projects" },
-  { id: "project-desk", label: "Project desk" },
-  { id: "directory", label: "Directory (4 users)" },
-  { id: "vendors", label: "Company vendors" },
-  { id: "roster", label: "PMC roster" },
   { id: "modules", label: "Module toggles" },
-  { id: "global", label: "Global masters" },
-  { id: "links", label: "CRM · HRM · Docs" },
+  { id: "checklists", label: "Checklist masters" },
 ] as const;
 
-type MasterTab = (typeof MASTER_TOOLS)[number]["id"];
+type DirectoryTab = (typeof DIRECTORY_TABS)[number]["id"];
 
-/** Master module — tool chips like Drawings / Quality */
+const CHECKLIST_MASTERS = [
+  {
+    to: "/master/checklists?family=DrawingCheck",
+    label: "Drawing-check master",
+    hint: "Pre-upload drawing review checklists — every project",
+    tag: "Drawings",
+  },
+  {
+    to: "/master/checklists?family=QualityInspection",
+    label: "Quality (QI) master",
+    hint: "SPDC F-01 inspection templates",
+    tag: "Quality",
+  },
+  {
+    to: "/master/checklists?family=Safety",
+    label: "Safety checklist master",
+    hint: "SPDC HSE pack F-01 / F-02 / F-03",
+    tag: "Safety",
+  },
+  {
+    to: "/master/checklists?family=SiteExecution",
+    label: "Site execution master",
+    hint: "Activity F-02 site checklists",
+    tag: "Quality · Site",
+  },
+] as const;
+
+/** Sharnam PMC company directory — clients, vendors, stakeholders, people, projects. */
 export default function MasterModulePage() {
   const { token, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as DirectoryTab | null;
   const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<UserRow[]>([]);
-  const [vendors, setVendors] = useState<VendorRow[]>([]);
   const [dirProjectId, setDirProjectId] = useState("");
-  const [overview, setOverview] = useState<any>(null);
   const [form, setForm] = useState({ code: "", name: "", clientName: "", location: "" });
-  const [memberForm, setMemberForm] = useState({ userId: "", role: "project_manager" });
-  const [vendorForm, setVendorForm] = useState({ vendorId: "", tradeRole: "" });
   const [msg, setMsg] = useState("");
   const [dirMsg, setDirMsg] = useState("");
-  const [masterTab, setMasterTab] = useState<MasterTab>("projects");
   const canManage = user?.role === "admin" || user?.role === "office";
 
-  const pmcUsers = useMemo(
-    () => users.filter((u) => u.role === "admin" || u.role === "office" || u.role === "employee"),
-    [users]
-  );
+  const directoryTab: DirectoryTab =
+    tabParam && DIRECTORY_TABS.some((t) => t.id === tabParam) ? tabParam : "people";
 
   const dirProject = projects.find((p) => p.id === dirProjectId);
+  const directoryMeta = DIRECTORY_TAB_META[directoryTab] || DIRECTORY_TAB_META.people;
 
   const load = async () => {
-    const [p, u, v] = await Promise.all([
-      api<Project[]>("/api/projects", { token }),
-      api<UserRow[]>("/api/users", { token }).catch(() => []),
-      api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
-    ]);
+    const p = await api<Project[]>("/api/projects", { token });
     setProjects(p);
-    setUsers(u);
-    setVendors(v);
     if (!dirProjectId && p[0]) setDirProjectId(p[0].id);
-  };
-
-  const loadDirectory = async (projectId: string) => {
-    if (!projectId) {
-      setOverview(null);
-      return;
-    }
-    const o = await api(`/api/directory/project/${projectId}/overview`, { token });
-    setOverview(o);
   };
 
   useEffect(() => {
     void load();
   }, [token]);
 
-  useEffect(() => {
-    if (dirProjectId) void loadDirectory(dirProjectId);
-  }, [dirProjectId, token]);
+  function setDirectoryTab(id: DirectoryTab) {
+    setSearchParams({ tab: id }, { replace: true });
+  }
 
   async function createProject(e: FormEvent) {
     e.preventDefault();
@@ -106,8 +106,8 @@ export default function MasterModulePage() {
       setForm({ code: "", name: "", clientName: "", location: "" });
       localStorage.setItem(WORKSPACE_PROJECT_KEY, created.id);
       setDirProjectId(created.id);
-      setMsg(`Project ${created.code} created — build Directory (4 users), then open Dashboard.`);
-      setMasterTab("directory");
+      setMsg(`Project ${created.code} created — assign directory and toggle modules.`);
+      setDirectoryTab("modules");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -117,8 +117,8 @@ export default function MasterModulePage() {
   if (!canManage) {
     return (
       <div className="max-w-xl mx-auto py-16 text-center space-y-4">
-        <h1 className="font-display text-2xl">Master module</h1>
-        <p className="text-steel-muted text-sm">Only Sharnam Office / Admin can open Master setup.</p>
+        <h1 className="font-display text-2xl">Directory</h1>
+        <p className="text-steel-muted text-sm">Only Sharnam Office / Admin can open the company directory.</p>
         <Link to="/dashboard" className="text-brand font-semibold">
           Back to dashboard →
         </Link>
@@ -129,37 +129,44 @@ export default function MasterModulePage() {
   return (
     <div className="master-module page-scroll-full space-y-6 min-w-0 pb-8 w-full">
       <PageHeader
-        eyebrow="Master module"
-        title="Project setup desk"
-        subtitle="After CRM converts a lead, finish directory, module toggles, and global masters here — each project’s data stays scoped by project ID."
+        eyebrow="Sharnam PMC · Directory"
+        title="Company directory"
+        subtitle="Maintain clients, vendors, stakeholders, and portal logins. CRM holds client pipeline data; Bid management holds contractor packages. MB / BBS / shape codes are per project under Cost."
         icon={<ModuleIcon name="master" size={20} className="text-white" />}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/crm/leads">
               <Button type="button" variant="secondary">
-                CRM · Convert lead
+                CRM · Leads
               </Button>
             </Link>
-            <Link to="/dashboard">
+            <Link to="/crm/bids">
               <Button type="button" variant="secondary">
-                Ops dashboard
+                Bid management
               </Button>
             </Link>
-            <Link to="/workspace">
-              <Button type="button">Modules →</Button>
+            <Link to="/login/hr">
+              <Button type="button" variant="secondary">
+                HR portal
+              </Button>
+            </Link>
+            <Link to="/custom-sheets">
+              <Button type="button" variant="secondary">
+                Custom sheets
+              </Button>
             </Link>
           </div>
         }
       />
 
       <div className="flex flex-wrap gap-2">
-        {MASTER_TOOLS.map((t) => (
+        {DIRECTORY_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            onClick={() => setMasterTab(t.id)}
+            onClick={() => setDirectoryTab(t.id)}
             className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
-              masterTab === t.id
+              directoryTab === t.id
                 ? "bg-brand text-white border-brand"
                 : "bg-paper border-line text-steel-muted hover:border-brand"
             }`}
@@ -170,24 +177,43 @@ export default function MasterModulePage() {
       </div>
 
       <WorkflowStrip
-        active={projects.length ? (overview?.members?.length ? 2 : 1) : 0}
+        active={1}
         steps={[
-          { label: "CRM · Convert lead", hint: "Project + bids + team" },
-          { label: "Directory", hint: "Office · Site · Client · Contractor" },
-          { label: "Toggle modules", hint: "Per project" },
-          { label: "Dashboard → modules", hint: "Pilot verify" },
+          { label: "CRM · Convert lead", hint: "Client + project spine" },
+          { label: "Directory", hint: "Clients · vendors · people" },
+          { label: "Project modules", hint: "Cost MB/BBS per project" },
+          { label: "Pilot on dashboard", hint: "Verify RFIs · quality" },
         ]}
       />
 
       {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
       {dirMsg && <p className="text-sm rounded-xl px-3 py-2 bg-amber-50 text-warn border border-amber-200">{dirMsg}</p>}
 
-      {masterTab === "projects" && (
+      {["people", "clients", "vendors", "stakeholders"].includes(directoryTab) && (
+        <div className="space-y-3">
+          <Card className="!p-4 bg-sand/30 border-line">
+            <p className="text-sm text-steel-muted">
+              <span className="font-semibold text-ink">{directoryMeta.title}</span> — {directoryMeta.subtitle}
+            </p>
+          </Card>
+          {directoryTab === "people" ? (
+            <DirectoryPeoplePanel token={token} canEdit={canManage} />
+          ) : (
+            <DirectoryCompaniesPanel
+              tab={directoryTab as "clients" | "vendors" | "stakeholders"}
+              token={token}
+              canEdit={canManage}
+            />
+          )}
+        </div>
+      )}
+
+      {directoryTab === "projects" && (
         <div className="space-y-6">
           <Card className="!p-5 border-brand/30 bg-brand-soft/40">
             <h2 className="font-display text-lg mb-1">Recommended: CRM → Convert lead</h2>
             <p className="text-sm text-steel-muted mb-3">
-              Creates the delivery project with client card, team, vendors, bid disciplines, sheet pack, and Meeting/RFI matrix — then return here for directory and module toggles.
+              Creates the delivery project with client card, team, vendors, bid disciplines, and comms matrix.
             </p>
             <Link to="/crm/leads">
               <Button type="button">Open CRM leads →</Button>
@@ -196,24 +222,14 @@ export default function MasterModulePage() {
 
           <Card>
             <h2 className="font-display text-xl mb-1">Quick create (office)</h2>
-            <p className="text-sm text-steel-muted mb-4">
-              Bare project spine when you skip CRM — still auto-provisions sheets and comms matrix.
-            </p>
+            <p className="text-sm text-steel-muted mb-4">Bare project when you skip CRM — still seeds sheets and matrix.</p>
             <form className="grid sm:grid-cols-2 gap-3" onSubmit={createProject}>
               <Input placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
               <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <Input
-                placeholder="Client"
-                value={form.clientName}
-                onChange={(e) => setForm({ ...form, clientName: e.target.value })}
-              />
-              <Input
-                placeholder="Location"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-              />
+              <Input placeholder="Client" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
+              <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
               <Button type="submit" className="sm:col-span-2">
-                Create project + seed Meeting/RFI matrix
+                Create project
               </Button>
             </form>
           </Card>
@@ -238,32 +254,9 @@ export default function MasterModulePage() {
                     <Link to={`/projects/${p.id}`} className="font-semibold text-brand">
                       Open project →
                     </Link>
-                    <button
-                      type="button"
-                      className="font-semibold text-brand"
-                      onClick={() => {
-                        setDirProjectId(p.id);
-                        setMasterTab("directory");
-                      }}
-                    >
-                      Edit directory
-                    </button>
-                    <button
-                      type="button"
-                      className="font-semibold text-ink/80 hover:text-brand"
-                      onClick={async () => {
-                        setMsg("");
-                        try {
-                          await api(`/api/projects/${p.id}/provision-sheets`, { method: "POST", token });
-                          setMsg(`Sheet pack re-provisioned for ${p.code}.`);
-                          await load();
-                        } catch (err) {
-                          setMsg(err instanceof Error ? err.message : "Provision failed");
-                        }
-                      }}
-                    >
-                      Re-provision sheets
-                    </button>
+                    <Link to={`/projects/${p.id}/directory`} className="font-semibold text-brand">
+                      Project directory →
+                    </Link>
                   </div>
                   <div className="mt-3 font-mono text-[11px] text-steel-muted">
                     {p._count?.drawings ?? 0} drawings · {p._count?.members ?? 0} members
@@ -275,225 +268,7 @@ export default function MasterModulePage() {
         </div>
       )}
 
-      {masterTab === "project-desk" && (
-        <Card>
-          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            <div>
-              <h2 className="font-display text-xl">Per-project desk</h2>
-              <p className="text-sm text-steel-muted mt-1">
-                Directory emails, project vendors, comparative bids, and simulated R2 BOQ uploads — after CRM convert.
-              </p>
-            </div>
-            <Select className="min-w-[220px]" value={dirProjectId} onChange={(e) => setDirProjectId(e.target.value)}>
-              <option value="">Select project…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {dirProjectId ? (
-            <MasterProjectSetupPanel
-              projectId={dirProjectId}
-              token={token || ""}
-              allUsers={users}
-              allVendors={vendors}
-              onMsg={setDirMsg}
-            />
-          ) : (
-            <p className="text-sm text-steel-muted">Select a project to manage its directory, vendors, and bids.</p>
-          )}
-        </Card>
-      )}
-
-      {masterTab === "directory" && (
-        <Card>
-          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            <div>
-              <h2 className="font-display text-xl">Four user kinds</h2>
-              <p className="text-sm text-steel-muted mt-1">
-                Sharnam Office · Site · Client · Contractor — assign people and parties. Full tools live on the project Directory page.
-              </p>
-            </div>
-            <Select className="min-w-[220px]" value={dirProjectId} onChange={(e) => setDirProjectId(e.target.value)}>
-              <option value="">Select project…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          {dirProject ? (
-            <div className="space-y-5">
-              <div className="flex flex-wrap gap-2 text-sm">
-                <Badge tone="brand">{dirProject.code}</Badge>
-                <Link to={`/projects/${dirProject.id}/directory?party=PMC`} className="font-semibold text-brand">
-                  Office →
-                </Link>
-                <Link to={`/projects/${dirProject.id}/directory?party=Site`} className="font-semibold text-brand">
-                  Site →
-                </Link>
-                <Link to={`/projects/${dirProject.id}/directory?party=Client`} className="font-semibold text-brand">
-                  Client →
-                </Link>
-                <Link to={`/projects/${dirProject.id}/directory?party=Contractor`} className="font-semibold text-brand">
-                  Contractor →
-                </Link>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!text-xs"
-                  onClick={async () => {
-                    const r = await api<{ created: number }>(`/api/comms/matrix/${dirProject.id}/seed-standard`, {
-                      method: "POST",
-                      token,
-                    });
-                    setDirMsg(`Seeded ${r.created} Meeting / RFI matrix row(s).`);
-                  }}
-                >
-                  Seed Meeting + RFI matrix
-                </Button>
-              </div>
-
-              <div className="grid lg:grid-cols-2 gap-4">
-                <div className="border border-line rounded-[var(--ui-radius)] p-4 space-y-3 bg-sand/30">
-                  <h3 className="font-semibold text-sm">Assign person</h3>
-                  <form
-                    className="flex flex-wrap gap-2 items-end"
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      setDirMsg("");
-                      await api(`/api/projects/${dirProject.id}/members`, {
-                        method: "POST",
-                        token,
-                        body: JSON.stringify(memberForm),
-                      });
-                      setDirMsg("Person assigned to project directory.");
-                      await loadDirectory(dirProject.id);
-                      await load();
-                    }}
-                  >
-                    <SearchableSelect
-                      className="min-w-[180px] flex-1"
-                      options={users.map((u) => ({
-                        value: u.id,
-                        label: u.fullName,
-                        sublabel: `${u.role} · ${u.email}`,
-                      }))}
-                      value={memberForm.userId}
-                      onChange={(userId) => setMemberForm({ ...memberForm, userId })}
-                      placeholder="Select user…"
-                      searchPlaceholder="Search name or email…"
-                      required
-                    />
-                    <Select
-                      value={memberForm.role}
-                      onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
-                    >
-                      <option value="project_manager">Project Manager</option>
-                      <option value="site_engineer">Site Engineer</option>
-                      <option value="member">Member</option>
-                      <option value="viewer">Viewer</option>
-                    </Select>
-                    <Button type="submit">Assign</Button>
-                  </form>
-                  <ul className="text-sm divide-y divide-line max-h-40 overflow-y-auto">
-                    {(overview?.members || []).map((m: any) => (
-                      <li key={m.id} className="py-2 flex justify-between gap-2">
-                        <div>
-                          <span>{m.user?.fullName}</span>
-                          {m.user?.email && (
-                            <div className="text-[10px] font-mono text-steel-muted">{m.user.email}</div>
-                          )}
-                        </div>
-                        <span className="text-xs text-steel-muted">{m.role}</span>
-                      </li>
-                    ))}
-                    {!overview?.members?.length && <li className="py-2 text-steel-muted text-xs">No members yet</li>}
-                  </ul>
-                </div>
-
-                <div className="border border-line rounded-[var(--ui-radius)] p-4 space-y-3 bg-sand/30">
-                  <h3 className="font-semibold text-sm">Assign contractor / party</h3>
-                  <form
-                    className="flex flex-wrap gap-2 items-end"
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      setDirMsg("");
-                      await api(`/api/vendors/project/${dirProject.id}/assign`, {
-                        method: "POST",
-                        token,
-                        body: JSON.stringify(vendorForm),
-                      });
-                      setVendorForm({ vendorId: "", tradeRole: "" });
-                      setDirMsg("Party assigned to project directory.");
-                      await loadDirectory(dirProject.id);
-                    }}
-                  >
-                    <Select
-                      className="min-w-[180px] flex-1"
-                      value={vendorForm.vendorId}
-                      onChange={(e) => setVendorForm({ ...vendorForm, vendorId: e.target.value })}
-                      required
-                    >
-                      <option value="">Select party…</option>
-                      {vendors.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <Input
-                      placeholder="Trade role"
-                      value={vendorForm.tradeRole}
-                      onChange={(e) => setVendorForm({ ...vendorForm, tradeRole: e.target.value })}
-                    />
-                    <Button type="submit">Assign</Button>
-                  </form>
-                  <ul className="text-sm divide-y divide-line max-h-40 overflow-y-auto">
-                    {(overview?.vendors || []).map((row: any) => (
-                      <li key={row.id} className="py-2 flex justify-between gap-2">
-                        <span>{row.vendor?.name || row.name}</span>
-                        <span className="text-xs text-steel-muted">{row.tradeRole || "—"}</span>
-                      </li>
-                    ))}
-                    {!overview?.vendors?.length && <li className="py-2 text-steel-muted text-xs">No parties yet</li>}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-steel-muted">Create or select a project to build its directory.</p>
-          )}
-        </Card>
-      )}
-
-      {masterTab === "roster" && (
-        <Card>
-          <h2 className="font-display text-xl mb-1">PMC roster</h2>
-          <p className="text-sm text-steel-muted mb-4">Sharnam Office / admin / employee accounts from HRM.</p>
-          <ul className="max-h-96 overflow-y-auto divide-y divide-line text-sm">
-            {pmcUsers.map((u) => (
-              <li key={u.id} className="py-2.5 flex justify-between gap-3">
-                <div>
-                  <div className="font-semibold">{u.fullName}</div>
-                  <div className="text-xs text-steel-muted font-mono">{u.email}</div>
-                </div>
-                <Badge tone="neutral">{u.role}</Badge>
-              </li>
-            ))}
-            {!pmcUsers.length && <li className="py-4 text-steel-muted">No PMC users yet — add in HRM.</li>}
-          </ul>
-          <Link to="/hrm" className="inline-block mt-3 text-sm font-semibold text-brand">
-            Manage HRM master →
-          </Link>
-        </Card>
-      )}
-
-      {masterTab === "modules" && (
+      {directoryTab === "modules" && (
         <Card>
           <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
             <div>
@@ -526,8 +301,8 @@ export default function MasterModulePage() {
                   <button
                     key={w.key}
                     type="button"
-                    className={`px-3 py-1.5 text-xs font-semibold border rounded-sm ${
-                      on ? "bg-brand text-white border-brand" : "bg-white border-line text-steel-muted"
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
+                      on ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted hover:border-brand"
                     }`}
                     onClick={async () => {
                       const next = on ? enabled.filter((k) => k !== w.key) : [...enabled, w.key];
@@ -551,123 +326,30 @@ export default function MasterModulePage() {
         </Card>
       )}
 
-      {masterTab === "global" && (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          <SharePointStatusPanel token={token || undefined} />
-          <MasterCostTemplatesPanel token={token} />
-          <BbsShapeMasterPanel token={token} />
-          <SiteFinalIndexPanel token={token} />
-          {[
-            {
-              to: "/master/checklists?family=DrawingCheck",
-              label: "Drawing-check master",
-              hint: "Drawing check checklists · reused on every project",
-              tag: "Checklists · Drawing",
-            },
-            {
-              to: "/master/checklists?family=QualityInspection",
-              label: "Quality (QI) checklist master",
-              hint: "QI checklist templates — reused across all projects",
-              tag: "Checklists · QI",
-            },
-            {
-              to: "/master/checklists?family=Safety",
-              label: "Safety checklist master",
-              hint: "SPDC HSE pack (F-01/F-02/F-03) seed-ready — reused across all projects",
-              tag: "Checklists · Safety",
-            },
-            {
-              to: "/custom-sheets",
-              label: "Sheet item templates",
-              hint: "Formula sheets · clone · export (advanced editing)",
-              tag: "Sheets",
-            },
-          ].map((c) => (
-            <Link key={c.label} to={c.to} className="block">
-              <Card className="h-full hover:border-brand/50 transition !p-5">
-                <div className="text-[10px] uppercase text-steel-muted tracking-wide">{c.tag}</div>
-                <div className="font-display text-lg mt-0.5">{c.label}</div>
-                <div className="text-sm text-steel-muted mt-1">{c.hint}</div>
-                <div className="mt-3">
-                  <Badge tone="brand">Manage</Badge>
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {masterTab === "vendors" && (
-        <Card className="!p-6">
-          <h2 className="font-display text-xl mb-2">Company vendor directory</h2>
-          <p className="text-sm text-steel-muted mb-4 max-w-2xl">
-            Global bidder directory — tag each contractor/vendor with R2 BOQ disciplines (CCV, Electrical Lab, Security, etc.).
-            When you open a CRM bid package, only matching companies appear in the bidder picker.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Link to="/master/vendors">
-              <Button type="button">Open company directory ({vendors.length} companies)</Button>
-            </Link>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  const r = await api<{ created: number; updated: number; total: number }>("/api/vendors/seed-bid-catalog", {
-                    method: "POST",
-                    token,
-                  });
-                  setMsg(`Bid catalog seeded: ${r.created} new, ${r.updated} updated (${r.total} R2 discipline vendors).`);
-                  await load();
-                } catch (err) {
-                  setMsg(err instanceof Error ? err.message : "Seed failed");
-                }
-              }}
-            >
-              Seed R2 bid vendors
-            </Button>
-            <Link to="/crm/bids">
-              <Button type="button" variant="secondary">CRM bid packages →</Button>
-            </Link>
+      {directoryTab === "checklists" && (
+        <div className="space-y-4">
+          <Card className="!p-4 bg-sand/30 border-line">
+            <p className="text-sm text-steel-muted">
+              Org-wide checklist line libraries — assign to projects from each module’s checklist master.{" "}
+              <strong className="text-ink">MB / BBS templates</strong> upload per project on{" "}
+              <span className="font-medium">Cost → MB / BBS</span>; shape codes on{" "}
+              <span className="font-medium">Cost → BBS</span>.
+            </p>
+          </Card>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-2 gap-4">
+            {CHECKLIST_MASTERS.map((c) => (
+              <Link key={c.label} to={c.to} className="block">
+                <Card className="h-full hover:border-brand/50 transition !p-5">
+                  <div className="text-[10px] uppercase text-steel-muted tracking-wide">{c.tag}</div>
+                  <div className="font-display text-lg mt-0.5">{c.label}</div>
+                  <div className="text-sm text-steel-muted mt-1">{c.hint}</div>
+                  <div className="mt-3">
+                    <Badge tone="brand">Open master →</Badge>
+                  </div>
+                </Card>
+              </Link>
+            ))}
           </div>
-        </Card>
-      )}
-
-      {masterTab === "links" && (
-        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {[
-            { to: "/crm", label: "CRM / PMCs", hint: "Leads → projects" },
-            { to: "/hrm", label: "HRM master", hint: `${users.length} people` },
-            {
-              to: dirProjectId ? `/projects/${dirProjectId}/dms` : "/projects",
-              label: "Documents",
-              hint: "Master DMS",
-            },
-            {
-              to: dirProjectId ? `/projects/${dirProjectId}/comms` : "/projects",
-              label: "Communication matrix",
-              hint: "Meeting + RFI parties",
-            },
-            { to: "/dashboard", label: "Ops dashboard", hint: "Open RFIs · alerts" },
-            { to: "/workspace", label: "Module select", hint: "After alerts" },
-          ].map((c) => (
-            <Link
-              key={c.label}
-              to={c.to}
-              className="block"
-              onClick={() => {
-                if (c.to.includes("/comms") && dirProjectId) setActiveWorkspace("comms");
-              }}
-            >
-              <Card className="h-full hover:border-brand/50 transition !p-5">
-                <div className="font-display text-lg">{c.label}</div>
-                <div className="text-sm text-steel-muted mt-1">{c.hint}</div>
-                <div className="mt-3">
-                  <Badge tone="brand">Open</Badge>
-                </div>
-              </Card>
-            </Link>
-          ))}
         </div>
       )}
     </div>

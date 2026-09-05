@@ -14,6 +14,7 @@ import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
+import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
@@ -1085,6 +1086,9 @@ export default function CostPage() {
 
       {tab === "bbs" && (
         <div className="cost-sheet-block space-y-3">
+          {canEdit && (
+            <BbsShapeMasterPanel token={token} mode="full" />
+          )}
           <CostSheetFlowBar active="bbs" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}

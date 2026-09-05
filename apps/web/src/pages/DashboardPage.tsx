@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { OfficeClockInCard } from "../components/OfficeClockInCard";
 import { Badge, Button, Card, PageHero } from "../components/ui";
+import { DashboardListModal, DashboardListModalFoot } from "../components/DashboardListModal";
 import { PieChart } from "../components/PieChart";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { ModuleIcon, type ModuleIconKey } from "../components/icons";
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [safetyOpen, setSafetyOpen] = useState(0);
   const [busy, setBusy] = useState(true);
+  const [rfiModalOpen, setRfiModalOpen] = useState(false);
 
   const selected = projects.find((p) => p.id === projectId) || projects[0];
   const pid = selected?.id;
@@ -196,38 +198,82 @@ export default function DashboardPage() {
       )}
 
       {tab === "rfis" && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-slate-50 flex justify-between items-center gap-2">
-            <span className="font-semibold text-sm">Open RFIs</span>
-            {pid && (
-              <Link to={`/projects/${pid}/rfis`} className="text-sm font-semibold text-brand hover:text-brand-dark">
-                Open in module →
-              </Link>
-            )}
+        <Card className="!p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-sm">Open RFIs</p>
+              <p className="text-xs text-steel-muted mt-1">
+                {openRfis.length} open — view the full list in a scrollable panel without locking this page.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => setRfiModalOpen(true)} disabled={!openRfis.length}>
+                View all ({openRfis.length})
+              </Button>
+              {pid && (
+                <Link to={`/projects/${pid}/rfis`}>
+                  <Button type="button">Open RFI module →</Button>
+                </Link>
+              )}
+            </div>
           </div>
-          <ul className="divide-y divide-slate-100 text-sm">
-            {openRfis.map((r) => (
-              <li key={r.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-50/80">
-                <div className="min-w-0">
-                  <span className="font-mono text-xs text-brand mr-2">{r.number}</span>
-                  <span className="text-ink">{r.subject || r.title || "—"}</span>
-                </div>
-                <div className="flex items-center gap-2">
+          {openRfis.length > 0 && (
+            <ul className="mt-4 divide-y divide-line text-sm border border-line rounded-lg overflow-hidden">
+              {openRfis.slice(0, 5).map((r) => (
+                <li key={r.id} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 bg-paper">
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs text-brand mr-2">{r.number}</span>
+                    <span className="text-ink truncate">{r.subject || r.title || "—"}</span>
+                  </div>
                   <Badge tone="danger">{r.status}</Badge>
-                  {pid && (
-                    <Link to={`/projects/${pid}/rfis`}>
-                      <Button type="button" variant="secondary" className="!text-xs !py-1.5">
-                        Address
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              </li>
-            ))}
-            {!openRfis.length && !busy && <li className="px-4 py-8 text-center text-steel-muted">No open RFIs.</li>}
-          </ul>
+                </li>
+              ))}
+              {openRfis.length > 5 && (
+                <li className="px-3 py-2 text-xs text-steel-muted bg-sand/30">
+                  +{openRfis.length - 5} more — open the list modal
+                </li>
+              )}
+            </ul>
+          )}
+          {!openRfis.length && !busy && <p className="text-sm text-steel-muted mt-3">No open RFIs.</p>}
         </Card>
       )}
+
+      <DashboardListModal
+        open={rfiModalOpen}
+        title="Open RFIs"
+        subtitle={selected ? `${selected.code} — ${openRfis.length} open` : undefined}
+        onClose={() => setRfiModalOpen(false)}
+        footer={
+          <DashboardListModalFoot
+            onClose={() => setRfiModalOpen(false)}
+            href={pid ? `/projects/${pid}/rfis` : undefined}
+            hrefLabel="Open in module"
+          />
+        }
+      >
+        <ul className="divide-y divide-line text-sm">
+          {openRfis.map((r) => (
+            <li key={r.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-sand/30">
+              <div className="min-w-0">
+                <span className="font-mono text-xs text-brand mr-2">{r.number}</span>
+                <span className="text-ink">{r.subject || r.title || "—"}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge tone="danger">{r.status}</Badge>
+                {pid && (
+                  <Link to={`/projects/${pid}/rfis`} onClick={() => setRfiModalOpen(false)}>
+                    <Button type="button" variant="secondary" className="!text-xs !py-1.5">
+                      Open
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </li>
+          ))}
+          {!openRfis.length && <li className="px-4 py-8 text-center text-steel-muted">No open RFIs.</li>}
+        </ul>
+      </DashboardListModal>
 
       {tab === "comms" && (
         <Card padding={false}>

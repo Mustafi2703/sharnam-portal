@@ -58,13 +58,7 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
     icon: "modules",
     roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
   },
-  {
-    to: "/stakeholder",
-    label: "Partner desk",
-    icon: "modules",
-    roles: ["employee", "office", "admin"],
-  },
-  { to: "/master", label: "Master setup", icon: "master", roles: ["admin", "office"] },
+  { to: "/master", label: "Directory", icon: "master", roles: ["admin", "office"] },
   {
     to: "/training",
     label: "Training",

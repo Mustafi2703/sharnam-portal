@@ -242,7 +242,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             )}
             {!id ? (
               <Link to="/master" className="text-sm font-semibold text-brand">
-                ← Master setup
+                ← Directory
               </Link>
             ) : (
               <Link to={`/projects/${id}`} className="text-sm font-semibold text-brand">
