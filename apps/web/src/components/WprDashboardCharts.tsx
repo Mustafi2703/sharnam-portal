@@ -117,12 +117,11 @@ export function WprDashboardCharts({ charts, emptyHint }: { charts: WprCharts; e
       </div>
 
       <p className="text-xs text-steel-muted px-1">
-        Reporting window: {charts.rangeStart} → {charts.rangeEnd} · charts match SPDC WPR PPT slides (milestone,
-        manpower histogram, cashflow, DCI, planned vs actual, quality, safety).
+        Reporting window: {charts.rangeStart} → {charts.rangeEnd} · S-curve = cumulative % · Cashflow = ₹ lakh (Cost) · Planned vs actual = weekly activity qty
       </p>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-4">
+        <Card className="p-4 lg:col-span-2">
           <ScurveChart points={charts.scurve} />
         </Card>
         {charts.manpowerHistogram.length > 0 ? (
@@ -147,13 +146,13 @@ export function WprDashboardCharts({ charts, emptyHint }: { charts: WprCharts; e
         )}
         {charts.cashflow.length > 0 ? (
           <BarChart
-            title="Project cashflow overview (₹ lakh)"
+            title="Cashflow (₹ lakh) · Cost periods"
             items={charts.cashflow}
             valueKey="actual"
             compareKey="planned"
           />
         ) : (
-          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Cashflow chart fills from Cost module periods.</Card>
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Cashflow — import Cost cashflow periods (not S-curve %).</Card>
         )}
         {charts.drawingDci.length > 0 ? (
           <PieChart title="Drawing register · DCI by discipline" items={charts.drawingDci} />
@@ -162,13 +161,13 @@ export function WprDashboardCharts({ charts, emptyHint }: { charts: WprCharts; e
         )}
         {charts.plannedVsActual.length > 0 ? (
           <BarChart
-            title="Planned vs actual · weekly qty"
+            title="Planned vs actual · weekly activity qty"
             items={charts.plannedVsActual}
             valueKey="actual"
             compareKey="planned"
           />
         ) : (
-          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Planned vs actual — from Progress activity lines.</Card>
+          <Card className="p-4 text-sm text-steel-muted min-h-[180px]">Activity qty — Progress → Planned vs Actual activity lines.</Card>
         )}
         {charts.quality.length > 0 ? (
           <PieChart title="Weekly quality updates · QAP status" items={charts.quality} />

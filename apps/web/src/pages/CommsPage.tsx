@@ -368,6 +368,29 @@ export default function CommsPage() {
                             Create follow-up
                           </Button>
                         )}
+                        {(selected.status === "Follow-up" || tab === "followup") && (
+                          <Button
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              setMsg("");
+                              try {
+                                const r = await api<{ to: string[]; openCount: number }>(
+                                  `/api/comms/meetings/${selected.id}/send-follow-up`,
+                                  { method: "POST", token, body: "{}" },
+                                );
+                                setMsg(`Follow-up sent to ${r.to.length} recipient(s) · ${r.openCount} open action(s).`);
+                              } catch (err) {
+                                setMsg(err instanceof Error ? err.message : String(err));
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Send follow-up
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="secondary"
@@ -490,7 +513,13 @@ export default function CommsPage() {
                       )}
                       <Input
                         className="flex-1 min-w-[180px]"
-                        placeholder={tab === "agenda" ? "Add agenda line…" : "Add action / MoM line…"}
+                        placeholder={
+                          tab === "agenda"
+                            ? "Add agenda line…"
+                            : tab === "followup"
+                              ? "Add follow-up action…"
+                              : "Add action / MoM line…"
+                        }
                         value={itemDesc}
                         onChange={(e) => setItemDesc(e.target.value)}
                       />

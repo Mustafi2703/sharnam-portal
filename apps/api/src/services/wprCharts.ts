@@ -257,13 +257,15 @@ export async function loadWprChartPack(
     }
   }
 
-  const pvaCashflow = plannedActual.filter((r) => r.packageName !== MS_PROJECT_SCURVE_PACKAGE);
-  const cashRows = cashflow.length > 0 ? cashflow : pvaCashflow;
-  const cashflowChart: WprBarPoint[] = cashRows.slice(-12).map((c) => ({
-    label: (c.periodLabel || c.packageName || "Period").slice(0, 20),
-    planned: Math.round(Number(c.plannedAmount || 0) / 100000) / 10,
-    actual: Math.round(Number(c.actualAmount || 0) / 100000) / 10,
-  }));
+  /** Cost cashflow only — ₹ periods. Do not fall back to PvA (that mixes S-curve % rows). */
+  const cashflowChart: WprBarPoint[] = cashflow
+    .filter((c) => !String(c.packageName || "").toLowerCase().includes("s-curve"))
+    .slice(-12)
+    .map((c) => ({
+      label: (c.periodLabel || c.packageName || "Period").slice(0, 20),
+      planned: Math.round(Number(c.plannedAmount || 0) / 100000) / 10,
+      actual: Math.round(Number(c.actualAmount || 0) / 100000) / 10,
+    }));
 
   const milestonesChart: WprBarPoint[] = milestones
     .filter((m) => m.activity)
@@ -329,9 +331,14 @@ export async function loadWprChartPack(
     },
   ];
 
-  const pvaRow = pvaCashflow.at(-1);
-  const plannedPct = Math.round(Number(pvaRow?.plannedPct || 0) * 1000) / 10;
-  const actualPct = Math.round(Number(pvaRow?.actualPct || 0) * 1000) / 10;
+  const pvaRow = plannedActual
+    .filter((r) => r.packageName !== MS_PROJECT_SCURVE_PACKAGE && !String(r.packageName || "").toLowerCase().includes("s-curve"))
+    .at(-1);
+  const scurveLast = scurve.at(-1);
+  let plannedPct = Math.round(Number(pvaRow?.plannedPct || 0) * (Number(pvaRow?.plannedPct || 0) <= 1 ? 1000 : 10)) / 10;
+  let actualPct = Math.round(Number(pvaRow?.actualPct || 0) * (Number(pvaRow?.actualPct || 0) <= 1 ? 1000 : 10)) / 10;
+  if (scurveLast && scurveLast.planned > 0) plannedPct = scurveLast.planned;
+  if (scurveLast && scurveLast.actual > 0) actualPct = scurveLast.actual;
   const variancePct = Math.round((actualPct - plannedPct) * 10) / 10;
   const spi = plannedPct > 0 ? Math.round((actualPct / plannedPct) * 100) / 100 : 1;
 

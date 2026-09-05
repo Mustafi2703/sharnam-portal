@@ -593,3 +593,62 @@ commsRouter.post(
     }
   }
 );
+
+/** Email open follow-up actions to matrix + assignees (Follow-up stage meetings). */
+commsRouter.post(
+  "/meetings/:id/send-follow-up",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: req.params.id },
+      include: { project: { select: { code: true, name: true } }, items: { include: { assignedTo: true } } },
+    });
+    if (!meeting) return res.status(404).json({ error: "Meeting not found" });
+
+    const openItems = meeting.items.filter((i) => i.resolutionStatus === "Open" || i.resolutionStatus === "Carried Over");
+    const bodyEmails = Array.isArray(req.body?.emails)
+      ? req.body.emails.map(String)
+      : String(req.body?.emails || "")
+          .split(/[,;\s]+/)
+          .filter(Boolean);
+    const ownerEmails = meeting.items.map((it) => it.assignedTo?.email).filter((e): e is string => Boolean(e));
+    const { getProjectMatrixEmails } = await import("../services/matrixContacts.js");
+    const matrixEmails = await getProjectMatrixEmails(meeting.projectId);
+    const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.all]));
+
+    const portal = process.env.PORTAL_ORIGIN || process.env.APP_URL || "http://localhost:5173";
+    const link = `${portal}/projects/${meeting.projectId}/comms?tab=followup&meeting=${meeting.id}`;
+    const lines = openItems.length
+      ? openItems.map((i) => `• ${i.description}${i.assignedTo?.fullName ? ` (${i.assignedTo.fullName})` : ""}`)
+      : ["• No open items — add follow-up lines in the portal."];
+
+    const { queueProjectEmail } = await import("../services/email.js");
+    const result = await queueProjectEmail({
+      projectId: meeting.projectId,
+      subject: `Follow-up actions · ${meeting.title} · ${meeting.project.code}`,
+      body: [
+        `Project: ${meeting.project.name}`,
+        `Follow-up meeting: ${meeting.title}`,
+        `Date: ${meeting.meetingDate.toLocaleString("en-IN")}`,
+        "",
+        "Open actions:",
+        ...lines,
+        "",
+        `Add updates or close items in the portal: ${link}`,
+      ].join("\n"),
+      bodyHtml: `<p>Open follow-up actions for <strong>${meeting.title}</strong>:</p><ul>${openItems.map((i) => `<li>${i.description}</li>`).join("")}</ul><p><a href="${link}">Open follow-up in Sharnam portal</a></p>`,
+      context: `meeting.followup.send ${meeting.id}`,
+      toOverride: to.join(", "),
+      createdById: req.user!.id,
+    });
+
+    await audit("meeting.followup.send", {
+      userId: req.user!.id,
+      entity: "Meeting",
+      entityId: meeting.id,
+      meta: { to, openCount: openItems.length, status: result },
+    });
+
+    res.json({ ok: true, to, openCount: openItems.length, result });
+  }
+);

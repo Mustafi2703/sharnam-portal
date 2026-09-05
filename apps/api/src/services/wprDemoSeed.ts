@@ -86,9 +86,11 @@ export async function seedWprDemoWeek(
   const pptxName = `WPR-${project.code}-${dateStr}.pptx`;
 
   let publishedPath = snapshot.publishedPath;
+  let publishedUrl: string | null = null;
   try {
     const saved = await mockOneDrive.upload(project.code, folder, spdcName, spdcBuf);
     publishedPath = saved.path;
+    publishedUrl = saved.sharePointUrl || saved.url || null;
     await mockOneDrive.upload(project.code, folder, clientName, clientBuf);
     await mockOneDrive.upload(project.code, folder, pptxName, pptxBuf);
   } catch {
@@ -100,12 +102,12 @@ export async function seedWprDemoWeek(
     publishedPath = `${folder}/${spdcName}`;
   }
 
-  if (publishedPath !== snapshot.publishedPath) {
+  if (publishedPath !== snapshot.publishedPath || publishedUrl) {
     await prisma.wprSnapshot.update({
       where: { id: snapshot.id },
-      data: { publishedPath },
+      data: { publishedPath, publishedUrl },
     });
   }
 
-  return { weekEnd, weekStart, reportNumber, publishedPath, spdcName, clientName, pptxName };
+  return { weekEnd, weekStart, reportNumber, publishedPath, publishedUrl, spdcName, clientName, pptxName };
 }

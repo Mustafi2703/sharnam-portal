@@ -71,8 +71,8 @@ type PptxDeck = {
 
 /** Native chart slides inserted after matching table sections (client WPR deck). */
 const CHART_AFTER: Partial<Record<keyof WprSections, WprChartSlideKey[]>> = {
-  projectDashboard: ["dashboardKpis"],
-  milestones: ["scurve", "milestones"],
+  projectDashboard: ["dashboardKpis", "scurve"],
+  milestones: ["milestones"],
   manpowerHistogram: ["manpower"],
   cashflow: ["cashflow"],
   drawingRegister: ["drawingDci"],

@@ -648,12 +648,20 @@ export default function WprMakerPage() {
                     {(sec.photos || []).length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {(sec.photos || []).map((p, i) => {
-                          const src = resolveMediaUrl(p);
+                          const isSlot = p.includes("[Upload") || p.startsWith("wpr-demo/");
+                          const src = isSlot ? "" : resolveMediaUrl(p);
                           return (
                             <div key={i} className="relative group rounded-lg border border-line overflow-hidden bg-sand/30">
-                              <a href={src} target="_blank" rel="noopener noreferrer" title="Open full size">
-                                <img src={src} alt="" className="w-full h-28 object-cover" loading="lazy" />
-                              </a>
+                              {src ? (
+                                <a href={src} target="_blank" rel="noopener noreferrer" title="Open full size">
+                                  <img src={src} alt="" className="w-full h-28 object-cover" loading="lazy" />
+                                </a>
+                              ) : (
+                                <div className="w-full h-28 grid place-items-center text-[10px] text-steel-muted px-2 text-center border-2 border-dashed border-line/80 bg-white/60">
+                                  Photo slot {i + 1}
+                                  <span className="block text-[9px] mt-1">Upload to fill PPTX grid</span>
+                                </div>
+                              )}
                               <button
                                 type="button"
                                 className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white text-xs"

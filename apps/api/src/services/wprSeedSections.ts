@@ -3,6 +3,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { DEFAULT_WPR_TITLES, type WprSection, type WprSections } from "./wprXlsx.js";
+import { applyWprArvindDemoFill } from "./wprArvindDemoFill.js";
 
 function isoDate(d: Date | null | undefined): string {
   return d ? new Date(d).toISOString().slice(0, 10) : "";
@@ -365,30 +366,27 @@ export async function seedWprSections(
     rows: executedRows,
   };
 
-  /** Prefer Cost cashflow; fall back / merge Progress PlannedActual amounts for WPR cashflow slides. */
+  /** Prefer Cost cashflow periods only (₹). Never mix S-curve / PvA % rows here. */
+  const cashflowOnly = cashflow.filter(
+    (c: { packageName?: string }) => !String(c.packageName || "").toLowerCase().includes("s-curve")
+  );
   const cashflowRows =
-    cashflow.length > 0
-      ? cashflow.map((c: any) => [
+    cashflowOnly.length > 0
+      ? cashflowOnly.map((c: any) => [
           c.periodLabel || "",
           c.packageName || "",
           c.plannedAmount || 0,
           c.actualAmount || 0,
           (c.actualAmount || 0) - (c.plannedAmount || 0),
         ])
-      : plannedActual.map((r: any) => [
-          r.periodLabel || "",
-          r.packageName || "Overall",
-          r.plannedAmount || 0,
-          r.actualAmount || 0,
-          (r.actualAmount || 0) - (r.plannedAmount || 0),
-        ]);
+      : [];
 
   const cashflowSec: WprSection = {
     title: DEFAULT_WPR_TITLES.cashflow,
     notes:
-      cashflow.length > 0
-        ? "From Cost cashflow (Excel / COP sync). Keep Progress Planned vs Actual cashflow in sync via Progress → Sync to Cost."
-        : "No Cost cashflow rows — showing Progress Planned vs Actual amounts. Import cashflow or sync from Progress.",
+      cashflowOnly.length > 0
+        ? "Monthly / period cashflow (₹) from Cost — separate from S-curve % and weekly activity qty."
+        : "Import Cost cashflow or sync from Progress. Regenerate applies demo fill if empty.",
     headers: ["Period", "Package", "Planned", "Actual", "Variance"],
     rows: cashflowRows,
   };
@@ -444,7 +442,13 @@ export async function seedWprSections(
     notes: ncrs.length ? `${ncrs.length} NCR/CAR items open — please review.` : "No open NCRs recorded.",
   };
 
-  const pvaCashRows = plannedActual.map((r: any) => [
+  const pvaCashRows = plannedActual
+    .filter(
+      (r: { packageName?: string }) =>
+        r.packageName !== "MS Project S-curve" &&
+        !String(r.packageName || "").toLowerCase().includes("s-curve")
+    )
+    .map((r: any) => [
     r.periodLabel || "",
     r.packageName || "",
     r.plannedPct ?? "",
@@ -470,7 +474,7 @@ export async function seedWprSections(
     title: DEFAULT_WPR_TITLES.plannedVsActual,
     notes:
       pvaActivityRows.length > 0
-        ? "Cashflow % from Progress Planned vs Actual; activity qty register below continues across slides."
+        ? "Weekly physical qty by activity — Progress PvA register (not cashflow ₹ or S-curve %)."
         : "Import Planned Vs. Actual Dashboard.xlsx under Progress → Planned vs Actual.",
     headers:
       pvaActivityRows.length > 0
@@ -625,32 +629,40 @@ export async function seedWprSections(
     rows: criticalRows.length ? criticalRows : [["—", "None flagged", "All registers within tolerance this week", "—"]],
   };
 
-  return {
-    cover,
-    index: indexSec,
-    brief,
-    stakeholders: stakeholdersSec,
-    mobilisation,
-    communicationMatrix,
-    projectDashboard,
-    criticalAreas,
-    capex: capexSec,
-    prTracker,
-    hindrance: hindranceSec,
-    risk: riskSec,
-    legal: legalSec,
-    drawingRegister,
-    designStatus,
-    procurement,
-    milestones: milestonesSec,
-    manpowerHistogram: manpower,
-    weeklyExecuted,
-    cashflow: cashflowSec,
-    quality,
-    cubeTest,
-    safety: safetySec,
-    plannedVsActual: plannedVsActualSec,
-    materialStock,
-    progressPictures,
-  };
+  return applyWprArvindDemoFill(
+    {
+      cover,
+      index: indexSec,
+      brief,
+      stakeholders: stakeholdersSec,
+      mobilisation,
+      communicationMatrix,
+      projectDashboard,
+      criticalAreas,
+      capex: capexSec,
+      prTracker,
+      hindrance: hindranceSec,
+      risk: riskSec,
+      legal: legalSec,
+      drawingRegister,
+      designStatus,
+      procurement,
+      milestones: milestonesSec,
+      manpowerHistogram: manpower,
+      weeklyExecuted,
+      cashflow: cashflowSec,
+      quality,
+      cubeTest,
+      safety: safetySec,
+      plannedVsActual: plannedVsActualSec,
+      materialStock,
+      progressPictures,
+    },
+    {
+      projectName: project?.name,
+      clientName: project?.clientName || undefined,
+      weekStart,
+      weekEnd,
+    }
+  );
 }
