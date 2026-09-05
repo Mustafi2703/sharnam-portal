@@ -694,7 +694,7 @@ export default function ProgressPage() {
   }
 
   return (
-    <div className="w-full min-w-0 space-y-5 pb-4">
+    <div className="progress-module page-scroll-full w-full min-w-0 space-y-5 pb-8">
       <div className="w-full shrink-0">
         <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
           ← Project

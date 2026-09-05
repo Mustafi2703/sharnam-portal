@@ -722,7 +722,7 @@ export default function DprMakerPage() {
   const disciplineLabel = DISCIPLINES.find((d) => d.key === discipline)?.label || discipline;
   return (
     <div className="maker-shell dpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
-      <div className="dpr-maker__chrome sticky top-0 z-20 bg-paper/95 backdrop-blur-sm border-b border-line space-y-2 px-1 py-2 -mx-0.5">
+      <div className="dpr-maker__chrome shrink-0 bg-paper border-b border-line space-y-2 px-1 py-2 -mx-0.5">
         <MakerToolHeader
           eyebrow="DPR"
           title="Daily Progress Report"
@@ -1471,14 +1471,6 @@ export default function DprMakerPage() {
           </ul>
         </Card>
       )}
-
-      <div className="maker-sticky-bar shrink-0">
-        <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
-        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>XLSX</Button>
-        <Button type="button" variant="secondary" onClick={downloadPdf} disabled={busy}>PDF</Button>
-        <Button type="button" onClick={save} disabled={busy}>Save</Button>
-        <Button type="button" variant="secondary" onClick={publish} disabled={busy}>Publish</Button>
-      </div>
 
       </div>
 

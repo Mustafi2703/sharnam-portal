@@ -85,6 +85,28 @@ export async function seedHrmsDemo(db: PrismaClient) {
   }
 
   await db.hrmsDocument.deleteMany({ where: { refNo: { startsWith: "HB-DEMO" } } });
+
+  const holidays = [
+    { date: `${year}-01-26`, name: "Republic Day", region: "India" },
+    { date: `${year}-03-14`, name: "Holi", region: "India" },
+    { date: `${year}-08-15`, name: "Independence Day", region: "India" },
+    { date: `${year}-10-02`, name: "Gandhi Jayanti", region: "India" },
+    { date: `${year}-10-20`, name: "Diwali (office closed)", region: "Gujarat" },
+    { date: `${year}-11-01`, name: "Gujarat Day / New Year", region: "Gujarat" },
+    { date: `${year}-12-25`, name: "Christmas", region: "India" },
+    { date: `${year + 1}-01-01`, name: "New Year", region: "India" },
+  ];
+  for (const h of holidays) {
+    const d = new Date(h.date);
+    if (Number.isNaN(d.getTime())) continue;
+    const existing = await db.holiday.findFirst({ where: { date: d, name: h.name } });
+    if (!existing) {
+      await db.holiday.create({
+        data: { date: d, name: h.name, region: h.region, isOptional: false },
+      });
+    }
+  }
+
   await db.hrmsDocument.createMany({
     data: [
       {
@@ -120,5 +142,5 @@ export async function seedHrmsDemo(db: PrismaClient) {
     ],
   });
 
-  return { leaveTypes: types.length, staffBalances: staff.length, handbookDocs: 2 };
+  return { leaveTypes: types.length, staffBalances: staff.length, handbookDocs: 2, holidays: holidays.length };
 }

@@ -1823,7 +1823,12 @@ checklistRouter.post(
     });
 
     const kind = /^CAR/i.test(row.number || "") ? "QualityCAR" : "QualityNCR";
-    const { notifyNcrFollowUp } = await import("../services/ncrNotify.js");
+    const { notifyNcrFollowUp, resolveNcrContractorEmail } = await import("../services/ncrNotify.js");
+    const contractorEmail = await resolveNcrContractorEmail(
+      req.params.projectId,
+      formParsed,
+      row.contractor
+    );
     const email = await notifyNcrFollowUp({
       projectId: req.params.projectId,
       recordId: row.id,
@@ -1832,7 +1837,7 @@ checklistRouter.post(
       status: row.status,
       description: row.description,
       createdById: req.user!.id,
-      contractorEmail: (formParsed.contractorEmail as string) || null,
+      contractorEmail,
       contractorName: row.contractor,
       location: row.location,
       plannedClosure: row.plannedClosure,
@@ -1926,6 +1931,7 @@ checklistRouter.patch(
       contractorName: row.contractor,
       location: row.location,
       plannedClosure: row.plannedClosure,
+      formParsed,
     });
     const project = await prisma.project.findUnique({
       where: { id: req.params.projectId },

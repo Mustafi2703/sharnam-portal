@@ -428,20 +428,6 @@ const G: Guide[] = [
     ],
   },
   {
-    id: "audit-kpi",
-    group: "Audit",
-    title: "Audit KPI — site audits, findings, KRA/KPI dashboard",
-    who: ["admin", "office"],
-    when: "Weekly / monthly review with client or leadership.",
-    steps: [
-      "Project → Audit KPI.",
-      "'Run refresh' pulls live values from RFIs, drawings, RA bills, checklists — no manual entry.",
-      "Each KPI subject shows target, actual, trend arrow, and last-updated timestamp.",
-      "Add site audit findings inline; findings link back to the source module (drawing / checklist / RFI).",
-      "Export the dashboard for the QPR pack.",
-    ],
-  },
-  {
     id: "audit-trail",
     group: "Audit",
     title: "Audit trail — who did what and when",

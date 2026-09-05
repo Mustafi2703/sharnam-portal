@@ -452,7 +452,7 @@ export default function WprMakerPage() {
 
   return (
     <div className="maker-shell wpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
-      <div className="wpr-maker__chrome sticky top-0 z-20 bg-paper/95 backdrop-blur-sm border-b border-line space-y-2 px-1 py-2 -mx-0.5">
+      <div className="wpr-maker__chrome shrink-0 bg-paper border-b border-line space-y-2 px-1 py-2 -mx-0.5">
         <MakerToolHeader
           eyebrow="WPR"
           title="Weekly Progress Report"

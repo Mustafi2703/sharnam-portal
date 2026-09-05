@@ -13,7 +13,6 @@ export type WorkspaceKey =
   | "inspection"
   | "progress"
   | "comms"
-  | "auditKpi"
   | "cost"
   | "finance"
   | "reports"
@@ -496,22 +495,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Request a site execution checklist fill.",
     },
   ],
-  auditKpi: [
-    {
-      to: "audit-kpi",
-      label: "Audit dashboard",
-      end: true,
-      blurb: "Open/closed findings, RAG — SITE_AUDIT_Pack DASHBOARD.",
-      sheet: "DASHBOARD",
-    },
-    { to: "audit-kpi", label: "Findings", query: "tab=findings", blurb: "NC / observation + CAPA.", sheet: "FINDINGS" },
-    { to: "audit-kpi", label: "Site walk", query: "tab=site-walk", blurb: "Walkthrough checklist.", sheet: "SITE_WALK" },
-    { to: "audit-kpi", label: "DC interview", query: "tab=dc-interview", blurb: "Document controller interview.", sheet: "DC_INTERVIEW" },
-    { to: "audit-kpi", label: "Folder sample", query: "tab=folder-sample", blurb: "Controlled folder sampling.", sheet: "FOLDER_SAMPLE" },
-    { to: "audit-kpi", label: "KPI dashboard", query: "tab=kpi-dashboard", blurb: "127 subjects RAG rollup.", sheet: "00_KPI_DASHBOARD" },
-    { to: "audit-kpi", label: "Subject data", query: "tab=subjects", blurb: "Per-subject workbook health.", sheet: "03_SUBJECT_DATA" },
-    { to: "audit-kpi", label: "Role KRA", query: "tab=role-kra", blurb: "Appraisal scorecard by role.", sheet: "06_ROLE_KRA" },
-  ],
   cost: [
     {
       to: "cost",
@@ -688,16 +671,6 @@ export const MODULE_META: Record<
     ink: "#4C1D95",
     icon: "PRG",
   },
-  auditKpi: {
-    title: "Audit & KPI",
-    desc: "Site document audit pack + Master KPI dashboard — findings, walk, folder sample, 127 subjects, role KRA.",
-    path: "hub/auditKpi",
-    accent: "#9333EA",
-    soft: "#F3E8FF",
-    glow: "rgba(147,51,234,0.32)",
-    ink: "#581C87",
-    icon: "KPI",
-  },
   comms: {
     title: "Comms",
     desc: "Matrix, Agenda, MoM, Follow-up, Ask (PMC RFI), Email — separate tools.",
@@ -780,7 +753,6 @@ export const WORKSPACES: {
   if (key === "cost") roles = ["admin", "office", "employee"];
   if (key === "finance") roles = ["admin", "office", "employee", "vendor"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
-  if (key === "auditKpi") roles = ["admin", "office", "employee", "client"];
   if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
   return {
     key,
@@ -852,7 +824,6 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "inspection",
   "progress",
   "comms",
-  "auditKpi",
   "cost",
   "finance",
   "reports",

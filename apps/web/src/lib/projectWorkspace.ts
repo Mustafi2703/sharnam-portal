@@ -48,7 +48,6 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
   if (["diary", "photos"].includes(tail)) return "comms";
   if (tail === "site-pilot") return "comms";
   if (tail.startsWith("progress/")) return "progress";
-  if (tail === "audit-kpi" || tail.startsWith("audit-kpi/")) return "auditKpi";
   if (["dpr-maker", "wpr-maker"].includes(tail)) return "reports";
   if (["comms", "email", "submittals"].includes(tail)) return "comms";
   if (tail === "cost" || tail.startsWith("cost/")) return "cost";

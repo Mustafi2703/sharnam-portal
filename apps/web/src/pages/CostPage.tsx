@@ -1206,6 +1206,7 @@ export default function CostPage() {
                 barMarks={bbsBarMarks}
                 files={sheetFiles}
                 canEdit={canEdit || canSiteEdit}
+                hideBulkShapes
                 onChanged={() => void load()}
               />
             </div>

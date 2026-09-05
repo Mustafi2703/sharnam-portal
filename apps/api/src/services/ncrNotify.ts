@@ -3,6 +3,43 @@ import { portalOrigin } from "./rfiFlowNotify.js";
 import { buildNcrFollowUpEmail, buildNcrRaisedEmail, type NcrEmailKind } from "./ncrEmailFormat.js";
 import { prisma } from "../prisma.js";
 
+/** Resolve contractor email from form JSON or project vendor directory. */
+export async function resolveNcrContractorEmail(
+  projectId: string,
+  formParsed?: Record<string, unknown> | null,
+  contractorName?: string | null
+): Promise<string | null> {
+  const fromForm = typeof formParsed?.contractorEmail === "string" ? formParsed.contractorEmail.trim() : "";
+  if (fromForm && fromForm.includes("@")) return fromForm;
+
+  const name = contractorName?.trim() || String(formParsed?.toParty || formParsed?.contractor || "").trim();
+  if (name) {
+    const vendor = await prisma.vendor.findFirst({
+      where: {
+        OR: [
+          { name: { contains: name.slice(0, 40) } },
+          { projects: { some: { projectId } } },
+        ],
+      },
+      select: { email: true },
+    });
+    if (vendor?.email?.includes("@")) return vendor.email.trim();
+  }
+
+  const pv = await prisma.projectVendor.findFirst({
+    where: { projectId },
+    include: { vendor: { select: { email: true, name: true } } },
+  });
+  return pv?.vendor?.email?.trim() || null;
+}
+
+function formHasContractorAction(formParsed?: Record<string, unknown> | null) {
+  if (!formParsed) return false;
+  if (formParsed.contractorActed === true || formParsed.contractorActed === "yes") return true;
+  const action = String(formParsed.correctiveAction || formParsed.actionTaken || formParsed.contractorResponse || "").trim();
+  return action.length > 20;
+}
+
 export async function notifyNcrStatus(opts: {
   projectId: string;
   recordId?: string;
@@ -16,6 +53,7 @@ export async function notifyNcrStatus(opts: {
   contractorName?: string | null;
   location?: string | null;
   plannedClosure?: Date | string | null;
+  formParsed?: Record<string, unknown> | null;
 }) {
   const label =
     opts.kind === "SafetyNCR" ? "Safety NCR" : opts.kind === "QualityCAR" ? "CAR" : "Quality NCR";
@@ -81,8 +119,12 @@ export async function notifyNcrStatus(opts: {
     /* optional */
   }
 
-  /** Contractor / vendor on the notice receives the form link directly when NCR/CAR is raised */
-  if (opts.event === "created" && opts.contractorEmail?.trim()) {
+  /** Contractor receives form link on raise and when form is saved while still open */
+  const contractorEmail =
+    opts.contractorEmail?.trim() ||
+    (await resolveNcrContractorEmail(opts.projectId, opts.formParsed, opts.contractorName));
+
+  if ((opts.event === "created" || opts.event === "updated") && contractorEmail && opts.status !== "Closed") {
     const contractorMail = buildNcrRaisedEmail({
       ctx: emailCtx,
       registerUrl: formUrl,
@@ -90,7 +132,9 @@ export async function notifyNcrStatus(opts: {
     const contractorBody = [
       contractorMail.bodyText,
       "",
-      "You are named on this notice. Complete the corrective action fields and sign off in the portal form.",
+      opts.event === "created"
+        ? "You are named on this notice. Complete the corrective action fields and sign off in the portal form."
+        : "The form has been updated. Review the latest fields and respond in the portal.",
       "",
       `Open form: ${formUrl}`,
     ].join("\n");
@@ -98,15 +142,37 @@ export async function notifyNcrStatus(opts: {
     try {
       await queueProjectEmail({
         projectId: opts.projectId,
-        subject: `[Action required] ${label} ${opts.number} — ${project?.code || "Project"}`,
+        subject:
+          opts.event === "created"
+            ? `[Action required] ${label} ${opts.number} — ${project?.code || "Project"}`
+            : `[Form saved] ${label} ${opts.number} — please review / respond`,
         body: contractorBody,
-        bodyHtml: contractorMail.bodyHtml.replace(
-          "Open NCR / CAR register",
-          "Open NCR / CAR form"
-        ),
-        context: "ncr.contractor_notice",
+        bodyHtml: contractorMail.bodyHtml.replace(/Open NCR \/ CAR register/g, "Open NCR / CAR form"),
+        context: opts.event === "created" ? "ncr.contractor_notice" : "ncr.contractor_save",
         createdById: opts.createdById,
-        toOverride: opts.contractorEmail.trim(),
+        toOverride: contractorEmail,
+      });
+    } catch {
+      /* optional */
+    }
+  }
+
+  /** When contractor marks action taken, notify SPDC office to review and close */
+  if (opts.event === "updated" && opts.formParsed && formHasContractorAction(opts.formParsed)) {
+    try {
+      await queueProjectEmail({
+        projectId: opts.projectId,
+        subject: `[Review] ${label} ${opts.number} — contractor action submitted`,
+        body: [
+          `${label} ${opts.number} — contractor has submitted corrective action details.`,
+          "",
+          `Status: ${opts.status}`,
+          `Description: ${opts.description}`,
+          "",
+          `Review and close when verified: ${formUrl}`,
+        ].join("\n"),
+        context: "ncr.office_action_review",
+        createdById: opts.createdById,
       });
     } catch {
       /* optional */
@@ -150,6 +216,10 @@ export async function notifyNcrFollowUp(opts: {
 }) {
   const label =
     opts.kind === "SafetyNCR" ? "Safety NCR" : opts.kind === "QualityCAR" ? "CAR" : "Quality NCR";
+
+  const contractorTo =
+    opts.contractorEmail?.trim() ||
+    (await resolveNcrContractorEmail(opts.projectId, null, opts.contractorName));
 
   const formUrl =
     opts.kind === "SafetyNCR"
@@ -206,7 +276,7 @@ export async function notifyNcrFollowUp(opts: {
     /* optional */
   }
 
-  if (opts.contractorEmail?.trim()) {
+  if (contractorTo) {
     try {
       results.contractor = await queueProjectEmail({
         projectId: opts.projectId,
@@ -215,7 +285,7 @@ export async function notifyNcrFollowUp(opts: {
         bodyHtml: mail.bodyHtml,
         context: "ncr.contractor_followup",
         createdById: opts.createdById,
-        toOverride: opts.contractorEmail.trim(),
+        toOverride: contractorTo,
       });
     } catch {
       /* optional */

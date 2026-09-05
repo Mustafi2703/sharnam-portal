@@ -1206,15 +1206,26 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
   });
   await audit("safety.update", { userId: req.user!.id, entity: "SafetyRecord", entityId: row.id });
   if (row.recordType === "NCR") {
-    const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+    const { notifyNcrStatus, resolveNcrContractorEmail } = await import("../services/ncrNotify.js");
+    const contractorEmail = await resolveNcrContractorEmail(row.projectId, null, row.responsibleParty || row.issuedTo);
     await notifyNcrStatus({
       projectId: row.projectId,
+      recordId: row.id,
       kind: "SafetyNCR",
       number: row.ncrNumber || row.title,
       status: row.status,
       description: row.description || row.title,
       createdById: req.user!.id,
       event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
+      contractorEmail,
+      contractorName: row.responsibleParty || row.issuedTo,
+      location: row.location,
+      plannedClosure: row.targetCompletion,
+      formParsed: {
+        correctiveAction: row.correctiveAction,
+        actionTaken: row.actionTaken,
+        rootCause: row.rootCause,
+      },
     });
   }
   const project = await prisma.project.findUnique({
@@ -1232,6 +1243,49 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
     }
   }
   res.json({ ...row, sharePointExports });
+});
+
+safetyRouter.post("/:id/follow-up", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.recordType !== "NCR") return res.status(404).json({ error: "Safety NCR not found" });
+  if (existing.status === "Closed") return res.status(400).json({ error: "Cannot follow up on a closed NCR" });
+
+  const { notifyNcrFollowUp, resolveNcrContractorEmail } = await import("../services/ncrNotify.js");
+  const contractorEmail = await resolveNcrContractorEmail(
+    existing.projectId,
+    null,
+    existing.responsibleParty || existing.issuedTo
+  );
+  const followUpNumber = (existing.followUpDate ? 2 : 1) as number;
+  const email = await notifyNcrFollowUp({
+    projectId: existing.projectId,
+    recordId: existing.id,
+    kind: "SafetyNCR",
+    number: existing.ncrNumber || existing.title,
+    status: existing.status,
+    description: existing.description || existing.title,
+    createdById: req.user!.id,
+    contractorEmail,
+    contractorName: existing.responsibleParty || existing.issuedTo,
+    location: existing.location,
+    plannedClosure: existing.targetCompletion,
+    followUpNumber,
+    note: req.body?.note ? String(req.body.note) : null,
+  });
+
+  await prisma.safetyRecord.update({
+    where: { id: existing.id },
+    data: { followUpDate: new Date() },
+  });
+
+  await audit("safety.ncr.follow-up", {
+    userId: req.user!.id,
+    entity: "SafetyRecord",
+    entityId: existing.id,
+    meta: { followUpNumber },
+  });
+
+  res.json({ ok: true, followUpNumber, email });
 });
 
 safetyRouter.get("/:id/export.xlsx", async (req, res) => {

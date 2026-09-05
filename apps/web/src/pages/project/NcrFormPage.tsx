@@ -116,17 +116,27 @@ export default function NcrFormPage() {
     setBusy(true);
     setMsg("");
     try {
-      const result = await api<any>(`/api/checklist/project/${id}/ncr/${recordId}/follow-up`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ note: followNote || null }),
-      });
+      const result = await api<any>(
+        isQuality
+          ? `/api/checklist/project/${id}/ncr/${recordId}/follow-up`
+          : `/api/safety/${recordId}/follow-up`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({ note: followNote || null }),
+        }
+      );
       setFormData((f) => ({
         ...f,
-        followUpCount: result.followUpCount != null ? String(result.followUpCount) : f.followUpCount,
+        followUpCount:
+          result.followUpCount != null
+            ? String(result.followUpCount)
+            : result.followUpNumber != null
+              ? String(result.followUpNumber)
+              : f.followUpCount,
         lastFollowUpAt: result.lastFollowUpAt || f.lastFollowUpAt,
       }));
-      const followNum = Number(result.followUpCount || 0);
+      const followNum = Number(result.followUpCount ?? result.followUpNumber ?? 0);
       const to = formData.contractorEmail ? ` · emailed ${formData.contractorEmail}` : "";
       const kind = /^CAR/i.test(row.number || "") ? "CAR" : "NCR";
       setMsg(`${kind} follow-up ${followNum} sent${to}`);
@@ -171,7 +181,7 @@ export default function NcrFormPage() {
           updated.sharePointExports?.length > 0
             ? " Branded XLSX + HTML saved to SharePoint."
             : "";
-        setMsg(`Saved${sp}`);
+        setMsg(`Saved${sp} — contractor notified if email is on file.`);
       } else {
         const updated = await api<any>(`/api/safety/${recordId}`, {
           method: "PATCH",
@@ -183,7 +193,7 @@ export default function NcrFormPage() {
           updated.sharePointExports?.length > 0
             ? " Branded XLSX + HTML saved to SharePoint."
             : "";
-        setMsg(`Saved${sp}`);
+        setMsg(`Saved${sp} — contractor notified if email is on file.`);
       }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");

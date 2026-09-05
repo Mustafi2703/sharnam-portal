@@ -31,6 +31,8 @@ type Props = {
   files: SheetFileRecord[];
   canEdit: boolean;
   onChanged: () => void;
+  /** Hide bulk shape upload — use BBS master + per-row upload instead */
+  hideBulkShapes?: boolean;
 };
 
 function fileHref(path?: string, shareUrl?: string) {
@@ -51,6 +53,7 @@ export function CostSheetUploadPanel({
   files,
   canEdit,
   onChanged,
+  hideBulkShapes = false,
 }: Props) {
   const [sheetFile, setSheetFile] = useState<File | null>(null);
   const [replacePkg, setReplacePkg] = useState(false);
@@ -181,7 +184,7 @@ export function CostSheetUploadPanel({
             </form>
           </Card>
 
-          {kind === "bbs" && (
+          {kind === "bbs" && !hideBulkShapes && (
             <Card className="border-brand/25 bg-paper lg:col-span-2">
               <h3 className="font-semibold text-sm mb-1">Bulk shape upload (optional)</h3>
               <p className="text-xs text-steel-muted mb-3">
@@ -210,7 +213,7 @@ export function CostSheetUploadPanel({
         </div>
       )}
 
-      {kind === "bbs" && shapeDraft && (
+      {kind === "bbs" && shapeDraft && !hideBulkShapes && (
         <div className="markup-modal" role="dialog" aria-modal="true" aria-label="BBS shape markup">
           <div className="markup-modal__backdrop" onClick={() => { setShapeDraft(null); setShapePreview(null); }} />
           <div className="markup-modal__panel max-w-4xl">
@@ -248,7 +251,9 @@ export function CostSheetUploadPanel({
       )}
 
       <Card>
-        <h3 className="font-semibold text-sm mb-2">Shared files ({kindFiles.length})</h3>
+        <h3 className="font-semibold text-sm mb-2">
+          {kind === "bbs" && hideBulkShapes ? "Imported sheets" : `Shared files (${kindFiles.length})`}
+        </h3>
         <ul className="text-sm space-y-2 max-h-56 overflow-y-auto">
           {sheetUploads.map((f) => (
             <li key={f.id} className="border border-line px-3 py-2 rounded-sm flex flex-wrap items-center justify-between gap-2">
@@ -270,6 +275,7 @@ export function CostSheetUploadPanel({
             </li>
           ))}
           {kind === "bbs" &&
+            !hideBulkShapes &&
             shapeUploads.map((f) => (
               <li key={f.id} className="border border-line px-3 py-2 rounded-sm flex flex-wrap items-center justify-between gap-2 bg-sand/40">
                 <div>
@@ -289,7 +295,13 @@ export function CostSheetUploadPanel({
                 </a>
               </li>
             ))}
-          {!kindFiles.length && <li className="text-steel-muted text-xs">No uploads yet — import Excel or add shape diagrams above.</li>}
+          {!sheetUploads.length && (hideBulkShapes || kind !== "bbs" || !shapeUploads.length) && (
+            <li className="text-steel-muted text-xs">
+              {kind === "bbs" && hideBulkShapes
+                ? "No Excel imports yet — use Import BBS sheet above; bend diagrams via BBS master or per bar-mark row."
+                : "No uploads yet — import Excel or add shape diagrams above."}
+            </li>
+          )}
         </ul>
       </Card>
     </div>
