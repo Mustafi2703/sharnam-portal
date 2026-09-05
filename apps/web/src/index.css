@@ -99,6 +99,29 @@ body.is-auth-route #root {
   max-height: none;
 }
 
+/* Standalone popup forms (NCR/CAR, checklist fill) — body scroll, not page lock */
+html.is-standalone-form,
+body.is-standalone-form {
+  overflow-x: hidden;
+  overflow-y: auto;
+  height: auto;
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: 100svh;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+body.is-standalone-form #root {
+  overflow-x: hidden;
+  overflow-y: visible;
+  height: auto;
+  min-height: 100%;
+  min-height: 100dvh;
+  min-height: 100svh;
+  max-height: none;
+}
+
 #root {
   overflow: hidden;
 }
@@ -10453,8 +10476,29 @@ body {
 }
 
 /* Standalone popup forms — checklist fill + NCR/CAR (no project module chrome) */
-.checklist-fill-standalone,
-.ncr-form-standalone {
+.checklist-fill-standalone {
   min-height: 100vh;
   background: var(--paper, #faf9f7);
+}
+
+.ncr-form-standalone {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper, #faf9f7);
+}
+
+.ncr-form-standalone > header {
+  position: sticky;
+  top: 0;
+}
+
+.ncr-form-standalone__scroll {
+  flex: 1 1 auto;
+}
+
+.ncr-form-standalone > footer {
+  position: sticky;
+  bottom: 0;
 }

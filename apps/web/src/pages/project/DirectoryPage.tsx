@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
+import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 
 const USER_TOOLS: {
   key: string;
@@ -155,6 +156,22 @@ export default function DirectoryPage() {
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-xl">{msg}</p>}
 
+      {canEdit && id && (
+        <WorkPackagesPanel token={token} projectId={id} onSaved={() => setMsg("Work packages saved for this project.")} />
+      )}
+
+      {canEdit && id && (
+        <Card className="!p-4 bg-sand/30">
+          <h3 className="font-semibold text-sm mb-1">Document library (DMS · ISO Rev 02)</h3>
+          <p className="text-xs text-steel-muted mb-2">
+            Project folder tree in OneDrive — assign logins above so they can open files needed for RFIs, drawings, and site work.
+          </p>
+          <Link to={`/projects/${id}/dms`} className="text-sm font-semibold text-brand">
+            Open project DMS →
+          </Link>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {USER_TOOLS.map((t) => (
           <Card key={t.key} className={`!p-4 ${activeTool.key === t.key ? "border-brand" : ""}`}>
@@ -277,6 +294,8 @@ export default function DirectoryPage() {
                 <option value="member">Member</option>
                 <option value="project_manager">Project Manager</option>
                 <option value="site_engineer">Site Engineer</option>
+                <option value="document_controller">Document Controller (DMS)</option>
+                <option value="quality_lead">Quality Lead</option>
                 <option value="viewer">Viewer</option>
               </Select>
               <Button type="submit">Assign</Button>

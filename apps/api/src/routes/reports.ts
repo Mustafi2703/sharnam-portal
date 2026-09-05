@@ -460,15 +460,22 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
   if (!lead) return res.status(404).json({ error: "Lead not found" });
 
   const bidDisciplinesJson = await resolveBidDisciplinesJson(req.body);
+  const workPackagesJson =
+    Array.isArray(req.body?.workPackages) && req.body.workPackages.length
+      ? JSON.stringify(req.body.workPackages.map(String))
+      : undefined;
 
   if (lead.projectId) {
     const project = await prisma.project.findUnique({ where: { id: lead.projectId } });
     if (!project) return res.status(404).json({ error: "Linked project not found" });
 
-    if (bidDisciplinesJson) {
+    if (bidDisciplinesJson || workPackagesJson) {
       await prisma.project.update({
         where: { id: project.id },
-        data: { bidDisciplinesJson },
+        data: {
+          ...(bidDisciplinesJson ? { bidDisciplinesJson } : {}),
+          ...(workPackagesJson ? { workPackages: workPackagesJson } : {}),
+        },
       });
     }
     if (lead.stage !== "Converted") {
@@ -500,6 +507,7 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
       designConsultant: req.body.designConsultant || undefined,
       contractorName: req.body.contractorName || undefined,
       bidDisciplinesJson,
+      ...(workPackagesJson ? { workPackages: workPackagesJson } : {}),
     },
   });
 

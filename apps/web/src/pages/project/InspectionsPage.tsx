@@ -377,20 +377,21 @@ export default function InspectionsPage() {
                             className="!py-1 !px-2 !text-xs"
                             onClick={async () => {
                               if (!id) return;
+                              const isCar = /^CAR/i.test(n.number || "");
                               try {
                                 await api(`/api/checklist/project/${id}/ncr/${n.id}/follow-up`, {
                                   method: "POST",
                                   token,
                                   body: JSON.stringify({}),
                                 });
-                                setMsg(`Follow-up sent for ${n.number}`);
+                                setMsg(`${isCar ? "CAR" : "NCR"} follow-up sent for ${n.number}`);
                                 await load();
                               } catch (err) {
                                 setMsg(err instanceof Error ? err.message : "Follow-up failed");
                               }
                             }}
                           >
-                            Follow-up
+                            {/^CAR/i.test(n.number || "") ? "CAR follow-up" : "NCR follow-up"}
                           </Button>
                         )}
                         <Button

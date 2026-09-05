@@ -92,6 +92,15 @@ export default function ChecklistFillPage() {
     void load();
   }, [assignmentId, projectId, token]);
 
+  useEffect(() => {
+    document.documentElement.classList.add("is-standalone-form");
+    document.body.classList.add("is-standalone-form");
+    return () => {
+      document.documentElement.classList.remove("is-standalone-form");
+      document.body.classList.remove("is-standalone-form");
+    };
+  }, []);
+
   const selectedDrawing = drawings.find((d) => d.id === drawingId);
   const revs = useMemo(() => {
     const list = [...(selectedDrawing?.revisions || [])];

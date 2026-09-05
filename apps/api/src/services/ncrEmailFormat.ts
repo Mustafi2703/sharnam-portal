@@ -34,6 +34,28 @@ function kindLabel(kind: NcrEmailKind) {
   }
 }
 
+function formActionLabel(kind: NcrEmailKind) {
+  switch (kind) {
+    case "QualityCAR":
+      return "Open CAR form";
+    case "SafetyNCR":
+      return "Open Safety NCR form";
+    default:
+      return "Open NCR form";
+  }
+}
+
+function registerActionLabel(kind: NcrEmailKind) {
+  switch (kind) {
+    case "QualityCAR":
+      return "Open CAR register";
+    case "SafetyNCR":
+      return "Open Safety NCR register";
+    default:
+      return "Open NCR register";
+  }
+}
+
 function ncrDetailRows(ctx: NcrEmailContext): RfiDetailRow[] {
   const rows: RfiDetailRow[] = [
     { label: "Reference no.", value: ctx.number },
@@ -85,9 +107,12 @@ export function buildNcrRaisedEmail(opts: { ctx: NcrEmailContext; registerUrl: s
     detailRows: rows,
     particularsLabel: `${label} particulars`,
     questionLabel: "Non-conformance / observation",
-    primaryAction: { href: opts.registerUrl, label: "Open NCR / CAR register" },
+    primaryAction: { href: opts.registerUrl, label: registerActionLabel(opts.ctx.kind) },
     extraHtml: `<p style="margin:10px 0 0;font-size:12px;color:#64748b;">Register link:<br/><a href="${escapeHtml(opts.registerUrl)}" style="color:#0b6a78;word-break:break-all;">${escapeHtml(opts.registerUrl)}</a></p>`,
-    footerNote: "Complete all mandatory fields on the branded NCR form export before marking Closed.",
+    footerNote:
+      opts.ctx.kind === "QualityCAR"
+        ? "Complete all mandatory fields on the branded CAR form export before marking Closed."
+        : "Complete all mandatory fields on the branded NCR form export before marking Closed.",
   });
 
   const bodyText = [
@@ -141,11 +166,14 @@ export function buildNcrFollowUpEmail(opts: {
     detailRows: rows,
     particularsLabel: `${label} particulars`,
     questionLabel: "Non-conformance / observation",
-    primaryAction: { href: opts.formUrl, label: "Open NCR / CAR form" },
+    primaryAction: { href: opts.formUrl, label: formActionLabel(opts.ctx.kind) },
     extraHtml: opts.note?.trim()
       ? `<p style="margin:12px 0 0;padding:10px 12px;background:#fff7ed;border-left:3px solid #ea580c;font-size:13px;color:#431407;"><strong>SPDC note:</strong> ${escapeHtml(opts.note.trim())}</p>`
       : undefined,
-    footerNote: "Contractor: fill work carried out and sign-off. SPDC office will verify compliance and close the register row.",
+    footerNote:
+      opts.ctx.kind === "QualityCAR"
+        ? "Contractor: fill corrective action and sign-off on the CAR form. SPDC office will verify compliance and close the register row."
+        : "Contractor: fill work carried out and sign-off on the NCR form. SPDC office will verify compliance and close the register row.",
   });
 
   const bodyText = [

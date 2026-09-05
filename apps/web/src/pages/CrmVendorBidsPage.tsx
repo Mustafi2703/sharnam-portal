@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -64,7 +65,7 @@ function VendorPackageCard({
   pkgSlots: BidSlot[];
   summary?: PackageSummary;
   highlighted?: boolean;
-  onUpload: (slot: BidSlot) => void;
+  onUpload: (slot: BidSlot, mode: "online" | "excel") => void;
 }) {
   const head = pkgSlots[0];
   const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
@@ -130,12 +131,10 @@ function VendorPackageCard({
               )}
             </div>
             <div className="flex gap-2 shrink-0">
-              {s.sheetId ? (
-                <Button type="button" variant="primary" className="!text-xs !py-1" onClick={() => onUpload(s)}>
-                  {s.fileName ? "Edit BOQ" : "Fill BOQ online"}
-                </Button>
-              ) : null}
-              <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => onUpload(s)}>
+              <Button type="button" variant="primary" className="!text-xs !py-1" onClick={() => onUpload(s, "online")}>
+                {s.fileName ? "Edit BOQ" : "Fill BOQ online"}
+              </Button>
+              <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => onUpload(s, "excel")}>
                 Upload Excel
               </Button>
             </div>
@@ -155,7 +154,29 @@ export default function CrmVendorBidsPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadSlot, setUploadSlot] = useState<BidSlot | null>(null);
+  const [uploadMode, setUploadMode] = useState<"online" | "excel" | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+
+  function openUpload(slot: BidSlot, mode: "online" | "excel") {
+    setUploadSlot(slot);
+    setUploadMode(mode);
+    setUploadFile(null);
+  }
+
+  function closeUpload() {
+    setUploadSlot(null);
+    setUploadMode(null);
+    setUploadFile(null);
+  }
+
+  useEffect(() => {
+    if (!uploadSlot) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [uploadSlot]);
 
   const load = useCallback(async () => {
     const rows = await api<BidSlot[]>("/api/crm/my-bid-slots", { token }).catch(() => []);
@@ -214,8 +235,7 @@ export default function CrmVendorBidsPage() {
         body: fd,
       });
       setMsg(`Uploaded — ${uploadSlot.disciplineLabel}${uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}`);
-      setUploadSlot(null);
-      setUploadFile(null);
+      closeUpload();
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Upload failed");
@@ -290,48 +310,82 @@ export default function CrmVendorBidsPage() {
               pkgSlots={pkgSlots}
               summary={summaries[pkgId]}
               highlighted={focusPkgId === pkgId}
-              onUpload={setUploadSlot}
+              onUpload={openUpload}
             />
           ))}
         </div>
       ))}
 
-      {uploadSlot && (
-        <CrmBidBoqRegister
-          token={token!}
-          bidPackageId={uploadSlot.bidPackageId}
-          slotId={uploadSlot.id}
-          title={`${uploadSlot.disciplineLabel}${uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}`}
-          sheetLabel={uploadSlot.disciplineLabel}
-          canEdit
-          onSaved={() => void load()}
-          onClose={() => setUploadSlot(null)}
-        />
-      )}
-
-      {uploadSlot && (
-        <Card>
-          <h4 className="font-semibold text-sm mb-2">
-            Upload Excel — {uploadSlot.disciplineLabel}
-          </h4>
-          <p className="text-xs text-steel-muted mb-3">
-            Use the matching discipline sheet from Comparative Statement R2 (CCV, Admin, Security, …).
-          </p>
-          <form className="space-y-3" onSubmit={uploadBoq}>
-            <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
-              {uploadFile ? uploadFile.name : "Choose Excel from R2 workbook"}
-            </FilePickButton>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={!uploadFile || busy}>
-                Upload
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setUploadSlot(null)}>
-                Cancel
-              </Button>
+      {uploadSlot &&
+        uploadMode &&
+        createPortal(
+          <div className="register-modal" role="dialog" aria-modal="true" onClick={closeUpload}>
+            <div className={`register-modal__panel register-modal__panel--2xl`} onClick={(e) => e.stopPropagation()}>
+              <div className="register-modal__head">
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-steel-muted">R2 bid BOQ</div>
+                  <h3 className="font-semibold text-base sm:text-lg">
+                    {uploadSlot.disciplineLabel}
+                    {uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}
+                  </h3>
+                </div>
+                <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={closeUpload} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <div className="register-modal__body">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Button
+                    type="button"
+                    variant={uploadMode === "online" ? "primary" : "secondary"}
+                    className="!text-xs"
+                    onClick={() => setUploadMode("online")}
+                  >
+                    Fill online
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={uploadMode === "excel" ? "primary" : "secondary"}
+                    className="!text-xs"
+                    onClick={() => setUploadMode("excel")}
+                  >
+                    Upload Excel
+                  </Button>
+                </div>
+                {uploadMode === "online" ? (
+                  <CrmBidBoqRegister
+                    token={token!}
+                    bidPackageId={uploadSlot.bidPackageId}
+                    slotId={uploadSlot.id}
+                    title={uploadSlot.disciplineLabel}
+                    sheetLabel={uploadSlot.disciplineLabel}
+                    canEdit
+                    onSaved={() => void load()}
+                    onClose={closeUpload}
+                  />
+                ) : (
+                  <form className="space-y-3" onSubmit={uploadBoq}>
+                    <p className="text-xs text-steel-muted">
+                      Use the matching discipline sheet from Comparative Statement R2 ({uploadSlot.disciplineLabel}).
+                    </p>
+                    <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
+                      {uploadFile ? uploadFile.name : "Choose Excel from R2 workbook"}
+                    </FilePickButton>
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={!uploadFile || busy}>
+                        {busy ? "Uploading…" : "Upload BOQ"}
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={closeUpload}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
-          </form>
-        </Card>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

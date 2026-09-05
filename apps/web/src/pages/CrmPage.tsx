@@ -66,8 +66,12 @@ export default function CrmPage() {
     memberIds: [] as string[],
     vendorIds: [] as string[],
     disciplineKeys: [] as string[],
+    workPackages: [] as string[],
   });
   const [bidDisciplines, setBidDisciplines] = useState<{ key: string; label: string }[]>([]);
+  const [workPackageCatalog, setWorkPackageCatalog] = useState<string[]>([]);
+  const [newCatalogPackage, setNewCatalogPackage] = useState("");
+  const [catalogBusy, setCatalogBusy] = useState(false);
   const [editProject, setEditProject] = useState<any | null>(null);
   const [leadsView, setLeadsView] = useState<LeadsView>("register");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -77,15 +81,18 @@ export default function CrmPage() {
 
   useEffect(() => {
     if (!canManage || !token) return;
-    void api<{ key: string; label: string }[]>("/api/crm/disciplines", { token })
-      .then((rows) => {
-        setBidDisciplines(rows);
-        setConvertForm((f) => ({
-          ...f,
-          disciplineKeys: f.disciplineKeys.length ? f.disciplineKeys : rows.map((d) => d.key),
-        }));
-      })
-      .catch(() => {});
+    void Promise.all([
+      api<{ key: string; label: string }[]>("/api/crm/disciplines", { token }),
+      api<{ packages: string[] }>("/api/projects/work-package-catalog", { token }).catch(() => ({ packages: ["Civil", "PEB"] })),
+    ]).then(([rows, pkgRes]) => {
+      setBidDisciplines(rows);
+      setWorkPackageCatalog(pkgRes.packages || ["Civil", "PEB"]);
+      setConvertForm((f) => ({
+        ...f,
+        disciplineKeys: f.disciplineKeys.length ? f.disciplineKeys : rows.map((d) => d.key),
+        workPackages: f.workPackages.length ? f.workPackages : (pkgRes.packages || ["Civil", "PEB"]).slice(0, 2),
+      }));
+    }).catch(() => {});
   }, [token, canManage]);
 
   function openSetupBids(lead: CrmLead) {
@@ -111,6 +118,7 @@ export default function CrmPage() {
       memberIds: [],
       vendorIds: [],
       disciplineKeys: bidDisciplines.map((d) => d.key),
+      workPackages: workPackageCatalog.length ? workPackageCatalog.slice(0, 2) : ["Civil", "PEB"],
     });
   }
 
@@ -220,6 +228,31 @@ export default function CrmPage() {
     setLeadAddOpen(false);
     setMsg("Lead added.");
     await load();
+  }
+
+  async function addCatalogPackage(e: FormEvent) {
+    e.preventDefault();
+    const name = newCatalogPackage.trim();
+    if (!name) return;
+    setCatalogBusy(true);
+    try {
+      const r = await api<{ packages: string[] }>("/api/projects/work-package-catalog", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ name }),
+      });
+      setWorkPackageCatalog(r.packages);
+      setConvertForm((f) => ({
+        ...f,
+        workPackages: f.workPackages.includes(name) ? f.workPackages : [...f.workPackages, name].sort(),
+      }));
+      setNewCatalogPackage("");
+      setMsg(`Added “${name}” to work package catalogue.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed to add package");
+    } finally {
+      setCatalogBusy(false);
+    }
   }
 
   async function runConvert(e: FormEvent) {
@@ -558,9 +591,9 @@ export default function CrmPage() {
               </div>
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="text-xs font-mono uppercase text-steel-muted">Bid disciplines (PEB, Civil, Fire…)</div>
-                  <Link to="/master/vendors" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
-                    Vendor directory ↗
+                  <div className="text-xs font-mono uppercase text-steel-muted">R2 bid packages (BOQ sheets — CCV, Admin, Security…)</div>
+                  <Link to="/master?tab=vendors" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
+                    Tag vendors ↗
                   </Link>
                 </div>
                 <div className="max-h-32 overflow-y-auto border rounded-xl p-2 grid sm:grid-cols-2 gap-1">
@@ -599,6 +632,45 @@ export default function CrmPage() {
                   emptyMessage="No vendors for selected disciplines — seed R2 catalog in Master → Vendors."
                   maxHeightClass="max-h-36"
                 />
+              </div>
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="text-xs font-mono uppercase text-steel-muted">Work packages (Civil, PEB, MEP…)</div>
+                  <Link to="/master?tab=packages" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
+                    Directory · packages ↗
+                  </Link>
+                </div>
+                <div className="max-h-32 overflow-y-auto border rounded-xl p-2 flex flex-wrap gap-1.5 mb-2">
+                  {workPackageCatalog.map((p) => (
+                    <label key={p} className="inline-flex items-center gap-1.5 text-xs rounded-full border border-line px-2.5 py-1 bg-paper">
+                      <input
+                        type="checkbox"
+                        checked={convertForm.workPackages.includes(p)}
+                        onChange={(e) => {
+                          setConvertForm({
+                            ...convertForm,
+                            workPackages: e.target.checked
+                              ? [...convertForm.workPackages, p].sort()
+                              : convertForm.workPackages.filter((x) => x !== p),
+                          });
+                        }}
+                      />
+                      {p}
+                    </label>
+                  ))}
+                  {!workPackageCatalog.length && <span className="text-xs text-steel-muted">Loading packages…</span>}
+                </div>
+                <form className="flex flex-wrap gap-2 items-end" onSubmit={addCatalogPackage}>
+                  <Input
+                    className="flex-1 min-w-[160px] !text-xs"
+                    placeholder="Add new package to catalogue"
+                    value={newCatalogPackage}
+                    onChange={(e) => setNewCatalogPackage(e.target.value)}
+                  />
+                  <Button type="submit" variant="secondary" className="!text-xs" disabled={catalogBusy || !newCatalogPackage.trim()}>
+                    Add package
+                  </Button>
+                </form>
               </div>
               <div className="flex gap-2">
                 <Button type="submit">Create project + open bids</Button>

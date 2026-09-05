@@ -184,7 +184,7 @@ export default function HrmsVendorsPage() {
           </div>
         </div>
         <div>
-          <p className="text-xs font-semibold text-steel-muted mb-2">CRM bid disciplines (R2 BOQ)</p>
+          <p className="text-xs font-semibold text-steel-muted mb-2">R2 bid packages (Comparative Statement BOQ sheets)</p>
           <div className="flex flex-wrap gap-2">
             {CRM_BID_DISCIPLINES.map((d) => (
               <button

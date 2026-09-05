@@ -79,6 +79,15 @@ export default function NcrFormPage() {
     void load();
   }, [id, recordId, token, isQuality]);
 
+  useEffect(() => {
+    document.documentElement.classList.add("is-standalone-form");
+    document.body.classList.add("is-standalone-form");
+    return () => {
+      document.documentElement.classList.remove("is-standalone-form");
+      document.body.classList.remove("is-standalone-form");
+    };
+  }, []);
+
   const missing = useMemo(() => {
     if (!row) return [];
     if (isQuality) {
@@ -124,7 +133,8 @@ export default function NcrFormPage() {
       }));
       const followNum = Number(result.followUpCount || 0);
       const to = formData.contractorEmail ? ` · emailed ${formData.contractorEmail}` : "";
-      setMsg(`Follow-up ${followNum} sent${to}`);
+      const kind = /^CAR/i.test(row.number || "") ? "CAR" : "NCR";
+      setMsg(`${kind} follow-up ${followNum} sent${to}`);
       setFollowNote("");
       await load();
     } catch (err) {
@@ -252,22 +262,25 @@ export default function NcrFormPage() {
   const canClose = isQuality ? closeMissing.length === 0 : missing.length === 0;
   const templateName = isQuality ? "NCR 01 .xlsx · Quality Dashboard" : "Safety NCR.xlsx";
   const closeBlockers = isQuality ? closeMissing : missing;
+  const isCar = isQuality && /^CAR/i.test(row.number || "");
+  const recordLabel = isQuality ? (isCar ? "CAR" : "NCR") : "Safety NCR";
 
   return (
-    <div className="ncr-form-standalone min-h-screen bg-paper flex flex-col">
-      <header className="sticky top-0 z-20 bg-procore-navy text-white border-b border-white/10 shadow-sm shrink-0">
+    <div className="ncr-form-standalone">
+      <header className="z-20 bg-procore-navy text-white border-b border-white/10 shadow-sm shrink-0">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-mono uppercase tracking-wider text-white/70">
-              {isQuality ? "Quality · CAR / NCR" : "Safety · NCR"}
+              {isQuality ? (isCar ? "Quality · Corrective Action Request" : "Quality · Non-conformance") : "Safety · NCR"}
             </div>
-            <div className="font-mono text-sm truncate">{row.number || row.ncrNumber || "NCR"}</div>
+            <div className="font-mono text-sm truncate">{row.number || row.ncrNumber || recordLabel}</div>
           </div>
           <Badge tone={row.status === "Open" ? "warn" : "ok"}>{row.status}</Badge>
         </div>
       </header>
 
-      <div className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4 w-full pb-28">
+      <main className="ncr-form-standalone__scroll">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-4 w-full pb-6">
         <PageHeader
           eyebrow={templateName}
           title={row.description?.slice(0, 100) || "Non-conformance report"}
@@ -291,7 +304,7 @@ export default function NcrFormPage() {
 
         {isQuality ? (
           <Card className="space-y-3">
-            <h3 className="font-semibold text-sm">NCR 01 — Non-Conformance / CAR</h3>
+            <h3 className="font-semibold text-sm">{isCar ? "NCR 01 — Corrective Action Request (CAR)" : "NCR 01 — Non-Conformance Report"}</h3>
             <div className="grid sm:grid-cols-2 gap-2">
               <Input
                 placeholder="Project name"
@@ -394,15 +407,15 @@ export default function NcrFormPage() {
 
             {isOfficeAdmin && (
               <Card className="!p-4 bg-sand/30 border-brand/20 space-y-3">
-                <h4 className="font-semibold text-sm">SPDC office — follow-up &amp; close-out</h4>
+                <h4 className="font-semibold text-sm">SPDC office — {isCar ? "CAR" : "NCR"} follow-up &amp; close-out</h4>
                 <p className="text-xs text-steel-muted leading-relaxed">
-                  Send reminders to the contractor, record whether they acted, then complete close-out and close the
-                  register row when verified.
+                  Send {isCar ? "CAR" : "NCR"} reminders to the contractor, record whether they acted, then complete
+                  close-out and close the register row when verified.
                 </p>
 
                 {row.status === "Open" && (
                   <div className="rounded-lg border border-line bg-white p-3 space-y-2">
-                    <p className="text-xs font-semibold text-ink">Send follow-up to contractor</p>
+                    <p className="text-xs font-semibold text-ink">Send {isCar ? "CAR" : "NCR"} follow-up to contractor</p>
                     <TextArea
                       rows={2}
                       placeholder="Optional note (e.g. planned closure date approaching)"
@@ -410,7 +423,9 @@ export default function NcrFormPage() {
                       onChange={(e) => setFollowNote(e.target.value)}
                     />
                     <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => void sendFollowUp()}>
-                      {busy ? "Sending…" : `Send follow-up${Number(formData.followUpCount || 0) > 0 ? ` (${formData.followUpCount} sent)` : ""}`}
+                      {busy
+                        ? "Sending…"
+                        : `Send ${isCar ? "CAR" : "NCR"} follow-up${Number(formData.followUpCount || 0) > 0 ? ` (${formData.followUpCount} sent)` : ""}`}
                     </Button>
                   </div>
                 )}
@@ -562,8 +577,9 @@ export default function NcrFormPage() {
           </Card>
         )}
       </div>
+      </main>
 
-      <footer className="sticky bottom-0 z-20 border-t border-line bg-paper/95 backdrop-blur-sm shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+      <footer className="z-20 border-t border-line bg-paper shadow-[0_-4px_20px_rgba(0,0,0,0.06)] shrink-0">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
           <Button type="button" disabled={busy} onClick={() => void saveDraft()}>
             {busy ? "Saving…" : "Save form"}
@@ -581,7 +597,7 @@ export default function NcrFormPage() {
               onClick={() => void closeRecord()}
               title={!canClose ? `Complete: ${closeBlockers.join(", ")}` : undefined}
             >
-              Close NCR / CAR
+              Close {recordLabel}
             </Button>
           )}
           {row.status === "Open" && !isOfficeAdmin && (

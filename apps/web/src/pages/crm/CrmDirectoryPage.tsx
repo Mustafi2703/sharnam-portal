@@ -206,16 +206,21 @@ export function DirectoryCompaniesPanel({
           <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
           <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           {(tab === "vendors" || meta.partyTypes.includes("Contractor")) && (
-            <div>
-              <p className="text-xs font-semibold uppercase text-steel-muted mb-2">Vendor type & R2 bid disciplines</p>
-              <p className="text-[10px] text-steel-muted mb-2">Tag civil, electrical, plumbing packages — used when picking bidders on convert.</p>
-              <div className="flex flex-wrap gap-2">
-                {CRM_BID_DISCIPLINES.map((d) => (
-                  <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
-                    <input type="checkbox" checked={parseVendorBidDisciplines(form.trade).includes(d.key)} onChange={() => toggleBidDiscipline(d.key)} />
-                    {d.label}
-                  </label>
-                ))}
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase text-steel-muted mb-1">R2 bid packages (Comparative Statement BOQ sheets)</p>
+                <p className="text-[10px] text-steel-muted mb-2">
+                  Tag which BOQ sheets this contractor can bid — CCV, Electrical Lab, Admin, etc. Used when picking bidders on CRM convert.
+                  Not the same as project work packages (Civil, PEB, MEP).
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {CRM_BID_DISCIPLINES.map((d) => (
+                    <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
+                      <input type="checkbox" checked={parseVendorBidDisciplines(form.trade).includes(d.key)} onChange={() => toggleBidDiscipline(d.key)} />
+                      {d.label}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -328,9 +333,9 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
             <option value="admin">Admin (office portal)</option>
             <option value="office">Office team</option>
             <option value="employee">Stakeholder / partner PMC</option>
+            <option value="site_employee">Site employee</option>
             <option value="vendor">Vendor / contractor</option>
             <option value="client">Client</option>
-            <option value="site_employee">Site employee</option>
           </Select>
           <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           {canEdit && <Button type="submit">Create login</Button>}

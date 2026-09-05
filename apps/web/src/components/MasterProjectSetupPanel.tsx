@@ -192,7 +192,10 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
             <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
               <option value="project_manager">Project Manager</option>
               <option value="site_engineer">Site Engineer</option>
+              <option value="document_controller">Document Controller (DMS)</option>
+              <option value="quality_lead">Quality Lead</option>
               <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
             </Select>
             <Button type="submit" variant="secondary" disabled={busy}>
               Assign
@@ -203,7 +206,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
             <Input placeholder="Full name" value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} required />
             <Input placeholder="Email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
             <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-              {["site_employee", "office", "employee", "client", "vendor"].map((r) => (
+              {["site_employee", "office", "employee", "client", "vendor", "admin"].map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -272,6 +275,17 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
           </form>
         </Card>
       </div>
+
+      <Card className="!p-4 space-y-2 bg-sand/30">
+        <h3 className="font-semibold text-sm">DMS · ISO folder tree (OneDrive)</h3>
+        <p className="text-xs text-steel-muted leading-relaxed">
+          Created automatically when the project is converted or quick-created. Assign people above so they can view and upload
+          in the project document library — site and office need access to address RFIs and NCRs.
+        </p>
+        <Link to={`/projects/${projectId}/dms`} className="text-sm font-semibold text-brand inline-block">
+          Open {summary.project.code} document library →
+        </Link>
+      </Card>
 
       <Card className="!p-4 space-y-3">
         <div className="flex flex-wrap justify-between gap-2 items-center">

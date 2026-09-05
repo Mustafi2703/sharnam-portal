@@ -387,6 +387,21 @@ projectsRouter.get("/", async (req: AuthedRequest, res) => {
   res.json(memberships.map((m) => m.project));
 });
 
+projectsRouter.get("/work-package-catalog", async (_req, res) => {
+  const { getWorkPackageCatalog } = await import("../services/workPackageCatalog.js");
+  res.json({ packages: await getWorkPackageCatalog() });
+});
+
+projectsRouter.post("/work-package-catalog", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { addWorkPackageCatalogEntry } = await import("../services/workPackageCatalog.js");
+  try {
+    const packages = await addWorkPackageCatalogEntry(String(req.body?.name || ""));
+    res.json({ packages });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid package" });
+  }
+});
+
 projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const {
     code,
@@ -1147,7 +1162,7 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
     prisma.drawingRegisterLine.findMany({
       where: { projectId },
       orderBy: { srNo: "asc" },
-      include: { drawing: { select: { id: true, isPublished: true, currentRev: true } } },
+      include: { drawing: { select: { id: true, isPublished: true, currentRev: true, drawingNo: true } } },
     }),
     Promise.resolve(loadDrawingRegisterDashboard()),
   ]);

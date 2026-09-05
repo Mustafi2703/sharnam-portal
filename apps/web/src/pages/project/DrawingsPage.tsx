@@ -62,6 +62,7 @@ export default function DrawingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [drawings, setDrawings] = useState<any[]>([]);
+  const [drawingsLoaded, setDrawingsLoaded] = useState(false);
   const [filter, setFilter] = useState("All");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
@@ -108,8 +109,10 @@ export default function DrawingsPage() {
   const clientOnly = isClientViewOnly(user?.role);
 
   const load = async () => {
+    setDrawingsLoaded(false);
     const d = await api<any[]>(`/api/drawings/project/${id}`, { token });
     setDrawings(d);
+    setDrawingsLoaded(true);
   };
 
   useEffect(() => {
@@ -128,11 +131,41 @@ export default function DrawingsPage() {
 
   useEffect(() => {
     if (!id || !canUpload) return;
-    if (searchParams.get("upload") === "1") {
-      startUploadFlow();
-      setSearchParams({}, { replace: true });
+    if (searchParams.get("upload") !== "1") return;
+
+    const drawingNumber = searchParams.get("drawingNumber")?.trim() || "";
+    if (drawingNumber && !drawingsLoaded) return;
+
+    const title = searchParams.get("title") || "";
+    const discipline = searchParams.get("discipline") || "Architecture";
+    setSearchParams({}, { replace: true });
+
+    if (drawingNumber) {
+      const norm = (s: string) =>
+        String(s)
+          .replace(/\s·\s*\d+$/, "")
+          .trim()
+          .toUpperCase();
+      const match = drawings.find((d) => norm(d.drawingNumber) === norm(drawingNumber));
+      if (match) {
+        openUploadRev(match);
+        setMsg(`Master register → upload GFC revision for ${match.drawingNumber}`);
+        return;
+      }
+      setAddRowForm({
+        drawingNumber,
+        title,
+        discipline,
+        buildingArea: "",
+        tlNo: "",
+      });
+      setAddRowOpen(true);
+      setMsg(`Master register → add GFC row for ${drawingNumber} (syncs back to master register).`);
+      return;
     }
-  }, [id, canUpload, searchParams, setSearchParams]);
+
+    startUploadFlow();
+  }, [id, canUpload, searchParams, setSearchParams, drawings, drawingsLoaded]);
 
   function onPrecheckUnlocked(tok: string) {
     setPrecheckOpen(false);

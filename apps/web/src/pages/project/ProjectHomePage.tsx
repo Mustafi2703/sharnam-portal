@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Stat, WorkflowStrip } from "../../components/ui";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
+import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function ProjectHomePage() {
   const [packMsg, setPackMsg] = useState("");
   const isClient = user?.role === "client";
   const canUpload = user && user.role !== "client";
+  const canManageProject = user?.role === "admin" || user?.role === "office";
 
   useEffect(() => {
     api(`/api/directory/project/${id}/overview`, { token }).then(setOverview).catch(console.error);
@@ -133,6 +135,10 @@ export default function ProjectHomePage() {
           />
           {packMsg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{packMsg}</p>}
         </div>
+      )}
+
+      {canManageProject && id && (
+        <WorkPackagesPanel token={token} projectId={id} />
       )}
 
       <WorkflowStrip

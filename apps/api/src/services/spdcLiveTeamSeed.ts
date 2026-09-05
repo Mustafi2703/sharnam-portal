@@ -13,8 +13,8 @@ export const LIVE_TEAM: { email: string; fullName: string; role: RoleKey; org: s
   { email: "baibhabmustafi@gmail.com", fullName: "Baibhab Kumar Mustafi", role: "admin", org: "Twinoxis / SPDC UAT" },
   { email: "admin@twinoxis.com", fullName: "Twinoxis Admin", role: "admin", org: "Twinoxis" },
   { email: "hello@twinoxis.com", fullName: "Twinoxis Operations", role: "office", org: "Twinoxis" },
-  { email: "nirav@spdc.in", fullName: "Nirav Shah", role: "office", org: "SPDC" },
-  { email: "operations@spdc.in", fullName: "SPDC Operations Desk", role: "office", org: "SPDC" },
+  { email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "office", org: "SPDC" },
+  { email: "operations@spdc.in", fullName: "Saurabh", role: "office", org: "SPDC" },
 ];
 
 const ALL_NOTIFY = LIVE_TEAM.map((t) => t.email).join(", ");
@@ -86,7 +86,7 @@ async function seedContacts(db: PrismaClient, projectId: string) {
   let order = 0;
   const sections: { section: string; people: typeof LIVE_TEAM }[] = [
     { section: "PMC", people: LIVE_TEAM.filter((t) => t.org.includes("SPDC") || t.email.includes("twinoxis") || t.email.includes("baibhab")) },
-    { section: "Client", people: [{ email: "nirav@spdc.in", fullName: "Nirav Shah", role: "office" as RoleKey, org: "SPDC" }] },
+    { section: "Client", people: [{ email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "office" as RoleKey, org: "SPDC" }] },
   ];
   for (const { section, people } of sections) {
     await db.communicationContact.create({
@@ -192,7 +192,7 @@ async function seedCoordination(db: PrismaClient, projectId: string, userIds: Re
       location: "Grid C4",
       priority: "Medium",
       assignedToEmail: "nirav@spdc.in",
-      assignedToName: "Nirav Shah",
+      assignedToName: "Nirav Parekh",
       followUpCount: 0,
     },
   ];

@@ -4,6 +4,8 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
 import { ModuleIcon } from "../components/icons";
+import { WorkPackagesPanel } from "../components/WorkPackagesPanel";
+import { MasterProjectSetupPanel } from "../components/MasterProjectSetupPanel";
 import {
   DirectoryCompaniesPanel,
   DirectoryPeoplePanel,
@@ -32,39 +34,11 @@ const DIRECTORY_TABS = [
   { id: "clients", label: "Clients" },
   { id: "vendors", label: "Vendors & contractors" },
   { id: "stakeholders", label: "Stakeholders" },
+  { id: "packages", label: "Work packages" },
   { id: "projects", label: "Projects" },
-  { id: "modules", label: "Module toggles" },
-  { id: "checklists", label: "Checklist masters" },
 ] as const;
 
 type DirectoryTab = (typeof DIRECTORY_TABS)[number]["id"];
-
-const CHECKLIST_MASTERS = [
-  {
-    to: "/master/checklists?family=DrawingCheck",
-    label: "Drawing-check master",
-    hint: "Pre-upload drawing review checklists — every project",
-    tag: "Drawings",
-  },
-  {
-    to: "/master/checklists?family=QualityInspection",
-    label: "Quality (QI) master",
-    hint: "SPDC F-01 inspection templates",
-    tag: "Quality",
-  },
-  {
-    to: "/master/checklists?family=Safety",
-    label: "Safety checklist master",
-    hint: "SPDC HSE pack F-01 / F-02 / F-03",
-    tag: "Safety",
-  },
-  {
-    to: "/master/checklists?family=SiteExecution",
-    label: "Site execution master",
-    hint: "Activity F-02 site checklists",
-    tag: "Quality · Site",
-  },
-] as const;
 
 /** Sharnam PMC company directory — clients, vendors, stakeholders, people, projects. */
 export default function MasterModulePage() {
@@ -76,6 +50,8 @@ export default function MasterModulePage() {
   const [form, setForm] = useState({ code: "", name: "", clientName: "", location: "" });
   const [msg, setMsg] = useState("");
   const [dirMsg, setDirMsg] = useState("");
+  const [dirUsers, setDirUsers] = useState<{ id: string; fullName: string; email: string; role: string }[]>([]);
+  const [dirVendors, setDirVendors] = useState<{ id: string; name: string; partyType?: string; trade?: string }[]>([]);
   const canManage = user?.role === "admin" || user?.role === "office";
 
   const directoryTab: DirectoryTab =
@@ -94,6 +70,17 @@ export default function MasterModulePage() {
     void load();
   }, [token]);
 
+  useEffect(() => {
+    if (!canManage || !token || directoryTab !== "projects") return;
+    void Promise.all([
+      api<any[]>("/api/users", { token }).catch(() => []),
+      api<any[]>("/api/vendors", { token }).catch(() => []),
+    ]).then(([u, v]) => {
+      setDirUsers(u);
+      setDirVendors(v);
+    });
+  }, [token, canManage, directoryTab]);
+
   function setDirectoryTab(id: DirectoryTab) {
     setSearchParams({ tab: id }, { replace: true });
   }
@@ -106,8 +93,8 @@ export default function MasterModulePage() {
       setForm({ code: "", name: "", clientName: "", location: "" });
       localStorage.setItem(WORKSPACE_PROJECT_KEY, created.id);
       setDirProjectId(created.id);
-      setMsg(`Project ${created.code} created — assign directory and toggle modules.`);
-      setDirectoryTab("modules");
+      setMsg(`Project ${created.code} created — assign directory, packages, and modules under Projects.`);
+      setDirectoryTab("projects");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -131,7 +118,7 @@ export default function MasterModulePage() {
       <PageHeader
         eyebrow="Sharnam PMC · Directory"
         title="Company directory"
-        subtitle="Maintain clients, vendors, stakeholders, and portal logins. CRM holds client pipeline data; Bid management holds contractor packages. MB / BBS / shape codes are per project under Cost."
+        subtitle="Maintain clients, vendors, stakeholders, and portal logins per project. Each new project gets an ISO folder tree in DMS / OneDrive. CRM holds pipeline; bids open from project setup."
         icon={<ModuleIcon name="master" size={20} className="text-white" />}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -208,8 +195,98 @@ export default function MasterModulePage() {
         </div>
       )}
 
+      {directoryTab === "packages" && (
+        <div className="space-y-4">
+          <Card className="!p-4 bg-sand/30 border-line">
+            <h2 className="font-display text-lg">Org work package catalogue</h2>
+            <p className="text-sm text-steel-muted mt-1">
+              Add packages once (Civil, PEB, MEP, …) — they appear on CRM convert and can be assigned per project under
+              Projects.
+            </p>
+          </Card>
+          <WorkPackagesPanel token={token} onSaved={() => setDirMsg("Package catalogue updated.")} />
+        </div>
+      )}
+
       {directoryTab === "projects" && (
         <div className="space-y-6">
+          <Card className="!p-4 bg-sand/30 border-line">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="font-display text-lg">Project setup</h2>
+                <p className="text-sm text-steel-muted mt-1">
+                  Assign people (with emails), vendors, and work packages before opening the project desk.
+                </p>
+              </div>
+              <Select className="min-w-[240px]" value={dirProjectId} onChange={(e) => setDirProjectId(e.target.value)}>
+                <option value="">Select project…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} — {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </Card>
+
+          <WorkPackagesPanel token={token} projectId={dirProjectId || undefined} onSaved={() => setDirMsg("Work packages saved.")} />
+
+          {dirProject && (
+            <Card className="!p-5">
+              <h2 className="font-display text-lg mb-1">Module toggles</h2>
+              <p className="text-sm text-steel-muted mb-3">Which modules appear on {dirProject.code}&apos;s top bar.</p>
+              <div className="flex flex-wrap gap-2">
+                {WORKSPACES.map((w) => {
+                  let enabled: WorkspaceKey[] = DEFAULT_ENABLED_MODULES;
+                  try {
+                    if (dirProject.enabledModules != null && dirProject.enabledModules !== "") {
+                      const parsed = JSON.parse(dirProject.enabledModules);
+                      if (Array.isArray(parsed)) enabled = parsed as WorkspaceKey[];
+                    }
+                  } catch {
+                    /* ignore */
+                  }
+                  const on = enabled.includes(w.key);
+                  return (
+                    <button
+                      key={w.key}
+                      type="button"
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
+                        on ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted hover:border-brand"
+                      }`}
+                      onClick={async () => {
+                        const next = on ? enabled.filter((k) => k !== w.key) : [...enabled, w.key];
+                        const updated = await api<Project>(`/api/progress/${dirProject.id}/modules`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ enabledModules: next }),
+                        });
+                        setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+                        setDirMsg(`Modules updated for ${dirProject.code}.`);
+                      }}
+                    >
+                      {w.title}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {dirProjectId && token ? (
+            <Card className="!p-5">
+              <MasterProjectSetupPanel
+                projectId={dirProjectId}
+                token={token}
+                allUsers={dirUsers}
+                allVendors={dirVendors}
+                onMsg={setDirMsg}
+              />
+            </Card>
+          ) : (
+            <Card className="!p-4 text-sm text-steel-muted">Select a project above to assign team and vendors.</Card>
+          )}
+
           <Card className="!p-5 border-brand/30 bg-brand-soft/40">
             <h2 className="font-display text-lg mb-1">Recommended: CRM → Convert lead</h2>
             <p className="text-sm text-steel-muted mb-3">
@@ -268,90 +345,7 @@ export default function MasterModulePage() {
         </div>
       )}
 
-      {directoryTab === "modules" && (
-        <Card>
-          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            <div>
-              <h2 className="font-display text-xl">Module toggles</h2>
-              <p className="text-sm text-steel-muted mt-1">Which modules appear on this project’s top bar.</p>
-            </div>
-            <Select className="min-w-[220px]" value={dirProjectId} onChange={(e) => setDirProjectId(e.target.value)}>
-              <option value="">Select project…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {dirProject ? (
-            <div className="flex flex-wrap gap-2">
-              {WORKSPACES.map((w) => {
-                let enabled: WorkspaceKey[] = DEFAULT_ENABLED_MODULES;
-                try {
-                  if (dirProject.enabledModules != null && dirProject.enabledModules !== "") {
-                    const parsed = JSON.parse(dirProject.enabledModules);
-                    if (Array.isArray(parsed)) enabled = parsed as WorkspaceKey[];
-                  }
-                } catch {
-                  /* ignore */
-                }
-                const on = enabled.includes(w.key);
-                return (
-                  <button
-                    key={w.key}
-                    type="button"
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
-                      on ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted hover:border-brand"
-                    }`}
-                    onClick={async () => {
-                      const next = on ? enabled.filter((k) => k !== w.key) : [...enabled, w.key];
-                      const updated = await api<Project>(`/api/progress/${dirProject.id}/modules`, {
-                        method: "PATCH",
-                        token,
-                        body: JSON.stringify({ enabledModules: next }),
-                      });
-                      setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-                      setDirMsg(`Modules updated for ${dirProject.code}.`);
-                    }}
-                  >
-                    {w.title}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-steel-muted">Select a project.</p>
-          )}
-        </Card>
-      )}
-
-      {directoryTab === "checklists" && (
-        <div className="space-y-4">
-          <Card className="!p-4 bg-sand/30 border-line">
-            <p className="text-sm text-steel-muted">
-              Org-wide checklist line libraries — assign to projects from each module’s checklist master.{" "}
-              <strong className="text-ink">MB / BBS templates</strong> upload per project on{" "}
-              <span className="font-medium">Cost → MB / BBS</span>; shape codes on{" "}
-              <span className="font-medium">Cost → BBS</span>.
-            </p>
-          </Card>
-          <div className="grid sm:grid-cols-2 xl:grid-cols-2 gap-4">
-            {CHECKLIST_MASTERS.map((c) => (
-              <Link key={c.label} to={c.to} className="block">
-                <Card className="h-full hover:border-brand/50 transition !p-5">
-                  <div className="text-[10px] uppercase text-steel-muted tracking-wide">{c.tag}</div>
-                  <div className="font-display text-lg mt-0.5">{c.label}</div>
-                  <div className="text-sm text-steel-muted mt-1">{c.hint}</div>
-                  <div className="mt-3">
-                    <Badge tone="brand">Open master →</Badge>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+      {dirMsg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{dirMsg}</p>}
     </div>
   );
 }

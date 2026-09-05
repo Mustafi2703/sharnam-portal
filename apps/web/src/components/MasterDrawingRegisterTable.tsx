@@ -13,6 +13,25 @@ function delayClass(days: number | null | undefined) {
   return regDelayClass(days);
 }
 
+function cleanDrawingNumber(n?: string | null) {
+  return String(n || "")
+    .replace(/\s·\s*\d+$/, "")
+    .trim();
+}
+
+function masterGfcUploadQuery(line: {
+  drawingNumber?: string | null;
+  drawingTitle?: string | null;
+  discipline?: string | null;
+  id?: string;
+}) {
+  const q = new URLSearchParams({ upload: "1", drawingNumber: cleanDrawingNumber(line.drawingNumber) });
+  if (line.drawingTitle) q.set("title", line.drawingTitle);
+  if (line.discipline) q.set("discipline", line.discipline);
+  if (line.id) q.set("registerLine", line.id);
+  return q.toString();
+}
+
 export function MasterDrawingRegisterTable({
   lines,
   filteredLines,
@@ -58,7 +77,9 @@ export function MasterDrawingRegisterTable({
       <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex flex-wrap justify-between gap-2 shrink-0">
         <div>
           <div className="text-sm font-semibold">Master Drawing Register</div>
-          <div className="text-[11px] text-white/70">DRAWING REGISTER - 01.xlsx · Master sheet</div>
+          <div className="text-[11px] text-white/70">
+            DRAWING REGISTER - 01.xlsx · Planned dates editable here · GFC column links revisions
+          </div>
         </div>
         <Badge tone="neutral">{filteredLines.length} / {lines.length} lines</Badge>
       </div>
@@ -215,10 +236,35 @@ export function MasterDrawingRegisterTable({
                 <td className="max-w-[10rem] text-xs">{r.remarks || "—"}</td>
                 <td>
                   {r.drawing?.id ? (
-                    <Badge tone="ok">Linked</Badge>
+                    <div className="flex flex-col gap-1 min-w-[5rem]">
+                      <Badge tone="ok">GFC R{r.drawing.currentRev ?? "—"}</Badge>
+                      {r.revisionNumber && r.drawing.currentRev != null && String(r.revisionNumber) !== String(r.drawing.currentRev) && (
+                        <span className="text-[10px] text-warn font-mono" title="Master register revision differs from GFC current rev">
+                          Reg R{r.revisionNumber} ≠ GFC
+                        </span>
+                      )}
+                      {r.drawing.isPublished ? (
+                        <span className="text-[10px] text-steel-muted">Published</span>
+                      ) : (
+                        <span className="text-[10px] text-steel-muted">Draft GFC</span>
+                      )}
+                      <Link
+                        to={`/projects/${projectId}/drawings/upload-revision/${r.drawing.id}`}
+                        className="text-[10px] font-semibold text-brand whitespace-nowrap"
+                      >
+                        Upload revision →
+                      </Link>
+                      <Link to={`/projects/${projectId}/drawings`} className="text-[10px] font-semibold text-brand whitespace-nowrap">
+                        Open GFC register →
+                      </Link>
+                    </div>
                   ) : (
-                    <Link to={`/projects/${projectId}/drawings?upload=1`} className="text-xs font-semibold text-brand">
-                      Upload
+                    <Link
+                      to={`/projects/${projectId}/drawings?${masterGfcUploadQuery(r)}`}
+                      className="text-xs font-semibold text-brand whitespace-nowrap"
+                      title={`Upload GFC for ${cleanDrawingNumber(r.drawingNumber) || "drawing"}`}
+                    >
+                      Upload GFC
                     </Link>
                   )}
                 </td>
