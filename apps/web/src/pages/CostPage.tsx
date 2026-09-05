@@ -1350,6 +1350,7 @@ export default function CostPage() {
             onClose={() => setCfAddOpen(false)}
             onSave={() => cfFormRef.current?.requestSubmit()}
             saveLabel="Add period"
+            size="md"
           >
             <form ref={cfFormRef} className="grid sm:grid-cols-2 gap-3" onSubmit={addCashflow}>
               <Select
@@ -1437,6 +1438,11 @@ export default function CostPage() {
           <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm space-y-2">
             <div>
               <strong>How cashflow connects:</strong>{" "}
+              Chart / Forecast / Tracking come from <em>Cashflow - Dashboard.xlsx</em>. Progress PvA (RA-month) is a separate snapshot in{" "}
+              <Link to={`/projects/${id}/progress?tab=planned&pva=cashflow`} className="text-brand font-semibold text-xs">
+                Progress → Planned vs Actual
+              </Link>
+              . Finance COP actuals overlay Chart after reconcile.
               <span className="text-steel-muted">
                 Progress PvA → <em>planned</em> outflow · Finance COP (Certified/Paid) → <em>actual</em> commercial outflow on Chart + COP-day/week/month rows · DPR AC certified = Finance COP cumulative.
               </span>
@@ -1465,7 +1471,7 @@ export default function CostPage() {
               <Link to={`/projects/${id}/hub/finance?tab=cop`} className="text-brand font-semibold text-xs">
                 Finance → COP
               </Link>
-              <Link to={`/projects/${id}/progress?tab=planned-actual`} className="text-brand font-semibold text-xs">
+              <Link to={`/projects/${id}/progress?tab=planned&pva=cashflow`} className="text-brand font-semibold text-xs">
                 Progress → Planned vs Actual
               </Link>
               {canEdit && (
@@ -1585,6 +1591,7 @@ export default function CostPage() {
           <ReferenceSheetToolbar
             sheetLabel="Rate difference register"
             rowCount={summary.rateDiffs?.length}
+            uploadHint={`Steel ${summary.rateDiffs?.filter((r: any) => r.materialType === "Steel").length || 0} · Cement ${summary.rateDiffs?.filter((r: any) => r.materialType === "Cement").length || 0} · Tiles ${summary.rateDiffs?.filter((r: any) => r.materialType === "Tiles").length || 0} — sync SPDC workbook or add lines`}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setRateAddOpen(true) : undefined}
             onDownloadCsv={() => void downloadSheet("rates")}
@@ -1594,6 +1601,7 @@ export default function CostPage() {
           <RegisterEntryModal
             open={rateAddOpen && canEdit}
             title="Add rate difference"
+            size="md"
             onClose={() => setRateAddOpen(false)}
             onSave={() => rateFormRef.current?.requestSubmit()}
             saveLabel="Add rate line"
@@ -1614,7 +1622,7 @@ export default function CostPage() {
                 onChange={(e) => setRateForm({ ...rateForm, description: e.target.value })}
               />
               <Input
-                placeholder="Vendor"
+                placeholder="Vendor / supplier"
                 value={rateForm.vendorName}
                 onChange={(e) => setRateForm({ ...rateForm, vendorName: e.target.value })}
               />

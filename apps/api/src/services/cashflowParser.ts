@@ -1,6 +1,6 @@
 /**
- * Parse Cashflow - Dashboard.xlsx (Chart, Forecast, Tracking).
- * Column layout matches seed/costFromBudget.ts — logic duplicated here (seed not modified).
+ * Parse Cashflow - Dashboard.xlsx (Chart, Forecast, Tracking, Monitoring, rate diffs).
+ * Column layout matches seed/costFromBudget.ts.
  */
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
 
@@ -21,7 +21,9 @@ function excelMonthLabel(serial: unknown): string {
 }
 
 function sheetRows(wb: WorkBook, name: string): unknown[][] {
-  const key = wb.SheetNames.find((n: string) => n === name) || wb.SheetNames.find((n: string) => n.trim() === name.trim());
+  const key =
+    wb.SheetNames.find((n: string) => n === name) ||
+    wb.SheetNames.find((n: string) => n.trim().toLowerCase() === name.trim().toLowerCase());
   if (!key || !wb.Sheets[key]) return [];
   return XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[key], {
     header: 1,
@@ -35,6 +37,32 @@ export type ParsedCashflowPeriod = {
   plannedAmount: number;
   actualAmount: number;
   progressPct: number;
+};
+
+export type ParsedMonitoringLine = {
+  packageName: string;
+  itemNo: string;
+  description: string;
+  uom: string | null;
+  rate: number;
+  boqQty: number;
+  extraQty: number;
+  gfcQty: number;
+  achievedQty: number;
+  certifiedQty: number;
+  boqCost: number;
+};
+
+export type ParsedRateDiff = {
+  materialType: string;
+  description: string;
+  vendorName: string | null;
+  purchaseNo: string | null;
+  qty: number;
+  basicRate: number;
+  purchaseRate: number;
+  excessAmount: number;
+  savingAmount: number;
 };
 
 export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
@@ -70,36 +98,118 @@ export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
       const structure = s(row[1], 120);
       if (!structure || /total/i.test(structure)) continue;
       const total = n(row[header.length - 2]) || n(row[22]) || n(row[2]);
-      if (!total) continue;
+      const firstMonth = n(row[4]) || n(row[5]);
+      if (!total && !firstMonth) continue;
       data.push({
         periodLabel: "Forecast total",
         packageName: `Forecast · ${structure}`,
-        plannedAmount: total,
+        plannedAmount: total || firstMonth,
         actualAmount: 0,
         progressPct: 0,
       });
+      if (firstMonth) {
+        data.push({
+          periodLabel: excelMonthLabel(header[4]) || "Forecast M1",
+          packageName: `Forecast · ${structure}`,
+          plannedAmount: firstMonth,
+          actualAmount: 0,
+          progressPct: 0,
+        });
+      }
     }
   }
 
   {
     const rows = sheetRows(wb, "Tracking");
     const months = (rows[6] || []) as unknown[];
+    const monthCount = Math.max(4, months.length - 1);
     for (let i = 7; i < Math.min(rows.length, 50); i++) {
       const row = rows[i] as unknown[];
       const work = s(row[0], 120);
-      if (!work) continue;
-      for (let c = 1; c <= 4; c++) {
+      if (!work || /^total/i.test(work)) continue;
+      for (let c = 1; c <= monthCount; c++) {
         const amt = n(row[c]);
         if (!amt) continue;
         data.push({
           periodLabel: excelMonthLabel(months[c]) || `Month ${c}`,
           packageName: `Tracking · ${work}`,
           plannedAmount: amt,
-          actualAmount: 0,
-          progressPct: 0,
+          actualAmount: amt,
+          progressPct: 1,
         });
       }
     }
+  }
+
+  return data;
+}
+
+/** Monitoring overview from Cashflow Dashboard workbook (separate package). */
+export function parseCashflowMonitoringBuffer(buffer: Buffer): ParsedMonitoringLine[] {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const rows = sheetRows(wb, "Monitoring");
+  const data: ParsedMonitoringLine[] = [];
+  for (let i = 2; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    const description = s(row[1], 500);
+    const itemNo = s(row[0], 40);
+    if (!description || !itemNo) continue;
+    const boqQty = n(row[4]);
+    const gfcQty = n(row[6]);
+    data.push({
+      packageName: "Cashflow Dashboard Monitoring",
+      itemNo,
+      description,
+      uom: s(row[2], 20) || null,
+      rate: n(row[3]),
+      boqQty,
+      extraQty: n(row[5]),
+      gfcQty,
+      achievedQty: n(row[7]),
+      certifiedQty: n(row[10]),
+      boqCost: n(row[11]) || n(row[3]) * boqQty,
+    });
+  }
+  return data;
+}
+
+/** Steel / Cement rate diffs embedded in Cashflow Dashboard workbook. */
+export function parseCashflowRateDiffsBuffer(buffer: Buffer): ParsedRateDiff[] {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const data: ParsedRateDiff[] = [];
+
+  const steel = sheetRows(wb, "STEEL RATE DIFFRENCE");
+  for (let i = 3; i < steel.length; i++) {
+    const row = steel[i] as unknown[];
+    if (!n(row[5]) && !n(row[7])) continue;
+    data.push({
+      materialType: "Steel",
+      description: s(row[1], 120) || `TMT ${s(row[4])}mm`,
+      vendorName: s(row[2], 120) || null,
+      purchaseNo: s(row[3], 80) || null,
+      qty: n(row[5]),
+      basicRate: n(row[6]),
+      purchaseRate: n(row[7]),
+      excessAmount: n(row[10]),
+      savingAmount: n(row[11]),
+    });
+  }
+
+  const cement = sheetRows(wb, "CEMENT RATE DIFFRENCE");
+  for (let i = 2; i < cement.length; i++) {
+    const row = cement[i] as unknown[];
+    if (!n(row[4]) && !n(row[5])) continue;
+    data.push({
+      materialType: "Cement",
+      description: s(row[1], 120) || "Cement Bags",
+      vendorName: s(row[2], 120) || null,
+      purchaseNo: s(row[3], 80) || null,
+      qty: n(row[4]),
+      basicRate: n(row[5]),
+      purchaseRate: n(row[6]),
+      excessAmount: n(row[9]),
+      savingAmount: n(row[10]),
+    });
   }
 
   return data;

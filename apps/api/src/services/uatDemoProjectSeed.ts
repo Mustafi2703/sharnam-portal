@@ -32,12 +32,13 @@ export async function seedUatLiveProject(db: PrismaClient = prisma, opts?: { upl
     "comms", "auditKpi", "cost", "finance", "reports", "closure",
   ]);
 
-  const project = await db.project.upsert({
+  const project =   await db.project.upsert({
     where: { code: UAT_LIVE_CODE },
     create: {
       code: UAT_LIVE_CODE,
       name: "SPDC UAT Live Demo — Dormitory & External Works",
       clientName: "SPDC Infrastructure Pvt Ltd",
+      contractorName: "M/s NK Infra (Viatrix)",
       location: "Ahmedabad, Gujarat",
       status: "In Progress",
       enabledModules,
@@ -45,7 +46,7 @@ export async function seedUatLiveProject(db: PrismaClient = prisma, opts?: { upl
       emailEnabled: true,
       emailFromName: "शरणम् Portal",
     },
-    update: { enabledModules, status: "In Progress" },
+    update: { enabledModules, status: "In Progress", contractorName: "M/s NK Infra (Viatrix)" },
   });
 
   await db.projectMember.upsert({
@@ -70,6 +71,41 @@ export async function seedUatLiveProject(db: PrismaClient = prisma, opts?: { upl
 
   const wpr = await seedWprDemoWeek(db, project.id, anchor, reporter.id);
   const finance = await seedFinanceRaCopDemo(db, project.id, reporter.id);
+
+  try {
+    const { syncBudgetWorkbookTemplate } = await import("./budgetWorkbookImport.js");
+    const cost = await syncBudgetWorkbookTemplate(project.id);
+    console.log("UAT cost sheets:", cost);
+  } catch (err) {
+    console.warn("UAT cost workbook sync skipped:", err instanceof Error ? err.message : err);
+  }
+
+  try {
+    const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
+    await syncAllCashflowSources(project.id);
+  } catch {
+    /* progress/finance overlay optional */
+  }
+
+  try {
+    const { seedHrmsDemo } = await import("./hrmsDemoSeed.js");
+    await seedHrmsDemo(db);
+  } catch (err) {
+    console.warn("HRMS demo seed skipped:", err instanceof Error ? err.message : err);
+  }
+
+  try {
+    const openPkg = await db.crmBidPackage.findFirst({
+      where: { status: "Open" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (openPkg) {
+      const { seedBidPackageR2Boqs } = await import("./crmVendorBoqSeed.js");
+      await seedBidPackageR2Boqs(db, openPkg.id, reporter.id, { force: false });
+    }
+  } catch (err) {
+    console.warn("CRM vendor BOQ seed skipped:", err instanceof Error ? err.message : err);
+  }
 
   const copUploads: { copId: string; filename?: string; url?: string; error?: string }[] = [];
   if (opts?.uploadCops !== false) {

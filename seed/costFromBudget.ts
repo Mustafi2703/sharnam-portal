@@ -69,7 +69,14 @@ export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId
   await prisma.costMbLine.deleteMany({ where: { projectId } });
   await prisma.costBbsLine.deleteMany({ where: { projectId } });
   await prisma.costRateDifference.deleteMany({ where: { projectId } });
-  await prisma.costCashflowPeriod.deleteMany({ where: { projectId } });
+  await prisma.costCashflowPeriod.deleteMany({
+    where: {
+      projectId,
+      NOT: {
+        OR: [{ packageName: { startsWith: "COP" } }, { packageName: { startsWith: "PVA" } }],
+      },
+    },
+  });
 
   // Budget WBS — XLSX omits empty column A: sr=0, description=1, stakeholder=2, amounts from 3+
   {

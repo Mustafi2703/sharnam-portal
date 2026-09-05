@@ -46,9 +46,17 @@ async function loadSeedModule(): Promise<{
 export async function syncBudgetWorkbookTemplate(projectId: string) {
   const file = resolveBudgetWorkbookPath();
   if (!file) throw new Error("SPDC_Budget_Arvind 49.xls not found on server");
+  const excelRoot = path.dirname(file);
   const { seedCostFromBudgetWorkbook } = await loadSeedModule();
-  await seedCostFromBudgetWorkbook(prisma, projectId, path.dirname(file));
-  return countCostRows(projectId, path.basename(file));
+  await seedCostFromBudgetWorkbook(prisma, projectId, excelRoot);
+  const counts = await countCostRows(projectId, path.basename(file));
+  try {
+    const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
+    await syncAllCashflowSources(projectId);
+    return { ...counts, reconciled: true };
+  } catch {
+    return counts;
+  }
 }
 
 /** Import uploaded SPDC budget workbook bytes (full Budget + Monitoring + MB + BBS + rates). */

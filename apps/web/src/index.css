@@ -2079,11 +2079,15 @@ html.is-standalone-form #root {
     padding: 0;
   }
 }
+.register-modal__head--brand {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-brand) 8%, var(--color-paper)), var(--color-sand));
+  border-bottom-color: color-mix(in srgb, var(--color-brand) 18%, var(--color-line));
+}
 .register-modal__panel {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: min(96dvh, var(--register-modal-h));
+  max-height: min(90dvh, var(--register-modal-h));
   min-height: 0;
   background: var(--color-paper);
   border: 1px solid var(--color-line);

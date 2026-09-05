@@ -16,7 +16,7 @@ type Props = {
 /** Reusable modal for register add/edit — pairs with inline forms on the same page. */
 const MODAL_PANEL = { md: "register-modal__panel--md", lg: "register-modal__panel--lg", xl: "register-modal__panel--xl", "2xl": "register-modal__panel--2xl" } as const;
 
-export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "xl", saveLabel = "Save", children }: Props) {
+export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "lg", saveLabel = "Save", children }: Props) {
   if (!open) return null;
   return createPortal(
     <div
@@ -29,7 +29,7 @@ export function RegisterEntryModal({ open, title, onClose, onSave, saving, size 
         className={`register-modal__panel ${MODAL_PANEL[size]}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="register-modal__head">
+        <div className="register-modal__head register-modal__head--brand">
           <h3 className="font-semibold text-ink text-base sm:text-lg">{title}</h3>
           <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={onClose} aria-label="Close">
             ×

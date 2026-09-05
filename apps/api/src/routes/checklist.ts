@@ -473,6 +473,30 @@ checklistRouter.post(
         rfiNumbers: linkedRfis.map((r) => r.number),
         createdById: req.user!.id,
       });
+      try {
+        const pv = await prisma.projectVendor.findFirst({
+          where: { projectId: assignment.projectId },
+          include: { vendor: { select: { email: true, name: true } } },
+        });
+        const contractorTo = pv?.vendor?.email?.trim() || null;
+        if (contractorTo) {
+          await notifyChecklistSubmittedForReview({
+            projectId: assignment.projectId,
+            projectCode: assignment.project.code,
+            projectName: assignment.project.name,
+            templateName: assignment.template.name,
+            checklistType: assignment.template.checklistType,
+            submissionId: submission.id,
+            assignmentId: assignment.id,
+            submittedByName: req.user!.fullName || undefined,
+            rfiNumbers: linkedRfis.map((r) => r.number),
+            createdById: req.user!.id,
+            toOverride: contractorTo,
+          });
+        }
+      } catch {
+        /* contractor copy optional */
+      }
     } else {
       // Still move linked RFIs to Answered / Office without closing
       await prisma.rfi.updateMany({

@@ -745,8 +745,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     budget,
     monitoring,
     cashflow,
-    cashflowChart: cashflow.filter(
-      (c) => /chart|project cashflow \(chart\)|^COP/i.test(c.packageName || "")
+    cashflowChart: cashflow.filter((c) =>
+      /^project cashflow \(chart\)$/i.test(c.packageName || "") || /\(chart\)/i.test(c.packageName || "")
     ),
     cashflowForecast: cashflow.filter((c) => /^Forecast/i.test(c.packageName || "")),
     cashflowTracking: cashflow.filter((c) => /^Tracking/i.test(c.packageName || "")),
@@ -1723,15 +1723,74 @@ costRouter.post(
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "file required" });
     const replace = String(req.body.replace || "") === "1";
-    const { parseCashflowBuffer } = await import("../services/cashflowParser.js");
+    const { parseCashflowBuffer, parseCashflowMonitoringBuffer, parseCashflowRateDiffsBuffer } = await import(
+      "../services/cashflowParser.js"
+    );
     const parsed = parseCashflowBuffer(req.file.buffer);
     if (!parsed.length) return res.status(400).json({ error: "No cashflow rows parsed" });
     const projectId = req.params.projectId;
-    if (replace) await prisma.costCashflowPeriod.deleteMany({ where: { projectId } });
+    if (replace) {
+      await prisma.costCashflowPeriod.deleteMany({
+        where: {
+          projectId,
+          NOT: {
+            OR: [{ packageName: { startsWith: "COP" } }, { packageName: { startsWith: "PVA" } }],
+          },
+        },
+      });
+      await prisma.costMonitoringLine.deleteMany({
+        where: { projectId, packageName: "Cashflow Dashboard Monitoring" },
+      });
+    }
     await prisma.costCashflowPeriod.createMany({
       data: parsed.map((p) => ({ ...p, projectId })),
     });
-    res.status(201).json({ ok: true, imported: parsed.length, replace });
+
+    const monRows = parseCashflowMonitoringBuffer(req.file.buffer);
+    if (monRows.length) {
+      await prisma.costMonitoringLine.createMany({
+        data: monRows.map((m) => ({
+          projectId,
+          packageName: m.packageName,
+          itemNo: m.itemNo,
+          description: m.description,
+          uom: m.uom,
+          rate: m.rate,
+          boqQty: m.boqQty,
+          extraQty: m.extraQty,
+          gfcQty: m.gfcQty,
+          achievedQty: m.achievedQty,
+          excessQty: Math.max(0, m.gfcQty - m.boqQty),
+          savingQty: Math.max(0, m.boqQty - m.gfcQty),
+          certifiedQty: m.certifiedQty,
+          boqCost: m.boqCost,
+        })),
+      });
+    }
+
+    let ratesMerged = 0;
+    const rateRows = parseCashflowRateDiffsBuffer(req.file.buffer);
+    if (rateRows.length) {
+      for (const r of rateRows) {
+        const existing = await prisma.costRateDifference.findFirst({
+          where: { projectId, materialType: r.materialType, description: r.description, purchaseNo: r.purchaseNo },
+        });
+        if (existing) {
+          await prisma.costRateDifference.update({ where: { id: existing.id }, data: r });
+        } else {
+          await prisma.costRateDifference.create({ data: { ...r, projectId } });
+        }
+        ratesMerged++;
+      }
+    }
+
+    try {
+      const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
+      await syncAllCashflowSources(projectId);
+    } catch {
+      /* reconcile optional if finance/progress not seeded */
+    }
+    res.status(201).json({ ok: true, imported: parsed.length, monitoring: monRows.length, ratesMerged, replace, reconciled: true });
   }
 );
 
