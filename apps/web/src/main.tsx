@@ -7,6 +7,20 @@ import "./index.css";
 
 loadSavedTheme();
 
+/** Suppress PerformanceObserver noise from embedded browser previews (startTime on undefined entries). */
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "error",
+    (event) => {
+      const msg = String(event.message || "");
+      if (msg.includes("startTime") && msg.includes("reportAllChanges")) {
+        event.preventDefault();
+      }
+    },
+    true,
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
     <AuthProvider>

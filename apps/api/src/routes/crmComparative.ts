@@ -10,6 +10,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { notifyBidPackageOpened } from "../services/crmBidNotify.js";
+import { resolveVendorForUser } from "../services/vendorPortal.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
   CRM_SHAREPOINT,
@@ -453,10 +454,7 @@ crmComparativeRouter.post(
 
     const isOffice = req.user!.role === "admin" || req.user!.role === "office";
     if (!isOffice && req.user!.role === "vendor") {
-      const vendorUser = await prisma.vendor.findFirst({
-        where: { email: req.user!.email },
-        select: { id: true },
-      });
+      const vendorUser = await resolveVendorForUser(req.user!);
       if (!vendorUser?.id || slot.vendorId !== vendorUser.id) {
         return res.status(403).json({ error: "You can only upload BOQ for your assigned vendor slot" });
       }
@@ -721,7 +719,7 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
 
   let vendorId: string | null = null;
   if (role === "vendor") {
-    const v = await prisma.vendor.findFirst({ where: { email: req.user!.email }, select: { id: true, name: true } });
+    const v = await resolveVendorForUser(req.user!);
     if (!v) return res.json([]);
     vendorId = v.id;
   }
@@ -790,7 +788,7 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
 
   let vendorId: string | null = null;
   if (role === "vendor") {
-    const v = await prisma.vendor.findFirst({ where: { email: req.user!.email }, select: { id: true, name: true } });
+    const v = await resolveVendorForUser(req.user!);
     if (!v) return res.status(404).json({ error: "vendor profile not found" });
     vendorId = v.id;
   }

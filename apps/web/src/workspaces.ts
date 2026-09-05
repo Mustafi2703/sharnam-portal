@@ -423,13 +423,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "progress",
-      label: "Lessons learnt",
-      query: "tab=lessons",
-      blurb: "Lessons learnt register from the SPDC pack — add site notes.",
-      sheet: "Lessons Learnt - Sharnam PMC.xls",
-    },
-    {
-      to: "progress",
       label: "S-curve",
       query: "tab=scurve",
       blurb: "Weekly planned vs actual % from MS Project — feeds DPR/WPR.",
@@ -528,7 +521,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Cashflow Dashboard · Monitoring",
     },
     { to: "cost", label: "MB sheets", query: "tab=mb", blurb: "Measurement books by package.", sheet: "SPDC Budget · MB" },
-    { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Upload BBS Excel + shape diagrams with markup → SharePoint.", sheet: "SPDC Budget · BBS" },
+    { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Bar bending schedule.", sheet: "SPDC Budget · BBS" },
+    { to: "cost", label: "BBS master", query: "tab=bbs-master", blurb: "Shape codes and diagrams.", sheet: "BBS shape library" },
     {
       to: "cost",
       label: "Budget WBS",
@@ -608,7 +602,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "closure",
       label: "Lessons learnt",
       query: "sheet=lessons",
-      blurb: "Project lessons learnt register.",
+      blurb: "Lessons learnt register — add rows; changes are audit-logged.",
       sheet: "Lessons Learnt - Sharnam PMC.xls",
     },
     {

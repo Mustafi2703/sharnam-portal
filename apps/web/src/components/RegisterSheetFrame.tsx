@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatUiText } from "../lib/formatUiText";
 import { RegisterScrollArea } from "./RegisterScrollArea";
 
 export const REGISTER_EMPTY_MSG =
@@ -41,9 +42,9 @@ export function RegisterSheetFrame({
   return (
     <div className={`sheet-register register-sheet-frame register-panel-fill flex flex-col flex-1 min-h-0 overflow-hidden ${className}`}>
       <div className="sheet-register__head shrink-0">
-        <span>{title}</span>
+        <span>{formatUiText(title)}</span>
         <span className="text-steel-muted font-normal normal-case tracking-normal text-xs">
-          {sheetLabel ? `${sheetLabel} · ` : ""}
+          {sheetLabel ? `${formatUiText(sheetLabel)} · ` : ""}
           {rowCount != null ? `${rowCount} rows` : ""}
         </span>
       </div>

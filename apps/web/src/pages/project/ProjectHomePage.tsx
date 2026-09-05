@@ -3,7 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
-import { Badge, Button, Card, Stat, WorkflowStrip } from "../../components/ui";
+import { Badge, Button, Card, Stat } from "../../components/ui";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 
@@ -39,11 +39,7 @@ export default function ProjectHomePage() {
       );
       setPack(out.pack);
       const failed = out.steps.filter((s) => !s.ok);
-      setPackMsg(
-        failed.length
-          ? `Loaded with gaps: ${failed.map((s) => s.key).join(", ")}`
-          : "SPDC Cost, Quality, Safety, and Progress formats loaded for this project."
-      );
+      setPackMsg(failed.length ? `Gaps: ${failed.map((s) => s.key).join(", ")}` : "Sheets loaded.");
       api(`/api/progress/${id}/summary`, { token }).then(setProgress).catch(() => null);
     } catch (err) {
       setPackMsg(err instanceof Error ? err.message : "Sheet load failed");
@@ -96,11 +92,7 @@ export default function ProjectHomePage() {
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-brand mb-1">
             {isClient ? "Client project desk" : "Project overview"}
           </p>
-          <h2 className="font-display text-2xl">Designed module grid</h2>
-          <p className="text-sm text-steel-muted mt-1 max-w-xl">
-            Open one module at a time. Upload drawings only inside Drawings. Quality Inspections are the Procore QI form.
-            Comms is Matrix → meeting → MoM.
-          </p>
+          <h2 className="font-display text-2xl">{isClient ? "Project desk" : "Project overview"}</h2>
         </div>
         {canUpload && (
           <div className="flex flex-wrap gap-2">
@@ -137,28 +129,7 @@ export default function ProjectHomePage() {
         </div>
       )}
 
-      {canManageProject && id && (
-        <WorkPackagesPanel token={token} projectId={id} />
-      )}
-
-      <WorkflowStrip
-        active={1}
-        steps={
-          isClient
-            ? [
-                { label: "Access project", hint: "Your assigned work" },
-                { label: "View drawings", hint: "Published only" },
-                { label: "Raise concerns", hint: "RFIs" },
-                { label: "Read packs", hint: "Reports" },
-              ]
-            : [
-                { label: "Drawings", hint: "Upload + publish" },
-                { label: "Quality / Site", hint: "QI form or checklist" },
-                { label: "Request fill", hint: "Matrix / vendor" },
-                { label: "Comms / MoM", hint: "Meetings + Ask" },
-              ]
-        }
-      />
+      {canManageProject && id && <WorkPackagesPanel token={token} projectId={id} />}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Published drawings" value={s.publishedDrawings ?? "—"} hint={`${s.drawings ?? 0} total`} />
@@ -217,21 +188,17 @@ export default function ProjectHomePage() {
       )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {tools.map(([to, title, desc, icon, accent]) => (
+        {tools.map(([to, title, , icon, accent]) => (
           <Link key={to} to={`/projects/${id}/${to}`}>
-            <Card className="h-full hover:border-brand/40 transition">
-              <div className="flex items-start gap-3">
+            <Card className="h-full hover:border-brand/40 transition !p-3">
+              <div className="flex items-center gap-3">
                 <span
-                  className="h-10 w-10 rounded-lg grid place-items-center text-white text-[10px] font-display shrink-0"
+                  className="h-9 w-9 rounded-lg grid place-items-center text-white text-[10px] font-display shrink-0"
                   style={{ background: accent }}
                 >
                   {icon}
                 </span>
-                <div>
-                  <div className="font-semibold">{title}</div>
-                  <p className="text-sm text-steel-muted mt-1 leading-relaxed">{desc}</p>
-                  <div className="mt-3 text-sm text-brand font-medium">Open →</div>
-                </div>
+                <div className="font-semibold text-sm">{title}</div>
               </div>
             </Card>
           </Link>

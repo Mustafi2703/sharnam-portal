@@ -49,6 +49,8 @@ type BidPackage = {
   } | null;
 };
 
+const SHOW_DEV_BID_TOOLS = import.meta.env.DEV;
+
 function formatINR(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 }
@@ -633,19 +635,38 @@ export default function CrmBidComparePage() {
                     value={projectSearch}
                     onChange={(e) => setProjectSearch(e.target.value)}
                   />
-                  <Select
-                    required
-                    value={form.projectId}
-                    onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-                  >
-                    <option value="">Select project (required)</option>
-                    {filteredProjects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.code} · {p.name}
-                        {!convertedProjectIds.has(p.id) ? " (non-CRM)" : ""}
-                      </option>
-                    ))}
-                  </Select>
+                  <div className="max-h-52 overflow-y-auto border rounded-xl divide-y bg-paper">
+                    {filteredProjects.length === 0 && (
+                      <p className="px-3 py-4 text-sm text-steel-muted text-center">No projects match — convert a CRM lead first.</p>
+                    )}
+                    {filteredProjects.map((p) => {
+                      const selected = form.projectId === p.id;
+                      const converted = convertedProjectIds.has(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-brand-soft/40 ${selected ? "bg-brand-soft/70 ring-1 ring-brand/30" : ""}`}
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              projectId: p.id,
+                              title: form.title || `${p.name} — comparative bid`,
+                            })
+                          }
+                        >
+                          <div className="font-semibold text-ink">{p.code}</div>
+                          <div className="text-xs text-steel-muted line-clamp-1">{p.name}</div>
+                          {!converted && <span className="text-[10px] text-warn">Non-CRM project</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {form.projectId && (
+                    <p className="text-xs text-brand font-semibold">
+                      Selected: {projects.find((p) => p.id === form.projectId)?.code}
+                    </p>
+                  )}
                   <Input
                     required
                     placeholder="Package title (e.g. Civil & structural works)"
@@ -886,6 +907,14 @@ export default function CrmBidComparePage() {
           <div className="space-y-4">
           {detail ? (
             <>
+              {detail.status === "Draft" && (
+                <Card className="!p-4 border-amber-300 bg-amber-50/70">
+                  <p className="text-sm text-ink">
+                    <strong>Draft package</strong> — bidders cannot upload yet. Click{" "}
+                    <strong>Open bid &amp; notify bidders</strong> to email portal logins and unlock vendor uploads.
+                  </p>
+                </Card>
+              )}
               <Card>
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                   <div>
@@ -917,7 +946,7 @@ export default function CrmBidComparePage() {
                     <Button type="button" variant="secondary" disabled={busy} onClick={() => void recomputeComparative()}>
                       Refresh comparative
                     </Button>
-                    {canManage && (
+                    {SHOW_DEV_BID_TOOLS && canManage && (
                       <Button type="button" variant="secondary" disabled={busy} onClick={() => void simulateR2Boqs()}>
                         Simulate R2 BOQ uploads
                       </Button>

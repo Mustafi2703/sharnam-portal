@@ -314,13 +314,18 @@ export default function DprMakerPage() {
     const boqProgress =
       api?.boqProgress?.length
         ? api.boqProgress
-        : snap.lines
-            .filter((l) => l.description && num(l.scopeQty) > 0)
-            .slice(0, 10)
-            .map((l, i) => {
+        : (() => {
+            const candidates = snap.lines
+              .map((l, lineIdx) => ({ l, row: computed.rows[lineIdx] }))
+              .filter(({ l }) => l.description && num(l.scopeQty) > 0)
+              .slice(0, 10);
+            const qtyMode = candidates.some(
+              ({ l }) => num(l.plannedQtyToday) > 0 || num(l.qtyToday) > 0
+            );
+            return candidates.map(({ l, row }) => {
               const plannedQty = num(l.plannedQtyToday);
               const qtyToday = num(l.qtyToday);
-              if (qtyToday > 0 || plannedQty > 0) {
+              if (qtyMode) {
                 return {
                   label: l.description.slice(0, 36),
                   planned: Math.round(plannedQty * 1000) / 1000,
@@ -329,10 +334,11 @@ export default function DprMakerPage() {
               }
               return {
                 label: l.description.slice(0, 36),
-                planned: Math.round((computed.rows[i]?.planned ?? 0) * 1000) / 10,
-                actual: Math.round((computed.rows[i]?.pctComplete ?? 0) * 1000) / 10,
+                planned: Math.round((row?.planned ?? 0) * 1000) / 10,
+                actual: Math.round((row?.pctComplete ?? 0) * 1000) / 10,
               };
             });
+          })();
 
     const manpower =
       api?.manpower?.length
@@ -713,46 +719,19 @@ export default function DprMakerPage() {
   }
 
   const h = snap.header;
+  const disciplineLabel = DISCIPLINES.find((d) => d.key === discipline)?.label || discipline;
   return (
     <div className="maker-shell dpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
-      <div className="maker-shell__body space-y-4 scrollbars-visible px-0.5 py-3 pb-6">
-      <div className="space-y-2 pb-2 border-b border-line/80 bg-sand/30 -mx-0.5 px-1 pt-1 rounded-lg">
-      <MakerToolHeader
-        eyebrow="DPR Maker · SPDC template"
-        title="Daily Progress Report"
-        meta={DISCIPLINES.find((d) => d.key === discipline)?.label || discipline}
-        description="Header, quantities, manpower, equipment, material, quality, HSE, delays, photos, and sign-off. Publishes SPDC XLSX to SharePoint."
-        busy={busy}
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>
-            <button className="text-sm font-semibold text-brand underline" onClick={downloadXlsx} disabled={busy}>Download XLSX</button>
-            <button className="text-sm font-semibold text-brand underline" onClick={downloadPdf} disabled={busy}>Download PDF</button>
-          </div>
-        }
-      />
+      <div className="dpr-maker__chrome sticky top-0 z-20 bg-paper/95 backdrop-blur-sm border-b border-line space-y-2 px-1 py-2 -mx-0.5">
+        <MakerToolHeader
+          eyebrow="DPR"
+          title="Daily Progress Report"
+          meta={disciplineLabel}
+          busy={busy}
+          actions={<Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>}
+        />
 
-      {snap.autoFillSources?.length ? (
-        <p className="text-sm text-steel-muted mx-1 px-3 py-2 rounded-lg bg-paper border border-line">
-          Auto-filled from: {snap.autoFillSources.join(" · ")}. Update Cost, Quality, Safety, and Progress daily — then re-open this date to refresh.
-        </p>
-      ) : null}
-      {projectId && <DailySheetWorkflow projectId={projectId} compact />}
-
-      <ReferenceSheetToolbar
-        sheetLabel={`SPDC_DPR_${discipline}_DASHBOARD`}
-        rowCount={snap.lines.length}
-        canEdit
-        onAddRow={() => setLineModalOpen(true)}
-        onGenerate={() => void publish()}
-        generateLabel="Publish DPR"
-        onDownloadXlsx={() => void downloadXlsx()}
-        busy={busy}
-        message={msg}
-      />
-
-      <div className="maker-section">
-        <div className="maker-toolbar">
+        <div className="maker-toolbar !py-0 !px-0 !bg-transparent !border-0">
           <div className="maker-toolbar__field">
             <label>Log date</label>
             <Input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
@@ -766,15 +745,27 @@ export default function DprMakerPage() {
             </Select>
           </div>
           <div className="maker-toolbar__actions">
-            <Button onClick={save} disabled={busy}>Save draft</Button>
+            <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
+            <Button onClick={() => void publish()} disabled={busy}>Publish</Button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadXlsx} disabled={busy}>XLSX</button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadPdf} disabled={busy}>PDF</button>
           </div>
         </div>
-        {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
-        <div className="px-4 pb-4">
-          <SharePointStatusBanner />
-        </div>
+
+        {projectId && <DailySheetWorkflow projectId={projectId} compact />}
+
+        {msg && <p className="text-xs text-brand-dark bg-brand-soft rounded px-2 py-1">{msg}</p>}
+        <SharePointStatusBanner />
       </div>
-      </div>
+
+      <div className="maker-shell__body space-y-4 scrollbars-visible px-0.5 py-3 pb-6">
+      <ReferenceSheetToolbar
+        sheetLabel={`SPDC_DPR_${discipline}_DASHBOARD`}
+        rowCount={snap.lines.length}
+        canEdit
+        onAddRow={() => setLineModalOpen(true)}
+        busy={busy}
+      />
 
       {/* 1. Header */}
       <div className="grid md:grid-cols-2 gap-4">
@@ -838,7 +829,7 @@ export default function DprMakerPage() {
       {/* DPR DASHBOARD — mirrors Excel DASHBOARD sheet charts (BOQ, manpower, S-curve) */}
       {displayCharts ? (
         <div className="maker-section shrink-0">
-          <div className="maker-section__head">DPR dashboard · matches Excel DASHBOARD sheet</div>
+          <div className="maker-section__head">Dashboard</div>
           <div className="maker-section__body grid lg:grid-cols-2 gap-4">
             <Card className="!p-4 lg:col-span-2">
               <p className="text-[10px] uppercase font-semibold text-steel-muted mb-2">Planned vs actual progress (S-curve)</p>
@@ -865,9 +856,6 @@ export default function DprMakerPage() {
               <Card className="!p-4 text-sm text-steel-muted">Fill manpower trades (planned / actual) for histogram.</Card>
             )}
           </div>
-          <p className="text-xs text-steel-muted mt-2 px-4 pb-4">
-            Charts feed the SPDC DASHBOARD sheet on XLSX publish · S-curve rows written to INPUT 125–137.
-          </p>
         </div>
       ) : null}
 
@@ -1582,7 +1570,7 @@ function DprScurveChart({ points }: { points: { label: string; planned: number; 
   return (
     <div className="min-h-[240px]">
       <div className="text-sm font-semibold mb-2">S-curve · cumulative %</div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-h-[200px]" role="img" aria-label="S-curve chart">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-h-[200px]" shapeRendering="geometricPrecision" role="img" aria-label="S-curve chart">
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         {points.map((p, i) => (

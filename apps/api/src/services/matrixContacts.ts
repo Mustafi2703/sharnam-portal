@@ -12,13 +12,18 @@ function normEmail(raw: string | null | undefined): string | null {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
 }
 
-/** All matrix contact emails for meetings / MoM / agenda (TO + CC, deduped). */
+/** All matrix contact emails for meetings / MoM / agenda (TO + CC, deduped). Merges TECHNICAL + COMMERCIAL by default. */
 export async function getProjectMatrixEmails(
   projectId: string,
-  matrixKind = "TECHNICAL"
+  matrixKind?: string | null,
 ): Promise<MatrixEmailLists> {
+  const kinds =
+    matrixKind && matrixKind.toUpperCase() !== "BOTH"
+      ? [matrixKind.toUpperCase()]
+      : ["TECHNICAL", "COMMERCIAL"];
+
   const rows = await prisma.communicationContact.findMany({
-    where: { projectId, matrixKind, isSectionHeader: false },
+    where: { projectId, matrixKind: { in: kinds }, isSectionHeader: false },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
 

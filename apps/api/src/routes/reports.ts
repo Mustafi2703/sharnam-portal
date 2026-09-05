@@ -71,6 +71,7 @@ import { proposalDocxFilename, resolveProposalDocxPath } from "../services/propo
 import {
   CRM_OFFICE_LIBRARY,
   createClientProposalFile,
+  createProjectProposalFile,
   syncProposalDocx,
   syncProposalSummaryFile,
 } from "../services/crmSharePoint.js";
@@ -565,6 +566,26 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
     console.error("Auto comms matrix seed failed:", err instanceof Error ? err.message : err);
   }
 
+  if (req.body.clientEmail) {
+    try {
+      const { ensureClientPortalLogin } = await import("../services/crmVendorCredentials.js");
+      const login = await ensureClientPortalLogin({
+        email: String(req.body.clientEmail),
+        name: String(req.body.clientContactName || req.body.clientName || name),
+        businessPhone: req.body.clientPhone ? String(req.body.clientPhone) : null,
+      });
+      if (login?.userId) {
+        await prisma.projectMember.upsert({
+          where: { projectId_userId: { projectId: project.id, userId: login.userId } },
+          create: { projectId: project.id, userId: login.userId, role: "client" },
+          update: { role: "client" },
+        });
+      }
+    } catch (err) {
+      console.warn("Client portal login skipped:", err instanceof Error ? err.message : err);
+    }
+  }
+
   res.status(201).json({ project, leadId: lead.id });
 });
 
@@ -685,10 +706,32 @@ crmRouter.get("/quotations/:id/download.doc", async (req, res) => {
 crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const clientName = String(req.body.clientName || "").trim();
   if (!clientName) return res.status(400).json({ error: "Client name is required" });
+
+  let projectId = req.body.projectId ? String(req.body.projectId) : null;
+  const leadId = req.body.leadId ? String(req.body.leadId) : null;
+  if (leadId && !projectId) {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead?.projectId) {
+      return res.status(400).json({
+        error: "Convert lead to SPDC project before saving a proposal — proposals are stored in the project ISO folder.",
+      });
+    }
+    projectId = lead.projectId;
+  }
+  if (!projectId) {
+    return res.status(400).json({
+      error: "Project required — convert the lead to SPDC first, then create the proposal from the project register.",
+    });
+  }
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
   const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
-  let file: Awaited<ReturnType<typeof createClientProposalFile>> | null = null;
+  let file: Awaited<ReturnType<typeof createProjectProposalFile>> | null = null;
   try {
-    file = await createClientProposalFile(clientName, quotationNo);
+    await mockOneDrive.ensureProjectTree(project.id);
+    file = await createProjectProposalFile(project.code, clientName, quotationNo);
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Could not create proposal file" });
   }
@@ -704,10 +747,10 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
       status: "Draft",
       validityDays: Number(req.body.validityDays || 30),
       quotationDate: req.body.quotationDate ? new Date(req.body.quotationDate) : new Date(),
-      leadId: req.body.leadId || null,
-      projectId: req.body.projectId || null,
+      leadId: leadId || null,
+      projectId: project.id,
       attachmentUrl: file.url,
-      attachmentSharePointUrl: file.sharePointUrl || null,
+      attachmentSharePointUrl: file.sharePointUrl || file.url,
       createdById: req.user!.id,
     },
   });
@@ -994,6 +1037,114 @@ hrmRouter.post("/assign", requireRoles("admin", "office"), async (req, res) => {
     update: { role: role || "member" },
   });
   res.json(member);
+});
+
+hrmRouter.delete("/assign", requireRoles("admin", "office"), async (req, res) => {
+  const { projectId, userId } = req.body;
+  if (!projectId || !userId) return res.status(400).json({ error: "projectId and userId required" });
+  await prisma.projectMember.deleteMany({ where: { projectId, userId } });
+  await audit("hrm.assign.removed", {
+    userId: (req as AuthedRequest).user?.id,
+    entity: "ProjectMember",
+    entityId: `${projectId}:${userId}`,
+  });
+  res.json({ ok: true });
+});
+
+hrmRouter.patch("/employees/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const userId = req.params.id;
+  const { email, fullName, role, phone, empCode, department, designation, password, isActive } = req.body;
+  const isOffice = req.user?.role === "office";
+  const existing = await prisma.user.findUnique({ where: { id: userId } });
+  if (!existing) return res.status(404).json({ error: "User not found" });
+  if (existing.role === "admin" && req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Only admin can edit admin accounts" });
+  }
+
+  const data: Record<string, unknown> = {};
+  if (fullName) data.fullName = String(fullName).trim();
+  if (phone !== undefined) data.phone = phone ? String(phone).trim() : null;
+  if (email && String(email).trim().toLowerCase() !== existing.email) {
+    const nextEmail = String(email).trim().toLowerCase();
+    const clash = await prisma.user.findUnique({ where: { email: nextEmail } });
+    if (clash && clash.id !== userId) return res.status(409).json({ error: "Email already in use" });
+    data.email = nextEmail;
+  }
+  if (role && !isOffice) {
+    const { portalForRole } = await import("@sharnam/shared");
+    const roleKey = role as import("@sharnam/shared").RoleKey;
+    data.role = roleKey;
+    data.portal = portalForRole(roleKey);
+  }
+  if (typeof isActive === "boolean" && !isOffice) data.isActive = isActive;
+  if (password && String(password).length >= 6) {
+    const bcrypt = await import("bcryptjs");
+    data.passwordHash = await bcrypt.hash(String(password), 10);
+  }
+  if (!Object.keys(data).length && empCode === undefined && department === undefined && designation === undefined) {
+    return res.status(400).json({ error: "Nothing to update" });
+  }
+
+  const user =
+    Object.keys(data).length > 0
+      ? await prisma.user.update({ where: { id: userId }, data })
+      : existing;
+
+  const effectiveRole = (data.role as string | undefined) || existing.role;
+  if (effectiveRole !== "client" && effectiveRole !== "vendor") {
+    const profilePatch: Record<string, unknown> = {};
+    if (empCode !== undefined) profilePatch.empCode = empCode || `EMP-${Date.now().toString().slice(-6)}`;
+    if (department !== undefined) profilePatch.department = department || null;
+    if (designation !== undefined) profilePatch.designation = designation || null;
+    if (Object.keys(profilePatch).length) {
+      await prisma.employeeProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          empCode: (profilePatch.empCode as string) || `EMP-${Date.now().toString().slice(-6)}`,
+          department: (profilePatch.department as string | null) ?? null,
+          designation: (profilePatch.designation as string | null) ?? null,
+          joinDate: new Date(),
+        },
+        update: profilePatch,
+      });
+    }
+  }
+
+  const profile = await prisma.employeeProfile.findUnique({ where: { userId } });
+  const memberships = await prisma.projectMember.findMany({
+    where: { userId },
+    include: { project: { select: { id: true, code: true, name: true } } },
+  });
+  await audit("hrm.employee.updated", { userId: req.user?.id, entity: "User", entityId: userId });
+  res.json({ ...user, profile, memberships });
+});
+
+hrmRouter.delete("/employees/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const userId = req.params.id;
+  if (userId === req.user?.id) return res.status(400).json({ error: "Cannot remove your own account" });
+
+  const existing = await prisma.user.findUnique({ where: { id: userId } });
+  if (!existing) return res.status(404).json({ error: "User not found" });
+  if (existing.role === "admin" && req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Only admin can remove admin accounts" });
+  }
+
+  await prisma.projectMember.deleteMany({ where: { userId } });
+  await prisma.employeeProfile.deleteMany({ where: { userId } });
+
+  const stamp = Date.now();
+  const retiredEmail = `deleted.${stamp}.${existing.email.replace("@", "_at_")}`.slice(0, 180);
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      isActive: false,
+      email: retiredEmail,
+      fullName: `[Removed] ${existing.fullName}`.slice(0, 200),
+    },
+  });
+  await audit("hrm.employee.removed", { userId: req.user?.id, entity: "User", entityId: userId });
+  res.json({ ok: true, softDeleted: true });
 });
 
 hrmRouter.get("/attendance/today", hrmStaff, async (req: AuthedRequest, res) => {

@@ -6,6 +6,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { isContentLessonRow, nextLessonSrNo } from "../services/lessonLearntUtils.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 export const closureRouter = Router();
@@ -23,13 +24,14 @@ const DEFAULT_SECTIONS = {
 
 closureRouter.get("/project/:projectId/dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const [snags, lessons, report, openSnags, closedSnags] = await Promise.all([
+  const [snags, lessonsRaw, report, openSnags, closedSnags] = await Promise.all([
     prisma.snagItem.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 200 }),
     prisma.lessonLearnt.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 200 }),
     prisma.projectClosureReport.findUnique({ where: { projectId } }),
     prisma.snagItem.count({ where: { projectId, status: "Open" } }),
     prisma.snagItem.count({ where: { projectId, status: { not: "Open" } } }),
   ]);
+  const lessons = lessonsRaw.filter(isContentLessonRow);
   res.json({
     totals: {
       snags: snags.length,
@@ -112,18 +114,22 @@ closureRouter.get("/project/:projectId/lessons", async (req, res) => {
     where: { projectId: req.params.projectId },
     orderBy: { srNo: "asc" },
   });
-  res.json({ lessons: rows });
+  const lessons = rows.filter(isContentLessonRow);
+  res.json({ lessons, total: lessons.length, totalRaw: rows.length });
 });
 
 closureRouter.post(
   "/project/:projectId/lessons",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
     const body = req.body || {};
+    const existing = await prisma.lessonLearnt.findMany({ where: { projectId }, select: { srNo: true } });
+    const srNo = body.srNo ? Number(body.srNo) : nextLessonSrNo(existing);
     const row = await prisma.lessonLearnt.create({
       data: {
-        projectId: req.params.projectId,
-        srNo: body.srNo ? Number(body.srNo) : null,
+        projectId,
+        srNo,
         category: body.category || body.description || null,
         description: body.description || body.category || null,
         wentWell: body.wentWell || null,
@@ -133,18 +139,25 @@ closureRouter.post(
         source: "Portal",
       },
     });
+    await audit("lesson.created", {
+      userId: req.user?.id,
+      entity: "LessonLearnt",
+      entityId: row.id,
+      meta: { projectId, srNo, description: row.description?.slice(0, 120) },
+    });
     res.status(201).json(row);
   }
 );
 
 closureRouter.patch(
   "/lessons/:id",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const row = await prisma.lessonLearnt.update({
       where: { id: req.params.id },
       data: {
+        srNo: body.srNo != null ? Number(body.srNo) : undefined,
         category: body.category,
         description: body.description,
         wentWell: body.wentWell,
@@ -153,7 +166,30 @@ closureRouter.patch(
         valueDifferentiator: body.valueDifferentiator,
       },
     });
+    await audit("lesson.updated", {
+      userId: req.user?.id,
+      entity: "LessonLearnt",
+      entityId: row.id,
+      meta: { projectId: row.projectId, srNo: row.srNo },
+    });
     res.json(row);
+  }
+);
+
+closureRouter.delete(
+  "/lessons/:id",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const row = await prisma.lessonLearnt.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: "Not found" });
+    await prisma.lessonLearnt.delete({ where: { id: req.params.id } });
+    await audit("lesson.deleted", {
+      userId: req.user?.id,
+      entity: "LessonLearnt",
+      entityId: req.params.id,
+      meta: { projectId: row.projectId, description: row.description?.slice(0, 120) },
+    });
+    res.json({ ok: true });
   }
 );
 

@@ -1,11 +1,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 type Props = {
   token?: string | null;
   projectId?: string;
-  /** Called after project packages are saved */
   onSaved?: (packages: string[]) => void;
 };
 
@@ -55,7 +55,7 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
       });
       setCatalog(r.packages);
       setNewName("");
-      setMsg(`Added “${newName.trim()}” to org catalogue.`);
+      setMsg(`Added ${newName.trim()}.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -73,7 +73,7 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
         token,
         body: JSON.stringify({ workPackages: projectPackages }),
       });
-      setMsg("Project packages saved — used on drawings master register, cost MB/BBS, and CRM convert.");
+      setMsg("Saved.");
       onSaved?.(projectPackages);
       await loadCatalog();
     } catch (err) {
@@ -85,31 +85,25 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
 
   function toggle(pkg: string) {
     setProjectPackages((prev) =>
-      prev.includes(pkg) ? prev.filter((p) => p !== pkg) : [...prev, pkg].sort()
+      prev.includes(pkg) ? prev.filter((p) => p !== pkg) : [...prev, pkg].sort(),
     );
   }
 
   return (
-    <Card className="!p-5 space-y-4">
-      <div>
-        <h2 className="font-display text-xl">Work packages catalogue</h2>
-        <p className="text-sm text-steel-muted mt-1">
-          Define packages once (Civil, PEB, MEP, …) — pick them on CRM convert and assign per project for drawings,
-          cost MB/BBS, and progress.
-        </p>
-      </div>
+    <Card className="!p-4 space-y-3">
+      <h2 className="font-semibold text-base">{formatUiText("Work packages")}</h2>
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      {msg && <p className="text-xs rounded px-2 py-1.5 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      <form className="flex flex-wrap gap-2 items-end" onSubmit={addToCatalog}>
+      <form className="flex flex-wrap gap-2 items-center" onSubmit={addToCatalog}>
         <Input
-          className="min-w-[200px] flex-1"
-          placeholder="New package name (e.g. UGWT, Compound Wall)"
+          className="min-w-[180px] flex-1"
+          placeholder="New package name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
         <Button type="submit" variant="secondary" disabled={busy || !newName.trim()}>
-          Add to catalogue
+          Add
         </Button>
       </form>
 
@@ -122,7 +116,7 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
               type="button"
               disabled={!projectId}
               onClick={() => toggle(p)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold border transition ${
+              className={`rounded-full px-3 py-1 text-xs font-semibold border transition ${
                 on ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted hover:border-brand"
               } ${!projectId ? "opacity-60 cursor-not-allowed" : ""}`}
             >
@@ -132,15 +126,13 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
         })}
       </div>
 
-      {projectId ? (
-        <div className="flex flex-wrap gap-2 items-center border-t border-line pt-3">
-          <Badge tone="brand">{projectPackages.length} selected for project</Badge>
+      {projectId && (
+        <div className="flex flex-wrap gap-2 items-center border-t border-line pt-2">
+          <Badge tone="brand">{projectPackages.length} selected</Badge>
           <Button type="button" disabled={busy} onClick={() => void saveProjectPackages()}>
-            Save project packages
+            Save
           </Button>
         </div>
-      ) : (
-        <p className="text-xs text-steel-muted">Select a project below to assign packages.</p>
       )}
     </Card>
   );

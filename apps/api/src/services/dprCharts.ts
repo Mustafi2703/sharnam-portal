@@ -68,24 +68,30 @@ function mergeSummaryWithScurve(
 }
 
 function boqProgressBars(computed: ReturnType<typeof computeDpr>): DprBarPoint[] {
-  return computed.rows.slice(0, 10).map((r) => {
-    const plannedQty = Number(r.plannedQtyToday) || 0;
-    const qtyToday = Number(r.qtyToday) || 0;
-    if (qtyToday > 0 || plannedQty > 0) {
+  const qtyMode = computed.rows.some(
+    (r) => (Number(r.plannedQtyToday) || 0) > 0 || (Number(r.qtyToday) || 0) > 0
+  );
+  return computed.rows
+    .filter((r) => r.description && (Number(r.scopeQty) || 0) > 0)
+    .slice(0, 10)
+    .map((r) => {
+      const plannedQty = Number(r.plannedQtyToday) || 0;
+      const qtyToday = Number(r.qtyToday) || 0;
+      if (qtyMode) {
+        return {
+          label: (r.description || "Item").slice(0, 36),
+          planned: Math.round(plannedQty * 1000) / 1000,
+          actual: Math.round(qtyToday * 1000) / 1000,
+        };
+      }
+      const planned = r.planned > 0 ? Math.round(r.planned * 1000) / 10 : 0;
+      const actual = Math.round(r.pctComplete * 1000) / 10;
       return {
         label: (r.description || "Item").slice(0, 36),
-        planned: Math.round(plannedQty * 1000) / 1000,
-        actual: Math.round(qtyToday * 1000) / 1000,
+        planned,
+        actual,
       };
-    }
-    const planned = r.planned > 0 ? Math.round(r.planned * 1000) / 10 : 0;
-    const actual = Math.round(r.pctComplete * 1000) / 10;
-    return {
-      label: (r.description || "Item").slice(0, 36),
-      planned,
-      actual,
-    };
-  });
+    });
 }
 export type DprBarPoint = { label: string; planned: number; actual: number };
 export type DprChartPack = {
@@ -334,8 +340,17 @@ export function dprChartsSvg(charts: DprChartPack): string {
   <text x="${w - 80}" y="36" fill="#2563EB" font-size="10">— Planned</text>
   <text x="${w - 80}" y="50" fill="#0F766E" font-size="10">— Actual</text>
   <text x="${summaryX}" y="22" fill="#1a1d26" font-size="12" font-weight="700">Today KPIs</text>
-  <rect x="${summaryX}" y="40" width="${barW}" height="${(charts.summary.plannedPct / maxY) * 100}" fill="#2563EB" opacity="0.85"/>
-  <rect x="${summaryX + 44}" y="40" width="${barW}" height="${(charts.summary.actualPct / maxY) * 100}" fill="#0F766E" opacity="0.85"/>
+  ${(() => {
+    const barTop = 40;
+    const barBottom = h - pad - 20;
+    const barH = Math.max(8, barBottom - barTop);
+    const pH = Math.min(barH, (charts.summary.plannedPct / 100) * barH);
+    const aH = Math.min(barH, (charts.summary.actualPct / 100) * barH);
+    const pY = barBottom - pH;
+    const aY = barBottom - aH;
+    return `<rect x="${summaryX}" y="${pY}" width="${barW}" height="${pH}" fill="#2563EB" opacity="0.85"/>
+  <rect x="${summaryX + 44}" y="${aY}" width="${barW}" height="${aH}" fill="#0F766E" opacity="0.85"/>`;
+  })()}
   <text x="${summaryX}" y="155" fill="#5c6578" font-size="9">Planned ${charts.summary.plannedPct}%</text>
   <text x="${summaryX + 44}" y="155" fill="#5c6578" font-size="9">Actual ${charts.summary.actualPct}%</text>
   <text x="${summaryX}" y="175" fill="#1a1d26" font-size="10">SPI ${charts.summary.spi} · ${charts.summary.overallStatus}</text>

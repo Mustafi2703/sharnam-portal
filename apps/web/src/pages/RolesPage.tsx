@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { UserAccountEditModal, type UserAccountRow } from "../components/UserAccountEditModal";
 import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { WORKSPACES } from "../workspaces";
@@ -18,9 +19,10 @@ const LOGIN_ROLES = ["office", "site_employee", "employee", "vendor", "client", 
 export default function RolesPage() {
   const { token, user } = useAuth();
   const [roles, setRoles] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserAccountRow[]>([]);
   const [selected, setSelected] = useState<string>("admin");
   const [msg, setMsg] = useState("");
+  const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -39,7 +41,7 @@ export default function RolesPage() {
   const load = async () => {
     const [r, u] = await Promise.all([
       api<any[]>("/api/roles", { token }),
-      api<any[]>("/api/users", { token }),
+      api<UserAccountRow[]>("/api/hrm/employees", { token }),
     ]);
     setRoles(r);
     setUsers(u);
@@ -96,23 +98,6 @@ export default function RolesPage() {
     }
   }
 
-  async function toggleActive(u: any) {
-    if (user?.role !== "admin") {
-      setMsg("Only admin can activate / deactivate logins");
-      return;
-    }
-    try {
-      await api(`/api/users/${u.id}`, {
-        method: "PATCH",
-        token,
-        body: JSON.stringify({ isActive: !u.isActive }),
-      });
-      setMsg(`${u.fullName} is now ${u.isActive ? "inactive" : "active"}`);
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Update failed");
-    }
-  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -227,12 +212,10 @@ export default function RolesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge tone={u.isActive ? "ok" : "warn"}>{u.isActive ? "Active" : "Off"}</Badge>
-                  {user?.role === "admin" && (
-                    <Button type="button" variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => void toggleActive(u)}>
-                      {u.isActive ? "Deactivate" : "Activate"}
-                    </Button>
-                  )}
+                  <Badge tone={u.isActive !== false ? "ok" : "warn"}>{u.isActive !== false ? "Active" : "Off"}</Badge>
+                  <Button type="button" variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => setEditUser(u)}>
+                    Edit
+                  </Button>
                 </div>
               </li>
             ))}
@@ -240,6 +223,22 @@ export default function RolesPage() {
           </ul>
         </Card>
       </div>
+
+      <UserAccountEditModal
+        open={!!editUser}
+        user={editUser}
+        token={token}
+        isAdmin={user?.role === "admin"}
+        onClose={() => setEditUser(null)}
+        onSaved={async () => {
+          setMsg("User updated.");
+          await load();
+        }}
+        onDeleted={async () => {
+          setMsg("User removed.");
+          await load();
+        }}
+      />
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {roles.map((r) => (

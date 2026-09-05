@@ -257,11 +257,15 @@ export async function seedCrmComparative(prisma: PrismaClient) {
       data: {
         title: DEMO_PACKAGE_TITLE,
         projectId: demoProject.id,
+        status: "Open",
         disciplinesJson: pkg.disciplinesJson || DEMO_DISCIPLINES_JSON,
         notes: `Linked project: ${demoProject.code} · ${demoProject.name}. Source: Comparative Statement - R2.xlsx`,
       },
       include: { vendorBoqs: true },
     });
+  } else if (pkg && pkg.status !== "Open") {
+    await prisma.crmBidPackage.update({ where: { id: pkg.id }, data: { status: "Open" } });
+    pkg = { ...pkg, status: "Open" };
   }
 
   if (demoProject && !demoProject.bidDisciplinesJson) {
@@ -309,6 +313,12 @@ export async function seedCrmComparative(prisma: PrismaClient) {
         "slots on",
         pkg.title
       );
+      // Leave Bhavna Infra slots empty so vendor@ portal demo shows upload flow
+      await prisma.crmVendorBoq.updateMany({
+        where: { bidPackageId: pkg.id, vendorLabel: "M/s Bhavna Infra" },
+        data: { fileName: null, uploadedAt: null, sheetId: null, sharePointUrl: null },
+      });
+      console.log("CRM vendor demo: cleared Bhavna Infra BOQs for live upload demo");
     }
     return { pkg };
   }
@@ -351,7 +361,7 @@ export async function seedCrmComparative(prisma: PrismaClient) {
       leadId: lead?.id ?? null,
       projectId: demoProject?.id ?? null,
       revisionLabel: "R2",
-      status: "Evaluation",
+      status: "Open",
       vendorNamesJson: JSON.stringify(DEMO_VENDORS),
       disciplinesJson: DEMO_DISCIPLINES_JSON,
       comparativeSheetId: masterSheet.id,

@@ -270,6 +270,8 @@ export async function syncLegalFromTemplate(projectId: string, opts?: { force?: 
   return { imported, skipped: false, source: path.basename(file) };
 }
 
+import { isContentLessonRow } from "./lessonLearntUtils.js";
+
 export function resolveLessonsPath() {
   return firstExisting(resolveExcelRoot(), ["Lessons Learnt - Sharnam PMC.xls", "Lessons Learnt - Sharnam PMC.xlsx"]);
 }
@@ -313,20 +315,30 @@ export async function syncLessonsFromTemplate(projectId: string, opts?: { force?
 
   const rows = sheetRows(file, (names) => names.find((n) => /lesson/i.test(n)) || names[0]);
   let imported = 0;
+  let sr = 0;
   for (let i = 7; i < rows.length; i++) {
     const row = rows[i] as unknown[];
-    const srNo = n(row[0]);
     const description = s(row[1], 400);
     if (!description) continue;
+    const draft = {
+      srNo: n(row[0]) || null,
+      description,
+      wentWell: s(row[2], 2000) || null,
+      notMetExpectation: s(row[3], 2000) || null,
+      lessonsLearnt: s(row[4], 2000) || null,
+      valueDifferentiator: s(row[5], 500) || null,
+    };
+    if (!isContentLessonRow(draft)) continue;
+    sr += 1;
     await prisma.lessonLearnt.create({
       data: {
         projectId,
-        srNo: srNo || imported + 1,
-        description,
-        wentWell: s(row[2], 2000) || null,
-        notMetExpectation: s(row[3], 2000) || null,
-        lessonsLearnt: s(row[4], 2000) || null,
-        valueDifferentiator: s(row[5], 500) || null,
+        srNo: draft.srNo || sr,
+        description: draft.description,
+        wentWell: draft.wentWell,
+        notMetExpectation: draft.notMetExpectation,
+        lessonsLearnt: draft.lessonsLearnt,
+        valueDifferentiator: draft.valueDifferentiator,
         source: path.basename(file),
       },
     });

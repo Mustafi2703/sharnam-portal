@@ -1335,9 +1335,9 @@ async function seedProjectAndCost(users: User[]) {
 
   const contactCount = await prisma.communicationContact.count({ where: { projectId: project.id } });
   if (contactCount === 0) {
-    const { seedBpclTechnicalMatrix } = await import("../apps/api/src/services/bpclMatrixSeed.ts");
-    const seeded = await seedBpclTechnicalMatrix(project.id);
-    console.log("Communication contacts seeded (BPCL):", seeded);
+    const { seedBpclAllMatrices } = await import("../apps/api/src/services/bpclMatrixSeed.ts");
+    await seedBpclAllMatrices(project.id);
+    console.log("Communication contacts seeded (BPCL technical + commercial)");
   }
 
   // CRM / HRM sample
@@ -1909,6 +1909,30 @@ async function main() {
     const { seedSpdcLiveTeam } = await import("./spdcLiveTeam.ts");
     const live = await seedSpdcLiveTeam(prisma);
     console.log("Live team seeded on", live.project.code);
+  } catch (e) {
+    console.warn("seedSpdcLiveTeam failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    const { seedBidVendorCatalog } = await import("../apps/api/src/services/crmVendorCatalog.js");
+    const vendorCat = await seedBidVendorCatalog(prisma);
+    console.log("CRM bid vendor catalog:", vendorCat);
+  } catch (e) {
+    console.warn("seedBidVendorCatalog failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    const { seedCrmComparative } = await import("./crmComparativeSeed.js");
+    await seedCrmComparative(prisma);
+    console.log("CRM comparative demo package seeded");
+  } catch (e) {
+    console.warn("seedCrmComparative failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    const { seedSpdcLiveTeam } = await import("../apps/api/src/services/spdcLiveTeamSeed.js");
+    await seedSpdcLiveTeam(prisma);
+    console.log("SPDC UAT live team + comms matrix seeded");
   } catch (e) {
     console.warn("seedSpdcLiveTeam failed:", e instanceof Error ? e.message : e);
   }

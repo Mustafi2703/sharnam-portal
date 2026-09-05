@@ -4,6 +4,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, apiBase } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 type ShapeMaster = {
   id: string;
@@ -162,14 +163,7 @@ export function BbsShapeMasterPanel({ token, mode = "full" }: Props) {
   return (
     <Card className="sm:col-span-2 xl:col-span-3 !p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl">BBS shape code master</h2>
-          <p className="text-sm text-steel-muted mt-1">
-            {mode === "full"
-              ? "Project BBS shape library — pick codes when filling bar entries; upload bend diagrams per shape. Seed IS-2502 defaults once, then customise per project package."
-              : "Reference catalogue for IS-2502 bar shapes — manage shapes and diagrams on Cost → BBS."}
-          </p>
-        </div>
+        <h2 className="font-semibold text-base">{formatUiText("BBS master")}</h2>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={() => void seedDefaults()}>
             {rows.length ? "Refresh IS-2502 defaults" : "Seed 15 IS-2502 shapes"}

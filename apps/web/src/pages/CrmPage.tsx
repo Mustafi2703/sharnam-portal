@@ -259,65 +259,70 @@ export default function CrmPage() {
   async function runConvert(e: FormEvent) {
     e.preventDefault();
     if (!convertLead) return;
+    setMsg("");
     const leadId = convertLead.id;
-    const res = await api<{ project: { id: string; code: string }; alreadyConverted?: boolean }>(
-      `/api/crm/leads/${leadId}/convert`,
-      {
-      method: "POST",
-      token,
-      body: JSON.stringify(convertForm),
-      },
-    );
-
-    if (res.alreadyConverted) {
-      setConvertLead(null);
-      setMsg(`Lead already linked to ${res.project.code} — opening bid setup.`);
-      navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
-      await load();
-      return;
-    }
-
-    let bidPackageId: string | null = null;
-    if (convertForm.vendorIds.length >= 2 && convertForm.disciplineKeys.length) {
-      try {
-        const vendorNames = convertForm.vendorIds
-          .map((id) => vendors.find((v) => v.id === id)?.name)
-          .filter(Boolean) as string[];
-        const bp = await api<{ id: string }>("/api/crm/bid-packages", {
+    try {
+      const res = await api<{ project: { id: string; code: string }; alreadyConverted?: boolean }>(
+        `/api/crm/leads/${leadId}/convert`,
+        {
           method: "POST",
           token,
-          body: JSON.stringify({
-            title: `${convertForm.name} — comparative bid`,
-            projectId: res.project.id,
-            leadId,
-            revisionLabel: "R2",
-            vendorNames,
-            disciplineKeys: convertForm.disciplineKeys,
-          }),
-        });
-        bidPackageId = bp.id;
-      } catch (err) {
-        setMsg(
-          `Project ${res.project.code} created. Bid package failed: ${err instanceof Error ? err.message : "unknown"} — open Bid desk to set up manually.`,
-        );
+          body: JSON.stringify(convertForm),
+        },
+      );
+
+      if (res.alreadyConverted) {
         setConvertLead(null);
+        setMsg(`Lead already linked to ${res.project.code} — opening bid setup.`);
         navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
         await load();
         return;
       }
-    }
 
-    setConvertLead(null);
-    if (bidPackageId) {
-      setMsg(`Project ${res.project.code} created with sheets, comms matrix, and discipline-wise bid package.`);
-      navigate(`/crm/bids/${bidPackageId}`);
-    } else {
-      setMsg(
-        `Project ${res.project.code} created with sheets + comms matrix. Select 2+ contractors on convert to auto-open bids — or set up from Bid desk.`,
-      );
-      navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+      let bidPackageId: string | null = null;
+      if (convertForm.vendorIds.length >= 2 && convertForm.disciplineKeys.length) {
+        try {
+          const vendorNames = convertForm.vendorIds
+            .map((id) => vendors.find((v) => v.id === id)?.name)
+            .filter(Boolean) as string[];
+          const bp = await api<{ id: string }>("/api/crm/bid-packages", {
+            method: "POST",
+            token,
+            body: JSON.stringify({
+              title: `${convertForm.name} — comparative bid`,
+              projectId: res.project.id,
+              leadId,
+              revisionLabel: "R2",
+              vendorNames,
+              disciplineKeys: convertForm.disciplineKeys,
+            }),
+          });
+          bidPackageId = bp.id;
+        } catch (err) {
+          setMsg(
+            `Project ${res.project.code} created. Bid package failed: ${err instanceof Error ? err.message : "unknown"} — open Bid desk to set up manually.`,
+          );
+          setConvertLead(null);
+          navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+          await load();
+          return;
+        }
+      }
+
+      setConvertLead(null);
+      if (bidPackageId) {
+        setMsg(`Project ${res.project.code} created with sheets, comms matrix, and discipline-wise bid package.`);
+        navigate(`/crm/bids/${bidPackageId}`);
+      } else {
+        setMsg(
+          `Project ${res.project.code} created with sheets + comms matrix. Select 2+ contractors on convert to auto-open bids — or set up from Bid desk.`,
+        );
+        navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+      }
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Convert failed — check project code is unique and vendors are seeded.");
     }
-    await load();
   }
 
   return (

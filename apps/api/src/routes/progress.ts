@@ -18,6 +18,7 @@ import {
   generateDemoMsProjectXml,
   MS_PROJECT_SCURVE_PACKAGE,
 } from "../services/msProjectSchedule.js";
+import { isContentLessonRow } from "../services/lessonLearntUtils.js";
 
 export const progressRouter = Router();
 progressRouter.use(requireAuth);
@@ -162,7 +163,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     activityLines,
     boqLineCount,
     sorStats,
-    lessons,
+    lessons: lessons.filter(isContentLessonRow),
   });
 });
 

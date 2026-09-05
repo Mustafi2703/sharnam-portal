@@ -61,7 +61,7 @@ function donutPath(cx: number, cy: number, rOuter: number, rInner: number, a0: n
 export function PieChart({
   title,
   items,
-  size = 168,
+  size = 200,
 }: {
   title: string;
   items: ChartItem[];
@@ -93,6 +93,7 @@ export function PieChart({
             height={size}
             viewBox={`0 0 ${size} ${size}`}
             className="shrink-0 mx-auto"
+            shapeRendering="geometricPrecision"
             role="img"
             aria-label={`${title}: ${Math.round(total)} total`}
           >
@@ -170,18 +171,26 @@ export function BarChart({
   items,
   valueKey = "value",
   compareKey,
+  compareLabels,
   maxBars = 12,
 }: {
   title: string;
   items: any[];
   valueKey?: string;
   compareKey?: string;
+  compareLabels?: { primary?: string; compare?: string };
   maxBars?: number;
 }) {
   const palette = readChartPalette();
   const primary = palette[0] || FALLBACK[0];
   const secondary = palette[1] || FALLBACK[1];
   const track = cssVar("--color-line", "#d5dadd");
+  const primaryLabel =
+    compareLabels?.primary ??
+    (valueKey === "actual" && compareKey === "planned" ? "Actual" : "Primary");
+  const compareLabel =
+    compareLabels?.compare ??
+    (valueKey === "actual" && compareKey === "planned" ? "Planned" : "Compare");
   const rows = (items || []).slice(0, maxBars);
   const max = Math.max(
     1,
@@ -246,11 +255,11 @@ export function BarChart({
             <div className="flex gap-3 text-[10px] uppercase tracking-wide text-steel-muted pt-1">
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 inline-block rounded-sm" style={{ background: primary }} />
-                Primary
+                {primaryLabel}
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 inline-block rounded-sm" style={{ background: secondary }} />
-                Compare
+                {compareLabel}
               </span>
             </div>
           )}

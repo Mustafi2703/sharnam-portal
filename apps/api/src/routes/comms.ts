@@ -98,10 +98,31 @@ commsRouter.delete("/contacts/:id", requireRoles("admin", "office"), async (req:
   res.json({ ok: true });
 });
 
-/** Seed exact BPCL TECHNICAL matrix from Communication Matrix_BPCL (2).xlsx */
+/** Seed exact BPCL TECHNICAL + COMMERCIAL matrices from Communication Matrix_BPCL (2).xlsx */
 commsRouter.post("/contacts/:projectId/seed-bpcl", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const force = req.body?.force === true;
+  const both = req.body?.both !== false;
+  if (both) {
+    const { seedBpclAllMatrices } = await import("../services/bpclMatrixSeed.js");
+    const out = await seedBpclAllMatrices(projectId, { force });
+    await audit("comms.contact.seed_bpcl", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: projectId,
+      meta: { ...out, force, both: true },
+    });
+    return res.status(201).json({
+      ok: true,
+      seeded: out.total,
+      technical: out.technical,
+      commercial: out.commercial,
+      message:
+        out.total > 0
+          ? `Loaded ${out.technical} technical + ${out.commercial} commercial BPCL rows`
+          : "Matrices already exist — pass force:true to replace",
+    });
+  }
   const { seedBpclTechnicalMatrix } = await import("../services/bpclMatrixSeed.js");
   const seeded = await seedBpclTechnicalMatrix(projectId, { force });
   await audit("comms.contact.seed_bpcl", { userId: req.user!.id, entity: "Project", entityId: projectId, meta: { seeded, force } });

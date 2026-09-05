@@ -73,19 +73,11 @@ function LeadDetailBody({
 
       {canWrite && (
         <div className="space-y-2 border-t border-line pt-3">
-          <Link to={`/crm/proposals/new?leadId=${lead.id}`} className="inline-flex text-sm font-semibold text-brand">
-            Create PMC proposal (Word in SharePoint) →
-          </Link>
-          <label className="text-[10px] font-mono uppercase text-steel-muted">Internal pipeline stage</label>
-          <Select value={lead.stage || "New"} onChange={(e) => void onStageChange(lead.id, e.target.value)}>
-            {PIPELINE_STAGES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
           {lead.projectId ? (
             <>
+              <Link to={`/crm/proposals/new?leadId=${lead.id}`} className="inline-flex text-sm font-semibold text-brand">
+                Create PMC proposal (Word in SharePoint) →
+              </Link>
               <Link to={`/projects/${lead.projectId}`} className="inline-flex text-sm font-semibold text-brand">
                 Open converted project →
               </Link>
@@ -94,10 +86,21 @@ function LeadDetailBody({
               </Button>
             </>
           ) : (
-            <Button type="button" className="w-full" onClick={() => onConvert(lead)}>
-              Convert to SPDC project
-            </Button>
+            <>
+              <p className="text-xs text-steel-muted">Convert to SPDC project first — then save proposal to ISO folder.</p>
+              <Button type="button" className="w-full" onClick={() => onConvert(lead)}>
+                Convert to SPDC project
+              </Button>
+            </>
           )}
+          <label className="text-[10px] font-mono uppercase text-steel-muted block pt-2">Internal pipeline stage</label>
+          <Select value={lead.stage || "New"} onChange={(e) => void onStageChange(lead.id, e.target.value)}>
+            {PIPELINE_STAGES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
         </div>
       )}
     </>

@@ -14,7 +14,6 @@ import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { openNcrFormWindow, ncrComplianceSummary } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
-import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
@@ -218,7 +217,7 @@ export default function InspectionsPage() {
 
       {sheetKey === "" && dash && (
         <div className="space-y-4">
-          {id && <DailySheetWorkflow projectId={id} pack={pack?.summary} checks={pack?.checks} />}
+
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
               ["Week", dash.workbook?.dashboard?.weekLabel ?? "—"],

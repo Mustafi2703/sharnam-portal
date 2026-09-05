@@ -11,10 +11,10 @@ const PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
 
 export const LIVE_TEAM: { email: string; fullName: string; role: RoleKey; org: string }[] = [
   { email: "baibhabmustafi@gmail.com", fullName: "Baibhab Kumar Mustafi", role: "admin", org: "Twinoxis / SPDC UAT" },
-  { email: "admin@twinoxis.com", fullName: "Twinoxis Admin", role: "admin", org: "Twinoxis" },
-  { email: "hello@twinoxis.com", fullName: "Twinoxis Operations", role: "office", org: "Twinoxis" },
+  { email: "admin@twinoxis.com", fullName: "Twinoxis Admin", role: "vendor", org: "Twinoxis Demo Contractor" },
+  { email: "hello@twinoxis.com", fullName: "Twinoxis Site Engineer", role: "site_employee", org: "Twinoxis" },
   { email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "office", org: "SPDC" },
-  { email: "operations@spdc.in", fullName: "Saurabh", role: "office", org: "SPDC" },
+  { email: "operations@spdc.in", fullName: "Saurabh Prajapati", role: "office", org: "SPDC Operations" },
 ];
 
 const ALL_NOTIFY = LIVE_TEAM.map((t) => t.email).join(", ");
@@ -82,8 +82,8 @@ async function seedCommsMatrix(db: PrismaClient, projectId: string) {
 }
 
 async function seedContacts(db: PrismaClient, projectId: string) {
-  const { seedBpclTechnicalMatrix } = await import("./bpclMatrixSeed.js");
-  await seedBpclTechnicalMatrix(projectId, { force: true });
+  const { seedBpclAllMatrices } = await import("./bpclMatrixSeed.js");
+  await seedBpclAllMatrices(projectId, { force: true });
 }
 
 async function seedMeetings(db: PrismaClient, projectId: string, userIds: Record<string, string>) {
@@ -269,6 +269,36 @@ export async function seedSpdcLiveTeam(db: PrismaClient = prisma) {
   await seedQapRow(db, project.id);
 
   await db.project.update({ where: { id: project.id }, data: { notificationEmails: ALL_NOTIFY } }).catch(() => {});
+
+  try {
+    const { ensureVendorPortalLogin } = await import("./vendorPortal.js");
+    let twinoxisVendor = await db.vendor.findFirst({ where: { email: "admin@twinoxis.com" } });
+    if (!twinoxisVendor) {
+      twinoxisVendor = await db.vendor.create({
+        data: {
+          name: "Twinoxis Demo Contractor",
+          partyType: "Contractor",
+          email: "admin@twinoxis.com",
+          trade: "Civil,MEP,Structural",
+          createdVia: "UAT seed",
+        },
+      });
+    }
+    const adminUser = await db.user.findUnique({ where: { email: "admin@twinoxis.com" } });
+    if (adminUser && twinoxisVendor) {
+      await db.user.update({ where: { id: adminUser.id }, data: { vendorId: twinoxisVendor.id } });
+    }
+    const bhavna = await db.vendor.findFirst({ where: { name: { contains: "Bhavna" } } });
+    if (bhavna) {
+      await db.vendorContact.upsert({
+        where: { email: "hello@twinoxis.com" },
+        create: { vendorId: bhavna.id, email: "hello@twinoxis.com", fullName: "Twinoxis Site — Bhavna liaison", role: "Site coordinator" },
+        update: { vendorId: bhavna.id },
+      });
+    }
+  } catch (e) {
+    console.warn("Vendor portal links for UAT team:", e instanceof Error ? e.message : e);
+  }
 
   return { project, userIds, meeting, rfi, password: PASSWORD, notify: ALL_NOTIFY };
 }

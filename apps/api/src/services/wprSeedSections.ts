@@ -499,21 +499,21 @@ export async function seedWprSections(
     notes: materialInvoices.length ? "From Finance → Material / tax invoices register." : "Fill from site stock register or import Payment Summary material sheets.",
   };
 
-  const photoPaths = photos
-    .map((p: any) => {
-      const label = [p.album, p.description, p.location, p.trade].filter(Boolean).join(" · ");
-      return label ? `${label} — ${p.fileUrl || ""}` : p.fileUrl || "";
-    })
-    .filter(Boolean);
+  const photoEntries = photos
+    .map((p: any) => ({
+      url: String(p.fileUrl || "").trim(),
+      caption: [p.album, p.description, p.location, p.trade].filter(Boolean).join(" · "),
+    }))
+    .filter((e) => e.url);
   const progressPictures: WprSection = {
     title: DEFAULT_WPR_TITLES.progressPictures,
     notes:
-      photoPaths.length > 0
-        ? `${photoPaths.length} photo path(s) from Project Photos / Site Pilot this project.`
-        : "Attach 6–10 photos captured this week. Upload via Photos / Site Pilot — paths appear here on next WPR sync.",
-    headers: ["#", "Photo / SharePoint path"],
-    rows: photoPaths.map((p: string, i: number) => [i + 1, p]),
-    photos: photoPaths,
+      photoEntries.length > 0
+        ? `${photoEntries.length} site photo(s) from Project Photos / Site Pilot — embedded in PPTX export.`
+        : "Attach 6–10 photos captured this week. Upload via WPR Maker or Photos — paths appear here on next WPR sync.",
+    headers: ["#", "Caption", "Path"],
+    rows: photoEntries.map((e, i) => [i + 1, e.caption || "Site photo", e.url]),
+    photos: photoEntries.map((e) => e.url),
   };
 
   const cover: WprSection = {

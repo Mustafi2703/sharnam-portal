@@ -80,6 +80,20 @@ export default function WorkspacePage() {
         </select>
       </Card>
 
+      {isOffice && (
+        <Card className="!p-4 border-brand/25">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-display text-base text-ink">CRM desk</div>
+              <p className="text-sm text-steel-muted mt-1">Leads, proposals, comparative bids, and vendor portal — not tied to one project.</p>
+            </div>
+            <Link to="/crm">
+              <Button type="button">Open CRM →</Button>
+            </Link>
+          </div>
+        </Card>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {visibleWorkspaces.map((w) => (
           <button

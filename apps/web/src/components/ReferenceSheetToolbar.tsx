@@ -1,5 +1,4 @@
-import { FilePickButton } from "./FilePickButton";
-import { Button } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 type ReferenceSheetToolbarProps = {
   sheetLabel: string;
@@ -50,7 +49,7 @@ export function ReferenceSheetToolbar({
   return (
     <div className="sheet-actions-bar shrink-0 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
       <div className="min-w-0 text-left">
-        <strong className="text-sm text-ink">{sheetLabel}</strong>
+        <strong className="text-sm text-ink">{formatUiText(sheetLabel)}</strong>
         {rowCount != null && <span className="text-xs text-steel-muted ml-2">{rowCount} rows</span>}
         {uploadHint && <p className="text-xs text-steel-muted mt-0.5 max-w-xl">{uploadHint}</p>}
         {message && <p className="text-xs text-brand-dark mt-0.5">{message}</p>}
@@ -73,7 +72,7 @@ export function ReferenceSheetToolbar({
         )}
         {onPublishSharePoint && (
           <Button type="button" variant="secondary" onClick={() => void onPublishSharePoint()} disabled={busy}>
-            {publishLabel}
+            {formatUiText(publishLabel)}
           </Button>
         )}
         {canEdit && onUpload && (
@@ -93,19 +92,19 @@ export function ReferenceSheetToolbar({
           <div className="flex flex-wrap gap-1.5">
             {addKinds.map((k) => (
               <Button key={k.key} type="button" variant="secondary" onClick={() => onAddKind(k.key)} disabled={busy}>
-                {k.label}
+                {formatUiText(k.label)}
               </Button>
             ))}
           </div>
         )}
         {canEdit && onAddRow && !addKinds?.length && (
           <Button type="button" onClick={onAddRow} disabled={busy}>
-            {addRowLabel}
+            {formatUiText(addRowLabel)}
           </Button>
         )}
         {onGenerate && (
           <Button type="button" onClick={onGenerate} disabled={busy}>
-            {busy ? "Saving…" : generateLabel}
+            {busy ? "Saving…" : formatUiText(generateLabel)}
           </Button>
         )}
         {onDownloadCsv && (

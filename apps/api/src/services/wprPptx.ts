@@ -251,15 +251,36 @@ function tableSlide(
  * Local (uploads/…) paths need to be resolved to on-disk absolute paths so
  * pptxgenjs can inline them.  Remote URLs pass through untouched.
  */
-function resolvePhotoPath(p: string): string | undefined {
+function resolvePhotoPath(p: string, projectCode?: string): string | undefined {
   if (!p) return undefined;
-  if (/^https?:\/\//i.test(p) || /^data:/i.test(p)) return p;
-  try {
-    const abs = path.isAbsolute(p) ? p : path.join(process.cwd(), p.replace(/^\/+/, ""));
-    return fs.existsSync(abs) ? abs : undefined;
-  } catch {
-    return undefined;
+  const raw = p.includes(" — ") ? p.split(" — ").pop()!.trim() : p.trim();
+  if (/^https?:\/\//i.test(raw) || /^data:/i.test(raw)) return raw;
+
+  const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+  const candidates: string[] = [];
+
+  const odMatch = raw.match(/^\/uploads\/onedrive\/([^/]+)\/(.+)$/);
+  if (odMatch) {
+    candidates.push(path.join(UPLOAD_DIR, "onedrive", odMatch[1], odMatch[2]));
   }
+  if (projectCode && !raw.startsWith("/uploads")) {
+    candidates.push(path.join(UPLOAD_DIR, "onedrive", projectCode, raw.replace(/^\/+/, "")));
+  }
+  if (path.isAbsolute(raw)) {
+    candidates.push(raw);
+  } else {
+    candidates.push(path.join(process.cwd(), raw.replace(/^\/+/, "")));
+    candidates.push(path.join(UPLOAD_DIR, raw.replace(/^\/+/, "")));
+  }
+
+  for (const abs of candidates) {
+    try {
+      if (fs.existsSync(abs)) return abs;
+    } catch {
+      /* try next */
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -277,6 +298,7 @@ function photoGridSlide(
     page: number;
     total: number;
     partLabel?: string;
+    projectCode?: string;
   }
 ) {
   const slide = pptx.addSlide();
@@ -304,7 +326,7 @@ function photoGridSlide(
     const row = Math.floor(i / 2);
     const x = 0.4 + col * (cellW + gap);
     const y = originY + row * (cellH + gap + 0.25); // extra 0.25 for caption
-    const src = opts.photos[i] ? resolvePhotoPath(opts.photos[i]) : undefined;
+    const src = opts.photos[i] ? resolvePhotoPath(opts.photos[i], opts.projectCode) : undefined;
     if (src) {
       slide.addImage({ path: src, x, y, w: cellW, h: cellH, sizing: { type: "contain", w: cellW, h: cellH } });
     } else {
@@ -633,6 +655,7 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
           client,
           page,
           total,
+          projectCode: fullPack.header.projectCode,
           partLabel: item.chunks > 1 ? `Part ${item.chunk + 1} of ${item.chunks}` : undefined,
         });
         continue;

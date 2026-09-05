@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { LessonsLearntRegister } from "../../components/LessonsLearntRegister";
 import { closureSheetFromParams } from "../../lib/closureSheetViews";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -35,14 +36,9 @@ export default function ProjectClosurePage() {
     priority: "Medium",
     vendor: "",
   });
-  const [lessonForm, setLessonForm] = useState({
-    category: "",
-    description: "",
-    wentWell: "",
-    notMetExpectation: "",
-    lessonsLearnt: "",
-  });
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
+  const canResyncExcel = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
+  const [registerSyncBusy, setRegisterSyncBusy] = useState(false);
 
   const load = async () => {
     const [dash, repRaw] = await Promise.all([
@@ -197,50 +193,32 @@ export default function ProjectClosurePage() {
         </>
       )}
 
-      {sheetKey === "lessons" && (
-        <>
-          {canEdit && (
-            <Card>
-              <h3 className="font-semibold mb-3">Add lesson learnt</h3>
-              <form
-                className="grid sm:grid-cols-2 gap-3"
-                onSubmit={async (e: FormEvent) => {
-                  e.preventDefault();
-                  await api(`/api/closure/project/${id}/lessons`, {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify(lessonForm),
-                  });
-                  setLessonForm({ category: "", description: "", wentWell: "", notMetExpectation: "", lessonsLearnt: "" });
-                  setMsg("Lesson added");
-                  await load();
-                }}
-              >
-                <Input placeholder="Category / phase" value={lessonForm.category} onChange={(e) => setLessonForm({ ...lessonForm, category: e.target.value })} />
-                <Input placeholder="Description" value={lessonForm.description} onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })} />
-                <TextArea rows={2} placeholder="What went well" value={lessonForm.wentWell} onChange={(e) => setLessonForm({ ...lessonForm, wentWell: e.target.value })} />
-                <TextArea rows={2} placeholder="What did not meet expectations" value={lessonForm.notMetExpectation} onChange={(e) => setLessonForm({ ...lessonForm, notMetExpectation: e.target.value })} />
-                <TextArea className="sm:col-span-2" rows={3} placeholder="Lessons learnt / how to improve" value={lessonForm.lessonsLearnt} onChange={(e) => setLessonForm({ ...lessonForm, lessonsLearnt: e.target.value })} required />
-                <Button type="submit">Save lesson</Button>
-              </form>
-            </Card>
-          )}
-          <Card>
-            <h3 className="font-semibold mb-3">Lessons learnt register</h3>
-            <ul className="space-y-4 max-h-[60vh] overflow-y-auto">
-              {(data?.lessons || []).map((l: any) => (
-                <li key={l.id} className="border border-line rounded-lg p-3 text-sm space-y-1">
-                  <div className="font-semibold">{l.category || l.description}</div>
-                  {l.wentWell && <p><span className="text-steel-muted">Went well:</span> {l.wentWell}</p>}
-                  {l.notMetExpectation && <p><span className="text-steel-muted">Gap:</span> {l.notMetExpectation}</p>}
-                  {l.lessonsLearnt && <p className="text-brand-dark">{l.lessonsLearnt}</p>}
-                </li>
-              ))}
-              {!data?.lessons?.length && <li className="text-steel-muted">No lessons seeded yet.</li>}
-            </ul>
-          </Card>
-        </>
-      )}
+      {sheetKey === "lessons" && id ? (
+        <LessonsLearntRegister
+          projectId={id}
+          token={token}
+          canEdit={canEdit}
+          canResyncExcel={canResyncExcel}
+          onResyncTemplate={async () => {
+            if (!id || !canResyncExcel) return;
+            setRegisterSyncBusy(true);
+            try {
+              await api(`/api/progress/${id}/resync-registers`, {
+                method: "POST",
+                token,
+                body: JSON.stringify({ force: true }),
+              });
+              setMsg("Lessons template loaded.");
+              await load();
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : "Template load failed");
+            } finally {
+              setRegisterSyncBusy(false);
+            }
+          }}
+          registerSyncBusy={registerSyncBusy}
+        />
+      ) : null}
 
       {sheetKey === "closure-report" && report && (
         <Card>

@@ -8,6 +8,12 @@ Build Procore-like construction ERP UX with **data integrity visible in the UI**
 
 Apply the **chosen** option from [ui-directions.md](ui-directions.md) via CSS variables in `apps/web/src/index.css`. Logo on light plate unless the selected direction is explicitly dark.
 
+## Copy & labels
+
+- Run all user-visible headings, buttons, badges, and sheet toolbar labels through `formatUiText()` (title case per word; preserves acronyms like BOQ, WPR, CRM).
+- `PageHeader`, `PageHero`, `Button`, and `Badge` in `ui.tsx` already apply `formatUiText` to string children — pass raw labels; do not pre-capitalize in source unless needed for acronyms.
+- Sheet register heads and `ReferenceSheetToolbar` labels must use `formatUiText` as well.
+
 ## Upload modal (required)
 
 Any upload (drawing, revision, BOQ, photo, DMS file) opens a **modal**, not only a bare `<input type="file">`:

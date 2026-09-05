@@ -73,11 +73,43 @@ type Pack = {
   reportNumber?: number;
   header: Header;
   sections: Sections;
+  packExtras?: { attachments?: { path: string; caption?: string; url?: string }[]; signatures?: { path: string; role: string; url?: string }[] };
   charts?: WprCharts;
   status: string;
   publishedAt?: string | null;
   publishedPath?: string | null;
+  publishedUrl?: string | null;
 };
+
+function resolveMediaUrl(ref: string): string {
+  if (!ref) return "";
+  if (/^https?:\/\//i.test(ref)) return ref;
+  if (ref.startsWith("/")) return `${apiBase()}${ref}`;
+  return `${apiBase()}/uploads/${ref}`;
+}
+
+function savePayload(
+  weekEnd: string,
+  rangePreset: string,
+  weekStart: string,
+  reportNumber: string,
+  pack: Pack,
+  attachments: { path: string; caption?: string; url?: string }[],
+  signatures: { path: string; role: string; url?: string }[]
+) {
+  return {
+    weekEnding: weekEnd,
+    preset: rangePreset,
+    start: rangePreset === "custom" && weekStart ? weekStart : undefined,
+    reportNumber: reportNumber ? Number(reportNumber) : null,
+    header: pack.header,
+    sections: pack.sections,
+    packExtras: {
+      attachments: attachments.map((a) => ({ ...a, url: a.url || resolveMediaUrl(a.path) })),
+      signatures: signatures.map((s) => ({ ...s, url: s.url || resolveMediaUrl(s.path) })),
+    },
+  };
+}
 
 const RANGE_PRESETS = [
   { value: "week", label: "This week (7 days)" },
@@ -118,8 +150,8 @@ export default function WprMakerPage() {
   const [msg, setMsg] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["brief"]));
   const [recent, setRecent] = useState<any[]>([]);
-  const [attachments, setAttachments] = useState<{ path: string; caption?: string }[]>([]);
-  const [signatures, setSignatures] = useState<{ path: string; role: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ path: string; caption?: string; url?: string }[]>([]);
+  const [signatures, setSignatures] = useState<{ path: string; role: string; url?: string }[]>([]);
 
   const load = useCallback(async () => {
     if (!projectId) return;
@@ -131,6 +163,8 @@ export default function WprMakerPage() {
       const p = await api<Pack>(`/api/wpr-maker/${projectId}?${qs}`, { token });
       setPack(p);
       setCharts(p.charts || null);
+      setAttachments(p.packExtras?.attachments || []);
+      setSignatures(p.packExtras?.signatures || []);
       if (p.weekStart) setWeekStart(p.weekStart.slice(0, 10));
       setReportNumber(p.reportNumber != null ? String(p.reportNumber) : "");
       const r = await api<any[]>(`/api/wpr-maker/${projectId}/recent`, { token }).catch(() => []);
@@ -230,14 +264,15 @@ export default function WprMakerPage() {
       fd.append("photo", file);
       fd.append("weekEnding", weekEnd);
       fd.append("sectionKey", key);
-      const out = await api<{ path: string }>(`/api/wpr-maker/${projectId}/photo`, {
+      const out = await api<{ path: string; url?: string }>(`/api/wpr-maker/${projectId}/photo`, {
         method: "POST",
         token,
         body: fd,
       });
       const sec = pack.sections[key] || { title: key };
-      updateSection(key, { photos: [...(sec.photos || []), out.path] });
-      setMsg(`Photo uploaded to ${out.path}`);
+      const photoRef = out.url || out.path;
+      updateSection(key, { photos: [...(sec.photos || []), photoRef] });
+      setMsg(`Photo uploaded — ${photoRef}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Photo upload failed");
     } finally {
@@ -259,10 +294,10 @@ export default function WprMakerPage() {
       fd.append("file", file);
       fd.append("caption", file.name);
       fd.append("weekEnding", weekEnd);
-      const out = await api<{ path: string; caption?: string }>(`/api/wpr-maker/${projectId}/attachment`, {
+      const out = await api<{ path: string; caption?: string; url?: string }>(`/api/wpr-maker/${projectId}/attachment`, {
         method: "POST", token, body: fd,
       });
-      setAttachments((a) => [...a, { path: out.path, caption: out.caption || file.name }]);
+      setAttachments((a) => [...a, { path: out.path, caption: out.caption || file.name, url: out.url }]);
       setMsg(`Attachment uploaded → ${out.path}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Attachment upload failed");
@@ -279,10 +314,10 @@ export default function WprMakerPage() {
       fd.append("signature", file);
       fd.append("weekEnding", weekEnd);
       fd.append("role", role);
-      const out = await api<{ path: string; role: string }>(`/api/wpr-maker/${projectId}/signature`, {
+      const out = await api<{ path: string; role: string; url?: string }>(`/api/wpr-maker/${projectId}/signature`, {
         method: "POST", token, body: fd,
       });
-      setSignatures((s) => [...s, { path: out.path, role: out.role || role }]);
+      setSignatures((s) => [...s, { path: out.path, role: out.role || role, url: out.url }]);
       setMsg(`Signature saved · ${role} → ${out.path}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Signature save failed");
@@ -322,12 +357,7 @@ export default function WprMakerPage() {
       await api(`/api/wpr-maker/${projectId}/save`, {
         method: "POST",
         token,
-        body: JSON.stringify({
-          weekEnding: weekEnd,
-          reportNumber: reportNumber ? Number(reportNumber) : null,
-          header: pack.header,
-          sections: pack.sections,
-        }),
+        body: JSON.stringify(savePayload(weekEnd, rangePreset, weekStart, reportNumber, pack, attachments, signatures)),
       });
       setMsg("Saved draft.");
       await load();
@@ -343,22 +373,14 @@ export default function WprMakerPage() {
     setBusy(true);
     setMsg("");
     try {
-      await api(`/api/wpr-maker/${projectId}/save`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          weekEnding: weekEnd,
-          reportNumber: reportNumber ? Number(reportNumber) : null,
-          header: pack.header,
-          sections: pack.sections,
-        }),
-      });
-      const out = await api<any>(`/api/wpr-maker/${projectId}/publish`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ weekEnding: weekEnd }),
-      });
-      setMsg(`Published → ${out.publishedPath || out.url || "SharePoint"}${out.provider ? ` · ${out.provider}` : ""}${out.provider === "mock-onedrive" ? " (SharePoint not live — check server env)" : ""}`);
+      const payload = savePayload(weekEnd, rangePreset, weekStart, reportNumber, pack, attachments, signatures);
+      await api(`/api/wpr-maker/${projectId}/save`, { method: "POST", token, body: JSON.stringify(payload) });
+      const out = await api<{ publishedUrl?: string; sharePointUrl?: string; publishedPath?: string; url?: string }>(
+        `/api/wpr-maker/${projectId}/publish`,
+        { method: "POST", token, body: JSON.stringify(payload) },
+      );
+      const link = out.publishedUrl || out.sharePointUrl || out.url;
+      setMsg(link ? `Published · ${out.publishedPath || "SharePoint"}` : `Published → ${out.publishedPath || "SharePoint"}`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Publish failed");
@@ -430,32 +452,19 @@ export default function WprMakerPage() {
 
   return (
     <div className="maker-shell wpr-maker page-scroll-full page-stack--register flex flex-col gap-0 pb-0 safe-bottom">
-      <div className="maker-shell__body space-y-5 scrollbars-visible px-0.5 py-3 pb-6">
-      <div className="space-y-2 pb-2 border-b border-line/80 bg-sand/30 -mx-0.5 px-1 pt-1 rounded-lg">
-      <MakerToolHeader
-        eyebrow="WPR Maker · SPDC pack"
-        title="Weekly Progress Report"
-        meta={pack.header.projectName || pack.projectCode}
-        description="Dashboard charts match the client PPT. Regenerate from live data, filter any week or day range, then export XLSX / PPTX."
-        busy={busy}
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>
-            <button className="text-sm font-semibold text-brand underline" onClick={downloadXlsx} disabled={busy}>Download SPDC pack</button>
-            <button className="text-sm font-semibold text-brand underline" onClick={downloadClientXlsx} disabled={busy}>Download client workbook</button>
-            <button className="text-sm font-semibold text-brand underline" onClick={downloadPptx} disabled={busy}>Download PPTX</button>
-          </div>
-        }
-      />
+      <div className="wpr-maker__chrome sticky top-0 z-20 bg-paper/95 backdrop-blur-sm border-b border-line space-y-2 px-1 py-2 -mx-0.5">
+        <MakerToolHeader
+          eyebrow="WPR"
+          title="Weekly Progress Report"
+          meta={pack.header.projectName || pack.projectCode}
+          busy={busy}
+          actions={<Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>}
+        />
 
-      <div className="maker-section">
-        <div className="maker-toolbar flex-wrap">
+        <div className="maker-toolbar !py-0 !px-0 !bg-transparent !border-0 flex-wrap">
           <div className="maker-toolbar__field">
-            <label>Period preset</label>
-            <Select
-              value={rangePreset}
-              onChange={(e) => setRangePreset(e.target.value)}
-            >
+            <label>Period</label>
+            <Select value={rangePreset} onChange={(e) => setRangePreset(e.target.value)}>
               {RANGE_PRESETS.map((p) => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
@@ -467,43 +476,58 @@ export default function WprMakerPage() {
           </div>
           {rangePreset === "custom" ? (
             <div className="maker-toolbar__field">
-              <label>Range start</label>
+              <label>Start</label>
               <Input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} />
             </div>
           ) : null}
           <div className="maker-toolbar__field">
-            <label>Report number</label>
+            <label>Report no.</label>
             <Input type="number" placeholder="50" value={reportNumber} onChange={(e) => setReportNumber(e.target.value)} />
           </div>
           <div className="maker-toolbar__actions flex-wrap">
-            <Button onClick={() => void load()} disabled={busy} variant="secondary">Load period</Button>
-            <Button onClick={refreshFromLive} disabled={busy}>Regenerate from live data</Button>
-            <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
-            <Button onClick={publish} disabled={busy}>Publish to SharePoint</Button>
+            <Button onClick={() => void load()} disabled={busy} variant="secondary">Load</Button>
+            <Button onClick={refreshFromLive} disabled={busy} variant="secondary">Regenerate</Button>
+            <Button onClick={save} disabled={busy} variant="secondary">Save</Button>
+            <Button onClick={publish} disabled={busy}>Publish</Button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadXlsx} disabled={busy}>XLSX</button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadClientXlsx} disabled={busy}>Client</button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadPptx} disabled={busy}>PPTX</button>
           </div>
         </div>
-        <div className="flex gap-2 px-4 pb-3 border-b border-line">
+
+        <div className="flex gap-2">
           <button
             type="button"
             className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${viewTab === "dashboard" ? "bg-brand text-white" : "text-steel-muted hover:bg-sand"}`}
             onClick={() => setViewTab("dashboard")}
           >
-            Dashboard & charts
+            Dashboard
           </button>
           <button
             type="button"
             className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${viewTab === "sections" ? "bg-brand text-white" : "text-steel-muted hover:bg-sand"}`}
             onClick={() => setViewTab("sections")}
           >
-            24 report sections
+            Sections
           </button>
         </div>
-        {msg && <p className="maker-flash maker-flash--ok mx-4 mb-4">{msg}</p>}
-        <div className="px-4 pb-4 space-y-3">
-          <SharePointStatusBanner />
-        </div>
+
+        {msg && <p className="text-xs text-brand-dark bg-brand-soft rounded px-2 py-1">{msg}</p>}
+        {(pack.publishedUrl || pack.publishedPath) && (
+          <p className="text-xs text-steel-muted">
+            {pack.publishedUrl ? (
+              <a href={pack.publishedUrl} target="_blank" rel="noopener noreferrer" className="text-brand font-semibold underline">
+                Open in SharePoint ↗
+              </a>
+            ) : (
+              <span className="font-mono">{pack.publishedPath}</span>
+            )}
+          </p>
+        )}
+        <SharePointStatusBanner />
       </div>
-      </div>
+
+      <div className="maker-shell__body space-y-5 scrollbars-visible px-0.5 py-3 pb-6">
 
       {viewTab === "dashboard" ? (
         <div className="maker-section p-4 min-h-[320px]">
@@ -622,14 +646,25 @@ export default function WprMakerPage() {
                       </FilePickButton>
                     </div>
                     {(sec.photos || []).length > 0 ? (
-                      <ul className="text-[11px] font-mono divide-y border border-line rounded-lg overflow-hidden">
-                        {(sec.photos || []).map((p, i) => (
-                          <li key={i} className="py-1.5 px-2 flex justify-between gap-2 bg-white">
-                            <span className="truncate">{p}</span>
-                            <button type="button" className="text-danger" onClick={() => removeSectionPhoto(key, i)}>✕</button>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {(sec.photos || []).map((p, i) => {
+                          const src = resolveMediaUrl(p);
+                          return (
+                            <div key={i} className="relative group rounded-lg border border-line overflow-hidden bg-sand/30">
+                              <a href={src} target="_blank" rel="noopener noreferrer" title="Open full size">
+                                <img src={src} alt="" className="w-full h-28 object-cover" loading="lazy" />
+                              </a>
+                              <button
+                                type="button"
+                                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white text-xs"
+                                onClick={() => removeSectionPhoto(key, i)}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : (
                       <p className="text-[11px] text-steel-muted">No photos yet.</p>
                     )}
@@ -684,17 +719,17 @@ export default function WprMakerPage() {
               <SignaturePad label="Contractor sign" personName="Contractor" height={140} onCapture={(f) => f && uploadPackSignature(f, "contractor")} />
             </div>
             {signatures.length > 0 && (
-              <ul className="text-xs divide-y border border-line rounded-lg overflow-hidden bg-white">
+              <div className="grid sm:grid-cols-3 gap-3">
                 {signatures.map((p, i) => (
-                  <li key={i} className="py-2 px-2 flex justify-between gap-2 items-center">
-                    <div className="min-w-0">
-                      <div className="font-mono truncate text-[11px]">{p.path}</div>
-                      <div className="text-steel-muted">{p.role}</div>
-                    </div>
-                    <button className="text-danger text-sm" onClick={() => setSignatures((s) => s.filter((_, k) => k !== i))} title="Remove">✕</button>
-                  </li>
+                  <div key={i} className="rounded-lg border border-line bg-white p-2 space-y-1">
+                    <div className="text-[10px] uppercase text-steel-muted">{p.role}</div>
+                    <a href={resolveMediaUrl(p.url || p.path)} target="_blank" rel="noopener noreferrer">
+                      <img src={resolveMediaUrl(p.url || p.path)} alt={p.role} className="w-full h-24 object-contain bg-sand/20" />
+                    </a>
+                    <button className="text-danger text-xs" onClick={() => setSignatures((s) => s.filter((_, k) => k !== i))}>Remove</button>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </section>
         </div>
@@ -709,7 +744,13 @@ export default function WprMakerPage() {
               <li key={r.id} className="maker-list__row">
                 <div className="min-w-0">
                   <div className="maker-list__title">Week ending {new Date(r.weekEnding).toISOString().slice(0, 10)} · No {r.reportNumber || "—"}</div>
-                  {r.publishedPath && <div className="maker-list__sub truncate">{r.publishedPath}</div>}
+                  {r.publishedUrl ? (
+                    <a href={r.publishedUrl} target="_blank" rel="noopener noreferrer" className="maker-list__sub text-brand truncate underline">
+                      Open in SharePoint
+                    </a>
+                  ) : r.publishedPath ? (
+                    <div className="maker-list__sub truncate">{r.publishedPath}</div>
+                  ) : null}
                 </div>
                 <Badge tone={r.status === "Published" ? "ok" : "warn"}>{r.status}</Badge>
               </li>
@@ -717,15 +758,6 @@ export default function WprMakerPage() {
           </ul>
         </div>
       )}
-
-      <div className="maker-sticky-bar shrink-0">
-        <Button onClick={refreshFromLive} disabled={busy}>Regenerate</Button>
-        <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
-        <Button onClick={publish} disabled={busy}>Publish</Button>
-        <Button type="button" variant="secondary" onClick={downloadXlsx} disabled={busy}>Export SPDC pack</Button>
-        <Button type="button" variant="secondary" onClick={downloadClientXlsx} disabled={busy}>Export client workbook</Button>
-        <Button type="button" variant="secondary" onClick={downloadPptx} disabled={busy}>Export PPTX</Button>
-      </div>
 
       </div>
     </div>

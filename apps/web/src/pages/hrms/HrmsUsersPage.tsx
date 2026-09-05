@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
@@ -12,12 +13,14 @@ const LOGIN_ROLES = ["site_employee", "office", "employee", "vendor", "client"] 
 export default function HrmsUsersPage() {
   const { token, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const [employees, setEmployees] = useState<any[]>([]);
+  const canEdit = user?.role === "admin" || user?.role === "office";
+  const [employees, setEmployees] = useState<UserAccountRow[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -32,7 +35,7 @@ export default function HrmsUsersPage() {
 
   const load = useCallback(async () => {
     const [e, p] = await Promise.all([
-      api<any[]>("/api/hrm/employees", { token }).catch(() => []),
+      api<UserAccountRow[]>("/api/hrm/employees", { token }).catch(() => []),
       api<any[]>("/api/projects", { token }).catch(() => []),
     ]);
     setEmployees(e);
@@ -84,29 +87,11 @@ export default function HrmsUsersPage() {
     }
   }
 
-  async function toggleActive(u: any) {
-    if (!isAdmin) {
-      setMsg("Only admin can activate / deactivate logins");
-      return;
-    }
-    try {
-      await api(`/api/users/${u.id}`, {
-        method: "PATCH",
-        token,
-        body: JSON.stringify({ isActive: !u.isActive }),
-      });
-      setMsg(`${u.fullName} is now ${u.isActive ? "inactive" : "active"}`);
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Update failed");
-    }
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          Create portal logins, assign people to projects, and manage active accounts. Role permissions stay in Office → Access.
+          Create portal logins, assign people to projects, edit profiles, and manage active accounts. Role permissions stay in Office → Access.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => setModalOpen(true)}>+ Add user</Button>
@@ -143,7 +128,7 @@ export default function HrmsUsersPage() {
                 <th className="px-4 py-2 font-semibold">Dept</th>
                 <th className="px-4 py-2 font-semibold">Projects</th>
                 <th className="px-4 py-2 font-semibold">Status</th>
-                {isAdmin ? <th className="px-4 py-2 font-semibold">Actions</th> : null}
+                {canEdit ? <th className="px-4 py-2 font-semibold">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -155,7 +140,7 @@ export default function HrmsUsersPage() {
                   <td className="px-4 py-2.5">{e.profile?.department || "—"}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1">
-                      {(e.memberships || []).slice(0, 3).map((m: any) => (
+                      {(e.memberships || []).slice(0, 3).map((m) => (
                         <Link
                           key={m.id}
                           to={`/projects/${m.project.id}/directory`}
@@ -169,11 +154,13 @@ export default function HrmsUsersPage() {
                   <td className="px-4 py-2.5">
                     <Badge tone={e.isActive !== false ? "ok" : "warn"}>{e.isActive !== false ? "Active" : "Inactive"}</Badge>
                   </td>
-                  {isAdmin ? (
+                  {canEdit ? (
                     <td className="px-4 py-2.5">
-                      <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => void toggleActive(e)}>
-                        {e.isActive !== false ? "Deactivate" : "Activate"}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => setEditUser(e)}>
+                          Edit
+                        </button>
+                      </div>
                     </td>
                   ) : null}
                 </tr>
@@ -182,6 +169,21 @@ export default function HrmsUsersPage() {
           </table>
         </div>
       </Card>
+
+      <UserAccountEditModal
+        open={!!editUser}
+        user={editUser}
+        token={token}
+        isAdmin={!!isAdmin}
+        onClose={() => setEditUser(null)}
+        onSaved={async () => {
+          setMsg("User updated.");
+          await load();
+        }}
+        onDeleted={async () => {
+          setMsg("User removed.");
+        }}
+      />
 
       <RegisterEntryModal
         open={modalOpen}

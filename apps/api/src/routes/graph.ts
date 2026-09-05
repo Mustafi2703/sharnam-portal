@@ -160,6 +160,26 @@ graphRouter.post("/send-comms-uat-pack", requireAuth, requireRoles("admin"), asy
   }
 });
 
+/** Admin — morning digest to SPDC leadership (preview or send) */
+graphRouter.post("/send-daily-digest", requireAuth, requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const mode = String(req.body?.mode || "preview").trim().toLowerCase();
+  const recipients = Array.isArray(req.body?.recipients)
+    ? req.body.recipients.map(String).filter(Boolean)
+    : undefined;
+  try {
+    const { sendDailyDigest } = await import("../services/dailyDigest.js");
+    const out = await sendDailyDigest({
+      preview: mode !== "send",
+      recipients,
+      projectCode: req.body?.projectCode ? String(req.body.projectCode) : undefined,
+    });
+    await audit("graph.send.daily.digest", { userId: req.user!.id, meta: { mode, sent: out.sent } });
+    res.json({ ok: true, ...out });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 graphRouter.get("/config", requireAuth, requireRoles("admin", "office"), (_req, res) => {
   const cfg = graphConfig();
   res.json({

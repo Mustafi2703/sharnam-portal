@@ -20,10 +20,19 @@ type Quotation = {
   quotationNo: string;
   clientName: string;
   status: string;
+  projectId?: string | null;
   attachmentUrl?: string | null;
   attachmentSharePointUrl?: string | null;
   updatedAt?: string;
   log?: LogRow[];
+};
+
+type LeadPrefill = {
+  id: string;
+  title?: string;
+  clientName?: string;
+  projectId?: string | null;
+  project?: { id: string; code: string; name: string } | null;
 };
 
 function driveHref(q: Quotation | null) {
@@ -59,6 +68,7 @@ export default function QuotationMakerPage() {
   const [status, setStatus] = useState<string>("Draft");
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState<Quotation | null>(null);
+  const [leadPrefill, setLeadPrefill] = useState<LeadPrefill | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -66,7 +76,8 @@ export default function QuotationMakerPage() {
     if (isEditing || !leadIdFromUrl) return;
     (async () => {
       try {
-        const lead = await api<{ title?: string; clientName?: string }>(`/api/crm/leads/${leadIdFromUrl}`, { token });
+        const lead = await api<LeadPrefill>(`/api/crm/leads/${leadIdFromUrl}`, { token });
+        setLeadPrefill(lead);
         const name = (lead.clientName || lead.title || "").trim();
         if (name) setClientName(name);
       } catch {
@@ -92,16 +103,24 @@ export default function QuotationMakerPage() {
       setMsg("Enter the client name to create a proposal file.");
       return;
     }
+    if (!leadPrefill?.projectId && !isEditing) {
+      setMsg("Convert this lead to an SPDC project first — proposals save to the project ISO folder (05.03 PMC_Proposals).");
+      return;
+    }
     setSaving(true);
     setMsg("");
     try {
       const r = await api<Quotation>("/api/crm/quotations", {
         method: "POST",
         token,
-        body: JSON.stringify({ clientName: name, leadId: leadIdFromUrl || undefined }),
+        body: JSON.stringify({
+          clientName: name,
+          leadId: leadIdFromUrl || undefined,
+          projectId: leadPrefill?.projectId || undefined,
+        }),
       });
       setSaved(r);
-      setMsg(`Proposal file created for ${name}. Open it in Drive to edit.`);
+      setMsg(`Proposal file created in project ISO folder for ${name}.`);
       nav(`/crm/proposals/${r.id}`, { replace: true });
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not create proposal");
@@ -135,12 +154,14 @@ export default function QuotationMakerPage() {
     ? [...STATUSES]
     : [status, ...STATUSES];
 
+  const needsConvert = !isEditing && leadIdFromUrl && leadPrefill && !leadPrefill.projectId;
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="CRM · Proposal"
         title={isEditing ? saved?.clientName || "Proposal" : "New proposal"}
-        subtitle="Ask for the client name, drop a copy of the SPDC PMC proposal into the proposals folder, then edit in Drive. Status lives in the log."
+        subtitle="Convert lead → SPDC project first. Proposal .docx saves to ISO 05.03 PMC_Proposals on the project library."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -162,13 +183,30 @@ export default function QuotationMakerPage() {
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
+      {needsConvert && (
+        <Card className="!p-4 border-warn/40 bg-amber-50/50">
+          <p className="text-sm text-ink">
+            This lead is not converted yet.{" "}
+            <Link to="/crm/leads" className="font-semibold text-brand">
+              Go to Leads → Convert to SPDC project
+            </Link>{" "}
+            before creating a proposal file.
+          </p>
+        </Card>
+      )}
+
       {!isEditing && (
         <Card>
           <h3 className="font-semibold text-sm mb-1">Client name</h3>
           <p className="text-xs text-steel-muted mb-4">
             Creates <code className="font-mono">{clientName.trim() || "Client"}-PMC-Proposal.docx</code> in{" "}
-            <code className="font-mono">PMC_Proposals</code>. Edit through the Drive / SharePoint link — not a complete in-app document.
+            <code className="font-mono">05.03 Tender Documents / PMC_Proposals</code> on the linked SPDC project.
           </p>
+          {leadPrefill?.projectId && (
+            <Badge tone="ok" className="mb-3">
+              Project linked — ISO folder will be created on save
+            </Badge>
+          )}
           <form className="flex flex-wrap gap-3 items-end" onSubmit={(e) => void createProposal(e)}>
             <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted min-w-[16rem] flex-1">
               Client
@@ -178,10 +216,10 @@ export default function QuotationMakerPage() {
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 required
-                disabled={!canWrite || saving}
+                disabled={!canWrite || saving || !!needsConvert}
               />
             </label>
-            <Button type="submit" disabled={!canWrite || saving}>
+            <Button type="submit" disabled={!canWrite || saving || !!needsConvert}>
               {saving ? "Creating file…" : "Create proposal file"}
             </Button>
           </form>

@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
@@ -17,15 +18,6 @@ import {
 } from "../../lib/crmBidDisciplines";
 
 type VendorRow = VendorFormState & { id: string; isActive?: boolean; _count?: { projects: number } };
-type PersonRow = {
-  id: string;
-  fullName: string;
-  email: string;
-  role: string;
-  phone?: string | null;
-  isActive?: boolean;
-  memberships?: { project: { code: string; name: string } }[];
-};
 
 const TAB_META: Record<
   string,
@@ -266,10 +258,11 @@ export function DirectoryCompaniesPanel({
 }
 
 export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdit: boolean }) {
-  const [people, setPeople] = useState<PersonRow[]>([]);
+  const [people, setPeople] = useState<UserAccountRow[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
   const [form, setForm] = useState({ fullName: "", email: "", role: "vendor", phone: "" });
   const [msg, setMsg] = useState("");
+  const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
 
   const visiblePeople = useMemo(() => {
     const needle = peopleSearch.trim().toLowerCase();
@@ -284,7 +277,7 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
   }, [people, peopleSearch]);
 
   const load = useCallback(async () => {
-    const rows = await api<PersonRow[]>("/api/hrm/employees", { token }).catch(() => []);
+    const rows = await api<UserAccountRow[]>("/api/hrm/employees", { token }).catch(() => []);
     setPeople(rows);
   }, [token]);
 
@@ -330,7 +323,14 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
                   </div>
                 ) : null}
               </div>
-              <Badge tone={p.isActive === false ? "warn" : "ok"}>{p.role}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone={p.isActive === false ? "warn" : "ok"}>{p.role}</Badge>
+                {canEdit ? (
+                  <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => setEditUser(p)}>
+                    Edit
+                  </button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -356,6 +356,21 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
           Full access matrix: <Link to="/roles" className="text-brand font-semibold">Access · Users</Link>
         </p>
       </Card>
+
+      <UserAccountEditModal
+        open={!!editUser}
+        user={editUser}
+        token={token}
+        isAdmin={canEdit}
+        onClose={() => setEditUser(null)}
+        onSaved={async () => {
+          setMsg("User updated.");
+          await load();
+        }}
+        onDeleted={async () => {
+          setMsg("User removed.");
+        }}
+      />
     </div>
   );
 }

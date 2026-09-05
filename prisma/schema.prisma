@@ -15,6 +15,8 @@ model User {
   role         String   @default("office")
   portal       String   @default("office")
   phone        String?
+  /// When set, vendor-role users map to this directory company (supports multiple logins per vendor).
+  vendorId     String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -37,6 +39,7 @@ model User {
   safetyReported        SafetyRecord[]              @relation("SafetyReporter")
   safetyAssigned        SafetyRecord[]              @relation("SafetyAssignee")
   qualitySiteReported   QualitySiteRecord[]         @relation("QualitySiteReporter")
+  vendor                Vendor?                     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
 }
 
 model RoleDefinition {
@@ -1360,6 +1363,7 @@ model WprSnapshot {
   status        String    @default("Draft")
   publishedAt   DateTime?
   publishedPath String?
+  publishedUrl  String?
   createdById   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
@@ -1403,6 +1407,23 @@ model Vendor {
   purchaseOrders PurchaseOrder[]
   raBills        RaBill[]
   crmVendorBoqs  CrmVendorBoq[]
+  portalUsers    User[]
+  contacts       VendorContact[]
+}
+
+/** Additional portal emails for the same vendor / client organisation. */
+model VendorContact {
+  id        String   @id @default(cuid())
+  vendorId  String
+  email     String   @unique
+  fullName  String?
+  role      String?  /// e.g. Estimator, Director
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
 }
 
 /**

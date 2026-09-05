@@ -60,13 +60,28 @@ export async function ensurePortalLogin(opts: {
   return { userId: user.id, email, created: true, tempPassword, role: opts.role };
 }
 
-export async function ensureVendorPortalLogin(vendor: { email?: string | null; name: string; businessPhone?: string | null }) {
-  return ensurePortalLogin({
+export async function ensureVendorPortalLogin(vendor: {
+  email?: string | null;
+  name: string;
+  businessPhone?: string | null;
+  vendorId?: string | null;
+}) {
+  const login = await ensurePortalLogin({
     email: vendor.email || "",
     fullName: vendor.name,
     role: "vendor",
     phone: vendor.businessPhone,
   });
+  if (!login) return login;
+  const vendorId =
+    vendor.vendorId ||
+    (vendor.email
+      ? (await prisma.vendor.findFirst({ where: { email: vendor.email.trim().toLowerCase() }, select: { id: true } }))?.id
+      : null);
+  if (vendorId) {
+    await prisma.user.update({ where: { id: login.userId }, data: { vendorId } }).catch(() => {});
+  }
+  return login;
 }
 
 export async function ensureClientPortalLogin(party: { email?: string | null; name: string; businessPhone?: string | null }) {

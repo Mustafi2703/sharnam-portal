@@ -60,22 +60,28 @@ function VendorPackageCard({
   summary,
   highlighted,
   onUpload,
+  vendorView = false,
 }: {
   pkgId: string;
   pkgSlots: BidSlot[];
   summary?: PackageSummary;
   highlighted?: boolean;
   onUpload: (slot: BidSlot, mode: "online" | "excel") => void;
+  vendorView?: boolean;
 }) {
   const head = pkgSlots[0];
   const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
+  const isOpen = head?.bidPackageStatus === "Open";
 
   return (
-    <Card className={highlighted ? "ring-2 ring-brand" : undefined}>
+    <Card className={highlighted ? "ring-2 ring-brand" : isOpen ? "border-brand/40" : undefined}>
       <div className="mb-3">
-        <h3 className="font-semibold">{head?.bidPackageTitle}</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">{head?.bidPackageTitle}</h3>
+          {isOpen ? <Badge tone="ok">Open for bids</Badge> : <Badge>{head?.bidPackageStatus}</Badge>}
+        </div>
         <p className="text-xs text-steel-muted mt-0.5">
-          {head?.revisionLabel} · <Badge>{head?.bidPackageStatus}</Badge>
+          {head?.revisionLabel}
           <span className="ml-2">
             Your BOQs {done}/{pkgSlots.length}
           </span>
@@ -98,7 +104,7 @@ function VendorPackageCard({
         {head?.projectNote && <p className="text-[11px] text-steel-muted mt-1">{head.projectNote}</p>}
       </div>
 
-      {summary?.summary?.grandTotals && Object.keys(summary.summary.grandTotals).length > 0 && (
+      {summary?.summary?.grandTotals && Object.keys(summary.summary.grandTotals).length > 0 && !vendorView && (
         <div className="mb-4">
           <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">
             Comparative statement (R2 summary — all bidders)
@@ -221,6 +227,16 @@ export default function CrmVendorBidsPage() {
     return groups;
   }, [slots]);
 
+  const openPackageCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const s of slots) {
+      if (s.bidPackageStatus === "Open") seen.add(s.bidPackageId);
+    }
+    return seen.size;
+  }, [slots]);
+
+  const pendingUploads = useMemo(() => slots.filter((s) => !s.fileName && !s.uploadedAt).length, [slots]);
+
   async function uploadBoq(e: FormEvent) {
     e.preventDefault();
     if (!uploadFile || !uploadSlot) return;
@@ -270,6 +286,19 @@ export default function CrmVendorBidsPage() {
 
   return (
     <div className="space-y-4 pb-4">
+      <Card className="!p-4 bg-sand/40 border-brand/20">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-1">Contractor bid desk</p>
+        <h2 className="font-display text-lg text-ink">Open packages & discipline BOQs</h2>
+        <p className="text-sm text-steel-muted mt-1 max-w-2xl">
+          Each project below lists bid packages assigned to you. Upload one R2 Excel per discipline, or fill BOQ online — PMC sees updates in Comparative Statement.
+        </p>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <Badge tone="ok">{openPackageCount} open package{openPackageCount === 1 ? "" : "s"}</Badge>
+          <Badge tone={pendingUploads ? "warn" : "neutral"}>{pendingUploads} pending upload{pendingUploads === 1 ? "" : "s"}</Badge>
+          <Badge tone="neutral">{slots.length} discipline slot{slots.length === 1 ? "" : "s"}</Badge>
+        </div>
+      </Card>
+
       <div className="flex flex-wrap gap-2 shrink-0">
         <Button
           type="button"
@@ -311,6 +340,7 @@ export default function CrmVendorBidsPage() {
               summary={summaries[pkgId]}
               highlighted={focusPkgId === pkgId}
               onUpload={openUpload}
+              vendorView
             />
           ))}
         </div>

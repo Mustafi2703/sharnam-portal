@@ -43,6 +43,16 @@ export async function syncProposalDocx(projectCode: string, quotationNo: string,
   );
 }
 
+export async function createProjectProposalFile(projectCode: string, clientName: string, quotationNo?: string) {
+  const buffer = fs.readFileSync(resolveProposalDocxPath());
+  return syncBufferToProjectSharePoint(
+    projectCode,
+    CRM_SHAREPOINT.pmcProposals,
+    proposalDocxFilename(quotationNo, clientName),
+    buffer
+  );
+}
+
 /** Copy the SPDC PMC proposal template into the office proposals folder, named for the client. */
 export async function createClientProposalFile(clientName: string, quotationNo?: string) {
   const buffer = fs.readFileSync(resolveProposalDocxPath());

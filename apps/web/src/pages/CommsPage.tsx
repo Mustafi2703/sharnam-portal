@@ -3,20 +3,9 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../components/ui";
+import { CommsMatrixPanel } from "../components/CommsMatrixPanel";
 
 type Tab = "matrix" | "agenda" | "mom" | "followup" | "log";
-
-function roleLabel(role: string) {
-  const map: Record<string, string> = {
-    client: "Client",
-    office: "Sharnam PMC",
-    employee: "Design consultant",
-    vendor: "Main contractor",
-    site_employee: "Site / concrete works",
-    admin: "Admin",
-  };
-  return map[role] || role.replace(/_/g, " ");
-}
 
 /**
  * Client video flow:
@@ -36,7 +25,6 @@ export default function CommsPage() {
     if (t === "matrix") setSearchParams({});
     else setSearchParams({ tab: t });
   };
-  const [matrix, setMatrix] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [project, setProject] = useState<any>(null);
   const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");
@@ -47,39 +35,6 @@ export default function CommsPage() {
   const [itemCategory, setItemCategory] = useState("Agenda");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [matrixForm, setMatrixForm] = useState({
-    communicationType: "Technical coordination",
-    fromRole: "office",
-    toRole: "client",
-    frequency: "Weekly",
-    channel: "Meeting",
-  });
-  // Presets: Meeting only — RFIs live under Ask (PMC RFI), not as duplicate meeting channels
-  const TOPIC_PRESETS = [
-    { label: "Site Meeting", communicationType: "Site Meeting", channel: "Meeting", frequency: "Weekly" },
-    { label: "Design Meeting", communicationType: "Design Meeting", channel: "Meeting", frequency: "Bi-weekly" },
-    { label: "Commercial Meeting", communicationType: "Commercial Meeting", channel: "Meeting", frequency: "Monthly" },
-  ];
-  const [contactForm, setContactForm] = useState({
-    orgSection: "Client",
-    orgName: "",
-    personName: "",
-    designation: "",
-    company: "",
-    spoc: "",
-    mobile: "",
-    email: "",
-    mailRole: "CC",
-    officeAddress: "",
-  });
-  const ORG_ROLES = [
-    { value: "client", label: "Client" },
-    { value: "office", label: "Sharnam PMC" },
-    { value: "employee", label: "Design consultant" },
-    { value: "vendor", label: "Main contractor" },
-    { value: "site_employee", label: "Site / concrete works" },
-  ];
-  const ORG_SECTIONS = ["Client", "PMC", "Consultant", "Contractor", "Other"];
   const [schedule, setSchedule] = useState({
     title: "Weekly Site Coordination",
     meetingDate: new Date().toISOString().slice(0, 16),
@@ -94,28 +49,50 @@ export default function CommsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
   const load = async () => {
-    const [m, l, meet, c, p] = await Promise.all([
-      api<any[]>(`/api/comms/matrix/${id}`, { token }),
+    const [l, meet, techContacts, commContacts, p] = await Promise.all([
       api<any[]>(`/api/comms/logs/${id}`, { token }),
       api<any[]>(`/api/comms/meetings/${id}`, { token }),
-      api<any[]>(`/api/comms/contacts/${id}?kind=${matrixKind}`, { token }).catch(() => []),
+      api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() => []),
+      api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }).catch(() => []),
       api<any>(`/api/projects/${id}`, { token }).catch(() => null),
     ]);
-    setMatrix(m);
     setLogs(l);
     setMeetings(meet);
-    setContacts(c);
     setProject(p);
-    const matrixEmails = c
-      .filter((r: any) => !r.isSectionHeader && r.email)
-      .map((r: any) => r.email.trim())
-      .filter(Boolean);
-    if (matrixEmails.length) {
-      setSchedule((s) => ({
-        ...s,
-        attendeeEmails: Array.from(new Set(matrixEmails)).join(", "),
-      }));
+
+    if (canEdit && techContacts.length === 0 && commContacts.length === 0) {
+      try {
+        await api(`/api/comms/contacts/${id}/seed-bpcl`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ force: false, both: true }),
+        });
+        const [tech2, comm2] = await Promise.all([
+          api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }),
+          api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }),
+        ]);
+        setContacts(matrixKind === "COMMERCIAL" ? comm2 : tech2);
+        const allEmails = [...tech2, ...comm2]
+          .filter((r: any) => !r.isSectionHeader && r.email)
+          .map((r: any) => r.email.trim())
+          .filter(Boolean);
+        if (allEmails.length) {
+          setSchedule((s) => ({ ...s, attendeeEmails: Array.from(new Set(allEmails)).join(", ") }));
+        }
+      } catch {
+        setContacts(matrixKind === "COMMERCIAL" ? commContacts : techContacts);
+      }
+    } else {
+      setContacts(matrixKind === "COMMERCIAL" ? commContacts : techContacts);
+      const allEmails = [...techContacts, ...commContacts]
+        .filter((r: any) => !r.isSectionHeader && r.email)
+        .map((r: any) => r.email.trim())
+        .filter(Boolean);
+      if (allEmails.length) {
+        setSchedule((s) => ({ ...s, attendeeEmails: Array.from(new Set(allEmails)).join(", ") }));
+      }
     }
+
     if (!activeMeeting && meet[0]) setActiveMeeting(meet[0].id);
   };
 
@@ -166,14 +143,6 @@ export default function CommsPage() {
       setBusy(false);
     }
   }
-
-  const matrixRecipients = useMemo(
-    () =>
-      contacts
-        .filter((r) => !r.isSectionHeader && r.email)
-        .map((r) => `${r.personName || r.email} (${r.mailRole || "CC"})`),
-    [contacts]
-  );
 
   async function generateAgenda() {
     if (!activeMeeting) return;
@@ -274,301 +243,18 @@ export default function CommsPage() {
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {tab === "matrix" && (
-        <div className="space-y-5">
-          <div className="flex flex-wrap gap-2 items-center">
-            {(["TECHNICAL", "COMMERCIAL"] as const).map((k) => (
-              <Button key={k} type="button" variant={matrixKind === k ? "primary" : "secondary"} onClick={() => setMatrixKind(k)}>
-                {k === "TECHNICAL" ? "Technical matrix" : "Commercial matrix"}
-              </Button>
-            ))}
-            {canEdit && (
-              <>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="!text-sm"
-                  onClick={async () => {
-                    const force = contacts.length > 0 && confirm("Replace existing TECHNICAL matrix with BPCL template?");
-                    const r = await api<{ seeded: number; message?: string }>(`/api/comms/contacts/${id}/seed-bpcl`, {
-                      method: "POST",
-                      token,
-                      body: JSON.stringify({ force }),
-                    });
-                    setMsg(r.message || `BPCL matrix: ${r.seeded} rows loaded.`);
-                    await load();
-                  }}
-                >
-                  Load BPCL matrix (Excel)
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!text-sm"
-                  onClick={async () => {
-                    const r = await api<{ created: number }>(`/api/comms/matrix/${id}/seed-standard`, {
-                      method: "POST",
-                      token,
-                    });
-                    setMsg(`Meeting + RFI topic matrix: added ${r.created} row(s).`);
-                    await load();
-                  }}
-                >
-                  Seed Meeting + RFI parties
-                </Button>
-              </>
-            )}
-          </div>
-
-          <Card className="!bg-procore-navy !text-white !border-0 space-y-2">
-            <div className="text-[11px] uppercase tracking-wider text-white/60">Subject</div>
-            <div className="font-display text-xl">{matrixKind} COMMUNICATION MATRIX</div>
-            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-white/80 pt-2 border-t border-white/20">
-              <div>
-                <span className="text-white/50 uppercase tracking-wider text-[10px]">Project</span>
-                <div>{project?.name || "—"}</div>
-              </div>
-              <div>
-                <span className="text-white/50 uppercase tracking-wider text-[10px]">Client</span>
-                <div>{project?.clientName || "—"}</div>
-              </div>
-              <div>
-                <span className="text-white/50 uppercase tracking-wider text-[10px]">Design consultant</span>
-                <div>{project?.designConsultant || "—"}</div>
-              </div>
-              <div>
-                <span className="text-white/50 uppercase tracking-wider text-[10px]">PMC</span>
-                <div>{project?.pmcName || "Sharnam Project Development Consultants & Co."}</div>
-              </div>
-            </div>
-            <p className="text-sm text-white/75 pt-2">
-              Sr.No · Name · Designation · Company · SPOC · Mobile · E-mail · General mail (TO/CC) · Office address — same
-              columns as Communication Matrix_BPCL (2).xlsx. All meeting invites, agenda, MoM, and follow-ups go to these
-              contacts.
-            </p>
-            {matrixRecipients.length > 0 && (
-              <p className="text-[11px] text-white/60">
-                Meeting recipients ({matrixRecipients.length}): {matrixRecipients.slice(0, 6).join(" · ")}
-                {matrixRecipients.length > 6 ? " …" : ""}
-              </p>
-            )}
-          </Card>
-
-          {canEdit && (
-            <Card>
-              <h3 className="font-semibold mb-3">Add contact / org section</h3>
-              <form
-                className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await api(`/api/comms/contacts/${id}`, {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify({ ...contactForm, matrixKind, company: contactForm.company || contactForm.orgName }),
-                  });
-                  setContactForm({
-                    orgSection: contactForm.orgSection,
-                    orgName: contactForm.orgName,
-                    personName: "",
-                    designation: "",
-                    company: "",
-                    spoc: "",
-                    mobile: "",
-                    email: "",
-                    mailRole: "CC",
-                    officeAddress: "",
-                  });
-                  await load();
-                }}
-              >
-                <Select value={contactForm.orgSection} onChange={(e) => setContactForm({ ...contactForm, orgSection: e.target.value })}>
-                  {ORG_SECTIONS.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </Select>
-                <Input placeholder="Organisation name" value={contactForm.orgName} onChange={(e) => setContactForm({ ...contactForm, orgName: e.target.value })} required />
-                <Input placeholder="Person name" value={contactForm.personName} onChange={(e) => setContactForm({ ...contactForm, personName: e.target.value })} />
-                <Input placeholder="Designation" value={contactForm.designation} onChange={(e) => setContactForm({ ...contactForm, designation: e.target.value })} />
-                <Input placeholder="Company" value={contactForm.company} onChange={(e) => setContactForm({ ...contactForm, company: e.target.value })} />
-                <Input placeholder="Single point of contact (SPOC)" value={contactForm.spoc} onChange={(e) => setContactForm({ ...contactForm, spoc: e.target.value })} />
-                <Input placeholder="Mobile" value={contactForm.mobile} onChange={(e) => setContactForm({ ...contactForm, mobile: e.target.value })} />
-                <Input placeholder="Email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} />
-                <Select value={contactForm.mailRole} onChange={(e) => setContactForm({ ...contactForm, mailRole: e.target.value })}>
-                  <option value="TO">TO</option>
-                  <option value="CC">CC</option>
-                </Select>
-                <Input className="sm:col-span-2" placeholder="Office address" value={contactForm.officeAddress} onChange={(e) => setContactForm({ ...contactForm, officeAddress: e.target.value })} />
-                <Button type="submit">Add to {matrixKind} matrix</Button>
-              </form>
-            </Card>
-          )}
-
-          <Card padding={false} className="overflow-x-auto">
-            <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white flex justify-between gap-2">
-              <span>{matrixKind} · Contact register</span>
-              <span className="text-[11px] font-normal text-white/70">{contacts.length} rows</span>
-            </div>
-            <table className="w-full text-sm min-w-[900px]">
-              <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
-                <tr>
-                  <th className="p-3">Sr.No</th>
-                  <th className="p-3">Name</th>
-                  <th className="p-3">Designation</th>
-                  <th className="p-3">Name of company</th>
-                  <th className="p-3">Single point of contact</th>
-                  <th className="p-3">Mobile</th>
-                  <th className="p-3">E-mail</th>
-                  <th className="p-3">General mail communication</th>
-                  <th className="p-3">Office add.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  let sectionIdx = -1;
-                  let personInSection = 0;
-                  return contacts.map((r) => {
-                    if (r.isSectionHeader) {
-                      sectionIdx += 1;
-                      personInSection = 0;
-                      return (
-                        <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
-                          <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + sectionIdx)}</td>
-                          <td className="p-3 font-semibold text-ink" colSpan={8}>
-                            {r.orgName}
-                          </td>
-                        </tr>
-                      );
-                    }
-                    personInSection += 1;
-                    return (
-                      <tr key={r.id} className="border-t border-line hover:bg-sand/40">
-                        <td className="p-3 font-mono text-xs text-steel-muted">{personInSection}</td>
-                        <td className="p-3 font-medium whitespace-pre-line">{r.personName || "—"}</td>
-                        <td className="p-3">{r.designation || "—"}</td>
-                        <td className="p-3">{r.company || r.orgName || "—"}</td>
-                        <td className="p-3 text-xs whitespace-pre-line">{r.spoc || "—"}</td>
-                        <td className="p-3 font-mono text-xs">{r.mobile || "—"}</td>
-                        <td className="p-3 text-xs break-all">{r.email || "—"}</td>
-                        <td className="p-3">
-                          <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge>
-                        </td>
-                        <td className="p-3 text-xs text-steel-muted max-w-[180px] whitespace-pre-line">{r.officeAddress || "—"}</td>
-                      </tr>
-                    );
-                  });
-                })()}
-                {!contacts.length && (
-                  <tr>
-                    <td colSpan={9} className="p-10 text-center text-steel-muted text-sm">
-                      No contacts yet — click <strong>Load BPCL matrix (Excel)</strong> or add people above.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </Card>
-
-          <details className="text-sm" open>
-            <summary className="cursor-pointer font-semibold text-steel-muted">Topic routing — Meeting + RFI parties</summary>
-            <Card className="mt-3 space-y-3 !p-4">
-              <p className="text-xs text-steel-muted">
-                Define who talks for Meetings and RFIs. Use <strong>Seed Meeting + RFI parties</strong> above, or add rows
-                with presets.
-              </p>
-              {canEdit && (
-                <div className="flex flex-wrap gap-2">
-                  {TOPIC_PRESETS.map((p) => (
-                    <button
-                      key={p.label}
-                      type="button"
-                      className="text-xs px-2.5 py-1.5 border border-line rounded-md hover:border-brand"
-                      onClick={() =>
-                        setMatrixForm({
-                          ...matrixForm,
-                          communicationType: p.communicationType,
-                          channel: p.channel,
-                          frequency: p.frequency,
-                        })
-                      }
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {canEdit && (
-                <form
-                  className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    await api(`/api/comms/matrix/${id}`, { method: "POST", token, body: JSON.stringify(matrixForm) });
-                    setMsg("Topic routing row added.");
-                    await load();
-                  }}
-                >
-                  <Input
-                    value={matrixForm.communicationType}
-                    onChange={(e) => setMatrixForm({ ...matrixForm, communicationType: e.target.value })}
-                    placeholder="Type"
-                  />
-                  <Select value={matrixForm.fromRole} onChange={(e) => setMatrixForm({ ...matrixForm, fromRole: e.target.value })}>
-                    {ORG_ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select value={matrixForm.toRole} onChange={(e) => setMatrixForm({ ...matrixForm, toRole: e.target.value })}>
-                    {ORG_ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select value={matrixForm.channel} onChange={(e) => setMatrixForm({ ...matrixForm, channel: e.target.value })}>
-                    <option value="Meeting">Meeting</option>
-                    <option value="RFI">RFI</option>
-                    <option value="Email">Email</option>
-                  </Select>
-                  <Button type="submit">Add row</Button>
-                </form>
-              )}
-              <table className="w-full text-sm">
-                <thead className="bg-sand text-left text-[10px] uppercase text-steel-muted">
-                  <tr>
-                    <th className="p-3">Type</th>
-                    <th className="p-3">From</th>
-                    <th className="p-3">To</th>
-                    <th className="p-3">Frequency</th>
-                    <th className="p-3">Channel</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrix.map((r) => (
-                    <tr key={r.id} className="border-t border-line">
-                      <td className="p-3 font-medium">{r.communicationType}</td>
-                      <td className="p-3">{roleLabel(r.fromRole)}</td>
-                      <td className="p-3">{roleLabel(r.toRole)}</td>
-                      <td className="p-3">{r.frequency}</td>
-                      <td className="p-3">
-                        <Badge tone={r.channel === "Meeting" ? "ok" : r.channel === "RFI" ? "brand" : "neutral"}>
-                          {r.channel}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                  {!matrix.length && (
-                    <tr>
-                      <td colSpan={5} className="p-6 text-center text-steel-muted text-sm">
-                        No topic rows — seed Meeting + RFI parties.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </Card>
-          </details>
-        </div>
+      {tab === "matrix" && id && (
+        <CommsMatrixPanel
+          projectId={id}
+          token={token!}
+          project={project}
+          matrixKind={matrixKind}
+          onMatrixKindChange={setMatrixKind}
+          contacts={contacts}
+          canEdit={canEdit}
+          onReload={load}
+          onMsg={setMsg}
+        />
       )}
 
       {(tab === "agenda" || tab === "mom" || tab === "followup") && (
@@ -620,11 +306,8 @@ export default function CommsPage() {
                 <Input
                   value={schedule.attendeeEmails}
                   onChange={(e) => setSchedule({ ...schedule, attendeeEmails: e.target.value })}
-                  placeholder="Matrix contacts (TO + CC) — auto-filled from communication matrix"
+                  placeholder="Attendee emails (TO + CC from both matrices)"
                 />
-                <p className="text-[10px] text-steel-muted px-1">
-                  Leave blank to use all communication matrix emails. One invite goes to everyone listed.
-                </p>
                 <label className="flex items-center gap-2 text-xs text-steel-muted px-1">
                   <input
                     type="checkbox"

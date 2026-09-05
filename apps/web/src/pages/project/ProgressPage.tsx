@@ -11,7 +11,12 @@ import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
 import { RegisterSheetCell } from "../../components/RegisterSheetCell";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
-import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
+import { CRM_BID_DISCIPLINES } from "../../lib/crmBidDisciplines";
+
+/** Dev-only — hide re-seed buttons in production demo builds. */
+const SHOW_DEMO_CONTROLS = import.meta.env.DEV;
+
+const SCURVE_DISCIPLINES = [{ key: "OVERALL", label: "Overall project" }, ...CRM_BID_DISCIPLINES.map((d) => ({ key: d.key, label: d.label }))];
 
 type Tab =
   | "overview"
@@ -21,11 +26,10 @@ type Tab =
   | "hindrance"
   | "risk"
   | "legal"
-  | "lessons"
   | "scurve"
   | "msproject";
 
-const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "milestones", "monthly", "lessons", "msproject"];
+const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "milestones", "monthly", "msproject"];
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
@@ -61,6 +65,11 @@ export default function ProgressPage() {
   const [msProject, setMsProject] = useState<any>(null);
   const [msBusy, setMsBusy] = useState<"seed" | "import" | "xml" | null>(null);
   const msImportRef = useRef<HTMLInputElement>(null);
+  const [scurveDiscipline, setScurveDiscipline] = useState("OVERALL");
+  const [scurvePoints, setScurvePoints] = useState<any[]>([]);
+  const [scurveModalOpen, setScurveModalOpen] = useState(false);
+  const [scurveForm, setScurveForm] = useState({ periodDate: "", periodLabel: "", plannedPct: "", actualPct: "" });
+  const [scurveBusy, setScurveBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [hindranceModalOpen, setHindranceModalOpen] = useState(false);
   const [mileAddOpen, setMileAddOpen] = useState(false);
@@ -69,7 +78,6 @@ export default function ProgressPage() {
   const [actAddOpen, setActAddOpen] = useState(false);
   const [cashAddOpen, setCashAddOpen] = useState(false);
   const [manAddOpen, setManAddOpen] = useState(false);
-  const [lessonAddOpen, setLessonAddOpen] = useState(false);
   const [actBusy, setActBusy] = useState(false);
   const [actForm, setActForm] = useState({
     activity: "",
@@ -83,7 +91,6 @@ export default function ProgressPage() {
   });
   const [cashForm, setCashForm] = useState({ periodLabel: "", packageName: "", plannedAmount: "", actualAmount: "" });
   const [manForm, setManForm] = useState({ trade: "", required: "", available: "" });
-  const [lessonForm, setLessonForm] = useState({ description: "", wentWell: "", notMetExpectation: "", lessonsLearnt: "" });
   const mileFormRef = useRef<HTMLFormElement>(null);
   const riskFormRef = useRef<HTMLFormElement>(null);
   const legalFormRef = useRef<HTMLFormElement>(null);
@@ -144,6 +151,52 @@ export default function ProgressPage() {
 
   const loadMsProject = () => api(`/api/progress/${id}/ms-project/summary`, { token }).then(setMsProject);
 
+  const loadScurvePoints = () =>
+    api<any[]>(`/api/progress/${id}/scurve-points?discipline=${encodeURIComponent(scurveDiscipline)}`, { token }).then(
+      setScurvePoints
+    );
+
+  async function saveScurvePoint() {
+    if (!id || !canEdit) return;
+    setScurveBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/progress/${id}/scurve-points`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          discipline: scurveDiscipline,
+          periodDate: scurveForm.periodDate,
+          periodLabel: scurveForm.periodLabel,
+          plannedPct: Number(scurveForm.plannedPct) / 100,
+          actualPct: Number(scurveForm.actualPct) / 100,
+          source: "manual",
+        }),
+      });
+      setScurveModalOpen(false);
+      setScurveForm({ periodDate: "", periodLabel: "", plannedPct: "", actualPct: "" });
+      await loadScurvePoints();
+      setMsg(`S-curve row saved for ${scurveDiscipline}.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setScurveBusy(false);
+    }
+  }
+
+  async function deleteScurvePoint(pointId: string) {
+    if (!id || !canEdit) return;
+    setScurveBusy(true);
+    try {
+      await api(`/api/progress/${id}/scurve-points/${pointId}`, { method: "DELETE", token });
+      await loadScurvePoints();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setScurveBusy(false);
+    }
+  }
+
   async function runVerify() {
     if (!canVerify) return;
     setVerifyBusy(true);
@@ -189,6 +242,10 @@ export default function ProgressPage() {
   useEffect(() => {
     if (tab === "scurve" || tab === "msproject") void loadMsProject();
   }, [id, token, tab]);
+
+  useEffect(() => {
+    if (tab === "scurve" && id) void loadScurvePoints();
+  }, [id, token, tab, scurveDiscipline]);
 
   if (!data) return <div className="text-steel-muted py-10">Loading progress sheets…</div>;
 
@@ -451,7 +508,7 @@ export default function ProgressPage() {
       await load();
       const reg = out.registers;
       setMsg(
-        `Loaded SPDC progress packs — ${reg?.milestones?.imported ?? 0} milestones · ${reg?.hindrance?.imported ?? 0} hindrances · ${reg?.risk?.imported ?? 0} risks · ${reg?.legal?.imported ?? 0} legal · ${out.planned?.activityLines ?? 0} activity lines`
+        `Loaded SPDC progress packs — ${reg?.milestones?.imported ?? 0} milestones · ${reg?.hindrance?.imported ?? 0} hindrances · ${reg?.risk?.imported ?? 0} risks · ${reg?.legal?.imported ?? 0} legal · ${reg?.lessons?.imported ?? 0} lessons · ${out.planned?.activityLines ?? 0} activity lines`
       );
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Template load failed");
@@ -483,7 +540,7 @@ export default function ProgressPage() {
     setPaBusy("sync");
     setMsg("");
     try {
-      const out = await api<{ synced: number; overlaid: number }>(
+      const out = await api<{ synced: number; overlaid: number; copSync?: { periods?: number } }>(
         `/api/progress/${id}/planned-actual/sync-cashflow`,
         { method: "POST", token }
       );
@@ -636,27 +693,6 @@ export default function ProgressPage() {
     }
   }
 
-  async function addLesson(e: FormEvent) {
-    e.preventDefault();
-    if (!id) return;
-    setActBusy(true);
-    try {
-      await api(`/api/closure/project/${id}/lessons`, {
-        method: "POST",
-        token,
-        body: JSON.stringify(lessonForm),
-      });
-      setLessonForm({ description: "", wentWell: "", notMetExpectation: "", lessonsLearnt: "" });
-      setLessonAddOpen(false);
-      setMsg("Lesson learnt added");
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Add failed");
-    } finally {
-      setActBusy(false);
-    }
-  }
-
   return (
     <div className="w-full min-w-0 space-y-5 pb-4">
       <div className="w-full shrink-0">
@@ -689,11 +725,6 @@ export default function ProgressPage() {
         />
       </div>
 
-      {!isProgressRegister && id && (
-        <div className="shrink-0">
-          <DailySheetWorkflow projectId={id} compact />
-        </div>
-      )}
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -920,7 +951,7 @@ export default function ProgressPage() {
             rowCount={data.milestones?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setMileAddOpen(true) : undefined}
-            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy}
             message={msg || undefined}
@@ -1417,7 +1448,7 @@ export default function ProgressPage() {
             sheetLabel="Monthly Progress Dashboard"
             rowCount={data.sorStats?.length}
             canEdit={canEdit}
-            onGenerate={canResyncExcel ? () => void runResyncSor() : undefined}
+            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void runResyncSor() : undefined}
             generateLabel="Load Monthly Dashboard"
             busy={resyncBusy}
             uploadHint="SOR Log from Monthly Progress Dashboard.xlsx — Sr.no, Observation, Total, Open, Close, Closure Rate."
@@ -1485,7 +1516,7 @@ export default function ProgressPage() {
             rowCount={data.hindrances?.length}
             canEdit={canEdit}
             onAddRow={() => setHindranceModalOpen(true)}
-            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy || !!paBusy}
             message={msg}
@@ -1576,7 +1607,7 @@ export default function ProgressPage() {
             rowCount={data.risks?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setRiskAddOpen(true) : undefined}
-            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy}
             message={msg || undefined}
@@ -1661,7 +1692,7 @@ export default function ProgressPage() {
             rowCount={data.legalApprovals?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setLegalAddOpen(true) : undefined}
-            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy}
             message={msg || undefined}
@@ -1729,52 +1760,6 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {tab === "lessons" && (
-        <div className="progress-sheet-block space-y-3">
-          <ReferenceSheetToolbar
-            sheetLabel="Lessons Learnt — Sharnam PMC"
-            rowCount={data.lessons?.length}
-            canEdit={canEdit}
-            onAddRow={canEdit ? () => setLessonAddOpen(true) : undefined}
-            onGenerate={canResyncExcel ? () => void loadAllProgressTemplates(true) : undefined}
-            generateLabel="Load SPDC template"
-            busy={registerSyncBusy}
-            message={msg || undefined}
-            uploadHint="Rows from Lessons Learnt - Sharnam PMC.xls — add site notes without changing Excel numbers."
-          />
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
-            <div className="sheet-register__head shrink-0">Lessons learnt register</div>
-            <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
-              <table className="sheet-register__table w-full text-sm min-w-[56rem]">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
-                    <th className="py-2.5 px-3">S.No</th>
-                    <th className="py-2.5 pr-3">Description</th>
-                    <th className="py-2.5 pr-3">What went well</th>
-                    <th className="py-2.5 pr-3">What did not meet expectations</th>
-                    <th className="py-2.5 pr-3">How it could have been done better</th>
-                    <th className="py-2.5 px-3">Value differentiator</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.lessons || []).map((l: any) => (
-                    <tr key={l.id} className="border-b border-line/70 align-top">
-                      <td className="py-2 px-3 font-mono text-xs">{l.srNo ?? "—"}</td>
-                      <td className="py-2 pr-3 font-medium">{l.description || "—"}</td>
-                      <td className="py-2 pr-3 text-sm">{l.wentWell || "—"}</td>
-                      <td className="py-2 pr-3 text-sm">{l.notMetExpectation || "—"}</td>
-                      <td className="py-2 pr-3 text-sm">{l.lessonsLearnt || "—"}</td>
-                      <td className="py-2 px-3 text-sm">{l.valueDifferentiator || "—"}</td>
-                    </tr>
-                  ))}
-                  {!data.lessons?.length && <RegisterEmptyRow colSpan={6} />}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-
       {tab === "scurve" && (
         <div className="space-y-4">
           <Card className="!p-5">
@@ -1786,7 +1771,7 @@ export default function ProgressPage() {
                   Built from MS Project task baseline + % complete. Same weekly rows feed DPR dashboard charts and WPR progress slides.
                 </p>
               </div>
-              {canEdit && (
+              {canEdit && SHOW_DEMO_CONTROLS && (
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" disabled={!!msBusy} onClick={() => void seedDemoSchedule()}>
                     {msBusy === "seed" ? "Loading…" : "Load demo schedule"}
@@ -1828,9 +1813,9 @@ export default function ProgressPage() {
             ) : (
               <div className="text-center py-8 border border-dashed border-line rounded-lg space-y-3">
                 <p className="text-sm text-steel-muted px-4">
-                  No S-curve yet. For the demo, click <strong>Load demo schedule</strong> — or import client XML (File → Save As → XML in MS Project).
+                  No S-curve yet — import client XML (File → Save As → XML in MS Project) or ask office to load the demo schedule.
                 </p>
-                {canEdit && (
+                {canEdit && SHOW_DEMO_CONTROLS && (
                   <Button type="button" onClick={() => void seedDemoSchedule()} disabled={!!msBusy}>
                     {msBusy === "seed" ? "Loading…" : "Load demo schedule"}
                   </Button>
@@ -1842,11 +1827,93 @@ export default function ProgressPage() {
             <p className="text-xs font-semibold text-ink mb-2">Connection to DPR / WPR</p>
             <ul className="text-sm text-steel-muted space-y-1 list-disc pl-4">
               <li>MS Project → <code className="text-xs">ProgressPlannedActual</code> (S-curve weekly %)</li>
+              <li>Per-discipline register below → DPR INPUT + WPR discipline charts</li>
               <li>Tasks → <code className="text-xs">ProgressActivityLine</code> → DPR planned qty hints</li>
               <li>DPR Maker dashboard charts read published DPR history + BOQ progress</li>
               <li>WPR Maker progress section reads milestones + hindrance + quality</li>
             </ul>
           </Card>
+
+          <Card className="!p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">DPR-style register</p>
+                <h3 className="font-display text-lg text-ink">Per-discipline S-curve input</h3>
+                <p className="text-sm text-steel-muted mt-1">Manual weekly planned / actual % — same format as DPR dashboard rows.</p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Select value={scurveDiscipline} onChange={(e) => setScurveDiscipline(e.target.value)} className="!w-auto min-w-[180px]">
+                  {SCURVE_DISCIPLINES.map((d) => (
+                    <option key={d.key} value={d.key}>{d.label}</option>
+                  ))}
+                </Select>
+                {canEdit ? (
+                  <Button type="button" onClick={() => setScurveModalOpen(true)} disabled={scurveBusy}>
+                    + Add week
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {scurvePoints.length ? (
+              <>
+                <ProgressScurveChart
+                  points={scurvePoints.map((p) => ({
+                    label: p.periodLabel || fmtDate(p.periodDate),
+                    planned: (Number(p.plannedPct) || 0) * 100,
+                    actual: (Number(p.actualPct) || 0) * 100,
+                  }))}
+                />
+                <div className="overflow-x-auto mt-4 border border-line rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="bg-sand/40 text-xs uppercase text-steel-muted">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Week</th>
+                        <th className="px-3 py-2 text-right">Planned %</th>
+                        <th className="px-3 py-2 text-right">Actual %</th>
+                        {canEdit ? <th className="px-3 py-2" /> : null}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scurvePoints.map((p) => (
+                        <tr key={p.id} className="border-t border-line/60">
+                          <td className="px-3 py-2">{p.periodLabel || fmtDate(p.periodDate)}</td>
+                          <td className="px-3 py-2 text-right font-mono">{pct(Number(p.plannedPct))}</td>
+                          <td className="px-3 py-2 text-right font-mono">{pct(Number(p.actualPct))}</td>
+                          {canEdit ? (
+                            <td className="px-3 py-2 text-right">
+                              <button type="button" className="text-xs text-danger underline" disabled={scurveBusy} onClick={() => void deleteScurvePoint(p.id)}>
+                                Delete
+                              </button>
+                            </td>
+                          ) : null}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-steel-muted py-6 text-center border border-dashed border-line rounded-lg">
+                No rows for {scurveDiscipline}. Add weekly planned / actual % or import MS Project for overall curve.
+              </p>
+            )}
+          </Card>
+
+          <RegisterEntryModal
+            open={scurveModalOpen}
+            title={`Add S-curve week — ${scurveDiscipline}`}
+            onClose={() => setScurveModalOpen(false)}
+            onSave={() => void saveScurvePoint()}
+            saving={scurveBusy}
+            saveLabel="Save row"
+          >
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Input required type="date" value={scurveForm.periodDate} onChange={(e) => setScurveForm({ ...scurveForm, periodDate: e.target.value })} />
+              <Input placeholder="Week label (e.g. W32)" value={scurveForm.periodLabel} onChange={(e) => setScurveForm({ ...scurveForm, periodLabel: e.target.value })} />
+              <Input required type="number" step="0.1" placeholder="Planned %" value={scurveForm.plannedPct} onChange={(e) => setScurveForm({ ...scurveForm, plannedPct: e.target.value })} />
+              <Input required type="number" step="0.1" placeholder="Actual %" value={scurveForm.actualPct} onChange={(e) => setScurveForm({ ...scurveForm, actualPct: e.target.value })} />
+            </div>
+          </RegisterEntryModal>
         </div>
       )}
 
@@ -2169,23 +2236,6 @@ export default function ProgressPage() {
           <Input className="sm:col-span-2" placeholder="Type of manpower" value={manForm.trade} onChange={(e) => setManForm({ ...manForm, trade: e.target.value })} required />
           <Input type="number" placeholder="Required people this week" value={manForm.required} onChange={(e) => setManForm({ ...manForm, required: e.target.value })} />
           <Input type="number" placeholder="Available people" value={manForm.available} onChange={(e) => setManForm({ ...manForm, available: e.target.value })} />
-        </form>
-      </RegisterEntryModal>
-
-      <RegisterEntryModal
-        open={lessonAddOpen && canEdit}
-        title="Add lesson learnt"
-        onClose={() => setLessonAddOpen(false)}
-        onSave={() => void addLesson({ preventDefault: () => {} } as FormEvent)}
-        saving={actBusy}
-        saveLabel="Add lesson"
-        size="xl"
-      >
-        <form className="grid gap-3" onSubmit={addLesson}>
-          <Input placeholder="Description / stage" value={lessonForm.description} onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })} required />
-          <TextArea rows={2} placeholder="What went well" value={lessonForm.wentWell} onChange={(e) => setLessonForm({ ...lessonForm, wentWell: e.target.value })} />
-          <TextArea rows={2} placeholder="What did not meet expectations" value={lessonForm.notMetExpectation} onChange={(e) => setLessonForm({ ...lessonForm, notMetExpectation: e.target.value })} />
-          <TextArea rows={2} placeholder="How it could have been done better" value={lessonForm.lessonsLearnt} onChange={(e) => setLessonForm({ ...lessonForm, lessonsLearnt: e.target.value })} />
         </form>
       </RegisterEntryModal>
 

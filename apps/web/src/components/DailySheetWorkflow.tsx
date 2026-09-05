@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Button } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 type PackCheck = {
   key: string;
@@ -26,12 +27,12 @@ type PackReport = {
   checks?: PackCheck[];
 };
 
-const FLOW: { to: string; label: string; hint: string; keys: string[] }[] = [
-  { to: "cost?tab=monitoring", label: "Cost", hint: "BOQ · MB · BBS", keys: ["boq", "mb", "bbs"] },
-  { to: "inspections", label: "Quality", hint: "QAP · Cube · NCR", keys: ["qap", "cube", "ncr"] },
-  { to: "safety", label: "Safety", hint: "HIRA · observations", keys: ["safety"] },
-  { to: "progress?tab=planned", label: "Progress", hint: "PvsA · hindrance", keys: ["pva-activity", "manpower", "milestones"] },
-  { to: "dpr-maker", label: "DPR", hint: "Auto-fill from sheets", keys: ["dpr-today"] },
+const FLOW: { to: string; label: string; keys: string[] }[] = [
+  { to: "cost?tab=monitoring", label: "Cost", keys: ["boq", "mb", "bbs"] },
+  { to: "inspections", label: "Quality", keys: ["qap", "cube", "ncr"] },
+  { to: "safety", label: "Safety", keys: ["safety"] },
+  { to: "progress?tab=planned", label: "Progress", keys: ["pva-activity", "manpower", "milestones"] },
+  { to: "dpr-maker", label: "DPR", keys: ["dpr-today"] },
 ];
 
 export function DailySheetWorkflow({
@@ -79,17 +80,13 @@ export function DailySheetWorkflow({
     try {
       const out = await api<{ pack: PackReport; steps: { key: string; ok: boolean; error?: string }[] }>(
         `/api/projects/${projectId}/provision-sheets`,
-        { method: "POST", token, body: JSON.stringify({}) }
+        { method: "POST", token, body: JSON.stringify({}) },
       );
       setLocalPack(out.pack);
       const failed = (out.steps || []).filter((s) => !s.ok);
-      setLocalMsg(
-        failed.length
-          ? `Loaded with gaps: ${failed.map((s) => s.key).join(", ")}`
-          : "SPDC Cost, Quality, Safety, and Progress formats loaded."
-      );
+      setLocalMsg(failed.length ? `Gaps: ${failed.map((s) => s.key).join(", ")}` : "Sheets loaded.");
     } catch (err) {
-      setLocalMsg(err instanceof Error ? err.message : "Sheet load failed");
+      setLocalMsg(err instanceof Error ? err.message : "Load failed");
     } finally {
       setLocalBusy(false);
     }
@@ -100,31 +97,24 @@ export function DailySheetWorkflow({
 
   return (
     <div className="rounded-lg border border-line bg-paper overflow-hidden shrink-0">
-      <div className={`px-3 ${compact ? "py-1.5" : "px-4 py-2.5"} border-b border-line flex flex-wrap items-center justify-between gap-2 bg-sand/40`}>
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-steel-muted">Daily sheet workflow</div>
-          {!compact && (
-            <p className="text-sm text-ink mt-0.5">
-              Excel formats load per project. Site updates Cost, Quality, Safety, Progress each day — DPR Maker pulls them automatically.
-            </p>
-          )}
-        </div>
+      <div className={`px-3 ${compact ? "py-1.5" : "py-2"} border-b border-line flex flex-wrap items-center justify-between gap-2 bg-sand/30`}>
+        <span className="font-semibold text-sm text-ink">{formatUiText("Daily sheets")}</span>
         <div className="flex flex-wrap gap-2 items-center">
           {summary && (
-            <span className="text-xs text-steel-muted">
-              {summary.requiredOk}/{summary.required} required sheets
-              {summary.readyForDpr ? " · ready for DPR" : ""}
+            <span className="text-xs text-steel-muted font-mono">
+              {summary.requiredOk}/{summary.required}
+              {summary.readyForDpr ? " · DPR ready" : ""}
             </span>
           )}
           {allowProvision && (
             <Button type="button" className="!text-xs" disabled={isBusy} onClick={() => void provision()}>
-              {isBusy ? "Loading formats…" : "Load SPDC sheets"}
+              {isBusy ? "Loading…" : "Load sheets"}
             </Button>
           )}
         </div>
       </div>
-      {localMsg && <p className="text-xs text-brand px-3 py-1.5 bg-brand-soft">{localMsg}</p>}
-      <div className={`grid sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-line ${compact ? "text-[11px]" : ""}`}>
+      {localMsg && <p className="text-xs text-brand px-3 py-1 bg-brand-soft">{localMsg}</p>}
+      <div className={`grid sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-line ${compact ? "text-xs" : "text-sm"}`}>
         {FLOW.map((step, i) => {
           const ok = step.keys.every((k) => {
             const c = byKey.get(k);
@@ -135,19 +125,16 @@ export function DailySheetWorkflow({
             <Link
               key={step.to}
               to={`/projects/${projectId}/${step.to}`}
-              className={`${compact ? "p-2" : "p-3"} hover:bg-brand-soft/40 ${ok && list.length ? "bg-ok/5" : ""}`}
+              className={`${compact ? "px-2 py-1.5" : "px-3 py-2"} hover:bg-brand-soft/30 ${ok && list.length ? "bg-ok/5" : ""}`}
             >
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={`${compact ? "h-5 w-5 text-[10px]" : "h-6 w-6 text-[11px]"} rounded-full grid place-items-center font-bold bg-ink text-white`}>
+              <div className="flex items-center gap-1.5">
+                <span className="h-5 w-5 rounded-full grid place-items-center text-[10px] font-bold bg-ink text-white shrink-0">
                   {i + 1}
                 </span>
-                <span className={`font-semibold text-ink ${compact ? "text-xs" : "text-sm"}`}>{step.label}</span>
+                <span className="font-semibold text-ink">{step.label}</span>
               </div>
-              <p className={`text-steel-muted ${compact ? "pl-7 text-[10px]" : "text-xs pl-8"}`}>{step.hint}</p>
               {list.length ? (
-                <p className={`font-mono text-steel-muted ${compact ? "pl-7 text-[10px]" : "text-[11px] pl-8 mt-1"}`}>
-                  {count} rows{ok ? " · loaded" : " · needs template"}
-                </p>
+                <p className="text-[10px] text-steel-muted pl-6 mt-0.5 font-mono">{count} rows</p>
               ) : null}
             </Link>
           );

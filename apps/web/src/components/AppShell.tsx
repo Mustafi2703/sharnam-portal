@@ -122,7 +122,7 @@ function SideNavBody({
   const location = useLocation();
   const navItems = appNav.filter((n) => !user || n.roles.includes(user.role));
   const isOffice = user?.role === "admin" || user?.role === "office";
-  const isSiteDesk = user?.role === "site_employee" || user?.role === "vendor";
+  const isSiteDesk = user?.role === "site_employee";
   const isVendor = user?.role === "vendor";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const modules = useMemo(
@@ -449,7 +449,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const dark = colorMode === "dark";
   const isOffice = user?.role === "admin" || user?.role === "office";
-  const isSiteDesk = user?.role === "site_employee" || user?.role === "vendor";
+  const isSiteDesk = user?.role === "site_employee";
+  const isVendor = user?.role === "vendor";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const activeProject = projects.find((p) => p.id === projectId);
   const routeProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] || "";
@@ -531,11 +532,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link to="/attendance" className="app-topbar__chip hover:border-brand">
                   Attendance
                 </Link>
-                {user?.role === "vendor" && (
-                  <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">
-                    My bids
-                  </Link>
-                )}
+              </div>
+            )}
+
+            {isVendor && (
+              <div className="hidden sm:flex items-center gap-1.5">
+                <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">
+                  My bids
+                </Link>
               </div>
             )}
 

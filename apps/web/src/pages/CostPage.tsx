@@ -13,15 +13,14 @@ import { MbEntryTable } from "../components/MbEntryTable";
 import { BarChart, PieChart } from "../components/PieChart";
 import { CostStructureSetupPanel } from "../components/CostStructureSetupPanel";
 import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
-import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
 
-type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs";
-const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs"];
+type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs" | "bbs-master";
+const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs", "bbs-master"];
 const COST_REGISTER_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "bills", "boq", "mb", "bbs"];
 
 function SheetTable({
@@ -631,13 +630,15 @@ export default function CostPage() {
   const isRegisterView = COST_REGISTER_TABS.includes(tab);
 
   const costHeroSubtitle =
-    tab === "monitoring"
-      ? siteBoqMode
-        ? "Pick a BOQ package and update achieved quantities — all monitoring columns stay visible."
-        : "BOQ / Monitoring — pick a package, upload BOQ if needed, track GFC and achieved qty."
-      : tab === "mb" || tab === "bbs"
-        ? "Parikh-style MB / BBS registers — office setup lives under Admin · cost sheet setup."
-        : "Parikh-style BOQ / MB / BBS sheet registers — one tool at a time. Commercial invoices live in Finance.";
+    tab === "bbs-master"
+      ? "BBS shape codes and bend diagrams — assign when filling bar schedules."
+      : tab === "monitoring"
+        ? siteBoqMode
+          ? "BOQ monitoring by package."
+          : "BOQ monitoring — GFC and achieved qty."
+        : tab === "mb" || tab === "bbs"
+          ? "MB / BBS registers by package."
+          : "Cost registers and commercial tracking.";
 
   return (
     <div className="cost-page w-full min-w-0 space-y-5 pb-4">
@@ -699,11 +700,6 @@ export default function CostPage() {
       />
       </div>
 
-      {id && !isRegisterView && (
-        <div className="shrink-0">
-          <DailySheetWorkflow projectId={id} compact />
-        </div>
-      )}
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
 
@@ -1101,11 +1097,12 @@ export default function CostPage() {
         </div>
       )}
 
+      {tab === "bbs-master" && canEdit && (
+        <BbsShapeMasterPanel token={token} mode="full" />
+      )}
+
       {tab === "bbs" && (
         <div className="cost-sheet-block space-y-3">
-          {canEdit && (
-            <BbsShapeMasterPanel token={token} mode="full" />
-          )}
           <CostSheetFlowBar active="bbs" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${pkgFilter}`}

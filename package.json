@@ -30,6 +30,8 @@
     "db:seed-uat-live": "tsx seed/uatLiveProject.ts",
     "email:comms-uat-preview": "tsx apps/api/scripts/send-comms-flow-demo-pack.ts preview",
     "email:comms-uat-all": "tsx apps/api/scripts/send-comms-flow-demo-pack.ts all",
+    "email:daily-digest": "tsx apps/api/scripts/send-daily-digest.ts preview",
+    "email:daily-digest:send": "tsx apps/api/scripts/send-daily-digest.ts send",
     "email:branded-preview": "tsx apps/api/scripts/send-spdc-branded-test-pack.ts preview",
     "email:branded-spdc": "tsx apps/api/scripts/send-spdc-branded-test-pack.ts all",
     "sync:reference-sheets": "node scripts/sync-reference-sheets.mjs",

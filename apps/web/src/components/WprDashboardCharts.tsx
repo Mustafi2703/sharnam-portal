@@ -29,9 +29,9 @@ export type WprCharts = {
 
 function ScurveChart({ points }: { points: { label: string; planned: number; actual: number }[] }) {
   const rows = points.length ? points : [{ label: "—", planned: 0, actual: 0 }];
-  const w = 360;
-  const h = 160;
-  const pad = 28;
+  const w = 640;
+  const h = 220;
+  const pad = 36;
   const maxY = Math.max(10, ...rows.flatMap((p) => [p.planned, p.actual])) * 1.08;
   const step = rows.length > 1 ? (w - pad * 2) / (rows.length - 1) : 0;
   const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
@@ -40,11 +40,11 @@ function ScurveChart({ points }: { points: { label: string; planned: number; act
   const hasData = rows.some((p) => p.planned > 0 || p.actual > 0);
   return (
     <div>
-      <div className="text-sm font-semibold mb-2">Progress trend · planned vs actual % (DPR rollup)</div>
+      <div className="text-sm font-semibold mb-2">Progress trend · planned vs actual %</div>
       {!hasData ? (
-        <p className="text-sm text-steel-muted mb-2">Publish DPRs in this window — or use section table data below after Regenerate.</p>
+        <p className="text-sm text-steel-muted mb-2">Publish DPRs in this window — or regenerate from live data.</p>
       ) : null}
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-lg min-h-[140px]" role="img" aria-label="WPR progress curve">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-h-[180px]" shapeRendering="geometricPrecision" role="img" aria-label="WPR progress curve">
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         {planned.includes("L") ? (
@@ -53,6 +53,8 @@ function ScurveChart({ points }: { points: { label: string; planned: number; act
         <path d={actual} fill="none" stroke="#0F766E" strokeWidth="2.5" />
       </svg>
       <div className="flex gap-4 text-[11px] text-steel-muted mt-1 flex-wrap">
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 bg-[#2563EB]" /> Planned</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5 bg-[#0F766E]" /> Actual</span>
         {rows.map((p) => (
           <span key={p.label}>{p.label}</span>
         ))}
