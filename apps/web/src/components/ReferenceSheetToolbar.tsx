@@ -1,4 +1,6 @@
 import { formatUiText } from "../lib/formatUiText";
+import { FilePickButton } from "./FilePickButton";
+import { Button } from "./ui";
 
 type ReferenceSheetToolbarProps = {
   sheetLabel: string;

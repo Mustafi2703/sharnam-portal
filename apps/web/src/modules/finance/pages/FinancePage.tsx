@@ -40,6 +40,12 @@ function d(s?: string | null) {
   return isNaN(dt.getTime()) ? "" : dt.toLocaleDateString("en-IN");
 }
 
+function raHasCertifiedWorkbook(ra: { revisions?: { stage: string; fileUrl?: string | null; sharePointUrl?: string | null }[] }) {
+  return (ra.revisions || []).some(
+    (rev) => rev.stage === "Certified" && Boolean(rev.fileUrl || rev.sharePointUrl)
+  );
+}
+
 export default function FinancePage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -48,7 +54,9 @@ export default function FinancePage() {
   const disciplineKey = searchParams.get("discipline") || "all";
   const activePkg = resolveFinancePackage(disciplineKey === "all" ? null : disciplineKey);
   const active = TOOLS.find((t) => t.id === tab) || TOOLS[0];
+  const isVendor = user?.role === "vendor";
   const canWrite = ["admin", "office"].includes(user?.role || "");
+  const canUploadRa = canWrite || isVendor;
 
   const [summary, setSummary] = useState<any>(null);
   const [capex, setCapex] = useState<any[]>([]);
@@ -103,7 +111,16 @@ export default function FinancePage() {
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {["overview", "bills", "ra", "cop", "invoices", "summary"].includes(active.id) && (
+      {isVendor && tab !== "ra" && (
+        <Card className="!p-4 text-sm">
+          Contractor view — upload RA submission workbooks from{" "}
+          <Link to={`/projects/${id}/finance?tab=ra`} className="text-brand font-semibold">
+            RA Bill Tracker →
+          </Link>
+        </Card>
+      )}
+
+      {["overview", "bills", "ra", "cop", "invoices", "summary"].includes(active.id) && !isVendor && (
         <Card className="!p-4">
           <div className="text-[10px] uppercase tracking-wide text-steel-muted mb-2">Discipline / package</div>
           <FinanceDisciplineStrip
@@ -120,7 +137,7 @@ export default function FinancePage() {
         <Overview summary={summary} ras={ras} cops={cops} projectId={id!} activePkg={activePkg} />
       )}
 
-      {active.id === "bills" && (
+      {active.id === "bills" && !isVendor && (
         <FinanceBillRegister
           projectId={id!}
           token={token || ""}
@@ -149,6 +166,8 @@ export default function FinancePage() {
         <RaTab
           ras={ras}
           canWrite={canWrite}
+          canUploadRa={canUploadRa}
+          vendorMode={isVendor}
           reload={reload}
           setMsg={setMsg}
           projectId={id!}
@@ -411,7 +430,7 @@ function CapexTab({ capex, canWrite, reload, setMsg, projectId, token }: any) {
 
 /* ─────────────────────────── RA Bill ─────────────────────────── */
 
-function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, disciplineKey }: any) {
+function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, projectId, token, activePkg, disciplineKey }: any) {
   const raPackages = FINANCE_PACKAGES.filter((p) => p.billKind === "ra");
   const defaultDiscipline = activePkg?.billKind === "ra" ? activePkg.discipline : raPackages[0]?.discipline || "Civil";
   const filteredRas = activePkg?.billKind === "ra" ? ras.filter((r: any) => raMatchesPackage(r, activePkg)) : activePkg ? [] : ras;
@@ -478,16 +497,23 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
   }
   return (
     <div className="space-y-4">
-      <WorkflowStrip
-        active={1}
-        steps={[
-          { label: "RA bill workbooks", hint: "Submission · Corrected · Certified" },
-          { label: "Create COP", hint: "Link RA · Viatrix certificate", href: `/projects/${projectId}/finance?tab=cop` },
-          { label: "Certify & pay", hint: "Rolls into Cost cashflow", href: `/projects/${projectId}/finance?tab=cop` },
-          { label: "WPR pack", hint: "Dashboard + charts", href: `/projects/${projectId}/wpr-maker` },
-        ]}
-      />
-      {activePkg && activePkg.billKind === "material" && (
+      {vendorMode && (
+        <Card className="!p-4 text-sm bg-brand-soft/40">
+          Upload your <strong>Submission</strong> workbook on linked RA rows below. PMC uploads Corrected and Certified stages; COP is created only after Certified is filed.
+        </Card>
+      )}
+      {!vendorMode && (
+        <WorkflowStrip
+          active={1}
+          steps={[
+            { label: "RA bill workbooks", hint: "Submission · Corrected · Certified" },
+            { label: "Create COP", hint: "Link RA · Viatrix certificate", href: `/projects/${projectId}/finance?tab=cop` },
+            { label: "Certify & pay", hint: "Rolls into Cost cashflow", href: `/projects/${projectId}/finance?tab=cop` },
+            { label: "WPR pack", hint: "Dashboard + charts", href: `/projects/${projectId}/wpr-maker` },
+          ]}
+        />
+      )}
+      {activePkg && activePkg.billKind === "material" && !vendorMode && (
         <Card className="!p-4 text-sm text-steel-muted">
           <strong>{activePkg.label}</strong> uses material / tax invoices, not RA bills. Switch to{" "}
           <Link to={`/projects/${projectId}/finance?tab=invoices&discipline=${activePkg.key}`} className="text-brand font-semibold">
@@ -631,18 +657,24 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
                       raBillId={r.id}
                       raNumber={r.raNumber}
                       token={token}
-                      canWrite={canWrite}
+                      canWrite={canUploadRa}
+                      vendorMode={vendorMode}
                       onChange={() => void reload()}
                     />
                   </td>
                   <td className="py-3 px-3">
-                    {canWrite && (
+                    {canWrite && raHasCertifiedWorkbook(r) && (
                       <Link
                         to={`/projects/${projectId}/finance?tab=cop&raBillId=${r.id}`}
                         className="text-xs font-semibold text-brand whitespace-nowrap"
                       >
                         Create COP →
                       </Link>
+                    )}
+                    {canWrite && !raHasCertifiedWorkbook(r) && (
+                      <span className="text-[10px] text-steel-muted whitespace-nowrap" title="Upload Certified workbook first">
+                        Certified pending
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -671,6 +703,10 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   const [file, setFile] = useState<File | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  const linkedRa = form.raBillId ? filteredRas.find((r: any) => r.id === form.raBillId) : null;
+  const linkedRaCertified = linkedRa ? raHasCertifiedWorkbook(linkedRa) : true;
+  const canCreateCop = !form.raBillId || linkedRaCertified;
 
   useEffect(() => {
     if (!raBillIdPrefill) return;
@@ -722,6 +758,10 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   }
   async function add(e: FormEvent) {
     e.preventDefault();
+    if (!canCreateCop) {
+      setMsg("Upload the Certified RA workbook before creating a COP for this bill.");
+      return;
+    }
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, v));
@@ -760,6 +800,12 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
       {canWrite && (
         <Card>
           <h3 className="font-semibold text-sm mb-2">Certify a payment (COP)</h3>
+          {form.raBillId && !linkedRaCertified && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <strong>RA checklist:</strong> Submission → Corrected → <strong>Certified</strong> → COP.
+              The linked RA bill is missing a Certified workbook — create COP is disabled until PMC uploads it.
+            </div>
+          )}
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Input placeholder="Cert No. (01/N.K.INFRA/2025)" value={form.certificateNumber} onChange={(e) => setForm({ ...form, certificateNumber: e.target.value })} required />
             <Input placeholder="Cert type (Against - RA / Advance)" value={form.certificateType} onChange={(e) => setForm({ ...form, certificateType: e.target.value })} />
@@ -775,7 +821,10 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
             <Select value={form.raBillId} onChange={(e) => setForm({ ...form, raBillId: e.target.value })}>
               <option value="">Link RA (optional)</option>
               {filteredRas.map((r: any) => (
-                <option key={r.id} value={r.id}>{r.raNumber} · {r.invoiceNumber || "no invoice"}</option>
+                <option key={r.id} value={r.id}>
+                  {r.raNumber} · {r.invoiceNumber || "no invoice"}
+                  {raHasCertifiedWorkbook(r) ? "" : " · Certified pending"}
+                </option>
               ))}
             </Select>
             <Input placeholder="Amount certified" type="number" value={form.amountCertified} onChange={(e) => setForm({ ...form, amountCertified: e.target.value })} />
@@ -790,7 +839,9 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
               Certificate PDF (optional)
               <input type="file" accept=".pdf,image/*" className="block mt-1 text-xs" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
-            <Button type="submit">Create COP</Button>
+            <Button type="submit" disabled={!canCreateCop} title={!canCreateCop ? "Certified RA workbook required" : undefined}>
+              Create COP
+            </Button>
           </form>
         </Card>
       )}

@@ -9,10 +9,49 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { resolveVendorForUser } from "../services/vendorPortal.js";
 
 export const financeRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 financeRouter.use(requireAuth);
+
+async function vendorForRequest(req: AuthedRequest) {
+  const user = req.user;
+  if (!user || user.role !== "vendor") return null;
+  return resolveVendorForUser(user);
+}
+
+async function canAccessRaBill(req: AuthedRequest, bill: { vendorId?: string | null }) {
+  const user = req.user!;
+  if (user.role === "admin" || user.role === "office" || user.role === "employee" || user.role === "site_employee") return true;
+  if (user.role === "vendor") {
+    const v = await vendorForRequest(req);
+    return Boolean(v && bill.vendorId === v.id);
+  }
+  return false;
+}
+
+async function canUploadRaStage(req: AuthedRequest, bill: { vendorId?: string | null }, stage: string) {
+  const user = req.user!;
+  if (user.role === "admin" || user.role === "office") return true;
+  if (user.role === "vendor") {
+    const v = await vendorForRequest(req);
+    if (!v || bill.vendorId !== v.id) return false;
+    return stage === "Submitted";
+  }
+  return false;
+}
+
+async function raHasCertifiedWorkbook(raBillId: string) {
+  const rev = await prisma.raBillRevision.findFirst({
+    where: {
+      raBillId,
+      stage: "Certified",
+      OR: [{ fileUrl: { not: null } }, { sharePointUrl: { not: null } }],
+    },
+  });
+  return Boolean(rev);
+}
 
 /** Module config — Viatrix Payment Summary packages (for web + integrations). */
 financeRouter.get("/meta/packages", (_req, res) => {
@@ -306,14 +345,16 @@ financeRouter.delete("/po/:id", requireRoles("admin", "office"), async (req: Aut
 
 /* ─────────────────────────────────────────  RA BILLS  ───────────────────────────────────────── */
 
-financeRouter.get("/:projectId/ra", async (req, res) => {
+financeRouter.get("/:projectId/ra", async (req: AuthedRequest, res) => {
+  const vendor = await vendorForRequest(req);
   const pkg = resolveFinancePackage(String(req.query.discipline || req.query.package || ""));
   const rows = await prisma.raBill.findMany({
-    where: { projectId: req.params.projectId },
+    where: { projectId: req.params.projectId, ...(vendor ? { vendorId: vendor.id } : {}) },
     include: {
       purchaseOrder: { select: { id: true, poNumber: true, vendorName: true, packageName: true, workTrade: true } },
       certificates: { select: { id: true, certificateNumber: true, status: true } },
       attachments: { orderBy: { uploadedAt: "desc" } },
+      revisions: { select: { stage: true, fileUrl: true, sharePointUrl: true, uploadedAt: true }, orderBy: { uploadedAt: "desc" } },
     },
     orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
   });
@@ -487,9 +528,10 @@ const RA_STAGES = ["Submitted", "Corrected", "Certified"] as const;
 type RaStage = (typeof RA_STAGES)[number];
 
 /** List every stage revision on this RA bill — most recent first. */
-financeRouter.get("/ra/:id/revisions", async (req, res) => {
-  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id }, select: { id: true } });
+financeRouter.get("/ra/:id/revisions", async (req: AuthedRequest, res) => {
+  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id }, select: { id: true, vendorId: true } });
   if (!bill) return res.status(404).json({ error: "RA bill not found" });
+  if (!(await canAccessRaBill(req, bill))) return res.status(403).json({ error: "Forbidden" });
   const rows = await prisma.raBillRevision.findMany({
     where: { raBillId: bill.id },
     orderBy: [{ uploadedAt: "desc" }],
@@ -503,9 +545,10 @@ financeRouter.get("/ra/:id/revisions", async (req, res) => {
 });
 
 /** List all contractor documents filed under this RA bill folder. */
-financeRouter.get("/ra/:id/attachments", async (req, res) => {
-  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id }, select: { id: true } });
+financeRouter.get("/ra/:id/attachments", async (req: AuthedRequest, res) => {
+  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id }, select: { id: true, vendorId: true } });
   if (!bill) return res.status(404).json({ error: "RA bill not found" });
+  if (!(await canAccessRaBill(req, bill))) return res.status(403).json({ error: "Forbidden" });
   const rows = await prisma.raBillAttachment.findMany({
     where: { raBillId: bill.id },
     orderBy: { uploadedAt: "desc" },
@@ -516,7 +559,6 @@ financeRouter.get("/ra/:id/attachments", async (req, res) => {
 /** Upload one or more contractor documents to the RA bill folder (09.01/RA-xx/). */
 financeRouter.post(
   "/ra/:id/attachments",
-  requireRoles("admin", "office"),
   upload.array("files", 25),
   async (req: AuthedRequest, res) => {
     const bill = await prisma.raBill.findUnique({
@@ -524,6 +566,9 @@ financeRouter.post(
       include: { project: { select: { code: true } } },
     });
     if (!bill) return res.status(404).json({ error: "RA bill not found" });
+    if (!(await canUploadRaStage(req, bill, "Submitted"))) {
+      return res.status(403).json({ error: "Only office staff or the linked contractor may upload RA documents" });
+    }
     const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) return res.status(400).json({ error: "no files uploaded" });
 
@@ -570,7 +615,6 @@ financeRouter.post(
  */
 financeRouter.post(
   "/ra/:id/stage",
-  requireRoles("admin", "office"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     const bill = await prisma.raBill.findUnique({
@@ -583,6 +627,17 @@ financeRouter.post(
     const stage = (RA_STAGES as readonly string[]).includes(stageRaw) ? (stageRaw as RaStage) : null;
     if (!stage) {
       return res.status(400).json({ error: `stage must be one of ${RA_STAGES.join(" | ")}` });
+    }
+    if (!(await canUploadRaStage(req, bill, stage))) {
+      return res.status(403).json({
+        error:
+          req.user?.role === "vendor"
+            ? "Contractors may upload the Submission workbook only"
+            : "Not allowed to upload this RA stage",
+      });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "file required" });
     }
 
     const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
@@ -671,6 +726,17 @@ financeRouter.get("/:projectId/cop", async (req, res) => {
 financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "not found" });
+
+  const raBillId = s(req.body.raBillId) || null;
+  if (raBillId) {
+    const certified = await raHasCertifiedWorkbook(raBillId);
+    if (!certified) {
+      return res.status(400).json({
+        error: "Linked RA bill must have a Certified workbook uploaded before a COP can be created.",
+      });
+    }
+  }
+
   let attachmentUrl: string | undefined;
   if (req.file) {
     const saved = await mockOneDrive.upload(

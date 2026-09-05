@@ -20,10 +20,11 @@ async function seedRaBillStageWorkbooks(
   raBillId: string,
   raNumber: string,
   discipline: string,
-  uploadedById: string
+  uploadedById: string,
+  stages: readonly (typeof RA_STAGES)[number][] = RA_STAGES
 ) {
   let latestUrl: string | undefined;
-  for (const stage of RA_STAGES) {
+  for (const stage of stages) {
     const fileName = `${raNumber}-${stage}-workbook.xlsx`;
     const buf = workbookBuffer(
       [
@@ -133,12 +134,52 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
   const project = await db.project.findUnique({ where: { id: projectId }, select: { code: true } });
   if (!project) throw new Error(`Project ${projectId} not found`);
 
+  const nkVendorName = "M/s NK Infra (Viatrix)";
+  let nkVendor = await db.vendor.findFirst({ where: { name: nkVendorName } });
+  if (!nkVendor) {
+    nkVendor = await db.vendor.create({
+      data: {
+        name: nkVendorName,
+        partyType: "Contractor",
+        trade: "Civil & Structural",
+        email: "nkinfra@sharnam.demo",
+        primaryContactName: "NK Infra Accounts",
+        city: "Ahmedabad",
+        state: "Gujarat",
+        country: "India",
+        createdVia: DEMO_SOURCE,
+        isPrequalified: true,
+        insuranceVerified: true,
+      },
+    });
+  }
+  await db.projectVendor.upsert({
+    where: { projectId_vendorId: { projectId, vendorId: nkVendor.id } },
+    create: { projectId, vendorId: nkVendor.id, tradeRole: "Civil & Structural", assignedVia: DEMO_SOURCE },
+    update: { tradeRole: "Civil & Structural" },
+  });
+
+  try {
+    const bcrypt = await import("bcryptjs");
+    const { ensureVendorPortalLogin } = await import("./vendorPortal.js");
+    const hash = await bcrypt.hash(process.env.SEED_PASSWORD || "Demo@1234", 10);
+    await ensureVendorPortalLogin({
+      vendorId: nkVendor.id,
+      email: "nkinfra@sharnam.demo",
+      fullName: "NK Infra Accounts",
+      passwordHash: hash,
+    });
+  } catch {
+    /* optional — seed may run without bcrypt in some contexts */
+  }
+
   const po = await db.purchaseOrder.create({
     data: {
       projectId,
       poNumber: "PO-NK-INFRA-CIV-01",
       poDate: new Date("2025-06-01"),
-      vendorName: "M/s NK Infra (Viatrix)",
+      vendorName: nkVendorName,
+      vendorId: nkVendor.id,
       workTrade: "Civil & Structural",
       packageName: `${DEMO_SOURCE} Civil dormitory`,
       originalValue: 57673579,
@@ -152,12 +193,25 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
     },
   });
 
-  const raSpecs = [
+  const raSpecs: Array<{
+    ra: string;
+    date: string;
+    wo: number;
+    pv: number;
+    gst: number;
+    adv: number;
+    ret: number;
+    net: number;
+    discipline: string;
+    stages?: readonly (typeof RA_STAGES)[number][];
+    skipCop?: boolean;
+  }> = [
     { ra: "RA-01", date: "2025-08-15", wo: 4200000, pv: 0, gst: 756000, adv: 420000, ret: 210000, net: 4326000, discipline: "Civil" },
     { ra: "RA-02", date: "2025-09-20", wo: 5100000, pv: 85000, gst: 934500, adv: 0, ret: 255000, net: 5779500, discipline: "Civil" },
     { ra: "RA-03", date: "2025-10-25", wo: 4800000, pv: 0, gst: 864000, adv: 0, ret: 240000, net: 5424000, discipline: "Structural" },
     { ra: "RA-04", date: "2025-11-30", wo: 3900000, pv: -120000, gst: 680400, adv: 0, ret: 195000, net: 4265400, discipline: "MEP" },
-    { ra: "RA-05", date: "2026-01-15", wo: 4500000, pv: 0, gst: 810000, adv: 0, ret: 225000, net: 5085000, discipline: "Electrical" },
+    { ra: "RA-05", date: "2026-01-15", wo: 4500000, pv: 0, gst: 810000, adv: 0, ret: 225000, net: 5085000, discipline: "Electrical", stages: ["Submitted", "Corrected"], skipCop: true },
+    { ra: "RA-06", date: "2026-02-20", wo: 3200000, pv: 0, gst: 576000, adv: 0, ret: 160000, net: 3616000, discipline: "Civil", stages: ["Submitted"], skipCop: true },
   ];
 
   let cumulative = 0;
@@ -189,18 +243,27 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
         netAmountPayable: spec.net,
         previousBillTotal,
         cumulativeBillTotal: cumulative,
-        status: "Certified",
+        status: spec.stages?.includes("Certified") ? "Certified" : "Submitted",
         discipline: spec.discipline,
-        vendorName: po.vendorName,
-        copNo: `COP-${spec.ra.replace("RA-", "")}`,
+        vendorId: nkVendor.id,
+        vendorName: nkVendorName,
+        copNo: spec.skipCop ? null : `COP-${spec.ra.replace("RA-", "")}`,
         createdById,
       },
     });
 
-    await seedRaBillStageWorkbooks(db, project.code, row.id, spec.ra, spec.discipline, createdById);
+    await seedRaBillStageWorkbooks(
+      db,
+      project.code,
+      row.id,
+      spec.ra,
+      spec.discipline,
+      createdById,
+      spec.stages ?? RA_STAGES
+    );
 
-    /** RA-05 is left without COP — use "Create COP →" in the demo. */
-    if (spec.ra === "RA-05") continue;
+    /** RA-05 / RA-06 left without COP — partial workbook trail for demo. */
+    if (spec.skipCop) continue;
 
     const copStatus = i < 2 ? "Paid" : "Certified";
 

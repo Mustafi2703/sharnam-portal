@@ -39,6 +39,7 @@ export function RaBillWorkbookSlots({
   raNumber,
   token,
   canWrite,
+  vendorMode = false,
   compact = false,
   onChange,
 }: {
@@ -46,6 +47,8 @@ export function RaBillWorkbookSlots({
   raNumber: string;
   token: string | null;
   canWrite: boolean;
+  /** When true, only the Submission slot accepts uploads (contractor portal). */
+  vendorMode?: boolean;
   compact?: boolean;
   onChange?: () => void;
 }) {
@@ -118,6 +121,7 @@ export function RaBillWorkbookSlots({
         {STAGES.map((s) => {
           const rev = latestForStage(s.key);
           const url = rev?.sharePointUrl || rev?.fileUrl;
+          const slotWritable = canWrite && (!vendorMode || s.key === "Submitted");
           return (
             <div key={s.key} className="ra-bill-files__slot">
               <div className="ra-bill-files__slot-label">{s.label}</div>
@@ -130,7 +134,7 @@ export function RaBillWorkbookSlots({
                 >
                   Open sheet ↗
                 </button>
-              ) : canWrite ? (
+              ) : slotWritable ? (
                 <FilePickButton
                   accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx"
                   variant="secondary"
@@ -156,7 +160,7 @@ export function RaBillWorkbookSlots({
         })}
       </div>
       <div className="ra-bill-files__docs">
-        {canWrite && (
+        {canWrite && !vendorMode && (
           <FilePickButton
             accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx,image/*"
             multiple

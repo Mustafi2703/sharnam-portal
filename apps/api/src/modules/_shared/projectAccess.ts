@@ -9,6 +9,21 @@ export async function userCanAccessProject(req: AuthedRequest, projectId: string
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return false;
   if (user.role === "admin" || user.role === "office") return true;
+  if (user.role === "vendor") {
+    const { resolveVendorForUser } = await import("../../services/vendorPortal.js");
+    const v = await resolveVendorForUser(user);
+    if (!v) return false;
+    const assigned = await prisma.projectVendor.findFirst({
+      where: { projectId, vendorId: v.id },
+      select: { id: true },
+    });
+    if (assigned) return true;
+    const raOnProject = await prisma.raBill.findFirst({
+      where: { projectId, vendorId: v.id },
+      select: { id: true },
+    });
+    return Boolean(raOnProject);
+  }
   const member = await prisma.projectMember.findFirst({
     where: { projectId, userId: user.id },
     select: { id: true },

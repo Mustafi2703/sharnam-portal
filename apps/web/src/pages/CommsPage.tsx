@@ -491,17 +491,25 @@ export default function CommsPage() {
                       className="p-4 border-t border-line flex flex-wrap gap-2"
                       onSubmit={async (e) => {
                         e.preventDefault();
-                        if (!itemDesc.trim()) return;
-                        await api(`/api/comms/meetings/${selected.id}/items`, {
-                          method: "POST",
-                          token,
-                          body: JSON.stringify({
-                            description: itemDesc,
-                            category: tab === "agenda" ? "Agenda" : tab === "followup" ? "Follow-up" : itemCategory,
-                          }),
-                        });
-                        setItemDesc("");
-                        await load();
+                        if (!itemDesc.trim() || busy) return;
+                        setBusy(true);
+                        setMsg("");
+                        try {
+                          await api(`/api/comms/meetings/${selected.id}/items`, {
+                            method: "POST",
+                            token,
+                            body: JSON.stringify({
+                              description: itemDesc,
+                              category: tab === "agenda" ? "Agenda" : tab === "followup" ? "Follow-up" : itemCategory,
+                            }),
+                          });
+                          setItemDesc("");
+                          await load();
+                        } catch (err) {
+                          setMsg(err instanceof Error ? err.message : "Could not add item — check connection and retry.");
+                        } finally {
+                          setBusy(false);
+                        }
                       }}
                     >
                       {tab === "mom" && (
@@ -523,7 +531,7 @@ export default function CommsPage() {
                         value={itemDesc}
                         onChange={(e) => setItemDesc(e.target.value)}
                       />
-                      <Button type="submit">Add</Button>
+                      <Button type="submit" disabled={busy || !itemDesc.trim()}>{busy ? "Adding…" : "Add"}</Button>
                     </form>
                   )}
                 </Card>
@@ -542,9 +550,18 @@ export default function CommsPage() {
                 className="space-y-2"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  await api(`/api/comms/logs/${id}`, { method: "POST", token, body: JSON.stringify(logForm) });
-                  setLogForm({ ...logForm, subject: "", body: "" });
-                  await load();
+                  if (busy) return;
+                  setBusy(true);
+                  setMsg("");
+                  try {
+                    await api(`/api/comms/logs/${id}`, { method: "POST", token, body: JSON.stringify(logForm) });
+                    setLogForm({ ...logForm, subject: "", body: "" });
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Could not save log — check connection and retry.");
+                  } finally {
+                    setBusy(false);
+                  }
                 }}
               >
                 <Input
