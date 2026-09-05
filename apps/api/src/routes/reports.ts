@@ -875,7 +875,12 @@ hrmRouter.get("/attendance/:id/photo/:kind", requireAuth, async (req, res) => {
 
 hrmRouter.use(requireAuth);
 
-hrmRouter.get("/dashboard", async (_req, res) => {
+/** HR desk metrics — office / admin only (portal UI is gated; API must match). */
+const hrmDesk = requireRoles("admin", "office");
+/** Field staff may punch and view roster; vendors/clients must not. */
+const hrmStaff = requireRoles("admin", "office", "site_employee", "employee");
+
+hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
@@ -915,7 +920,7 @@ hrmRouter.get("/dashboard", async (_req, res) => {
   });
 });
 
-hrmRouter.get("/employees", async (_req, res) => {
+hrmRouter.get("/employees", hrmDesk, async (_req, res) => {
   const users = await prisma.user.findMany({
     where: { role: { in: ["office", "site_employee", "employee", "admin", "vendor", "client"] } },
     select: {
@@ -977,7 +982,7 @@ hrmRouter.post("/assign", requireRoles("admin", "office"), async (req, res) => {
   res.json(member);
 });
 
-hrmRouter.get("/attendance/today", async (req: AuthedRequest, res) => {
+hrmRouter.get("/attendance/today", hrmStaff, async (req: AuthedRequest, res) => {
   await applyAutoEodClockOut();
   const date = istStartOfDay();
   const row = await prisma.attendance.findUnique({
@@ -1002,7 +1007,7 @@ hrmRouter.get("/attendance/today", async (req: AuthedRequest, res) => {
   });
 });
 
-hrmRouter.get("/attendance", async (req, res) => {
+hrmRouter.get("/attendance", hrmStaff, async (req, res) => {
   await applyAutoEodClockOut();
   const date = req.query.date ? new Date(String(req.query.date)) : istStartOfDay();
   if (req.query.date) date.setHours(0, 0, 0, 0);
@@ -1241,7 +1246,7 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "
 
 /* ─── leave types, balances, holidays ─── */
 
-hrmRouter.get("/leave-types", async (_req, res) => {
+hrmRouter.get("/leave-types", hrmStaff, async (_req, res) => {
   const rows = await prisma.leaveType.findMany({ orderBy: { name: "asc" } });
   res.json(rows);
 });
@@ -1300,7 +1305,7 @@ hrmRouter.delete("/holidays/:id", requireRoles("admin", "office"), async (req, r
   res.json({ ok: true });
 });
 
-hrmRouter.get("/leave-balances", async (req: AuthedRequest, res) => {
+hrmRouter.get("/leave-balances", hrmStaff, async (req: AuthedRequest, res) => {
   const year = Number(req.query.year || new Date().getFullYear());
   const userId = String(req.query.userId || req.user!.id);
   const rows = await prisma.leaveBalance.findMany({
@@ -1382,7 +1387,7 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
   return `SPDC/HR/${codeMap[kind]}/${yn}-${nx}/${seq}`;
 }
 
-hrmRouter.get("/hrms-documents", async (req, res) => {
+hrmRouter.get("/hrms-documents", hrmDesk, async (req, res) => {
   const rows = await prisma.hrmsDocument.findMany({
     where: {
       ...(req.query.kind ? { kind: String(req.query.kind) } : {}),
@@ -1512,7 +1517,7 @@ hrmRouter.delete("/hrms-documents/:id", requireRoles("admin", "office"), async (
   res.json({ ok: true });
 });
 
-hrmRouter.get("/leave", async (_req, res) => {
+hrmRouter.get("/leave", hrmDesk, async (_req, res) => {
   const rows = await prisma.leaveRequest.findMany({
     include: { user: { select: { fullName: true } } },
     orderBy: { createdAt: "desc" },
