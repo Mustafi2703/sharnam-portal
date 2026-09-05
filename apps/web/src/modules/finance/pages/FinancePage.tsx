@@ -278,25 +278,33 @@ function Overview({
       </div>
       {summary?.costBridge && (
         <Card className="!p-4 border-line">
-          <h3 className="font-semibold text-sm mb-2">Cost module link (engineering)</h3>
+          <h3 className="font-semibold text-sm mb-2">Cost ↔ Finance cashflow bridge</h3>
+          <p className="text-xs text-steel-muted mb-3">{summary.costBridge.links?.copToCashflowNote}</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
             <div>
-              <div className="text-[10px] uppercase text-steel-muted">Budget WBS certified</div>
-              <div className="font-display">{money(summary.costBridge.cost.budgetCertified)}</div>
+              <div className="text-[10px] uppercase text-steel-muted">Finance COP payable</div>
+              <div className="font-display">{money(summary.costBridge.finance.copPayable)}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase text-steel-muted">Cashflow planned</div>
+              <div className="text-[10px] uppercase text-steel-muted">Cost chart planned</div>
               <div className="font-display">{money(summary.costBridge.cost.cashflowPlanned)}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase text-steel-muted">Cashflow actual</div>
+              <div className="text-[10px] uppercase text-steel-muted">Cost chart actual (COP)</div>
               <div className="font-display">{money(summary.costBridge.cost.cashflowActual)}</div>
             </div>
             <div>
-              <Link to={`/projects/${projectId}/cost?tab=cashflow`} className="text-brand text-xs font-semibold">
-                Open Cost → Cashflow →
-              </Link>
+              <div className="text-[10px] uppercase text-steel-muted">Progress PvA planned</div>
+              <div className="font-display">{money(summary.costBridge.cost.pvaPlanned)}</div>
             </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 items-center">
+            <Badge tone={summary.costBridge.cashflow?.aligned ? "ok" : "warn"}>
+              {summary.costBridge.cashflow?.aligned ? "COP ↔ Cost aligned" : "Run reconcile"}
+            </Badge>
+            <Link to={`/projects/${projectId}/cost?tab=cashflow`} className="text-brand text-xs font-semibold">
+              Cost → Cashflow →
+            </Link>
           </div>
         </Card>
       )}

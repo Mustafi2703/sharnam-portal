@@ -53,7 +53,7 @@ export async function syncCopToCashflow(projectId: string) {
     where: { projectId, packageName: { in: ["COP", "COP-week", "COP-day"] } },
   });
 
-  if (!cops.length) return { periods: 0 };
+  if (!cops.length) return { periods: 0, copTotal: 0 };
 
   const dayMap = new Map<string, { date: Date; amount: number }>();
   const weekMap = new Map<string, { date: Date; amount: number }>();
@@ -136,7 +136,14 @@ export async function syncCopToCashflow(projectId: string) {
     const label = fmtMonth(date);
     const match = chartRows.find((c) => {
       const pl = (c.periodLabel || "").toLowerCase();
-      return pl.includes(label.toLowerCase()) || (c.periodDate && `${c.periodDate.getFullYear()}-${String(c.periodDate.getMonth() + 1).padStart(2, "0")}` === mk);
+      const monthKey =
+        c.periodDate &&
+        `${c.periodDate.getFullYear()}-${String(c.periodDate.getMonth() + 1).padStart(2, "0")}`;
+      return (
+        monthKey === mk ||
+        pl.includes(label.toLowerCase()) ||
+        pl.includes(fmtMonthShort(date).toLowerCase())
+      );
     });
     if (match) {
       await prisma.costCashflowPeriod.update({
@@ -149,5 +156,9 @@ export async function syncCopToCashflow(projectId: string) {
     }
   }
 
-  return { periods: rows.length };
+  return { periods: rows.length, copTotal: [...monthMap.values()].reduce((s, v) => s + v.amount, 0) };
+}
+
+function fmtMonthShort(d: Date) {
+  return d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
 }

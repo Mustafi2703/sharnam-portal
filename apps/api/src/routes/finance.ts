@@ -153,6 +153,22 @@ financeRouter.get("/:projectId/summary", async (req, res) => {
   });
 });
 
+/** Reconcile Progress PvA + Finance COP → Cost cashflow (run after bulk COP certify or PvA import). */
+financeRouter.post("/:projectId/reconcile-cashflow", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const { syncAllCashflowSources, getCashflowReconciliation } = await import("../modules/finance/cashflowBridge.js");
+  const sync = await syncAllCashflowSources(project.id);
+  const reconciliation = await getCashflowReconciliation(project.id);
+  await audit("finance.cashflow.reconcile", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { ...sync, aligned: reconciliation.aligned },
+  });
+  res.json({ ok: true, sync, reconciliation });
+});
+
 /* ─────────────────────────────────────────  CAPEX  ───────────────────────────────────────── */
 
 financeRouter.get("/:projectId/capex", async (req, res) => {

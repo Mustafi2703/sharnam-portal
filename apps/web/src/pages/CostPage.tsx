@@ -224,6 +224,23 @@ export default function CostPage() {
   };
   const loadBills = () => api<{ bills: any[]; totals: any }>(`/api/cost/${id}/bills`, { token }).then(setBillsData);
 
+  async function reconcileCashflow() {
+    if (!id || !canEdit) return;
+    setSyncing(true);
+    setMsg("");
+    try {
+      const out = await api<any>(`/api/finance/${id}/reconcile-cashflow`, { method: "POST", token });
+      setMsg(
+        `Cashflow reconciled — PvA ${out.sync?.pva?.synced ?? 0} period(s) · COP ${out.sync?.cop?.periods ?? 0} row(s) · ${out.reconciliation?.aligned ? "aligned" : "check month labels"}`
+      );
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Reconcile failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function downloadSheet(kind: string, fmt: "csv" | "xlsx" = "csv") {
     if (!id) return;
     const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
@@ -1420,22 +1437,51 @@ export default function CostPage() {
               </form>
             </Card>
           )}
-          <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm space-y-1">
+          <div className="rounded-sm border border-brand/30 bg-brand-soft/40 px-4 py-3 text-sm space-y-2">
             <div>
-              <strong>Budget ↔ Cashflow chart:</strong> Budget WBS ({formatINR(summary.totals.budgeted)}) · Cashflow Chart planned (
-              {formatINR(summary.totals.planned)}) · Budget certified ({formatINR(summary.totals.certified)}). Progress Planned vs Actual cashflow (RA months) lives under Progress — use Sync cashflow to overlay it here without mixing BOQ qty.
+              <strong>How cashflow connects:</strong>{" "}
+              <span className="text-steel-muted">
+                Progress PvA → <em>planned</em> outflow · Finance COP (Certified/Paid) → <em>actual</em> commercial outflow on Chart + COP-day/week/month rows · DPR AC certified = Finance COP cumulative.
+              </span>
             </div>
             {summary.financeBridge && (
-              <div>
-                <strong>Finance COP ↔ Cashflow actual:</strong> COP payable{" "}
-                {formatINR(summary.financeBridge.finance.copPayable)} · Cashflow actual outflow{" "}
-                {formatINR(summary.totals.actual)} — maintain COP in{" "}
-                <Link to={`/projects/${id}/hub/finance?tab=cop`} className="text-brand font-semibold">
-                  Finance → COP
-                </Link>
-                .
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <span className="text-steel-muted">Finance COP payable</span>
+                  <div className="font-semibold">{formatINR(summary.financeBridge.finance.copPayable)}</div>
+                </div>
+                <div>
+                  <span className="text-steel-muted">Chart planned</span>
+                  <div className="font-semibold">{formatINR(summary.totals.planned)}</div>
+                </div>
+                <div>
+                  <span className="text-steel-muted">Chart actual (COP)</span>
+                  <div className="font-semibold">{formatINR(summary.totals.actual)}</div>
+                </div>
+                <div>
+                  <span className="text-steel-muted">PvA planned</span>
+                  <div className="font-semibold">{formatINR(summary.financeBridge.cost?.pvaPlanned ?? 0)}</div>
+                </div>
               </div>
             )}
+            <div className="flex flex-wrap gap-2 items-center pt-1">
+              <Link to={`/projects/${id}/hub/finance?tab=cop`} className="text-brand font-semibold text-xs">
+                Finance → COP
+              </Link>
+              <Link to={`/projects/${id}/progress?tab=planned-actual`} className="text-brand font-semibold text-xs">
+                Progress → Planned vs Actual
+              </Link>
+              {canEdit && (
+                <Button type="button" variant="secondary" className="!text-xs !py-1" disabled={syncing} onClick={() => void reconcileCashflow()}>
+                  {syncing ? "Syncing…" : "Reconcile PvA + COP → cashflow"}
+                </Button>
+              )}
+              {summary.financeBridge?.cashflow && (
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${summary.financeBridge.cashflow.aligned ? "bg-ok/15 text-ok" : "bg-warn/15 text-warn"}`}>
+                  {summary.financeBridge.cashflow.aligned ? "COP ↔ Cost aligned" : "Run reconcile after COP certify"}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {(

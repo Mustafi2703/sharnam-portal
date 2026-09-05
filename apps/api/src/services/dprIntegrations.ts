@@ -537,12 +537,15 @@ export async function buildDprAutoFill(
 
   const copMonth = cashflow.filter((c) => c.packageName === "COP");
   const chartCf = cashflow.filter((c) => c.packageName !== "COP");
-  const acCertifiedToDate =
+  const { acCertifiedToDate } = await import("../modules/finance/cashflowBridge.js");
+  const acFromFinance = await acCertifiedToDate(projectId, logDate);
+  const acCertifiedToDateVal =
+    acFromFinance ||
     (copMonth.length ? copMonth : chartCf).reduce((s, c) => s + (c.actualAmount || 0), 0) ||
     monitoring.reduce((s, m) => s + (m.certifiedQty || 0) * (m.rate || 0), 0);
 
   const header: Partial<DprHeader> = {
-    acCertifiedToDate,
+    acCertifiedToDate: acCertifiedToDateVal,
     cumManDaysPrev: prev.cumManDays,
     cumSafeManHoursPrev: prev.cumSafeHours,
   };

@@ -702,8 +702,8 @@ progressRouter.post(
     if (!file?.buffer?.length) return res.status(400).json({ error: "Excel file required (field: file)" });
     try {
       const counts = await importPlannedActualDashboard(project.id, file.buffer);
-      const { syncProgressCashflowToCost } = await import("../services/cashflowPvaSync.js");
-      const sync = await syncProgressCashflowToCost(project.id);
+      const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
+      const sync = await syncAllCashflowSources(project.id);
       await audit("progress.plannedActual.import", {
         userId: req.user!.id,
         entity: "ProgressActivityLine",
@@ -724,15 +724,15 @@ progressRouter.post(
   async (req: AuthedRequest, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Project not found" });
-    const { syncProgressCashflowToCost } = await import("../services/cashflowPvaSync.js");
-    const sync = await syncProgressCashflowToCost(project.id);
+    const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
+    const sync = await syncAllCashflowSources(project.id);
     await audit("progress.plannedActual.syncCashflow", {
       userId: req.user!.id,
       entity: "CostCashflowPeriod",
       entityId: project.id,
       meta: sync,
     });
-    res.json({ ok: true, ...sync });
+    res.json({ ok: true, ...sync.pva, copSync: sync.cop });
   }
 );
 

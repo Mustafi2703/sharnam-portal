@@ -19,21 +19,27 @@ export type FinanceCostBridge = {
     budgetWorkOrder: number;
     cashflowPlanned: number;
     cashflowActual: number;
+    cashflowCopMonthly: number;
+    pvaPlanned: number;
+    pvaActual: number;
     monitoringCertifiedQtyValue: number;
     legacyVendorBillsPending: number;
   };
+  cashflow: {
+    aligned: boolean;
+    note: string;
+  };
   links: {
-    /** Finance COP payable ≈ commercial outflow certified against RA bills */
     copToCashflowNote: string;
-    /** Cost Budget WBS certified column aligns with Finance PO certified roll-up */
     budgetToFinanceNote: string;
-    /** Legacy Cost → Bills tab; use Finance → COP for official certificates */
     billsModuleNote: string;
+    progressNote: string;
   };
 };
 
 export async function getFinanceCostBridge(projectId: string): Promise<FinanceCostBridge> {
-  const [cops, ras, pos, budget, cashflow, monitoring, vendorBills] = await Promise.all([
+  const { getCashflowReconciliation } = await import("./cashflowBridge.js");
+  const [cops, ras, pos, budget, cashflow, monitoring, vendorBills, pvaRows, cashflowRec] = await Promise.all([
     prisma.certificateOfPayment.findMany({ where: { projectId } }),
     prisma.raBill.findMany({ where: { projectId } }),
     prisma.purchaseOrder.findMany({ where: { projectId } }),
@@ -41,10 +47,14 @@ export async function getFinanceCostBridge(projectId: string): Promise<FinanceCo
     prisma.costCashflowPeriod.findMany({ where: { projectId } }),
     prisma.costMonitoringLine.findMany({ where: { projectId } }),
     prisma.vendorBill.findMany({ where: { projectId } }),
+    prisma.progressPlannedActual.findMany({ where: { projectId } }),
+    getCashflowReconciliation(projectId),
   ]);
 
   const chartCf = cashflow.filter((c) => /chart|project cashflow/i.test(c.packageName || ""));
   const cfRows = chartCf.length ? chartCf : cashflow;
+  const copMonthRows = cashflow.filter((c) => c.packageName === "COP");
+  const pvaCash = pvaRows.filter((r) => (r.plannedAmount || 0) + (r.actualAmount || 0) > 0);
 
   const copPaid = cops
     .filter((c) => c.status === "Paid" || c.status === "Approved")
@@ -73,17 +83,29 @@ export async function getFinanceCostBridge(projectId: string): Promise<FinanceCo
       budgetCertified: budget.reduce((s, b) => s + b.certifiedAmount, 0),
       budgetWorkOrder: budget.reduce((s, b) => s + b.workOrderAmount, 0),
       cashflowPlanned: cfRows.reduce((s, c) => s + c.plannedAmount, 0),
-      cashflowActual: cfRows.reduce((s, c) => s + c.actualAmount, 0),
+      cashflowActual: Math.max(
+        cfRows.reduce((s, c) => s + c.actualAmount, 0),
+        cashflowRec.finance.copCertifiedPayable
+      ),
+      cashflowCopMonthly: copMonthRows.reduce((s, c) => s + c.actualAmount, 0),
+      pvaPlanned: pvaCash.reduce((s, r) => s + (r.plannedAmount || 0), 0),
+      pvaActual: pvaCash.reduce((s, r) => s + (r.actualAmount || 0), 0),
       monitoringCertifiedQtyValue,
       legacyVendorBillsPending: legacyPending,
     },
+    cashflow: {
+      aligned: cashflowRec.aligned,
+      note: cashflowRec.note,
+    },
     links: {
       copToCashflowNote:
-        "Certified / Approved / Paid COP rolls into Cost cashflow as COP-day, COP-week, and COP (month) rows, and overlays Chart actual for the same month. DPR AC certified uses cashflow actual.",
+        "Finance COP (Certified/Paid) → Cost Chart actual + COP-day/week/month rows. Certify a COP in Finance to refresh. DPR AC certified reads Finance COP cumulative.",
       budgetToFinanceNote:
         "Cost Budget WBS certified amount aligns with Finance PO/CAPEX certified roll-up for the same project.",
       billsModuleNote:
         "Official COP certificates: Finance → COP tab (linked to PO + RA). Cost → Bills is a quick vendor log only.",
+      progressNote:
+        "Progress Planned vs Actual sets cashflow planned. Sync from Progress overlays planned on Chart — COP always wins for commercial actual.",
     },
   };
 }

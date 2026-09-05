@@ -488,7 +488,7 @@ export default function ProgressPage() {
         { method: "POST", token }
       );
       setMsg(
-        `Cashflow synced to Cost — ${out.synced} PVA period(s)${out.overlaid ? ` · ${out.overlaid} chart row(s) overlaid` : ""}. WPR will pick these up on next pack sync.`
+        `Cashflow synced — ${out.synced} PVA period(s)${out.overlaid ? ` · ${out.overlaid} chart planned row(s)` : ""}${out.copSync ? ` · COP ${out.copSync.periods ?? 0} actual row(s)` : ""}. Cost Chart actual comes from Finance COP.`
       );
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Sync failed");

@@ -55,20 +55,28 @@ export async function syncProgressCashflowToCost(projectId: string) {
   });
 
   let overlaid = 0;
+  const copCount = await prisma.certificateOfPayment.count({
+    where: { projectId, status: { in: ["Certified", "Approved", "Paid"] } },
+  });
+
   for (const r of rows) {
     const label = (r.periodLabel || "").trim().toLowerCase();
     if (!label) continue;
     const match = chartRows.find((c) => (c.periodLabel || "").trim().toLowerCase() === label);
     if (!match) continue;
+    const planned = r.plannedAmount || match.plannedAmount;
+    /** Finance COP sync owns Chart actual when commercial COPs exist. */
+    const actual =
+      copCount > 0
+        ? match.actualAmount
+        : r.actualAmount || match.actualAmount;
     await prisma.costCashflowPeriod.update({
       where: { id: match.id },
       data: {
-        plannedAmount: r.plannedAmount || match.plannedAmount,
-        actualAmount: r.actualAmount || match.actualAmount,
+        plannedAmount: planned,
+        actualAmount: actual,
         progressPct:
-          (r.plannedAmount || match.plannedAmount) > 0
-            ? (r.actualAmount || match.actualAmount) / (r.plannedAmount || match.plannedAmount)
-            : r.actualPct || match.progressPct,
+          planned > 0 ? actual / planned : r.actualPct || match.progressPct,
       },
     });
     overlaid += 1;
