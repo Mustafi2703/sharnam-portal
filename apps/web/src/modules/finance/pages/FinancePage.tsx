@@ -10,6 +10,7 @@ import {
 import { FinanceBillRegister } from "../components/FinanceBillRegister";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
 import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
+import { CopDocumentSlots } from "../components/CopDocumentSlots";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -726,13 +727,6 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
       setMsg(err instanceof Error ? err.message : "Add failed");
     }
   }
-  async function downloadCop(copId: string, certNo: string) {
-    try {
-      await downloadAuthFile(`/api/finance/${projectId}/cop/${copId}/download.xlsx`, token, `Sharnam-COP-${certNo.replace(/[^\w.-]+/g, "_")}.xlsx`);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Download failed");
-    }
-  }
   async function saveCopToDms(copId: string) {
     setBusyId(copId);
     try {
@@ -819,7 +813,8 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                 <th className="px-3 py-2.5 text-right">Certified</th>
                 <th className="px-3 py-2.5 text-right">Payable</th>
                 <th className="px-3 py-2.5">Stage</th>
-                <th className="px-3 py-2.5 min-w-[220px]">Actions</th>
+                <th className="px-3 py-2.5 min-w-[340px]">Documents · SharePoint</th>
+                <th className="px-3 py-2.5 min-w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -838,24 +833,20 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                     </Badge>
                   </td>
                   <td className="py-3 px-3">
+                    <CopDocumentSlots
+                      copId={c.id}
+                      certificateNumber={c.certificateNumber}
+                      projectId={projectId}
+                      raBillId={c.raBillId}
+                      raNumber={c.raBill?.raNumber}
+                      token={token}
+                      canWrite={canWrite}
+                      compact
+                      onChange={() => void reload()}
+                    />
+                  </td>
+                  <td className="py-3 px-3">
                     <div className="flex flex-wrap gap-1.5">
-                      <Button type="button" variant="secondary" className="!py-1 !px-2 !text-[11px]" onClick={() => void downloadCop(c.id, c.certificateNumber)}>
-                        XLSX
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!py-1 !px-2 !text-[11px]"
-                        onClick={() =>
-                          window.open(
-                            `/api/finance/${projectId}/cop/${c.id}/print.html?token=${encodeURIComponent(token || "")}`,
-                            "_blank",
-                            "noopener"
-                          )
-                        }
-                      >
-                        Print
-                      </Button>
                       {canWrite && c.status === "Draft" && (
                         <Button type="button" className="!py-1 !px-2 !text-[11px]" disabled={busyId === c.id} onClick={() => void updateCopStatus(c.id, "Certified")}>
                           Certify
@@ -877,7 +868,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
               ))}
               {!filteredCops.length && (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-steel-muted">
+                  <td colSpan={10} className="py-8 text-center text-steel-muted">
                     No COPs yet — upload RA workbooks, then create COP from linked RA bill.
                   </td>
                 </tr>

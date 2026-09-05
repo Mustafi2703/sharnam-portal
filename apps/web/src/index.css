@@ -10745,3 +10745,25 @@ html.is-standalone-form #root {
 .ra-bill-files--compact .ra-bill-files__stages {
   gap: 0.375rem;
 }
+
+.cop-doc-files .ra-bill-files__stages {
+  grid-template-columns: repeat(4, minmax(4.5rem, 1fr));
+}
+
+.cop-doc-files__system {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+}
+
+.cop-doc-files__system .ra-bill-files__open {
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.375rem;
+  background: var(--color-sand);
+}
+
+.cop-doc-files__ra .ra-bill-files__stages {
+  grid-template-columns: repeat(3, minmax(4.5rem, 1fr));
+}

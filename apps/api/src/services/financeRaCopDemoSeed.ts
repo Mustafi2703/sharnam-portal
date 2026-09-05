@@ -81,6 +81,50 @@ async function seedRaBillStageWorkbooks(
   }
 }
 
+async function seedCopStageDocuments(
+  db: PrismaClient,
+  projectCode: string,
+  copId: string,
+  certificateNumber: string,
+  copStatus: string,
+  createdById: string
+) {
+  const { buildViatrixCopWorkbook } = await import("../modules/finance/copWorkbook.js");
+  const { saveCopFile, logCopStageFile } = await import("../modules/finance/copDocuments.js");
+
+  const { buffer, filename } = await buildViatrixCopWorkbook(copId);
+  const draftSaved = await saveCopFile(projectCode, certificateNumber, filename, buffer);
+  await logCopStageFile(db, {
+    copId,
+    stage: "Draft",
+    fileName: filename,
+    fileUrl: draftSaved.fileUrl,
+    storagePath: draftSaved.path,
+    sharePointUrl: draftSaved.url || null,
+    uploadedById: createdById,
+    kind: "generated",
+    notes: "Sharnam Viatrix COP workbook",
+  });
+
+  const extraStages: Array<"Certified" | "Signed" | "Paid"> =
+    copStatus === "Paid" ? ["Certified", "Signed", "Paid"] : copStatus === "Certified" ? ["Certified"] : [];
+
+  for (const stage of extraStages) {
+    const name = `${certificateNumber}-${stage}.pdf`;
+    const buf = Buffer.from(`Demo ${stage} document — ${DEMO_SOURCE}`, "utf8");
+    const saved = await saveCopFile(projectCode, certificateNumber, name, buf);
+    await logCopStageFile(db, {
+      copId,
+      stage,
+      fileName: name,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path,
+      sharePointUrl: saved.url || null,
+      uploadedById: createdById,
+    });
+  }
+}
+
 export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, createdById: string) {
   await db.certificateOfPayment.deleteMany({ where: { projectId, remarks: { contains: DEMO_SOURCE } } });
   await db.raBill.deleteMany({ where: { projectId, description: { contains: DEMO_SOURCE } } });
@@ -188,6 +232,7 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
       },
     });
     copIds.push(cop.id);
+    await seedCopStageDocuments(db, project.code, cop.id, cop.certificateNumber, copStatus, createdById);
   }
 
   await db.purchaseOrder.update({

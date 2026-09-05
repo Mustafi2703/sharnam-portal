@@ -2210,8 +2210,48 @@ model CertificateOfPayment {
   project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   raBill        RaBill?        @relation(fields: [raBillId], references: [id])
+  revisions     CopRevision[]
+  attachments   CopAttachment[]
 
   @@unique([projectId, certificateNumber])
+}
+
+/** COP document revision — Draft → Certified → Signed → Paid (each upload logged with SharePoint link). */
+model CopRevision {
+  id            String   @id @default(cuid())
+  copId         String
+  /// Draft | Certified | Signed | Paid
+  stage         String
+  revisionNo    Int      @default(1)
+  fileName      String?
+  fileUrl       String?
+  storagePath   String?
+  sharePointUrl String?
+  notes         String?  @db.Text
+  uploadedById  String?
+  uploadedAt    DateTime @default(now())
+
+  cop CertificateOfPayment @relation(fields: [copId], references: [id], onDelete: Cascade)
+
+  @@index([copId, stage])
+}
+
+model CopAttachment {
+  id            String   @id @default(cuid())
+  copId         String
+  fileName      String
+  fileUrl       String?
+  storagePath   String?
+  sharePointUrl String?
+  /// supporting | stage | generated
+  kind          String   @default("supporting")
+  notes         String?
+  uploadedById  String?
+  uploadedAt    DateTime @default(now())
+
+  cop CertificateOfPayment @relation(fields: [copId], references: [id], onDelete: Cascade)
+
+  @@index([copId, uploadedAt])
 }
 
 /**

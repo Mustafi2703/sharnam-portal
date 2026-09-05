@@ -703,8 +703,154 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   await syncCopToCashflow(req.params.projectId);
 
   await audit("finance.cop.create", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: created.id, meta: { certificateNumber: created.certificateNumber } });
+  if (req.file && attachmentUrl) {
+    const { logCopStageFile } = await import("../modules/finance/copDocuments.js");
+    await logCopStageFile(prisma, {
+      copId: created.id,
+      stage: "Draft",
+      fileName: req.file.originalname,
+      fileUrl: attachmentUrl,
+      sharePointUrl: attachmentUrl.startsWith("http") ? attachmentUrl : null,
+      uploadedById: req.user!.id,
+    });
+  }
   res.status(201).json(created);
 });
+
+/** COP document trail — COP stages + linked RA workbook revisions. */
+financeRouter.get("/cop/:id/document-trail", async (req, res) => {
+  const { loadCopDocumentTrail } = await import("../modules/finance/copDocuments.js");
+  const trail = await loadCopDocumentTrail(prisma, req.params.id);
+  if (!trail) return res.status(404).json({ error: "COP not found" });
+  res.json(trail);
+});
+
+/** List COP stage revisions — most recent first. */
+financeRouter.get("/cop/:id/revisions", async (req, res) => {
+  const cop = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const rows = await prisma.copRevision.findMany({
+    where: { copId: cop.id },
+    orderBy: [{ uploadedAt: "desc" }],
+  });
+  res.json(rows);
+});
+
+/** List all COP attachments. */
+financeRouter.get("/cop/:id/attachments", async (req, res) => {
+  const cop = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const rows = await prisma.copAttachment.findMany({
+    where: { copId: cop.id },
+    orderBy: [{ uploadedAt: "desc" }],
+  });
+  res.json(rows);
+});
+
+/** Upload supporting documents to COP folder. */
+financeRouter.post(
+  "/cop/:id/attachments",
+  requireRoles("admin", "office"),
+  upload.array("files", 25),
+  async (req: AuthedRequest, res) => {
+    const cop = await prisma.certificateOfPayment.findFirst({
+      where: { id: req.params.id },
+      include: { project: { select: { code: true } } },
+    });
+    if (!cop) return res.status(404).json({ error: "COP not found" });
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) return res.status(400).json({ error: "no files uploaded" });
+
+    const { saveCopFile } = await import("../modules/finance/copDocuments.js");
+    const created = [];
+    for (const f of files) {
+      const saved = await saveCopFile(
+        cop.project.code,
+        cop.certificateNumber,
+        `${Date.now()}-${f.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+        f.buffer
+      );
+      const row = await prisma.copAttachment.create({
+        data: {
+          copId: cop.id,
+          fileName: f.originalname,
+          fileUrl: saved.fileUrl,
+          storagePath: saved.path,
+          sharePointUrl: saved.url || null,
+          kind: s(req.body.kind) || "supporting",
+          uploadedById: req.user!.id,
+        },
+      });
+      created.push(row);
+    }
+    await audit("finance.cop.attachments", {
+      userId: req.user!.id,
+      entity: "CertificateOfPayment",
+      entityId: cop.id,
+      meta: { count: created.length },
+    });
+    res.status(201).json(created);
+  }
+);
+
+/**
+ * Log a COP document stage revision (Draft | Certified | Signed | Paid).
+ * Body: stage, notes?, file
+ */
+financeRouter.post(
+  "/cop/:id/stage",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const { COP_STAGES, saveCopFile, logCopStageFile } = await import("../modules/finance/copDocuments.js");
+    const cop = await prisma.certificateOfPayment.findFirst({
+      where: { id: req.params.id },
+      include: { project: { select: { code: true } } },
+    });
+    if (!cop) return res.status(404).json({ error: "COP not found" });
+
+    const stageRaw = s(req.body.stage);
+    const stage = (COP_STAGES as readonly string[]).includes(stageRaw) ? stageRaw : null;
+    if (!stage) {
+      return res.status(400).json({ error: `stage must be one of ${COP_STAGES.join(" | ")}` });
+    }
+    if (!req.file) return res.status(400).json({ error: "file required" });
+
+    const revisionNo =
+      (await prisma.copRevision.count({ where: { copId: cop.id, stage } })) + 1;
+    const saved = await saveCopFile(
+      cop.project.code,
+      cop.certificateNumber,
+      `${stage}-R${revisionNo}-${Date.now()}${extOf(req.file)}`,
+      req.file.buffer
+    );
+
+    await logCopStageFile(prisma, {
+      copId: cop.id,
+      stage,
+      fileName: req.file.originalname,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path,
+      sharePointUrl: saved.url || null,
+      uploadedById: req.user!.id,
+      notes: s(req.body.notes) || null,
+    });
+
+    const revision = await prisma.copRevision.findFirst({
+      where: { copId: cop.id, stage },
+      orderBy: { revisionNo: "desc" },
+    });
+
+    await audit("finance.cop.stage", {
+      userId: req.user!.id,
+      entity: "CopRevision",
+      entityId: revision?.id || cop.id,
+      meta: { copId: cop.id, certificateNumber: cop.certificateNumber, stage, revisionNo },
+    });
+
+    res.status(201).json(revision);
+  }
+);
 
 /** Download Viatrix-format COP certificate (xlsx). */
 financeRouter.get("/:projectId/cop/:copId/download.xlsx", async (req, res) => {
@@ -857,6 +1003,21 @@ financeRouter.post("/:projectId/cop/:copId/save-to-dms", requireRoles("admin", "
   const out = await saveViatrixCopToDms(cop.id, (code, folder, name, buf) =>
     mockOneDrive.upload(code, folder, name, buf)
   );
+  const { logCopStageFile } = await import("../modules/finance/copDocuments.js");
+  if (out.url || out.path) {
+    const fileUrl = out.url || `/uploads/onedrive/${project.code}/${out.path}`;
+    await logCopStageFile(prisma, {
+      copId: cop.id,
+      stage: "Draft",
+      fileName: out.filename,
+      fileUrl,
+      storagePath: out.path || null,
+      sharePointUrl: out.url || null,
+      uploadedById: req.user!.id,
+      kind: "generated",
+      notes: "Sharnam Viatrix COP workbook → DMS 09.01",
+    });
+  }
   await audit("finance.cop.export", { userId: req.user!.id, entity: "CertificateOfPayment", entityId: cop.id, meta: { filename: out.filename } });
   res.json(out);
 });
@@ -870,12 +1031,27 @@ financeRouter.post("/:projectId/cop/upload-all-to-dms", requireRoles("admin", "o
     orderBy: { certificateDate: "asc" },
   });
   const { saveViatrixCopToDms } = await import("../modules/finance/copWorkbook.js");
+  const { logCopStageFile } = await import("../modules/finance/copDocuments.js");
   const results: { copId: string; certificateNumber: string; ok: boolean; filename?: string; url?: string; error?: string }[] = [];
   for (const cop of cops) {
     try {
       const out = await saveViatrixCopToDms(cop.id, (code, folder, name, buf) =>
         mockOneDrive.upload(code, folder, name, buf)
       );
+      if (out.url || out.path) {
+        const fileUrl = out.url || `/uploads/onedrive/${project.code}/${out.path}`;
+        await logCopStageFile(prisma, {
+          copId: cop.id,
+          stage: "Draft",
+          fileName: out.filename,
+          fileUrl,
+          storagePath: out.path || null,
+          sharePointUrl: out.url || null,
+          uploadedById: req.user!.id,
+          kind: "generated",
+          notes: "Bulk upload → DMS 09.01",
+        });
+      }
       results.push({ copId: cop.id, certificateNumber: cop.certificateNumber, ok: true, filename: out.filename, url: out.url ?? undefined });
     } catch (err) {
       results.push({ copId: cop.id, certificateNumber: cop.certificateNumber, ok: false, error: err instanceof Error ? err.message : String(err) });
