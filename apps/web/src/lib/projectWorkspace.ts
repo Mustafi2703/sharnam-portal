@@ -13,7 +13,7 @@ function checklistFamilyModule(search: string, tool: "master" | "logs"): Workspa
   if (family === "Safety") return "safety";
   if (family === "DrawingCheck") return "drawings";
   if (family === "ActivityInspection") return "inspection";
-  if (family === "SiteExecution" || (tool === "logs" && family === "SiteExecution")) return "progress";
+  if (family === "SiteExecution") return "quality";
   return "quality";
 }
 
@@ -63,7 +63,7 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
     if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
-    if (kind === "SiteExecution") return "progress";
+    if (kind === "SiteExecution") return "quality";
     const stored = getActiveWorkspace();
     if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms" || stored === "inspection") return stored;
     return "quality";

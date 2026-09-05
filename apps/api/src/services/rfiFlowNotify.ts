@@ -75,7 +75,7 @@ export function logsPathForFamily(projectId: string, family: string) {
   if (family === "QualityInspection") return `/projects/${projectId}/quality/checklist-logs`;
   if (family === "Safety") return `/projects/${projectId}/safety/checklist-logs`;
   if (family === "ActivityInspection") return `/projects/${projectId}/inspection/checklist-logs`;
-  if (family === "SiteExecution") return `/projects/${projectId}/progress/checklist-logs`;
+  if (family === "SiteExecution") return `/projects/${projectId}/quality/site-checklist-logs`;
   return `/projects/${projectId}/drawings/checklist-logs`;
 }
 

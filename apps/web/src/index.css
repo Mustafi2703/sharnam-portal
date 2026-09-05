@@ -1128,6 +1128,7 @@ body.is-auth-route #root {
 
 /* SPDC register pages — fill middle column between nav + actions panel */
 .spdc-register-page,
+.rfi-register-page,
 .qap-page {
   min-height: 0;
   flex: 1 1 0%;
@@ -1142,6 +1143,7 @@ body.is-auth-route #root {
 .tool-main:has(.cost-page--register),
 .tool-main:has(.progress-page--register),
 .tool-main:has(.spdc-register-page),
+.tool-main:has(.rfi-register-page),
 .tool-main:has(.maker-shell) {
   display: flex;
   flex-direction: column;
@@ -1178,6 +1180,7 @@ body.is-auth-route #root {
   /* All register pages: inner sheet scroll (never whole-page scroll) */
   .tool-main:has(.page-stack--register),
   .tool-main:has(.spdc-register-page),
+.tool-main:has(.rfi-register-page),
   .tool-main:has(.cost-page--register),
   .tool-main:has(.progress-page--register),
   .tool-main:has(.qap-page),
@@ -1198,6 +1201,7 @@ body.is-auth-route #root {
   .tool-main:has(.page-stack--register),
   .tool-main:has(.qap-page),
   .tool-main:has(.spdc-register-page),
+.tool-main:has(.rfi-register-page),
   .tool-main:has(.cost-page--register),
   .tool-main:has(.progress-page--register),
   .tool-main:has(.maker-shell) {
@@ -10430,3 +10434,9 @@ body {
   }
 }
 
+/* Standalone popup forms — checklist fill + NCR/CAR (no project module chrome) */
+.checklist-fill-standalone,
+.ncr-form-standalone {
+  min-height: 100vh;
+  background: var(--paper, #faf9f7);
+}

@@ -6,7 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/
 import { SignaturePad } from "../components/SignaturePad";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
 
-type Item = { id: string; itemCode?: string; description: string; section?: string };
+type Item = { id: string; itemCode?: string; description: string; section?: string; instruction?: string; requirePhoto?: boolean };
 type LineResponse = { answer: string; remarks: string; photos: File[]; docs: File[]; evidenceLinks: string[] };
 type FillMeta = { reportNo: string; location: string; refDrawing: string; quantity: string };
 
@@ -255,48 +255,34 @@ export default function ChecklistFillPage() {
 
 
   return (
-    <div className="min-h-screen bg-sand">
-      <header className="sticky top-0 z-30 bg-paper border-b border-line text-ink">
+    <div className="checklist-fill-standalone min-h-screen bg-sand">
+      <header className="sticky top-0 z-30 bg-paper border-b border-line text-ink shadow-sm">
         <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <Link to={`/projects/${projectId}`} className="inline-flex items-center" aria-label="Sharnam home">
-              <img src="/logo.png" alt="Sharnam" className="h-9 w-auto max-w-[9rem] object-contain" width={160} height={76} />
-            </Link>
+            <img src="/logo.png" alt="Sharnam" className="h-9 w-auto max-w-[9rem] object-contain" width={160} height={76} />
             <span className="text-xs text-steel-muted truncate">
-              {assignment?.project?.code} · Checklist form
+              {assignment?.project?.code || "Project"} · Checklist fill window
             </span>
           </div>
           <div className="flex items-center gap-2">
             <Badge tone="brand">
               {family === "QualityInspection"
-                ? "Quality inspection"
+                ? "Quality IR"
                 : family === "Safety"
                   ? "Safety checklist"
                   : family === "ActivityInspection"
                     ? "Activity inspection"
                     : family === "DrawingCheck"
                       ? "Drawing check"
-                      : "Site / field checklist"}
+                      : "Site execution (Quality)"}
             </Badge>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => void downloadAuditCsv()}>
-              CSV audit log
+            {draftId && <Badge tone="warn">Draft</Badge>}
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => void saveDraft()} disabled={savingDraft || !canFill}>
+              {savingDraft ? "Saving…" : "Save draft"}
             </Button>
-            <Link
-              to={`/projects/${projectId}/${
-                family === "QualityInspection"
-                  ? "quality/checklist-logs"
-                  : family === "Safety"
-                    ? "safety/checklist-logs"
-                    : family === "ActivityInspection"
-                      ? "inspection/checklist-logs"
-                      : family === "DrawingCheck"
-                        ? "drawings/checklist-logs"
-                        : "progress/checklist-logs"
-              }`}
-              className="text-xs font-semibold text-brand"
-            >
-              Fill log
-            </Link>
+            <Button type="button" variant="ghost" className="!text-xs" onClick={() => window.close()}>
+              Close window
+            </Button>
           </div>
         </div>
       </header>
@@ -538,6 +524,17 @@ export default function ChecklistFillPage() {
                                 {item.itemCode && <span className="font-mono text-brand mr-2">{item.itemCode}</span>}
                                 {item.description}
                               </div>
+                              {item.instruction?.trim() && (
+                                <p className="text-sm text-steel-muted bg-sand/50 border border-line rounded-lg px-3 py-2 leading-relaxed">
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-brand block mb-1">
+                                    Instruction / QI note
+                                  </span>
+                                  {item.instruction}
+                                </p>
+                              )}
+                              {item.requirePhoto && (
+                                <p className="text-[11px] font-semibold text-amber-800">Photo required for this line</p>
+                              )}
                               <div className="flex flex-wrap gap-2">
                                 {["Yes", "No", "N.A."].map((ans) => {
                                   const on = line.answer === ans;

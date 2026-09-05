@@ -15,6 +15,7 @@ import {
   parseFormDataJson,
   type InspectionRegisterTab,
 } from "../../lib/inspectionRequestForms";
+import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
 
 const TABS: { key: InspectionRegisterTab; label: string; doc: string }[] = [
   { key: "quality-ir", label: "Quality IR (F-01)", doc: "SPDC/QA/F-01" },
@@ -277,13 +278,14 @@ export default function InspectionRegisterPage() {
               Drawing ref (text): {parseFormDataJson(selected.formDataJson).drawingRef || "—"}
             </p>
           )}
-          {selected.linkedAssignmentId && (
-            <Link
-              className="inline-block mt-3 text-sm font-semibold text-brand"
-              to={`/projects/${id}/checklist/fill/${selected.linkedAssignmentId}?family=${tabChecklist.family}`}
+          {selected.linkedAssignmentId && id && (
+            <Button
+              type="button"
+              className="!text-sm mt-3"
+              onClick={() => openChecklistFillWindow(id, selected.linkedAssignmentId, tabChecklist.family)}
             >
               Fill linked checklist →
-            </Link>
+            </Button>
           )}
         </Card>
       )}

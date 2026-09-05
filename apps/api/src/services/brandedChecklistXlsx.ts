@@ -214,10 +214,12 @@ function getAnswer(
 
 function familyOf(type?: string | null): "activity" | "safety" | "rfi" | "ir" {
   const t = String(type || "").toLowerCase();
-  if (t.includes("safety")) return "safety";
-  if (t.includes("drawing")) return "activity";
-  if (t.includes("rfi") || t.includes("information") || t === "drawingchecklist") return "rfi";
-  if (t.includes("qualityir") || t === "ir" || t.includes("requestforinspection")) return "ir";
+  if (t === "safety" || t.includes("safety")) return "safety";
+  if (t === "qualityinspection" || t.includes("qualityir")) return "ir";
+  if (t === "activityinspection") return "activity";
+  if (t === "siteexecution") return "activity";
+  if (t === "drawingcheck" || t.includes("drawing")) return "rfi";
+  if (t.includes("rfi") || t.includes("information")) return "rfi";
   return "activity";
 }
 

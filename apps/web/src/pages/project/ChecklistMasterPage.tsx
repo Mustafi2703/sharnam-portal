@@ -11,10 +11,10 @@ import {
 import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
-  { value: "DrawingCheck", label: "Drawing check (pre-upload)" },
-  { value: "SiteExecution", label: "Site / field" },
-  { value: "QualityInspection", label: "Quality" },
-  { value: "Safety", label: "Safety" },
+  { value: "DrawingCheck", label: "Drawing check · RFI (SPDC RFI form)" },
+  { value: "QualityInspection", label: "Quality IR (SPDC F-01)" },
+  { value: "SiteExecution", label: "Site execution (SPDC Activity F-02)" },
+  { value: "Safety", label: "Safety (SPDC Safety IR)" },
   { value: "ActivityInspection", label: "Activity inspection" },
 ] as const;
 
@@ -23,13 +23,14 @@ const MODULE_MASTER_ROUTES: Record<string, string> = {
   QualityInspection: "quality/checklist-master",
   Safety: "safety/checklist-master",
   ActivityInspection: "inspection/checklist-master",
-  SiteExecution: "progress/checklist-master",
+  SiteExecution: "quality/site-checklist-master",
 };
 
 function familyLockFromPath(pathname: string): Family | undefined {
   const tail = projectRouteTail(pathname);
   if (tail === "drawings/checklist-master") return "DrawingCheck";
   if (tail === "quality/checklist-master") return "QualityInspection";
+  if (tail === "quality/site-checklist-master") return "SiteExecution";
   if (tail === "safety/checklist-master") return "Safety";
   if (tail === "inspection/checklist-master") return "ActivityInspection";
   if (tail === "progress/checklist-master") return "SiteExecution";

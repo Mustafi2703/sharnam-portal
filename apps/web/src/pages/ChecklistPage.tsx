@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { moduleForChecklistFamily } from "../lib/rfiModuleScope";
+import { openChecklistFillWindow } from "../lib/checklistFillWindow";
 
 export type ChecklistFamily = "SiteExecution" | "QualityInspection";
 
@@ -20,13 +21,13 @@ const FAMILY_META: Record<
   }
 > = {
   SiteExecution: {
-    eyebrow: "Progress · site checklists",
+    eyebrow: "Quality · site execution checklists",
     title: "Site checklists",
     subtitle:
-      "Choose types from Progress checklist master, assign to this project, then request site fill. Partial save, photos, and branded PDF/XLSX go to SharePoint.",
+      "Final Index field checklists (SPDC Activity format) — assign from Quality site checklist master, partial save, photos, branded PDF/XLSX to SharePoint.",
     rfiKind: "SiteExecution",
-    masterPath: "progress/checklist-master",
-    logsPath: "progress/checklist-logs",
+    masterPath: "quality/site-checklist-master",
+    logsPath: "quality/site-checklist-logs",
     assignPath: "checklist/assign",
   },
   QualityInspection: {
@@ -129,8 +130,8 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
   const available = templates.filter((t) => !assignedIds.has(t.id));
 
   function openFill(assignmentId: string) {
-    const url = `${window.location.origin}/projects/${id}/checklist/fill/${assignmentId}?family=${family}`;
-    window.open(url, "_blank", "noopener,noreferrer,width=1400,height=900");
+    if (!id) return;
+    openChecklistFillWindow(id, assignmentId, family);
   }
 
   const hubModule = moduleForChecklistFamily(family);

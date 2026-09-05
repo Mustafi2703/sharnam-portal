@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../../lib/brandedChecklistPrint";
+import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
@@ -20,13 +21,14 @@ const MODULE_LOG_ROUTES: Record<string, string> = {
   QualityInspection: "quality/checklist-logs",
   Safety: "safety/checklist-logs",
   ActivityInspection: "inspection/checklist-logs",
-  SiteExecution: "progress/checklist-logs",
+  SiteExecution: "quality/site-checklist-logs",
 };
 
 function familyLockFromPath(pathname: string): string | undefined {
   const tail = projectRouteTail(pathname);
   if (tail === "drawings/checklist-logs") return "DrawingCheck";
   if (tail === "quality/checklist-logs") return "QualityInspection";
+  if (tail === "quality/site-checklist-logs") return "SiteExecution";
   if (tail === "safety/checklist-logs") return "Safety";
   if (tail === "inspection/checklist-logs") return "ActivityInspection";
   if (tail === "progress/checklist-logs") return "SiteExecution";
@@ -280,6 +282,22 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                     </Badge>
                   </td>
                   <td className="text-right">
+                    {s.status === "Draft" && id && s.assignment?.id && (
+                      <Button
+                        type="button"
+                        className="!text-xs !py-1.5"
+                        onClick={() =>
+                          openChecklistFillWindow(
+                            id,
+                            s.assignment.id,
+                            s.assignment?.template?.checklistType || family || "SiteExecution",
+                            { resumeDraft: true }
+                          )
+                        }
+                      >
+                        Resume fill
+                      </Button>
+                    )}
                     {s.status !== "Draft" && (
                       <div className="flex flex-wrap gap-1 justify-end">
                         <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>

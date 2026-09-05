@@ -50,16 +50,6 @@ export default function InspectionsPage() {
     location: "",
     contractor: "",
   });
-  const [ncrEdit, setNcrEdit] = useState<any>(null);
-  const [ncrEditForm, setNcrEditForm] = useState({
-    ncrType: "",
-    description: "",
-    location: "",
-    status: "Open",
-    plannedClosure: "",
-    actualClosure: "",
-  });
-  const [ncrModalBusy, setNcrModalBusy] = useState(false);
   const [ncrAddOpen, setNcrAddOpen] = useState(false);
   const [ncrAddBusy, setNcrAddBusy] = useState(false);
   const [pack, setPack] = useState<any>(null);
@@ -347,24 +337,6 @@ export default function InspectionsPage() {
                         >
                           {n.status === "Open" ? "Fill form" : "View form"}
                         </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="!py-1 !px-2 !text-xs"
-                          onClick={() => {
-                            setNcrEdit(n);
-                            setNcrEditForm({
-                              ncrType: n.ncrType || "",
-                              description: n.description || "",
-                              location: n.location || "",
-                              status: n.status || "Open",
-                              plannedClosure: n.plannedClosure ? String(n.plannedClosure).slice(0, 10) : "",
-                              actualClosure: n.actualClosure ? String(n.actualClosure).slice(0, 10) : "",
-                            });
-                          }}
-                        >
-                          Quick edit
-                        </Button>
                         {n.status === "Open" ? (
                           <Button
                             type="button"
@@ -435,48 +407,6 @@ export default function InspectionsPage() {
               onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value })}
             />
           </form>
-        </RegisterEntryModal>
-        <RegisterEntryModal
-          open={!!ncrEdit}
-          title={`Edit ${ncrEdit?.number || "NCR/CAR"}`}
-          size="xl"
-          onClose={() => setNcrEdit(null)}
-          saving={ncrModalBusy}
-          onSave={async () => {
-            if (!ncrEdit || !id) return;
-            setNcrModalBusy(true);
-            try {
-              await api(`/api/checklist/project/${id}/ncr/${ncrEdit.id}`, {
-                method: "PATCH",
-                token,
-                body: JSON.stringify({
-                  ncrType: ncrEditForm.ncrType,
-                  description: ncrEditForm.description,
-                  location: ncrEditForm.location,
-                  status: ncrEditForm.status,
-                  plannedClosure: ncrEditForm.plannedClosure || null,
-                  actualClosure: ncrEditForm.actualClosure || null,
-                }),
-              });
-              setMsg(`${ncrEdit.number} updated`);
-              setNcrEdit(null);
-              await load();
-            } catch (err) {
-              setMsg(err instanceof Error ? err.message : "Update failed");
-            } finally {
-              setNcrModalBusy(false);
-            }
-          }}
-        >
-          <Select value={ncrEditForm.status} onChange={(e) => setNcrEditForm({ ...ncrEditForm, status: e.target.value })}>
-            <option value="Open">Open</option>
-            <option value="Closed">Closed</option>
-          </Select>
-          <Input placeholder="Type" value={ncrEditForm.ncrType} onChange={(e) => setNcrEditForm({ ...ncrEditForm, ncrType: e.target.value })} />
-          <TextArea placeholder="Description" value={ncrEditForm.description} onChange={(e) => setNcrEditForm({ ...ncrEditForm, description: e.target.value })} />
-          <Input placeholder="Location" value={ncrEditForm.location} onChange={(e) => setNcrEditForm({ ...ncrEditForm, location: e.target.value })} />
-          <Input type="date" value={ncrEditForm.plannedClosure} onChange={(e) => setNcrEditForm({ ...ncrEditForm, plannedClosure: e.target.value })} />
-          <Input type="date" value={ncrEditForm.actualClosure} onChange={(e) => setNcrEditForm({ ...ncrEditForm, actualClosure: e.target.value })} />
         </RegisterEntryModal>
         </div>
       )}

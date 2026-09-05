@@ -1537,6 +1537,10 @@ async function seedProjectAndCost(users: User[]) {
   const siteExecAssignment = await prisma.checklistAssignment.findFirst({
     where: { projectId: project.id, template: { checklistType: "SiteExecution" } },
   });
+  const drawingCheckAssignment = await prisma.checklistAssignment.findFirst({
+    where: { projectId: project.id, template: { checklistType: "DrawingCheck" } },
+  });
+  const a301 = await drawingByNum("A-301");
 
   // Demo RFIs — varied fill / response states for walkthrough
   const demoRfis: {
@@ -1601,11 +1605,34 @@ async function seedProjectAndCost(users: User[]) {
       ],
     },
     {
-      number: "DWG-RFI-001",
-      subject: "Fill site execution checklist — Block A slab pour",
-      question: "Please fill the linked site checklist and attach pour card photos before tomorrow's review.",
+      number: "RFI-005",
+      subject: "Slab opening size at lift lobby — confirm with MEP",
+      question: "Architectural A-301 shows 900×900 opening; lift vendor needs 950. Confirm revised opening before formwork.",
+      status: "Open",
+      rfiKind: "RequestForInformation",
+      createdById: siteId,
+      assignedToId: officeUserId,
+      linkedDrawingId: a301?.id || null,
+      scheduleImpact: "Medium",
+      costImpact: "Low",
+    },
+    {
+      number: "DWG-CHK-001",
+      subject: "Drawing check — S-201 revision R1 markup",
+      question: "Complete drawing check checklist for structural revision before issue to site.",
       status: "Open",
       rfiKind: "DrawingChecklist",
+      createdById: officeUserId,
+      assignedToId: structUserId || siteId,
+      linkedDrawingId: s201?.id || structuralDrawing.id || null,
+      linkedAssignmentId: drawingCheckAssignment?.id || null,
+    },
+    {
+      number: "SITE-RFI-001",
+      subject: "Site execution checklist — Block A slab pour",
+      question: "Fill the linked site checklist (SPDC Activity F-02) and attach pour card photos before tomorrow's review.",
+      status: "Open",
+      rfiKind: "SiteExecution",
       createdById: officeUserId,
       assignedToId: siteId,
       linkedAssignmentId: siteExecAssignment?.id || null,
@@ -1658,6 +1685,25 @@ async function seedProjectAndCost(users: User[]) {
     }
   }
   console.log("Demo RFIs seeded (open / answered / closed / checklist fill)");
+
+  // Fix legacy mis-seeded site execution row stored as drawing checklist
+  const legacySiteAsDrawing = await prisma.rfi.findFirst({
+    where: { projectId: project.id, number: "DWG-RFI-001", rfiKind: "DrawingChecklist" },
+  });
+  if (legacySiteAsDrawing) {
+    await prisma.rfi.update({
+      where: { id: legacySiteAsDrawing.id },
+      data: {
+        number: "SITE-RFI-001",
+        rfiKind: "SiteExecution",
+        subject: "Site execution checklist — Block A slab pour",
+        question:
+          "Fill the linked site checklist (SPDC Activity F-02) and attach pour card photos before tomorrow's review.",
+        linkedAssignmentId: siteExecAssignment?.id || legacySiteAsDrawing.linkedAssignmentId,
+      },
+    });
+    console.log("Patched legacy DWG-RFI-001 → SITE-RFI-001 (SiteExecution under Quality)");
+  }
 
   // Sample QA inspection (gated by published drawings)
   const inspCount = await prisma.qualityInspection.count({ where: { projectId: project.id } });

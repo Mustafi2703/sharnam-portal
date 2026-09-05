@@ -133,6 +133,14 @@ export default function App() {
         }
       />
       <Route
+        path="/projects/:id/ncr-form/:scope/:recordId"
+        element={
+          <Protected>
+            <NcrFormPage />
+          </Protected>
+        }
+      />
+      <Route
         path="/projects/:id/drawings/precheck"
         element={
           <Protected>
@@ -212,19 +220,20 @@ export default function App() {
                   <Route path="quality-inspections" element={<ChecklistPage family="QualityInspection" />} />
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="inspection-register" element={<InspectionRegisterPage />} />
-                  <Route path="ncr-form/:scope/:recordId" element={<NcrFormPage />} />
                   <Route path="qap" element={<QapPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="quality/checklist-master" element={<ChecklistMasterPage lockedFamily="QualityInspection" />} />
+                  <Route path="quality/site-checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
                   <Route path="safety/checklist-master" element={<ChecklistMasterPage lockedFamily="Safety" />} />
                   <Route path="inspection/checklist-master" element={<ChecklistMasterPage lockedFamily="ActivityInspection" />} />
-                  <Route path="progress/checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
+                  <Route path="progress/checklist-master" element={<Navigate to="../quality/site-checklist-master" replace />} />
                   <Route path="quality/checklist-logs" element={<ChecklistLogsPage lockedFamily="QualityInspection" />} />
+                  <Route path="quality/site-checklist-logs" element={<ChecklistLogsPage lockedFamily="SiteExecution" />} />
                   <Route path="safety/checklist-logs" element={<ChecklistLogsPage lockedFamily="Safety" />} />
                   <Route path="inspection/checklist-logs" element={<ChecklistLogsPage lockedFamily="ActivityInspection" />} />
-                  <Route path="progress/checklist-logs" element={<ChecklistLogsPage lockedFamily="SiteExecution" />} />
+                  <Route path="progress/checklist-logs" element={<Navigate to="../quality/site-checklist-logs" replace />} />
                   <Route path="checklist-master" element={<ChecklistMasterPage />} />
                   <Route path="checklist-logs" element={<ChecklistLogsPage />} />
                   <Route path="rfis" element={<RfisPage />} />
