@@ -1666,27 +1666,51 @@ checklistRouter.post(
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const kind = String(body.kind || "NCR").toUpperCase();
+    if (!body.contractorVendorId && !body.contractor?.trim()) {
+      return res.status(400).json({ error: "Contractor / company on notice is required" });
+    }
     const autoNo = kind === "CAR" ? `CAR-${Date.now().toString().slice(-6)}` : `NCR-${Date.now().toString().slice(-6)}`;
     const project = await prisma.project.findUnique({
       where: { id: req.params.projectId },
       select: { name: true, code: true, clientName: true, contractorName: true },
     });
+
+    let contractorName = body.contractor ? String(body.contractor) : project?.contractorName || "";
+    let contractorEmail: string | null = body.contractorEmail ? String(body.contractorEmail) : null;
+    if (body.contractorVendorId) {
+      const link = await prisma.projectVendor.findFirst({
+        where: { projectId: req.params.projectId, vendorId: String(body.contractorVendorId) },
+        include: { vendor: { select: { name: true, email: true } } },
+      });
+      if (link?.vendor) {
+        contractorName = link.vendor.name || contractorName;
+        contractorEmail = link.vendor.email || contractorEmail;
+      }
+    }
+
     const initialForm =
       body.formDataJson && typeof body.formDataJson === "object"
-        ? body.formDataJson
+        ? {
+            ...body.formDataJson,
+            contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
+            contractorEmail: contractorEmail || undefined,
+          }
         : {
             projectName: project?.name || project?.code || "",
             fromParty: "Sharnam Project Development Consultant",
-            toParty: body.contractor ? String(body.contractor) : project?.contractorName || "",
+            toParty: contractorName,
             actionRequired: body.actionRequired ? String(body.actionRequired) : "",
+            contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
+            contractorEmail: contractorEmail || undefined,
           };
+
     const row = await prisma.qualityNcr.create({
       data: {
         projectId: req.params.projectId,
         number: String(body.number || autoNo).slice(0, 40),
         issueDate: body.issueDate ? new Date(body.issueDate) : new Date(),
         ncrType: String(body.ncrType || (kind === "CAR" ? "Corrective Action" : "General")).slice(0, 80),
-        contractor: body.contractor ? String(body.contractor).slice(0, 120) : null,
+        contractor: contractorName ? contractorName.slice(0, 120) : null,
         description: String(body.description || "Non-conformance raised from portal"),
         location: body.location ? String(body.location).slice(0, 120) : null,
         plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : null,
@@ -1702,17 +1726,22 @@ checklistRouter.post(
       userId: req.user!.id,
       entity: "QualityNcr",
       entityId: row.id,
-      meta: { projectId: req.params.projectId, number: row.number },
+      meta: { projectId: req.params.projectId, number: row.number, contractorEmail },
     });
     const { notifyNcrStatus } = await import("../services/ncrNotify.js");
     await notifyNcrStatus({
       projectId: req.params.projectId,
+      recordId: row.id,
       kind: kind === "CAR" ? "QualityCAR" : "QualityNCR",
       number: row.number || row.id,
       status: row.status,
       description: row.description,
       createdById: req.user!.id,
       event: "created",
+      contractorEmail,
+      contractorName,
+      location: row.location,
+      plannedClosure: row.plannedClosure,
     });
     if (project?.code) {
       try {
@@ -1735,6 +1764,69 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId", async (req, res) => {
   res.json(row);
 });
 
+checklistRouter.post(
+  "/project/:projectId/ncr/:ncrId/follow-up",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.qualityNcr.findFirst({
+      where: { id: req.params.ncrId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "NCR not found" });
+    if (existing.status === "Closed") {
+      return res.status(400).json({ error: "Cannot send follow-up on a closed NCR / CAR" });
+    }
+
+    const formParsed = (() => {
+      try {
+        return existing.formDataJson ? JSON.parse(existing.formDataJson) : {};
+      } catch {
+        return {};
+      }
+    })() as Record<string, unknown>;
+
+    const prevCount = Number(formParsed.followUpCount || 0);
+    const nextCount = prevCount + 1;
+    const nowIso = new Date().toISOString();
+    const mergedForm = {
+      ...formParsed,
+      followUpCount: nextCount,
+      lastFollowUpAt: nowIso,
+    };
+
+    const row = await prisma.qualityNcr.update({
+      where: { id: existing.id },
+      data: { formDataJson: JSON.stringify(mergedForm) },
+    });
+
+    const kind = /^CAR/i.test(row.number || "") ? "QualityCAR" : "QualityNCR";
+    const { notifyNcrFollowUp } = await import("../services/ncrNotify.js");
+    const email = await notifyNcrFollowUp({
+      projectId: req.params.projectId,
+      recordId: row.id,
+      kind,
+      number: row.number || row.id,
+      status: row.status,
+      description: row.description,
+      createdById: req.user!.id,
+      contractorEmail: (formParsed.contractorEmail as string) || null,
+      contractorName: row.contractor,
+      location: row.location,
+      plannedClosure: row.plannedClosure,
+      followUpNumber: nextCount,
+      note: req.body?.note ? String(req.body.note) : null,
+    });
+
+    await audit("quality.ncr.follow-up", {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: row.id,
+      meta: { followUpCount: nextCount },
+    });
+
+    res.json({ ok: true, followUpCount: nextCount, lastFollowUpAt: nowIso, email, row });
+  }
+);
+
 checklistRouter.patch(
   "/project/:projectId/ncr/:ncrId",
   requireRoles("admin", "office", "employee"),
@@ -1747,6 +1839,11 @@ checklistRouter.patch(
 
     const nextStatus = body.status != null ? String(body.status) : existing.status;
     if (nextStatus === "Closed" && existing.status !== "Closed") {
+      if (req.user!.role !== "admin" && req.user!.role !== "office") {
+        return res.status(403).json({
+          error: "Only office admin can close an NCR / CAR after verifying contractor compliance",
+        });
+      }
       const { qualityNcrCloseMissingFields } = await import("../services/ncrFormExport.js");
       const merged = {
         ...existing,
@@ -1785,14 +1882,26 @@ checklistRouter.patch(
       data,
     });
     const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+    const formParsed = (() => {
+      try {
+        return row.formDataJson ? JSON.parse(row.formDataJson) : {};
+      } catch {
+        return {};
+      }
+    })();
     await notifyNcrStatus({
       projectId: req.params.projectId,
+      recordId: row.id,
       kind: /^CAR/i.test(row.number || "") ? "QualityCAR" : "QualityNCR",
       number: row.number || row.id,
       status: row.status,
       description: row.description,
       createdById: req.user!.id,
       event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
+      contractorEmail: formParsed.contractorEmail || null,
+      contractorName: row.contractor,
+      location: row.location,
+      plannedClosure: row.plannedClosure,
     });
     const project = await prisma.project.findUnique({
       where: { id: req.params.projectId },

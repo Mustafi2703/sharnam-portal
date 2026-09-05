@@ -170,8 +170,12 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
     setMsg("Line item added");
   }
 
+  const pageShell = id
+    ? "quality-module page-scroll-full flex flex-col gap-6 pb-8 min-w-0 w-full"
+    : "master-module page-scroll-full space-y-6 min-w-0 pb-8 w-full";
+
   return (
-    <div className="space-y-6 min-w-0 portal-fill-layout">
+    <div className={pageShell}>
       <PageHeader
         eyebrow={
           effectiveLock === "DrawingCheck"
@@ -240,7 +244,11 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               <Link to="/master" className="text-sm font-semibold text-brand">
                 ← Master setup
               </Link>
-            ) : null}
+            ) : (
+              <Link to={`/projects/${id}`} className="text-sm font-semibold text-brand">
+                ← Project home
+              </Link>
+            )}
           </div>
         }
       />
@@ -266,10 +274,11 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               key={f.value}
               type="button"
               onClick={() => setSearchParams({ family: f.value })}
-              className={`px-3 py-1.5 text-sm font-semibold border rounded-sm ${
-                family === f.value ? "text-white border-transparent" : "bg-white border-line"
+              className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
+                family === f.value
+                  ? "bg-brand text-white border-brand"
+                  : "bg-paper border-line text-steel-muted hover:border-brand"
               }`}
-              style={family === f.value ? { background: "var(--mod-accent, var(--color-brand))" } : undefined}
             >
               {f.label}
             </button>
@@ -350,7 +359,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         </p>
       )}
 
-      {msg && <p className="text-sm text-steel-muted">{msg}</p>}
+      {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
       {canEdit && (
         <Card className="space-y-3">

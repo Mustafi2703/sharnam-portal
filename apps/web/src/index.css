@@ -3369,6 +3369,24 @@ body.is-auth-route #root {
   display: flex;
   flex-direction: column;
 }
+.app-frame__scroll--master {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.app-frame__canvas--wide {
+  width: 100%;
+  max-width: none;
+}
+.app-frame__scroll .master-module.page-scroll-full {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
 
 .side-nav {
   width: 268px;

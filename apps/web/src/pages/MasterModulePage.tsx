@@ -127,7 +127,7 @@ export default function MasterModulePage() {
   }
 
   return (
-    <div className="master-module page-scroll-full space-y-6 page-canvas-wide pb-8">
+    <div className="master-module page-scroll-full space-y-6 min-w-0 pb-8 w-full">
       <PageHeader
         eyebrow="Master module"
         title="Project setup desk"

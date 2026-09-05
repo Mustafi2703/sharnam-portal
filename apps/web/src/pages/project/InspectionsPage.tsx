@@ -11,7 +11,7 @@ import { CubeRegisterPanel } from "../../components/CubeRegisterPanel";
 import type { QapProjectMeta } from "../../components/QapDetailRegister";
 import { SorLogPanel } from "../../components/SorLogPanel";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
-import { openNcrFormWindow } from "../../lib/ncrFormFields";
+import { openNcrFormWindow, ncrComplianceSummary } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
@@ -41,6 +41,7 @@ export default function InspectionsPage() {
   const [drawings, setDrawings] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
+  const [projectVendors, setProjectVendors] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [ncrForm, setNcrForm] = useState({
     kind: "NCR" as "NCR" | "CAR",
@@ -49,6 +50,7 @@ export default function InspectionsPage() {
     description: "",
     location: "",
     contractor: "",
+    contractorVendorId: "",
   });
   const [ncrAddOpen, setNcrAddOpen] = useState(false);
   const [ncrAddBusy, setNcrAddBusy] = useState(false);
@@ -70,9 +72,10 @@ export default function InspectionsPage() {
 
   const canManage =
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
+  const isOfficeAdmin = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
-    const [insp, d, u, t, dashRes, projRes, packRes] = await Promise.all([
+    const [insp, d, u, t, dashRes, projRes, packRes, vendorsRes] = await Promise.all([
       api<{ inspections: any[]; canInspect: boolean; publishedDrawings: number }>(`/api/inspections/project/${id}`, {
         token,
       }),
@@ -82,6 +85,7 @@ export default function InspectionsPage() {
       api(`/api/checklist/project/${id}/quality-dashboard`, { token }).catch(() => null),
       api<QapProjectMeta>(`/api/projects/${id}`, { token }).catch(() => null),
       api(`/api/projects/${id}/sheet-pack`, { token }).catch(() => null),
+      api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
     ]);
     setData(insp);
     setDash(dashRes);
@@ -103,6 +107,7 @@ export default function InspectionsPage() {
     setUsers(u);
     const list = Array.isArray(t) ? t : [];
     setTemplates(list.slice(0, 50));
+    setProjectVendors(Array.isArray(vendorsRes) ? vendorsRes : []);
     if (!active && insp.inspections?.[0]) setActive(insp.inspections[0].id);
   };
 
@@ -130,6 +135,11 @@ export default function InspectionsPage() {
   async function submitNcrAdd(e: FormEvent) {
     e.preventDefault();
     if (!id) return;
+    if (!ncrForm.contractorVendorId && !ncrForm.contractor?.trim()) {
+      setMsg("Select a contractor / company on notice — they receive the NCR/CAR form link by email.");
+      return;
+    }
+    const vendor = projectVendors.find((v) => v.vendorId === ncrForm.contractorVendorId);
     setNcrAddBusy(true);
     try {
       const created = await api<any>(`/api/checklist/project/${id}/ncr`, {
@@ -137,10 +147,7 @@ export default function InspectionsPage() {
         token,
         body: JSON.stringify({
           ...ncrForm,
-          formDataJson: {
-            toParty: ncrForm.contractor,
-            actionRequired: "",
-          },
+          contractorVendorId: ncrForm.contractorVendorId || undefined,
         }),
       });
       setNcrForm({
@@ -150,9 +157,15 @@ export default function InspectionsPage() {
         description: "",
         location: "",
         contractor: "",
+        contractorVendorId: "",
       });
       setNcrAddOpen(false);
-      setMsg(`${created.number || ncrForm.kind} raised — opening fill form`);
+      const emailNote = vendor?.vendor?.email
+        ? ` Email sent to ${vendor.vendor.email}.`
+        : vendor
+          ? " Selected contractor has no email on file — add email under Project → Vendors."
+          : "";
+      setMsg(`${created.number || ncrForm.kind} raised — opening fill form.${emailNote}`);
       await load();
       openNcrFormWindow(id, "quality", created.id);
     } catch (err) {
@@ -314,16 +327,29 @@ export default function InspectionsPage() {
                   <th className="text-left">No</th>
                   <th className="text-left">Type</th>
                   <th className="text-left">Description</th>
+                  <th className="text-left">Contractor</th>
+                  <th className="text-left">Compliance</th>
                   <th className="text-left">Status</th>
                   {canManage && <th className="text-left">Action</th>}
                 </tr>
               </thead>
               <tbody>
-                {(dash?.ncrs || []).map((n: any) => (
+                {(dash?.ncrs || []).map((n: any) => {
+                  const compliance = ncrComplianceSummary(n.formDataJson);
+                  return (
                   <tr key={n.id}>
                     <td className="text-left font-mono text-xs">{n.number}</td>
                     <td className="text-left">{n.ncrType || "—"}</td>
                     <td className="text-left max-w-md">{n.description}</td>
+                    <td className="text-left text-xs">{n.contractor || "—"}</td>
+                    <td className="text-left">
+                      <Badge tone={compliance.tone}>{compliance.label}</Badge>
+                      {compliance.followUpCount > 0 && (
+                        <span className="block text-[10px] text-steel-muted font-mono mt-0.5">
+                          {compliance.followUpCount} follow-up{compliance.followUpCount === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </td>
                     <td className="text-left">
                       <button
                         type="button"
@@ -344,6 +370,29 @@ export default function InspectionsPage() {
                         >
                           {n.status === "Open" ? "Fill form" : "View form"}
                         </Button>
+                        {isOfficeAdmin && n.status === "Open" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="!py-1 !px-2 !text-xs"
+                            onClick={async () => {
+                              if (!id) return;
+                              try {
+                                await api(`/api/checklist/project/${id}/ncr/${n.id}/follow-up`, {
+                                  method: "POST",
+                                  token,
+                                  body: JSON.stringify({}),
+                                });
+                                setMsg(`Follow-up sent for ${n.number}`);
+                                await load();
+                              } catch (err) {
+                                setMsg(err instanceof Error ? err.message : "Follow-up failed");
+                              }
+                            }}
+                          >
+                            Follow-up
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="secondary"
@@ -361,10 +410,11 @@ export default function InspectionsPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
                 {!dash?.ncrs?.length && (
                   <tr>
-                    <td colSpan={canManage ? 5 : 4} className="empty text-left">
+                    <td colSpan={canManage ? 7 : 6} className="empty text-left">
                       No NCR rows yet — run <code className="text-xs">npm run db:seed-quality-safety-demo</code> or raise one above.
                     </td>
                   </tr>
@@ -412,8 +462,33 @@ export default function InspectionsPage() {
               value={ncrForm.location}
               onChange={(e) => setNcrForm({ ...ncrForm, location: e.target.value })}
             />
+            <Select
+              value={ncrForm.contractorVendorId}
+              onChange={(e) => {
+                const vid = e.target.value;
+                const link = projectVendors.find((v) => v.vendorId === vid);
+                setNcrForm({
+                  ...ncrForm,
+                  contractorVendorId: vid,
+                  contractor: link?.vendor?.name || ncrForm.contractor,
+                });
+              }}
+            >
+              <option value="">Contractor / company on notice *</option>
+              {projectVendors.map((pv) => (
+                <option key={pv.vendorId} value={pv.vendorId}>
+                  {pv.vendor?.name || pv.vendorId}
+                  {pv.vendor?.email ? ` · ${pv.vendor.email}` : " · no email"}
+                </option>
+              ))}
+            </Select>
+            {!projectVendors.length && (
+              <p className="sm:col-span-2 lg:col-span-3 text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+                Assign contractors under Project → Vendors first — they receive the NCR/CAR form link by email when raised.
+              </p>
+            )}
             <Input
-              placeholder="Contractor"
+              placeholder="Contractor name (if not in list)"
               value={ncrForm.contractor}
               onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value })}
             />

@@ -32,6 +32,9 @@ export default function NcrFormPage() {
   const [formData, setFormData] = useState<QualityNcrFormData>({});
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [followNote, setFollowNote] = useState("");
+
+  const isOfficeAdmin = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
     if (!id || !recordId) return;
@@ -54,6 +57,17 @@ export default function NcrFormPage() {
         otherCause: parsed.otherCause || "",
         actionResultOf: parsed.actionResultOf || "",
         furtherAction: parsed.furtherAction || "",
+        pursueFurtherCosts: parsed.pursueFurtherCosts || "",
+        siteSetupModification: parsed.siteSetupModification || "",
+        correctiveActionDetail: parsed.correctiveActionDetail || "",
+        actionByWhom: parsed.actionByWhom || "",
+        actionCompleted: parsed.actionCompleted || "",
+        contractorEmail: parsed.contractorEmail || "",
+        contractorActed: parsed.contractorActed || "",
+        contractorActedAt: parsed.contractorActedAt || "",
+        contractorActedNote: parsed.contractorActedNote || "",
+        followUpCount: parsed.followUpCount != null ? String(parsed.followUpCount) : "0",
+        lastFollowUpAt: parsed.lastFollowUpAt || "",
       });
     } else {
       const found = await api<any>(`/api/safety/${recordId}`, { token });
@@ -92,6 +106,41 @@ export default function NcrFormPage() {
       formDataJson: JSON.stringify(formData),
     });
   }, [row, formData, isQuality, missing]);
+
+  async function sendFollowUp() {
+    if (!id || !recordId || !isOfficeAdmin) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const result = await api<any>(`/api/checklist/project/${id}/ncr/${recordId}/follow-up`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ note: followNote || null }),
+      });
+      setFormData((f) => ({
+        ...f,
+        followUpCount: result.followUpCount != null ? String(result.followUpCount) : f.followUpCount,
+        lastFollowUpAt: result.lastFollowUpAt || f.lastFollowUpAt,
+      }));
+      const followNum = Number(result.followUpCount || 0);
+      const to = formData.contractorEmail ? ` · emailed ${formData.contractorEmail}` : "";
+      setMsg(`Follow-up ${followNum} sent${to}`);
+      setFollowNote("");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Follow-up failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function markContractorActed(value: "Yes" | "No") {
+    setFormData((f) => ({
+      ...f,
+      contractorActed: value,
+      contractorActedAt: f.contractorActedAt || new Date().toISOString().slice(0, 10),
+    }));
+  }
 
   async function saveDraft() {
     if (!id || !recordId) return;
@@ -305,37 +354,158 @@ export default function NcrFormPage() {
               value={formData.actionRequired || ""}
               onChange={(e) => setFormData({ ...formData, actionRequired: e.target.value })}
             />
-            <TextArea
-              rows={2}
-              placeholder="Work carried out in accordance with requirements"
-              value={formData.workCarriedOutNote || ""}
-              onChange={(e) => setFormData({ ...formData, workCarriedOutNote: e.target.value })}
-            />
-            <div className="grid sm:grid-cols-2 gap-2">
-              <Input
-                placeholder="Signed — contractor rep"
-                value={formData.signedContractor || ""}
-                onChange={(e) => setFormData({ ...formData, signedContractor: e.target.value })}
+
+            <Card className="!p-4 bg-blue-50/60 border-blue-200 space-y-3">
+              <h4 className="font-semibold text-sm">Contractor compliance — action required</h4>
+              <p className="text-xs text-steel-muted leading-relaxed">
+                The company on which this notice is served must rectify the substandard conditions and record their
+                response below. SPDC office will verify compliance before closing the NCR/CAR.
+              </p>
+              <TextArea
+                rows={2}
+                placeholder="Work carried out in accordance with requirements (contractor response)"
+                value={formData.workCarriedOutNote || ""}
+                onChange={(e) => setFormData({ ...formData, workCarriedOutNote: e.target.value })}
               />
-              <Input
-                placeholder="Position — contractor"
-                value={formData.positionContractor || ""}
-                onChange={(e) => setFormData({ ...formData, positionContractor: e.target.value })}
-              />
-              <Select
-                value={formData.followUpEffective || ""}
-                onChange={(e) => setFormData({ ...formData, followUpEffective: e.target.value })}
-              >
-                <option value="">Follow-up: action effective?</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </Select>
-              <Input
-                placeholder="Signed — reviewer"
-                value={formData.signedReviewer || ""}
-                onChange={(e) => setFormData({ ...formData, signedReviewer: e.target.value })}
-              />
-            </div>
+              <div className="grid sm:grid-cols-2 gap-2">
+                <Input
+                  placeholder="Signed — contractor representative"
+                  value={formData.signedContractor || ""}
+                  onChange={(e) => setFormData({ ...formData, signedContractor: e.target.value })}
+                />
+                <Input
+                  placeholder="Position — contractor"
+                  value={formData.positionContractor || ""}
+                  onChange={(e) => setFormData({ ...formData, positionContractor: e.target.value })}
+                />
+              </div>
+              {formData.contractorEmail && (
+                <p className="text-[11px] text-steel-muted font-mono">
+                  Notified at raise: {formData.contractorEmail}
+                  {formData.followUpCount && Number(formData.followUpCount) > 0
+                    ? ` · ${formData.followUpCount} follow-up(s) sent`
+                    : ""}
+                  {formData.lastFollowUpAt
+                    ? ` · last ${String(formData.lastFollowUpAt).slice(0, 10)}`
+                    : ""}
+                </p>
+              )}
+            </Card>
+
+            {isOfficeAdmin && (
+              <Card className="!p-4 bg-sand/30 border-brand/20 space-y-3">
+                <h4 className="font-semibold text-sm">SPDC office — follow-up &amp; close-out</h4>
+                <p className="text-xs text-steel-muted leading-relaxed">
+                  Send reminders to the contractor, record whether they acted, then complete close-out and close the
+                  register row when verified.
+                </p>
+
+                {row.status === "Open" && (
+                  <div className="rounded-lg border border-line bg-white p-3 space-y-2">
+                    <p className="text-xs font-semibold text-ink">Send follow-up to contractor</p>
+                    <TextArea
+                      rows={2}
+                      placeholder="Optional note (e.g. planned closure date approaching)"
+                      value={followNote}
+                      onChange={(e) => setFollowNote(e.target.value)}
+                    />
+                    <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => void sendFollowUp()}>
+                      {busy ? "Sending…" : `Send follow-up${Number(formData.followUpCount || 0) > 0 ? ` (${formData.followUpCount} sent)` : ""}`}
+                    </Button>
+                  </div>
+                )}
+
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <Select
+                    value={formData.contractorActed || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "Yes" || v === "No") markContractorActed(v);
+                      else setFormData({ ...formData, contractorActed: v });
+                    }}
+                  >
+                    <option value="">Contractor acted / complied?</option>
+                    <option value="Yes">Yes — contractor complied</option>
+                    <option value="No">No — did not comply</option>
+                  </Select>
+                  <Input
+                    type="date"
+                    placeholder="Verified on"
+                    value={formData.contractorActedAt ? String(formData.contractorActedAt).slice(0, 10) : ""}
+                    onChange={(e) => setFormData({ ...formData, contractorActedAt: e.target.value })}
+                  />
+                </div>
+                {formData.contractorActed === "No" && (
+                  <TextArea
+                    rows={2}
+                    placeholder="Why contractor did not comply (required if Not acted)"
+                    value={formData.contractorActedNote || ""}
+                    onChange={(e) => setFormData({ ...formData, contractorActedNote: e.target.value })}
+                  />
+                )}
+
+                <p className="text-xs text-steel-muted leading-relaxed">
+                  Failure to act within the specified time may result in SPDC taking further action — costs payable by
+                  the company on which this notice is served.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <Select
+                    value={formData.pursueFurtherCosts || ""}
+                    onChange={(e) => setFormData({ ...formData, pursueFurtherCosts: e.target.value })}
+                  >
+                    <option value="">Pursue further action/costs?</option>
+                    <option value="Yes">Yes — notify Project Manager</option>
+                    <option value="No">No</option>
+                  </Select>
+                  <Select
+                    value={formData.siteSetupModification || ""}
+                    onChange={(e) => setFormData({ ...formData, siteSetupModification: e.target.value })}
+                  >
+                    <option value="">Site set-up modification required?</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </Select>
+                  <Select
+                    value={formData.followUpEffective || ""}
+                    onChange={(e) => setFormData({ ...formData, followUpEffective: e.target.value })}
+                  >
+                    <option value="">Follow-up: action effective?</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </Select>
+                  <Input
+                    placeholder="Signed — SPDC reviewer"
+                    value={formData.signedReviewer || ""}
+                    onChange={(e) => setFormData({ ...formData, signedReviewer: e.target.value })}
+                  />
+                </div>
+                <TextArea
+                  rows={3}
+                  placeholder="Action required (close-out)"
+                  value={formData.correctiveActionDetail || formData.furtherAction || ""}
+                  onChange={(e) => setFormData({ ...formData, correctiveActionDetail: e.target.value })}
+                />
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <Input
+                    placeholder="By whom (responsible party)"
+                    value={formData.actionByWhom || row.contractor || ""}
+                    onChange={(e) => setFormData({ ...formData, actionByWhom: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Completed (date or note)"
+                    value={formData.actionCompleted || ""}
+                    onChange={(e) => setFormData({ ...formData, actionCompleted: e.target.value })}
+                  />
+                </div>
+              </Card>
+            )}
+
+            {!isOfficeAdmin && row.status === "Open" && (
+              <Card className="!p-3 bg-sand/20 border-line text-xs text-steel-muted">
+                SPDC office will send follow-ups, verify your compliance, and close this NCR/CAR. Save your contractor
+                response above.
+              </Card>
+            )}
           </Card>
         ) : (
           <Card className="space-y-3">
@@ -404,7 +574,7 @@ export default function NcrFormPage() {
           <Button type="button" variant="secondary" className="!text-xs" onClick={openPrintPdf}>
             Print / PDF
           </Button>
-          {row.status === "Open" && (
+          {row.status === "Open" && isOfficeAdmin && (
             <Button
               type="button"
               disabled={!canClose || busy || !user}
@@ -413,6 +583,9 @@ export default function NcrFormPage() {
             >
               Close NCR / CAR
             </Button>
+          )}
+          {row.status === "Open" && !isOfficeAdmin && (
+            <span className="text-xs text-steel-muted">Only SPDC office can close after verifying compliance</span>
           )}
           <Button type="button" variant="ghost" className="!text-xs ml-auto" onClick={() => window.close()}>
             Close window

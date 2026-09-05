@@ -97,7 +97,7 @@ export default function GlobalVendorsPage() {
   }
 
   return (
-    <div className="master-module page-scroll-full space-y-6 max-w-6xl pb-8">
+    <div className="master-module page-scroll-full space-y-6 min-w-0 pb-8 w-full">
       <PageHeader
         eyebrow="Master module · company directory"
         title="Vendors & contractors"

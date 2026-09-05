@@ -104,3 +104,66 @@ export function buildNcrRaisedEmail(opts: { ctx: NcrEmailContext; registerUrl: s
 
   return { bodyHtml, bodyText, subject: `[${opts.ctx.projectCode || "Portal"}] ${label} raised — ${opts.ctx.number}` };
 }
+
+export function buildNcrFollowUpEmail(opts: {
+  ctx: NcrEmailContext;
+  formUrl: string;
+  followUpNumber: number;
+  note?: string | null;
+}) {
+  const label = kindLabel(opts.ctx.kind);
+  const rows = ncrDetailRows(opts.ctx);
+  const intro = [
+    `Follow-up ${opts.followUpNumber} — the ${label} below remains open.`,
+    "You are named on this notice. Complete the corrective action and contractor sign-off in the portal form.",
+    opts.note?.trim() ? `\nNote from SPDC: ${opts.note.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const rfiCtx = {
+    projectCode: opts.ctx.projectCode,
+    projectName: opts.ctx.projectName,
+    number: opts.ctx.number,
+    subject: `${label} — follow-up ${opts.followUpNumber}`,
+    question: opts.ctx.description,
+    rfiKind: opts.ctx.kind,
+    status: opts.ctx.status,
+    createdByName: opts.ctx.raisedByName,
+    createdAt: opts.ctx.raisedAt,
+  };
+
+  const bodyHtml = wrapRfiEmailHtml({
+    eyebrow: `${label} follow-up ${opts.followUpNumber}`,
+    headline: `${opts.ctx.number} — compliance required`,
+    intro,
+    ctx: rfiCtx,
+    detailRows: rows,
+    particularsLabel: `${label} particulars`,
+    questionLabel: "Non-conformance / observation",
+    primaryAction: { href: opts.formUrl, label: "Open NCR / CAR form" },
+    extraHtml: opts.note?.trim()
+      ? `<p style="margin:12px 0 0;padding:10px 12px;background:#fff7ed;border-left:3px solid #ea580c;font-size:13px;color:#431407;"><strong>SPDC note:</strong> ${escapeHtml(opts.note.trim())}</p>`
+      : undefined,
+    footerNote: "Contractor: fill work carried out and sign-off. SPDC office will verify compliance and close the register row.",
+  });
+
+  const bodyText = [
+    `${label} follow-up ${opts.followUpNumber} — ${opts.ctx.number}`,
+    "",
+    detailTableText(rows),
+    "",
+    "Description:",
+    opts.ctx.description,
+    "",
+    opts.note?.trim() ? `SPDC note: ${opts.note.trim()}\n` : "",
+    "Open form:",
+    opts.formUrl,
+  ].join("\n");
+
+  return {
+    bodyHtml,
+    bodyText,
+    subject: `[Action required] ${label} ${opts.ctx.number} — follow-up ${opts.followUpNumber}`,
+  };
+}

@@ -19,6 +19,19 @@ export type QualityNcrFormData = {
   signedReviewer?: string;
   positionReviewer?: string;
   furtherAction?: string;
+  pursueFurtherCosts?: string;
+  siteSetupModification?: string;
+  correctiveActionDetail?: string;
+  actionByWhom?: string;
+  actionCompleted?: string;
+  contractorVendorId?: string;
+  contractorEmail?: string;
+  /** Office admin: Has contractor complied? Yes / No */
+  contractorActed?: string;
+  contractorActedAt?: string;
+  contractorActedNote?: string;
+  followUpCount?: string;
+  lastFollowUpAt?: string;
 };
 
 export type SafetyNcrFormData = Record<string, string>;
@@ -67,8 +80,21 @@ export function qualityNcrCloseMissingFields(row: {
 }): string[] {
   const base = qualityNcrMissingFields(row);
   const f = parseQualityFormData(row.formDataJson);
+  if (!f.contractorActed?.trim()) base.push("Contractor compliance — mark Acted / Not acted (office admin)");
+  else if (f.contractorActed === "Yes") {
+    if (!f.workCarriedOutNote?.trim()) base.push("Contractor: work carried out (compliance response)");
+    if (!f.signedContractor?.trim()) base.push("Contractor: signed name");
+  } else if (f.contractorActed === "No" && !f.contractorActedNote?.trim()) {
+    base.push("Note why contractor did not comply (office admin)");
+  }
   if (!f.followUpEffective?.trim()) base.push("Follow-up: action effective (Yes/No)");
+  if (!f.pursueFurtherCosts?.trim()) base.push("Pursue further action/costs? (Yes/No)");
+  if (!f.siteSetupModification?.trim()) base.push("Site set-up modification required? (Yes/No)");
+  if (!f.correctiveActionDetail?.trim() && !f.furtherAction?.trim())
+    base.push("Action required (close-out)");
+  if (!f.actionByWhom?.trim()) base.push("By whom (responsible party)");
   if (!row.actualClosure) base.push("Actual closure date");
+  if (!f.actionCompleted?.trim()) base.push("Completed (date or note)");
   return base;
 }
 
@@ -298,8 +324,21 @@ export async function buildQualityNcrXlsxFromTemplate(
     23,
     `Signed: ${f.signedReviewer || ""}    Position: ${f.positionReviewer || ""}    Date: ${fmtDate(row.actualClosure || row.plannedClosure)}`
   );
-  if (f.furtherAction) setMergedRow(ws, 27, f.furtherAction);
-  ws.getCell("B31").value = row.status === "Closed" ? fmtDate(row.actualClosure) : "";
+  const pursueYes = f.pursueFurtherCosts === "Yes" ? "Yes" : f.pursueFurtherCosts === "No" ? "No" : "";
+  setMergedRow(
+    ws,
+    25,
+    `Should further action and/or costs be pursued against the company on which this notice is served?  ${pursueYes}    
+
+(If YES, then send a copy of this notice to the Project Manager for further action).`
+  );
+  const siteMod = f.siteSetupModification === "Yes" ? "Yes" : f.siteSetupModification === "No" ? "No" : "";
+  setMergedRow(ws, 26, `Does the Project Site Set Up System require modification to prevent a recurrence?       ${siteMod}`);
+  const actionDetail = f.correctiveActionDetail || f.furtherAction || "";
+  if (actionDetail) setMergedRow(ws, 27, `Action required:\n${actionDetail}`);
+  ws.getCell("A31").value = f.actionByWhom ? `By Whom: ${f.actionByWhom}` : "By Whom:";
+  ws.getCell("B31").value =
+    f.actionCompleted || (row.status === "Closed" ? fmtDate(row.actualClosure) : "") || "Completed:";
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -385,6 +424,11 @@ export function buildQualityNcrHtml(
     ["Planned closure", fmtDate(row.plannedClosure)],
     ["Work carried out", f.workCarriedOutNote || ""],
     ["Follow-up effective", f.followUpEffective || ""],
+    ["Pursue further costs?", f.pursueFurtherCosts || ""],
+    ["Site set-up modification?", f.siteSetupModification || ""],
+    ["Action required (close-out)", f.correctiveActionDetail || f.furtherAction || ""],
+    ["By whom", f.actionByWhom || ""],
+    ["Completed", f.actionCompleted || ""],
     ["Actual closure", fmtDate(row.actualClosure)],
     ["Status", row.status || "Open"],
   ];

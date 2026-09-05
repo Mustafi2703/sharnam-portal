@@ -358,7 +358,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inProject = /^\/projects\/[^/]+/.test(location.pathname);
   const inCrm = /^\/crm(\/|$)/.test(location.pathname);
   const inMaster = /^\/master(\/|$)/.test(location.pathname);
-  const deskFullBleed = inProject || inCrm || inMaster;
+  /** Project + CRM use locked tool shell; master scrolls in the app frame like dashboard. */
+  const deskFullBleed = inProject || inCrm;
+  const deskWideCanvas = inMaster;
   const [projects, setProjects] = useState<Proj[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [hidden, setHidden] = useState(() => {
@@ -394,6 +396,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   /** Keep left nav + top bar accent in sync with the open module (green base). */
   useEffect(() => {
+    if (inMaster) {
+      applyModuleAccent(BASE_ACCENT, BASE_SOFT);
+      return;
+    }
     if (!inProject) {
       clearModuleAccent();
       return;
@@ -404,7 +410,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     } else {
       applyModuleAccent(BASE_ACCENT, BASE_SOFT);
     }
-  }, [location.pathname, inProject]);
+  }, [location.pathname, inProject, inMaster]);
 
   useEffect(() => {
     try {
@@ -593,12 +599,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className={`app-frame__scroll ${deskFullBleed ? "app-frame__scroll--project" : ""}`}>
+        <main
+          className={`app-frame__scroll ${deskFullBleed ? "app-frame__scroll--project" : ""} ${
+            deskWideCanvas ? "app-frame__scroll--master" : ""
+          }`}
+        >
           <div
             className={
               deskFullBleed
                 ? "w-full max-w-none h-full min-h-0 flex flex-col"
-                : "w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6"
+                : deskWideCanvas
+                  ? "app-frame__canvas app-frame__canvas--wide w-full max-w-none px-3 sm:px-5 py-4 sm:py-6"
+                  : "app-frame__canvas w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6"
             }
           >
             {children}

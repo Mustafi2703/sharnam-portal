@@ -1136,6 +1136,7 @@ safetyRouter.post(
       const { notifyNcrStatus } = await import("../services/ncrNotify.js");
       await notifyNcrStatus({
         projectId: req.params.projectId,
+        recordId: row.id,
         kind: "SafetyNCR",
         number: row.ncrNumber || row.title,
         status: row.status,
