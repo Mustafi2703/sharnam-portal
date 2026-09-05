@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -76,6 +76,7 @@ export function DirectoryCompaniesPanel({
   const [msg, setMsg] = useState("");
   const [loginMsg, setLoginMsg] = useState("");
   const [listSearch, setListSearch] = useState("");
+  const formPanelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const list = await api<VendorRow[]>("/api/vendors", { token });
@@ -100,6 +101,14 @@ export function DirectoryCompaniesPanel({
     if (selected) setForm(vendorToForm(selected));
     else if (!selectedId) setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
   }, [selected, selectedId, meta.defaultParty]);
+
+  function startNewCompany() {
+    setSelectedId(null);
+    setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
+    setMsg("");
+    setLoginMsg("");
+    requestAnimationFrame(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -157,9 +166,9 @@ export function DirectoryCompaniesPanel({
           <div className="font-semibold text-sm flex justify-between">
             <span>{visibleRows.length} companies</span>
             {canEdit && (
-              <button type="button" className="text-xs text-brand font-semibold" onClick={() => setSelectedId(null)}>
+              <Button type="button" variant="secondary" className="!text-xs !py-1 !px-2" onClick={startNewCompany}>
                 + New
-              </button>
+              </Button>
             )}
           </div>
           <Input
@@ -190,6 +199,7 @@ export function DirectoryCompaniesPanel({
         </ul>
       </Card>
 
+      <div ref={formPanelRef}>
       <Card>
         <h3 className="font-semibold text-sm mb-3">{selected ? "Edit company" : "Add company"}</h3>
         <form className="space-y-3" onSubmit={save}>
@@ -250,6 +260,7 @@ export function DirectoryCompaniesPanel({
           .
         </p>
       </Card>
+      </div>
     </div>
   );
 }

@@ -39,6 +39,8 @@ export async function seedWprSections(
     ncrs,
     weeklyDiaries,
     dprSnaps,
+    cops,
+    materialInvoices,
   ] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.projectMember.findMany({
@@ -124,6 +126,8 @@ export async function seedWprSections(
       where: { projectId, logDate: { gte: weekStart, lte: weekEnd } },
       orderBy: { logDate: "asc" },
     }),
+    prisma.certificateOfPayment.findMany({ where: { projectId }, take: 20, orderBy: { certificateDate: "desc" } }),
+    prisma.financeMaterialInvoice.findMany({ where: { projectId }, take: 30, orderBy: { invoiceDate: "desc" } }),
   ]);
 
   void submittals;
@@ -246,28 +250,45 @@ export async function seedWprSections(
     ]),
   };
 
+  const designDisciplines = new Map<string, { total: number; published: number }>();
+  for (const d of drawings) {
+    const disc = d.discipline || "General";
+    const cur = designDisciplines.get(disc) || { total: 0, published: 0 };
+    cur.total += 1;
+    if (d.isPublished) cur.published += 1;
+    designDisciplines.set(disc, cur);
+  }
   const designStatus: WprSection = {
     title: DEFAULT_WPR_TITLES.designStatus,
-    headers: ["Sr", "Discipline", "Status", "Percentage", "Remark"],
-    rows: [
-      [1, "Architectural", "In progress", "", ""],
-      [2, "Structural", "In progress", "", ""],
-      [3, "Electrical", "In progress", "", ""],
-      [4, "Plumbing", "In progress", "", ""],
-      [5, "Fire Protection", "In progress", "", ""],
-    ],
+    headers: ["Sr", "Discipline", "Status", "Published %", "Remark"],
+    rows:
+      designDisciplines.size > 0
+        ? [...designDisciplines.entries()].map(([disc, v], i) => [
+            i + 1,
+            disc,
+            v.published >= v.total ? "Complete" : "In progress",
+            v.total ? `${Math.round((100 * v.published) / v.total)}%` : "—",
+            `${v.published}/${v.total} sheets GFC`,
+          ])
+        : submittals.slice(0, 5).map((s: any, i: number) => [i + 1, s.submittalType || "Design", s.status || "Under Review", "", s.title || ""]),
   };
 
   const procurement: WprSection = {
     title: DEFAULT_WPR_TITLES.procurement,
-    headers: ["Nomenclature", "Package", "Status"],
-    rows: [
-      ["DC", "A. Design Consultancy", "In progress"],
-      ["CP", "B. Civil Packages", "In progress"],
-      ["EP", "C. Electrical Packages", "In progress"],
-      ["FP", "D. Fire Protection Packages", "In progress"],
-      ["PP", "E. Plumbing Packages", "In progress"],
-    ],
+    headers: ["Sr", "Package / PO", "Vendor", "Status", "Value (₹)"],
+    rows:
+      poList.length > 0
+        ? poList.map((po: any, i: number) => [
+            i + 1,
+            po.packageName || po.workTrade || po.poNumber,
+            po.vendorName || "—",
+            po.status || "Active",
+            po.amendedValue || po.originalValue || 0,
+          ])
+        : [
+            [1, "Civil & Structural", "Main contractor", "Active", "—"],
+            [2, "MEP packages", "Vendor pool", "In progress", "—"],
+          ],
   };
 
   const milestonesSec: WprSection = {
@@ -460,9 +481,22 @@ export async function seedWprSections(
 
   const materialStock: WprSection = {
     title: DEFAULT_WPR_TITLES.materialStock,
-    headers: ["Material", "Unit", "Opening", "Received", "Consumed", "Balance"],
-    rows: [],
-    notes: "Fill in from site stock register for this week.",
+    headers: ["Material / Invoice", "Unit", "Received (₹ w/o GST)", "Received (₹ w/ GST)", "Net payable", "Date"],
+    rows:
+      materialInvoices.length > 0
+        ? materialInvoices.slice(0, 12).map((m: any) => [
+            m.description || m.sheetCategory || m.taxInvoiceNo || "Material",
+            "Lot",
+            m.amountWithoutGst || 0,
+            m.amountWithGst || 0,
+            m.netPayable || 0,
+            isoDate(m.receivedDate || m.invoiceDate),
+          ])
+        : [
+            ["Cement / steel (site)", "MT", "—", "—", "—", isoDate(weekEnd)],
+            ["PEB supply invoices", "Lot", "—", "—", "—", isoDate(weekEnd)],
+          ],
+    notes: materialInvoices.length ? "From Finance → Material / tax invoices register." : "Fill from site stock register or import Payment Summary material sheets.",
   };
 
   const photoPaths = photos
@@ -517,11 +551,18 @@ export async function seedWprSections(
     ],
   };
 
+  const mobilisationPhotos = photos
+    .filter((p: any) => /mobil|site|yard|camp|office/i.test(`${p.album} ${p.description} ${p.location}`))
+    .map((p: any) => p.fileUrl || "")
+    .filter(Boolean);
   const mobilisation: WprSection = {
     title: DEFAULT_WPR_TITLES.mobilisation,
-    notes:
-      "Attach a mobilisation site plan photo — steel yard, office container, labour colony, store, QC lab, toilets, etc. Use the Photos section below to link SharePoint image paths.",
-    photos: [],
+    notes: "Mobilisation layout — steel yard, site office, labour colony, store, QC lab (from Project Photos).",
+    headers: ["#", "Location / album", "SharePoint path"],
+    rows: (mobilisationPhotos.length ? mobilisationPhotos : photos.slice(0, 4).map((p: any) => p.fileUrl || ""))
+      .filter(Boolean)
+      .map((url: string, i: number) => [i + 1, photos[i]?.album || "Site", url]),
+    photos: mobilisationPhotos.length ? mobilisationPhotos : photos.slice(0, 4).map((p: any) => p.fileUrl).filter(Boolean),
   };
   const openNcrs = ncrs.filter((n: { status?: string }) => n.status === "Open").length;
   const dprDayCount = new Set(dprSnaps.map((s: { logDate: Date }) => new Date(s.logDate).toISOString().slice(0, 10))).size;
@@ -533,27 +574,55 @@ export async function seedWprSections(
       (m.varianceDays || 0) <= 0 && (m.status || "").toLowerCase() !== "delayed"
   ).length;
 
+  const certifiedCopTotal = cops
+    .filter((c: { status?: string }) => ["Certified", "Approved", "Paid"].includes(c.status || ""))
+    .reduce((s: number, c: { amountPayable?: number | null }) => s + Number(c.amountPayable || 0), 0);
+
   const projectDashboard: WprSection = {
     title: DEFAULT_WPR_TITLES.projectDashboard,
-    notes: "Auto-filled from live Progress, DPR, Quality and Safety registers for this reporting window.",
+    notes: "Auto-filled from Progress, DPR, Quality, Safety, Finance (RA/COP) — same KPIs as project dashboard.",
     headers: ["KPI", "Value"],
     rows: [
       ["Reporting window", `${isoDate(weekStart)} → ${isoDate(weekEnd)}`],
       ["Planned progress %", plannedPct || "Import Progress → Planned vs Actual"],
       ["Actual progress %", actualPct || "—"],
+      ["SPI / variance", plannedPct && actualPct ? `${actualPct} vs ${plannedPct}` : "—"],
       ["DPR days logged", dprDayCount || "No DPR in window — fill DPR Maker"],
       ["Open NCRs", openNcrs],
+      ["Open RFIs / hindrances", `${hindrance.filter((h: { status?: string }) => h.status === "Open").length} hindrance · ${risk.filter((r: { status?: string }) => r.status === "Open").length} risk`],
       ["QAP activities (project)", qap.length],
       ["Cube tests (window)", cubes.length],
       ["Safety events (window)", safety.length],
       ["Milestones on track", milestones.length ? `${onTrack} / ${milestones.length}` : "—"],
       ["Drawings in register", registerLines.length || drawings.length],
+      ["COP certified (₹ payable)", certifiedCopTotal ? certifiedCopTotal.toLocaleString("en-IN") : `${cops.length} COP(s)`],
+      ["Purchase orders", poList.length],
     ],
   };
+
+  const criticalRows: (string | number)[][] = [];
+  hindrance
+    .filter((h: { status?: string }) => (h.status || "").toLowerCase() === "open")
+    .slice(0, 4)
+    .forEach((h: any, i: number) => criticalRows.push([i + 1, "Hindrance", h.description || h.title || "—", h.impact || h.status || "Open"]));
+  risk
+    .filter((r: { status?: string }) => (r.status || "").toLowerCase() === "open")
+    .slice(0, 3)
+    .forEach((r: any, i: number) =>
+      criticalRows.push([criticalRows.length + 1, "Risk", r.description || r.title || "—", r.likelihood || r.status || "Open"])
+    );
+  milestones
+    .filter((m: { status?: string }) => (m.status || "").toLowerCase() === "delayed")
+    .slice(0, 3)
+    .forEach((m: any) =>
+      criticalRows.push([criticalRows.length + 1, "Schedule", m.activity || m.code || "—", `Delayed · ${m.varianceDays || 0}d`])
+    );
+
   const criticalAreas: WprSection = {
     title: DEFAULT_WPR_TITLES.criticalAreas,
-    notes: "List critical areas of concern this week — schedule, quality, safety, procurement.",
-    rows: [],
+    notes: "Open hindrances, risks, and delayed milestones from Progress registers.",
+    headers: ["Sr", "Area", "Description", "Status / impact"],
+    rows: criticalRows.length ? criticalRows : [["—", "None flagged", "All registers within tolerance this week", "—"]],
   };
 
   return {

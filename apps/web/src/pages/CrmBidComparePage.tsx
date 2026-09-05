@@ -170,6 +170,27 @@ export default function CrmBidComparePage() {
     nav(`/crm/bids/${id}`, { replace: true });
   }
 
+  function openNewBidSetup(prefill?: Partial<typeof form>) {
+    setSelectedId(null);
+    setDetail(null);
+    setDeskView("setup");
+    setSetupStep(1);
+    setSlotPanel(null);
+    setUploadFile(null);
+    setMsg("");
+    setForm({
+      title: "",
+      projectId: "",
+      leadId: "",
+      revisionLabel: "R2",
+      vendorIds: [],
+      disciplineKeys: disciplines.map((d) => d.key),
+      customDisciplines: [],
+      ...prefill,
+    });
+    nav("/crm/bids", { replace: true });
+  }
+
   function openSlotPanel(slot: VendorBoqSlot, tab: "edit" | "upload") {
     setSlotPanel({ slot, tab });
     if (tab === "upload") setUploadFile(null);
@@ -559,14 +580,11 @@ export default function CrmBidComparePage() {
                   type="button"
                   className="text-xs font-semibold text-brand shrink-0"
                   onClick={() => {
-                    setForm((f) => ({
-                      ...f,
+                    openNewBidSetup({
                       projectId: l.projectId || "",
                       leadId: l.id,
-                      title: f.title || `${l.title} — comparative bid`,
-                    }));
-                    setDeskView("setup");
-                    setSetupStep(1);
+                      title: `${l.title} — comparative bid`,
+                    });
                     setMsg(`Step 1 — confirm project for ${l.title}, then pick disciplines and bidders.`);
                   }}
                 >
@@ -768,7 +786,7 @@ export default function CrmBidComparePage() {
         <aside className="crm-bid-desk__rail">
           <div className="crm-bid-desk__rail-head space-y-2">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" className="!text-xs flex-1" onClick={() => setDeskView("setup")}>
+              <Button type="button" className="!text-xs flex-1" onClick={() => openNewBidSetup()}>
                 + New bid
               </Button>
               <Button
@@ -842,7 +860,7 @@ export default function CrmBidComparePage() {
                 <li className="px-4 py-8 text-sm text-steel-muted text-center space-y-3">
                   <div className="text-4xl">📊</div>
                   <p className="font-semibold text-ink">No bid packages yet.</p>
-                  <Button type="button" onClick={() => setDeskView("setup")}>
+                  <Button type="button" onClick={() => openNewBidSetup()}>
                     Start new bid setup →
                   </Button>
                 </li>

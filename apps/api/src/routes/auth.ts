@@ -99,17 +99,23 @@ usersRouter.get("/", requireRoles("admin", "office"), async (_req, res) => {
   res.json(users);
 });
 
-usersRouter.patch("/:id", requireRoles("admin"), async (req, res) => {
+usersRouter.patch("/:id", requireRoles("admin", "office"), async (req, res) => {
   const { role, portal, isActive, fullName, phone } = req.body;
   const data: Record<string, unknown> = {};
-  if (role) {
+  const isOffice = (req as AuthedRequest).user?.role === "office";
+
+  if (role && !isOffice) {
     data.role = role;
     data.portal = portal || portalForRole(role as RoleKey);
   }
-  if (portal) data.portal = portal;
-  if (typeof isActive === "boolean") data.isActive = isActive;
+  if (portal && !isOffice) data.portal = portal;
+  if (typeof isActive === "boolean" && !isOffice) data.isActive = isActive;
   if (fullName) data.fullName = fullName;
   if (phone !== undefined) data.phone = phone;
+
+  if (!Object.keys(data).length) {
+    return res.status(400).json({ error: "Nothing to update" });
+  }
 
   const user = await prisma.user.update({ where: { id: req.params.id }, data });
   await audit("user.update", { userId: (req as AuthedRequest).user?.id, entity: "User", entityId: user.id });

@@ -11,7 +11,7 @@ export type FinanceHubModule = "finance" | "cost" | "progress" | "safety";
 export type FinanceSheetColumn = {
   key: string;
   label: string;
-  type?: "text" | "number" | "date";
+  type?: "text" | "number" | "date" | "files";
   /** RaBill / FinanceMaterialInvoice field */
   field?: string;
   width?: number;
@@ -19,16 +19,19 @@ export type FinanceSheetColumn = {
 
 export const FINANCE_RA_COLUMNS: FinanceSheetColumn[] = [
   { key: "srNo", label: "Sr. No.", type: "number" },
-  { key: "description", label: "Description of Goods", field: "raNumber" },
+  { key: "discipline", label: "Discipline", field: "discipline", type: "text" },
+  { key: "raNumber", label: "RA No.", field: "raNumber" },
+  { key: "description", label: "Description", field: "description" },
   { key: "taxInvoiceNo", label: "Tax Invoice No.", field: "invoiceNumber" },
   { key: "invoiceDate", label: "Invoice Date", field: "invoiceDate", type: "date" },
   { key: "againstBillRaised", label: "Against bill Raised", field: "againstBillRaised", type: "number" },
   { key: "priceVariation", label: "Price Variation of material", field: "priceVariation", type: "number" },
   { key: "totalInvoiceWithoutGst", label: "Total Invoice value without GST", field: "totalInvoiceWithoutGst", type: "number" },
   { key: "advanceAdjusted", label: "Steel advance 85% adjusted as per consumption", field: "advanceAdjusted", type: "number" },
-  { key: "totalInvoiceWithGst", label: "Total Invoice value withGST", field: "totalInvoiceWithGst", type: "number" },
+  { key: "totalInvoiceWithGst", label: "Total Invoice value with GST", field: "totalInvoiceWithGst", type: "number" },
   { key: "retentionAmount", label: "Retentions (5%)", field: "retentionAmount", type: "number" },
-  { key: "netAmountPayable", label: "Net Amount Payable Against This Bill With Advanced Amount", field: "netAmountPayable", type: "number" },
+  { key: "netAmountPayable", label: "Net Amount Payable", field: "netAmountPayable", type: "number" },
+  { key: "workbooks", label: "Submission · Corrected · Certified", type: "files" as FinanceSheetColumn["type"] },
 ];
 
 export const FINANCE_MATERIAL_COLUMNS: FinanceSheetColumn[] = [

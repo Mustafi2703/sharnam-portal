@@ -1335,30 +1335,9 @@ async function seedProjectAndCost(users: User[]) {
 
   const contactCount = await prisma.communicationContact.count({ where: { projectId: project.id } });
   if (contactCount === 0) {
-    const contacts = [
-      ["Client", "SPDC Project Owner", "Client Representative", "SPDC", "client@sharnam.demo", "TO", 1],
-      ["PMC", "Sharnam PMC", "Office Coordinator", "Sharnam", "office@sharnam.demo", "TO", 2],
-      ["PMC", "Sharnam PMC", "MEP Design Engineer", "Sharnam", "mep@sharnam.demo", "CC", 3],
-      ["PMC", "Sharnam PMC", "Structural Reviewer", "Sharnam", "struct@sharnam.demo", "CC", 4],
-      ["Consultant", "MEP Consultant", "Lead MEP", "Consultant Co", "mep@sharnam.demo", "TO", 5],
-      ["Contractor", "M/s Bhavna Infra", "Site Engineer", "Bhavna Infra", "site@sharnam.demo", "TO", 6],
-    ] as const;
-    for (const [section, org, name, company, email, mailRole, sortOrder] of contacts) {
-      await prisma.communicationContact.create({
-        data: {
-          projectId: project.id,
-          matrixKind: "TECHNICAL",
-          orgSection: section,
-          orgName: org,
-          personName: name,
-          company,
-          email,
-          mailRole,
-          sortOrder,
-        },
-      });
-    }
-    console.log("Communication contacts seeded:", contacts.length);
+    const { seedBpclTechnicalMatrix } = await import("../apps/api/src/services/bpclMatrixSeed.ts");
+    const seeded = await seedBpclTechnicalMatrix(project.id);
+    console.log("Communication contacts seeded (BPCL):", seeded);
   }
 
   // CRM / HRM sample

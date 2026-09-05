@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -39,6 +39,7 @@ export default function CrmPage() {
   const [bidPackages, setBidPackages] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [leadAddOpen, setLeadAddOpen] = useState(false);
+  const leadFormRef = useRef<HTMLDivElement>(null);
   const [convertLead, setConvertLead] = useState<any | null>(null);
   const [leadForm, setLeadForm] = useState({
     title: "",
@@ -353,7 +354,11 @@ export default function CrmPage() {
             sheetLabel="CRM market register"
             rowCount={leads.length}
             canEdit
-            onAddRow={() => setLeadAddOpen((v) => !v)}
+            onAddRow={() => {
+              setLeadAddOpen(true);
+              requestAnimationFrame(() => leadFormRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+            }}
+            addRowLabel="+ New lead"
             onUpload={async (file) => {
               const fd = new FormData();
               fd.append("file", file);
@@ -391,6 +396,7 @@ export default function CrmPage() {
           </div>
 
           {leadAddOpen && (
+          <div ref={leadFormRef}>
           <Card className="!p-3">
             <h3 className="font-semibold mb-3">Add lead manually</h3>
             <form className="grid md:grid-cols-3 gap-3" onSubmit={createLead}>
@@ -408,6 +414,7 @@ export default function CrmPage() {
               <Button type="button" variant="secondary" className="md:col-span-3" onClick={() => setLeadAddOpen(false)}>Cancel</Button>
             </form>
           </Card>
+          </div>
           )}
 
           {leadsView === "register" && (

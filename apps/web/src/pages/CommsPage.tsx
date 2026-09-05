@@ -38,6 +38,7 @@ export default function CommsPage() {
   };
   const [matrix, setMatrix] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [project, setProject] = useState<any>(null);
   const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");
   const [logs, setLogs] = useState<any[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]);
@@ -84,7 +85,7 @@ export default function CommsPage() {
     meetingDate: new Date().toISOString().slice(0, 16),
     location: "Site cabin / Microsoft Teams",
     durationMins: "60",
-    attendeeEmails: "baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, operations@spdc.in",
+    attendeeEmails: "",
     createTeams: true,
   });
   const [logForm, setLogForm] = useState({ subject: "", body: "", toRoles: "client", channel: "In-App" });
@@ -93,16 +94,28 @@ export default function CommsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
   const load = async () => {
-    const [m, l, meet, c] = await Promise.all([
+    const [m, l, meet, c, p] = await Promise.all([
       api<any[]>(`/api/comms/matrix/${id}`, { token }),
       api<any[]>(`/api/comms/logs/${id}`, { token }),
       api<any[]>(`/api/comms/meetings/${id}`, { token }),
       api<any[]>(`/api/comms/contacts/${id}?kind=${matrixKind}`, { token }).catch(() => []),
+      api<any>(`/api/projects/${id}`, { token }).catch(() => null),
     ]);
     setMatrix(m);
     setLogs(l);
     setMeetings(meet);
     setContacts(c);
+    setProject(p);
+    const matrixEmails = c
+      .filter((r: any) => !r.isSectionHeader && r.email)
+      .map((r: any) => r.email.trim())
+      .filter(Boolean);
+    if (matrixEmails.length) {
+      setSchedule((s) => ({
+        ...s,
+        attendeeEmails: Array.from(new Set(matrixEmails)).join(", "),
+      }));
+    }
     if (!activeMeeting && meet[0]) setActiveMeeting(meet[0].id);
   };
 
@@ -154,13 +167,21 @@ export default function CommsPage() {
     }
   }
 
+  const matrixRecipients = useMemo(
+    () =>
+      contacts
+        .filter((r) => !r.isSectionHeader && r.email)
+        .map((r) => `${r.personName || r.email} (${r.mailRole || "CC"})`),
+    [contacts]
+  );
+
   async function generateAgenda() {
     if (!activeMeeting) return;
     setBusy(true);
     setMsg("");
     try {
       await api(`/api/comms/meetings/${activeMeeting}/generate-agenda`, { method: "POST", token, body: "{}" });
-      setMsg("Agenda generated. Review items, then Start MoM.");
+      setMsg("Agenda generated and emailed to communication matrix contacts.");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -177,7 +198,7 @@ export default function CommsPage() {
       await api(`/api/comms/meetings/${activeMeeting}/start-mom`, { method: "POST", token, body: "{}" });
       setTab("mom");
       setItemCategory("Action");
-      setMsg("MoM started — add action items against the agenda.");
+      setMsg("MoM started — matrix contacts notified. Add action items against the agenda.");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -197,7 +218,7 @@ export default function CommsPage() {
       });
       setActiveMeeting(next.id);
       setTab("followup");
-      setMsg("Follow-up meeting created from open actions.");
+      setMsg("Follow-up meeting created — open actions carried over; matrix contacts notified.");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -262,31 +283,75 @@ export default function CommsPage() {
               </Button>
             ))}
             {canEdit && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="!text-sm"
-                onClick={async () => {
-                  const r = await api<{ created: number }>(`/api/comms/matrix/${id}/seed-standard`, {
-                    method: "POST",
-                    token,
-                  });
-                  setMsg(`Meeting + RFI topic matrix: added ${r.created} row(s).`);
-                  await load();
-                }}
-              >
-                Seed Meeting + RFI parties
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="!text-sm"
+                  onClick={async () => {
+                    const force = contacts.length > 0 && confirm("Replace existing TECHNICAL matrix with BPCL template?");
+                    const r = await api<{ seeded: number; message?: string }>(`/api/comms/contacts/${id}/seed-bpcl`, {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ force }),
+                    });
+                    setMsg(r.message || `BPCL matrix: ${r.seeded} rows loaded.`);
+                    await load();
+                  }}
+                >
+                  Load BPCL matrix (Excel)
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-sm"
+                  onClick={async () => {
+                    const r = await api<{ created: number }>(`/api/comms/matrix/${id}/seed-standard`, {
+                      method: "POST",
+                      token,
+                    });
+                    setMsg(`Meeting + RFI topic matrix: added ${r.created} row(s).`);
+                    await load();
+                  }}
+                >
+                  Seed Meeting + RFI parties
+                </Button>
+              </>
             )}
           </div>
 
-          <Card className="!bg-procore-navy !text-white !border-0">
+          <Card className="!bg-procore-navy !text-white !border-0 space-y-2">
             <div className="text-[11px] uppercase tracking-wider text-white/60">Subject</div>
-            <div className="font-display text-xl mt-1">{matrixKind} COMMUNICATION MATRIX</div>
-            <p className="text-sm text-white/75 mt-2">
-              Per-project contact sheet — Name · Designation · Company · SPOC · Mobile · Email · TO/CC · Office address
-              (same columns as your BPCL Excel).
+            <div className="font-display text-xl">{matrixKind} COMMUNICATION MATRIX</div>
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-white/80 pt-2 border-t border-white/20">
+              <div>
+                <span className="text-white/50 uppercase tracking-wider text-[10px]">Project</span>
+                <div>{project?.name || "—"}</div>
+              </div>
+              <div>
+                <span className="text-white/50 uppercase tracking-wider text-[10px]">Client</span>
+                <div>{project?.clientName || "—"}</div>
+              </div>
+              <div>
+                <span className="text-white/50 uppercase tracking-wider text-[10px]">Design consultant</span>
+                <div>{project?.designConsultant || "—"}</div>
+              </div>
+              <div>
+                <span className="text-white/50 uppercase tracking-wider text-[10px]">PMC</span>
+                <div>{project?.pmcName || "Sharnam Project Development Consultants & Co."}</div>
+              </div>
+            </div>
+            <p className="text-sm text-white/75 pt-2">
+              Sr.No · Name · Designation · Company · SPOC · Mobile · E-mail · General mail (TO/CC) · Office address — same
+              columns as Communication Matrix_BPCL (2).xlsx. All meeting invites, agenda, MoM, and follow-ups go to these
+              contacts.
             </p>
+            {matrixRecipients.length > 0 && (
+              <p className="text-[11px] text-white/60">
+                Meeting recipients ({matrixRecipients.length}): {matrixRecipients.slice(0, 6).join(" · ")}
+                {matrixRecipients.length > 6 ? " …" : ""}
+              </p>
+            )}
           </Card>
 
           {canEdit && (
@@ -346,47 +411,56 @@ export default function CommsPage() {
             <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
                 <tr>
-                  <th className="p-3">Sr</th>
+                  <th className="p-3">Sr.No</th>
                   <th className="p-3">Name</th>
                   <th className="p-3">Designation</th>
-                  <th className="p-3">Company</th>
-                  <th className="p-3">SPOC</th>
+                  <th className="p-3">Name of company</th>
+                  <th className="p-3">Single point of contact</th>
                   <th className="p-3">Mobile</th>
                   <th className="p-3">E-mail</th>
-                  <th className="p-3">TO/CC</th>
-                  <th className="p-3">Office address</th>
+                  <th className="p-3">General mail communication</th>
+                  <th className="p-3">Office add.</th>
                 </tr>
               </thead>
               <tbody>
-                {contacts.map((r, idx) =>
-                  r.isSectionHeader ? (
-                    <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
-                      <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + (idx % 26))}</td>
-                      <td className="p-3 font-semibold text-ink" colSpan={8}>
-                        {r.orgName}
-                        <span className="ml-2 text-xs font-normal text-steel-muted">({r.orgSection})</span>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={r.id} className="border-t border-line hover:bg-sand/40">
-                      <td className="p-3 font-mono text-xs text-steel-muted">{r.sortOrder || idx + 1}</td>
-                      <td className="p-3 font-medium">{r.personName || "—"}</td>
-                      <td className="p-3">{r.designation || "—"}</td>
-                      <td className="p-3">{r.company || r.orgName || "—"}</td>
-                      <td className="p-3 text-xs">{r.spoc || "—"}</td>
-                      <td className="p-3 font-mono text-xs">{r.mobile || "—"}</td>
-                      <td className="p-3 text-xs break-all">{r.email || "—"}</td>
-                      <td className="p-3">
-                        <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge>
-                      </td>
-                      <td className="p-3 text-xs text-steel-muted max-w-[180px]">{r.officeAddress || "—"}</td>
-                    </tr>
-                  )
-                )}
+                {(() => {
+                  let sectionIdx = -1;
+                  let personInSection = 0;
+                  return contacts.map((r) => {
+                    if (r.isSectionHeader) {
+                      sectionIdx += 1;
+                      personInSection = 0;
+                      return (
+                        <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
+                          <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + sectionIdx)}</td>
+                          <td className="p-3 font-semibold text-ink" colSpan={8}>
+                            {r.orgName}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    personInSection += 1;
+                    return (
+                      <tr key={r.id} className="border-t border-line hover:bg-sand/40">
+                        <td className="p-3 font-mono text-xs text-steel-muted">{personInSection}</td>
+                        <td className="p-3 font-medium whitespace-pre-line">{r.personName || "—"}</td>
+                        <td className="p-3">{r.designation || "—"}</td>
+                        <td className="p-3">{r.company || r.orgName || "—"}</td>
+                        <td className="p-3 text-xs whitespace-pre-line">{r.spoc || "—"}</td>
+                        <td className="p-3 font-mono text-xs">{r.mobile || "—"}</td>
+                        <td className="p-3 text-xs break-all">{r.email || "—"}</td>
+                        <td className="p-3">
+                          <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge>
+                        </td>
+                        <td className="p-3 text-xs text-steel-muted max-w-[180px] whitespace-pre-line">{r.officeAddress || "—"}</td>
+                      </tr>
+                    );
+                  });
+                })()}
                 {!contacts.length && (
                   <tr>
                     <td colSpan={9} className="p-10 text-center text-steel-muted text-sm">
-                      No contacts yet — click <strong>Seed BPCL-style rows</strong> or add people above.
+                      No contacts yet — click <strong>Load BPCL matrix (Excel)</strong> or add people above.
                     </td>
                   </tr>
                 )}
@@ -546,8 +620,11 @@ export default function CommsPage() {
                 <Input
                   value={schedule.attendeeEmails}
                   onChange={(e) => setSchedule({ ...schedule, attendeeEmails: e.target.value })}
-                  placeholder="Invite emails — one email to all (comma-separated)"
+                  placeholder="Matrix contacts (TO + CC) — auto-filled from communication matrix"
                 />
+                <p className="text-[10px] text-steel-muted px-1">
+                  Leave blank to use all communication matrix emails. One invite goes to everyone listed.
+                </p>
                 <label className="flex items-center gap-2 text-xs text-steel-muted px-1">
                   <input
                     type="checkbox"
@@ -635,7 +712,9 @@ export default function CommsPage() {
                           variant="secondary"
                           disabled={busy}
                           onClick={async () => {
-                            const extra = prompt("Extra recipients (comma-separated, optional). Action owners already receive the MoM.");
+                            const extra = prompt(
+                              "Extra recipients (comma-separated, optional). All communication matrix contacts are included automatically."
+                            );
                             setBusy(true);
                             setMsg("");
                             try {
@@ -644,7 +723,7 @@ export default function CommsPage() {
                                 token,
                                 body: JSON.stringify({ emails: extra || "" }),
                               });
-                              setMsg(`MoM queued to ${r.to.length} recipient(s): ${r.to.join(", ") || "action owners only"}`);
+                              setMsg(`MoM queued to ${r.to.length} recipient(s) (matrix + action owners).`);
                             } catch (err) {
                               setMsg(err instanceof Error ? err.message : String(err));
                             } finally {

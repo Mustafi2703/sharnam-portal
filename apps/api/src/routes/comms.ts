@@ -98,6 +98,16 @@ commsRouter.delete("/contacts/:id", requireRoles("admin", "office"), async (req:
   res.json({ ok: true });
 });
 
+/** Seed exact BPCL TECHNICAL matrix from Communication Matrix_BPCL (2).xlsx */
+commsRouter.post("/contacts/:projectId/seed-bpcl", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const force = req.body?.force === true;
+  const { seedBpclTechnicalMatrix } = await import("../services/bpclMatrixSeed.js");
+  const seeded = await seedBpclTechnicalMatrix(projectId, { force });
+  await audit("comms.contact.seed_bpcl", { userId: req.user!.id, entity: "Project", entityId: projectId, meta: { seeded, force } });
+  res.status(201).json({ ok: true, seeded, message: seeded ? `Loaded ${seeded} BPCL matrix rows` : "Matrix already exists — pass force:true to replace" });
+});
+
 /** Seed demo BPCL-shaped contacts if empty */
 commsRouter.post("/contacts/:projectId/seed-demo", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
@@ -223,10 +233,12 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
   });
   await audit("meeting.schedule", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
 
-  const attendeeRaw =
-    typeof req.body.attendeeEmails === "string" && req.body.attendeeEmails.trim()
-      ? req.body.attendeeEmails.trim()
-      : (project.notificationEmails || "").trim();
+  const { resolveMeetingRecipients } = await import("../services/matrixContacts.js");
+  const recipients = await resolveMeetingRecipients(
+    req.params.projectId,
+    typeof req.body.attendeeEmails === "string" ? req.body.attendeeEmails : undefined
+  );
+  const attendeeRaw = recipients.csv;
 
   const agendaFromBody = Array.isArray(req.body.agendaItems)
     ? req.body.agendaItems.map(String).filter(Boolean)
@@ -378,7 +390,17 @@ commsRouter.post("/meetings/:id/carry-over", requireRoles("admin", "office", "em
   });
 
   await audit("meeting.carry_over", { userId: req.user!.id, entity: "Meeting", entityId: next.id });
-  res.status(201).json(next);
+
+  const { notifyMeetingMatrixContacts } = await import("../services/meetingMatrixNotify.js");
+  const notify = await notifyMeetingMatrixContacts({
+    projectId: source.projectId,
+    meetingId: next.id,
+    stage: "followup",
+    createdById: req.user!.id,
+    extraBody: "Follow-up meeting created from open MoM actions.",
+  });
+
+  res.status(201).json({ ...next, notify });
 });
 
 /** Seed agenda items BEFORE MoM (client video flow) */
@@ -421,7 +443,17 @@ commsRouter.post(
     });
 
     await audit("meeting.agenda_generate", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
-    res.status(201).json({ meetingId: meeting.id, items: created });
+
+    const { notifyMeetingMatrixContacts } = await import("../services/meetingMatrixNotify.js");
+    const notify = await notifyMeetingMatrixContacts({
+      projectId: meeting.projectId,
+      meetingId: meeting.id,
+      stage: "agenda",
+      createdById: req.user!.id,
+      extraBody: "Agenda has been published for review before MoM.",
+    });
+
+    res.status(201).json({ meetingId: meeting.id, items: created, notify });
   }
 );
 
@@ -445,7 +477,17 @@ commsRouter.post(
       include: { items: true },
     });
     await audit("meeting.start_mom", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
-    res.json(updated);
+
+    const { notifyMeetingMatrixContacts } = await import("../services/meetingMatrixNotify.js");
+    const notify = await notifyMeetingMatrixContacts({
+      projectId: meeting.projectId,
+      meetingId: meeting.id,
+      stage: "mom",
+      createdById: req.user!.id,
+      extraBody: "MoM session started — action items can now be recorded.",
+    });
+
+    res.json({ ...updated, notify });
   }
 );
 
@@ -503,7 +545,9 @@ commsRouter.post(
       const ownerEmails = meeting.items
         .map((it) => it.assignedTo?.email)
         .filter((e): e is string => Boolean(e));
-      const to = Array.from(new Set([...bodyEmails, ...ownerEmails]));
+      const { getProjectMatrixEmails } = await import("../services/matrixContacts.js");
+      const matrixEmails = await getProjectMatrixEmails(meeting.projectId);
+      const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.all]));
 
       const { queueProjectEmail } = await import("../services/email.js");
       const result = await queueProjectEmail({

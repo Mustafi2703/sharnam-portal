@@ -12,7 +12,8 @@ import { downloadAuthFile } from "../../../lib/downloadReport";
 import { ReferenceSheetToolbar } from "../../../components/ReferenceSheetToolbar";
 import { RegisterEmptyRow, RegisterSheetFrame } from "../../../components/RegisterSheetFrame";
 import { RegisterSheetCell } from "../../../components/RegisterSheetCell";
-import { Card } from "../../../components/ui";
+import { Card, WorkflowStrip } from "../../../components/ui";
+import { RaBillWorkbookSlots } from "./RaBillWorkbookSlots";
 
 function fmtDateInput(v?: string | null) {
   if (!v) return "";
@@ -66,9 +67,7 @@ export function FinanceBillRegister({
       body.invoiceDate = raw || null;
     } else if (field === "invoiceNumber") {
       body.invoiceNumber = raw || null;
-    } else if (field === "raNumber") {
-      body.raNumber = raw;
-    } else {
+    } else if (field === "raNumber" || field === "description" || field === "discipline") {
       body[field] = raw;
     }
     await api(`/api/finance/ra/${id}`, { method: "PUT", token, body: JSON.stringify(body) });
@@ -99,7 +98,7 @@ export function FinanceBillRegister({
             packageKey: activePkg.key,
             discipline: activePkg.discipline,
             raNumber: `RA-${String(n).padStart(2, "0")}`,
-            status: "Submitted",
+            status: "Draft",
           }),
         });
       } else {
@@ -181,6 +180,17 @@ export function FinanceBillRegister({
 
   return (
     <div className="space-y-3 flex flex-col flex-1 min-h-0 overflow-hidden register-page-fill">
+      {activePkg.billKind === "ra" && (
+        <WorkflowStrip
+          active={0}
+          steps={[
+            { label: "RA bill workbooks", hint: "Submission · Corrected · Certified" },
+            { label: "Create COP", hint: "RA tracker → link bill", href: `/projects/${projectId}/finance?tab=ra&discipline=${activePkg.key}` },
+            { label: "Certify & pay", hint: "Viatrix COP · cashflow", href: `/projects/${projectId}/finance?tab=cop&discipline=${activePkg.key}` },
+            { label: "WPR pack", hint: "Dashboard KPIs + PPTX", href: `/projects/${projectId}/wpr-maker` },
+          ]}
+        />
+      )}
       <div className="shrink-0">
       <ReferenceSheetToolbar
         sheetLabel={`Payment Summary · ${activePkg.sheetName}`}
@@ -200,11 +210,11 @@ export function FinanceBillRegister({
       </div>
 
       <RegisterSheetFrame title={activePkg.label} sheetLabel={activePkg.sheetName} rowCount={rows.length}>
-        <table className="register-sheet min-w-max w-full text-xs">
+        <table className="register-sheet register-sheet--finance min-w-max w-full text-sm">
           <thead>
             <tr>
               {columns.map((c) => (
-                <th key={c.key} className="register-sheet__th whitespace-nowrap px-2 py-1.5 text-left">
+                <th key={c.key} className="register-sheet__th whitespace-nowrap px-3 py-2.5 text-left">
                   {c.label}
                 </th>
               ))}
@@ -217,8 +227,22 @@ export function FinanceBillRegister({
                 {columns.map((col) => {
                   if (col.key === "srNo") {
                     return (
-                      <td key={col.key} className="register-sheet__td px-2 py-1 text-steel-muted">
+                      <td key={col.key} className="register-sheet__td px-3 py-2 text-steel-muted">
                         {row.srNo ?? idx + 1}
+                      </td>
+                    );
+                  }
+                  if (col.type === "files" && activePkg.billKind === "ra") {
+                    return (
+                      <td key={col.key} className="register-sheet__td px-3 py-2 min-w-[280px] align-top">
+                        <RaBillWorkbookSlots
+                          raBillId={row.id}
+                          raNumber={row.raNumber}
+                          token={token}
+                          canWrite={canWrite}
+                          compact
+                          onChange={() => void reload()}
+                        />
                       </td>
                     );
                   }
@@ -226,7 +250,7 @@ export function FinanceBillRegister({
                   let val = row[field];
                   if (col.type === "date") val = fmtDateInput(val);
                   return (
-                    <td key={col.key} className="register-sheet__td px-1 py-0.5">
+                    <td key={col.key} className="register-sheet__td px-2 py-1.5">
                       <RegisterSheetCell
                         value={val}
                         type={col.type === "number" ? "number" : col.type === "date" ? "date" : "text"}
@@ -259,17 +283,17 @@ export function FinanceBillRegister({
           {rows.length > 0 && activePkg.billKind === "ra" && (
             <tfoot>
               <tr className="border-t-2 border-ink font-semibold">
-                <td colSpan={4} className="px-2 py-2">
+                <td colSpan={5} className="px-3 py-2.5">
                   TOTAL
                 </td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.againstBillRaised || 0), 0))}</td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.priceVariation || 0), 0))}</td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.totalInvoiceWithoutGst || 0), 0))}</td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.advanceAdjusted || 0), 0))}</td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.totalInvoiceWithGst || 0), 0))}</td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.retentionAmount || 0), 0))}</td>
-                <td className="px-2 py-2 text-right">{money(rows.reduce((s, r) => s + Number(r.netAmountPayable || 0), 0))}</td>
-                {canWrite && <td></td>}
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.againstBillRaised || 0), 0))}</td>
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.priceVariation || 0), 0))}</td>
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.totalInvoiceWithoutGst || 0), 0))}</td>
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.advanceAdjusted || 0), 0))}</td>
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.totalInvoiceWithGst || 0), 0))}</td>
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.retentionAmount || 0), 0))}</td>
+                <td className="px-3 py-2.5 text-right">{money(rows.reduce((s, r) => s + Number(r.netAmountPayable || 0), 0))}</td>
+                <td colSpan={canWrite ? 2 : 1}></td>
               </tr>
             </tfoot>
           )}

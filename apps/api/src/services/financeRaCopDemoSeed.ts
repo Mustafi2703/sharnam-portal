@@ -2,13 +2,92 @@
  * Seed PO → RA Bill chain → COP for client demo (Viatrix layout).
  */
 import type { PrismaClient } from "@prisma/client";
+import { mockOneDrive } from "./mockOneDrive.js";
+import { workbookBuffer } from "./brandedExport.js";
 
 const DEMO_SOURCE = "finance-demo-seed";
+const RA_ISO_ROOT = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
+const RA_STAGES = ["Submitted", "Corrected", "Certified"] as const;
+
+function raBillFolder(raNumber: string): string {
+  const safe = `RA-${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  return `${RA_ISO_ROOT}/${safe}`;
+}
+
+async function seedRaBillStageWorkbooks(
+  db: PrismaClient,
+  projectCode: string,
+  raBillId: string,
+  raNumber: string,
+  discipline: string,
+  uploadedById: string
+) {
+  let latestUrl: string | undefined;
+  for (const stage of RA_STAGES) {
+    const fileName = `${raNumber}-${stage}-workbook.xlsx`;
+    const buf = workbookBuffer(
+      [
+        {
+          name: "RA Bill",
+          rows: [
+            ["Sharnam PMC · RA Bill workbook", "", ""],
+            ["RA No.", raNumber, ""],
+            ["Discipline", discipline, ""],
+            ["Stage", stage, ""],
+            ["Demo", DEMO_SOURCE, ""],
+            [],
+            ["Line", "Description", "Amount (₹)"],
+            ["1", `${discipline} interim — ${stage}`, stage === "Certified" ? "As per certified qty" : "Contractor submission"],
+          ],
+        },
+      ],
+      { title: `${raNumber} ${stage}`, projectCode }
+    );
+    const saved = await mockOneDrive.upload(
+      projectCode,
+      raBillFolder(raNumber),
+      `${stage}-R1-${Date.now()}.xlsx`,
+      buf
+    );
+    const fileUrl = saved.url || `/uploads/onedrive/${projectCode}/${saved.path}`;
+    latestUrl = fileUrl;
+
+    await db.raBillRevision.create({
+      data: {
+        raBillId,
+        stage,
+        revisionNo: 1,
+        fileName,
+        fileUrl,
+        storagePath: saved.path,
+        sharePointUrl: saved.url || null,
+        uploadedById,
+      },
+    });
+    await db.raBillAttachment.create({
+      data: {
+        raBillId,
+        fileName,
+        fileUrl,
+        storagePath: saved.path,
+        sharePointUrl: saved.url || null,
+        kind: "stage",
+        uploadedById,
+      },
+    });
+  }
+  if (latestUrl) {
+    await db.raBill.update({ where: { id: raBillId }, data: { attachmentUrl: latestUrl } });
+  }
+}
 
 export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, createdById: string) {
   await db.certificateOfPayment.deleteMany({ where: { projectId, remarks: { contains: DEMO_SOURCE } } });
   await db.raBill.deleteMany({ where: { projectId, description: { contains: DEMO_SOURCE } } });
   await db.purchaseOrder.deleteMany({ where: { projectId, packageName: { contains: DEMO_SOURCE } } });
+
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { code: true } });
+  if (!project) throw new Error(`Project ${projectId} not found`);
 
   const po = await db.purchaseOrder.create({
     data: {
@@ -40,7 +119,8 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
   let cumulative = 0;
   const copIds: string[] = [];
 
-  for (const spec of raSpecs) {
+  for (let i = 0; i < raSpecs.length; i++) {
+    const spec = raSpecs[i];
     const totalInvoiceWithoutGst = spec.wo + spec.pv;
     const previousBillTotal = cumulative;
     cumulative += totalInvoiceWithoutGst;
@@ -65,13 +145,20 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
         netAmountPayable: spec.net,
         previousBillTotal,
         cumulativeBillTotal: cumulative,
-        status: spec.ra === "RA-05" ? "Submitted" : "Certified",
+        status: "Certified",
         discipline: spec.discipline,
         vendorName: po.vendorName,
         copNo: `COP-${spec.ra.replace("RA-", "")}`,
         createdById,
       },
     });
+
+    await seedRaBillStageWorkbooks(db, project.code, row.id, spec.ra, spec.discipline, createdById);
+
+    /** RA-05 is left without COP — use "Create COP →" in the demo. */
+    if (spec.ra === "RA-05") continue;
+
+    const copStatus = i < 2 ? "Paid" : "Certified";
 
     const cop = await db.certificateOfPayment.create({
       data: {
@@ -96,7 +183,7 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
         gstNumber: po.gstNumber,
         payableTo: po.payableTo,
         remarks: `${DEMO_SOURCE} — Viatrix COP format · ${spec.discipline}`,
-        status: spec.ra === "RA-05" ? "Draft" : "Certified",
+        status: copStatus,
         createdById,
       },
     });
@@ -108,8 +195,12 @@ export async function seedFinanceRaCopDemo(db: PrismaClient, projectId: string, 
     data: {
       totalBilledWithoutGst: cumulative,
       totalBilledWithGst: raSpecs.reduce((s, r) => s + r.wo + r.pv + r.gst, 0),
+      totalCertified: raSpecs.reduce((s, r) => s + r.net, 0),
     },
   });
+
+  const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
+  await syncCopToCashflow(projectId);
 
   return { poId: po.id, raCount: raSpecs.length, copIds, cumulative };
 }

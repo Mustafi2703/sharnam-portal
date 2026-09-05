@@ -604,12 +604,10 @@ financeRouter.post(
       },
     });
 
-    /** Roll status forward. Once a bill is Certified, further Corrected uploads keep it Certified. */
-    const nextStatus = stage === "Certified" ? "Certified" : stage === "Corrected" ? "Under Review" : "Submitted";
+    /** File uploads only — do not roll workflow status from stage uploads. */
     await prisma.raBill.update({
       where: { id: bill.id },
       data: {
-        status: nextStatus,
         attachmentUrl: fileUrl || bill.attachmentUrl,
         ...(revision.amountAtStage != null ? { totalInvoiceWithoutGst: revision.amountAtStage } : {}),
       },

@@ -82,40 +82,8 @@ async function seedCommsMatrix(db: PrismaClient, projectId: string) {
 }
 
 async function seedContacts(db: PrismaClient, projectId: string) {
-  await db.communicationContact.deleteMany({ where: { projectId, matrixKind: "TECHNICAL" } });
-  let order = 0;
-  const sections: { section: string; people: typeof LIVE_TEAM }[] = [
-    { section: "PMC", people: LIVE_TEAM.filter((t) => t.org.includes("SPDC") || t.email.includes("twinoxis") || t.email.includes("baibhab")) },
-    { section: "Client", people: [{ email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "office" as RoleKey, org: "SPDC" }] },
-  ];
-  for (const { section, people } of sections) {
-    await db.communicationContact.create({
-      data: {
-        projectId,
-        matrixKind: "TECHNICAL",
-        orgSection: section,
-        orgName: section === "PMC" ? "Sharnam PMC / Twinoxis UAT" : "SPDC Client team",
-        isSectionHeader: true,
-        sortOrder: order++,
-      },
-    });
-    for (const p of people) {
-      await db.communicationContact.create({
-        data: {
-          projectId,
-          matrixKind: "TECHNICAL",
-          orgSection: section,
-          orgName: p.org,
-          personName: p.fullName,
-          designation: p.role === "admin" ? "Portal Admin" : "PMC Coordinator",
-          company: p.org,
-          email: p.email,
-          mailRole: p.email === "nirav@spdc.in" ? "TO" : "CC",
-          sortOrder: order++,
-        },
-      });
-    }
-  }
+  const { seedBpclTechnicalMatrix } = await import("./bpclMatrixSeed.js");
+  await seedBpclTechnicalMatrix(projectId, { force: true });
 }
 
 async function seedMeetings(db: PrismaClient, projectId: string, userIds: Record<string, string>) {

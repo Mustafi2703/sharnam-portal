@@ -87,8 +87,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 /** Office admin — full control surface */
-const officeAdminNav: { to: string; label: string; icon: ModuleIconKey }[] = [
-  { to: "/crm", label: "CRM", icon: "modules" },
+const officeAdminNav: { to: string; label: string; icon: ModuleIconKey; end?: boolean }[] = [
+  { to: "/crm", label: "CRM", icon: "modules", end: true },
   { to: "/crm/bids", label: "Bid management", icon: "cost" },
   { to: "/login/hr", label: "HR portal", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
@@ -224,6 +224,7 @@ function SideNavBody({
                 <NavLink
                   key={n.to}
                   to={n.to}
+                  end={n.end}
                   onClick={onNavigate}
                   className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
                 >

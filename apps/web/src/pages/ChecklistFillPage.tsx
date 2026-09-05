@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
+import { FilePickButton } from "../components/FilePickButton";
 import { SignaturePad } from "../components/SignaturePad";
 import { StandaloneFormHeader } from "../components/StandaloneFormHeader";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
@@ -21,31 +22,21 @@ export default function ChecklistFillPage() {
   const family = search.get("family") || "SiteExecution";
   const { token, user } = useAuth();
   const [assignment, setAssignment] = useState<any>(null);
-  const [drawings, setDrawings] = useState<any[]>([]);
-  const [drawingId, setDrawingId] = useState("");
-  const [revisionId, setRevisionId] = useState("");
   const [responses, setResponses] = useState<Record<string, LineResponse>>({});
   const [fillMeta, setFillMeta] = useState<FillMeta>(emptyMeta);
   const [remarks, setRemarks] = useState("");
-  const [photos, setPhotos] = useState<FileList | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
-  const [uploadOpen, setUploadOpen] = useState(false);
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
-  const canUploadDrawing = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
 
   const [draftId, setDraftId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const emptyLine = (): LineResponse => ({ answer: "", remarks: "", photos: [], docs: [], evidenceLinks: [] });
 
   const load = async () => {
-    const [a, d] = await Promise.all([
-      api<any>(`/api/checklist/assignments/${assignmentId}`, { token }),
-      api<any[]>(`/api/drawings/project/${projectId}`, { token }),
-    ]);
+    const a = await api<any>(`/api/checklist/assignments/${assignmentId}`, { token });
     setAssignment(a);
-    const published = d.filter((x) => x.isPublished && (x.revisions?.length || 0) > 0);
-    setDrawings(published.length ? published : d);
     const init: Record<string, LineResponse> = {};
     a.template.items.forEach((i: Item) => {
       init[i.id] = emptyLine();
@@ -55,8 +46,6 @@ export default function ChecklistFillPage() {
     if (draft) {
       setDraftId(draft.id);
       setRemarks(draft.remarks || "");
-      if (draft.drawingId) setDrawingId(draft.drawingId);
-      if (draft.revisionId) setRevisionId(draft.revisionId);
       let saved: Record<string, { answer?: string; remarks?: string; evidenceLinks?: string[] } & Partial<FillMeta>> = {};
       try {
         saved = JSON.parse(draft.responsesJson || "{}");
@@ -96,25 +85,11 @@ export default function ChecklistFillPage() {
 
   useStandaloneFormPage();
 
-  const selectedDrawing = drawings.find((d) => d.id === drawingId);
-  const revs = useMemo(() => {
-    const list = [...(selectedDrawing?.revisions || [])];
-    return list.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [selectedDrawing]);
-
-  useEffect(() => {
-    if (revs[0] && !revs.some((r: any) => r.id === revisionId)) {
-      setRevisionId(revs[0].id);
-    }
-    if (!drawingId) setRevisionId("");
-  }, [drawingId, revs]);
-
   const items: Item[] = assignment?.template?.items || [];
   const sections = useMemo(() => Array.from(new Set(items.map((i) => i.section || "General"))), [items]);
   const answered = Object.values(responses).filter((r) => r.answer).length;
   const linkEvidence = Object.values(responses).reduce((s, r) => s + (r.evidenceLinks?.filter(Boolean).length || 0), 0);
   const answerPct = items.length ? Math.round((answered / items.length) * 100) : 0;
-  const selectedRev = revs.find((r: any) => r.id === revisionId);
 
   function buildPayload() {
     const payload: Record<string, { answer: string; remarks: string; evidenceLinks?: string[] } | FillMeta> = {};
@@ -136,13 +111,10 @@ export default function ChecklistFillPage() {
     const fd = new FormData();
     fd.append("responsesJson", JSON.stringify(payload));
     fd.append("itemCommentsJson", JSON.stringify(itemComments));
-    if (drawingId) fd.append("drawingId", drawingId);
-    if (revisionId) fd.append("revisionId", revisionId);
-    if (selectedRev?.revisionNumber) fd.append("revisionNumber", selectedRev.revisionNumber);
     fd.append("remarks", remarks);
     if (status === "Submitted") fd.append("status", "Submitted");
-    if (photos) {
-      Array.from(photos).forEach((f) => fd.append("photos", f));
+    if (photos.length) {
+      photos.forEach((f) => fd.append("photos", f));
     }
     if (signatureFile) {
       fd.append("signature", signatureFile, signatureFile.name);
@@ -195,7 +167,7 @@ export default function ChecklistFillPage() {
 
   const minPhotos = assignment?.template?.requirePhotosMin || 0;
   const photoTotal = useMemo(() => {
-    const overall = photos?.length || 0;
+    const overall = photos.length;
     const linePhotos = Object.values(responses).reduce((s, r) => s + (r.photos?.length || 0), 0);
     const links = Object.values(responses).reduce((s, r) => s + (r.evidenceLinks?.filter(Boolean).length || 0), 0);
     return overall + linePhotos + links;
@@ -216,7 +188,7 @@ export default function ChecklistFillPage() {
         body: fd,
       });
       const lineFiles = Object.values(responses).reduce((s, r) => s + r.photos.length + r.docs.length, 0);
-      const overall = photos?.length || 0;
+      const overall = photos.length;
       const spNote =
         saved.sharePointExports?.length > 0
           ? " Branded forms saved to SharePoint."
@@ -235,7 +207,7 @@ export default function ChecklistFillPage() {
           /* user can download from fill log */
         }
       }
-      setPhotos(null);
+      setPhotos([]);
       setDraftId(null);
       await load();
     } catch (err) {
@@ -369,150 +341,19 @@ export default function ChecklistFillPage() {
               </div>
             </Card>
 
-            <div className="grid lg:grid-cols-[300px_1fr] gap-8 items-start">
-              <aside className="space-y-5 sticky top-20">
-                <Card className="brand-frame !p-5">
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <h3 className="font-semibold text-sm">Drawing / revision</h3>
-                    {canUploadDrawing && (
-                      <button
-                        type="button"
-                        className="text-[11px] font-semibold text-brand"
-                        onClick={() => setUploadOpen((v) => !v)}
-                      >
-                        {uploadOpen ? "Hide upload" : "Upload…"}
-                      </button>
-                    )}
-                  </div>
-
-                  {canUploadDrawing && uploadOpen && (
-                    <div className="mb-4 space-y-3 border border-line rounded-lg p-3 bg-sand/50 text-sm">
-                      <p className="text-steel-muted text-xs leading-relaxed">
-                        Uploads require <strong>Drawing Check Master</strong> first. Use the GFC register — checklist unlocks the upload form.
-                      </p>
-                      <Link
-                        to={`/projects/${projectId}/drawings?upload=1`}
-                        className="inline-flex text-xs font-semibold text-brand"
-                      >
-                        GFC register → upload drawing →
-                      </Link>
-                      {drawingId && (
-                        <Link
-                          to={`/projects/${projectId}/drawings/precheck?drawingId=${drawingId}`}
-                          className="inline-flex text-xs font-semibold text-brand ml-3"
-                        >
-                          Upload revision (checklist gate) →
-                        </Link>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="scroll-panel space-y-2 list-roomy pr-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDrawingId("");
-                        setRevisionId("");
-                      }}
-                      className={`w-full text-left border px-3 py-3 transition ${
-                        !drawingId ? "selected-ring border-brand" : "border-line hover:border-brand/40"
-                      }`}
-                    >
-                      <div className="text-sm font-medium">No drawing linked</div>
-                      <div className="text-[11px] text-steel-muted mt-1">Fill with docs / photos only</div>
-                    </button>
-                    {drawings.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => setDrawingId(d.id)}
-                        className={`w-full text-left border px-3 py-3 transition ${
-                          drawingId === d.id ? "selected-ring border-brand" : "border-line hover:border-brand/40"
-                        }`}
-                      >
-                        <div className="font-mono text-[11px] text-brand">{d.drawingNumber}</div>
-                        <div className="text-sm font-medium mt-1 leading-snug">{d.title}</div>
-                        <div className="text-[11px] text-steel-muted mt-1">Current {d.currentRev}</div>
-                      </button>
-                    ))}
-                    {!drawings.length && (
-                      <p className="text-xs text-steel-muted leading-relaxed">
-                        No drawings yet — upload above or submit with photos/docs only.
-                      </p>
-                    )}
-                  </div>
-                </Card>
-
-                <Card className="!p-5">
-                  <h3 className="font-semibold text-sm mb-3">Revision (optional)</h3>
-                  <div className="space-y-2">
-                    {revs.map((r: any) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setRevisionId(r.id)}
-                        className={`w-full text-left border px-3 py-2.5 text-sm ${
-                          revisionId === r.id ? "selected-ring border-brand" : "border-line"
-                        }`}
-                      >
-                        <span className="font-mono font-semibold">{r.revisionNumber}</span>
-                        <span className="text-xs text-steel-muted ml-2">
-                          {new Date(r.createdAt).toLocaleDateString()}
-                        </span>
-                        {r.uploadedBy?.fullName && (
-                          <div className="text-[11px] text-steel-muted mt-0.5">by {r.uploadedBy.fullName}</div>
-                        )}
-                      </button>
-                    ))}
-                    {drawingId && !revs.length && <p className="text-xs text-steel-muted">No revisions on this sheet.</p>}
-                    {!drawingId && <p className="text-xs text-steel-muted">Select a drawing first.</p>}
-                  </div>
-                </Card>
-
-                <Card className="!p-5">
-                  <h3 className="font-semibold text-sm mb-3">Audit log</h3>
-                  <ul className="scroll-panel space-y-3 text-sm pr-1">
-                    {(assignment.submissions || []).map((s: any) => (
-                      <li key={s.id} className="border-b border-line pb-3">
-                        <div className="flex justify-between gap-2">
-                          <Badge tone={s.status === "Approved" ? "ok" : "brand"}>{s.status}</Badge>
-                          <span className="text-[11px] font-mono text-steel-muted">
-                            {new Date(s.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="mt-1 font-medium">{s.submittedBy?.fullName}</div>
-                        <div className="text-xs text-steel-muted">
-                          {s.drawing?.drawingNumber || "—"} · {s.revisionNumber || s.drawing?.currentRev || "—"}
-                          {s.progress
-                            ? ` · ${s.progress.progressLabel} (${s.progress.answerPct}%)`
-                            : s.photos?.length
-                              ? ` · ${s.photos.length} file(s)`
-                              : ""}
-                        </div>
-                      </li>
-                    ))}
-                    {!assignment.submissions?.length && (
-                      <li className="text-xs text-steel-muted">No fills yet.</li>
-                    )}
-                  </ul>
-                </Card>
-              </aside>
-
+            <div className="grid lg:grid-cols-[1fr] gap-8 items-start max-w-4xl mx-auto w-full">
               <form onSubmit={submit} className="surface brand-frame p-6 sm:p-8 space-y-6">
                 <div className="pb-4 border-b border-line flex flex-wrap gap-3 justify-between">
                   <div>
-                    <div className="text-xs font-mono uppercase text-steel-muted">Form applies to</div>
-                    <div className="font-semibold mt-1">
-                      {selectedDrawing
-                        ? `${selectedDrawing.drawingNumber} · ${selectedRev?.revisionNumber || "—"}`
-                        : "No drawing (OK)"}
-                    </div>
+                    <div className="text-xs font-mono uppercase text-steel-muted">Checklist fill</div>
+                    <div className="font-semibold mt-1">Answer each line · take photos or add SharePoint links</div>
                   </div>
                   <Input
                     className="max-w-xs"
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
                     placeholder="Overall remarks"
+                    disabled={!canFill}
                   />
                 </div>
 
@@ -587,45 +428,48 @@ export default function ChecklistFillPage() {
                                     Link only — file stays in SharePoint; portal stores the URL.
                                   </span>
                                 </label>
-                                <label className="text-xs text-steel-muted block">
-                                  Photos (optional upload → SharePoint)
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    capture="environment"
-                                    multiple
-                                    className="block mt-1 text-xs w-full"
-                                    onChange={(e) =>
-                                      patchLine(item.id, {
-                                        photos: e.target.files ? Array.from(e.target.files) : [],
-                                      })
-                                    }
-                                  />
+                                <div className="space-y-2">
+                                  <p className="text-xs text-steel-muted">Photos (camera → SharePoint)</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    <FilePickButton
+                                      accept="image/*"
+                                      capture="environment"
+                                      multiple
+                                      variant="primary"
+                                      onPick={(files) =>
+                                        patchLine(item.id, {
+                                          photos: [...line.photos, ...files],
+                                        })
+                                      }
+                                    >
+                                      Take photo
+                                    </FilePickButton>
+                                  </div>
                                   {line.photos.length > 0 && (
-                                    <span className="block mt-1 text-[11px] text-ink">
+                                    <span className="block text-[11px] text-ink">
                                       {line.photos.map((f) => f.name).join(", ")}
                                     </span>
                                   )}
-                                </label>
-                                <label className="text-xs text-steel-muted block">
-                                  Documents
-                                  <input
-                                    type="file"
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-xs text-steel-muted">Documents</p>
+                                  <FilePickButton
                                     accept=".pdf,.doc,.docx,.xls,.xlsx,.dwg,.txt,application/pdf"
                                     multiple
-                                    className="block mt-1 text-xs w-full"
-                                    onChange={(e) =>
+                                    onPick={(files) =>
                                       patchLine(item.id, {
-                                        docs: e.target.files ? Array.from(e.target.files) : [],
+                                        docs: [...line.docs, ...files],
                                       })
                                     }
-                                  />
+                                  >
+                                    Choose file
+                                  </FilePickButton>
                                   {line.docs.length > 0 && (
-                                    <span className="block mt-1 text-[11px] text-ink">
+                                    <span className="block text-[11px] text-ink">
                                       {line.docs.map((f) => f.name).join(", ")}
                                     </span>
                                   )}
-                                </label>
+                                </div>
                               </div>
                             </div>
                           );
@@ -636,22 +480,28 @@ export default function ChecklistFillPage() {
 
                 <div className="pt-4 border-t border-line space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
-                    <label className="text-sm text-steel-muted">
-                      Overall photos / docs
-                      {minPhotos > 0 && (
-                        <span className="ml-2 text-xs font-semibold text-brand">
-                          {photoTotal}/{minPhotos} photos (min)
-                        </span>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*,.pdf,.doc,.docx"
+                    <div className="space-y-2">
+                      <p className="text-sm text-steel-muted">
+                        Overall photos
+                        {minPhotos > 0 && (
+                          <span className="ml-2 text-xs font-semibold text-brand">
+                            {photoTotal}/{minPhotos} photos (min)
+                          </span>
+                        )}
+                      </p>
+                      <FilePickButton
+                        accept="image/*"
                         capture="environment"
                         multiple
-                        className="block mt-1 text-xs"
-                        onChange={(e) => setPhotos(e.target.files)}
-                      />
-                    </label>
+                        variant="primary"
+                        onPick={(files) => setPhotos((prev) => [...prev, ...files])}
+                      >
+                        Take photo
+                      </FilePickButton>
+                      {photos.length > 0 && (
+                        <p className="text-xs text-ink">{photos.map((f) => f.name).join(", ")}</p>
+                      )}
+                    </div>
                     <SignaturePad
                       onCapture={setSignatureFile}
                       personName={user?.fullName || user?.email || undefined}

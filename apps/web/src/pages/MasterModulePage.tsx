@@ -164,12 +164,12 @@ export default function MasterModulePage() {
       </div>
 
       <WorkflowStrip
-        active={1}
+        active={directoryTab === "projects" ? 2 : 1}
         steps={[
-          { label: "CRM · Convert lead", hint: "Client + project spine" },
-          { label: "Directory", hint: "Clients · vendors · people" },
-          { label: "Project modules", hint: "Cost MB/BBS per project" },
-          { label: "Pilot on dashboard", hint: "Verify RFIs · quality" },
+          { label: "CRM · Convert lead", hint: "Client + project spine", href: "/crm/leads" },
+          { label: "Directory", hint: "Clients · vendors · people", href: "/master?tab=vendors" },
+          { label: "Project modules", hint: "Cost MB/BBS per project", href: "/master?tab=projects" },
+          { label: "Pilot on dashboard", hint: "Verify RFIs · quality", href: "/dashboard" },
         ]}
       />
 

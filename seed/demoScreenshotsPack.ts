@@ -20,6 +20,8 @@ import { seedDprDemoDay } from "../apps/api/src/services/dprDemoDaySeed.ts";
 import { seedWprDemoWeek, snapWeekEnding } from "../apps/api/src/services/wprDemoSeed.ts";
 import { seedFinanceRaCopDemo } from "./financeRaCopDemo.ts";
 import { seedAuditKpiFromSheets } from "./auditKpiFromSheets.ts";
+import { saveViatrixCopToDms } from "../apps/api/src/modules/finance/copWorkbook.ts";
+import { mockOneDrive } from "../apps/api/src/services/mockOneDrive.ts";
 
 export const DEMO_PROJECT_CODES = ["SPDC-DEMO-01", "SPDC-PILOT-02"] as const;
 
@@ -94,7 +96,15 @@ export async function seedAllDemoSheetModules(prisma: PrismaClient) {
     await seedQualitySafetyDemoForDpr(prisma, project.id, anchor, reporter.id, { weekDays: 7, skipIfSheetData: true });
     await linkDrawingRegisterToGfc(prisma, project.id);
     console.log(`  Finance PO · RA · COP — ${code}`);
-    await seedFinanceRaCopDemo(prisma, project.id, reporter.id);
+    const finance = await seedFinanceRaCopDemo(prisma, project.id, reporter.id);
+    for (const copId of finance.copIds) {
+      try {
+        const out = await saveViatrixCopToDms(copId, (c, folder, name, buf) => mockOneDrive.upload(c, folder, name, buf));
+        console.log(`    COP → DMS: ${out.filename || copId}`);
+      } catch (e) {
+        console.warn(`    COP DMS skip ${copId}:`, e instanceof Error ? e.message : e);
+      }
+    }
     console.log(`  Audit & KPI packs — ${code}`);
     await seedAuditKpiFromSheets(prisma, project.id);
   }

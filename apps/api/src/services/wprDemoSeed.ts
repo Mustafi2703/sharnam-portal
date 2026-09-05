@@ -6,6 +6,9 @@ import path from "path";
 import type { PrismaClient } from "@prisma/client";
 import { buildWprWorkbook, type WprHeader } from "./wprXlsx.js";
 import { buildWprClientWorkbook } from "./wprClientPack.js";
+import { buildWprPptx } from "./wprPptx.js";
+import { loadWprChartPack } from "./wprCharts.js";
+import { mergeWprChartsForExport } from "./wprChartMerge.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
 import { seedWprSections } from "./wprSeedSections.js";
@@ -70,23 +73,30 @@ export async function seedWprDemoWeek(
   });
 
   const dateStr = weekEnd.toISOString().slice(0, 10);
+  const startStr = weekStart.toISOString().slice(0, 10);
   const spdcBuf = buildWprWorkbook({ header, sections });
   const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
+  const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const charts = mergeWprChartsForExport(sections, chartsRaw, startStr, dateStr);
+  const pptxBuf = await buildWprPptx({ header, sections, charts });
 
   const folder = MODULE_TO_ISO_FOLDER.wpr;
   const spdcName = `WPR-${project.code}-${dateStr}.xlsx`;
   const clientName = `WPR-ClientPack-${project.code}-${dateStr}.xlsx`;
+  const pptxName = `WPR-${project.code}-${dateStr}.pptx`;
 
   let publishedPath = snapshot.publishedPath;
   try {
     const saved = await mockOneDrive.upload(project.code, folder, spdcName, spdcBuf);
     publishedPath = saved.path;
     await mockOneDrive.upload(project.code, folder, clientName, clientBuf);
+    await mockOneDrive.upload(project.code, folder, pptxName, pptxBuf);
   } catch {
     const wprRoot = path.join(process.cwd(), "uploads", "onedrive", project.code, folder);
     fs.mkdirSync(wprRoot, { recursive: true });
     fs.writeFileSync(path.join(wprRoot, spdcName), spdcBuf);
     fs.writeFileSync(path.join(wprRoot, clientName), clientBuf);
+    fs.writeFileSync(path.join(wprRoot, pptxName), pptxBuf);
     publishedPath = `${folder}/${spdcName}`;
   }
 
@@ -97,5 +107,5 @@ export async function seedWprDemoWeek(
     });
   }
 
-  return { weekEnd, weekStart, reportNumber, publishedPath, spdcName, clientName };
+  return { weekEnd, weekStart, reportNumber, publishedPath, spdcName, clientName, pptxName };
 }

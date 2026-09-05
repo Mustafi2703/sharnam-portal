@@ -1,4 +1,5 @@
 import { useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { formatUiText } from "../lib/formatUiText";
 
 function fmt(children: ReactNode): ReactNode {
@@ -156,7 +157,7 @@ export function WorkflowStrip({
   steps,
   active = 0,
 }: {
-  steps: { label: string; hint?: string }[];
+  steps: { label: string; hint?: string; href?: string }[];
   active?: number;
 }) {
   return (
@@ -168,26 +169,40 @@ export function WorkflowStrip({
         <Badge tone="brand">{fmt("Demo flow")}</Badge>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-0">
-        {steps.map((s, i) => (
-          <div
-            key={s.label}
-            className={`workflow-step p-4 sm:p-5 border-t sm:border-t-0 sm:border-l border-line first:border-l-0 first:border-t-0 ${
-              i === active ? "bg-brand-soft/50" : ""
-            }`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className={`h-7 w-7 rounded-full grid place-items-center text-xs font-semibold ${
-                  i <= active ? "bg-ink text-white" : "bg-steel/10 text-steel-muted"
-                }`}
-              >
-                {i + 1}
-              </span>
-              <span className="font-medium text-sm">{fmt(s.label)}</span>
+        {steps.map((s, i) => {
+          const done = i < active;
+          const current = i === active;
+          const body = (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className={`h-7 w-7 rounded-full grid place-items-center text-xs font-semibold ${
+                    current ? "bg-brand text-white ring-2 ring-brand/30" : done ? "bg-ink text-white" : "bg-steel/10 text-steel-muted"
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <span className={`font-medium text-sm ${current ? "text-ink" : ""}`}>{fmt(s.label)}</span>
+              </div>
+              {s.hint && <p className="text-xs text-steel-muted leading-relaxed pl-9">{fmt(s.hint)}</p>}
+            </>
+          );
+          const className = `workflow-step p-4 sm:p-5 border-t sm:border-t-0 sm:border-l border-line first:border-l-0 first:border-t-0 transition-colors ${
+            current ? "bg-brand-soft/50" : s.href ? "hover:bg-sand/60" : ""
+          }`;
+          if (s.href) {
+            return (
+              <Link key={s.label} to={s.href} className={`${className} block no-underline text-inherit`}>
+                {body}
+              </Link>
+            );
+          }
+          return (
+            <div key={s.label} className={className}>
+              {body}
             </div>
-            {s.hint && <p className="text-xs text-steel-muted leading-relaxed pl-9">{fmt(s.hint)}</p>}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );

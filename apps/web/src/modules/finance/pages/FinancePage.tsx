@@ -9,12 +9,12 @@ import {
 } from "@sharnam/finance/disciplines";
 import { FinanceBillRegister } from "../components/FinanceBillRegister";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
-import { RaBillStageButtons } from "../components/RaBillStageButtons";
-import { RaBillAttachments } from "../components/RaBillAttachments";
+import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
-import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../../components/ui";
+import { FilePickButton } from "../../../components/FilePickButton";
+import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../../components/ui";
 
 const TOOLS = [
   { id: "overview", label: "Overview" },
@@ -167,6 +167,7 @@ export default function FinancePage() {
           projectId={id!}
           token={token || ""}
           activePkg={activePkg}
+          raBillIdPrefill={searchParams.get("raBillId") || ""}
         />
       )}
 
@@ -237,6 +238,15 @@ function Overview({
   ] as const;
   return (
     <div className="space-y-4">
+      <WorkflowStrip
+        active={0}
+        steps={[
+          { label: "RA bill workbooks", hint: "Bill registers · 3 stages", href: `/projects/${projectId}/finance?tab=bills&discipline=civil` },
+          { label: "RA tracker", hint: "Link invoices · Create COP", href: `/projects/${projectId}/finance?tab=ra` },
+          { label: "Certify COP", hint: "Viatrix · DMS · cashflow", href: `/projects/${projectId}/finance?tab=cop` },
+          { label: "WPR report", hint: "KPIs · charts · PPTX", href: `/projects/${projectId}/wpr-maker` },
+        ]}
+      />
       {!activePkg && disciplineRows.length > 0 && (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {disciplineRows
@@ -458,7 +468,16 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
     }
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <WorkflowStrip
+        active={1}
+        steps={[
+          { label: "RA bill workbooks", hint: "Submission · Corrected · Certified" },
+          { label: "Create COP", hint: "Link RA · Viatrix certificate", href: `/projects/${projectId}/finance?tab=cop` },
+          { label: "Certify & pay", hint: "Rolls into Cost cashflow", href: `/projects/${projectId}/finance?tab=cop` },
+          { label: "WPR pack", hint: "Dashboard + charts", href: `/projects/${projectId}/wpr-maker` },
+        ]}
+      />
       {activePkg && activePkg.billKind === "material" && (
         <Card className="!p-4 text-sm text-steel-muted">
           <strong>{activePkg.label}</strong> uses material / tax invoices, not RA bills. Switch to{" "}
@@ -497,17 +516,17 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
             <Input placeholder="Retention" type="number" value={form.retentionAmount} onChange={(e) => setForm({ ...form, retentionAmount: e.target.value })} />
             <Input placeholder="Other recoveries" type="number" value={form.otherRecoveries} onChange={(e) => setForm({ ...form, otherRecoveries: e.target.value })} />
             <Input placeholder="Net payable" type="number" value={form.netAmountPayable} onChange={(e) => setForm({ ...form, netAmountPayable: e.target.value })} />
-            <label className="md:col-span-3 text-xs text-steel-muted">
-              Contractor documents (multiple allowed)
-              <input
-                type="file"
-                multiple
+            <label className="md:col-span-3 text-xs text-steel-muted block space-y-2">
+              Contractor documents (multiple workbooks / scans)
+              <FilePickButton
                 accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx,image/*"
-                className="block mt-1 text-xs"
-                onChange={(e) => setFiles(Array.from(e.target.files || []))}
-              />
+                multiple
+                onPick={(picked) => setFiles(picked)}
+              >
+                Choose files
+              </FilePickButton>
               {files.length > 0 && (
-                <span className="block mt-1 text-[11px] text-brand">{files.length} file(s) selected</span>
+                <span className="block text-[11px] text-brand">{files.length} file(s) selected</span>
               )}
             </label>
             <div className="md:col-span-4 border border-line rounded-lg p-2 bg-sand/30 text-xs">
@@ -563,48 +582,43 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
           </form>
         </Card>
       )}
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
+      <Card padding={false} className="overflow-hidden">
+        <div className="px-5 py-4 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span className="font-semibold text-sm">RA Bill register {activePkg ? `· ${activePkg.label}` : ""}</span>
-            <p className="text-[10px] text-steel-muted mt-0.5">Payment Summary · CIVIL / MEP / Facade RA Bill columns</p>
+            <span className="font-semibold text-base">RA Bill register {activePkg ? `· ${activePkg.label}` : ""}</span>
+            <p className="text-xs text-steel-muted mt-1">
+              Upload Submission · Corrected · Certified workbooks per row — open directly in SharePoint. No status column; files are the record.
+            </p>
           </div>
-          <span className="text-[11px] text-steel-muted">{filteredRas.length} entries</span>
+          <span className="text-xs text-steel-muted">{filteredRas.length} entries</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[1200px] w-full text-xs">
+        <div className="overflow-x-auto p-2">
+          <table className="min-w-[1100px] w-full text-sm register-sheet--finance-table">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">RA</th><th>Invoice</th><th>Date</th><th>Vendor</th><th>Discipline</th><th className="text-right">Previous</th><th className="text-right">Against</th><th className="text-right">Price Var</th><th className="text-right">w/o GST</th><th className="text-right">w/ GST</th><th className="text-right">Adv adj</th><th className="text-right">Retention</th><th className="text-right">Net</th><th className="text-right">Cumulative</th><th>COP</th><th>Status</th><th className="min-w-[280px]">Documents · stage uploads</th></tr>
+              <tr>
+                <th className="px-3 py-2.5">RA</th>
+                <th className="px-3 py-2.5">Discipline</th>
+                <th className="px-3 py-2.5">Invoice</th>
+                <th className="px-3 py-2.5">Date</th>
+                <th className="px-3 py-2.5">Vendor</th>
+                <th className="px-3 py-2.5 text-right">Against</th>
+                <th className="px-3 py-2.5 text-right">Net payable</th>
+                <th className="px-3 py-2.5 min-w-[320px]">Workbooks · SharePoint</th>
+                <th className="px-3 py-2.5">COP</th>
+              </tr>
             </thead>
             <tbody>
               {filteredRas.map((r: any) => (
-                <tr key={r.id} className="border-t border-line align-top">
-                  <td className="py-1.5 px-2">{r.raNumber}</td>
-                  <td>{r.invoiceNumber || "—"}</td>
-                  <td>{d(r.invoiceDate)}</td>
-                  <td>{r.vendorName || "—"}</td>
-                  <td>{r.discipline || "—"}</td>
-                  <td className="text-right">{money(r.previousBillTotal)}</td>
-                  <td className="text-right">{money(r.againstBillRaised)}</td>
-                  <td className="text-right">{money(r.priceVariation)}</td>
-                  <td className="text-right">{money(r.totalInvoiceWithoutGst)}</td>
-                  <td className="text-right">{money(r.totalInvoiceWithGst)}</td>
-                  <td className="text-right">{money(r.advanceAdjusted)}</td>
-                  <td className="text-right">{money(r.retentionAmount)}</td>
-                  <td className="text-right">{money(r.netAmountPayable)}</td>
-                  <td className="text-right">{money(r.cumulativeBillTotal)}</td>
-                  <td>{r.copNo || "—"}</td>
-                  <td><Badge tone={r.status === "Certified" || r.status === "Paid" ? "ok" : r.status === "Rejected" ? "danger" : "brand"}>{r.status}</Badge></td>
-                  <td className="py-1 pr-2 space-y-1">
-                    <RaBillAttachments
-                      raBillId={r.id}
-                      raNumber={r.raNumber}
-                      token={token}
-                      canWrite={canWrite}
-                      initialAttachments={r.attachments || []}
-                      onChange={() => void reload()}
-                    />
-                    <RaBillStageButtons
+                <tr key={r.id} className="border-t border-line align-top hover:bg-sand/30">
+                  <td className="py-3 px-3 font-mono font-semibold">{r.raNumber}</td>
+                  <td className="py-3 px-3">{r.discipline || "—"}</td>
+                  <td className="py-3 px-3">{r.invoiceNumber || "—"}</td>
+                  <td className="py-3 px-3">{d(r.invoiceDate)}</td>
+                  <td className="py-3 px-3">{r.vendorName || "—"}</td>
+                  <td className="py-3 px-3 text-right tabular-nums">{money(r.againstBillRaised)}</td>
+                  <td className="py-3 px-3 text-right tabular-nums font-semibold">{money(r.netAmountPayable)}</td>
+                  <td className="py-3 px-3">
+                    <RaBillWorkbookSlots
                       raBillId={r.id}
                       raNumber={r.raNumber}
                       token={token}
@@ -612,9 +626,25 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
                       onChange={() => void reload()}
                     />
                   </td>
+                  <td className="py-3 px-3">
+                    {canWrite && (
+                      <Link
+                        to={`/projects/${projectId}/finance?tab=cop&raBillId=${r.id}`}
+                        className="text-xs font-semibold text-brand whitespace-nowrap"
+                      >
+                        Create COP →
+                      </Link>
+                    )}
+                  </td>
                 </tr>
               ))}
-              {!filteredRas.length && <tr><td colSpan={17} className="py-4 text-center text-steel-muted">No RA bills for {activePkg?.label || "this project"} — add RA-01 or sync Payment Summary.</td></tr>}
+              {!filteredRas.length && (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-steel-muted">
+                    No RA bills for {activePkg?.label || "this project"} — add RA-01 or open Bill registers tab.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -625,12 +655,62 @@ function RaTab({ ras, canWrite, reload, setMsg, projectId, token, activePkg, dis
 
 /* ─────────────────────────── COP ─────────────────────────── */
 
-function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activePkg }: any) {
+function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activePkg, raBillIdPrefill }: any) {
   const filteredCops = activePkg ? cops.filter((c: any) => copMatchesPackage(c, activePkg)) : cops;
   const filteredRas = activePkg?.billKind === "ra" ? ras.filter((r: any) => raMatchesPackage(r, activePkg)) : ras;
   const [form, setForm] = useState({ certificateNumber: "", certificateType: "Against - RA", certificateDate: "", contractor: "", workTrade: activePkg?.discipline || "", budgetCode: "", poNumberDate: "", originalWoValue: "", amendmentNo: "", amendedWoValue: "", invoiceNoDate: "", raBillId: "", amountCertified: "", amountPayable: "", gstAmount: "", retentionAmount: "", panNumber: "", gstNumber: "", payableTo: "", remarks: "" });
   const [file, setFile] = useState<File | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  useEffect(() => {
+    if (!raBillIdPrefill) return;
+    const ra = filteredRas.find((r: any) => r.id === raBillIdPrefill);
+    if (!ra) return;
+    setForm((f) => ({
+      ...f,
+      raBillId: ra.id,
+      contractor: ra.vendorName || f.contractor,
+      workTrade: ra.discipline || f.workTrade,
+      invoiceNoDate: `${ra.raNumber}${ra.invoiceNumber ? ` · ${ra.invoiceNumber}` : ""}`,
+      amountCertified: String(ra.totalInvoiceWithoutGst ?? ra.againstBillRaised ?? ""),
+      amountPayable: String(ra.netAmountPayable ?? ""),
+      gstAmount: String(ra.gstAmount ?? ""),
+      retentionAmount: String(ra.retentionAmount ?? ""),
+      certificateNumber: f.certificateNumber || `01/N.K.INFRA/2025-26/${(ra.raNumber || "").replace("RA-", "")}`,
+    }));
+  }, [raBillIdPrefill, filteredRas]);
+
+  async function updateCopStatus(copId: string, status: string) {
+    setBusyId(copId);
+    setMsg("");
+    try {
+      await api(`/api/finance/cop/${copId}`, {
+        method: "PUT",
+        token,
+        body: JSON.stringify({ status, certified: status === "Certified", approved: status === "Approved" }),
+      });
+      setMsg(`COP marked ${status} — cashflow updated in Cost module.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function uploadAllToDms() {
+    setBulkBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ uploaded: number }>(`/api/finance/${projectId}/cop/upload-all-to-dms`, { method: "POST", token });
+      setMsg(`Uploaded ${out.uploaded} COP file(s) to DMS 09.01 folder.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Bulk upload failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
   async function add(e: FormEvent) {
     e.preventDefault();
     try {
@@ -665,7 +745,16 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
     }
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <WorkflowStrip
+        active={2}
+        steps={[
+          { label: "RA bill workbooks", hint: "Submission · Corrected · Certified", href: `/projects/${projectId}/finance?tab=bills&discipline=civil` },
+          { label: "Create COP", hint: "Link RA · Viatrix certificate" },
+          { label: "Certify & pay", hint: "Rolls into Cost cashflow" },
+          { label: "WPR pack", hint: "Dashboard + charts", href: `/projects/${projectId}/wpr-maker` },
+        ]}
+      />
       {canWrite && (
         <Card>
           <h3 className="font-semibold text-sm mb-2">Certify a payment (COP)</h3>
@@ -703,37 +792,60 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
           </form>
         </Card>
       )}
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex justify-between">
-          <span className="font-semibold text-sm">Certificate of Payment · register {activePkg ? `· ${activePkg.label}` : ""}</span>
-          <span className="text-[11px] text-steel-muted">{filteredCops.length} entries</span>
+      <Card padding={false} className="overflow-hidden">
+        <div className="px-5 py-4 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <span className="font-semibold text-base">Certificate of Payment · register {activePkg ? `· ${activePkg.label}` : ""}</span>
+            <p className="text-xs text-steel-muted mt-1">Viatrix COP format · certify to roll amounts into Cost cashflow chart</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-steel-muted">{filteredCops.length} entries</span>
+            {canWrite && (
+              <Button type="button" variant="secondary" className="!text-xs" disabled={bulkBusy} onClick={() => void uploadAllToDms()}>
+                {bulkBusy ? "Uploading…" : "Upload all COPs → DMS"}
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-[1100px] w-full text-xs">
+        <div className="overflow-x-auto p-2">
+          <table className="min-w-[1000px] w-full text-sm register-sheet--finance-table">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">COP</th><th>Type</th><th>Date</th><th>Contractor</th><th>WO ref</th><th>RA</th><th className="text-right">Certified</th><th className="text-right">Payable</th><th>Status</th><th>Actions</th></tr>
+              <tr>
+                <th className="px-3 py-2.5">COP</th>
+                <th className="px-3 py-2.5">Type</th>
+                <th className="px-3 py-2.5">Date</th>
+                <th className="px-3 py-2.5">Contractor</th>
+                <th className="px-3 py-2.5">RA</th>
+                <th className="px-3 py-2.5 text-right">Certified</th>
+                <th className="px-3 py-2.5 text-right">Payable</th>
+                <th className="px-3 py-2.5">Stage</th>
+                <th className="px-3 py-2.5 min-w-[220px]">Actions</th>
+              </tr>
             </thead>
             <tbody>
               {filteredCops.map((c: any) => (
-                <tr key={c.id} className="border-t border-line">
-                  <td className="py-1.5 px-2">{c.certificateNumber}</td>
-                  <td>{c.certificateType || "—"}</td>
-                  <td>{d(c.certificateDate)}</td>
-                  <td>{c.contractor}</td>
-                  <td>{c.poNumberDate || "—"}</td>
-                  <td>{c.raBill?.raNumber || "—"}</td>
-                  <td className="text-right">{money(c.amountCertified)}</td>
-                  <td className="text-right">{money(c.amountPayable)}</td>
-                  <td><Badge tone={c.status === "Paid" ? "ok" : c.status === "Rejected" ? "danger" : "brand"}>{c.status}</Badge></td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      <Button type="button" variant="secondary" className="!py-0.5 !px-2 !text-[10px]" onClick={() => void downloadCop(c.id, c.certificateNumber)}>
+                <tr key={c.id} className="border-t border-line align-top hover:bg-sand/20">
+                  <td className="py-3 px-3 font-mono font-semibold">{c.certificateNumber}</td>
+                  <td className="py-3 px-3">{c.certificateType || "—"}</td>
+                  <td className="py-3 px-3">{d(c.certificateDate)}</td>
+                  <td className="py-3 px-3">{c.contractor}</td>
+                  <td className="py-3 px-3">{c.raBill?.raNumber || "—"}</td>
+                  <td className="py-3 px-3 text-right tabular-nums">{money(c.amountCertified)}</td>
+                  <td className="py-3 px-3 text-right tabular-nums font-semibold">{money(c.amountPayable)}</td>
+                  <td className="py-3 px-3">
+                    <Badge tone={c.status === "Paid" ? "ok" : c.status === "Certified" || c.status === "Approved" ? "brand" : "neutral"}>
+                      {c.status}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button type="button" variant="secondary" className="!py-1 !px-2 !text-[11px]" onClick={() => void downloadCop(c.id, c.certificateNumber)}>
                         XLSX
                       </Button>
                       <Button
                         type="button"
                         variant="secondary"
-                        className="!py-0.5 !px-2 !text-[10px]"
+                        className="!py-1 !px-2 !text-[11px]"
                         onClick={() =>
                           window.open(
                             `/api/finance/${projectId}/cop/${c.id}/print.html?token=${encodeURIComponent(token || "")}`,
@@ -741,20 +853,35 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                             "noopener"
                           )
                         }
-                        title="Sharnam letterhead print view — Ctrl+P → Save as PDF"
                       >
                         Print
                       </Button>
+                      {canWrite && c.status === "Draft" && (
+                        <Button type="button" className="!py-1 !px-2 !text-[11px]" disabled={busyId === c.id} onClick={() => void updateCopStatus(c.id, "Certified")}>
+                          Certify
+                        </Button>
+                      )}
+                      {canWrite && (c.status === "Certified" || c.status === "Approved") && (
+                        <Button type="button" className="!py-1 !px-2 !text-[11px]" disabled={busyId === c.id} onClick={() => void updateCopStatus(c.id, "Paid")}>
+                          Mark paid
+                        </Button>
+                      )}
                       {canWrite && (
-                        <Button type="button" variant="secondary" className="!py-0.5 !px-2 !text-[10px]" disabled={busyId === c.id} onClick={() => void saveCopToDms(c.id)}>
-                          {busyId === c.id ? "…" : "→ DMS"}
+                        <Button type="button" variant="ghost" className="!py-1 !px-2 !text-[11px]" disabled={busyId === c.id} onClick={() => void saveCopToDms(c.id)}>
+                          → DMS
                         </Button>
                       )}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!filteredCops.length && <tr><td colSpan={10} className="py-4 text-center text-steel-muted">No COPs for {activePkg?.label || "this project"} yet.</td></tr>}
+              {!filteredCops.length && (
+                <tr>
+                  <td colSpan={9} className="py-8 text-center text-steel-muted">
+                    No COPs yet — upload RA workbooks, then create COP from linked RA bill.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

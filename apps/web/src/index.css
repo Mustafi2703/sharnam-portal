@@ -10663,3 +10663,85 @@ html.is-standalone-form #root {
 .ncr-form-standalone__scroll {
   /* body scroll — no inner trap */
 }
+
+/* Finance RA bill — spaced register + SharePoint workbook slots */
+.register-sheet--finance .register-sheet__td,
+.register-sheet--finance .register-sheet__th,
+.register-sheet--finance-table th,
+.register-sheet--finance-table td {
+  padding: 0.625rem 0.75rem;
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+.ra-bill-files__stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(5.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.ra-bill-files__slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.375rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+  background: var(--color-paper);
+}
+
+.ra-bill-files__slot-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-steel-muted);
+}
+
+.ra-bill-files__open {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-brand);
+  text-align: left;
+  padding: 0.25rem 0;
+}
+
+.ra-bill-files__open:hover {
+  text-decoration: underline;
+}
+
+.ra-bill-files__fname {
+  font-size: 0.625rem;
+  color: var(--color-steel-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 7rem;
+}
+
+.ra-bill-files__docs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  align-items: center;
+}
+
+.ra-bill-files__doc-link {
+  font-size: 0.625rem;
+  color: var(--color-brand);
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ra-bill-files__msg {
+  font-size: 0.625rem;
+  color: var(--color-steel-muted);
+  margin-top: 0.25rem;
+}
+
+.ra-bill-files--compact .ra-bill-files__stages {
+  gap: 0.375rem;
+}
