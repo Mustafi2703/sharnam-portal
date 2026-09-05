@@ -602,6 +602,25 @@ crmComparativeRouter.post("/bid-packages/:id/recompute", requireRoles("admin", "
   }
 });
 
+/** Simulate vendor BOQ uploads from Comparative Statement R2 for every slot in a package. */
+crmComparativeRouter.post("/bid-packages/:id/seed-r2-boqs", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { seedBidPackageR2Boqs } = await import("../services/crmVendorBoqSeed.js");
+    const force = req.body?.force === true || String(req.query.force || "") === "1";
+    const result = await seedBidPackageR2Boqs(prisma, req.params.id, req.user!.id, { force });
+    await audit("crm.comparative.seed_r2_boqs", {
+      userId: req.user!.id,
+      entity: "CrmBidPackage",
+      entityId: req.params.id,
+      meta: { uploaded: result.uploaded, total: result.total },
+    });
+    const pkg = await loadBidPackage(req.params.id);
+    res.json({ ok: true, ...result, package: pkg });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "seed failed" });
+  }
+});
+
 crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: req.params.id },

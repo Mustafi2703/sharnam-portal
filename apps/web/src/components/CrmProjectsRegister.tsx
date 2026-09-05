@@ -189,6 +189,9 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit }: Props) {
                 <Link to={`/projects/${selected.id}`} className="text-sm font-semibold text-brand">
                   Open project tools →
                 </Link>
+                <Link to="/master" className="text-xs font-semibold text-brand">
+                  Master setup (directory · modules) →
+                </Link>
                 {canWrite && onEdit && (
                   <button type="button" className="text-xs text-steel-muted hover:text-brand text-left" onClick={() => onEdit(selected)}>
                     Edit client card

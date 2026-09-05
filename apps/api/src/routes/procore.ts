@@ -56,6 +56,13 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
   res.status(201).json(v);
 });
 
+/** Seed global bidder catalog — one vendor per R2 BOQ discipline package (idempotent). */
+vendorsRouter.post("/seed-bid-catalog", requireRoles("admin", "office"), async (_req: AuthedRequest, res) => {
+  const { seedBidVendorCatalog } = await import("../services/crmVendorCatalog.js");
+  const out = await seedBidVendorCatalog(prisma);
+  res.json({ ok: true, ...out });
+});
+
 vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data: req.body });
   res.json(v);

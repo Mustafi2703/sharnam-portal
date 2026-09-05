@@ -42,6 +42,15 @@ export default function DirectoryPage() {
   });
   const [msg, setMsg] = useState("");
   const canEdit = user?.role === "admin" || user?.role === "office";
+  const [userForm, setUserForm] = useState({
+    fullName: "",
+    email: "",
+    role: "site_employee",
+    phone: "",
+    department: "Site",
+    designation: "",
+    password: "Demo@1234",
+  });
 
   const activeTool = USER_TOOLS.find((t) => t.party === partyTab) || USER_TOOLS[0];
 
@@ -167,7 +176,10 @@ export default function DirectoryPage() {
         <ul className="divide-y divide-line text-sm">
           {staffForTab.map((m: any) => (
             <li key={m.id} className="py-2 flex justify-between gap-2">
-              <span>{m.user?.fullName || m.fullName}</span>
+              <div>
+                <span>{m.user?.fullName || m.fullName}</span>
+                {m.user?.email && <div className="text-[10px] font-mono text-steel-muted">{m.user.email}</div>}
+              </div>
               <Badge tone="neutral">{m.user?.role || m.role}</Badge>
             </li>
           ))}
@@ -262,6 +274,53 @@ export default function DirectoryPage() {
                 <option value="viewer">Viewer</option>
               </Select>
               <Button type="submit">Assign</Button>
+            </form>
+            <form
+              className="grid sm:grid-cols-2 gap-2 mt-4 pt-4 border-t border-line"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setMsg("");
+                try {
+                  const user = await api<{ id: string }>("/api/hrm/employees", {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify(userForm),
+                  });
+                  await api("/api/hrm/assign", {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify({ projectId: id, userId: user.id, role: userForm.role }),
+                  });
+                  setUserForm({
+                    fullName: "",
+                    email: "",
+                    role: activeTool.party === "Site" ? "site_employee" : activeTool.party === "Client" ? "client" : "office",
+                    phone: "",
+                    department: activeTool.label,
+                    designation: "",
+                    password: "Demo@1234",
+                  });
+                  setMsg("Login created and assigned to this project.");
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Create failed");
+                }
+              }}
+            >
+              <p className="sm:col-span-2 text-[10px] font-mono uppercase text-steel-muted">Create portal login (HR)</p>
+              <Input placeholder="Full name" value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} required />
+              <Input placeholder="Email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
+              <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
+                {(activeTool.roles.length ? activeTool.roles : ["office", "site_employee", "employee", "client", "vendor"]).map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </Select>
+              <Input placeholder="Phone" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
+              <Button type="submit" className="sm:col-span-2" variant="secondary">
+                Create user + assign
+              </Button>
             </form>
             <form
               className="flex flex-wrap gap-2 items-end mt-4 pt-4 border-t border-line"

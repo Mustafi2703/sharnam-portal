@@ -433,6 +433,12 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   } catch (err) {
     console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
   }
+  try {
+    const { seedStandardCommsMatrix } = await import("../services/commsMatrixSeed.js");
+    await seedStandardCommsMatrix(project.id);
+  } catch (err) {
+    console.error("Auto comms matrix seed failed:", err instanceof Error ? err.message : err);
+  }
   res.status(201).json(project);
 });
 
@@ -494,6 +500,87 @@ projectsRouter.patch("/:id/bid-disciplines", requireRoles("admin", "office"), as
     projectId: project.id,
     catalog: defaultDisciplines(),
     disciplines: parseDisciplinesJson(project.bidDisciplinesJson),
+  });
+});
+
+/** Master / CRM desk — project directory, vendors, and bid packages in one view. */
+projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async (req, res) => {
+  const projectId = req.params.id;
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      status: true,
+      clientName: true,
+      bidDisciplinesJson: true,
+      enabledModules: true,
+    },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+
+  const [members, projectVendors, bidPackages, lead] = await Promise.all([
+    prisma.projectMember.findMany({
+      where: { projectId },
+      include: {
+        user: { select: { id: true, fullName: true, email: true, role: true, phone: true, portal: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.projectVendor.findMany({
+      where: { projectId },
+      include: { vendor: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.crmBidPackage.findMany({
+      where: { projectId },
+      include: {
+        vendorBoqs: { select: { id: true, vendorLabel: true, discipline: true, fileName: true, uploadedAt: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.lead.findFirst({ where: { projectId }, select: { id: true, title: true, stage: true } }),
+  ]);
+
+  const { parseDisciplinesJson, defaultDisciplines } = await import("../services/comparativeStatement.js");
+
+  res.json({
+    project,
+    lead,
+    members: members.map((m) => ({
+      id: m.id,
+      role: m.role,
+      userId: m.userId,
+      fullName: m.user.fullName,
+      email: m.user.email,
+      portalRole: m.user.role,
+      phone: m.user.phone,
+      portal: m.user.portal,
+    })),
+    vendors: projectVendors.map((pv) => ({
+      id: pv.id,
+      vendorId: pv.vendorId,
+      tradeRole: pv.tradeRole,
+      name: pv.vendor.name,
+      partyType: pv.vendor.partyType,
+      email: pv.vendor.email,
+      trade: pv.vendor.trade,
+    })),
+    bidPackages: bidPackages.map((bp) => ({
+      id: bp.id,
+      title: bp.title,
+      status: bp.status,
+      revisionLabel: bp.revisionLabel,
+      awardedVendorId: bp.awardedVendorId,
+      disciplines: parseDisciplinesJson(bp.disciplinesJson),
+      uploadProgress: {
+        done: bp.vendorBoqs.filter((s) => s.fileName).length,
+        total: bp.vendorBoqs.length,
+      },
+      vendorBoqs: bp.vendorBoqs,
+    })),
+    bidDisciplines: parseDisciplinesJson(project.bidDisciplinesJson) || defaultDisciplines(),
   });
 });
 

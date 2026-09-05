@@ -105,7 +105,7 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
+    <div className="flex flex-col gap-2 min-w-0">
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
       <div className="shrink-0 space-y-4">

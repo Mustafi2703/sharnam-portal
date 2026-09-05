@@ -234,6 +234,10 @@ async function backfillDemoVendorIds(
 }
 
 export async function seedCrmComparative(prisma: PrismaClient) {
+  const { seedBidVendorCatalog } = await import("../apps/api/src/services/crmVendorCatalog.ts");
+  const vendorOut = await seedBidVendorCatalog(prisma);
+  console.log("CRM bid vendor catalog:", vendorOut);
+
   writeComparativeTemplateFile(path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"));
 
   const office = await prisma.user.findFirst({ where: { email: "office@sharnam.demo" } });

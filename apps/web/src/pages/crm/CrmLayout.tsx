@@ -26,7 +26,7 @@ export default function CrmLayout() {
 
   return (
     <div
-      className="crm-module flex flex-col gap-4 pb-8 min-w-0 w-full"
+      className="crm-module page-scroll-full flex flex-col gap-4 pb-8 min-w-0 w-full"
       style={
         {
           ["--module-accent" as string]: CRM_ACCENT,

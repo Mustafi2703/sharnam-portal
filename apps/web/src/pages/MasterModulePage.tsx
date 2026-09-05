@@ -7,6 +7,7 @@ import { ModuleIcon } from "../components/icons";
 import { MasterCostTemplatesPanel } from "../components/MasterCostTemplatesPanel";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import { SiteFinalIndexPanel } from "../components/SiteFinalIndexPanel";
+import { MasterProjectSetupPanel } from "../components/MasterProjectSetupPanel";
 import SharePointStatusPanel from "../components/SharePointStatusPanel";
 import {
   WORKSPACE_PROJECT_KEY,
@@ -29,10 +30,11 @@ type Project = {
 };
 
 type UserRow = { id: string; fullName: string; email: string; role: string; portal?: string };
-type VendorRow = { id: string; name: string; trade?: string };
+type VendorRow = { id: string; name: string; trade?: string; partyType?: string };
 
 const MASTER_TOOLS = [
   { id: "projects", label: "Projects" },
+  { id: "project-desk", label: "Project desk" },
   { id: "directory", label: "Directory (4 users)" },
   { id: "vendors", label: "Company vendors" },
   { id: "roster", label: "PMC roster" },
@@ -106,7 +108,6 @@ export default function MasterModulePage() {
       setMsg(`Project ${created.code} created — build Directory (4 users), then open Dashboard.`);
       setMasterTab("directory");
       await load();
-      await api(`/api/comms/matrix/${created.id}/seed-standard`, { method: "POST", token }).catch(() => null);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
     }
@@ -125,14 +126,19 @@ export default function MasterModulePage() {
   }
 
   return (
-    <div className="space-y-6 page-canvas-wide">
+    <div className="master-module page-scroll-full space-y-6 page-canvas-wide pb-8">
       <PageHeader
         eyebrow="Master module"
         title="Project setup desk"
-        subtitle="Master is a module with tools — like Drawings or Quality. Create projects, build the four-user directory, toggle modules, then open the ops dashboard."
+        subtitle="After CRM converts a lead, finish directory, module toggles, and global masters here — each project’s data stays scoped by project ID."
         icon={<ModuleIcon name="master" size={20} className="text-white" />}
         actions={
           <div className="flex flex-wrap gap-2">
+            <Link to="/crm/leads">
+              <Button type="button" variant="secondary">
+                CRM · Convert lead
+              </Button>
+            </Link>
             <Link to="/dashboard">
               <Button type="button" variant="secondary">
                 Ops dashboard
@@ -165,7 +171,7 @@ export default function MasterModulePage() {
       <WorkflowStrip
         active={projects.length ? (overview?.members?.length ? 2 : 1) : 0}
         steps={[
-          { label: "Create project", hint: "Code + client" },
+          { label: "CRM · Convert lead", hint: "Project + bids + team" },
           { label: "Directory", hint: "Office · Site · Client · Contractor" },
           { label: "Toggle modules", hint: "Per project" },
           { label: "Dashboard → modules", hint: "Pilot verify" },
@@ -177,9 +183,21 @@ export default function MasterModulePage() {
 
       {masterTab === "projects" && (
         <div className="space-y-6">
+          <Card className="!p-5 border-brand/30 bg-brand-soft/40">
+            <h2 className="font-display text-lg mb-1">Recommended: CRM → Convert lead</h2>
+            <p className="text-sm text-steel-muted mb-3">
+              Creates the delivery project with client card, team, vendors, bid disciplines, sheet pack, and Meeting/RFI matrix — then return here for directory and module toggles.
+            </p>
+            <Link to="/crm/leads">
+              <Button type="button">Open CRM leads →</Button>
+            </Link>
+          </Card>
+
           <Card>
-            <h2 className="font-display text-xl mb-1">Create project</h2>
-            <p className="text-sm text-steel-muted mb-4">Starts the spine — directory, matrix, drawings, and fills hang off it.</p>
+            <h2 className="font-display text-xl mb-1">Quick create (office)</h2>
+            <p className="text-sm text-steel-muted mb-4">
+              Bare project spine when you skip CRM — still auto-provisions sheets and comms matrix.
+            </p>
             <form className="grid sm:grid-cols-2 gap-3" onSubmit={createProject}>
               <Input placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
               <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -216,6 +234,9 @@ export default function MasterModulePage() {
                     <Badge tone="ok">{p.status}</Badge>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                    <Link to={`/projects/${p.id}`} className="font-semibold text-brand">
+                      Open project →
+                    </Link>
                     <button
                       type="button"
                       className="font-semibold text-brand"
@@ -226,12 +247,22 @@ export default function MasterModulePage() {
                     >
                       Edit directory
                     </button>
-                    <Link to={`/projects/${p.id}/drawings`} className="font-semibold text-ink/80 hover:text-brand">
-                      Drawings
-                    </Link>
-                    <Link to={`/dashboard`} className="font-semibold text-ink/80 hover:text-brand">
-                      Dashboard
-                    </Link>
+                    <button
+                      type="button"
+                      className="font-semibold text-ink/80 hover:text-brand"
+                      onClick={async () => {
+                        setMsg("");
+                        try {
+                          await api(`/api/projects/${p.id}/provision-sheets`, { method: "POST", token });
+                          setMsg(`Sheet pack re-provisioned for ${p.code}.`);
+                          await load();
+                        } catch (err) {
+                          setMsg(err instanceof Error ? err.message : "Provision failed");
+                        }
+                      }}
+                    >
+                      Re-provision sheets
+                    </button>
                   </div>
                   <div className="mt-3 font-mono text-[11px] text-steel-muted">
                     {p._count?.drawings ?? 0} drawings · {p._count?.members ?? 0} members
@@ -241,6 +272,38 @@ export default function MasterModulePage() {
             </div>
           </section>
         </div>
+      )}
+
+      {masterTab === "project-desk" && (
+        <Card>
+          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-display text-xl">Per-project desk</h2>
+              <p className="text-sm text-steel-muted mt-1">
+                Directory emails, project vendors, comparative bids, and simulated R2 BOQ uploads — after CRM convert.
+              </p>
+            </div>
+            <Select className="min-w-[220px]" value={dirProjectId} onChange={(e) => setDirProjectId(e.target.value)}>
+              <option value="">Select project…</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} — {p.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {dirProjectId ? (
+            <MasterProjectSetupPanel
+              projectId={dirProjectId}
+              token={token || ""}
+              allUsers={users}
+              allVendors={vendors}
+              onMsg={setDirMsg}
+            />
+          ) : (
+            <p className="text-sm text-steel-muted">Select a project to manage its directory, vendors, and bids.</p>
+          )}
+        </Card>
       )}
 
       {masterTab === "directory" && (
@@ -339,7 +402,12 @@ export default function MasterModulePage() {
                   <ul className="text-sm divide-y divide-line max-h-40 overflow-y-auto">
                     {(overview?.members || []).map((m: any) => (
                       <li key={m.id} className="py-2 flex justify-between gap-2">
-                        <span>{m.user?.fullName}</span>
+                        <div>
+                          <span>{m.user?.fullName}</span>
+                          {m.user?.email && (
+                            <div className="text-[10px] font-mono text-steel-muted">{m.user.email}</div>
+                          )}
+                        </div>
                         <span className="text-xs text-steel-muted">{m.role}</span>
                       </li>
                     ))}
@@ -513,24 +581,6 @@ export default function MasterModulePage() {
               hint: "Formula sheets · clone · export (advanced editing)",
               tag: "Sheets",
             },
-            {
-              to: dirProjectId ? `/projects/${dirProjectId}/drawings` : "/projects",
-              label: "GFC drawing register",
-              hint: "Per-project drawing types · R0–R5 · markup upload",
-              tag: "Project",
-            },
-            {
-              to: dirProjectId ? `/projects/${dirProjectId}/cost?tab=boq` : "/projects",
-              label: "Cost — BOQ per structure",
-              hint: "Upload BOQ per project structure · MB/BBS from global master",
-              tag: "Project",
-            },
-            {
-              to: dirProjectId ? `/projects/${dirProjectId}/dms` : "/projects",
-              label: "Document management",
-              hint: "ISO folder tree · SharePoint sync",
-              tag: "Project",
-            },
           ].map((c) => (
             <Link key={c.label} to={c.to} className="block">
               <Card className="h-full hover:border-brand/50 transition !p-5">
@@ -557,7 +607,25 @@ export default function MasterModulePage() {
             <Link to="/master/vendors">
               <Button type="button">Open company directory ({vendors.length} companies)</Button>
             </Link>
-            <Link to="/crm/bids/compare">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  const r = await api<{ created: number; updated: number; total: number }>("/api/vendors/seed-bid-catalog", {
+                    method: "POST",
+                    token,
+                  });
+                  setMsg(`Bid catalog seeded: ${r.created} new, ${r.updated} updated (${r.total} R2 discipline vendors).`);
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Seed failed");
+                }
+              }}
+            >
+              Seed R2 bid vendors
+            </Button>
+            <Link to="/crm/bids">
               <Button type="button" variant="secondary">CRM bid packages →</Button>
             </Link>
           </div>

@@ -22,7 +22,7 @@ export const CRM_SECTIONS: CrmSection[] = [
     tools: [
       { to: "leads", label: "Leads", subtitle: "Market register · filter · convert to SPDC delivery project." },
       { to: "proposals", label: "Proposals", subtitle: "PMC quotation register, status log, and letter export." },
-      { to: "projects", label: "Project setup", subtitle: "Spin up delivery project from a CRM win." },
+      { to: "projects", label: "Projects register", subtitle: "Delivery projects from converted leads — edit client card, open Master for setup." },
     ],
   },
   {

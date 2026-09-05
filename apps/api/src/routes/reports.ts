@@ -550,6 +550,12 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
   } catch (err) {
     console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
   }
+  try {
+    const { seedStandardCommsMatrix } = await import("../services/commsMatrixSeed.js");
+    await seedStandardCommsMatrix(project.id);
+  } catch (err) {
+    console.error("Auto comms matrix seed failed:", err instanceof Error ? err.message : err);
+  }
 
   res.status(201).json({ project, leadId: lead.id });
 });

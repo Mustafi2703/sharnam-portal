@@ -16,15 +16,16 @@ import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 
-/** Excel register sheets — fill viewport; dashboard / QI workflow excluded */
+  /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
   "sor-log",
   "site-observation",
   "site-instruction",
-  "checklist-summary",
   "car-register",
-  "cube-test",
 ]);
+
+/** Dashboard-style tabs — middle column scrolls (charts + tables + QAP-style sheets) */
+const QUALITY_PAGE_SCROLL_SHEETS = new Set<QualitySheetKey>(["", "qi", "checklist-summary", "cube-test"]);
 
 /** Quality module — Quality Dashboard.xlsx sheet tabs + QI / checklist fills → DPR */
 export default function InspectionsPage() {
@@ -134,6 +135,7 @@ export default function InspectionsPage() {
   const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
 
   const isQualityRegister = QUALITY_REGISTER_SHEETS.has(sheetKey);
+  const useQualityPageScroll = QUALITY_PAGE_SCROLL_SHEETS.has(sheetKey);
 
   async function submitNcrAdd(e: FormEvent) {
     e.preventDefault();
@@ -166,12 +168,14 @@ export default function InspectionsPage() {
   return (
     <div
       className={`min-w-0 ${
-        isQualityRegister
-          ? "page-stack--register spdc-register-page flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
-          : "space-y-4"
+        useQualityPageScroll
+          ? "quality-module page-scroll-full flex flex-col gap-4 pb-8 w-full"
+          : isQualityRegister
+            ? "quality-page spdc-register-page page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
+            : "quality-module space-y-4"
       }`}
     >
-      <div className={isQualityRegister ? "shrink-0 space-y-2" : undefined}>
+      <div className={isQualityRegister && !useQualityPageScroll ? "shrink-0 space-y-2" : undefined}>
       <PageHeader
         dense={isQualityRegister}
         eyebrow="Quality module"
@@ -282,7 +286,6 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "checklist-summary" && dash && (
-        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
         <QualityChecklistSummaryPanel
           projectId={id!}
           token={token}
@@ -290,11 +293,10 @@ export default function InspectionsPage() {
           canManage={canManage}
           onChanged={load}
         />
-        </div>
       )}
 
       {sheetKey === "car-register" && (
-        <>
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
           <div className="shrink-0">
         <ReferenceSheetToolbar
           sheetLabel="NCR / CAR register — Quality Dashboard"
@@ -476,7 +478,7 @@ export default function InspectionsPage() {
           <Input type="date" value={ncrEditForm.plannedClosure} onChange={(e) => setNcrEditForm({ ...ncrEditForm, plannedClosure: e.target.value })} />
           <Input type="date" value={ncrEditForm.actualClosure} onChange={(e) => setNcrEditForm({ ...ncrEditForm, actualClosure: e.target.value })} />
         </RegisterEntryModal>
-        </>
+        </div>
       )}
 
       {sheetKey === "site-observation" && id && (
@@ -504,7 +506,7 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "cube-test" && id && (
-        <>
+        <div className="cube-sheet-page flex flex-col gap-2 min-w-0">
           <div className="shrink-0">
           <ReferenceSheetToolbar
             sheetLabel="SPDC Cube Register"
@@ -541,7 +543,7 @@ export default function InspectionsPage() {
             sharePointUrl={cubeSharePointUrl}
           />
           </div>
-          <div className="cube-page__register register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="cube-page__register flex flex-col min-w-0">
             <CubeRegisterPanel
               projectId={id}
               token={token}
@@ -554,7 +556,7 @@ export default function InspectionsPage() {
               onProjectUpdated={load}
             />
           </div>
-        </>
+        </div>
       )}
 
       {sheetKey === "qi" && (
@@ -640,10 +642,10 @@ export default function InspectionsPage() {
         </Card>
       )}
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-4">
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b font-semibold bg-sand/40">Inspections</div>
-          <ul className="divide-y max-h-[55vh] overflow-y-auto">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-4 min-h-0">
+        <Card padding={false} className="min-h-0 flex flex-col">
+          <div className="px-4 py-3 border-b font-semibold bg-sand/40 shrink-0">Inspections</div>
+          <ul className="divide-y flex-1 min-h-0 max-h-[55vh] lg:max-h-[calc(100vh-14rem)] overflow-y-auto">
             {data?.inspections?.map((i: any) => (
               <button
                 key={i.id}
@@ -664,7 +666,7 @@ export default function InspectionsPage() {
           </ul>
         </Card>
 
-        <Card>
+        <Card className="min-h-0 overflow-y-auto lg:max-h-[calc(100vh-10rem)]">
           {!selected && <p className="text-sm text-steel-muted">Select an inspection</p>}
           {selected && (
             <div className="space-y-4">

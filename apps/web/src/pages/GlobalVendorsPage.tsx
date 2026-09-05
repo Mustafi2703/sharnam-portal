@@ -89,13 +89,32 @@ export default function GlobalVendorsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="master-module page-scroll-full space-y-6 max-w-6xl pb-8">
       <PageHeader
         eyebrow="Master module · company directory"
         title="Vendors & contractors"
         subtitle="Global bidder directory for CRM comparative packages — tag each company with R2 BOQ disciplines, then pick them when opening a bid package."
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={async () => {
+                setMsg("");
+                try {
+                  const r = await api<{ created: number; updated: number; total: number }>("/api/vendors/seed-bid-catalog", {
+                    method: "POST",
+                    token,
+                  });
+                  setMsg(`Loaded ${r.total} R2 discipline vendors (${r.created} new).`);
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Seed failed");
+                }
+              }}
+            >
+              Seed R2 vendors
+            </Button>
             <Link to="/crm/bids">
               <Button type="button" variant="secondary">Open bid packages →</Button>
             </Link>

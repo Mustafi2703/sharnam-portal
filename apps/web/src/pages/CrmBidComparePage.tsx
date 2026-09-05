@@ -180,6 +180,26 @@ export default function CrmBidComparePage() {
     }
   }
 
+  async function simulateR2Boqs() {
+    if (!selectedId) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ uploaded: number; total: number }>(`/api/crm/bid-packages/${selectedId}/seed-r2-boqs`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ force: true }),
+      });
+      setMsg(`Simulated vendor BOQ uploads from R2 template: ${r.uploaded}/${r.total} disciplines filled.`);
+      await loadDetail(selectedId);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Simulate failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (disciplines.length && !form.disciplineKeys.length) {
       setForm((f) => ({ ...f, disciplineKeys: disciplines.map((d) => d.key) }));
@@ -802,6 +822,11 @@ export default function CrmBidComparePage() {
                     <Button type="button" variant="secondary" disabled={busy} onClick={() => void recomputeComparative()}>
                       Refresh comparative
                     </Button>
+                    {canManage && (
+                      <Button type="button" variant="secondary" disabled={busy} onClick={() => void simulateR2Boqs()}>
+                        Simulate R2 BOQ uploads
+                      </Button>
+                    )}
                   </div>
                 </div>
 

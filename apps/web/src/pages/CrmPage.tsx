@@ -29,7 +29,6 @@ export default function CrmPage() {
     : location.pathname.includes("/projects")
       ? "projects"
       : "leads";
-  const [tab, setTab] = useState<"leads" | "projects" | "wizard">("leads");
   const [leads, setLeads] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -68,25 +67,10 @@ export default function CrmPage() {
     disciplineKeys: [] as string[],
   });
   const [bidDisciplines, setBidDisciplines] = useState<{ key: string; label: string }[]>([]);
-  const [wizardStep, setWizardStep] = useState(1);
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const [projectForm, setProjectForm] = useState({
-    code: "",
-    name: "",
-    ...emptyClient,
-  });
   const [editProject, setEditProject] = useState<any | null>(null);
-  const [memberUserId, setMemberUserId] = useState("");
-  const [memberRole, setMemberRole] = useState("site_employee");
-  const [vendorId, setVendorId] = useState("");
-  const [trade, setTrade] = useState("");
   const [leadsView, setLeadsView] = useState<LeadsView>("register");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (section === "projects") setTab("wizard");
-    else setTab("leads");
-  }, [section]);
 
   const canManage = user?.role === "admin" || user?.role === "office";
 
@@ -268,27 +252,14 @@ export default function CrmPage() {
 
     setConvertLead(null);
     if (bidPackageId) {
-      setMsg(`Project ${res.project.code} created with discipline-wise bid package (PEB, Civil, Fire, etc.).`);
+      setMsg(`Project ${res.project.code} created with sheets, comms matrix, and discipline-wise bid package.`);
       navigate(`/crm/bids/${bidPackageId}`);
     } else {
       setMsg(
-        `Project ${res.project.code} created. Select at least 2 contractors on convert to auto-open bids — or set up from Bid desk.`,
+        `Project ${res.project.code} created with sheets + comms matrix. Select 2+ contractors on convert to auto-open bids — or set up from Bid desk.`,
       );
       navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
     }
-    await load();
-  }
-
-  async function createProject(e: FormEvent) {
-    e.preventDefault();
-    const p = await api<any>("/api/projects", {
-      method: "POST",
-      token,
-      body: JSON.stringify(projectForm),
-    });
-    setCreatedId(p.id);
-    setMsg(`Project ${p.code} created.`);
-    setWizardStep(2);
     await load();
   }
 
@@ -640,115 +611,29 @@ export default function CrmPage() {
       )}
 
       {section === "projects" && (
-        <CrmProjectsRegister
-          projects={projects}
-          canWrite={canManage}
-          onEdit={(p) => setEditProject({ ...p })}
-        />
-      )}
-
-      {section === "projects" && canManage && tab === "wizard" && (
-        <Card>
-          <h3 className="font-semibold mb-3">Create new project</h3>
-          <div className="flex gap-2 mb-4 text-xs font-mono">
-            {[1, 2, 3].map((s) => (
-              <span key={s} className={`px-2 py-1 rounded ${wizardStep === s ? "bg-brand text-white" : "bg-sand"}`}>
-                Step {s}
-              </span>
-            ))}
-          </div>
-          {wizardStep === 1 && (
-            <form className="grid md:grid-cols-2 gap-3" onSubmit={createProject}>
-              <Input required placeholder="Project code" value={projectForm.code} onChange={(e) => setProjectForm({ ...projectForm, code: e.target.value })} />
-              <Input required placeholder="Project name" value={projectForm.name} onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })} />
-              <p className="md:col-span-2 text-[11px] font-mono uppercase text-steel-muted pt-1">Client information (CRM card)</p>
-              <Input placeholder="Client organisation" value={projectForm.clientName} onChange={(e) => setProjectForm({ ...projectForm, clientName: e.target.value })} />
-              <Input placeholder="Client contact name" value={projectForm.clientContactName} onChange={(e) => setProjectForm({ ...projectForm, clientContactName: e.target.value })} />
-              <Input placeholder="Client email" value={projectForm.clientEmail} onChange={(e) => setProjectForm({ ...projectForm, clientEmail: e.target.value })} />
-              <Input placeholder="Client phone" value={projectForm.clientPhone} onChange={(e) => setProjectForm({ ...projectForm, clientPhone: e.target.value })} />
-              <Input className="md:col-span-2" placeholder="Client address / site address" value={projectForm.clientAddress} onChange={(e) => setProjectForm({ ...projectForm, clientAddress: e.target.value })} />
-              <Input placeholder="GST / tax ID" value={projectForm.clientGst} onChange={(e) => setProjectForm({ ...projectForm, clientGst: e.target.value })} />
-              <Input placeholder="Site location" value={projectForm.location} onChange={(e) => setProjectForm({ ...projectForm, location: e.target.value })} />
-              <Input placeholder="Design consultant" value={projectForm.designConsultant} onChange={(e) => setProjectForm({ ...projectForm, designConsultant: e.target.value })} />
-              <Input placeholder="Main contractor" value={projectForm.contractorName} onChange={(e) => setProjectForm({ ...projectForm, contractorName: e.target.value })} />
-              <Button type="submit" className="md:col-span-2">
-                Create project → Assign team
-              </Button>
-            </form>
-          )}
-          {wizardStep === 2 && createdId && (
-            <div className="space-y-3">
-              <form
-                className="flex flex-wrap gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await api(`/api/projects/${createdId}/members`, {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify({ userId: memberUserId, role: memberRole }),
-                  });
-                  setMsg("Employee assigned.");
-                  await load();
-                }}
-              >
-                <Select required className="min-w-[220px]" value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}>
-                  <option value="">Select user</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.fullName || u.name} ({u.role})
-                    </option>
-                  ))}
-                </Select>
-                <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                  {["office", "site_employee", "employee", "client", "vendor", "project_manager"].map((r) => (
-                    <option key={r}>{r}</option>
-                  ))}
-                </Select>
-                <Button type="submit">Assign</Button>
-                <Button type="button" variant="secondary" onClick={() => setWizardStep(3)}>
-                  Next: vendors →
+        <>
+          <Card className="!p-5 border-brand/30 bg-brand-soft/40 shrink-0">
+            <h3 className="font-display text-lg mb-1">Create projects from leads</h3>
+            <p className="text-sm text-steel-muted mb-3">
+              Use <strong>Leads → Convert</strong> to spin up a delivery project with client card, team, vendors, bid package, sheets, and comms matrix. This register is read-only for client cards — finish directory and modules in Master setup.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/crm/leads">
+                <Button type="button">Go to leads →</Button>
+              </Link>
+              <Link to="/master">
+                <Button type="button" variant="secondary">
+                  Master setup →
                 </Button>
-              </form>
-            </div>
-          )}
-          {wizardStep === 3 && createdId && (
-            <div className="space-y-3">
-              <form
-                className="flex flex-wrap gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await api(`/api/vendors/project/${createdId}/assign`, {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify({ vendorId, tradeRole: trade }),
-                  });
-                  setMsg("Vendor assigned.");
-                }}
-              >
-                <Select required className="min-w-[220px]" value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
-                  <option value="">Select vendor</option>
-                  {vendors.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </Select>
-                <Input placeholder="Trade" value={trade} onChange={(e) => setTrade(e.target.value)} />
-                <Button type="submit">Assign vendor</Button>
-              </form>
-              <p className="text-xs text-steel-muted">
-                After assign, manage the full directory (employees + vendors) in{" "}
-                <Link to="/hrm" className="text-brand font-semibold">
-                  HR / Directory
-                </Link>{" "}
-                or the project Directory tool.
-              </p>
-              <Link to={`/projects/${createdId}`} className="inline-flex text-sm font-semibold text-brand">
-                Open project tools →
               </Link>
             </div>
-          )}
-        </Card>
+          </Card>
+          <CrmProjectsRegister
+            projects={projects}
+            canWrite={canManage}
+            onEdit={(p) => setEditProject({ ...p })}
+          />
+        </>
       )}
 
       {editProject && (
