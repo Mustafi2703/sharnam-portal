@@ -4,7 +4,7 @@
 import fs from "fs";
 import * as XLSX from "xlsx";
 import type { PrismaClient } from "@prisma/client";
-import { evaluateAllRows, type SheetCell } from "@sharnam/shared";
+import { evaluateAllRows, normalizeCell, type SheetCell } from "@sharnam/shared";
 import {
   COMPARATIVE_DISCIPLINES,
   importR2WorkbookFromFile,
@@ -59,7 +59,7 @@ export async function seedBidPackageR2Boqs(
   prisma: PrismaClient,
   bidPackageId: string,
   officeUserId: string,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; slotIds?: string[] }
 ) {
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: bidPackageId },
@@ -78,7 +78,11 @@ export async function seedBidPackageR2Boqs(
 
   let uploaded = 0;
   let slotIndex = 0;
-  for (const slot of pkg.vendorBoqs) {
+  const slotsToProcess = opts?.slotIds?.length
+    ? pkg.vendorBoqs.filter((s) => opts.slotIds!.includes(s.id))
+    : pkg.vendorBoqs;
+
+  for (const slot of slotsToProcess) {
     const existing = await prisma.crmVendorBoq.findUnique({ where: { id: slot.id } });
     if (!opts?.force && existing?.fileName && existing.sheetId) {
       slotIndex++;
@@ -154,4 +158,42 @@ export async function seedBidPackageR2Boqs(
 
   const recomputed = await recomputeBidPackageComparative(prisma, bidPackageId);
   return { uploaded, total: pkg.vendorBoqs.length, recomputed };
+}
+
+/** Ensure a vendor BOQ slot has a linked custom sheet (create from R2 if missing). */
+export async function ensureVendorBoqSheet(
+  prisma: PrismaClient,
+  bidPackageId: string,
+  slotId: string,
+  officeUserId: string
+) {
+  const slot = await prisma.crmVendorBoq.findUnique({ where: { id: slotId } });
+  if (!slot || slot.bidPackageId !== bidPackageId) throw new Error("Vendor slot not found");
+
+  if (slot.sheetId) {
+    const existing = await prisma.customSheet.findUnique({ where: { id: slot.sheetId } });
+    if (existing) {
+      const headers = JSON.parse(existing.headersJson || "[]") as string[];
+      const raw = JSON.parse(existing.rowsJson || "[]") as unknown[][];
+      const rows = evaluateAllRows(
+        raw.map((row) => (Array.isArray(row) ? row.map((cell) => normalizeCell(cell)) : []))
+      );
+      return { sheetId: existing.id, headers, rows, created: false };
+    }
+  }
+
+  await seedBidPackageR2Boqs(prisma, bidPackageId, officeUserId, { force: true, slotIds: [slotId] });
+
+  const refreshed = await prisma.crmVendorBoq.findUnique({ where: { id: slotId } });
+  if (!refreshed?.sheetId) throw new Error("Could not create BOQ sheet for this slot");
+
+  const sheet = await prisma.customSheet.findUnique({ where: { id: refreshed.sheetId } });
+  if (!sheet) throw new Error("BOQ sheet missing after create");
+
+  const headers = JSON.parse(sheet.headersJson || "[]") as string[];
+  const raw = JSON.parse(sheet.rowsJson || "[]") as unknown[][];
+  const rows = evaluateAllRows(
+    raw.map((row) => (Array.isArray(row) ? row.map((cell) => normalizeCell(cell)) : []))
+  );
+  return { sheetId: sheet.id, headers, rows, created: true };
 }

@@ -43,18 +43,26 @@ export default function GlobalVendorsPage() {
   }, [token, filter]);
 
   const [filterDiscipline, setFilterDiscipline] = useState<string>("All");
+  const [listSearch, setListSearch] = useState("");
   const bidDisciplineKeys = useMemo(() => parseVendorBidDisciplines(form.trade), [form.trade]);
 
   const filteredRows = useMemo(() => {
-    if (filterDiscipline === "All") return rows;
-    return rows.filter((v) => {
-      const keys = parseVendorBidDisciplines(v.trade);
-      if (keys.length) return keys.includes(filterDiscipline);
-      const trade = (v.trade || "").toLowerCase();
-      const def = CRM_BID_DISCIPLINES.find((d) => d.key === filterDiscipline);
-      return def?.tradeHints.some((h) => trade.includes(h));
-    });
-  }, [rows, filterDiscipline]);
+    let list = rows;
+    if (filterDiscipline !== "All") {
+      list = list.filter((v) => {
+        const keys = parseVendorBidDisciplines(v.trade);
+        if (keys.length) return keys.includes(filterDiscipline);
+        const trade = (v.trade || "").toLowerCase();
+        const def = CRM_BID_DISCIPLINES.find((d) => d.key === filterDiscipline);
+        return def?.tradeHints.some((h) => trade.includes(h));
+      });
+    }
+    const needle = listSearch.trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter((v) =>
+      [v.name, v.trade, v.email, v.city, v.partyType].filter(Boolean).join(" ").toLowerCase().includes(needle)
+    );
+  }, [rows, filterDiscipline, listSearch]);
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
 
@@ -169,20 +177,28 @@ export default function GlobalVendorsPage() {
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
         <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm flex justify-between">
-            <span>Company directory ({filteredRows.length})</span>
-            {canEdit && (
-              <button
-                type="button"
-                className="text-brand text-xs font-semibold"
-                onClick={() => {
-                  setSelectedId(null);
-                  setForm(EMPTY_VENDOR_FORM);
-                }}
-              >
-                + New company
-              </button>
-            )}
+          <div className="px-4 py-3 border-b border-line bg-sand/40 space-y-2">
+            <div className="font-semibold text-sm flex justify-between">
+              <span>Company directory ({filteredRows.length})</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  className="text-brand text-xs font-semibold"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setForm(EMPTY_VENDOR_FORM);
+                  }}
+                >
+                  + New company
+                </button>
+              )}
+            </div>
+            <Input
+              placeholder="Search company name, trade, email…"
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              className="!text-sm"
+            />
           </div>
           <ul className="divide-y divide-line max-h-[32rem] overflow-y-auto">
             {filteredRows.map((v) => (

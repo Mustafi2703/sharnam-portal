@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from "../components/ui";
+import { SearchableSelect } from "../components/SearchableSelect";
 import { ModuleIcon } from "../components/icons";
 import { MasterCostTemplatesPanel } from "../components/MasterCostTemplatesPanel";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
@@ -375,19 +376,19 @@ export default function MasterModulePage() {
                       await load();
                     }}
                   >
-                    <Select
+                    <SearchableSelect
                       className="min-w-[180px] flex-1"
+                      options={users.map((u) => ({
+                        value: u.id,
+                        label: u.fullName,
+                        sublabel: `${u.role} · ${u.email}`,
+                      }))}
                       value={memberForm.userId}
-                      onChange={(e) => setMemberForm({ ...memberForm, userId: e.target.value })}
+                      onChange={(userId) => setMemberForm({ ...memberForm, userId })}
+                      placeholder="Select user…"
+                      searchPlaceholder="Search name or email…"
                       required
-                    >
-                      <option value="">Select user…</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.fullName} · {u.role}
-                        </option>
-                      ))}
-                    </Select>
+                    />
                     <Select
                       value={memberForm.role}
                       onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}

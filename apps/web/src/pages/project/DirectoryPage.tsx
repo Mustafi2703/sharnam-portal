@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
+import { SearchableSelect } from "../../components/SearchableSelect";
 
 const USER_TOOLS: {
   key: string;
@@ -257,16 +258,21 @@ export default function DirectoryPage() {
                 await load();
               }}
             >
-              <Select className="min-w-[180px] flex-1" value={userId} onChange={(e) => setUserId(e.target.value)} required>
-                <option value="">Select person</option>
-                {users
+              <SearchableSelect
+                className="min-w-[180px] flex-1"
+                options={users
                   .filter((u) => !activeTool.roles.length || activeTool.roles.includes(u.role))
-                  .map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.fullName} · {u.role}
-                    </option>
-                  ))}
-              </Select>
+                  .map((u) => ({
+                    value: u.id,
+                    label: u.fullName,
+                    sublabel: `${u.role} · ${u.email}`,
+                  }))}
+                value={userId}
+                onChange={setUserId}
+                placeholder="Select person"
+                searchPlaceholder="Search name or email…"
+                required
+              />
               <Select value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="member">Member</option>
                 <option value="project_manager">Project Manager</option>

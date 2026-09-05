@@ -8,6 +8,7 @@ import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
 import { CrmBidVendorMatrix } from "../components/CrmBidVendorMatrix";
 import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
+import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
 
 type Discipline = { key: string; label: string; sheetName: string };
@@ -92,6 +93,8 @@ export default function CrmBidComparePage() {
   const [deskFilter, setDeskFilter] = useState<"converted" | "all">("converted");
   const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
   const [showSetup, setShowSetup] = useState(true);
+  const [setupStep, setSetupStep] = useState(1);
+  const [projectSearch, setProjectSearch] = useState("");
   const [dueDate, setDueDate] = useState("");
 
   const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
@@ -216,9 +219,21 @@ export default function CrmBidComparePage() {
       title: f.title || (project ? `${project.name} — comparative bid` : f.title),
     }));
     if (setupProjectId && !routePkgId) {
-      setMsg("New project linked — select contractors and disciplines, then create the bid package.");
+      setShowSetup(true);
+      setSetupStep(2);
+      setMsg("Step 2 — pick discipline BOQ sheets, then select bidders and create the package.");
     }
   }, [setupProjectId, setupLeadId, projects, routePkgId]);
+
+  const filteredProjects = useMemo(() => {
+    const needle = projectSearch.trim().toLowerCase();
+    const pool =
+      deskFilter === "all"
+        ? projects
+        : [...convertedProjects, ...projects.filter((p) => !convertedProjectIds.has(p.id))];
+    if (!needle) return pool;
+    return pool.filter((p) => `${p.code} ${p.name}`.toLowerCase().includes(needle));
+  }, [projectSearch, projects, convertedProjects, convertedProjectIds, deskFilter]);
 
   useEffect(() => {
     if (!form.projectId || !canManage) return;
@@ -234,6 +249,17 @@ export default function CrmBidComparePage() {
   const allBidders = useMemo(
     () => vendors.filter((v) => vendorMatchesBidDisciplines(v, form.disciplineKeys)),
     [vendors, form.disciplineKeys],
+  );
+
+  const bidderItems = useMemo(
+    () =>
+      allBidders.map((v) => ({
+        id: v.id,
+        label: v.name,
+        sublabel: v.partyType,
+        trade: v.trade,
+      })),
+    [allBidders]
   );
 
   const detailDisciplines = detail?.disciplines || disciplines;
@@ -548,7 +574,9 @@ export default function CrmBidComparePage() {
                       leadId: l.id,
                       title: f.title || `${l.title} — comparative bid`,
                     }));
-                    setMsg(`Select contractors and disciplines for ${l.title}, then create the bid package.`);
+                    setShowSetup(true);
+                    setSetupStep(1);
+                    setMsg(`Step 1 — confirm project for ${l.title}, then pick disciplines and bidders.`);
                   }}
                 >
                   Setup bids →
@@ -586,145 +614,174 @@ export default function CrmBidComparePage() {
           </div>
           {showSetup && (
           <Card>
-            <h3 className="font-semibold text-sm mb-1">1 · Project & package</h3>
-            <p className="text-xs text-steel-muted mb-3">Comparative Statement R2 — summary + discipline BOQ tabs (CCV, Electrical Lab, Admin, …)</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {[
+                { n: 1, label: "Project" },
+                { n: 2, label: "Disciplines" },
+                { n: 3, label: "Bidders" },
+                { n: 4, label: "Create" },
+              ].map(({ n, label }) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSetupStep(n)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold border ${
+                    setupStep === n ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted"
+                  }`}
+                >
+                  {n}. {label}
+                </button>
+              ))}
+            </div>
             <form className="space-y-3" onSubmit={createPackage}>
-              <Input
-                required
-                placeholder="Package title (e.g. Civil & structural works)"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-              />
-              <Select
-                required
-                value={form.projectId}
-                onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-              >
-                <option value="">Select project (required for SharePoint + vendor portal)</option>
-                {convertedProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} · {p.name}
-                  </option>
-                ))}
-                {deskFilter === "all" &&
-                  projects
-                    .filter((p) => !convertedProjectIds.has(p.id))
-                    .map((p) => (
+              {setupStep === 1 && (
+                <>
+                  <h3 className="font-semibold text-sm">1 · Select delivery project</h3>
+                  <p className="text-xs text-steel-muted">After CRM convert — link comparative R2 package to this project.</p>
+                  <Input
+                    placeholder="Search project code or name…"
+                    value={projectSearch}
+                    onChange={(e) => setProjectSearch(e.target.value)}
+                  />
+                  <Select
+                    required
+                    value={form.projectId}
+                    onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+                  >
+                    <option value="">Select project (required)</option>
+                    {filteredProjects.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.code} · {p.name} (non-CRM)
+                        {p.code} · {p.name}
+                        {!convertedProjectIds.has(p.id) ? " (non-CRM)" : ""}
                       </option>
                     ))}
-              </Select>
-              {form.projectId && (
-                <Button type="button" variant="secondary" className="!text-xs" onClick={() => void saveProjectDisciplines()}>
-                  Save discipline list as project default
-                </Button>
-              )}
-              <Select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })}>
-                <option value="">Link to lead (optional)</option>
-                {convertedLeads.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.title}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                placeholder="Revision"
-                value={form.revisionLabel}
-                onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
-              />
-              <Input
-                type="date"
-                placeholder="Bid due date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
-              <div>
-                <p className="text-xs font-mono uppercase text-steel-muted mb-1">
-                  2 · Discipline BOQ sheets ({form.disciplineKeys.length} selected)
-                </p>
-                <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1 mb-2">
-                  {disciplines.map((d) => (
-                    <label key={d.key} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.disciplineKeys.includes(d.key)}
-                        onChange={(e) => {
-                          setForm({
-                            ...form,
-                            disciplineKeys: e.target.checked
-                              ? [...form.disciplineKeys, d.key]
-                              : form.disciplineKeys.filter((x) => x !== d.key),
-                          });
-                        }}
-                      />
-                      <span>{d.label}</span>
-                      <span className="text-[10px] text-steel-muted font-mono">{d.sheetName}</span>
-                    </label>
-                  ))}
-                  {form.customDisciplines.map((d) => (
-                    <label key={d.key} className="flex items-center gap-2 text-sm text-brand-dark">
-                      <input type="checkbox" checked readOnly />
-                      <span>{d.label}</span>
-                      <span className="text-[10px] font-mono">custom · {d.sheetName}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
+                  </Select>
                   <Input
-                    placeholder="Custom discipline label"
-                    value={customDiscLabel}
-                    onChange={(e) => setCustomDiscLabel(e.target.value)}
-                    className="!text-sm flex-1 min-w-[140px]"
+                    required
+                    placeholder="Package title (e.g. Civil & structural works)"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
                   />
-                  <Input
-                    placeholder="Excel sheet name (optional)"
-                    value={customDiscSheet}
-                    onChange={(e) => setCustomDiscSheet(e.target.value)}
-                    className="!text-sm flex-1 min-w-[140px]"
-                  />
-                  <Button type="button" variant="secondary" className="!text-xs" onClick={addCustomDiscipline}>
-                    + Add discipline
+                  <Select value={form.leadId} onChange={(e) => setForm({ ...form, leadId: e.target.value })}>
+                    <option value="">Link to lead (optional)</option>
+                    {convertedLeads.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.title}
+                      </option>
+                    ))}
+                  </Select>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Revision"
+                      value={form.revisionLabel}
+                      onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
+                    />
+                    <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                  </div>
+                  <Button type="button" onClick={() => setSetupStep(2)} disabled={!form.projectId || !form.title.trim()}>
+                    Next: disciplines →
                   </Button>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-mono uppercase text-steel-muted mb-1">3 · Bidders to compare (min 2)</p>
-                <p className="text-[10px] text-steel-muted mb-1">Contractors and vendors are both bidders — same R2 comparative flow.</p>
-                <div className="max-h-44 overflow-y-auto border rounded-xl p-2 space-y-1">
-                  {allBidders.map((v) => (
-                    <label key={v.id} className="flex items-center gap-2 text-sm py-0.5">
-                      <input
-                        type="checkbox"
-                        checked={form.vendorIds.includes(v.id)}
-                        onChange={(e) => {
-                          setForm({
-                            ...form,
-                            vendorIds: e.target.checked
-                              ? [...form.vendorIds, v.id]
-                              : form.vendorIds.filter((x) => x !== v.id),
-                          });
-                        }}
-                      />
-                      <span>{v.name}</span>
-                      {v.trade && <span className="text-[10px] text-steel-muted">· {v.trade}</span>}
-                      {v.partyType && v.partyType !== "Vendor" && (
-                        <span className="text-[10px] text-steel-muted">· {v.partyType}</span>
-                      )}
-                    </label>
-                  ))}
-                  {!allBidders.length && (
-                    <p className="text-xs text-steel-muted">No bidders tagged for selected disciplines — add in Master → Vendors.</p>
+                </>
+              )}
+
+              {setupStep === 2 && (
+                <>
+                  <h3 className="font-semibold text-sm">2 · Discipline BOQ sheets (R2)</h3>
+                  <p className="text-xs text-steel-muted mb-1">Each discipline = one tab from Comparative Statement R2.</p>
+                  {form.projectId && (
+                    <Button type="button" variant="secondary" className="!text-xs mb-2" onClick={() => void saveProjectDisciplines()}>
+                      Save as project default
+                    </Button>
                   )}
-                </div>
-              </div>
-              <p className="text-[11px] text-steel-muted">
-                Creates {form.disciplineKeys.length || 0} discipline slot(s) per bidder from{" "}
-                <strong>Comparative Statement - R2.xlsx</strong>. After create, click <strong>Open bid & notify</strong> to email bidders.
-              </p>
-              <Button type="submit" disabled={busy}>
-                {busy ? "Creating…" : "Create draft package"}
-              </Button>
+                  <div className="max-h-40 overflow-y-auto border rounded-xl p-2 space-y-1">
+                    {disciplines.map((d) => (
+                      <label key={d.key} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={form.disciplineKeys.includes(d.key)}
+                          onChange={(e) => {
+                            setForm({
+                              ...form,
+                              disciplineKeys: e.target.checked
+                                ? [...form.disciplineKeys, d.key]
+                                : form.disciplineKeys.filter((x) => x !== d.key),
+                            });
+                          }}
+                        />
+                        <span>{d.label}</span>
+                        <span className="text-[10px] text-steel-muted font-mono">{d.sheetName}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="secondary" onClick={() => setSetupStep(1)}>
+                      ← Back
+                    </Button>
+                    <Button type="button" onClick={() => setSetupStep(3)} disabled={!form.disciplineKeys.length}>
+                      Next: bidders →
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {setupStep === 3 && (
+                <>
+                  <h3 className="font-semibold text-sm">3 · Select bidders (min 2)</h3>
+                  <p className="text-[10px] text-steel-muted">
+                    Filtered by discipline tags — vendors upload BOQs at <strong>/login/vendor</strong> → My bids.
+                  </p>
+                  <SearchableCheckboxList
+                    items={bidderItems}
+                    selectedIds={form.vendorIds}
+                    onChange={(vendorIds) => setForm({ ...form, vendorIds })}
+                    placeholder="Search contractor name, trade, discipline…"
+                    emptyMessage="No bidders match — tag disciplines in Master → Vendors or CRM directory."
+                  />
+                  <div className="flex gap-2">
+                    <Button type="button" variant="secondary" onClick={() => setSetupStep(2)}>
+                      ← Back
+                    </Button>
+                    <Button type="button" onClick={() => setSetupStep(4)} disabled={form.vendorIds.length < 2}>
+                      Next: review →
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {setupStep === 4 && (
+                <>
+                  <h3 className="font-semibold text-sm">4 · Review & create</h3>
+                  <ul className="text-sm space-y-1 border rounded-xl p-3 bg-sand/30">
+                    <li>
+                      <strong>Project:</strong> {projects.find((p) => p.id === form.projectId)?.code || "—"}
+                    </li>
+                    <li>
+                      <strong>Title:</strong> {form.title}
+                    </li>
+                    <li>
+                      <strong>Disciplines:</strong> {form.disciplineKeys.length} BOQ sheet(s)
+                    </li>
+                    <li>
+                      <strong>Bidders:</strong> {form.vendorIds.length} —{" "}
+                      {form.vendorIds.map((id) => vendors.find((v) => v.id === id)?.name).filter(Boolean).join(", ")}
+                    </li>
+                    <li>
+                      <strong>Slots:</strong> {form.disciplineKeys.length * form.vendorIds.length} vendor × discipline uploads
+                    </li>
+                  </ul>
+                  <p className="text-[11px] text-steel-muted">
+                    After create: open bid → notify vendors → they fill BOQs in portal or you simulate R2 uploads.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="secondary" onClick={() => setSetupStep(3)}>
+                      ← Back
+                    </Button>
+                    <Button type="submit" disabled={busy || form.vendorIds.length < 2}>
+                      {busy ? "Creating…" : "Create & open package"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </form>
           </Card>
           )}
@@ -1053,7 +1110,7 @@ export default function CrmBidComparePage() {
                               )}
                             </div>
                             <div className="flex gap-2 shrink-0">
-                              {slot?.sheetId && (
+                              {slot && (
                                 <Button
                                   variant="secondary"
                                   className="!text-xs !py-1"
@@ -1084,10 +1141,9 @@ export default function CrmBidComparePage() {
                 </div>
               </Card>
 
-              {uploadSlot && selectedId && uploadSlot.sheetId && (
+              {uploadSlot && selectedId && (
                 <CrmBidBoqRegister
                   token={token!}
-                  sheetId={uploadSlot.sheetId}
                   bidPackageId={selectedId}
                   slotId={uploadSlot.id}
                   title={`${uploadSlot.vendorLabel} — ${disciplineLabel(disciplines, uploadSlot.discipline)}`}

@@ -533,6 +533,40 @@ crmComparativeRouter.post(
   }
 );
 
+/** Vendor / office — load BOQ sheet for a slot (auto-creates from R2 if missing). */
+crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/sheet", async (req: AuthedRequest, res) => {
+  try {
+    const pkg = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
+    if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+    const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
+    if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
+
+    const { ensureVendorBoqSheet } = await import("../services/crmVendorBoqSeed.js");
+    const out = await ensureVendorBoqSheet(prisma, req.params.id, req.params.slotId, req.user!.id);
+
+    const role = req.user!.role;
+    const isOffice = role === "admin" || role === "office" || role === "employee";
+    if (!isOffice) {
+      if (role !== "vendor") return res.status(403).json({ error: "Forbidden" });
+      const canEdit = await vendorCanEditBoqSheet(prisma, role, req.user!.email, out.sheetId);
+      if (!canEdit) return res.status(403).json({ error: "Forbidden" });
+    }
+
+    res.json({
+      sheetId: out.sheetId,
+      headers: out.headers,
+      rows: out.rows,
+      created: out.created,
+      canWrite:
+        isOffice ||
+        (await vendorCanEditBoqSheet(prisma, role, req.user!.email, out.sheetId)),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "load failed" });
+  }
+});
+
 /** Vendor / office — save in-portal BOQ edits (rates & amounts on R2 template). */
 crmComparativeRouter.put(
   "/bid-packages/:id/vendor-boq/:slotId/sheet",

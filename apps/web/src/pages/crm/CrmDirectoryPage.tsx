@@ -73,6 +73,7 @@ function DirectoryCompaniesPanel({
   const [form, setForm] = useState<VendorFormState>({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
   const [msg, setMsg] = useState("");
   const [loginMsg, setLoginMsg] = useState("");
+  const [listSearch, setListSearch] = useState("");
 
   const load = useCallback(async () => {
     const list = await api<VendorRow[]>("/api/vendors", { token });
@@ -84,6 +85,14 @@ function DirectoryCompaniesPanel({
   }, [load]);
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
+
+  const visibleRows = useMemo(() => {
+    const needle = listSearch.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((r) =>
+      [r.name, r.trade, r.email, r.partyType, r.city].filter(Boolean).join(" ").toLowerCase().includes(needle)
+    );
+  }, [rows, listSearch]);
 
   useEffect(() => {
     if (selected) setForm(vendorToForm(selected));
@@ -142,16 +151,24 @@ function DirectoryCompaniesPanel({
   return (
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
       <Card padding={false}>
-        <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm flex justify-between">
-          <span>{rows.length} companies</span>
-          {canEdit && (
-            <button type="button" className="text-xs text-brand font-semibold" onClick={() => setSelectedId(null)}>
-              + New
-            </button>
-          )}
+        <div className="px-4 py-3 border-b bg-sand/40 space-y-2">
+          <div className="font-semibold text-sm flex justify-between">
+            <span>{visibleRows.length} companies</span>
+            {canEdit && (
+              <button type="button" className="text-xs text-brand font-semibold" onClick={() => setSelectedId(null)}>
+                + New
+              </button>
+            )}
+          </div>
+          <Input
+            placeholder="Search name, trade, email…"
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            className="!text-sm"
+          />
         </div>
         <ul className="divide-y max-h-[420px] overflow-y-auto text-sm">
-          {rows.map((r) => (
+          {visibleRows.map((r) => (
             <li key={r.id}>
               <button
                 type="button"
@@ -167,7 +184,7 @@ function DirectoryCompaniesPanel({
               </button>
             </li>
           ))}
-          {!rows.length && <li className="px-4 py-8 text-center text-steel-muted">No records yet.</li>}
+          {!visibleRows.length && <li className="px-4 py-8 text-center text-steel-muted">No records yet.</li>}
         </ul>
       </Card>
 
@@ -186,9 +203,10 @@ function DirectoryCompaniesPanel({
           <Input placeholder="Email (for portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
           <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-          {tab === "vendors" && (
+          {(tab === "vendors" || meta.partyTypes.includes("Contractor")) && (
             <div>
-              <p className="text-xs font-semibold uppercase text-steel-muted mb-2">R2 bid disciplines</p>
+              <p className="text-xs font-semibold uppercase text-steel-muted mb-2">Vendor type & R2 bid disciplines</p>
+              <p className="text-[10px] text-steel-muted mb-2">Tag civil, electrical, plumbing packages — used when picking bidders on convert.</p>
               <div className="flex flex-wrap gap-2">
                 {CRM_BID_DISCIPLINES.map((d) => (
                   <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
@@ -231,8 +249,21 @@ function DirectoryCompaniesPanel({
 
 function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdit: boolean }) {
   const [people, setPeople] = useState<PersonRow[]>([]);
+  const [peopleSearch, setPeopleSearch] = useState("");
   const [form, setForm] = useState({ fullName: "", email: "", role: "vendor", phone: "" });
   const [msg, setMsg] = useState("");
+
+  const visiblePeople = useMemo(() => {
+    const needle = peopleSearch.trim().toLowerCase();
+    if (!needle) return people;
+    return people.filter((p) =>
+      [p.fullName, p.email, p.role, ...(p.memberships?.map((m) => m.project.code) || [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(needle)
+    );
+  }, [people, peopleSearch]);
 
   const load = useCallback(async () => {
     const rows = await api<PersonRow[]>("/api/hrm/employees", { token }).catch(() => []);
@@ -260,9 +291,17 @@ function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdi
   return (
     <div className="grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4">
       <Card padding={false}>
-        <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">{people.length} portal accounts</div>
+        <div className="px-4 py-3 border-b bg-sand/40 space-y-2">
+          <div className="font-semibold text-sm">{visiblePeople.length} portal accounts</div>
+          <Input
+            placeholder="Search name, email, role…"
+            value={peopleSearch}
+            onChange={(e) => setPeopleSearch(e.target.value)}
+            className="!text-sm"
+          />
+        </div>
         <ul className="divide-y max-h-[460px] overflow-y-auto text-sm">
-          {people.map((p) => (
+          {visiblePeople.map((p) => (
             <li key={p.id} className="px-4 py-3 flex flex-wrap justify-between gap-2">
               <div>
                 <div className="font-medium">{p.fullName}</div>

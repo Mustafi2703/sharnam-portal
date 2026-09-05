@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { CrmLeadsRegister } from "../components/CrmLeadsRegister";
 import { CrmProposalsRegister } from "../components/CrmProposalsRegister";
 import { CrmProjectsRegister } from "../components/CrmProjectsRegister";
+import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { RegisterSheetFrame } from "../components/RegisterSheetFrame";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import {
@@ -172,6 +173,28 @@ export default function CrmPage() {
   const convertEligibleVendors = useMemo(
     () => vendors.filter((v) => vendorMatchesBidDisciplines(v, convertForm.disciplineKeys)),
     [vendors, convertForm.disciplineKeys]
+  );
+
+  const convertStaffItems = useMemo(
+    () =>
+      users.map((u) => ({
+        id: u.id,
+        label: u.fullName || u.name || u.email,
+        sublabel: u.role,
+        meta: u.email,
+      })),
+    [users]
+  );
+
+  const convertVendorItems = useMemo(
+    () =>
+      convertEligibleVendors.map((v) => ({
+        id: v.id,
+        label: v.name,
+        sublabel: v.partyType,
+        trade: v.trade,
+      })),
+    [convertEligibleVendors]
   );
 
   const marketPipeline = useMemo(() => {
@@ -525,25 +548,13 @@ export default function CrmPage() {
               <Input placeholder="Site location" value={convertForm.location} onChange={(e) => setConvertForm({ ...convertForm, location: e.target.value })} />
               <div>
                 <div className="text-xs font-mono uppercase text-steel-muted mb-1">Assign staff</div>
-                <div className="max-h-28 overflow-y-auto border rounded-xl p-2 space-y-1">
-                  {users.map((u) => (
-                    <label key={u.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={convertForm.memberIds.includes(u.id)}
-                        onChange={(e) => {
-                          setConvertForm({
-                            ...convertForm,
-                            memberIds: e.target.checked
-                              ? [...convertForm.memberIds, u.id]
-                              : convertForm.memberIds.filter((x) => x !== u.id),
-                          });
-                        }}
-                      />
-                      {u.fullName || u.name} ({u.role})
-                    </label>
-                  ))}
-                </div>
+                <SearchableCheckboxList
+                  items={convertStaffItems}
+                  selectedIds={convertForm.memberIds}
+                  onChange={(memberIds) => setConvertForm({ ...convertForm, memberIds })}
+                  placeholder="Search name, email, role…"
+                  maxHeightClass="max-h-36"
+                />
               </div>
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
@@ -573,31 +584,21 @@ export default function CrmPage() {
                 </div>
               </div>
               <div>
-                <div className="text-xs font-mono uppercase text-steel-muted mb-1">Contractors / vendors for comparative bid (min 2)</div>
-                <p className="text-[10px] text-steel-muted mb-1">Office can upload BOQs later, or vendors fill online at /login/vendor.</p>
-                <div className="max-h-28 overflow-y-auto border rounded-xl p-2 space-y-1">
-                  {convertEligibleVendors.map((v) => (
-                    <label key={v.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={convertForm.vendorIds.includes(v.id)}
-                        onChange={(e) => {
-                          setConvertForm({
-                            ...convertForm,
-                            vendorIds: e.target.checked
-                              ? [...convertForm.vendorIds, v.id]
-                              : convertForm.vendorIds.filter((x) => x !== v.id),
-                          });
-                        }}
-                      />
-                      {v.name}
-                      {v.trade && <span className="text-[10px] text-steel-muted">· {v.trade}</span>}
-                    </label>
-                  ))}
-                  {!convertEligibleVendors.length && (
-                    <p className="text-xs text-steel-muted">No vendors tagged for selected disciplines — add them in Master → Vendors.</p>
-                  )}
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="text-xs font-mono uppercase text-steel-muted">Contractors / vendors (min 2 for auto-bid)</div>
+                  <Link to="/master/vendors" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
+                    Tag disciplines ↗
+                  </Link>
                 </div>
+                <p className="text-[10px] text-steel-muted mb-1">Vendors upload BOQs at /login/vendor after bid opens.</p>
+                <SearchableCheckboxList
+                  items={convertVendorItems}
+                  selectedIds={convertForm.vendorIds}
+                  onChange={(vendorIds) => setConvertForm({ ...convertForm, vendorIds })}
+                  placeholder="Search company, civil, electrical…"
+                  emptyMessage="No vendors for selected disciplines — seed R2 catalog in Master → Vendors."
+                  maxHeightClass="max-h-36"
+                />
               </div>
               <div className="flex gap-2">
                 <Button type="submit">Create project + open bids</Button>

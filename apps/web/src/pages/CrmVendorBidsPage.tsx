@@ -296,10 +296,9 @@ export default function CrmVendorBidsPage() {
         </div>
       ))}
 
-      {uploadSlot && uploadSlot.sheetId && (
+      {uploadSlot && (
         <CrmBidBoqRegister
           token={token!}
-          sheetId={uploadSlot.sheetId}
           bidPackageId={uploadSlot.bidPackageId}
           slotId={uploadSlot.id}
           title={`${uploadSlot.disciplineLabel}${uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}`}

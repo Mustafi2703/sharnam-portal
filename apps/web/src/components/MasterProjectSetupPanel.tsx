@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
+import { SearchableSelect } from "./SearchableSelect";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; status: string; clientName?: string | null };
@@ -175,14 +176,19 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               }
             }}
           >
-            <Select className="min-w-[160px] flex-1" value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)} required>
-              <option value="">Existing login…</option>
-              {allUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.fullName} · {u.email}
-                </option>
-              ))}
-            </Select>
+            <SearchableSelect
+              className="min-w-[160px] flex-1"
+              options={allUsers.map((u) => ({
+                value: u.id,
+                label: u.fullName,
+                sublabel: u.email,
+              }))}
+              value={memberUserId}
+              onChange={setMemberUserId}
+              placeholder="Existing login…"
+              searchPlaceholder="Search name or email…"
+              required
+            />
             <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
               <option value="project_manager">Project Manager</option>
               <option value="site_engineer">Site Engineer</option>

@@ -8,7 +8,6 @@ import { Button } from "./ui";
 
 type Props = {
   token: string;
-  sheetId: string;
   bidPackageId: string;
   slotId: string;
   title: string;
@@ -31,10 +30,9 @@ function cellDisplay(cell?: SheetCell): string {
   return c == null ? "" : String(c);
 }
 
-/** Inline R2 BOQ register — lives inside CRM bid desk (not Custom Sheet Maker). */
+/** Inline R2 BOQ register — loads via CRM slot API (auto-creates sheet if missing). */
 export function CrmBidBoqRegister({
   token,
-  sheetId,
   bidPackageId,
   slotId,
   title,
@@ -45,16 +43,29 @@ export function CrmBidBoqRegister({
 }: Props) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<SheetCell[][]>([]);
+  const [sheetId, setSheetId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    const s = await api<any>(`/api/custom-sheets/${sheetId}`, { token });
-    const parsed = evaluateAllRows((s.rows || []).map((row: unknown[]) => row.map((cell) => normalizeCell(cell))));
-    setHeaders(s.headers || []);
-    setRows(parsed);
-  }, [sheetId, token]);
+    setLoadError("");
+    try {
+      const s = await api<{ sheetId: string; headers: string[]; rows: unknown[][]; canWrite?: boolean }>(
+        `/api/crm/bid-packages/${bidPackageId}/vendor-boq/${slotId}/sheet`,
+        { token }
+      );
+      setSheetId(s.sheetId);
+      const parsed = evaluateAllRows((s.rows || []).map((row) => row.map((cell) => normalizeCell(cell))));
+      setHeaders(s.headers || []);
+      setRows(parsed);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load BOQ");
+      setHeaders([]);
+      setRows([]);
+    }
+  }, [bidPackageId, slotId, token]);
 
   useEffect(() => {
     void load();
@@ -73,6 +84,7 @@ export function CrmBidBoqRegister({
   }, [headers, rows]);
 
   async function persist(nextRows: SheetCell[][]) {
+    if (!sheetId) return;
     setBusy(true);
     setMsg("");
     try {
@@ -106,6 +118,26 @@ export function CrmBidBoqRegister({
       queueSave(evaluated);
       return evaluated;
     });
+  }
+
+  if (loadError) {
+    return (
+      <CostRegisterShell title={title} subtitle="BOQ load failed" sheetKind="monitoring">
+        <div className="p-4 space-y-3">
+          <p className="text-sm text-warn">{loadError}</p>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={() => void load()}>
+              Retry
+            </Button>
+            {onClose && (
+              <Button type="button" variant="secondary" onClick={onClose}>
+                Close
+              </Button>
+            )}
+          </div>
+        </div>
+      </CostRegisterShell>
+    );
   }
 
   return (
