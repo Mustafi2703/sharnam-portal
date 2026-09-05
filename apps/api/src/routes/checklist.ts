@@ -491,9 +491,20 @@ checklistRouter.post(
       include: { photos: true },
     });
 
-    res.status(existingDraft ? 200 : 201).json(
-      attachProgress(withPhotos || submission, itemCount)
-    );
+    let driveExports: Awaited<ReturnType<typeof import("../services/syncChecklistSubmissionToDrive.js").syncChecklistSubmissionToDrive>> = {
+      exports: [],
+    };
+    try {
+      const { syncChecklistSubmissionToDrive } = await import("../services/syncChecklistSubmissionToDrive.js");
+      driveExports = await syncChecklistSubmissionToDrive(submission.id);
+    } catch (err) {
+      console.warn("[checklist] drive sync on submit:", err instanceof Error ? err.message : err);
+    }
+
+    res.status(existingDraft ? 200 : 201).json({
+      ...attachProgress(withPhotos || submission, itemCount),
+      sharePointExports: driveExports.exports,
+    });
   }
 );
 
@@ -613,9 +624,20 @@ checklistRouter.post(
       meta: { progress: computeChecklistProgress(assignment.template.items.length, responses, withPhotos?.photos.length || 0) },
     });
 
-    res.status(existingDraft ? 200 : 201).json(
-      attachProgress(withPhotos || submission, assignment.template.items.length)
-    );
+    let driveExports: Awaited<ReturnType<typeof import("../services/syncChecklistSubmissionToDrive.js").syncChecklistSubmissionToDrive>> = {
+      exports: [],
+    };
+    try {
+      const { syncChecklistSubmissionToDrive } = await import("../services/syncChecklistSubmissionToDrive.js");
+      driveExports = await syncChecklistSubmissionToDrive(submission.id);
+    } catch (err) {
+      console.warn("[checklist] drive sync on draft:", err instanceof Error ? err.message : err);
+    }
+
+    res.status(existingDraft ? 200 : 201).json({
+      ...attachProgress(withPhotos || submission, assignment.template.items.length),
+      sharePointExports: driveExports.exports,
+    });
   }
 );
 

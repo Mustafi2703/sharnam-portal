@@ -161,7 +161,20 @@ export default function ChecklistFillPage() {
         body: fd,
       });
       setDraftId(saved.id);
-      setMsg(`Draft saved — ${saved.progress?.progressLabel || answered + "/" + items.length} answered · ${saved.progress?.evidenceCount || linkEvidence} evidence link(s).`);
+      const spNote =
+        saved.sharePointExports?.length > 0
+          ? " Branded XLSX + HTML synced to SharePoint (Drafts folder)."
+          : "";
+      setMsg(
+        `Draft saved — ${saved.progress?.progressLabel || answered + "/" + items.length} answered · ${saved.progress?.evidenceCount || linkEvidence} evidence item(s).${spNote}`,
+      );
+      if (saved.id) {
+        try {
+          await downloadBrandedChecklistXlsx(saved.id, token);
+        } catch {
+          /* optional local copy */
+        }
+      }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Draft save failed");
     } finally {
@@ -200,10 +213,14 @@ export default function ChecklistFillPage() {
       });
       const lineFiles = Object.values(responses).reduce((s, r) => s + r.photos.length + r.docs.length, 0);
       const overall = photos?.length || 0;
+      const spNote =
+        saved.sharePointExports?.length > 0
+          ? " Branded forms saved to SharePoint."
+          : "";
       setMsg(
         overall + lineFiles + linkEvidence
-          ? `Submitted — sheet report generated. ${answered}/${items.length} answered.`
-          : "Submitted — sheet report generated."
+          ? `Submitted — ${answered}/${items.length} answered.${spNote}`
+          : `Submitted — sheet report generated.${spNote}`,
       );
       const submissionId = saved?.id;
       if (submissionId) {

@@ -223,7 +223,7 @@ export function ToolRightPanel({
               label: "Request checklist fill",
               onClick: () =>
                 navigate(
-                  `/projects/${ctx.projectId}/rfis?kind=${tool === "quality-inspections" ? "QualityInspection" : "DrawingChecklist"}`
+                  `/projects/${ctx.projectId}/rfis?kind=${tool === "quality-inspections" ? "QualityInspection" : "SiteExecution"}&compose=1`
                 ),
               secondary: true,
             },
