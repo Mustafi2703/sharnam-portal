@@ -192,7 +192,14 @@ export function ToolRightPanel({
       case "dms":
         if (canUpload) {
           actions.push(
-            { label: "Upload to current folder", to: "dms", primary: true },
+            {
+              label: "Upload to current folder",
+              primary: true,
+              onClick: () => {
+                window.dispatchEvent(new CustomEvent("sharnam:dms-upload"));
+                navigate(`/projects/${ctx.projectId}/dms?upload=1`);
+              },
+            },
             { label: "Assign checklist types", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
             {
               label: "Raise drawing fill RFI",

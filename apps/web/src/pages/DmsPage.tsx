@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
@@ -90,8 +90,11 @@ export type DmsPageMode = "documents" | "drawings";
  * mode=documents — full project DMS (Procore Documents parity)
  * mode=drawings  — design/engineering folders only (paired with GFC register)
  */
+export const DMS_UPLOAD_EVENT = "sharnam:dms-upload";
+
 export default function DmsPage({ mode = "documents", embedded = false }: { mode?: DmsPageMode; embedded?: boolean }) {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
   const isDrawings = mode === "drawings";
@@ -110,6 +113,22 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
   const [uploadErr, setUploadErr] = useState("");
   const [viewer, setViewer] = useState<DrawingPreview | null>(null);
   const [treeQuery, setTreeQuery] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("upload") !== "1" || !canUpload) return;
+    setUploadOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("upload");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, canUpload]);
+
+  useEffect(() => {
+    function openUpload() {
+      if (canUpload) setUploadOpen(true);
+    }
+    window.addEventListener(DMS_UPLOAD_EVENT, openUpload);
+    return () => window.removeEventListener(DMS_UPLOAD_EVENT, openUpload);
+  }, [canUpload]);
 
   const load = useCallback(
     async (folderPath = path) => {

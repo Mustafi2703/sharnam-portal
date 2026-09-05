@@ -26,8 +26,8 @@ type Props = {
   vendorMatrix: Row[];
   grandTotals?: Record<string, number>;
   lowestVendor?: string;
-  onOpenSlot: (slot: Slot) => void;
-  onUploadSlot: (slot: Slot) => void;
+  onManageSlot: (slot: Slot, mode: "edit" | "upload") => void;
+  onCopyLink?: (vendorLabel: string) => void;
 };
 
 /** Vendor × discipline BOQ matrix — R2 receipt grid. */
@@ -36,8 +36,8 @@ export function CrmBidVendorMatrix({
   vendorMatrix,
   grandTotals,
   lowestVendor,
-  onOpenSlot,
-  onUploadSlot,
+  onManageSlot,
+  onCopyLink,
 }: Props) {
   if (!vendorMatrix.length) return null;
 
@@ -70,40 +70,42 @@ export function CrmBidVendorMatrix({
             return (
               <tr key={vendorLabel} className={isLowest ? "bg-ok/5" : undefined}>
                 <td className="sticky left-0 z-10 bg-inherit font-semibold">
-                  {vendorLabel}
-                  {isLowest && (
-                    <span className="ml-1">
-                      <Badge tone="ok">L1</Badge>
-                    </span>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span>{vendorLabel}</span>
+                    {isLowest && <Badge tone="ok">L1</Badge>}
+                    {onCopyLink && (
+                      <button
+                        type="button"
+                        className="text-[10px] text-brand font-semibold"
+                        onClick={() => onCopyLink(vendorLabel)}
+                      >
+                        Link
+                      </button>
+                    )}
+                  </div>
                   <div className="text-[10px] text-steel-muted font-normal font-mono">
                     {filled}/{slots.length} BOQs
                   </div>
                 </td>
-                {slots.map(({ discipline, slot }) => (
-                  <td key={discipline.key} className="text-center">
-                    {!slot ? (
-                      <span className="text-steel-muted">—</span>
-                    ) : slot.sheetId ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!text-[10px] !py-0.5 !px-2 !min-h-0"
-                        onClick={() => onOpenSlot(slot)}
-                      >
-                        Fill ✓
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        className="!text-[10px] !py-0.5 !px-2 !min-h-0"
-                        onClick={() => onUploadSlot(slot)}
-                      >
-                        Upload
-                      </Button>
-                    )}
-                  </td>
-                ))}
+                {slots.map(({ discipline, slot }) => {
+                  const done = !!(slot?.sheetId || slot?.fileName);
+                  return (
+                    <td key={discipline.key} className="text-center">
+                      {!slot ? (
+                        <span className="text-steel-muted">—</span>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant={done ? "secondary" : "primary"}
+                          className="!text-[10px] !py-0.5 !px-2 !min-h-0"
+                          onClick={() => onManageSlot(slot, done ? "edit" : "upload")}
+                        >
+                          {done ? "View ✓" : "Fill / upload"}
+                        </Button>
+                      )}
+                    </td>
+                  );
+                })}
                 <td className="text-right font-mono text-xs tabular-nums">{total ? formatINR(total) : "—"}</td>
                 <td className="text-center text-[10px]">
                   {filled === slots.length ? (

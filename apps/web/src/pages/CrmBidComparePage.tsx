@@ -74,7 +74,7 @@ export default function CrmBidComparePage() {
   const [detail, setDetail] = useState<BidPackage | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [uploadSlot, setUploadSlot] = useState<VendorBoqSlot | null>(null);
+  const [slotPanel, setSlotPanel] = useState<{ slot: VendorBoqSlot; tab: "edit" | "upload" } | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   const [form, setForm] = useState({
@@ -92,7 +92,7 @@ export default function CrmBidComparePage() {
   const [addVendorIds, setAddVendorIds] = useState<string[]>([]);
   const [deskFilter, setDeskFilter] = useState<"converted" | "all">("converted");
   const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
-  const [showSetup, setShowSetup] = useState(true);
+  const [deskView, setDeskView] = useState<"packages" | "setup">("packages");
   const [setupStep, setSetupStep] = useState(1);
   const [projectSearch, setProjectSearch] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -162,9 +162,16 @@ export default function CrmBidComparePage() {
 
   function selectPackage(id: string) {
     setSelectedId(id);
-    setShowSetup(false);
+    setDeskView("packages");
+    setSlotPanel(null);
+    setUploadFile(null);
     setActiveDiscipline("all");
     nav(`/crm/bids/${id}`, { replace: true });
+  }
+
+  function openSlotPanel(slot: VendorBoqSlot, tab: "edit" | "upload") {
+    setSlotPanel({ slot, tab });
+    if (tab === "upload") setUploadFile(null);
   }
 
   async function recomputeComparative() {
@@ -219,7 +226,7 @@ export default function CrmBidComparePage() {
       title: f.title || (project ? `${project.name} — comparative bid` : f.title),
     }));
     if (setupProjectId && !routePkgId) {
-      setShowSetup(true);
+      setDeskView("setup");
       setSetupStep(2);
       setMsg("Step 2 — pick discipline BOQ sheets, then select bidders and create the package.");
     }
@@ -457,20 +464,22 @@ export default function CrmBidComparePage() {
 
   async function uploadBoq(e: FormEvent) {
     e.preventDefault();
-    if (!uploadFile || !selectedId || !uploadSlot) return;
+    if (!uploadFile || !selectedId || !slotPanel) return;
     setBusy(true);
     setMsg("");
     try {
       const fd = new FormData();
       fd.append("file", uploadFile);
-      await api(`/api/crm/bid-packages/${selectedId}/vendor-boq/${uploadSlot.id}`, {
+      await api(`/api/crm/bid-packages/${selectedId}/vendor-boq/${slotPanel.slot.id}`, {
         method: "POST",
         token,
         body: fd,
       });
-      setMsg(`BOQ uploaded — ${uploadSlot.vendorLabel} / ${disciplineLabel(disciplines, uploadSlot.discipline)}`);
+      setMsg(
+        `BOQ uploaded — ${slotPanel.slot.vendorLabel} / ${disciplineLabel(disciplines, slotPanel.slot.discipline)}`,
+      );
       setUploadFile(null);
-      setUploadSlot(null);
+      setSlotPanel((prev) => (prev ? { ...prev, tab: "edit" } : null));
       await loadDetail(selectedId);
       await load();
     } catch (err) {
@@ -574,7 +583,7 @@ export default function CrmBidComparePage() {
                       leadId: l.id,
                       title: f.title || `${l.title} — comparative bid`,
                     }));
-                    setShowSetup(true);
+                    setDeskView("setup");
                     setSetupStep(1);
                     setMsg(`Step 1 — confirm project for ${l.title}, then pick disciplines and bidders.`);
                   }}
@@ -589,51 +598,46 @@ export default function CrmBidComparePage() {
 
       <div className="flex flex-wrap gap-2 items-center shrink-0">
         <Button
-          variant={deskFilter === "converted" ? "primary" : "secondary"}
+          variant={deskView === "packages" ? "primary" : "secondary"}
           type="button"
-          onClick={() => setDeskFilter("converted")}
+          onClick={() => setDeskView("packages")}
         >
-          Converted projects ({packagesForDesk.length})
+          Bid packages
         </Button>
         <Button
-          variant={deskFilter === "all" ? "primary" : "secondary"}
+          variant={deskView === "setup" ? "primary" : "secondary"}
           type="button"
-          onClick={() => setDeskFilter("all")}
+          onClick={() => setDeskView("setup")}
         >
-          All packages ({packages.length})
+          New bid setup
         </Button>
+        <span className="text-xs text-steel-muted ml-1">
+          {deskFilter === "converted" ? "Converted CRM projects" : "All packages"} · {packagesForDesk.length} package(s)
+        </span>
       </div>
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold text-sm">Setup new bid (R2 template)</h3>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowSetup((v) => !v)}>
-              {showSetup ? "Hide setup" : "Show setup"}
-            </Button>
+      {deskView === "setup" ? (
+        <Card>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {[
+              { n: 1, label: "Project" },
+              { n: 2, label: "Disciplines" },
+              { n: 3, label: "Bidders" },
+              { n: 4, label: "Create" },
+            ].map(({ n, label }) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setSetupStep(n)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold border ${
+                  setupStep === n ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted"
+                }`}
+              >
+                {n}. {label}
+              </button>
+            ))}
           </div>
-          {showSetup && (
-          <Card>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {[
-                { n: 1, label: "Project" },
-                { n: 2, label: "Disciplines" },
-                { n: 3, label: "Bidders" },
-                { n: 4, label: "Create" },
-              ].map(({ n, label }) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setSetupStep(n)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold border ${
-                    setupStep === n ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted"
-                  }`}
-                >
-                  {n}. {label}
-                </button>
-              ))}
-            </div>
-            <form className="space-y-3" onSubmit={createPackage}>
+          <form className="space-y-3" onSubmit={createPackage}>
               {setupStep === 1 && (
                 <>
                   <h3 className="font-semibold text-sm">1 · Select delivery project</h3>
@@ -783,20 +787,39 @@ export default function CrmBidComparePage() {
                 </>
               )}
             </form>
-          </Card>
-          )}
-
+        </Card>
+      ) : (
+      <div className="grid lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-4 items-start">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={deskFilter === "converted" ? "primary" : "secondary"}
+              type="button"
+              className="!text-xs"
+              onClick={() => setDeskFilter("converted")}
+            >
+              Converted
+            </Button>
+            <Button
+              variant={deskFilter === "all" ? "primary" : "secondary"}
+              type="button"
+              className="!text-xs"
+              onClick={() => setDeskFilter("all")}
+            >
+              All
+            </Button>
+          </div>
           <Card padding={false}>
             <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm flex items-center justify-between">
-              <span>Bid packages ({packagesForDesk.length})</span>
+              <span>Packages ({packagesForDesk.length})</span>
               {packagesForDesk.length > 0 && (
                 <span className="text-[10px] text-steel-muted font-normal">
                   {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.done || 0), 0)}/
-                  {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.total || 0), 0)} BOQs in
+                  {packagesForDesk.reduce((s, p) => s + (p.uploadProgress?.total || 0), 0)} BOQs
                 </span>
               )}
             </div>
-            <ul className="divide-y">
+            <ul className="divide-y max-h-[min(70vh,640px)] overflow-y-auto">
               {packagesForDesk.map((p) => {
                 const pct = p.uploadProgress
                   ? Math.round((100 * (p.uploadProgress.done || 0)) / Math.max(1, p.uploadProgress.total || 0))
@@ -836,16 +859,16 @@ export default function CrmBidComparePage() {
                 <li className="px-4 py-8 text-sm text-steel-muted text-center space-y-3">
                   <div className="text-4xl">📊</div>
                   <p className="font-semibold text-ink">No bid packages yet.</p>
-                  <p className="text-xs">
-                    Fill the form on the left to create your first bid package, then invite vendors to upload discipline BOQs.
-                  </p>
+                  <Button type="button" onClick={() => setDeskView("setup")}>
+                    Start new bid setup →
+                  </Button>
                 </li>
               )}
             </ul>
           </Card>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {detail ? (
             <>
               <Card>
@@ -952,77 +975,80 @@ export default function CrmBidComparePage() {
                   <p className="text-xs text-steel-muted mb-3 border-l-2 border-brand pl-2">{detail.notes}</p>
                 )}
 
-                <div className="mb-4 p-3 border border-dashed border-line rounded-xl space-y-4">
-                  <div>
-                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add bidders (after deploy)</p>
-                    <p className="text-[11px] text-steel-muted mb-2">
-                      Pick from{" "}
-                      <Link to="/crm/directory/vendors" className="text-brand font-semibold">
-                        CRM vendor directory
-                      </Link>
-                      . If the bid is already Open, new bidders are emailed and get portal logins when email is set.
-                    </p>
-                    <div className="flex flex-wrap gap-2 mb-2 max-h-28 overflow-y-auto">
-                      {vendorsNotOnPackage.map((v) => (
-                        <label key={v.id} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1 bg-paper">
-                          <input
-                            type="checkbox"
-                            checked={addVendorIds.includes(v.id)}
-                            onChange={(e) =>
-                              setAddVendorIds((prev) =>
-                                e.target.checked ? [...prev, v.id] : prev.filter((x) => x !== v.id),
-                              )
-                            }
-                          />
-                          {v.name}
-                        </label>
-                      ))}
-                      {!vendorsNotOnPackage.length && (
-                        <span className="text-xs text-steel-muted">All directory vendors are already on this package.</span>
-                      )}
+                <details className="mb-4 rounded-xl border border-dashed border-line">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-mono uppercase text-steel-muted">
+                    Manage package — add bidders or disciplines
+                  </summary>
+                  <div className="p-3 space-y-4 border-t border-line">
+                    <div>
+                      <p className="text-[11px] text-steel-muted mb-2">
+                        Pick from{" "}
+                        <Link to="/crm/directory/vendors" className="text-brand font-semibold">
+                          CRM vendor directory
+                        </Link>
+                        . Open bids email new bidders automatically.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-2 max-h-28 overflow-y-auto">
+                        {vendorsNotOnPackage.map((v) => (
+                          <label key={v.id} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1 bg-paper">
+                            <input
+                              type="checkbox"
+                              checked={addVendorIds.includes(v.id)}
+                              onChange={(e) =>
+                                setAddVendorIds((prev) =>
+                                  e.target.checked ? [...prev, v.id] : prev.filter((x) => x !== v.id),
+                                )
+                              }
+                            />
+                            {v.name}
+                          </label>
+                        ))}
+                        {!vendorsNotOnPackage.length && (
+                          <span className="text-xs text-steel-muted">All directory vendors are already on this package.</span>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!text-xs"
+                        disabled={!addVendorIds.length || busy}
+                        onClick={() => void addVendorsToPackage()}
+                      >
+                        Add selected bidders
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="!text-xs"
-                      disabled={!addVendorIds.length || busy}
-                      onClick={() => void addVendorsToPackage()}
-                    >
-                      Add selected bidders
-                    </Button>
+                    <div className="border-t border-line pt-3">
+                      <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add discipline BOQ slots</p>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {disciplines
+                          .filter((d) => !(detail.disciplines || []).some((x) => x.key === d.key))
+                          .map((d) => (
+                            <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
+                              <input
+                                type="checkbox"
+                                checked={addDiscKeys.includes(d.key)}
+                                onChange={(e) =>
+                                  setAddDiscKeys((prev) =>
+                                    e.target.checked ? [...prev, d.key] : prev.filter((x) => x !== d.key),
+                                  )
+                                }
+                              />
+                              {d.label}
+                            </label>
+                          ))}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!text-xs"
+                        disabled={!addDiscKeys.length || busy}
+                        onClick={() => void addDisciplinesToPackage()}
+                      >
+                        Add selected disciplines
+                      </Button>
+                    </div>
                   </div>
-
-                  <div className="border-t border-line pt-3">
-                    <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add discipline BOQ slots</p>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {disciplines
-                      .filter((d) => !(detail.disciplines || []).some((x) => x.key === d.key))
-                      .map((d) => (
-                        <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
-                          <input
-                            type="checkbox"
-                            checked={addDiscKeys.includes(d.key)}
-                            onChange={(e) =>
-                              setAddDiscKeys((prev) =>
-                                e.target.checked ? [...prev, d.key] : prev.filter((x) => x !== d.key)
-                              )
-                            }
-                          />
-                          {d.label}
-                        </label>
-                      ))}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="!text-xs"
-                    disabled={!addDiscKeys.length || busy}
-                    onClick={() => void addDisciplinesToPackage()}
-                  >
-                    Add selected disciplines to package
-                  </Button>
-                  </div>
-                </div>
+                </details>
 
                 {vendorMatrix.length > 0 && (
                   <div className="mb-4">
@@ -1058,134 +1084,82 @@ export default function CrmBidComparePage() {
                       vendorMatrix={vendorMatrix}
                       grandTotals={detail.summary?.grandTotals}
                       lowestVendor={detail.summary?.lowestVendor}
-                      onOpenSlot={(slot) => setUploadSlot(slot)}
-                      onUploadSlot={(slot) => {
-                        setUploadSlot(slot);
-                        setUploadFile(null);
-                      }}
+                      onManageSlot={openSlotPanel}
+                      onCopyLink={copyVendorLink}
                     />
                   </div>
                 )}
-
-                <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Vendor upload links & file detail</h4>
-                <div className="space-y-4">
-                  {vendorMatrix.map(({ vendorLabel, slots }) => (
-                    <div key={vendorLabel} className="border border-line rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-sand/50 font-semibold text-sm flex items-center justify-between">
-                        <span>{vendorLabel}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="!text-[10px] !py-0.5"
-                          onClick={() => copyVendorLink(vendorLabel)}
-                        >
-                          📋 Copy upload link
-                        </Button>
-                      </div>
-                      <ul className="divide-y">
-                        {slots.map(({ discipline, slot }) => (
-                          <li key={discipline.key} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <div className="min-w-0">
-                              <div className="font-medium">{discipline.label}</div>
-                              <div className="text-[10px] text-steel-muted font-mono">{discipline.sheetName}</div>
-                              {slot?.fileName ? (
-                                <div className="text-xs text-steel-muted truncate">
-                                  {slot.fileName}
-                                  {slot.sharePointUrl && (
-                                    <>
-                                      {" · "}
-                                      <a
-                                        href={slot.sharePointUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-brand font-semibold"
-                                      >
-                                        SharePoint
-                                      </a>
-                                    </>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="text-xs text-warn">Not uploaded</div>
-                              )}
-                            </div>
-                            <div className="flex gap-2 shrink-0">
-                              {slot && (
-                                <Button
-                                  variant="secondary"
-                                  className="!text-xs !py-1"
-                                  type="button"
-                                  onClick={() => setUploadSlot(slot)}
-                                >
-                                  {slot.fileName ? "View / edit BOQ" : "Fill BOQ"}
-                                </Button>
-                              )}
-                              {slot && (
-                                <Button
-                                  variant="secondary"
-                                  className="!text-xs !py-1"
-                                  onClick={() => {
-                                    setUploadSlot(slot);
-                                    setUploadFile(null);
-                                  }}
-                                >
-                                  {slot.fileName ? "Replace" : "Upload"}
-                                </Button>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
               </Card>
 
-              {uploadSlot && selectedId && (
-                <CrmBidBoqRegister
-                  token={token!}
-                  bidPackageId={selectedId}
-                  slotId={uploadSlot.id}
-                  title={`${uploadSlot.vendorLabel} — ${disciplineLabel(disciplines, uploadSlot.discipline)}`}
-                  sheetLabel={disciplineLabel(disciplines, uploadSlot.discipline)}
-                  canEdit={canManage}
-                  onSaved={() => {
-                    void loadDetail(selectedId);
-                    void load();
-                  }}
-                  onClose={() => {
-                    setUploadSlot(null);
-                    setUploadFile(null);
-                  }}
-                />
-              )}
-
-              {uploadSlot && (
+              {slotPanel && selectedId && (
                 <Card>
-                  <h4 className="font-semibold text-sm mb-1">Upload Excel BOQ (optional)</h4>
-                  <p className="text-xs text-steel-muted mb-3">
-                    {uploadSlot.vendorLabel} · {disciplineLabel(disciplines, uploadSlot.discipline)} — matching R2 discipline sheet.
-                  </p>
-                  <form className="space-y-3" onSubmit={uploadBoq}>
-                    <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
-                      {uploadFile ? uploadFile.name : "Choose Excel BOQ"}
-                    </FilePickButton>
-                    <div className="flex gap-2">
-                      <Button type="submit" disabled={!uploadFile || busy}>
-                        Upload
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => {
-                          setUploadSlot(null);
-                          setUploadFile(null);
-                        }}
-                      >
-                        Close
-                      </Button>
+                  <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                    <div>
+                      <h4 className="font-semibold text-sm">
+                        {slotPanel.slot.vendorLabel} · {disciplineLabel(disciplines, slotPanel.slot.discipline)}
+                      </h4>
+                      <p className="text-xs text-steel-muted">Fill BOQ in portal or upload matching R2 Excel sheet.</p>
                     </div>
-                  </form>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="!text-xs"
+                      onClick={() => {
+                        setSlotPanel(null);
+                        setUploadFile(null);
+                      }}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <Button
+                      type="button"
+                      variant={slotPanel.tab === "edit" ? "primary" : "secondary"}
+                      className="!text-xs"
+                      onClick={() => setSlotPanel((prev) => (prev ? { ...prev, tab: "edit" } : null))}
+                    >
+                      Edit in portal
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={slotPanel.tab === "upload" ? "primary" : "secondary"}
+                      className="!text-xs"
+                      onClick={() => {
+                        setSlotPanel((prev) => (prev ? { ...prev, tab: "upload" } : null));
+                        setUploadFile(null);
+                      }}
+                    >
+                      Upload Excel
+                    </Button>
+                  </div>
+                  {slotPanel.tab === "edit" ? (
+                    <CrmBidBoqRegister
+                      token={token!}
+                      bidPackageId={selectedId}
+                      slotId={slotPanel.slot.id}
+                      title={`${slotPanel.slot.vendorLabel} — ${disciplineLabel(disciplines, slotPanel.slot.discipline)}`}
+                      sheetLabel={disciplineLabel(disciplines, slotPanel.slot.discipline)}
+                      canEdit={canManage}
+                      onSaved={() => {
+                        void loadDetail(selectedId);
+                        void load();
+                      }}
+                      onClose={() => {
+                        setSlotPanel(null);
+                        setUploadFile(null);
+                      }}
+                    />
+                  ) : (
+                    <form className="space-y-3" onSubmit={uploadBoq}>
+                      <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
+                        {uploadFile ? uploadFile.name : "Choose Excel BOQ"}
+                      </FilePickButton>
+                      <Button type="submit" disabled={!uploadFile || busy}>
+                        {busy ? "Uploading…" : "Upload BOQ"}
+                      </Button>
+                    </form>
+                  )}
                 </Card>
               )}
             </>
@@ -1199,6 +1173,7 @@ export default function CrmBidComparePage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
