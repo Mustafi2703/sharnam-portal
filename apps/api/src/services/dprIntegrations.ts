@@ -284,6 +284,9 @@ export async function buildDprAutoFill(
           const scopeQty = r.boqQty || r.gfcQty || act?.boqQty || 0;
           const remaining = Math.max(0, scopeQty - cumQtyPrev);
           const plannedHint = act?.weeklyPlanned ?? act?.boqQty;
+          const weeklyPlanned = Number(act?.weeklyPlanned || 0);
+          const plannedQtyToday =
+            weeklyPlanned > 0 ? Math.round((weeklyPlanned / 6) * 1000) / 1000 : 0;
           const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining);
           return {
             srNo: undefined,
@@ -296,6 +299,7 @@ export async function buildDprAutoFill(
             finish: act?.plannedEnd ? act.plannedEnd.toISOString().slice(0, 10) : null,
             cumQtyPrev,
             qtyToday,
+            plannedQtyToday,
             remarks: plannedHint
               ? `Planned: ${plannedHint}${act?.weeklyActual != null ? ` · P-A actual: ${act.weeklyActual}` : ""}${qtyToday ? " · qty today from weekly actual / 6" : ""}`
               : qtyToday
@@ -324,6 +328,21 @@ export async function buildDprAutoFill(
 
   if (lines.some((l) => Number(l.qtyToday || 0) > 0)) {
     sources.push("Progress weekly actual → qty today");
+  }
+
+  try {
+    const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
+    const ms = await loadMsProjectSummary(projectId);
+    for (const ln of lines) {
+      if (ln.start && ln.finish) continue;
+      const task = ms.tasks.find((t) => fuzzyMatch(t.name, ln.description));
+      if (task?.baselineStart && task?.baselineFinish) {
+        ln.start = task.baselineStart.toISOString().slice(0, 10);
+        ln.finish = task.baselineFinish.toISOString().slice(0, 10);
+      }
+    }
+  } catch {
+    /* MS Project schedule optional */
   }
 
   const bbsKg = bbsLines.reduce((s, b) => s + (b.weightKg || 0), 0);

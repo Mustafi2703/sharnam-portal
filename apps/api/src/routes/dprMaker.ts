@@ -44,7 +44,7 @@ import {
 } from "../services/dprXlsx.js";
 import { audit } from "../services/audit.js";
 import { buildDprAutoFill } from "../services/dprIntegrations.js";
-import { buildDprChartPack, loadDprScurveHistory, normalizeScurveEntries } from "../services/dprCharts.js";
+import { buildDprChartPack, loadDprScurveHistory, normalizeScurveEntries, scurveEntriesFromChartPoints } from "../services/dprCharts.js";
 import { renderDprSnapshotHtml } from "../services/dprSnapshotExport.js";
 import { seedDprDemoDay } from "../services/dprDemoDaySeed.js";
 
@@ -275,6 +275,10 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     normalizeScurveEntries(extras.scurveEntries)
   );
   const charts = buildDprChartPack(snapForCharts, scurve);
+  const scurveEntries =
+    extras.scurveEntries?.length
+      ? extras.scurveEntries
+      : scurveEntriesFromChartPoints(scurve);
 
   res.json({
     projectId,
@@ -298,13 +302,44 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     photos: extras.photos || [],
     attachments: extras.attachments || [],
     signatures: extras.signatures || [],
-    scurveEntries: extras.scurveEntries || [],
+    scurveEntries,
     status: existing?.status || "Draft",
     publishedPath: existing?.publishedPath || null,
     publishedAt: existing?.publishedAt || null,
     autoFillSources: autoSources,
     charts,
   });
+});
+
+// ═══════════════════════ POST recalc S-curve from schedule + BOQ ═══════════════════════
+
+dprMakerRouter.post("/:projectId/recalc-scurve", async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const logDate = parseDate(req.body.logDate);
+  const discipline = normDiscipline(req.body.discipline);
+  const lines: DprLine[] = Array.isArray(req.body.lines) ? req.body.lines : [];
+  const header: DprHeader = req.body.header || {};
+  const manpower: DprManpower[] = Array.isArray(req.body.manpower) ? req.body.manpower : [];
+
+  const snapForCharts = {
+    discipline,
+    header,
+    lines,
+    manpower,
+    equipment: [],
+    materials: [],
+    qualityTests: [],
+    safetyRows: [],
+    safety: {},
+    delays: [],
+  };
+  const scurve = await loadDprScurveHistory(projectId, discipline, logDate, snapForCharts);
+  const scurveEntries = scurveEntriesFromChartPoints(scurve);
+  const charts = buildDprChartPack(snapForCharts, scurve);
+
+  res.json({ scurveEntries, charts });
 });
 
 // ═══════════════════════════════ POST save ═══════════════════════════════

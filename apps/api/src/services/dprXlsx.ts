@@ -71,6 +71,8 @@ export type DprLine = {
   finish?: string | null;
   cumQtyPrev?: number;
   qtyToday?: number;
+  /** Daily target qty (e.g. weekly planned ÷ 6) for BOQ progress chart */
+  plannedQtyToday?: number;
   remarks?: string;
 };
 

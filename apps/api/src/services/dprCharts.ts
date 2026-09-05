@@ -16,6 +16,16 @@ import type ExcelJS from "exceljs";
 export type DprChartPoint = { date: string; label: string; planned: number; actual: number };
 export type DprScurveEntryInput = { date: string; label?: string; planned: number; actual: number };
 
+export function formatScurveLabel(date: string, label?: string): string {
+  const trimmed = (label || "").trim();
+  if (trimmed && !/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed;
+  const d = new Date(date);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  }
+  return trimmed || date.slice(0, 10);
+}
+
 export function normalizeScurveEntries(
   entries?: DprScurveEntryInput[]
 ): DprChartPoint[] | undefined {
@@ -23,12 +33,59 @@ export function normalizeScurveEntries(
   return entries
     .map((p) => ({
       date: p.date.slice(0, 10),
-      label: p.label || p.date.slice(0, 10),
+      label: formatScurveLabel(p.date, p.label),
       planned: Number(p.planned) || 0,
       actual: Number(p.actual) || 0,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-13);
+}
+
+function mergeSummaryWithScurve(
+  kpis: ReturnType<typeof computeDpr>["kpis"],
+  scurve: DprChartPoint[]
+): DprChartPack["summary"] {
+  const last = scurve.length ? scurve[scurve.length - 1] : null;
+  let plannedPct = Math.round(kpis.plannedPct * 1000) / 10;
+  let actualPct = Math.round(kpis.actualPct * 1000) / 10;
+  if (plannedPct === 0 && last && last.planned > 0) {
+    plannedPct = last.planned;
+  }
+  if (actualPct === 0 && last && last.actual > 0) {
+    actualPct = last.actual;
+  }
+  const variance = Math.round((actualPct - plannedPct) * 10) / 10;
+  const spi = plannedPct > 0 ? Math.round((actualPct / plannedPct) * 100) / 100 : 0;
+  return {
+    plannedPct,
+    actualPct,
+    variance,
+    spi,
+    overallStatus: actualPct >= plannedPct ? "ON PROGRAMME" : "BEHIND PROGRAMME",
+    earnedValueLakh: Math.round(kpis.earnedValueLakh * 100) / 100,
+    valueDoneTodayInr: Math.round(kpis.valueDoneTodayInr),
+  };
+}
+
+function boqProgressBars(computed: ReturnType<typeof computeDpr>): DprBarPoint[] {
+  return computed.rows.slice(0, 10).map((r) => {
+    const plannedQty = Number(r.plannedQtyToday) || 0;
+    const qtyToday = Number(r.qtyToday) || 0;
+    if (qtyToday > 0 || plannedQty > 0) {
+      return {
+        label: (r.description || "Item").slice(0, 36),
+        planned: Math.round(plannedQty * 1000) / 1000,
+        actual: Math.round(qtyToday * 1000) / 1000,
+      };
+    }
+    const planned = r.planned > 0 ? Math.round(r.planned * 1000) / 10 : 0;
+    const actual = Math.round(r.pctComplete * 1000) / 10;
+    return {
+      label: (r.description || "Item").slice(0, 36),
+      planned,
+      actual,
+    };
+  });
 }
 export type DprBarPoint = { label: string; planned: number; actual: number };
 export type DprChartPack = {
@@ -93,17 +150,19 @@ export async function loadDprScurveHistory(
       .reverse()
       .map((p) => ({
       date: p.periodDate.toISOString().slice(0, 10),
-      label: p.periodLabel || p.periodDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      label: formatScurveLabel(p.periodDate.toISOString().slice(0, 10), p.periodLabel || undefined),
       planned: Number(p.plannedPct) || 0,
       actual: Number(p.actualPct) || 0,
     }));
   }
 
-  let msPlannedByDate = new Map<string, number>();
+  let msScurve: { date: string; periodLabel: string; plannedPct: number; actualPct: number }[] = [];
+  const msPlannedByDate = new Map<string, number>();
   try {
     const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
     const ms = await loadMsProjectSummary(projectId);
-    for (const p of ms.scurve || []) {
+    msScurve = ms.scurve || [];
+    for (const p of msScurve) {
       msPlannedByDate.set(p.date.slice(0, 10), p.plannedPct);
     }
   } catch {
@@ -112,12 +171,14 @@ export async function loadDprScurveHistory(
 
   const end = new Date(logDate);
   end.setHours(23, 59, 59, 999);
+  const logKey = logDate.toISOString().slice(0, 10);
   const prior = await prisma.dprSnapshot.findMany({
     where: { projectId, discipline, logDate: { lte: end } },
     orderBy: { logDate: "asc" },
     take: 12,
   });
 
+  const actualByDate = new Map<string, number>();
   const points: DprChartPoint[] = [];
   for (const row of prior) {
     const snap = parseSnap(row.headerJson, row.linesJson);
@@ -125,31 +186,51 @@ export async function loadDprScurveHistory(
     snap.header.dataDate = row.logDate.toISOString();
     const computed = computeDpr(snap);
     const dateKey = row.logDate.toISOString().slice(0, 10);
+    const actual = Math.round(computed.kpis.actualPct * 1000) / 10;
+    actualByDate.set(dateKey, actual);
     points.push({
       date: dateKey,
-      label: row.logDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      label: formatScurveLabel(dateKey),
       planned: msPlannedByDate.has(dateKey)
         ? msPlannedByDate.get(dateKey)!
         : Math.round(computed.kpis.plannedPct * 1000) / 10,
-      actual: Math.round(computed.kpis.actualPct * 1000) / 10,
+      actual,
     });
   }
 
-  const hasToday = points.some((p) => p.date === logDate.toISOString().slice(0, 10));
+  const hasToday = points.some((p) => p.date === logKey);
   if (!hasToday) {
     const computed = computeDpr(currentSnap);
-    const dateKey = logDate.toISOString().slice(0, 10);
+    const actual = Math.round(computed.kpis.actualPct * 1000) / 10;
+    actualByDate.set(logKey, actual);
     points.push({
-      date: dateKey,
-      label: logDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      planned: msPlannedByDate.has(dateKey)
-        ? msPlannedByDate.get(dateKey)!
+      date: logKey,
+      label: formatScurveLabel(logKey),
+      planned: msPlannedByDate.has(logKey)
+        ? msPlannedByDate.get(logKey)!
         : Math.round(computed.kpis.plannedPct * 1000) / 10,
-      actual: Math.round(computed.kpis.actualPct * 1000) / 10,
+      actual,
     });
   }
 
-  return points.slice(-13);
+  const merged = points.slice(-13);
+  const needsMsPlanned = merged.length === 0 || merged.every((p) => p.planned === 0);
+  if (needsMsPlanned && msScurve.length) {
+    const msSlice = msScurve.filter((p) => p.date.slice(0, 10) <= logKey).slice(-13);
+    if (msSlice.length) {
+      return msSlice.map((p) => {
+        const dateKey = p.date.slice(0, 10);
+        return {
+          date: dateKey,
+          label: formatScurveLabel(dateKey, p.periodLabel),
+          planned: p.plannedPct,
+          actual: actualByDate.get(dateKey) ?? (dateKey === logKey ? actualByDate.get(logKey) ?? p.actualPct : p.actualPct),
+        };
+      });
+    }
+  }
+
+  return merged;
 }
 
 /** Map MS Project S-curve export → DPR chart points (for manual override after XML import). */
@@ -166,11 +247,17 @@ export async function msProjectScurveToDprPoints(projectId: string): Promise<Dpr
 
 export function buildDprChartPack(snap: DprSnapshot, scurve: DprChartPoint[] = []): DprChartPack {
   const computed = computeDpr(snap);
-  const boqProgress = computed.rows.slice(0, 10).map((r) => ({
-    label: (r.description || "Item").slice(0, 36),
-    planned: Math.round(r.planned * 1000) / 10,
-    actual: Math.round(r.pctComplete * 1000) / 10,
-  }));
+  const scurveSeries =
+    scurve.length > 0
+      ? scurve
+      : [
+          {
+            date: (snap.header.dataDate || new Date().toISOString()).slice(0, 10),
+            label: formatScurveLabel((snap.header.dataDate || new Date().toISOString()).slice(0, 10)),
+            planned: Math.round(computed.kpis.plannedPct * 1000) / 10,
+            actual: Math.round(computed.kpis.actualPct * 1000) / 10,
+          },
+        ];
 
   const manpower = (snap.manpower || [])
     .filter((m) => m.trade && (m.planned || m.actual))
@@ -182,26 +269,21 @@ export function buildDprChartPack(snap: DprSnapshot, scurve: DprChartPoint[] = [
     }));
 
   return {
-    summary: {
-      plannedPct: Math.round(computed.kpis.plannedPct * 1000) / 10,
-      actualPct: Math.round(computed.kpis.actualPct * 1000) / 10,
-      variance: Math.round(computed.kpis.variance * 1000) / 10,
-      spi: Math.round(computed.kpis.spi * 100) / 100,
-      overallStatus: computed.kpis.overallStatus,
-      earnedValueLakh: Math.round(computed.kpis.earnedValueLakh * 100) / 100,
-      valueDoneTodayInr: Math.round(computed.kpis.valueDoneTodayInr),
-    },
-    scurve: scurve.length ? scurve : [
-      {
-        date: new Date().toISOString().slice(0, 10),
-        label: "Today",
-        planned: Math.round(computed.kpis.plannedPct * 1000) / 10,
-        actual: Math.round(computed.kpis.actualPct * 1000) / 10,
-      },
-    ],
-    boqProgress,
+    summary: mergeSummaryWithScurve(computed.kpis, scurveSeries),
+    scurve: scurveSeries,
+    boqProgress: boqProgressBars(computed),
     manpower,
   };
+}
+
+/** Build editable S-curve rows for DPR INPUT 125–137 (max 13 points). */
+export function scurveEntriesFromChartPoints(points: DprChartPoint[]): DprScurveEntryInput[] {
+  return points.slice(-13).map((p) => ({
+    date: p.date,
+    label: p.label,
+    planned: p.planned,
+    actual: p.actual,
+  }));
 }
 
 /** Write S-curve history into INPUT rows 125–137 for DASHBOARD chart formulas. */

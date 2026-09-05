@@ -94,6 +94,7 @@ type Line = {
   finish?: string | null;
   cumQtyPrev?: number;
   qtyToday?: number;
+  plannedQtyToday?: number;
   remarks?: string;
 };
 
@@ -316,11 +317,22 @@ export default function DprMakerPage() {
         : snap.lines
             .filter((l) => l.description && num(l.scopeQty) > 0)
             .slice(0, 10)
-            .map((l, i) => ({
-              label: l.description.slice(0, 36),
-              planned: Math.round((computed.rows[i]?.planned ?? 0) * 1000) / 10,
-              actual: Math.round((computed.rows[i]?.pctComplete ?? 0) * 1000) / 10,
-            }));
+            .map((l, i) => {
+              const plannedQty = num(l.plannedQtyToday);
+              const qtyToday = num(l.qtyToday);
+              if (qtyToday > 0 || plannedQty > 0) {
+                return {
+                  label: l.description.slice(0, 36),
+                  planned: Math.round(plannedQty * 1000) / 1000,
+                  actual: Math.round(qtyToday * 1000) / 1000,
+                };
+              }
+              return {
+                label: l.description.slice(0, 36),
+                planned: Math.round((computed.rows[i]?.planned ?? 0) * 1000) / 10,
+                actual: Math.round((computed.rows[i]?.pctComplete ?? 0) * 1000) / 10,
+              };
+            });
 
     const manpower =
       api?.manpower?.length
@@ -353,13 +365,29 @@ export default function DprMakerPage() {
               },
             ];
 
+    const summaryBase = api?.summary ?? {
+      plannedPct: Math.round(computed.plannedPct * 1000) / 10,
+      actualPct: Math.round(computed.actualPct * 1000) / 10,
+      variance: Math.round(computed.variance * 1000) / 10,
+      spi: Math.round(computed.spi * 100) / 100,
+      overallStatus: computed.actualPct >= computed.plannedPct ? "On programme" : "Behind",
+    };
+    const scurveLast = scurve.length ? scurve[scurve.length - 1] : null;
+    let plannedPct = summaryBase.plannedPct;
+    let actualPct = summaryBase.actualPct;
+    if (plannedPct === 0 && scurveLast && scurveLast.planned > 0) plannedPct = scurveLast.planned;
+    if (actualPct === 0 && scurveLast && scurveLast.actual > 0) actualPct = scurveLast.actual;
+    const variance = Math.round((actualPct - plannedPct) * 10) / 10;
+    const spi = plannedPct > 0 ? Math.round((actualPct / plannedPct) * 100) / 100 : 0;
+
     return {
-      summary: api?.summary ?? {
-        plannedPct: Math.round(computed.plannedPct * 1000) / 10,
-        actualPct: Math.round(computed.actualPct * 1000) / 10,
-        variance: Math.round(computed.variance * 1000) / 10,
-        spi: Math.round(computed.spi * 100) / 100,
-        overallStatus: computed.actualPct >= computed.plannedPct ? "On programme" : "Behind",
+      summary: {
+        ...summaryBase,
+        plannedPct,
+        actualPct,
+        variance,
+        spi,
+        overallStatus: actualPct >= plannedPct ? "ON PROGRAMME" : "BEHIND PROGRAMME",
       },
       scurve,
       boqProgress,
@@ -789,20 +817,20 @@ export default function DprMakerPage() {
       </div>
 
       {/* KPI band */}
-      {computed && (
+      {computed && displayCharts && (
         <div className="maker-section">
           <div className="maker-section__head">Live KPIs</div>
           <div className="maker-section__body">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-sm">
-            <KPI label="Planned %" value={(computed.plannedPct * 100).toFixed(1) + "%"} />
-            <KPI label="Actual %" value={(computed.actualPct * 100).toFixed(1) + "%"} />
-            <KPI label="Variance" value={(computed.variance * 100).toFixed(1) + "%"} tone={computed.variance >= 0 ? "ok" : "warn"} />
-            <KPI label="SPI" value={computed.spi.toFixed(2)} tone={computed.spi >= 1 ? "ok" : "warn"} />
+            <KPI label="Planned %" value={displayCharts.summary.plannedPct.toFixed(1) + "%"} />
+            <KPI label="Actual %" value={displayCharts.summary.actualPct.toFixed(1) + "%"} />
+            <KPI label="Variance" value={displayCharts.summary.variance.toFixed(1) + "%"} tone={displayCharts.summary.variance >= 0 ? "ok" : "warn"} />
+            <KPI label="SPI" value={displayCharts.summary.spi.toFixed(2)} tone={displayCharts.summary.spi >= 1 ? "ok" : "warn"} />
             <KPI label="Earned value ₹ L" value={computed.earnedValueLakh.toFixed(2)} />
             <KPI label="Man-days today" value={computed.manDaysToday.toFixed(1)} />
             <KPI label="Hrs lost today" value={computed.hoursLostToday.toFixed(1)} tone={computed.hoursLostToday > 0 ? "warn" : "ok"} />
           </div>
-          <p className="text-xs text-steel-muted mt-2">Contract value ~ ₹ {computed.contractValueLakh.toFixed(2)} Lakh · Overall {computed.actualPct >= computed.plannedPct ? "ON PROGRAMME" : "BEHIND PROGRAMME"}.</p>
+          <p className="text-xs text-steel-muted mt-2">Contract value ~ ₹ {computed.contractValueLakh.toFixed(2)} Lakh · Overall {displayCharts.summary.overallStatus}.</p>
           </div>
         </div>
       )}
@@ -853,18 +881,26 @@ export default function DprMakerPage() {
                 variant="secondary"
                 type="button"
                 className="!text-xs"
-                onClick={() => {
-                  if (!snap) return;
-                  const entries = displayCharts?.scurve?.length
-                    ? displayCharts.scurve.map((p) => ({
-                        date: (p as { date?: string }).date || logDate,
-                        label: p.label,
-                        planned: p.planned,
-                        actual: p.actual,
-                      }))
-                    : [{ date: logDate, label: "Today", planned: 0, actual: 0 }];
-                  setSnap({ ...snap, scurveEntries: entries });
-                  setMsg("S-curve loaded from BOQ / history — edit rows or import MS Project XML.");
+                disabled={busy}
+                onClick={async () => {
+                  if (!snap || !projectId) return;
+                  setBusy(true);
+                  setMsg("");
+                  try {
+                    const out = await api<{ scurveEntries: ScurveEntry[]; charts: Snap["charts"] }>(
+                      `/api/dpr-maker/${projectId}/recalc-scurve`,
+                      { method: "POST", token, body: JSON.stringify(buildSavePayload(snap, logDate, discipline)) }
+                    );
+                    setSnap({ ...snap, scurveEntries: out.scurveEntries, charts: out.charts });
+                    setMsg(
+                      `S-curve recalculated — ${out.scurveEntries.length} points for INPUT 125–137. ` +
+                        "Uses MS Project planned % + BOQ actual history."
+                    );
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Recalc failed");
+                  } finally {
+                    setBusy(false);
+                  }
                 }}
               >
                 Recalc from BOQ
@@ -914,12 +950,17 @@ export default function DprMakerPage() {
                 className="!text-xs"
                 onClick={() => {
                   if (!snap) return;
+                  const base: ScurveEntry[] = snap.scurveEntries?.length
+                    ? snap.scurveEntries
+                    : (displayCharts?.scurve || []).map((p) => ({
+                        date: (p as { date?: string }).date || logDate,
+                        label: p.label,
+                        planned: p.planned,
+                        actual: p.actual,
+                      }));
                   setSnap({
                     ...snap,
-                    scurveEntries: [
-                      ...(snap.scurveEntries || []),
-                      { date: logDate, label: "", planned: 0, actual: 0 },
-                    ],
+                    scurveEntries: [...base, { date: logDate, label: "", planned: 0, actual: 0 }],
                   });
                 }}
               >
@@ -942,31 +983,27 @@ export default function DprMakerPage() {
                 </tr>
               </thead>
               <tbody>
-                {(snap.scurveEntries?.length ? snap.scurveEntries : displayCharts?.scurve || []).map((p, i) => (
+                {(snap.scurveEntries || []).map((p, i) => (
                   <tr key={`sc-${i}`} className="border-t border-line">
                     <td className="p-1">
                       <Input
                         type="date"
-                        value={toDateInput((p as ScurveEntry).date || logDate)}
+                        value={toDateInput(p.date || logDate)}
                         onChange={(e) => {
-                          if (!snap.scurveEntries?.length) return;
-                          const rows = [...snap.scurveEntries];
+                          const rows = [...(snap.scurveEntries || [])];
                           rows[i] = { ...rows[i], date: e.target.value };
                           setSnap({ ...snap, scurveEntries: rows });
                         }}
-                        disabled={!snap.scurveEntries?.length}
                       />
                     </td>
                     <td className="p-1">
                       <Input
-                        value={(p as ScurveEntry).label || ""}
+                        value={p.label || ""}
                         onChange={(e) => {
-                          if (!snap.scurveEntries?.length) return;
-                          const rows = [...snap.scurveEntries];
+                          const rows = [...(snap.scurveEntries || [])];
                           rows[i] = { ...rows[i], label: e.target.value };
                           setSnap({ ...snap, scurveEntries: rows });
                         }}
-                        disabled={!snap.scurveEntries?.length}
                         placeholder="Week label"
                       />
                     </td>
@@ -974,51 +1011,44 @@ export default function DprMakerPage() {
                       <Input
                         type="number"
                         step="0.1"
-                        value={(p as ScurveEntry).planned ?? 0}
+                        value={p.planned ?? 0}
                         onChange={(e) => {
-                          if (!snap.scurveEntries?.length) return;
-                          const rows = [...snap.scurveEntries];
+                          const rows = [...(snap.scurveEntries || [])];
                           rows[i] = { ...rows[i], planned: Number(e.target.value) };
                           setSnap({ ...snap, scurveEntries: rows });
                         }}
-                        disabled={!snap.scurveEntries?.length}
                       />
                     </td>
                     <td className="p-1">
                       <Input
                         type="number"
                         step="0.1"
-                        value={(p as ScurveEntry).actual ?? 0}
+                        value={p.actual ?? 0}
                         onChange={(e) => {
-                          if (!snap.scurveEntries?.length) return;
-                          const rows = [...snap.scurveEntries];
+                          const rows = [...(snap.scurveEntries || [])];
                           rows[i] = { ...rows[i], actual: Number(e.target.value) };
                           setSnap({ ...snap, scurveEntries: rows });
                         }}
-                        disabled={!snap.scurveEntries?.length}
                       />
                     </td>
                     <td>
-                      {snap.scurveEntries?.length ? (
-                        <button
-                          type="button"
-                          className="maker-table__remove-row"
-                          onClick={() => {
-                            const rows = snap.scurveEntries!.filter((_, j) => j !== i);
-                            setSnap({ ...snap, scurveEntries: rows });
-                          }}
-                          aria-label="Remove"
-                        >
-                          ✕
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="text-steel-muted hover:text-danger text-xs px-2"
+                        onClick={() => {
+                          const rows = (snap.scurveEntries || []).filter((_, j) => j !== i);
+                          setSnap({ ...snap, scurveEntries: rows });
+                        }}
+                      >
+                        ✕
+                      </button>
                     </td>
                   </tr>
                 ))}
-                {!snap.scurveEntries?.length && !(displayCharts?.scurve?.length) && (
+                {!snap.scurveEntries?.length && (
                   <tr>
                     <td colSpan={5} className="p-6 text-center text-sm text-steel-muted">
-                      Click <b>Recalc from BOQ</b>, <b>Import MS Project XML</b>, or <b>+ Add row</b> to maintain the S-curve.
+                      Click <b>Recalc from BOQ</b>, <b>Import MS Project XML</b>, or <b>+ Add row</b> to maintain the S-curve (INPUT rows 125–137).
                     </td>
                   </tr>
                 )}
@@ -1526,7 +1556,20 @@ export default function DprMakerPage() {
   );
 }
 
-function DprScurveChart({ points }: { points: { label: string; planned: number; actual: number }[] }) {
+function formatScurveAxisLabel(label: string, date?: string): string {
+  const trimmed = (label || "").trim();
+  if (trimmed && !/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed.length > 12 ? trimmed.slice(0, 12) : trimmed;
+  }
+  const raw = date || trimmed;
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  }
+  return raw.slice(0, 10);
+}
+
+function DprScurveChart({ points }: { points: { label: string; planned: number; actual: number; date?: string }[] }) {
   if (!points.length) return <p className="text-sm text-steel-muted">Add S-curve rows below or import MS Project XML.</p>;
   const w = 640;
   const h = 220;
@@ -1544,7 +1587,7 @@ function DprScurveChart({ points }: { points: { label: string; planned: number; 
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         {points.map((p, i) => (
           <text key={`xl-${i}`} x={pad + i * step} y={h - 8} textAnchor="middle" fontSize="9" fill="var(--color-steel-muted,#5c6578)">
-            {p.label.slice(0, 8)}
+            {formatScurveAxisLabel(p.label, p.date)}
           </text>
         ))}
         <path d={planned} fill="none" stroke="#2563EB" strokeWidth="2.5" />
