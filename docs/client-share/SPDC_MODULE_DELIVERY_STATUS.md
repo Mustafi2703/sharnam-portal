@@ -27,10 +27,10 @@ Sharnam Portal is a **single online workspace** per construction project: drawin
 | **Role-based portals** | Office · Site · Contractor · Client · Stakeholder (+ CRM master) |
 | **WPR / DPR data hub** | 7 DPR disciplines → **24 WPR sections** · branded ExcelJS export |
 | **Client demo readiness** | Full 3-session runbook + UAT workbook available |
-| **UAT schedule** | **Sep 8–19, 2026** — module finals, security S1–S10, multi-user M1–M8, daily/weekly/monthly/closure workflows |
-| **Production go-live** | After two-week UAT sign-off (see §4 and [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md)) |
+| **UAT schedule** | **Sep 8–19, 2026** — **~147 scenarios** · soft launch Day 1 · full handover Sep 19 |
+| **Production go-live** | After two-week UAT — HP + NEG + M1–M16 + S1–S15 pass ([scenario bank](./SPDC_UAT_SCENARIO_BANK.md)) |
 
-**Bottom line:** The product is **feature-complete for PMC demo and pilot UAT**. **Structured testing runs over the next two weeks** on portal.spdc.in with office, site, client, contractor, vendor, and stakeholder users — then signed acceptance per module before production cut-over.
+**Bottom line:** **Test thoroughly, use immediately.** Office and site can start daily work from **Mon Sep 8** on DMS, directory, and field modules while UAT runs. Formal **handover Fri Sep 19** after ~147 scenarios pass including multi-user, security, and daily→closure workflows.
 
 ---
 
@@ -155,7 +155,12 @@ The portal mirrors the **client Excel pack** — each tool maps to a workbook ta
 
 ## 4. Two-week UAT plan (8–19 September 2026)
 
-**All testing on portal.spdc.in** with **SPDC-UAT-LIVE** and **SPDC-DEMO-01**. Full day-by-day calendar: **[SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md)**.
+**All testing on portal.spdc.in** with **SPDC-UAT-LIVE** and **SPDC-DEMO-01**.  
+**Calendar:** [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) · **Scenarios (~147):** [SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md)
+
+### Test hard · use early · hand over Fri Sep 19
+
+Teams **start using the portal from Mon Sep 8** on modules that pass Day-1 smoke tests (DMS, directory, registers). Vendors join Wed Sep 10; client Mon Sep 15; stakeholders Wed Sep 17. **Full production handover** after robust UAT sign-off — not a hard wait until Sep 19 for daily work.
 
 ### Roles in every session
 

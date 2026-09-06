@@ -3,9 +3,31 @@
 **Portal:** https://portal.spdc.in  
 **Projects:** SPDC-UAT-LIVE (full pack) · SPDC-DEMO-01 (CRM bids)  
 **Password:** `Demo@1234`  
-**Goal:** Module final tests · security gates · multi-user parallel DB · daily → weekly → monthly → closure workflows — **all roles**
+**Goal:** **~147 test scenarios** (see scenario bank) · module finals · security · multi-user · daily → closure workflows — **all roles**  
+**Handover:** Formal sign-off **Fri Sep 19** · **Soft launch from Mon Sep 8** — teams start using passed modules immediately while testing continues.
 
-**Companion docs:** [SPDC_MODULE_DELIVERY_STATUS.md](./SPDC_MODULE_DELIVERY_STATUS.md) · [12-Live-Client-UAT-Workbook.md](./12-Live-Client-UAT-Workbook.md) · [SPDC_FE_DEMO_RUNBOOK.md](./SPDC_FE_DEMO_RUNBOOK.md)
+**Companion docs:** [SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md) · [SPDC_MODULE_DELIVERY_STATUS.md](./SPDC_MODULE_DELIVERY_STATUS.md) · [12-Live-Client-UAT-Workbook.md](./12-Live-Client-UAT-Workbook.md)
+
+---
+
+## 0. Test hard · use early · hand over once
+
+| Principle | Detail |
+|-----------|--------|
+| **Robust testing** | ~147 scenarios — happy path, edge cases, negative role checks, multi-user, mobile spot-checks |
+| **Use while testing** | Office + site **from Day 1** on DMS, directory, checklists, DPR; vendors from Day 3; client from Week 2 Mon |
+| **Log, don’t block** | P2/P3 issues logged in Workbook §2 — daily work continues unless IT marks **P1 stop-ship** |
+| **Handover gate** | Fri Sep 19 — all HP + NEG + M1–M16 + S1–S15 pass · leadership signatures |
+
+### Soft launch schedule (start using before full sign-off)
+
+| From | Roles unlocked for real work | Modules safe to use daily |
+|------|------------------------------|---------------------------|
+| **Mon Sep 8** | Office, site, IT | DMS · directory · sign-off register · browse all registers |
+| **Wed Sep 10** | + vendor | + checklist fills · NCR response · quality/safety field |
+| **Mon Sep 15** | + client | + read-only WPR · progress · published GFC |
+| **Wed Sep 17** | + stakeholder | + RFI response · MoM actions |
+| **Fri Sep 19** | All — **full handover** | Production cut-over · real project data |
 
 ---
 
@@ -42,13 +64,13 @@ Each cadence is exercised on UAT with **real multi-user input** (not demo-only v
 
 ## 3. Week 1 — Module finals + daily/weekly base (Sep 8–12)
 
-| Day | Date | Focus | Modules | Multi-user / security |
-|-----|------|-------|---------|------------------------|
-| **Mon** | Sep 8 | Kick-off · roles · DMS · directory | Master, Directory, DMS, sign-off register | **S1–S5** · all 6 roles login smoke |
-| **Tue** | Sep 9 | Design & comms | Drawings, RFIs, coordination, Comms matrix | **M5** struct + mep RFIs parallel · **S2** cross-project |
-| **Wed** | Sep 10 | Quality loop | QI, NCR/CAR, inspection, cubes, QAP | **M4** office close vs vendor fill · **S3–S4** role blocks |
-| **Thu** | Sep 11 | Safety & site daily | Safety NCR, HSE IR, checklists, attendance | **Daily workflow** full day · site + vendor |
-| **Fri** | Sep 12 | DPR & progress | DPR 7 disciplines, PvA, photos, diary | **M1** two site users · **M2** DPR + WPR same window |
+| Day | Date | Focus | Modules | Multi-user / security | Scenario IDs |
+|-----|------|-------|---------|------------------------|--------------|
+| **Mon** | Sep 8 | Kick-off · roles · DMS · directory | Master, Directory, DMS, sign-off register | **S1–S5** · all roles login | **DIR-01–10 · DMS-01–10** |
+| **Tue** | Sep 9 | Design & comms | Drawings, RFIs, coordination, Comms matrix | **M5** · **S2** | **DWG-01–12 · COM-06** |
+| **Wed** | Sep 10 | Quality loop | QI, NCR/CAR, inspection, cubes, QAP | **M4** · **S3–S4** | **QLT-01–16** · vendors soft launch |
+| **Thu** | Sep 11 | Safety & site daily | Safety NCR, HSE IR, checklists, attendance | Daily cadence · **MOB-01–04** | **SAF-01–10** |
+| **Fri** | Sep 12 | DPR & progress | DPR 7 disciplines, PvA, photos, diary | **M1 · M2 · M15** | **DPR-01–15** |
 
 **Week 1 exit criteria:** Phases A–C pass · daily workflow documented · issues logged in UAT Workbook §2.
 
@@ -56,15 +78,17 @@ Each cadence is exercised on UAT with **real multi-user input** (not demo-only v
 
 ## 4. Week 2 — Commercial, cadence, security hardening (Sep 15–19)
 
-| Day | Date | Focus | Modules | Multi-user / security |
-|-----|------|-------|---------|------------------------|
-| **Mon** | Sep 15 | Weekly & reports | WPR 24 sections, client XLSX/PPTX, reports files | **Weekly workflow** · client read-only verify |
-| **Tue** | Sep 16 | Commercial | Cost, cashflow, Finance RA/COP, CRM bids | **M3** Bhavna + Nikhra BOQ · **M7** comparative refresh |
-| **Wed** | Sep 17 | People & audit | HRMS, Audit KPI, Inspection register polish | **M6** parallel exports · stakeholder MoM |
-| **Thu** | Sep 18 | Monthly + closure | Monthly audit row · snaglist · lessons learnt | **Synthetic week** replay · **M8** client + office publish |
-| **Fri** | Sep 19 | **Final gate** | Re-test open issues · sign-off | **S6–S10** · **M1–M8** full matrix · §7 signatures |
+| Day | Date | Focus | Modules | Multi-user / security | Scenario IDs |
+|-----|------|-------|---------|------------------------|--------------|
+| **Mon** | Sep 15 | Weekly & reports | WPR 24 sections, client XLSX/PPTX | Weekly · client verify | **WPR-01–12 · M12** |
+| **Tue** | Sep 16 | Commercial | Cost, cashflow, Finance, CRM | **M3 · M7 · M15** | **CST-01–05 · FIN-01–03 · CRM-01–08** |
+| **Wed** | Sep 17 | People & audit | HRMS, Audit KPI, Inspection | **M6 · M11** · stakeholders | **COM-01–05 · HRM-01–05 · AUD-01–05** |
+| **Thu** | Sep 18 | Monthly + closure | Synthetic week · snag · lessons | **M8 · M16 · E2E-01–06** | **CLS-01–05 · E2E-01–06** |
+| **Fri** | Sep 19 | **Final gate** | Re-test P1 · sign-off | **S6–S15 · M1–M16** | All open HP/NEG retest |
 
-**Week 2 exit criteria:** All modules ☐ in delivery matrix · security S1–S10 pass · concurrent M1–M8 pass · leadership sign-off.
+**Week 2 exit criteria:** All **HP** scenarios pass · M1–M16 · S1–S15 · leadership sign-off · **production handover**.
+
+Full scenario list: **[SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md)** (~147 cases).
 
 ---
 
@@ -109,6 +133,14 @@ Run on **SPDC-UAT-LIVE** with separate browsers/incognito. **Pass = no 500 error
 | M6 | Signature upload + XLSX export | office ×2 | Both files in DMS |
 | M7 | BOQ save + comparative recompute | vendor + office | Comparative totals match |
 | M8 | Drawing publish + client browse | office + client | Client never sees draft revision |
+| M9 | Three checklist submits same template | site + vendor×2 | Three distinct submission rows |
+| M10 | WPR + DPR + NCR same window | office + site + vendor | All three complete |
+| M11 | Two MoM action edits | office×2 | Both actions saved |
+| M12 | Client WPR download during regenerate | client + office | Stable file for client |
+| M13 | Stakeholder RFI + drawing publish | struct + office | Independent records |
+| M14 | Dual attendance punch same minute | site×2 | Both logged with audit |
+| M15 | Rapid dual vendor BOQ saves | vendor×2 | 05.06 valid final state |
+| M16 | Full synthetic week all roles | all 6 types | E2E-06 pass |
 
 ---
 
@@ -126,6 +158,11 @@ Run on **SPDC-UAT-LIVE** with separate browsers/incognito. **Pass = no 500 error
 | S8 | SharePoint path scoped to project code | ☐ |
 | S9 | Token invalid after credential change | ☐ |
 | S10 | No secrets in git; prod env on server | ☐ |
+| S11 | Logout clears session | ☐ |
+| S12 | Invalid JWT → 401 | ☐ |
+| S13 | Injection in search fields sanitized | ☐ |
+| S14 | XSS in remarks escaped in exports | ☐ |
+| S15 | Login rate limit (if enabled) | ☐ |
 
 ---
 
@@ -152,4 +189,4 @@ Run on **SPDC-UAT-LIVE** with separate browsers/incognito. **Pass = no 500 error
 
 ---
 
-*Sharnam PMC · Two-week UAT plan · Sep 8–19, 2026 · Rev 01*
+*Sharnam PMC · Two-week UAT plan · Sep 8–19, 2026 · Rev 02 · ~147 scenarios in SPDC_UAT_SCENARIO_BANK.md*

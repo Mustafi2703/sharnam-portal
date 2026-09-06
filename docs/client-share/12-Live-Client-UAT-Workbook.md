@@ -7,7 +7,9 @@
 **UAT window:** **8–19 September 2026** (two weeks)  
 **Purpose:** One shared document for client testing — **features + UAT steps per page**, **meeting change stakes**, sign-off.
 
-**Master schedule:** [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) — day-by-day · all roles · daily/weekly/monthly/closure workflows · multi-user + security gates.
+**Master schedule:** [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) · **Scenario bank (~147):** [SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md)
+
+**Soft launch:** Office + site use DMS/directory from **Mon Sep 8** while testing continues. Full handover **Fri Sep 19**.
 
 ---
 

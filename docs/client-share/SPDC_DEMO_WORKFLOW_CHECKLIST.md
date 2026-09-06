@@ -19,12 +19,14 @@ npm run hostinger:build
 
 ## 0. Two-week UAT cadence (Sep 8–19)
 
+**~147 scenarios** in [SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md). **Use portal from Day 1** on passed modules — see soft launch table in two-week plan.
+
 | Week | Daily test | Weekly test | Roles each day |
 |------|------------|-------------|----------------|
-| **1** | Checklist + DPR + safety (Thu–Fri) | WPR spot-check Fri | Office + site + vendor |
-| **2** | DPR continues | Full WPR Mon · QAP | + client + stakeholder |
-| **2 Thu** | Synthetic week replay | Monthly audit + closure snag | **All 6 role types concurrent** |
-| **2 Fri** | — | Final sign-off | IT runs S1–S10 + M1–M8 |
+| **1** | Checklist + DPR + safety (Thu–Fri) | WPR spot-check Fri | Office + site + vendor (from Wed) |
+| **2** | DPR continues | Full WPR Mon · QAP | + client (Mon) + stakeholder (Wed) |
+| **2 Thu** | Synthetic week replay | Monthly audit + closure snag | **All 6 role types · E2E-01–06 · M16** |
+| **2 Fri** | — | Final sign-off | IT: S1–S15 · M1–M16 · retest open HP/NEG |
 
 See [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) for the day-by-day calendar.
 
