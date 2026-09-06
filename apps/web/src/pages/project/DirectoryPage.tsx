@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, Select } from "../../components
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
+import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
 
 const USER_TOOLS: {
@@ -200,6 +201,10 @@ export default function DirectoryPage() {
       )}
 
       {id && (
+        <DirectoryMySignaturePanel projectId={id} token={token} />
+      )}
+
+      {id && (
         <DirectorySignOffRegister
           projectId={id}
           token={token}
@@ -207,6 +212,8 @@ export default function DirectoryPage() {
           vendors={overview?.vendors || []}
           canEditAll={canEdit}
           currentUserId={user?.id}
+          currentUserEmail={user?.email}
+          currentUserVendorId={user?.vendorId}
           onSaved={load}
         />
       )}

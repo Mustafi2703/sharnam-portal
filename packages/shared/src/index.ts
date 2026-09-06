@@ -204,6 +204,7 @@ export type AuthUser = {
   fullName: string;
   role: RoleKey;
   portal: PortalKey;
+  vendorId?: string | null;
 };
 
 /** Indian Standard Time — used for site attendance punches and display. */

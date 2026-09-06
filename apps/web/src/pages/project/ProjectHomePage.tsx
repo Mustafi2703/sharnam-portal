@@ -6,6 +6,7 @@ import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Stat } from "../../components/ui";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
+import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -53,6 +54,7 @@ export default function ProjectHomePage() {
 
   const tools = isClient
     ? [
+        ["directory", "My sign-off", "Upload signature for reports & checklists", "SIG", "#0B6A78"],
         ["drawings", "Drawings", "Published GFC sheets — view only", "DWG", "#E4632A"],
         ["drawings/coordination", "Design coordination", "View clash / design issues", "DC", "#2563EB"],
         ["rfis", "Concerns / RFIs", "Raise questions without upload control", "RFI", "#0B6A78"],
@@ -64,6 +66,7 @@ export default function ProjectHomePage() {
     : [
         // Report makers pulled up first — this is where daily / weekly work
         // gets recorded and pushed to the SharePoint MIS.
+        ["directory", "My sign-off", "Personal + company signature for exports", "SIG", "#0B6A78"],
         ["dpr-maker", "DPR maker", "Fill INPUT → publish SPDC template XLSX", "DPR", "#E4632A"],
         ["wpr-maker", "WPR maker", "24-section weekly pack with photos", "WPR", "#C45C26"],
         ["drawings", "Drawings", "Upload, revise, publish sheets", "DWG", "#E4632A"],
@@ -114,6 +117,8 @@ export default function ProjectHomePage() {
           </div>
         )}
       </div>
+
+      {id && token && <DirectoryMySignaturePanel projectId={id} token={token} compact />}
 
       {!isClient && (
         <div className="space-y-2">

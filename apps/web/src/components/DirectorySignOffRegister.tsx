@@ -18,11 +18,18 @@ type MemberRow = {
 
 type VendorRow = {
   id: string;
+  vendorId?: string;
   tradeRole?: string | null;
   signatoryName?: string | null;
   signatureUrl?: string | null;
   signatureUpdatedAt?: string | null;
-  vendor?: { name?: string; partyType?: string; primaryContactName?: string | null; email?: string | null };
+  vendor?: {
+    id?: string;
+    name?: string;
+    partyType?: string;
+    primaryContactName?: string | null;
+    email?: string | null;
+  };
 };
 
 type Props = {
@@ -32,6 +39,8 @@ type Props = {
   vendors: VendorRow[];
   canEditAll?: boolean;
   currentUserId?: string;
+  currentUserEmail?: string;
+  currentUserVendorId?: string | null;
   onSaved?: () => void;
 };
 
@@ -51,6 +60,8 @@ export function DirectorySignOffRegister({
   vendors,
   canEditAll,
   currentUserId,
+  currentUserEmail,
+  currentUserVendorId,
   onSaved,
 }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -104,6 +115,16 @@ export function DirectorySignOffRegister({
     }
   }
 
+  function canEditVendor(v: VendorRow) {
+    if (canEditAll) return true;
+    if (currentUserVendorId && v.vendorId === currentUserVendorId) return true;
+    if (currentUserVendorId && v.vendor?.id === currentUserVendorId) return true;
+    const email = currentUserEmail?.toLowerCase();
+    const vendorEmail = v.vendor?.email?.toLowerCase();
+    if (email && vendorEmail && email === vendorEmail) return true;
+    return false;
+  }
+
   const rows = [
     ...members.map((m) => ({
       key: `m-${m.id}`,
@@ -114,7 +135,7 @@ export function DirectorySignOffRegister({
       role: m.signatoryTitle || m.role || m.user?.role || "Member",
       signatureUrl: m.signatureUrl,
       updatedAt: m.signatureUpdatedAt,
-      canEdit: canEditAll || m.user?.id === currentUserId,
+      canEdit: !!canEditAll || m.user?.id === currentUserId,
     })),
     ...vendors.map((v) => ({
       key: `v-${v.id}`,
@@ -125,7 +146,7 @@ export function DirectorySignOffRegister({
       role: v.tradeRole || v.vendor?.partyType || "Party",
       signatureUrl: v.signatureUrl,
       updatedAt: v.signatureUpdatedAt,
-      canEdit: !!canEditAll,
+      canEdit: canEditVendor(v),
     })),
   ];
 

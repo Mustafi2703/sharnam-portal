@@ -55,6 +55,7 @@ export function toAuthUser(u: {
   fullName: string;
   role: string;
   portal: string;
+  vendorId?: string | null;
 }): AuthUser {
   return {
     id: u.id,
@@ -62,5 +63,6 @@ export function toAuthUser(u: {
     fullName: u.fullName,
     role: u.role as RoleKey,
     portal: u.portal as PortalKey,
+    vendorId: u.vendorId ?? null,
   };
 }

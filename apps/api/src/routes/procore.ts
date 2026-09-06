@@ -812,6 +812,19 @@ directoryRouter.get("/project/:projectId/signatures", async (req, res) => {
   res.json({ signatures, folder: DIRECTORY_SIGNATURES_FOLDER });
 });
 
+directoryRouter.get("/project/:projectId/signatures/me", async (req: AuthedRequest, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    select: { id: true, email: true, role: true, vendorId: true },
+  });
+  if (!user) return res.status(404).json({ error: "Not found" });
+  const { getMyDirectorySignatureSlots, DIRECTORY_SIGNATURES_FOLDER } = await import(
+    "../services/directorySignatures.js"
+  );
+  const slots = await getMyDirectorySignatureSlots(prisma, req.params.projectId, user);
+  res.json({ ...slots, folder: DIRECTORY_SIGNATURES_FOLDER });
+});
+
 directoryRouter.post(
   "/project/:projectId/members/:memberId/signature",
   signUpload.single("signature"),
@@ -851,15 +864,32 @@ directoryRouter.post(
 
 directoryRouter.post(
   "/project/:projectId/vendors/:projectVendorId/signature",
-  requireRoles("admin", "office", "site_employee", "employee", "vendor"),
   signUpload.single("signature"),
   async (req: AuthedRequest, res) => {
     const { projectId, projectVendorId } = req.params;
     const file = req.file;
     if (!file) return res.status(400).json({ error: "signature file required (field: signature)" });
 
+    const pv = await prisma.projectVendor.findFirst({
+      where: { id: projectVendorId, projectId },
+      include: { vendor: { select: { id: true, email: true, partyType: true, name: true } } },
+    });
+    if (!pv) return res.status(404).json({ error: "Project party not found" });
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, email: true, role: true, vendorId: true },
+    });
+    if (!user) return res.status(404).json({ error: "Not found" });
+
+    const { saveVendorDirectorySignature, canEditVendorSignature } = await import(
+      "../services/directorySignatures.js"
+    );
+    if (!canEditVendorSignature(user, pv)) {
+      return res.status(403).json({ error: "Not allowed to update this company signature" });
+    }
+
     try {
-      const { saveVendorDirectorySignature } = await import("../services/directorySignatures.js");
       const updated = await saveVendorDirectorySignature(
         prisma,
         projectId,

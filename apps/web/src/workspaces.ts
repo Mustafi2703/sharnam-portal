@@ -110,6 +110,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "directory", label: "Directory · Client", query: "party=Client", blurb: "Client contacts." },
     { to: "directory", label: "Directory · Contractor", query: "party=Contractor", blurb: "Contractors on the job." },
     {
+      to: "directory",
+      label: "Sign-off register",
+      blurb: "Upload your signature PNG — used in branded Excel exports (all roles).",
+    },
+    {
       to: "vendors",
       label: "Vendors",
       roles: ["admin", "office", "site_employee", "employee", "vendor"],

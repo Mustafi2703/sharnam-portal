@@ -203,3 +203,82 @@ export async function saveVendorDirectorySignature(
     include: { vendor: true },
   });
 }
+
+export type MySignatureSlots = {
+  member: {
+    id: string;
+    name: string;
+    role: string;
+    signatureUrl?: string | null;
+    signatureUpdatedAt?: Date | null;
+    canEdit: boolean;
+  } | null;
+  vendors: Array<{
+    id: string;
+    vendorId: string;
+    name: string;
+    partyType: string;
+    signatureUrl?: string | null;
+    signatureUpdatedAt?: Date | null;
+    canEdit: boolean;
+  }>;
+};
+
+export function canManageDirectorySignatures(role: string) {
+  return ["admin", "office"].includes(role);
+}
+
+export function canEditVendorSignature(
+  user: { id: string; email: string; role: string; vendorId?: string | null },
+  pv: { vendorId: string; vendor: { email?: string | null; partyType?: string | null } }
+) {
+  if (canManageDirectorySignatures(user.role)) return true;
+  if (user.vendorId && user.vendorId === pv.vendorId) return true;
+  const email = user.email?.toLowerCase();
+  const vendorEmail = pv.vendor.email?.toLowerCase();
+  if (email && vendorEmail && email === vendorEmail) return true;
+  return false;
+}
+
+export async function getMyDirectorySignatureSlots(
+  prisma: PrismaClient,
+  projectId: string,
+  user: { id: string; email: string; role: string; vendorId?: string | null }
+): Promise<MySignatureSlots> {
+  const [member, vendors] = await Promise.all([
+    prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: user.id } },
+      include: { user: { select: { fullName: true, role: true } } },
+    }),
+    prisma.projectVendor.findMany({
+      where: { projectId },
+      include: { vendor: { select: { id: true, name: true, partyType: true, email: true, primaryContactName: true } } },
+    }),
+  ]);
+
+  const editableVendors = vendors
+    .filter((pv) => canEditVendorSignature(user, pv))
+    .map((pv) => ({
+      id: pv.id,
+      vendorId: pv.vendorId,
+      name: pv.signatoryName || pv.vendor.primaryContactName || pv.vendor.name,
+      partyType: pv.vendor.partyType || "Party",
+      signatureUrl: pv.signatureUrl,
+      signatureUpdatedAt: pv.signatureUpdatedAt,
+      canEdit: true,
+    }));
+
+  return {
+    member: member
+      ? {
+          id: member.id,
+          name: member.user.fullName,
+          role: member.signatoryTitle || member.role || member.user.role,
+          signatureUrl: member.signatureUrl,
+          signatureUpdatedAt: member.signatureUpdatedAt,
+          canEdit: canManageDirectorySignatures(user.role) || member.userId === user.id,
+        }
+      : null,
+    vendors: editableVendors,
+  };
+}
