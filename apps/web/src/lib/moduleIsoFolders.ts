@@ -51,7 +51,7 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     title: "Drawing files",
     eyebrow: "Drawings · ISO 04.02",
     hubPath: "hub/drawings",
-    subtitle: "GFC PDFs/DWG by discipline — same tree as Drawing file library. RFIs and coordination exports file here.",
+    subtitle: "GFC PDFs/DWG by discipline. Live register CSVs → _Registers/Drawings (use Refresh registers in DMS).",
     rfiKinds: ["RequestForInformation", "DrawingChecklist"],
   },
   progress: {

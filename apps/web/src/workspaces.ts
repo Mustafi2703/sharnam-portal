@@ -118,20 +118,30 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   quality: [
     {
+      to: "rfis",
+      label: "Checklist fills & QI responses",
+      end: true,
+      roles: ["vendor"],
+      blurb: "Complete quality checklists and IR responses assigned to your company.",
+    },
+    {
       to: "inspections",
       label: "Dashboard",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Quality Dashboard KPIs — week, concreting, QI fills.",
       sheet: "Quality Dashboard.xlsx · Dashboard",
     },
     {
       to: "quality/files",
       label: "Quality files",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "SharePoint ISO 08 tree + portal RFIs, NCR/CAR, QAP and cube exports.",
     },
     {
       to: "inspections",
       label: "SOR Log",
       query: "sheet=sor-log",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Site observation summary — includes live portal entries.",
       sheet: "SOR Log",
     },
@@ -227,21 +237,31 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     {
       to: "inspection-register",
       label: "Quality IR register",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "SPDC/QA/F-01 Request for Inspection — text drawing ref, live register.",
       sheet: "SPDC_Request_for_Inspection_Form.xlsx",
     },
   ],
   safety: [
-    { to: "safety", label: "Dashboard", blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
+    {
+      to: "rfis",
+      label: "NCR & safety responses",
+      end: true,
+      roles: ["vendor"],
+      blurb: "Respond to safety NCRs and checklist fills assigned to your company.",
+    },
+    { to: "safety", label: "Dashboard", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
     {
       to: "safety/files",
       label: "Safety files",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "SharePoint HSE folder + safety RFIs and NCR forms — open in SharePoint anytime.",
     },
     {
       to: "safety",
       label: "Site Instruction",
       query: "sheet=site-instruction",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Site instruction register.",
       sheet: "Site Instruction",
     },
@@ -249,6 +269,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety",
       label: "Unsafe Act Summary",
       query: "sheet=unsafe-act-summary",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Unsafe act summary register.",
       sheet: "Unsafe Act Summary",
     },
@@ -256,6 +277,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety",
       label: "NCR Summary",
       query: "sheet=ncr-summary",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "NCR summary register.",
       sheet: "NCR Summary",
     },
@@ -263,6 +285,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety",
       label: "NCR Form",
       query: "sheet=ncr-form",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Full NCR form (Safety NCR.xlsx).",
       sheet: "Safety NCR.xlsx",
     },
@@ -270,6 +293,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety",
       label: "Observation — Unsafe Act",
       query: "sheet=observation",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Unsafe act observation sheet.",
       sheet: "Observation - Unsafe Act",
     },
@@ -277,6 +301,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety",
       label: "HIRA",
       query: "sheet=hira",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Hazard identification & risk assessment.",
       sheet: "HIRA",
     },
@@ -284,6 +309,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety",
       label: "Safety Hours",
       query: "sheet=safety-hours",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Safe man-hours & HSE indicators.",
       sheet: "Safety Hours",
     },
@@ -302,12 +328,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "rfis",
       label: "Safety checklist RFI",
       query: "kind=SafetyChecklist",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Request safety checklist fill.",
     },
     {
       to: "inspection-register",
       label: "Safety IR register",
       query: "tab=safety-ir",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "SPDC/HSE/F-01 clearance requests + HSE register.",
       sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
     },
@@ -458,30 +486,41 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   comms: [
     {
+      to: "rfis",
+      label: "My RFIs & responses",
+      end: true,
+      roles: ["vendor"],
+      blurb: "Answer PMC RFIs and submit checklist fills — logged to Sharnam office.",
+    },
+    {
       to: "comms",
       label: "Communication matrix",
       end: true,
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Who talks to whom (roles / channels).",
       sheet: "Communication Matrix_BPCL",
     },
     {
       to: "comms/files",
       label: "Comms files",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "MoM exports, meeting packs — SharePoint ISO 03.08 folder.",
     },
-    { to: "comms", label: "Agenda", query: "tab=agenda", blurb: "Create meeting → generate agenda before MoM." },
-    { to: "comms", label: "MoM", query: "tab=mom", blurb: "Minutes + action items." },
-    { to: "comms", label: "Follow-up", query: "tab=followup", blurb: "Open actions from MoM." },
-    { to: "comms", label: "Comm log", query: "tab=log", blurb: "Communication log entries." },
+    { to: "comms", label: "Agenda", query: "tab=agenda", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Create meeting → generate agenda before MoM." },
+    { to: "comms", label: "MoM", query: "tab=mom", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Minutes + action items." },
+    { to: "comms", label: "Follow-up", query: "tab=followup", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Open actions from MoM." },
+    { to: "comms", label: "Comm log", query: "tab=log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Communication log entries." },
     {
       to: "rfis",
       label: "Ask (PMC RFI)",
       query: "kind=RequestForInformation",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Classic request for information — link drawing revision.",
     },
     {
       to: "inspection-register",
       label: "Quality IR (F-01)",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Raise SPDC quality inspection request — register maintained live.",
       sheet: "SPDC_Request_for_Inspection_Form.xlsx",
     },
@@ -489,6 +528,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "inspection-register",
       label: "Safety IR (F-01)",
       query: "tab=safety-ir",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "High-risk activity clearance — HSE register.",
       sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
     },
@@ -496,6 +536,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "inspection-register",
       label: "Activity checklist (F-02)",
       query: "tab=activity-checklist",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Activity inspection checklist offer — drawing ref as text.",
       sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
     },
@@ -503,6 +544,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "inspection-register",
       label: "HSE register",
       query: "tab=hse-register",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Safety IRs, findings & observations register.",
       sheet: "HSE Register",
     },
@@ -512,12 +554,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "employee", "site_employee"],
       blurb: "Connect mailbox and outbox.",
     },
-    { to: "diary", label: "Day log", blurb: "Manpower and site notes — feeds DPR.", sheet: "Day log" },
-    { to: "photos", label: "Photos", blurb: "Site photo albums.", sheet: "Photos" },
+    { to: "diary", label: "Day log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Manpower and site notes — feeds DPR.", sheet: "Day log" },
+    { to: "photos", label: "Photos", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Site photo albums.", sheet: "Photos" },
     {
       to: "rfis",
       label: "Site checklist RFI",
       query: "kind=SiteExecution",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
       blurb: "Request a site execution checklist fill.",
     },
   ],
@@ -537,7 +580,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "audit-kpi", label: "Findings", query: "tab=findings", blurb: "NC / observation + CAPA.", sheet: "FINDINGS" },
     { to: "audit-kpi", label: "Site walk", query: "tab=site-walk", blurb: "Walkthrough checklist.", sheet: "SITE_WALK" },
     { to: "audit-kpi", label: "DC interview", query: "tab=dc-interview", blurb: "Document controller interview.", sheet: "DC_INTERVIEW" },
-    { to: "audit-kpi", label: "Folder sample", query: "tab=folder-sample", blurb: "Controlled folder sampling.", sheet: "FOLDER_SAMPLE" },
     { to: "audit-kpi", label: "KPI dashboard", query: "tab=kpi-dashboard", blurb: "127 subjects RAG rollup.", sheet: "00_KPI_DASHBOARD" },
     { to: "audit-kpi", label: "Subject data", query: "tab=subjects", blurb: "Per-subject workbook health.", sheet: "03_SUBJECT_DATA" },
     { to: "audit-kpi", label: "Role KRA", query: "tab=role-kra", blurb: "Appraisal scorecard by role.", sheet: "06_ROLE_KRA" },
@@ -821,12 +863,15 @@ export const WORKSPACES: {
 }[] = (Object.keys(MODULE_META) as WorkspaceKey[]).map((key) => {
   const m = MODULE_META[key];
   let roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
-  if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
+  if (key === "drawings") roles = ["admin", "office", "site_employee", "employee", "client"];
+  if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "client"];
+  if (key === "inspection") roles = ["admin", "office", "site_employee", "employee"];
   if (key === "cost") roles = ["admin", "office", "employee"];
-  if (key === "finance") roles = ["admin", "office", "employee", "vendor"];
+  if (key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
   if (key === "auditKpi") roles = ["admin", "office", "employee", "client"];
   if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
+  // vendor: respond-only desk — RFIs, NCR/checklist fills (no registers / DPR / cost)
   return {
     key,
     title: m.title,

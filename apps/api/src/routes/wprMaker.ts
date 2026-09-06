@@ -312,7 +312,7 @@ wprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
   const range = rangeFromQuery(req.query as Record<string, unknown>);
   const pack = await buildWprExportPack(projectId, range);
   if (!pack) return res.status(404).json({ error: "project not found" });
-  const buf = buildWprWorkbook({ header: pack.header, sections: pack.sections, charts: pack.charts });
+  const buf = await buildWprWorkbook({ header: pack.header, sections: pack.sections, charts: pack.charts });
   const fname = `WPR-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
@@ -371,7 +371,7 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
   }
 
   const { project, weekStart, header, sections, charts, existing } = pack;
-  const buf = buildWprWorkbook({ header, sections, charts });
+  const buf = await buildWprWorkbook({ header, sections, charts });
   const dateStr = weekEnd.toISOString().slice(0, 10);
   const fname = `WPR-${project.code}-${dateStr}.xlsx`;
   const clientFname = `WPR-ClientPack-${project.code}-${dateStr}.xlsx`;

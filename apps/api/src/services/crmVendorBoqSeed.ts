@@ -16,10 +16,11 @@ import {
 } from "./comparativeStatement.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { CRM_SHAREPOINT, syncBufferToProjectSharePoint } from "./crmSharePoint.js";
-import { recomputeBidPackageComparative } from "./crmBidRecompute.js";
+import { recomputeAndSyncBidPackage } from "./crmBidRecompute.js";
 
 const VENDOR_RATE_FACTOR: Record<string, number> = {
   "M/s Bhavna Infra": 1,
+  "M/s Nikhra Infra": 1.035,
   "TCC Projects PVT. LTD.": 1.04,
   "Pearl Electricals": 1.02,
   "Kalyani Construction Co.": 1.03,
@@ -129,7 +130,7 @@ export async function seedBidPackageR2Boqs(
       const out = XLSX.write(miniWb, { type: "buffer", bookType: "xlsx" }) as Buffer;
       const saved = await syncBufferToProjectSharePoint(
         pkg.project.code,
-        CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel),
+        CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel, slot.discipline),
         fileName,
         out
       );
@@ -156,7 +157,7 @@ export async function seedBidPackageR2Boqs(
     data: { status: pkg.status === "Draft" ? "Evaluation" : pkg.status },
   });
 
-  const recomputed = await recomputeBidPackageComparative(prisma, bidPackageId);
+  const recomputed = await recomputeAndSyncBidPackage(prisma, bidPackageId);
   return { uploaded, total: pkg.vendorBoqs.length, recomputed };
 }
 

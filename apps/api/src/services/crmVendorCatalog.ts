@@ -31,6 +31,7 @@ function tradeFromDisciplines(keys: string[]): string {
 /** ~3 bidders per R2 discipline — derived from Comparative Statement R2 sheet names. */
 export const CRM_BID_VENDOR_CATALOG: BidVendorSeed[] = [
   { name: "M/s Bhavna Infra", partyType: "Contractor", disciplines: ["CCV"], email: "bhavna@bid.sharnam.demo", primaryContactName: "Bhavna Shah", city: "Ahmedabad", businessPhone: "+91 79 2650 1100" },
+  { name: "M/s Nikhra Infra", partyType: "Contractor", disciplines: ["CCV", "ADMIN"], email: "nkinra@bid.sharnam.demo", primaryContactName: "Nikunj Rao", city: "Ahmedabad", businessPhone: "+91 79 2650 2200" },
   { name: "TCC Projects PVT. LTD.", partyType: "Contractor", disciplines: ["CCV", "ENTRANCE_GATE"], email: "tcc@bid.sharnam.demo", primaryContactName: "Ramesh Desai", city: "Ahmedabad" },
   { name: "Kalyani Construction Co.", partyType: "Contractor", disciplines: ["CCV"], email: "kalyani@bid.sharnam.demo", primaryContactName: "Kalyani Mehta", city: "Surat" },
   { name: "Shreeji Infra Projects", partyType: "Contractor", disciplines: ["CCV", "ADMIN"], email: "shreeji@bid.sharnam.demo", primaryContactName: "Jayesh Patel", city: "Rajkot" },

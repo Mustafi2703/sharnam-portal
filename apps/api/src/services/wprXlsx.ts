@@ -8,7 +8,8 @@
  * The user drives the content via the WPR Maker page — this file only
  * turns the persisted sectionsJson into a printable pack.
  */
-import XLSX from "../lib/xlsx.js";
+import ExcelJS from "exceljs";
+import { sharnamLogoPath } from "./brandedExport.js";
 
 export type WprSection = {
   title: string;
@@ -157,17 +158,140 @@ function sectionToAoA(sec: WprSection): (string | number | null)[][] {
   return aoa;
 }
 
-export function buildWprWorkbook(input: WprPackInput): Buffer {
-  const wb = XLSX.utils.book_new();
+export async function buildWprWorkbook(input: WprPackInput): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Sharnam Portal";
+  wb.created = new Date();
   const H = input.header;
 
+  const BRAND = "FF0F766E";
+  const INK = "FF1A1D26";
+  const MUTED = "FF5C6578";
+  const HEADER_FILL = "FFF0F2F5";
+  const ALT_FILL = "FFF7F9FA";
+  const BORDER = "FFE2E5EB";
+
+  const styleHeaderRow = (row: ExcelJS.Row, colCount: number) => {
+    for (let c = 1; c <= colCount; c++) {
+      const cell = row.getCell(c);
+      cell.font = { bold: true, size: 10, color: { argb: INK } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+      cell.alignment = { vertical: "middle", wrapText: true };
+      cell.border = { bottom: { style: "thin", color: { argb: BORDER } } };
+    }
+    row.height = 22;
+  };
+
+  const styleBodyRow = (row: ExcelJS.Row, colCount: number, zebra: boolean) => {
+    for (let c = 1; c <= colCount; c++) {
+      const cell = row.getCell(c);
+      if (typeof cell.value === "number") {
+        cell.numFmt = "#,##0.00";
+        cell.alignment = { horizontal: "right", vertical: "middle" };
+      } else {
+        cell.alignment = { vertical: "middle", wrapText: true };
+      }
+      if (zebra) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ALT_FILL } };
+      }
+      cell.border = { bottom: { style: "hair", color: { argb: BORDER } } };
+    }
+  };
+
+  const addSectionSheet = (label: string, sec: WprSection) => {
+    const ws = wb.addWorksheet(sheetName(label), { views: [{ state: "frozen", ySplit: 0 }] });
+    let rowIdx = 1;
+
+    const titleCell = ws.getCell(rowIdx, 1);
+    titleCell.value = sec.title || label;
+    titleCell.font = { bold: true, size: 14, color: { argb: BRAND } };
+    rowIdx += 1;
+
+    if (sec.notes) {
+      ws.mergeCells(rowIdx, 1, rowIdx, Math.max(6, sec.headers?.length || 6));
+      const notesCell = ws.getCell(rowIdx, 1);
+      notesCell.value = sec.notes;
+      notesCell.font = { italic: true, size: 10, color: { argb: MUTED } };
+      notesCell.alignment = { wrapText: true };
+      rowIdx += 2;
+    }
+
+    const headers = sec.headers || [];
+    const body = sec.rows || [];
+
+    if (headers.length) {
+      const hRow = ws.getRow(rowIdx);
+      headers.forEach((h, i) => {
+        hRow.getCell(i + 1).value = h;
+      });
+      styleHeaderRow(hRow, headers.length);
+      const headerRowNum = rowIdx;
+      rowIdx += 1;
+
+      if (body.length) {
+        body.forEach((dataRow, ri) => {
+          const r = ws.getRow(rowIdx);
+          headers.forEach((_, ci) => {
+            r.getCell(ci + 1).value = dataRow[ci] ?? "";
+          });
+          styleBodyRow(r, headers.length, ri % 2 === 1);
+          rowIdx += 1;
+        });
+        ws.autoFilter = {
+          from: { row: headerRowNum, column: 1 },
+          to: { row: rowIdx - 1, column: headers.length },
+        };
+      } else {
+        ws.mergeCells(rowIdx, 1, rowIdx, headers.length);
+        ws.getCell(rowIdx, 1).value = "(No rows — fill in WPR Maker or Regenerate from registers.)";
+        ws.getCell(rowIdx, 1).font = { italic: true, color: { argb: MUTED } };
+        rowIdx += 1;
+      }
+
+      headers.forEach((h, i) => {
+        ws.getColumn(i + 1).width = Math.min(42, Math.max(12, String(h).length + 6));
+      });
+    } else if (body.length) {
+      body.forEach((dataRow, ri) => {
+        const r = ws.getRow(rowIdx);
+        dataRow.forEach((v, ci) => {
+          r.getCell(ci + 1).value = v ?? "";
+        });
+        styleBodyRow(r, dataRow.length, ri % 2 === 1);
+        rowIdx += 1;
+      });
+    } else if (sec.photos?.length) {
+      /* handled below */
+    } else {
+      ws.getCell(rowIdx, 1).value = "(No content added yet — fill this section in the WPR Maker.)";
+      ws.getCell(rowIdx, 1).font = { italic: true, color: { argb: MUTED } };
+      rowIdx += 1;
+    }
+
+    if (sec.photos?.length) {
+      rowIdx += 1;
+      ws.getCell(rowIdx, 1).value = "Photos / paths";
+      ws.getCell(rowIdx, 1).font = { bold: true, size: 10, color: { argb: INK } };
+      rowIdx += 1;
+      for (const p of sec.photos) {
+        ws.getCell(rowIdx, 1).value = p;
+        rowIdx += 1;
+      }
+    }
+
+    return ws;
+  };
+
   // -------------------- Cover --------------------
-  const cover: (string | number | null)[][] = [
-    ["WEEKLY PROGRESS REPORT"],
-    [safeStr(H.clientName || H.projectName || "")],
-    [`REPORT NO. ${H.reportNumber ?? ""}`],
-    [`(${safeStr(H.weekStart)}   to   ${safeStr(H.weekEnd)})`],
-    [""],
+  const coverWs = wb.addWorksheet(sheetName("00 Cover"), { views: [{ showGridLines: false }] });
+  coverWs.getColumn(1).width = 22;
+  coverWs.getColumn(2).width = 62;
+  const coverRows: (string | number)[][] = [
+    ["WEEKLY PROGRESS REPORT", ""],
+    [safeStr(H.clientName || H.projectName || ""), ""],
+    [`REPORT NO. ${H.reportNumber ?? ""}`, ""],
+    [`(${safeStr(H.weekStart)}   to   ${safeStr(H.weekEnd)})`, ""],
+    ["", ""],
     ["Project", safeStr(H.projectName)],
     ["Code", safeStr(H.projectCode)],
     ["Client", safeStr(H.clientName)],
@@ -176,9 +300,22 @@ export function buildWprWorkbook(input: WprPackInput): Buffer {
     ["Location", safeStr(H.location)],
     ["PMC", safeStr(H.pmc || "Sharnam Project Development Consultants & Co.")],
   ];
-  const wsCover = XLSX.utils.aoa_to_sheet(cover);
-  wsCover["!cols"] = [{ wch: 22 }, { wch: 60 }];
-  XLSX.utils.book_append_sheet(wb, wsCover, sheetName("00 Cover"));
+  coverRows.forEach((r) => coverWs.addRow(r));
+  coverWs.getRow(1).font = { bold: true, size: 16, color: { argb: BRAND } };
+  coverWs.getRow(2).font = { bold: true, size: 12, color: { argb: INK } };
+  coverWs.getRow(3).font = { size: 11, color: { argb: INK } };
+  coverWs.getRow(4).font = { size: 10, color: { argb: MUTED } };
+
+  const logo = sharnamLogoPath();
+  if (logo) {
+    try {
+      const imgId = wb.addImage({ filename: logo, extension: "png" });
+      coverWs.getRow(1).height = 42;
+      coverWs.addImage(imgId, { tl: { col: 1.1, row: 0.05 }, ext: { width: 140, height: 46 }, editAs: "oneCell" });
+    } catch {
+      /* optional logo */
+    }
+  }
 
   // -------------------- One sheet per section --------------------
   let idx = 1;
@@ -187,23 +324,18 @@ export function buildWprWorkbook(input: WprPackInput): Buffer {
     const sec = input.sections[key];
     const title = sec?.title || DEFAULT_WPR_TITLES[key];
     const filled: WprSection = { ...(sec || {}), title };
-    const aoa = sectionToAoA(filled);
-    if (!filled.notes && !(filled.rows && filled.rows.length) && !(filled.photos && filled.photos.length)) {
-      aoa.push(["(No content added yet — fill this section in the WPR Maker.)"]);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    const maxCols = aoa.reduce((m, r) => Math.max(m, r.length), 1);
-    ws["!cols"] = Array.from({ length: maxCols }, () => ({ wch: 22 }));
     const label = `${String(idx).padStart(2, "0")} ${title}`;
-    XLSX.utils.book_append_sheet(wb, ws, sheetName(label));
+    addSectionSheet(label, filled);
     idx += 1;
   }
-  // -------------------- Dashboard charts (when chart pack supplied) --------------------
+
+  // -------------------- Dashboard charts --------------------
   if (input.charts) {
     const c = input.charts;
-    const dash: (string | number | null)[][] = [
+    const dashWs = wb.addWorksheet(sheetName("Charts Dashboard"));
+    const dashRows: (string | number | null)[][] = [
       ["WPR Dashboard · chart data"],
-      [`Period`, `${c.rangeStart} → ${c.rangeEnd}`],
+      ["Period", `${c.rangeStart} → ${c.rangeEnd}`],
       [],
       ["Summary KPI", "Value"],
       ...c.dashboardKpis.map(([k, v]) => [k, v]),
@@ -229,10 +361,13 @@ export function buildWprWorkbook(input: WprPackInput): Buffer {
       ["Safety · Indicator", "Previous week", "Current week"],
       ...c.safety.map((p) => [p.label, p.previous, p.current]),
     ];
-    const wsDash = XLSX.utils.aoa_to_sheet(dash);
-    wsDash["!cols"] = [{ wch: 28 }, { wch: 16 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, wsDash, sheetName("Charts Dashboard"));
+    dashRows.forEach((r) => dashWs.addRow(r));
+    dashWs.getRow(1).font = { bold: true, size: 13, color: { argb: BRAND } };
+    dashWs.getColumn(1).width = 28;
+    dashWs.getColumn(2).width = 16;
+    dashWs.getColumn(3).width = 16;
   }
 
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const ab = await wb.xlsx.writeBuffer();
+  return Buffer.from(ab as ArrayBuffer);
 }

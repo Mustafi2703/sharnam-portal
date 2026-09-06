@@ -14,7 +14,6 @@ type Tab =
   | "findings"
   | "site-walk"
   | "dc-interview"
-  | "folder-sample"
   | "kpi-dashboard"
   | "subjects"
   | "role-kra";
@@ -24,7 +23,6 @@ const TABS: { key: Tab; label: string; sheet?: string }[] = [
   { key: "findings", label: "Findings", sheet: "FINDINGS" },
   { key: "site-walk", label: "Site walk", sheet: "SITE_WALK" },
   { key: "dc-interview", label: "DC interview", sheet: "DC_INTERVIEW" },
-  { key: "folder-sample", label: "Folder sample", sheet: "FOLDER_SAMPLE" },
   { key: "kpi-dashboard", label: "KPI dashboard", sheet: "00_KPI_DASHBOARD" },
   { key: "subjects", label: "Subject data", sheet: "03_SUBJECT_DATA" },
   { key: "role-kra", label: "Role KRA", sheet: "06_ROLE_KRA" },
@@ -33,7 +31,6 @@ const TABS: { key: Tab; label: string; sheet?: string }[] = [
 function sectionForTab(tab: Tab) {
   if (tab === "site-walk") return "SiteWalk";
   if (tab === "dc-interview") return "DcInterview";
-  if (tab === "folder-sample") return "FolderSample";
   return "";
 }
 
@@ -41,7 +38,11 @@ export default function AuditKpiPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
-  const tab = (searchParams.get("tab") as Tab) || "dashboard";
+  const tabRaw = searchParams.get("tab");
+  const tab: Tab =
+    tabRaw === "folder-sample"
+      ? "site-walk"
+      : (TABS.some((t) => t.key === tabRaw) ? (tabRaw as Tab) : "dashboard");
   const [data, setData] = useState<any>(null);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
@@ -215,7 +216,7 @@ export default function AuditKpiPage() {
     }
   };
 
-  const checklistTab = ["site-walk", "dc-interview", "folder-sample"].includes(tab);
+  const checklistTab = tab === "site-walk" || tab === "dc-interview";
   const checklistSection = sectionForTab(tab as Tab);
 
   const currentSheet = TABS.find((t) => t.key === tab)?.sheet || "";
@@ -352,7 +353,7 @@ export default function AuditKpiPage() {
           uploadHint={
             tab === "role-kra" || tab === "subjects"
               ? "Upload MASTER_KPI_DASHBOARD.xlsx (03_SUBJECT_DATA / 06_ROLE_KRA sheets)."
-              : "Workbook must match client template columns (FINDINGS / SITE_WALK / DC_INTERVIEW / FOLDER_SAMPLE)."
+              : "Workbook must match client template columns (FINDINGS / SITE_WALK / DC_INTERVIEW)."
           }
           onDownloadCsv={() => {
             if (tab === "findings") dl("csv", "findings");
@@ -591,7 +592,7 @@ export default function AuditKpiPage() {
           <label className="block">
             <span className="text-xs text-steel-muted">Source</span>
             <Select value={findingForm.source} onChange={(e) => setFindingForm({ ...findingForm, source: e.target.value })}>
-              {["Site walk", "Folder sample", "DC interview"].map((v) => (
+              {["Site walk", "DC interview", "Document review"].map((v) => (
                 <option key={v} value={v}>{v}</option>
               ))}
             </Select>

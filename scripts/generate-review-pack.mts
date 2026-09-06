@@ -136,7 +136,7 @@ async function main() {
     const wStartStr = new Date(weekEnd.getTime() - 6 * 86400000).toISOString().slice(0, 10);
     const charts = mergeWprChartsForExport(sections, null, wStartStr, wEndStr);
     const spdcXlsx = `WPR-${projectCode}-${wEndStr}.xlsx`;
-    fs.writeFileSync(path.join(wprDir, spdcXlsx), buildWprWorkbook({ header, sections }));
+    fs.writeFileSync(path.join(wprDir, spdcXlsx), await buildWprWorkbook({ header, sections }));
     files.push({ label: "WPR SPDC workbook", rel: `wpr/${spdcXlsx}`, kind: "xlsx" });
     const pptxName = `WPR-${projectCode}-${wEndStr}.pptx`;
     fs.writeFileSync(path.join(wprDir, pptxName), await buildWprPptx({ header, sections, charts }));
@@ -267,7 +267,7 @@ async function main() {
       };
 
       const spdcXlsx = `WPR-${project.code}-${wEndStr}.xlsx`;
-      fs.writeFileSync(path.join(wprDir, spdcXlsx), buildWprWorkbook({ header, sections }));
+      fs.writeFileSync(path.join(wprDir, spdcXlsx), await buildWprWorkbook({ header, sections }));
       files.push({ label: "WPR SPDC workbook", rel: `wpr/${spdcXlsx}`, kind: "xlsx" });
 
       const clientXlsx = `WPR-ClientPack-${project.code}-${wEndStr}.xlsx`;

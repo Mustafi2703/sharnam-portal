@@ -131,7 +131,8 @@ export class MockOneDriveService {
     relFolder: string,
     fileName: string,
     buffer: Buffer,
-    contentType = "application/octet-stream"
+    contentType = "application/octet-stream",
+    opts?: { replace?: boolean }
   ): Promise<{
     path: string;
     url: string;
@@ -143,7 +144,9 @@ export class MockOneDriveService {
     ensureDir(dir);
     let safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
     let dest = path.join(dir, safe);
-    if (fs.existsSync(dest)) {
+    if (opts?.replace && fs.existsSync(dest)) {
+      fs.unlinkSync(dest);
+    } else if (fs.existsSync(dest)) {
       const dot = safe.lastIndexOf(".");
       const base = dot > 0 ? safe.slice(0, dot) : safe;
       const ext = dot > 0 ? safe.slice(dot) : "";

@@ -8,6 +8,7 @@ import { BarChart } from "../components/PieChart";
 import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { EvidencePanel } from "../components/EvidencePanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
+import { MakerRecentPanel, fileNameFromPublishedPath } from "../components/MakerRecentPanel";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
 
@@ -1458,26 +1459,16 @@ export default function DprMakerPage() {
         />
       </Card>
 
-      {recent.length > 0 && (
-        <Card>
-          <h3 className="font-semibold mb-2">Recent DPRs</h3>
-          <ul className="text-sm divide-y">
-            {recent.map((r) => (
-              <li key={r.id} className="py-1.5 flex justify-between items-center">
-                <span className="font-mono text-xs">{new Date(r.logDate).toISOString().slice(0, 10)} · {r.discipline}</span>
-                <span>
-                  <Badge tone={r.status === "Published" ? "ok" : "warn"}>{r.status}</Badge>
-                  {r.publishedPath && (
-                    <span className="text-xs text-steel-muted ml-2 truncate max-w-[280px] inline-block align-middle">
-                      {r.publishedPath}
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      <MakerRecentPanel
+        title="Recent DPRs"
+        previewCount={5}
+        items={recent.map((r) => ({
+          id: r.id,
+          title: `${new Date(r.logDate).toISOString().slice(0, 10)} · ${r.discipline}`,
+          subtitle: fileNameFromPublishedPath(r.publishedPath),
+          badge: { label: r.status, tone: r.status === "Published" ? "ok" : "warn" },
+        }))}
+      />
 
       </div>
 

@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, PageHeader } from "../../components/ui";
+import { Button, Card, PageHeader } from "../../components/ui";
 import { InspectionRegisterTable, registerFormRefForTab } from "../../components/InspectionRegisterTable";
 import { SpdcInspectionFormPanel } from "../../components/SpdcInspectionFormPanel";
+import { SpdcInspectionIrPanel } from "../../components/SpdcInspectionIrPanel";
 import {
   ACTIVITY_CHECKLIST_FORM,
   HSE_REGISTER_REF,
@@ -12,7 +13,6 @@ import {
   QUALITY_IR_FORM,
   SAFETY_IR_FORM,
   kindForRegisterTab,
-  parseFormDataJson,
   type InspectionRegisterTab,
 } from "../../lib/inspectionRequestForms";
 import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
@@ -43,6 +43,7 @@ export default function InspectionRegisterPage() {
   const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
   const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
+  const [project, setProject] = useState<any>(null);
 
   const canCreate = !!user && user.role !== "client";
   const formRef = registerFormRefForTab(tab);
@@ -50,7 +51,7 @@ export default function InspectionRegisterPage() {
 
   const load = async () => {
     const kinds = INSPECTION_KINDS.join(",");
-    const [payload, u, qi, saf, act] = await Promise.all([
+    const [payload, u, qi, saf, act, proj] = await Promise.all([
       api<any>(`/api/rfis/project/${id}?kind=${kinds}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=QualityInspection`, { token }).catch(() => ({
@@ -60,6 +61,7 @@ export default function InspectionRegisterPage() {
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=ActivityInspection`, { token }).catch(() => ({
         assignments: [],
       })),
+      api<any>(`/api/projects/${id}`, { token }).catch(() => null),
     ]);
     const list = Array.isArray(payload) ? payload : payload.rfis || [];
     setRows(list);
@@ -67,6 +69,7 @@ export default function InspectionRegisterPage() {
     setQiAssignments(qi.assignments || []);
     setSafetyAssignments(saf.assignments || []);
     setActivityAssignments(act.assignments || []);
+    setProject(proj);
     if (!active && list[0]) setActive(list[0].id);
   };
 
@@ -233,6 +236,7 @@ export default function InspectionRegisterPage() {
           qualityIrOptions={tab === "safety-ir" ? qualityIrOptions : []}
           checklistAssignments={tabChecklist.assignments}
           masterHref={tabChecklist.master}
+          project={project}
           onSubmit={raiseEntry}
           busy={busy}
         />
@@ -261,33 +265,27 @@ export default function InspectionRegisterPage() {
           activeId={active}
           onSelect={setActive}
           checklistByRowId={tab === "hse-register" ? undefined : checklistByRowId}
+          onFillChecklist={
+            id
+              ? (row) => {
+                  if (row.linkedAssignmentId) {
+                    openChecklistFillWindow(id, row.linkedAssignmentId, tabChecklist.family);
+                  }
+                }
+              : undefined
+          }
         />
       </Card>
 
-      {selected && (
-        <Card className="!p-4">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <Badge tone="brand">{selected.rfiKind}</Badge>
-            <span className="font-mono text-sm">{selected.irNumber || selected.number}</span>
-            <Badge tone={selected.status === "Open" ? "warn" : "ok"}>{selected.status}</Badge>
-          </div>
-          <h4 className="font-semibold">{selected.subject}</h4>
-          <pre className="text-xs whitespace-pre-wrap mt-2 text-steel-muted max-h-48 overflow-y-auto">{selected.question}</pre>
-          {selected.formDataJson && (
-            <p className="text-[10px] text-steel-muted mt-2">
-              Drawing ref (text): {parseFormDataJson(selected.formDataJson).drawingRef || "—"}
-            </p>
-          )}
-          {selected.linkedAssignmentId && id && (
-            <Button
-              type="button"
-              className="!text-sm mt-3"
-              onClick={() => openChecklistFillWindow(id, selected.linkedAssignmentId, tabChecklist.family)}
-            >
-              Fill linked checklist →
-            </Button>
-          )}
-        </Card>
+      {selected && tab !== "hse-register" && id && (
+        <SpdcInspectionIrPanel
+          rfi={selected}
+          project={project}
+          projectId={id}
+          checklistFamily={tabChecklist.family}
+          checklistName={checklistByRowId[selected.id]}
+          token={token}
+        />
       )}
 
       <p className="text-[10px] text-steel-muted">

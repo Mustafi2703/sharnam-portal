@@ -15,6 +15,7 @@ type Props = {
   qualityIrOptions?: { number: string; label: string }[];
   checklistAssignments?: { id: string; template?: { name?: string } }[];
   masterHref?: string;
+  project?: { code?: string; name?: string; clientName?: string | null; contractorName?: string | null };
   onSubmit: (payload: {
     subject: string;
     question: string;
@@ -48,11 +49,22 @@ export function SpdcInspectionFormPanel({
   qualityIrOptions = [],
   checklistAssignments = [],
   masterHref,
+  project,
   onSubmit,
   busy,
 }: Props) {
   const ref = inspectionFormForKind(formKind);
-  const [draft, setDraft] = useState<Record<string, string>>({ ...SPDC_FORM_DEFAULTS });
+  const projectDefaults = useMemo(
+    () => ({
+      ...SPDC_FORM_DEFAULTS,
+      projectFacility: project?.code || project?.name || "",
+      employerClient: project?.clientName || "",
+      contractorAgency: project?.contractorName || "",
+      dateRaised: new Date().toISOString().slice(0, 10),
+    }),
+    [project]
+  );
+  const [draft, setDraft] = useState<Record<string, string>>(projectDefaults);
   const [assignedToId, setAssignedToId] = useState("");
   const [linkedAssignmentId, setLinkedAssignmentId] = useState("");
   const [subject, setSubject] = useState("");
@@ -203,7 +215,7 @@ export function SpdcInspectionFormPanel({
             assignedToId,
             linkedAssignmentId,
           });
-          setDraft({ ...SPDC_FORM_DEFAULTS });
+          setDraft({ ...projectDefaults });
           setSubject("");
           setQuestion("");
           setAssignedToId("");

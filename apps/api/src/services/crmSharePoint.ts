@@ -10,8 +10,14 @@ function sanitizeSegment(s: string) {
 /** ISO 19650 procurement folders under each project library. */
 export const CRM_SHAREPOINT = {
   pmcProposals: "05_PROCUREMENT_AND_CONTRACTS/05.03_Tender_Documents_Issue/PMC_Proposals",
-  vendorBoqFolder: (vendorLabel: string) =>
-    `05_PROCUREMENT_AND_CONTRACTS/05.05_Bid_Receipt_Opening/Vendor_BOQs/${sanitizeSegment(vendorLabel)}`,
+  /** Root for all vendor BOQ uploads on a bid package. */
+  vendorBoqRoot: "05_PROCUREMENT_AND_CONTRACTS/05.05_Bid_Receipt_Opening/Vendor_BOQs",
+  /** Per-bidder folder — contains one subfolder per R2 discipline. */
+  vendorBoqVendorRoot: (vendorLabel: string) =>
+    `${CRM_SHAREPOINT.vendorBoqRoot}/${sanitizeSegment(vendorLabel)}`,
+  /** Vendor × discipline — one XLSX per slot (05.05 bid receipt). */
+  vendorBoqFolder: (vendorLabel: string, disciplineKey: string) =>
+    `${CRM_SHAREPOINT.vendorBoqVendorRoot(vendorLabel)}/${sanitizeSegment(disciplineKey)}`,
   comparative: "05_PROCUREMENT_AND_CONTRACTS/05.06_Bid_Evaluation_Recommendation/Comparative_Statement",
 } as const;
 
@@ -22,9 +28,12 @@ export async function syncBufferToProjectSharePoint(
   projectCode: string,
   relFolder: string,
   fileName: string,
-  buffer: Buffer
+  buffer: Buffer,
+  opts?: { replace?: boolean }
 ) {
-  return mockOneDrive.upload(projectCode, relFolder, fileName, buffer);
+  return mockOneDrive.upload(projectCode, relFolder, fileName, buffer, "application/octet-stream", {
+    replace: opts?.replace ?? false,
+  });
 }
 
 export async function syncComparativeWorkbook(projectCode: string, revisionLabel: string) {

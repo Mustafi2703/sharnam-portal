@@ -296,6 +296,44 @@ rfiRouter.get("/project/:projectId/register.html", async (req, res) => {
   sendWorkbook(res, Buffer.from(html, "utf8"), `${project.code}-RFI-Register.html`, true);
 });
 
+rfiRouter.get("/:id/inspection.xlsx", async (req, res) => {
+  const rfi = await prisma.rfi.findUnique({ where: { id: req.params.id } });
+  if (!rfi) return res.status(404).json({ error: "RFI not found" });
+  const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  if (!["QualityIR", "SafetyIR", "ActivityInspection"].includes(rfi.rfiKind)) {
+    return res.status(400).json({ error: "Not an inspection IR record" });
+  }
+  const linkedAssignment = rfi.linkedAssignmentId
+    ? await prisma.checklistAssignment.findUnique({
+        where: { id: rfi.linkedAssignmentId },
+        include: { template: { select: { name: true } } },
+      })
+    : null;
+  const { buildInspectionIrXlsx, safeInspectionIrFilename } = await import("../services/spdcInspectionIr.js");
+  const buf = await buildInspectionIrXlsx({ ...rfi, linkedAssignment }, project);
+  sendWorkbook(res, buf, safeInspectionIrFilename(rfi.number, "xlsx"));
+});
+
+rfiRouter.get("/:id/inspection.html", async (req, res) => {
+  const rfi = await prisma.rfi.findUnique({ where: { id: req.params.id } });
+  if (!rfi) return res.status(404).json({ error: "RFI not found" });
+  const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  if (!["QualityIR", "SafetyIR", "ActivityInspection"].includes(rfi.rfiKind)) {
+    return res.status(400).json({ error: "Not an inspection IR record" });
+  }
+  const linkedAssignment = rfi.linkedAssignmentId
+    ? await prisma.checklistAssignment.findUnique({
+        where: { id: rfi.linkedAssignmentId },
+        include: { template: { select: { name: true } } },
+      })
+    : null;
+  const { renderInspectionIrHtml, safeInspectionIrFilename } = await import("../services/spdcInspectionIr.js");
+  const html = renderInspectionIrHtml({ ...rfi, linkedAssignment }, project);
+  sendWorkbook(res, Buffer.from(html, "utf8"), safeInspectionIrFilename(rfi.number, "html"), true);
+});
+
 rfiRouter.get("/:id/download.xlsx", async (req, res) => {
   const rfi = await prisma.rfi.findUnique({ where: { id: req.params.id }, include: rfiDetailInclude });
   if (!rfi) return res.status(404).json({ error: "RFI not found" });

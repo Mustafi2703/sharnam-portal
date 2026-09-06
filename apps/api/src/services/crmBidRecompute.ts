@@ -292,6 +292,17 @@ export async function recomputeBidPackageComparative(
   return { summary, filledSlots, totalSlots: pkg.vendorBoqs.length };
 }
 
+export async function recomputeAndSyncBidPackage(prisma: PrismaClient, pkgId: string) {
+  const result = await recomputeBidPackageComparative(prisma, pkgId);
+  try {
+    const { syncBidPackageToSharePoint } = await import("./crmBidSharePointSync.js");
+    await syncBidPackageToSharePoint(prisma, pkgId);
+  } catch (err) {
+    console.warn("[CRM] SharePoint sync after recompute failed:", err instanceof Error ? err.message : err);
+  }
+  return result;
+}
+
 export async function findVendorBoqSlotForSheet(prisma: PrismaClient, sheetId: string, vendorId?: string | null) {
   return prisma.crmVendorBoq.findFirst({
     where: { sheetId, ...(vendorId ? { vendorId } : {}) },

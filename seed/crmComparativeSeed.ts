@@ -25,7 +25,8 @@ import {
   syncComparativeWorkbook,
 } from "../apps/api/src/services/crmSharePoint.ts";
 
-const DEMO_VENDORS = ["M/s Bhavna Infra", "TCC Projects PVT. LTD.", "Pearl Electricals"];
+/** Two civil contractors for SPDC bid compare demo — both BOQs pre-filled. */
+const DEMO_VENDORS = ["M/s Bhavna Infra", "M/s Nikhra Infra"];
 const DEMO_DISCIPLINES = defaultDisciplines();
 const DEMO_DISCIPLINES_JSON = JSON.stringify(DEMO_DISCIPLINES);
 const DEMO_PACKAGE_TITLE = "SPDC-DEMO-01 · Civil & structural — R2 demo bid";
@@ -33,8 +34,7 @@ const DEMO_PACKAGE_TITLE = "SPDC-DEMO-01 · Civil & structural — R2 demo bid";
 /** Slight rate variance per vendor so comparative totals differ in demo. */
 const VENDOR_RATE_FACTOR: Record<string, number> = {
   "M/s Bhavna Infra": 1,
-  "TCC Projects PVT. LTD.": 1.04,
-  "Pearl Electricals": 1.02,
+  "M/s Nikhra Infra": 1.035,
 };
 
 function scaleBoqRates(sheet: ImportedSheet, factor: number): ImportedSheet {
@@ -116,7 +116,7 @@ async function seedVendorBoqUploads(
       const out = XLSX.write(miniWb, { type: "buffer", bookType: "xlsx" }) as Buffer;
       const saved = await syncBufferToProjectSharePoint(
         projectCode,
-        CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel),
+        CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel, slot.discipline),
         fileName,
         out
       );
@@ -233,6 +233,17 @@ async function backfillDemoVendorIds(
   return linked;
 }
 
+async function pruneDemoVendorSlots(prisma: PrismaClient, pkgId: string) {
+  const removed = await prisma.crmVendorBoq.deleteMany({
+    where: { bidPackageId: pkgId, vendorLabel: { notIn: DEMO_VENDORS } },
+  });
+  if (removed.count) console.log("CRM comparative: removed", removed.count, "legacy bidder slot(s)");
+  await prisma.crmBidPackage.update({
+    where: { id: pkgId },
+    data: { vendorNamesJson: JSON.stringify(DEMO_VENDORS) },
+  });
+}
+
 export async function seedCrmComparative(prisma: PrismaClient) {
   const { seedBidVendorCatalog } = await import("../apps/api/src/services/crmVendorCatalog.ts");
   const vendorOut = await seedBidVendorCatalog(prisma);
@@ -285,6 +296,7 @@ export async function seedCrmComparative(prisma: PrismaClient) {
   }
 
   if (pkg) {
+    await pruneDemoVendorSlots(prisma, pkg.id);
     await ensureDemoVendorSlots(prisma, pkg.id);
     pkg = await prisma.crmBidPackage.findUniqueOrThrow({
       where: { id: pkg.id },
@@ -313,12 +325,18 @@ export async function seedCrmComparative(prisma: PrismaClient) {
         "slots on",
         pkg.title
       );
-      // Leave Bhavna Infra slots empty so vendor@ portal demo shows upload flow
-      await prisma.crmVendorBoq.updateMany({
-        where: { bidPackageId: pkg.id, vendorLabel: "M/s Bhavna Infra" },
-        data: { fileName: null, uploadedAt: null, sheetId: null, sharePointUrl: null },
-      });
-      console.log("CRM vendor demo: cleared Bhavna Infra BOQs for live upload demo");
+      try {
+        const { ensureCrmBidSharePointTree, syncBidPackageToSharePoint } = await import(
+          "../apps/api/src/services/crmBidSharePointSync.ts"
+        );
+        if (demoProject?.id) {
+          await ensureCrmBidSharePointTree(prisma, demoProject.id, DEMO_VENDORS, DEMO_DISCIPLINES.map((d) => d.key));
+          await syncBidPackageToSharePoint(prisma, pkg.id);
+          console.log("CRM comparative SharePoint: vendor×discipline folders + master workbook synced");
+        }
+      } catch (e) {
+        console.warn("CRM SharePoint sync skipped:", e instanceof Error ? e.message : e);
+      }
     }
     return { pkg };
   }
@@ -401,6 +419,17 @@ export async function seedCrmComparative(prisma: PrismaClient) {
       n,
       "demo BOQs from R2.xlsx"
     );
+    if (demoProject?.id) {
+      try {
+        const { ensureCrmBidSharePointTree, syncBidPackageToSharePoint } = await import(
+          "../apps/api/src/services/crmBidSharePointSync.ts"
+        );
+        await ensureCrmBidSharePointTree(prisma, demoProject.id, DEMO_VENDORS, DEMO_DISCIPLINES.map((d) => d.key));
+        await syncBidPackageToSharePoint(prisma, pkg.id);
+      } catch (e) {
+        console.warn("CRM SharePoint sync skipped:", e instanceof Error ? e.message : e);
+      }
+    }
   }
 
   return { pkg, summarySheet, masterSheet };

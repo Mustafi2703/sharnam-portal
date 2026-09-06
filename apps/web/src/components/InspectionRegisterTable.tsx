@@ -28,6 +28,7 @@ type Props = {
   onSelect?: (id: string) => void;
   activeId?: string | null;
   checklistByRowId?: Record<string, string>;
+  onFillChecklist?: (row: Row) => void;
 };
 
 function fmtDate(iso: string) {
@@ -83,7 +84,7 @@ function cell(row: Row, key: string, form: Record<string, string>) {
   }
 }
 
-export function InspectionRegisterTable({ rows, formRef, variant = "register", onSelect, activeId, checklistByRowId }: Props) {
+export function InspectionRegisterTable({ rows, formRef, variant = "register", onSelect, activeId, checklistByRowId, onFillChecklist }: Props) {
   const columns =
     variant === "hse"
       ? HSE_REGISTER_REF.columns.filter((c) => c !== "Sr.")
@@ -110,6 +111,7 @@ export function InspectionRegisterTable({ rows, formRef, variant = "register", o
               </th>
             ))}
             {showChecklistCol && <th className="p-2 font-semibold whitespace-nowrap">Checklist (master)</th>}
+            {onFillChecklist && <th className="p-2 font-semibold whitespace-nowrap w-28">Actions</th>}
             {variant === "register" && <th className="p-2 font-semibold">Portal ref</th>}
           </tr>
         </thead>
@@ -137,8 +139,26 @@ export function InspectionRegisterTable({ rows, formRef, variant = "register", o
                   );
                 })}
                 {showChecklistCol && (
-                  <td className="p-2 align-top text-brand-dark font-medium">
-                    {checklistByRowId[row.id] || "—"}
+                  <td className="p-2 align-top text-brand-dark font-medium max-w-[180px]">
+                    <span className="line-clamp-2">{checklistByRowId[row.id] || "—"}</span>
+                  </td>
+                )}
+                {onFillChecklist && (
+                  <td className="p-2 align-top">
+                    {row.linkedAssignmentId ? (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-brand underline hover:no-underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onFillChecklist(row);
+                        }}
+                      >
+                        Fill →
+                      </button>
+                    ) : (
+                      <span className="text-steel-muted">—</span>
+                    )}
                   </td>
                 )}
                 {variant === "register" && (

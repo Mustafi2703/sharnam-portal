@@ -150,6 +150,7 @@ async function seedUsers() {
     { email: "struct@sharnam.demo", fullName: "Structural Reviewer", role: "employee" },
     { email: "ak@consultant.demo", fullName: "A. Kumar — AK Consultant", role: "employee" },
     { email: "vendor@sharnam.demo", fullName: "Vendor Partner", role: "vendor" },
+    { email: "nkinra@sharnam.demo", fullName: "Nikhra Infra — Bid Manager", role: "vendor" },
     { email: "tcc@sharnam.demo", fullName: "TCC Bid Manager", role: "vendor" },
     { email: "pearl@sharnam.demo", fullName: "Pearl Bid Manager", role: "vendor" },
   ];
@@ -220,6 +221,14 @@ async function seedChecklistsFromExcel() {
     where: { source: "quality-inspection-catalog" },
     data: { checklistType: "QualityInspection", requirePhotosMin: 3 },
   });
+
+  try {
+    const { seedSpdcSafetyPack } = await import("../apps/api/src/services/safetyPackSeed.js");
+    const out = await seedSpdcSafetyPack();
+    console.log("SPDC HSE pack:", out.templates.map((t) => `${t.name} (${t.items} items)`).join(" · "));
+  } catch (err) {
+    console.warn("SPDC HSE pack seed skipped:", err instanceof Error ? err.message : err);
+  }
 
   const indexRows = readSheet(indexFile);
   let created = 0;
@@ -1381,6 +1390,20 @@ async function seedProjectAndCost(users: User[]) {
       insuranceVerified: true,
     },
     {
+      name: "M/s Nikhra Infra",
+      partyType: "Contractor",
+      trade: "Civil & Structural (CCV), Admin Building",
+      city: "Ahmedabad",
+      state: "Gujarat",
+      businessPhone: "+91 79 2650 2200",
+      email: "nkinra@sharnam.demo",
+      primaryContactName: "Nikunj Rao",
+      gstNumber: "24CCCCC0000C1Z5",
+      licenseNumber: "LIC-CIV-2088",
+      isPrequalified: true,
+      insuranceVerified: true,
+    },
+    {
       name: "TCC Projects PVT. LTD.",
       partyType: "Contractor",
       trade: "Civil & Structural (CCV), Entrance Gate",
@@ -1498,12 +1521,20 @@ async function seedProjectAndCost(users: User[]) {
       create: { projectId: project.id, vendorId: vendor.id, tradeRole: v.trade, assignedVia: "Seed" },
       update: { tradeRole: v.trade },
     });
+    if (v.email.endsWith("@sharnam.demo")) {
+      await prisma.user.updateMany({
+        where: { email: v.email },
+        data: { vendorId: vendor.id },
+      });
+    }
   }
   console.log("Directory parties seeded:", vendorDefs.length);
 
   const adminId = users.find((u) => u.role === "admin")?.id!;
   const siteId = users.find((u) => u.role === "site_employee")?.id!;
   const officeUserId = users.find((u) => u.role === "office")?.id!;
+  const vendorUserId = users.find((u) => u.email === "vendor@sharnam.demo")?.id!;
+  const nkinraUserId = users.find((u) => u.email === "nkinra@sharnam.demo")?.id!;
   const mepUserId = users.find((u) => u.email === "mep@sharnam.demo")?.id!;
   const structUserId = users.find((u) => u.email === "struct@sharnam.demo")?.id!;
   const employeeId = users.find((u) => u.email === "employee@sharnam.demo")?.id!;
@@ -1629,6 +1660,42 @@ async function seedProjectAndCost(users: User[]) {
       scheduleImpact: "Medium",
       costImpact: "Low",
     },
+    {
+      number: "RFI-VC-001",
+      subject: "Contractor response — waterproofing detail at toilet block TB-02",
+      question:
+        "PMC requires M/s Bhavna Infra to confirm membrane lap width and primer spec. Submit method statement — response logged to Sharnam office.",
+      status: "Open",
+      rfiKind: "RequestForInformation",
+      createdById: officeUserId,
+      assignedToId: vendorUserId || officeUserId,
+      scheduleImpact: "Low",
+      costImpact: "Low",
+    },
+    {
+      number: "RFI-VC-002",
+      subject: "Nikhra Infra — curing compound for slab S-Block pour",
+      question:
+        "Office raised this to M/s Nikhra Infra. Confirm curing compound brand and application rate for dormitory slab pour.",
+      status: "Open",
+      rfiKind: "RequestForInformation",
+      createdById: officeUserId,
+      assignedToId: nkinraUserId || vendorUserId || officeUserId,
+      scheduleImpact: "Medium",
+      costImpact: "None",
+    },
+    {
+      number: "RFI-VC-003",
+      subject: "Safety NCR SN-014 — contractor corrective action due",
+      question:
+        "Open safety NCR: missing toe-board at stair opening Level 1. Contractor to upload photo evidence and CAP within 48h.",
+      status: "Open",
+      rfiKind: "RequestForInformation",
+      createdById: siteId,
+      assignedToId: vendorUserId || officeUserId,
+      scheduleImpact: "High",
+      costImpact: "None",
+    },
   ];
 
   for (const spec of demoRfis) {
@@ -1665,6 +1732,86 @@ async function seedProjectAndCost(users: User[]) {
     }
   }
   console.log("Demo RFIs seeded (open / answered / closed / checklist fill)");
+
+  const ppeAssignment = await prisma.checklistAssignment.findFirst({
+    where: { projectId: project.id, template: { name: "PPE & Site Induction Checklist" } },
+  });
+  const hseF01Assignment = await prisma.checklistAssignment.findFirst({
+    where: { projectId: project.id, template: { name: { contains: "SPDC/HSE/F-01" } } },
+  });
+  const safetyIrChecklist = hseF01Assignment || ppeAssignment;
+  const demoSafetyIrForm = {
+    projectFacility: project.code,
+    employerClient: project.clientName || "Demo Client Corp",
+    contractorAgency: project.contractorName || "Main contractor",
+    pmcEngineer: "SPDC",
+    irNumber: "HSE/IR/001",
+    dateRaised: new Date().toISOString().slice(0, 10),
+    linkedQualityIrNo: "",
+    highRiskType: "Work at height / PPE compliance",
+    activityDescription: "PPE & site induction — Zone 1 dormitory block",
+    location: "Zone 1 · Grid A–B / Level 0",
+    clearanceSoughtFrom: "Morning shift · 06:00",
+    validUpTo: "End of shift",
+    riskRating: "Medium",
+    clearanceResult: "S2 — Cleared with conditions",
+    actionRequired: "Daily toolbox before entry; harness check for roof work.",
+    checklistRef: "PPE & Site Induction Checklist",
+  };
+  const demoSafetyIrQuestion = [
+    "SAFETY INSPECTION & CLEARANCE REQUEST — SPDC/HSE/F-01",
+    "",
+    `Project / facility: ${demoSafetyIrForm.projectFacility}`,
+    `Employer / client: ${demoSafetyIrForm.employerClient}`,
+    `Contractor / agency: ${demoSafetyIrForm.contractorAgency}`,
+    `PMC / engineer: ${demoSafetyIrForm.pmcEngineer}`,
+    `Safety IR no.: ${demoSafetyIrForm.irNumber}`,
+    `Date of raising: ${demoSafetyIrForm.dateRaised}`,
+    `Linked quality IR no.: ${demoSafetyIrForm.linkedQualityIrNo || "—"}`,
+    "",
+    `High-risk activity type: ${demoSafetyIrForm.highRiskType}`,
+    `Description of work: ${demoSafetyIrForm.activityDescription}`,
+    `Exact location / grid / level: ${demoSafetyIrForm.location}`,
+    `Clearance sought from: ${demoSafetyIrForm.clearanceSoughtFrom}`,
+    `Valid up to: ${demoSafetyIrForm.validUpTo}`,
+    `Risk rating: ${demoSafetyIrForm.riskRating}`,
+    `Result code: ${demoSafetyIrForm.clearanceResult}`,
+    `Action required: ${demoSafetyIrForm.actionRequired}`,
+  ].join("\n");
+
+  const existingSafetyIr = await prisma.rfi.findFirst({
+    where: { projectId: project.id, rfiKind: "SafetyIR", number: "HSE-IR-001" },
+  });
+  if (!existingSafetyIr && safetyIrChecklist) {
+    await prisma.rfi.create({
+      data: {
+        projectId: project.id,
+        number: "HSE-IR-001",
+        irNumber: demoSafetyIrForm.irNumber,
+        subject: "Safety IR — clearance: PPE & site induction — Zone 1",
+        question: demoSafetyIrQuestion,
+        status: "Open",
+        rfiKind: "SafetyIR",
+        ballInCourt: "Assignee",
+        createdById: officeUserId,
+        assignedToId: siteId,
+        linkedAssignmentId: safetyIrChecklist.id,
+        linkedChecklistItemId: safetyIrChecklist.templateId,
+        formDataJson: JSON.stringify(demoSafetyIrForm),
+        dueDate: new Date(Date.now() + 3 * 86400000),
+      },
+    });
+    console.log("Demo Safety IR seeded (HSE-IR-001 → PPE / HSE F-01 checklist)");
+  } else if (existingSafetyIr && !existingSafetyIr.formDataJson) {
+    await prisma.rfi.update({
+      where: { id: existingSafetyIr.id },
+      data: {
+        formDataJson: JSON.stringify(demoSafetyIrForm),
+        question: demoSafetyIrQuestion,
+        linkedAssignmentId: existingSafetyIr.linkedAssignmentId || safetyIrChecklist?.id || null,
+      },
+    });
+  }
 
   // Fix legacy mis-seeded site execution row stored as drawing checklist
   const legacySiteAsDrawing = await prisma.rfi.findFirst({
@@ -1943,7 +2090,7 @@ async function main() {
   console.log(
     "Logins: admin / office / site / client / employee / mep / struct / vendor @sharnam.demo"
   );
-  console.log("Bid vendors: vendor@ (Bhavna) · tcc@ · pearl@ @sharnam.demo");
+  console.log("Bid vendors: vendor@ (Bhavna) · nkinra@ (Nikhra) @sharnam.demo");
 }
 
 main()

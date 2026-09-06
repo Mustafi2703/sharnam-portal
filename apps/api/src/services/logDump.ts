@@ -35,31 +35,49 @@ function iso(d: Date | null | undefined) {
   return d ? new Date(d).toISOString() : "";
 }
 
+type RegisterBucket =
+  | "rfi"
+  | "drawings"
+  | "designCoordination"
+  | "submittals"
+  | "dpr"
+  | "hindrance"
+  | "progress"
+  | "checklist"
+  | "cube"
+  | "ncr"
+  | "hira"
+  | "meetings";
+
+/** Portal register CSV dumps — kept under _Registers only (not mixed with GFC PDFs). */
+const REGISTER_BUCKETS: Record<RegisterBucket, string> = {
+  rfi: "_Registers/RFI",
+  drawings: "_Registers/Drawings",
+  designCoordination: "_Registers/Drawings",
+  submittals: "_Registers/Drawings",
+  dpr: "_Registers/Progress",
+  hindrance: "_Registers/Progress",
+  progress: "_Registers/Progress",
+  checklist: "_Registers/Quality",
+  cube: "_Registers/Quality",
+  ncr: "_Registers/Quality",
+  hira: "_Registers/Safety",
+  meetings: "_Registers/Comms",
+};
+
 const FOLDER = {
-  rfi: "03_SUPPORT_AND_RESOURCES/03.06_Correspondence_Control",
-  meetings: "03_SUPPORT_AND_RESOURCES/03.08_Meetings_Minutes_Action_Tracking",
-  drawings: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications",
-  designCoordination: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.04_Clash_Detection_Design_Coordination",
-  submittals: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.08_Shop_Drawings_and_Material_Submittals",
-  dpr: "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records",
-  hindrance: "07_EXECUTION_AND_DELIVERY/07.09_Delay_Analysis",
-  progress: "07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve",
-  checklist: "08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards",
-  cube: "08_QUALITY_HSE_AND_ENVIRONMENT/08.03_Testing_Test_Report_Control",
-  ncr: "08_QUALITY_HSE_AND_ENVIRONMENT/08.06_Control_of_Nonconforming_Output",
-  hira: "08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment",
   registers: "_Registers",
 } as const;
 
-async function upload(projectCode: string, folder: string, fileName: string, content: string) {
-  return mockOneDrive.upload(projectCode, folder, fileName, Buffer.from(content, "utf8"));
+async function upload(projectCode: string, folder: string, fileName: string, content: string, replace = false) {
+  return mockOneDrive.upload(projectCode, folder, fileName, Buffer.from(content, "utf8"), "text/csv", { replace });
 }
 
-async function dropRegister(projectCode: string, folder: string, name: string, rows: Row[]) {
+async function dropRegister(projectCode: string, bucket: RegisterBucket, name: string, rows: Row[]) {
+  const folder = REGISTER_BUCKETS[bucket];
   const csv = toCsv(rows);
-  const primary = await upload(projectCode, folder, `${name}.csv`, csv);
-  const mirror = await upload(projectCode, FOLDER.registers, `${name}.csv`, csv);
-  return { name, rows: rows.length, primary, mirror };
+  const saved = await upload(projectCode, folder, `${name}.csv`, csv, true);
+  return { name, rows: rows.length, folder, saved };
 }
 
 /** Dump every register for a project. Idempotent, safe to run repeatedly. */
@@ -83,7 +101,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   });
   const infoReg = await dropRegister(
     code,
-    FOLDER.rfi,
+    "rfi",
     "RFI-Information-Log",
     infoRfis.map((r) => ({
       number: r.number,
@@ -114,7 +132,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.checklist,
+      "checklist",
       "RFI-Quality-Log",
       qiRfis.map((r) => ({
         number: r.number,
@@ -141,7 +159,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.hira,
+      "hira",
       "RFI-Safety-Log",
       safetyRfis.map((r) => ({
         number: r.number,
@@ -167,7 +185,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.drawings,
+      "drawings",
       "RFI-DrawingChecklist-Log",
       dwgRfis.map((r) => ({
         number: r.number,
@@ -198,7 +216,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.drawings,
+      "drawings",
       "Drawings-Log",
       drawings.map((d) => ({
         drawingNumber: d.drawingNumber,
@@ -237,7 +255,7 @@ export async function dumpAllProjectLogs(projectId: string) {
     row.totalRevisions = revsAsc.length;
     gfcRows.push(row);
   }
-  results.push(await dropRegister(code, FOLDER.drawings, "GFC-Drawing-Register", gfcRows));
+  results.push(await dropRegister(code, "drawings", "GFC-Drawing-Register", gfcRows));
 
   /* Per-revision upload log with checklist gate id */
   const revisionRows: Row[] = [];
@@ -267,7 +285,7 @@ export async function dumpAllProjectLogs(projectId: string) {
       });
     }
   }
-  results.push(await dropRegister(code, FOLDER.drawings, "Drawings-Revision-Log", revisionRows));
+  results.push(await dropRegister(code, "drawings", "Drawings-Revision-Log", revisionRows));
 
   /* Design Coordination */
   const designIssues = await prisma.designCoordinationIssue.findMany({
@@ -277,7 +295,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.designCoordination,
+      "designCoordination",
       "Design-Coordination-Log",
       designIssues.map((i) => ({
         id: i.id,
@@ -312,7 +330,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.dpr,
+      "dpr",
       "DPR-Log",
       dpr.map((r) => ({
         date: iso(r.logDate).slice(0, 10),
@@ -350,7 +368,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.progress,
+      "progress",
       "WPR-Log",
       Array.from(wprMap.entries()).map(([week, v]) => ({ week, ...v }))
     )
@@ -365,7 +383,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.checklist,
+      "checklist",
       "QualityInspection-Log",
       qi.map((r) => ({
         title: r.title,
@@ -396,7 +414,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.checklist,
+      "checklist",
       "Checklist-Submissions-Log",
       submissions.map((s) => ({
         submissionId: s.id,
@@ -445,7 +463,7 @@ export async function dumpAllProjectLogs(projectId: string) {
     }
   }
   if (filledLines.length) {
-    results.push(await dropRegister(code, FOLDER.checklist, "Checklist-Filled-Lines", filledLines));
+    results.push(await dropRegister(code, "checklist", "Checklist-Filled-Lines", filledLines));
   }
 
   /* Safety */
@@ -456,7 +474,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.hira,
+      "hira",
       "Safety-Log",
       safety.map((s) => ({
         id: s.id,
@@ -478,7 +496,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.ncr,
+      "ncr",
       "NCR-Log",
       ncr.map((n) => ({
         number: n.number ?? "",
@@ -500,7 +518,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.cube,
+      "cube",
       "Cube-Test-Log",
       cubes.map((c) => ({
         srNo: c.srNo ?? "",
@@ -526,7 +544,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.meetings,
+      "meetings",
       "Meetings-Log",
       meetings.map((m) => ({
         title: m.title,
@@ -546,7 +564,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.submittals,
+      "submittals",
       "Submittals-Log",
       submittals.map((s) => ({
         number: s.number,
@@ -569,7 +587,7 @@ export async function dumpAllProjectLogs(projectId: string) {
   results.push(
     await dropRegister(
       code,
-      FOLDER.hindrance,
+      "hindrance",
       "Hindrance-Log",
       hindrance.map((h) => ({
         description: h.description,
@@ -588,7 +606,8 @@ export async function dumpAllProjectLogs(projectId: string) {
     code,
     FOLDER.registers,
     "_INDEX.csv",
-    toCsv(results.map((r) => ({ register: r.name, records: r.rows, refreshedAt: new Date().toISOString() })))
+    toCsv(results.map((r) => ({ register: r.name, records: r.rows, refreshedAt: new Date().toISOString() }))),
+    true
   );
 
   return {

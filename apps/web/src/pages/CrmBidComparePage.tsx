@@ -11,6 +11,7 @@ import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { CrmBidProjectSetupSection } from "../components/CrmBidProjectSetupSection";
+import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 
 type Discipline = { key: string; label: string; sheetName: string };
 
@@ -171,6 +172,14 @@ export default function CrmBidComparePage() {
     setActiveDiscipline("all");
     nav(`/crm/bids/${id}`, { replace: true });
   }
+
+  useEffect(() => {
+    if (routePkgId || selectedId || !packages.length) return;
+    const demo =
+      packages.find((p) => p.title.includes("SPDC-DEMO-01")) ||
+      packages.find((p) => p.project?.code === "SPDC-DEMO-01");
+    if (demo) selectPackage(demo.id);
+  }, [packages, routePkgId, selectedId, nav]);
 
   function openNewBidSetup(prefill?: Partial<typeof form>) {
     setSelectedId(null);
@@ -567,6 +576,17 @@ export default function CrmBidComparePage() {
   return (
     <div className="crm-bid-page">
       {msg && <p className="text-sm text-ok shrink-0 px-0.5">{msg}</p>}
+
+      {detail?.project?.code === "SPDC-DEMO-01" && packageVendorNames.length === 2 && (
+        <Card className="!p-4 border-brand/40 bg-brand-soft/25 shrink-0 mb-3">
+          <h3 className="font-semibold text-sm mb-1">SPDC demo — two-bidder comparative</h3>
+          <p className="text-xs text-steel-muted">
+            <strong>M/s Bhavna Infra</strong> (<code>vendor@sharnam.demo</code>) vs{" "}
+            <strong>M/s Nikhra Infra</strong> (<code>nkinra@sharnam.demo</code>) — both BOQs pre-seeded.
+            Office compares L1/L2 below; contractors respond via vendor portal (RFIs only, no registers).
+          </p>
+        </Card>
+      )}
 
       {pendingBidSetup.length > 0 && deskFilter === "converted" && !routePkgId && deskView === "packages" && (
         <Card className="!p-4 border-amber-200 bg-amber-50/60 shrink-0">
@@ -1131,6 +1151,11 @@ export default function CrmBidComparePage() {
                       onManageSlot={openSlotPanel}
                       onCopyLink={copyVendorLink}
                     />
+                    {selectedId && detail.project?.code && token && (
+                      <div className="mt-4">
+                        <CrmBidSharePointPanel token={token} bidPackageId={selectedId} />
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>

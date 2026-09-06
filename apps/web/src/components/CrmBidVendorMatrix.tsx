@@ -44,7 +44,7 @@ export function CrmBidVendorMatrix({
   return (
     <RegisterSheetFrame
       title="Vendor BOQ matrix"
-      sheetLabel="05.05 Bid receipt · discipline slots"
+      sheetLabel="05.05 Bid receipt · vendor × discipline"
       rowCount={vendorMatrix.length}
       className="min-h-[240px]"
     >

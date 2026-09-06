@@ -7,6 +7,7 @@ import { MakerToolHeader } from "../components/MakerToolHeader";
 import { FilePickButton } from "../components/FilePickButton";
 import { SignaturePad } from "../components/SignaturePad";
 import { WprDashboardCharts, type WprCharts } from "../components/WprDashboardCharts";
+import { MakerRecentPanel, fileNameFromPublishedPath } from "../components/MakerRecentPanel";
 import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { mergeWprCharts } from "../lib/wprChartFallback";
 
@@ -586,8 +587,12 @@ export default function WprMakerPage() {
                   </label>
 
                   {(sec.headers?.length || sec.rows?.length) ? (
-                    <div className="maker-table-wrap">
-                      <table className="maker-table">
+                    <div
+                      className={`maker-table-wrap maker-table-wrap--comfortable maker-table-wrap--scroll${
+                        key === "capex" ? " maker-table-wrap--wide" : ""
+                      }`}
+                    >
+                      <table className={`maker-table maker-table--comfortable${key === "capex" ? " maker-table--capex" : ""}`}>
                         <thead>
                           <tr>
                             {(sec.headers || []).map((h, i) => (
@@ -744,28 +749,17 @@ export default function WprMakerPage() {
       </div>
       ) : null}
 
-      {recent.length > 0 && (
-        <div className="maker-section maker-section--flush">
-          <div className="maker-section__head">Recent WPR packs</div>
-          <ul className="maker-list">
-            {recent.map((r) => (
-              <li key={r.id} className="maker-list__row">
-                <div className="min-w-0">
-                  <div className="maker-list__title">Week ending {new Date(r.weekEnding).toISOString().slice(0, 10)} · No {r.reportNumber || "—"}</div>
-                  {r.publishedUrl ? (
-                    <a href={r.publishedUrl} target="_blank" rel="noopener noreferrer" className="maker-list__sub text-brand truncate underline">
-                      Open in SharePoint
-                    </a>
-                  ) : r.publishedPath ? (
-                    <div className="maker-list__sub truncate">{r.publishedPath}</div>
-                  ) : null}
-                </div>
-                <Badge tone={r.status === "Published" ? "ok" : "warn"}>{r.status}</Badge>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <MakerRecentPanel
+        title="Recent WPR packs"
+        previewCount={5}
+        items={recent.map((r) => ({
+          id: r.id,
+          title: `Week ending ${new Date(r.weekEnding).toISOString().slice(0, 10)} · No ${r.reportNumber || "—"}`,
+          subtitle: r.publishedUrl ? "Open in SharePoint" : fileNameFromPublishedPath(r.publishedPath),
+          href: r.publishedUrl || undefined,
+          badge: { label: r.status, tone: r.status === "Published" ? "ok" : "warn" },
+        }))}
+      />
 
       </div>
     </div>

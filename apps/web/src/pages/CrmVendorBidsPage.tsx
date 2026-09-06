@@ -7,6 +7,7 @@ import { Badge, Button, Card } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
 import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
+import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 import { downloadAuthFile } from "../lib/downloadReport";
 
 type BidSlot = {
@@ -271,10 +272,7 @@ export default function CrmVendorBidsPage() {
             <strong>vendor@sharnam.demo</strong> — M/s Bhavna Infra
           </li>
           <li>
-            <strong>tcc@sharnam.demo</strong> — TCC Projects
-          </li>
-          <li>
-            <strong>pearl@sharnam.demo</strong> — Pearl Electricals
+            <strong>nkinra@sharnam.demo</strong> — M/s Nikhra Infra
           </li>
         </ul>
         <Link to="/login/vendor" className="text-sm text-brand font-semibold mt-2 inline-block">
@@ -333,15 +331,19 @@ export default function CrmVendorBidsPage() {
           </div>
 
           {Object.entries(project.packages).map(([pkgId, pkgSlots]) => (
-            <VendorPackageCard
-              key={pkgId}
-              pkgId={pkgId}
-              pkgSlots={pkgSlots}
-              summary={summaries[pkgId]}
-              highlighted={focusPkgId === pkgId}
-              onUpload={openUpload}
-              vendorView
-            />
+            <div key={pkgId} className="space-y-2">
+              <VendorPackageCard
+                pkgId={pkgId}
+                pkgSlots={pkgSlots}
+                summary={summaries[pkgId]}
+                highlighted={focusPkgId === pkgId}
+                onUpload={openUpload}
+                vendorView
+              />
+              {token && (
+                <CrmBidSharePointPanel token={token} bidPackageId={pkgId} vendorView />
+              )}
+            </div>
           ))}
         </div>
       ))}

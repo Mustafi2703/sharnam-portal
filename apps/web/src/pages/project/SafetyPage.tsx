@@ -207,6 +207,7 @@ export default function SafetyPage() {
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
           <Link to={`/projects/${id}/safety/checklist-logs`}>Safety fill log →</Link>
           <Link to={`/projects/${id}/safety/checklist-master`}>Safety checklist master →</Link>
+          <Link to={`/projects/${id}/inspection-register?tab=safety-ir`}>Safety IR register (F-01) →</Link>
           <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`}>Raise Safety RFI →</Link>
         </div>
       </div>

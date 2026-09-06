@@ -6,8 +6,8 @@ import type { PrismaClient } from "@prisma/client";
 import { UAT_LIVE_CODE } from "./uatDemoProjectSeed.js";
 
 const TAG = "uat-walkthrough-seed";
-const CONTRACTOR = "M/s NK Infra (Viatrix)";
-const CONTRACTOR_EMAIL = "nkinfra@sharnam.demo";
+const CONTRACTOR = "M/s Nikhra Infra";
+const CONTRACTOR_EMAIL = "nkinra@sharnam.demo";
 
 const STAKEHOLDER_VENDORS = [
   {
@@ -250,7 +250,7 @@ async function linkCrmBidPackage(db: PrismaClient, projectId: string, officeUser
         title: "UAT Live — Dormitory R2 comparative",
         status: "Open",
         revisionLabel: "R2",
-        vendorNamesJson: JSON.stringify(["M/s Bhavna Infra", "TCC Projects PVT. LTD.", "Pearl Electricals"]),
+        vendorNamesJson: JSON.stringify(["M/s Bhavna Infra", "M/s Nikhra Infra"]),
         notes: TAG,
       },
     });
@@ -260,7 +260,9 @@ async function linkCrmBidPackage(db: PrismaClient, projectId: string, officeUser
 
   try {
     const { seedBidPackageR2Boqs } = await import("./crmVendorBoqSeed.js");
-    await seedBidPackageR2Boqs(db, pkg.id, officeUserId, { force: false });
+    await seedBidPackageR2Boqs(db, pkg.id, officeUserId, { force: true });
+    const { syncBidPackageToSharePoint } = await import("./crmBidSharePointSync.js");
+    await syncBidPackageToSharePoint(db, pkg.id);
   } catch {
     /* optional */
   }

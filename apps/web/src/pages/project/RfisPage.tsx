@@ -680,6 +680,8 @@ export default function RfisPage() {
               {(selected.linkedAssignmentId || selected.linkedChecklistItemId) &&
                 (selected.rfiKind === "DrawingChecklist" ||
                   selected.rfiKind === "QualityInspection" ||
+                  selected.rfiKind === "QualityIR" ||
+                  selected.rfiKind === "SafetyIR" ||
                   selected.rfiKind === "RequestForInformation" ||
                   selected.rfiKind === "SafetyChecklist" ||
                   selected.rfiKind === "ActivityInspection" ||

@@ -74,7 +74,7 @@ export async function seedWprDemoWeek(
 
   const dateStr = weekEnd.toISOString().slice(0, 10);
   const startStr = weekStart.toISOString().slice(0, 10);
-  const spdcBuf = buildWprWorkbook({ header, sections });
+  const spdcBuf = await buildWprWorkbook({ header, sections });
   const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
   const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
   const charts = mergeWprChartsForExport(sections, chartsRaw, startStr, dateStr);

@@ -72,12 +72,12 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
     headline: "Vendor portal",
-    subtitle: "Bid BOQs, RFIs, checklists, and site evidence.",
+    subtitle: "Bid BOQs, answer RFIs/NCRs, and submit checklist fills — no register editing.",
     demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
-    points: ["Comparative bid BOQs", "RFI responses", "Site checklists"],
+    points: ["Comparative bid BOQs", "RFI & NCR responses", "Assigned checklist fills"],
     cta: "Sign in", tone: "#C45C26", icon: "VN",
-    landingPath: "/crm/vendor-bids", workspaceKey: "drawings", group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to."],
+    landingPath: "/crm/vendor-bids", workspaceKey: "comms", group: "role",
+    policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to. Registers are read-only — respond via RFIs."],
   },
   client: {
     key: "client", title: "Client", shortLabel: "Client",

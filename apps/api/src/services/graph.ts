@@ -219,6 +219,12 @@ export async function listDriveChildren(driveId: string, itemPath = "root") {
 export const PROJECT_LIBRARY_FOLDERS = [
   // Root registers
   "_Registers",
+  "_Registers/Drawings",
+  "_Registers/RFI",
+  "_Registers/Quality",
+  "_Registers/Safety",
+  "_Registers/Progress",
+  "_Registers/Comms",
   "00_PROJECT_BRANDING",
   // 01
   "01_CONTEXT_AND_GOVERNANCE",
@@ -268,6 +274,7 @@ export const PROJECT_LIBRARY_FOLDERS = [
   "05_PROCUREMENT_AND_CONTRACTS/05.03_Tender_Documents_Issue",
   "05_PROCUREMENT_AND_CONTRACTS/05.04_PreBid_Queries_Addenda",
   "05_PROCUREMENT_AND_CONTRACTS/05.05_Bid_Receipt_Opening",
+  "05_PROCUREMENT_AND_CONTRACTS/05.05_Bid_Receipt_Opening/Vendor_BOQs",
   "05_PROCUREMENT_AND_CONTRACTS/05.06_Bid_Evaluation_Recommendation",
   "05_PROCUREMENT_AND_CONTRACTS/05.07_Negotiation_Records",
   "05_PROCUREMENT_AND_CONTRACTS/05.08_Award_Recommendation_Letter_Intent",

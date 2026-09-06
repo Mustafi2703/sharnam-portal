@@ -444,6 +444,45 @@ export function parseFormDataJson(raw?: string | null): Record<string, string> {
   }
 }
 
+/** Merge JSON form, parsed body lines, and project defaults for display / export. */
+export function resolveInspectionFormData(
+  rfi: {
+    formDataJson?: string | null;
+    question?: string | null;
+    irNumber?: string | null;
+    number?: string;
+    subject?: string;
+    linkedAssignment?: { template?: { name?: string | null } | null } | null;
+  },
+  project?: {
+    code?: string;
+    name?: string;
+    clientName?: string | null;
+    contractorName?: string | null;
+    location?: string | null;
+  }
+): Record<string, string> {
+  const fromJson = parseFormDataJson(rfi.formDataJson);
+  const fromBody: Record<string, string> = {};
+  if (rfi.question) {
+    for (const line of rfi.question.split("\n")) {
+      for (const [prefix, key] of Object.entries(BODY_LINE_MAP)) {
+        if (line.startsWith(prefix)) {
+          const val = line.slice(prefix.length).trim();
+          if (val) fromBody[key] = val;
+        }
+      }
+    }
+  }
+  const defaults: Record<string, string> = {
+    projectFacility: project?.code || project?.name || "",
+    employerClient: project?.clientName || "",
+    contractorAgency: project?.contractorName || "",
+    pmcEngineer: SPDC_FORM_DEFAULTS.pmcEngineer,
+  };
+  return { ...defaults, ...fromBody, ...fromJson };
+}
+
 export function rfiUsesDrawingLink(kind: string): boolean {
   return kind === "RequestForInformation" || kind === "DrawingChecklist";
 }

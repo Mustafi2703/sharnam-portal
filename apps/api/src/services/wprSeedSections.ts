@@ -19,7 +19,7 @@ export async function seedWprSections(
     project,
     stakeholders,
     matrix,
-    capex,
+    budgetWbs,
     poList,
     hindrance,
     risk,
@@ -50,7 +50,7 @@ export async function seedWprSections(
       take: 40,
     }),
     prisma.communicationMatrix.findMany({ where: { projectId, isActive: true }, take: 40 }),
-    prisma.projectCapex.findMany({ where: { projectId }, take: 40 }),
+    prisma.costBudgetLine.findMany({ where: { projectId }, orderBy: [{ srNo: "asc" }], take: 80 }),
     prisma.purchaseOrder.findMany({ where: { projectId }, take: 40 }),
     prisma.progressHindrance.findMany({ where: { projectId }, take: 40 }),
     prisma.progressRisk.findMany({ where: { projectId }, take: 40 }),
@@ -172,14 +172,34 @@ export async function seedWprSections(
 
   const capexSec: WprSection = {
     title: DEFAULT_WPR_TITLES.capex,
-    headers: ["Sr", "Description", "Package", "Stakeholder", "Budgeted", "WO Value"],
-    rows: capex.map((c: any, i: number) => [
-      c.srNo || i + 1,
-      c.description || "",
-      c.packageName || "",
-      c.stakeholder || "",
-      c.budgetedAmount || 0,
-      c.workOrderValue || 0,
+    notes: budgetWbs.length
+      ? "Budget WBS from Cost → Budget tab (SPDC columns). Shown only in Project CAPEX — not duplicated in other WPR sections."
+      : "Load budget template under Cost → Budget WBS, then Regenerate WPR.",
+    headers: [
+      "Sr",
+      "Description",
+      "Stakeholder",
+      "Budgeted",
+      "WO Amount",
+      "Certified",
+      "Forecast +",
+      "Forecast −",
+      "Non-tendered",
+      "Gross Total",
+      "Remarks",
+    ],
+    rows: budgetWbs.map((b: any) => [
+      b.srNo || "",
+      b.description || "",
+      b.stakeholder || "",
+      b.budgetedAmount || 0,
+      b.workOrderAmount || 0,
+      b.certifiedAmount || 0,
+      b.forecastedAmount || 0,
+      b.forecastReduction || 0,
+      b.nonTendered || 0,
+      b.grossTotal || 0,
+      b.remarks || "",
     ]),
   };
 

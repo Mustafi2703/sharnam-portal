@@ -34,7 +34,7 @@ import {
 } from "../services/comparativeStatement.js";
 import {
   ensureVendorBoqTemplateSheets,
-  recomputeBidPackageComparative,
+  recomputeAndSyncBidPackage,
   vendorCanEditBoqSheet,
 } from "../services/crmBidRecompute.js";
 import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
@@ -467,7 +467,7 @@ crmComparativeRouter.post(
     const safeName = `${slot.vendorLabel.replace(/[^a-zA-Z0-9._-]/g, "_")}-${slot.discipline}-BOQ-${Date.now()}.xlsx`;
     const projectCode = pkg.project?.code || "GLOBAL";
     const relFolder = pkg.project?.code
-      ? CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel)
+      ? CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel, slot.discipline)
       : "CRM/BidPackages";
     if (pkg.project?.id) {
       await mockOneDrive.ensureProjectTree(pkg.project.id);
@@ -516,7 +516,7 @@ crmComparativeRouter.post(
       },
     });
 
-    const recomputed = await recomputeBidPackageComparative(prisma, pkg.id);
+    const recomputed = await recomputeAndSyncBidPackage(prisma, pkg.id);
 
     res.json({
       slot: updated,
@@ -530,6 +530,33 @@ crmComparativeRouter.post(
     });
   }
 );
+
+/** Office / vendor — browse SharePoint procurement folders for this bid package. */
+crmComparativeRouter.get("/bid-packages/:id/sharepoint", async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: req.params.id },
+    include: { project: { select: { id: true, code: true } } },
+  });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+  const isOffice = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "employee";
+  let vendorLabel: string | null = null;
+  if (!isOffice && req.user!.role === "vendor") {
+    const vendor = await resolveVendorForUser(req.user!);
+    if (!vendor) return res.status(403).json({ error: "Vendor profile not linked" });
+    const onPkg = await prisma.crmVendorBoq.findFirst({
+      where: { bidPackageId: pkg.id, vendorId: vendor.id },
+    });
+    if (!onPkg) return res.status(403).json({ error: "Not invited to this bid package" });
+    vendorLabel = vendor.name;
+  } else if (!isOffice) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  const { listCrmBidSharePointTree } = await import("../services/crmBidSharePointSync.js");
+  const tree = await listCrmBidSharePointTree(prisma, pkg.id, vendorLabel);
+  res.json(tree);
+});
 
 /** Vendor / office — load BOQ sheet for a slot (auto-creates from R2 if missing). */
 crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/sheet", async (req: AuthedRequest, res) => {
@@ -600,13 +627,20 @@ crmComparativeRouter.put(
       },
     });
 
-    const recomputed = await recomputeBidPackageComparative(prisma, pkg.id);
+    const recomputed = await recomputeAndSyncBidPackage(prisma, pkg.id);
 
     await audit("crm.vendor_boq.save", {
       userId: req.user!.id,
       entity: "CrmVendorBoq",
       entityId: slot.id,
-      meta: { bidPackageId: pkg.id, sheetId: slot.sheetId },
+      meta: {
+        bidPackageId: pkg.id,
+        sheetId: slot.sheetId,
+        vendorLabel: slot.vendorLabel,
+        discipline: slot.discipline,
+        sharePointFolder: CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel, slot.discipline),
+        savedByRole: req.user!.role,
+      },
     });
 
     res.json({
@@ -621,7 +655,7 @@ crmComparativeRouter.put(
 /** Office — refresh comparative summary from all vendor BOQ sheets. */
 crmComparativeRouter.post("/bid-packages/:id/recompute", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   try {
-    const result = await recomputeBidPackageComparative(prisma, req.params.id);
+    const result = await recomputeAndSyncBidPackage(prisma, req.params.id);
     await audit("crm.comparative.recompute", {
       userId: req.user!.id,
       entity: "CrmBidPackage",

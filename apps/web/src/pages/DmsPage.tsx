@@ -54,6 +54,18 @@ function isImage(name: string) {
   return /\.(png|jpe?g|webp|gif)$/i.test(name);
 }
 
+function isRegisterDumpFile(name: string) {
+  return (
+    /\.csv$/i.test(name) &&
+    /(-Log|Register|RFI-|Checklist-|GFC-|WPR-|DPR-|NCR-|Cube-|Meetings-|Submittals-|Design-Coordination)/i.test(name)
+  );
+}
+
+function hideRegisterDumpsInFolder(path: string, rootPrefix: string) {
+  if (!rootPrefix || path.includes("_Registers")) return false;
+  return path === rootPrefix || path.startsWith(`${rootPrefix}/`);
+}
+
 function folderLabel(path: string) {
   if (!path) return "Project root";
   const leaf = path.split("/").pop() || path;
@@ -220,11 +232,14 @@ export default function DmsPage({
   }, [folderTree, treeQuery]);
 
   const contents = useMemo(() => {
-    const list = data?.children || [];
+    let list = data?.children || [];
+    if (rootPrefix && hideRegisterDumpsInFolder(path, rootPrefix)) {
+      list = list.filter((c) => c.type === "folder" || !isRegisterDumpFile(c.name));
+    }
     const q = filter.trim().toLowerCase();
     if (!q) return list;
     return list.filter((c) => c.name.toLowerCase().includes(q));
-  }, [data?.children, filter]);
+  }, [data?.children, filter, path, rootPrefix]);
 
   const folders = contents.filter((c) => c.type === "folder");
   const files = contents.filter((c) => c.type === "file");
@@ -289,10 +304,24 @@ export default function DmsPage({
 
       {isDrawings && !embedded && (
         <p className="text-xs text-steel-muted">
-          Sheet PDFs and DWG files live here. For revision register, publish gate, and R0–R5 workflow use{" "}
+          Sheet PDFs and DWG files live here. Register CSV exports are in{" "}
+          <button type="button" className="text-brand font-semibold" onClick={() => setPath("_Registers/Drawings")}>
+            _Registers → Drawings
+          </button>
+          . For revision register workflow use{" "}
           <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
             GFC register →
           </Link>
+        </p>
+      )}
+
+      {(isDrawings || isModule) && embedded && rootPrefix && !path.includes("_Registers") && (
+        <p className="text-xs text-steel-muted">
+          Portal register CSVs are filed under{" "}
+          <button type="button" className="text-brand font-semibold" onClick={() => setPath("_Registers")}>
+            _Registers
+          </button>{" "}
+          — not mixed with design PDFs.
         </p>
       )}
 
@@ -445,28 +474,36 @@ export default function DmsPage({
                     </td>
                   </tr>
                 ))}
-                {files.map((c) => (
+                {files.map((c) => {
+                  const previewable = canPreviewInApp && (isPdf(c.name) || isImage(c.name));
+                  const url = fileUrl(data?.projectCode || "", c);
+                  return (
                   <tr key={c.path} className="hover:bg-sand/50">
                     <td className="px-4 py-2.5 font-medium">📄 {c.name}</td>
                     <td className="px-2 py-2.5 text-steel-muted uppercase text-[10px]">{c.name.split(".").pop() || "file"}</td>
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatBytes(c.size)}</td>
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatDate(c.modifiedAt)}</td>
-                    <td className="px-4 py-2.5 text-right flex gap-1 justify-end">
-                      <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => openItem(c)}>
-                        {canPreviewInApp && (isPdf(c.name) || isImage(c.name)) ? "Preview" : "Open"}
-                      </Button>
-                      <a
-                        href={fileUrl(data?.projectCode || "", c)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-semibold text-brand px-2 py-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Open
-                      </a>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="dms-file-actions">
+                        {previewable ? (
+                          <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => openItem(c)}>
+                            Preview
+                          </Button>
+                        ) : null}
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="dms-file-actions__link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {previewable ? "Open ↗" : "Open ↗"}
+                        </a>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {!contents.length && (
                   <tr>
                     <td colSpan={5} className="px-4 py-12 text-center text-steel-muted">

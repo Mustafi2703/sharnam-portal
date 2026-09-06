@@ -22,7 +22,8 @@ npm run hostinger:build
 |------|-------|------------|----------|
 | **SPDC Office** | `operations@spdc.in` or `office@sharnam.demo` | `/login/office` | Full walkthrough, close NCR, publish WPR |
 | **Site engineer** | `site@sharnam.demo` | `/login/site` | DPR, safety NCR, checklists |
-| **Contractor** | `nkinfra@sharnam.demo` | `/login/vendor` | RA bill upload, NCR response, vendor BOQs |
+| **Contractor (Bhavna)** | `vendor@sharnam.demo` | `/login/vendor` | BOQ uploads, RFI/NCR responses |
+| **Contractor (Nikhra)** | `nkinra@sharnam.demo` | `/login/vendor` | Second bidder · comparative demo |
 | **Client** | `client@sharnam.demo` | `/login/client` | Read-only progress & reports |
 | **Structural consultant** | `struct@sharnam.demo` | `/login/stakeholder` | RFI response, design coordination |
 | **MEP consultant** | `mep@sharnam.demo` | `/login/stakeholder` | Coordination issues, meetings |
@@ -40,7 +41,8 @@ npm run hostinger:build
 | 3 | **CRM → Directory → Stakeholders** | Show consultant types (Structural, MEP, …) | `Create portal login` → `/login/stakeholder` |
 | 4 | **Project → Documents (DMS)** | Open ISO folder tree | SharePoint-linked folders |
 | 5 | **Quality → Quality files** (or any module **files** tool) | Portal records + SharePoint browse | RFIs/NCR open in portal; PDFs open in SharePoint |
-| 6 | **CRM → Vendor bids** | Show R2 BOQ slots | Uploaded XLSX per vendor/discipline |
+| 6 | **CRM → Vendor bids** | Show R2 BOQ slots | One XLSX per vendor × discipline in SharePoint 05.05 |
+| 7 | **CRM → Comparative bids** | Open SPDC-DEMO-01 package | Master comparative in 05.06 · L1/L2 totals |
 
 ---
 
@@ -142,9 +144,9 @@ npm run hostinger:build
 
 | # | Step | Who | Output |
 |---|------|-----|--------|
-| K1 | Vendor bids list | **nkinfra@** or office | Discipline BOQ rows |
-| K2 | Upload BOQ slot | Contractor | File listed + SharePoint |
-| K3 | Comparative bid (office) | Office | R2 matrix |
+| K1 | Vendor bids list | **vendor@** (Bhavna) or **nkinra@** (Nikhra) | Pre-seeded BOQs · SharePoint 05.05/{vendor}/{discipline} |
+| K2 | View / edit BOQ online | Contractor | Saves sync master to 05.06 |
+| K3 | Comparative bid (office) | Office | Two-bidder matrix · SharePoint folder tree · award L1 |
 
 ### L. Closure (optional)
 

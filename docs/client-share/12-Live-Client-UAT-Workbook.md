@@ -46,6 +46,7 @@
 |------|--------------|---------|
 | Office | office@sharnam.demo | Full module walkthrough, uploads, registers |
 | Site | site@sharnam.demo | Field flows, attendance, site checklists |
+| Contractor | vendor@sharnam.demo · nkinra@sharnam.demo | Bid BOQs, RFI/NCR responses (no registers) |
 | Client | client@sharnam.demo | Read-only / client view confirmation |
 
 ---
@@ -89,6 +90,23 @@ Tick **Done** when session completed. Write brief notes in the last column.
 | 9 | Cost · Finance | Office | ☐ | | |
 | 10 | Reports · DPR · WPR | Office + Client | ☐ | | |
 | 11 | Closure · Snaglist | Office + Client | ☐ | | |
+| 12 | **CRM · Comparative bids** | Office + Contractor | ☐ | | |
+
+---
+
+## Section 5b — CRM comparative bids (UAT)
+
+**Project:** SPDC-DEMO-01 · **Path:** CRM → Comparative bids · `/crm/vendor-bids` (contractor)
+
+| # | Test step | Role | Expected | Pass | Meeting changes |
+|---|-----------|------|----------|:----:|-----------------|
+| C1 | Office opens SPDC-DEMO-01 bid package | Office | Two bidders · 100% BOQ progress | ☐ | |
+| C2 | Vendor matrix shows discipline columns | Office | Bhavna + Nikhra rows · View/Fill per cell | ☐ | |
+| C3 | SharePoint panel lists 05.05 vendor/discipline folders | Office | One XLSX per slot · Open links work | ☐ | |
+| C4 | Master comparative in 05.06 updates after recompute | Office | `Comparative-Statement-R2-live.xlsx` | ☐ | |
+| C5 | `vendor@` sees My bid uploads + own SharePoint tree | Contractor | Cannot edit registers · can fill BOQ | ☐ | |
+| C6 | `nkinra@` sees second bidder BOQs + assigned RFIs | Contractor | RFI-VC-002 assigned | ☐ | |
+| C7 | Award L1 from comparative totals | Office | Package status → Awarded | ☐ | |
 
 ---
 
@@ -99,6 +117,7 @@ Mark **Pass** when critical path works on **your project data**. Add name + date
 | Module | Critical path (short) | Office | Site | Client | Pass | Sign-off name | Date |
 |--------|----------------------|:------:|:----:|:------:|:----:|---------------|------|
 | Master | Create project, enable modules | ☐ | — | — | ☐ | | |
+| **CRM · Bids** | Two-bidder BOQ · SharePoint 05.05/05.06 · L1 award | ☐ | — | — | ☐ | | |
 | **Drawings** | GFC upload, registers, signatures, drawing check | ☐ | ☐ | ☐ | ☐ | | |
 | Documents | ISO folders, upload, PDF preview | ☐ | ☐ | ☐ | ☐ | | |
 | Quality | Dashboard, SOR, QI, NCR | ☐ | ☐ | ☐ | ☐ | | |
