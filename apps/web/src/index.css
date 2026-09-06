@@ -909,6 +909,14 @@ html.is-standalone-form #root {
   width: 100%;
   min-width: 0;
   white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--color-line) 80%, transparent);
+  border-radius: 0.25rem;
+  background: #fff;
+  padding: 0.15rem 0.35rem;
+}
+.spdc-register-meta__cell .register-sheet-cell:focus-within {
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-brand) 15%, transparent);
 }
 .spdc-register-meta__cell--client .spdc-register-meta__label {
   background: #fef3c7;
@@ -954,13 +962,14 @@ html.is-standalone-form #root {
   --register-modal-w-lg: min(92vw, 58rem);
   --register-modal-w-xl: min(94vw, 52rem);
   --register-modal-w-2xl: min(94vw, 58rem);
+  --register-modal-w-3xl: min(94vw, 62rem);
 }
 @media (min-width: 1280px) {
   :root {
     --register-chrome: 10.5rem;
-    --register-modal-h: clamp(24rem, 86dvh, 50rem);
-    --register-modal-w-xl: min(92vw, 76rem);
+    --register-modal-h: clamp(32rem, 88dvh, 58rem);
     --register-modal-w-2xl: min(90vw, 88rem);
+    --register-modal-w-3xl: min(88vw, 96rem);
   }
 }
 @media (min-width: 1440px) {
@@ -968,6 +977,7 @@ html.is-standalone-form #root {
     --register-chrome: 9.5rem;
     --register-modal-h: clamp(28rem, 84dvh, 56rem);
     --register-modal-w-2xl: min(88vw, 92rem);
+    --register-modal-w-3xl: min(86vw, 102rem);
   }
 }
 @media (min-width: 1920px) {
@@ -975,6 +985,7 @@ html.is-standalone-form #root {
     --register-chrome: 8.5rem;
     --register-modal-h: clamp(32rem, 82dvh, 64rem);
     --register-modal-w-2xl: min(84vw, 100rem);
+    --register-modal-w-3xl: min(82vw, 108rem);
   }
 }
 
@@ -1980,7 +1991,8 @@ html.is-standalone-form #root {
 
 /* QAP / Cube page-scroll-full — final override (beats register height:0 traps) */
 .tool-main__outlet:has(.qap-page.page-scroll-full),
-.tool-main__outlet:has(.quality-module.page-scroll-full) {
+.tool-main__outlet:has(.quality-module.page-scroll-full),
+.tool-main__outlet:has(.cube-sheet-page.page-scroll-full) {
   overflow-y: auto !important;
   overflow-x: hidden !important;
   overscroll-behavior: contain;
@@ -1988,7 +2000,8 @@ html.is-standalone-form #root {
   scrollbar-gutter: stable;
 }
 .tool-main__outlet .qap-page.page-scroll-full .qap-page__register,
-.tool-main__outlet .quality-module.page-scroll-full .cube-page__register {
+.tool-main__outlet .quality-module.page-scroll-full .cube-page__register,
+.tool-main__outlet .cube-sheet-page.page-scroll-full .cube-page__register {
   flex: none !important;
   height: auto !important;
   overflow: visible !important;
@@ -2105,6 +2118,7 @@ html.is-standalone-form #root {
 .register-modal__panel--lg { max-width: var(--register-modal-w-lg); }
 .register-modal__panel--xl { max-width: var(--register-modal-w-xl); }
 .register-modal__panel--2xl { max-width: var(--register-modal-w-2xl); }
+.register-modal__panel--3xl { max-width: var(--register-modal-w-3xl); }
 .register-modal__head {
   flex-shrink: 0;
   display: flex;
@@ -6065,6 +6079,23 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* DPR / WPR page-scroll — never trap sections in flex height:0 */
+.dpr-maker.page-scroll-full .maker-section--flush,
+.wpr-maker.page-scroll-full .maker-section--flush,
+.dpr-maker.page-scroll-full .maker-section,
+.wpr-maker.page-scroll-full .maker-section {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: block !important;
+}
+.dpr-maker.page-scroll-full .maker-table-wrap,
+.wpr-maker.page-scroll-full .maker-table-wrap {
+  max-height: none !important;
+  overflow-x: auto;
+  overflow-y: visible !important;
+}
 .maker-page {
   max-width: 100%;
   overflow-x: hidden;
@@ -6322,6 +6353,27 @@ body {
 }
 .maker-table tbody tr:hover td {
   background: rgba(247, 249, 250, 0.65);
+}
+.maker-table--comfortable {
+  min-width: 640px;
+}
+.maker-table--comfortable thead th {
+  position: static;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.68rem;
+}
+.maker-table--comfortable tbody td {
+  padding: 0.55rem 0.75rem;
+  vertical-align: middle;
+}
+.maker-table--comfortable tbody tr:nth-child(even) td {
+  background: rgba(247, 249, 250, 0.55);
+}
+.maker-table--comfortable tbody tr:hover td {
+  background: rgba(230, 244, 246, 0.65);
+}
+.maker-table-wrap--comfortable {
+  padding: 0.25rem 0.5rem 0.75rem;
 }
 .maker-table__head-input,
 .maker-table__cell {

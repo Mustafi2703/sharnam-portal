@@ -522,7 +522,16 @@ export default function InspectionsPage() {
       )}
 
       {sheetKey === "cube-test" && id && (
-        <div className="cube-sheet-page flex flex-col gap-2 min-w-0">
+        <div className="cube-sheet-page quality-module page-scroll-full flex flex-col gap-3 pb-8 min-w-0 w-full">
+          <WorkflowStrip
+            active={2}
+            steps={[
+              { label: "Cast & register", hint: "Footing groups + 7D/28D" },
+              { label: "Lab results", hint: "Inline edit strength" },
+              { label: "Export pack", hint: "XLSX / PDF / SharePoint" },
+              { label: "DPR link", hint: "Cube stats on quality dashboard" },
+            ]}
+          />
           <div className="shrink-0">
           <ReferenceSheetToolbar
             sheetLabel="SPDC Cube Register"

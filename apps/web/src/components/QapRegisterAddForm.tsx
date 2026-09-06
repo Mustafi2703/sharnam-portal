@@ -38,7 +38,7 @@ export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange
       onClose={onClose}
       onSave={() => formRef.current?.requestSubmit()}
       saving={busy}
-      size="2xl"
+      size="3xl"
       saveLabel={saveLabel}
     >
       <form ref={formRef} className="space-y-4" onSubmit={onSubmit}>

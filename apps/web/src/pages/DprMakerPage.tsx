@@ -1047,7 +1047,7 @@ export default function DprMakerPage() {
       )}
 
       {/* 2. Quantity */}
-      <div className="maker-section maker-section--flush">
+      <div className="maker-section">
         <div className="maker-section__head maker-section__head--row shrink-0">
           <span>2. Quantity progress · BOQ item-wise</span>
           <Button variant="secondary" onClick={() => setLineModalOpen(true)}>+ Add item</Button>
@@ -1105,38 +1105,45 @@ export default function DprMakerPage() {
       </div>
 
       {/* 3. Manpower */}
-      <div className="maker-section maker-section--flush">
-        <div className="maker-section__head maker-section__head--row">
-          <span>3. Manpower deployed today</span>
+      <Card padding={false}>
+        <div className="flex items-center justify-between p-3 border-b border-line bg-sand/40">
+          <h3 className="text-sm font-semibold uppercase tracking-widest">3. Manpower deployed today</h3>
           <Button variant="secondary" onClick={addManpower}>+ Trade</Button>
         </div>
-        <div className="maker-table-wrap">
-          <table className="maker-table">
-            <thead>
+        <div className="maker-table-wrap maker-table-wrap--comfortable overflow-x-auto">
+          <table className="maker-table maker-table--comfortable">
+            <thead className="bg-sand/40 text-[10px] uppercase tracking-wider">
               <tr>
-                <th>Sr</th>
-                <th>Trade / category</th>
-                <th>Planned nos</th>
-                <th>Actual nos</th>
-                <th>Hours</th>
-                <th className="w-8" />
+                <th className="p-2 w-10 text-left">Sr</th>
+                <th className="p-2 text-left min-w-[12rem]">Trade / category</th>
+                <th className="p-2 text-left w-28">Planned nos</th>
+                <th className="p-2 text-left w-28">Actual nos</th>
+                <th className="p-2 text-left w-24">Hours</th>
+                <th className="p-2 w-10" />
               </tr>
             </thead>
             <tbody>
               {snap.manpower.map((m, i) => (
-                <tr key={i} className="border-t border-line">
-                  <td className="p-1.5 text-xs">{i + 1}</td>
-                  <td className="p-1"><Input value={m.trade} onChange={(e) => updateManpower(i, { trade: e.target.value })} /></td>
-                  <td className="p-1"><Input type="number" value={m.planned ?? 0} onChange={(e) => updateManpower(i, { planned: Number(e.target.value) })} className="max-w-[110px]" /></td>
-                  <td className="p-1"><Input type="number" value={m.actual ?? 0} onChange={(e) => updateManpower(i, { actual: Number(e.target.value) })} className="max-w-[110px]" /></td>
-                  <td className="p-1"><Input type="number" step="0.25" value={m.hoursWorked ?? 8} onChange={(e) => updateManpower(i, { hoursWorked: Number(e.target.value) })} className="max-w-[90px]" /></td>
-                  <td><button type="button" className="maker-table__remove-row" onClick={() => removeManpower(i)} aria-label="Remove">✕</button></td>
+                <tr key={i} className="maker-table__row border-t border-line">
+                  <td className="p-2 text-xs text-steel-muted tabular-nums">{i + 1}</td>
+                  <td className="p-2"><Input value={m.trade} onChange={(e) => updateManpower(i, { trade: e.target.value })} /></td>
+                  <td className="p-2"><Input type="number" value={m.planned ?? 0} onChange={(e) => updateManpower(i, { planned: Number(e.target.value) })} className="max-w-[7rem]" /></td>
+                  <td className="p-2"><Input type="number" value={m.actual ?? 0} onChange={(e) => updateManpower(i, { actual: Number(e.target.value) })} className="max-w-[7rem]" /></td>
+                  <td className="p-2"><Input type="number" step="0.25" value={m.hoursWorked ?? 8} onChange={(e) => updateManpower(i, { hoursWorked: Number(e.target.value) })} className="max-w-[5.5rem]" /></td>
+                  <td className="p-2"><button type="button" className="maker-table__remove-row" onClick={() => removeManpower(i)} aria-label="Remove">✕</button></td>
                 </tr>
               ))}
+              {!snap.manpower.length && (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-steel-muted text-sm">
+                    No trades yet — click <strong>+ Trade</strong> or load from Progress manpower register.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* 4. Equipment */}
       <Card padding={false}>

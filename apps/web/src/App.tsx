@@ -27,6 +27,8 @@ import HrmPage from "./pages/HrmPage";
 import HrmsProtected from "./pages/hrms/HrmsProtected";
 import HrmsLayout from "./pages/hrms/HrmsLayout";
 import HrmsShell from "./pages/hrms/HrmsShell";
+import ModuleFilesPage from "./pages/project/ModuleFilesPage";
+import AuditKpiPage from "./pages/project/AuditKpiPage";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
 import ProjectHomePage from "./pages/project/ProjectHomePage";
 import VendorsPage from "./pages/project/VendorsPage";
@@ -196,6 +198,7 @@ export default function App() {
                   <Route path="hub/safety" element={<ModuleHubPage moduleKey="safety" />} />
                   <Route path="hub/inspection" element={<ModuleHubPage moduleKey="inspection" />} />
                   <Route path="hub/progress" element={<ModuleHubPage moduleKey="progress" />} />
+                  <Route path="hub/auditKpi" element={<ModuleHubPage moduleKey="auditKpi" />} />
                   <Route path="hub/comms" element={<ModuleHubPage moduleKey="comms" />} />
                   <Route path="hub/cost" element={<ModuleHubPage moduleKey="cost" />} />
                   <Route path="hub/finance" element={<ModuleHubPage moduleKey="finance" />} />
@@ -208,6 +211,16 @@ export default function App() {
                   <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />
                   <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
                   <Route path="drawings/library" element={<DrawingsLibraryPage />} />
+                  <Route path="drawings/files" element={<ModuleFilesPage moduleKey="drawings" />} />
+                  <Route path="quality/files" element={<ModuleFilesPage moduleKey="quality" />} />
+                  <Route path="safety/files" element={<ModuleFilesPage moduleKey="safety" />} />
+                  <Route path="progress/files" element={<ModuleFilesPage moduleKey="progress" />} />
+                  <Route path="reports/files" element={<ModuleFilesPage moduleKey="reports" />} />
+                  <Route path="cost/files" element={<ModuleFilesPage moduleKey="cost" />} />
+                  <Route path="finance/files" element={<ModuleFilesPage moduleKey="finance" />} />
+                  <Route path="comms/files" element={<ModuleFilesPage moduleKey="comms" />} />
+                  <Route path="audit-kpi/files" element={<ModuleFilesPage moduleKey="auditKpi" />} />
+                  <Route path="inspection/files" element={<ModuleFilesPage moduleKey="inspection" />} />
                   <Route path="drawings/coordination" element={<CoordinationPage />} />
                   <Route path="drawings/checklist-master" element={<ChecklistMasterPage lockedFamily="DrawingCheck" />} />
                   <Route path="drawings/checklist-logs" element={<ChecklistLogsPage lockedFamily="DrawingCheck" />} />
@@ -221,6 +234,7 @@ export default function App() {
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />
                   <Route path="progress" element={<ProgressPage />} />
+                  <Route path="audit-kpi" element={<AuditKpiPage />} />
                   <Route path="quality/checklist-master" element={<ChecklistMasterPage lockedFamily="QualityInspection" />} />
                   <Route path="quality/site-checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
                   <Route path="safety/checklist-master" element={<ChecklistMasterPage lockedFamily="Safety" />} />

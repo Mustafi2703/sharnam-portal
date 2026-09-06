@@ -104,8 +104,10 @@ This loads: 7-day DPR, WPR #50, finance RA/COP chain, cost workbooks, HRMS leave
 **Full client presentation (digital transformation, all modules, DMS links, CRM → setup flow):**  
 [SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md](./SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md)
 
-**Tick-list for every module workflow (NCR, RFI, HRMS, stakeholders, bids):**  
+**Tick-list for every module workflow (NCR, RFI, HRMS, stakeholders, bids, module files):**  
 [SPDC_DEMO_WORKFLOW_CHECKLIST.md](./SPDC_DEMO_WORKFLOW_CHECKLIST.md)
+
+**Module files:** Each module (Quality, Safety, Drawings, Progress, Reports, Cost, Finance, Comms, Audit & KPI, Inspection) includes a **{Module} files** tool — browse the ISO SharePoint folder for that discipline and open live portal RFIs, NCR forms, and XLSX exports from one screen.
 
 ---
 

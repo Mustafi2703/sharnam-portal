@@ -28,6 +28,7 @@ const TOP_MODULES = (
     { key: "safety", label: "Safety", path: "hub/safety" },
     { key: "progress", label: "Progress", path: "hub/progress" },
     { key: "comms", label: "Comms", path: "hub/comms" },
+    { key: "auditKpi", label: "Audit & KPI", path: "hub/auditKpi" },
     { key: "cost", label: "Cost", path: "hub/cost" },
     { key: "finance", label: "Finance", path: "hub/finance" },
     { key: "reports", label: "Reports", path: "hub/reports" },

@@ -29,7 +29,7 @@ export async function seedUatLiveProject(db: PrismaClient = prisma, opts?: { upl
 
   const enabledModules = JSON.stringify([
     "drawings", "dms", "quality", "safety", "inspection", "progress",
-    "comms", "cost", "finance", "reports", "closure",
+    "comms", "auditKpi", "cost", "finance", "reports", "closure",
   ]);
 
   const project =   await db.project.upsert({

@@ -8,13 +8,13 @@ type Props = {
   onClose: () => void;
   onSave: () => void | Promise<void>;
   saving?: boolean;
-  size?: "md" | "lg" | "xl" | "2xl";
+  size?: "md" | "lg" | "xl" | "2xl" | "3xl";
   saveLabel?: string;
   children: ReactNode;
 };
 
 /** Reusable modal for register add/edit — pairs with inline forms on the same page. */
-const MODAL_PANEL = { md: "register-modal__panel--md", lg: "register-modal__panel--lg", xl: "register-modal__panel--xl", "2xl": "register-modal__panel--2xl" } as const;
+const MODAL_PANEL = { md: "register-modal__panel--md", lg: "register-modal__panel--lg", xl: "register-modal__panel--xl", "2xl": "register-modal__panel--2xl", "3xl": "register-modal__panel--3xl" } as const;
 
 export function RegisterEntryModal({ open, title, onClose, onSave, saving, size = "lg", saveLabel = "Save", children }: Props) {
   if (!open) return null;

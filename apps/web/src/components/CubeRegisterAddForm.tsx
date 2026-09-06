@@ -39,7 +39,7 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
       onClose={onClose}
       onSave={() => formRef.current?.requestSubmit()}
       saving={busy}
-      size="2xl"
+      size="3xl"
       saveLabel="Save"
     >
       <form ref={formRef} className="space-y-4" onSubmit={onSubmit}>

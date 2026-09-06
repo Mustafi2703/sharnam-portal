@@ -39,7 +39,8 @@ npm run hostinger:build
 | 2 | **Master → Projects → Setup** | Assign people + pick **contractor from global directory** | Directory populated |
 | 3 | **CRM → Directory → Stakeholders** | Show consultant types (Structural, MEP, …) | `Create portal login` → `/login/stakeholder` |
 | 4 | **Project → Documents (DMS)** | Open ISO folder tree | SharePoint-linked folders |
-| 5 | **CRM → Vendor bids** | Show R2 BOQ slots | Uploaded XLSX per vendor/discipline |
+| 5 | **Quality → Quality files** (or any module **files** tool) | Portal records + SharePoint browse | RFIs/NCR open in portal; PDFs open in SharePoint |
+| 6 | **CRM → Vendor bids** | Show R2 BOQ slots | Uploaded XLSX per vendor/discipline |
 
 ---
 
@@ -96,10 +97,11 @@ npm run hostinger:build
 
 | # | Step | Who | Output |
 |---|------|-----|--------|
-| F1 | Progress → Overview / Planned vs Actual | Office | Scrollable register |
-| F2 | DPR Maker → pick date + discipline | Site | Page scrolls (no sticky trap) |
-| F3 | Save draft → Publish | Site | XLSX + SharePoint |
-| F4 | Download PDF (HTML print) | Site | Branded PDF pack |
+| F1 | Progress → Overview / Planned vs Actual | Office | Filter pills + sync from Cost; no dev verify panel |
+| F2 | Planned vs Actual → manpower / cashflow / activity tabs | Office | Same Excel pack columns |
+| F3 | DPR Maker → pick date + discipline | Site | Full page scroll — manpower table flows into Equipment (no white gap) |
+| F4 | Save draft → Publish | Site | XLSX + SharePoint |
+| F5 | Download PDF (HTML print) | Site | Branded PDF pack |
 
 ### G. WPR
 
@@ -109,38 +111,65 @@ npm run hostinger:build
 | G2 | Save → **Publish** | Office | SharePoint URL |
 | G3 | Client XLSX + PPTX | Office | Arvind-format pack |
 
-### H. Comms
+### H. Audit & KPI
 
 | # | Step | Who | Output |
 |---|------|-----|--------|
-| H1 | Matrix (BPCL import) | Office | Parties listed |
-| H2 | Meeting → Agenda items | Office | — |
-| H3 | MoM → **Send follow-up** | Office | Email to action owners |
-| H4 | Download MoM XLSX | Office | Branded workbook → DMS |
+| H1 | Audit dashboard | Office | RAG rollup + findings count |
+| H2 | Findings → add NC / observation | Office | CAPA row |
+| H3 | KPI dashboard + Subject data | Office | 127-subject health |
+| H4 | Download workbook sheet (XLSX) | Office | Branded audit pack |
 
-### I. HRMS
-
-| # | Step | Who | Output |
-|---|------|-----|--------|
-| I1 | Leave balances | Employee/Site | CL/SL/EL shown |
-| I2 | Pending + approved requests | Office | Demo requests visible |
-| I3 | Holidays calendar | All | India + Gujarat dates |
-| I4 | Handbook + appointment letter | Office | HRMS Documents tab |
-
-### J. CRM & Vendor bids
+### I. Comms
 
 | # | Step | Who | Output |
 |---|------|-----|--------|
-| J1 | Vendor bids list | **nkinfra@** or office | Discipline BOQ rows |
-| J2 | Upload BOQ slot | Contractor | File listed + SharePoint |
-| J3 | Comparative bid (office) | Office | R2 matrix |
+| I1 | Matrix (BPCL import) | Office | Parties listed |
+| I2 | Meeting → Agenda items | Office | — |
+| I3 | MoM → **Send follow-up** | Office | Email to action owners |
+| I4 | Download MoM XLSX | Office | Branded workbook → DMS |
 
-### K. Closure (optional)
+### J. HRMS
 
 | # | Step | Who | Output |
 |---|------|-----|--------|
-| K1 | Snaglist register | Office | Open/closed rows |
-| K2 | Lessons learnt | Office | Handover prep |
+| J1 | Leave balances | Employee/Site | CL/SL/EL shown |
+| J2 | Pending + approved requests | Office | Demo requests visible |
+| J3 | Holidays calendar | All | India + Gujarat dates |
+| J4 | Handbook + appointment letter | Office | HRMS Documents tab |
+
+### K. CRM & Vendor bids
+
+| # | Step | Who | Output |
+|---|------|-----|--------|
+| K1 | Vendor bids list | **nkinfra@** or office | Discipline BOQ rows |
+| K2 | Upload BOQ slot | Contractor | File listed + SharePoint |
+| K3 | Comparative bid (office) | Office | R2 matrix |
+
+### L. Closure (optional)
+
+| # | Step | Who | Output |
+|---|------|-----|--------|
+| L1 | Snaglist register | Office | Open/closed rows |
+| L2 | Lessons learnt | Office | Handover prep |
+
+### M. Module files (SharePoint + portal)
+
+Each major module has a **{Module} files** tool (same pattern as **Drawings → Drawing files**):
+
+| Module | Tool path | SharePoint ISO root | Portal panel shows |
+|--------|-----------|---------------------|-------------------|
+| Quality | Quality files | 08 Quality HSE | QI RFIs, NCR/CAR, links to forms |
+| Safety | Safety files | 08.07 HSE | Safety RFIs, safety NCR |
+| Drawings | Drawing files / library | 04.02 GFC | Drawing RFIs, PDF/DWG preview |
+| Progress | Progress files | 07.02 Daily records | Published DPR folders |
+| Reports | Reports files | 10.01 MIS | WPR packs |
+| Cost / Finance | Cost / Finance files | 09 Commercial | BOQ, RA workbooks |
+| Comms | Comms files | 03.08 Meetings | MoM exports |
+| Audit & KPI | Audit files | 10.18 Audit programme | Audit workbook exports |
+| Inspection | Inspection files | 08.02 Pour cards | IR / activity RFIs |
+
+**Demo tip:** Open **Quality files** → show portal NCR row → **Open** form → **XLSX** download → browse SharePoint subfolder for the same export after close/publish.
 
 ---
 

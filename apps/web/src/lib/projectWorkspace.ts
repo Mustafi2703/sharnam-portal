@@ -29,6 +29,20 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (MODULE_META[mod as WorkspaceKey]) return mod as WorkspaceKey;
   }
 
+  if (tail.endsWith("/files")) {
+    const mod = tail.replace(/\/files$/, "");
+    if (mod === "quality" || mod === "inspections") return "quality";
+    if (mod === "drawings") return "drawings";
+    if (mod === "safety") return "safety";
+    if (mod === "progress") return "progress";
+    if (mod === "reports") return "reports";
+    if (mod === "cost") return "cost";
+    if (mod === "finance") return "finance";
+    if (mod === "comms") return "comms";
+    if (mod === "audit-kpi") return "auditKpi";
+    if (mod === "inspection") return "inspection";
+  }
+
   if (tail === "drawings" || tail.startsWith("drawings/")) return "drawings";
   if (tail === "coordination") return "drawings";
 
@@ -45,6 +59,7 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
   if (tail === "checklist-logs") return checklistFamilyModule(search, "logs");
 
   if (tail === "progress" || tail.startsWith("progress/")) return "progress";
+  if (tail === "audit-kpi" || tail.startsWith("audit-kpi")) return "auditKpi";
   if (["diary", "photos"].includes(tail)) return "comms";
   if (tail === "site-pilot") return "comms";
   if (tail.startsWith("progress/")) return "progress";

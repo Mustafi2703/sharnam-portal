@@ -81,7 +81,7 @@ export const DRAWINGS_LIBRARY_ROOT =
 /** Discipline subfolders shown in Drawings → Drawing files (not full DMS tree) */
 export const DRAWINGS_DISCIPLINE_FOLDERS = ["Architecture", "Structural", "MEP", "Civil"] as const;
 
-export type DmsPageMode = "documents" | "drawings";
+export type DmsPageMode = "documents" | "drawings" | "module";
 
 /**
  * Procore-style document manager — browse ISO folder tree, preview files,
@@ -92,15 +92,32 @@ export type DmsPageMode = "documents" | "drawings";
  */
 export const DMS_UPLOAD_EVENT = "sharnam:dms-upload";
 
-export default function DmsPage({ mode = "documents", embedded = false }: { mode?: DmsPageMode; embedded?: boolean }) {
+export default function DmsPage({
+  mode = "documents",
+  embedded = false,
+  moduleRoot,
+  moduleTitle,
+  moduleEyebrow,
+  moduleSubtitle,
+  hubLink,
+}: {
+  mode?: DmsPageMode;
+  embedded?: boolean;
+  moduleRoot?: string;
+  moduleTitle?: string;
+  moduleEyebrow?: string;
+  moduleSubtitle?: string;
+  hubLink?: string;
+}) {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
   const isDrawings = mode === "drawings";
-  const rootPrefix = isDrawings ? DRAWINGS_LIBRARY_ROOT : "";
+  const isModule = mode === "module" && !!moduleRoot;
+  const rootPrefix = isModule ? moduleRoot! : isDrawings ? DRAWINGS_LIBRARY_ROOT : "";
 
-  const [path, setPath] = useState(isDrawings ? DRAWINGS_LIBRARY_ROOT : "");
+  const [path, setPath] = useState(rootPrefix || "");
   const [data, setData] = useState<BrowseData | null>(null);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
@@ -165,18 +182,24 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
       ? path.slice(rootPrefix.length).replace(/^\//, "")
       : path;
     if (!rel) {
-      return [{ label: isDrawings ? "Design & Engineering" : "Root", path: rootPrefix || "" }];
+      const rootLabel = isModule
+        ? moduleTitle || "Module files"
+        : isDrawings
+          ? "Design & Engineering"
+          : "Root";
+      return [{ label: rootLabel, path: rootPrefix || "" }];
     }
     const parts = rel.split("/").filter(Boolean);
     const base = rootPrefix || "";
+    const rootLabel = isModule ? moduleTitle || "Module files" : isDrawings ? "Design & Engineering" : "Root";
     return [
-      { label: isDrawings ? "Design & Engineering" : "Root", path: base },
+      { label: rootLabel, path: base },
       ...parts.map((_, i) => ({
         label: parts[i].replace(/_/g, " "),
         path: base ? `${base}/${parts.slice(0, i + 1).join("/")}` : parts.slice(0, i + 1).join("/"),
       })),
     ];
-  }, [path, rootPrefix, isDrawings]);
+  }, [path, rootPrefix, isDrawings, isModule, moduleTitle]);
 
   const folderTree = useMemo(() => {
     const scoped = rootPrefix
@@ -257,10 +280,10 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
     <div className={`space-y-4 min-w-0 ${embedded ? "" : ""}`}>
       {!embedded && (
         <Link
-          to={isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}/hub/dms`}
+          to={hubLink || (isDrawings ? `/projects/${id}/hub/drawings` : `/projects/${id}/hub/dms`)}
           className="text-sm text-brand font-medium"
         >
-          ← {isDrawings ? "Drawings module" : "Documents module"}
+          ← {isModule ? moduleEyebrow?.split("·")[0]?.trim() || "Module" : isDrawings ? "Drawings module" : "Documents module"}
         </Link>
       )}
 
@@ -274,10 +297,13 @@ export default function DmsPage({ mode = "documents", embedded = false }: { mode
       )}
 
       <PageHeader
-        eyebrow={isDrawings ? "Drawings · files" : "Documents"}
-        title={isDrawings ? "Drawing file library" : "Document manager"}
+        eyebrow={isModule ? moduleEyebrow || "Module files" : isDrawings ? "Drawings · files" : "Documents"}
+        title={isModule ? moduleTitle || "Module file library" : isDrawings ? "Drawing file library" : "Document manager"}
         subtitle={
-          isDrawings
+          isModule
+            ? moduleSubtitle ||
+              "Browse the ISO SharePoint folder for this module — preview PDFs in-app or open files in SharePoint."
+            : isDrawings
             ? "Drawing PDFs/DWG only — discipline folders under 04.02. Office users preview in-app; SharePoint opens in a new tab when required."
             : "Procore-style browse of the ISO folder tree — contracts, HSE, daily records, and all non-drawing project files."
         }

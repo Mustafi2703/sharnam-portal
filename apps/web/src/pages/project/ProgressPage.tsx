@@ -56,8 +56,6 @@ export default function ProgressPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
-  const [verify, setVerify] = useState<any>(null);
-  const [verifyBusy, setVerifyBusy] = useState(false);
   const [resyncBusy, setResyncBusy] = useState(false);
   const [registerSyncBusy, setRegisterSyncBusy] = useState(false);
   const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | "boq" | null>(null);
@@ -99,7 +97,6 @@ export default function ProgressPage() {
   const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
   const canEdit =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
-  const canVerify = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
   const canResyncExcel =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
@@ -197,29 +194,15 @@ export default function ProgressPage() {
     }
   }
 
-  async function runVerify() {
-    if (!canVerify) return;
-    setVerifyBusy(true);
-    try {
-      const report = await api(`/api/progress/${id}/verify`, { token });
-      setVerify(report);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Verify failed");
-    } finally {
-      setVerifyBusy(false);
-    }
-  }
-
   async function runResyncSor() {
     if (!canResyncExcel || !id) return;
     setResyncBusy(true);
     setMsg("");
     try {
-      const out = await api<{ imported: number; verify: typeof verify }>(`/api/progress/${id}/resync-sor`, {
+      const out = await api<{ imported: number }>(`/api/progress/${id}/resync-sor`, {
         method: "POST",
         token,
       });
-      setVerify(out.verify);
       await load();
       setMsg(`Monthly SOR re-synced from Excel (${out.imported} rows).`);
     } catch (err) {
@@ -229,15 +212,9 @@ export default function ProgressPage() {
     }
   }
 
-  const sorCheckFailed = verify?.checks?.some((c: { key: string; ok: boolean }) => c.key === "count.sor" && !c.ok);
-
   useEffect(() => {
     void load();
   }, [id, token]);
-
-  useEffect(() => {
-    if (canVerify && tab === "overview") void runVerify();
-  }, [id, token, canVerify, tab]);
 
   useEffect(() => {
     if (tab === "scurve" || tab === "msproject") void loadMsProject();
@@ -500,11 +477,10 @@ export default function ProgressPage() {
     setRegisterSyncBusy(true);
     setMsg("");
     try {
-      const out = await api<{ registers?: any; planned?: any; verify?: typeof verify }>(
+      const out = await api<{ registers?: any; planned?: any }>(
         `/api/progress/${id}/resync-registers`,
         { method: "POST", token, body: JSON.stringify({ force }) }
       );
-      if (out.verify) setVerify(out.verify);
       await load();
       const reg = out.registers;
       setMsg(
@@ -715,11 +691,6 @@ export default function ProgressPage() {
                   : pct(data.totals.projectProgressPct)}
               </Badge>
               <ReportExportButtons projectId={id} kind="progress" compact />
-              {canVerify && (
-                <Button type="button" variant="secondary" disabled={verifyBusy} onClick={() => void runVerify()}>
-                  {verifyBusy ? "Verifying…" : "Verify vs Excel"}
-                </Button>
-              )}
             </div>
           }
         />
@@ -727,93 +698,6 @@ export default function ProgressPage() {
 
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
-
-      {verify && (!isProgressRegister || !verify.ok) && (
-        <details
-          className={`shrink-0 rounded-lg border bg-paper ${verify.ok ? "border-ok/40" : "border-danger/40"} ${
-            isProgressRegister ? "" : "open"
-          }`}
-          open={!isProgressRegister || !verify.ok}
-        >
-          <summary className="cursor-pointer px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-steel-muted">Backend vs Excel packs</div>
-              <div className="font-semibold text-sm mt-0.5">
-                {verify.ok ? "Progress data matches Excel" : "Mismatches found — expand to review"}
-              </div>
-            </div>
-            <Badge tone={verify.ok ? "ok" : "danger"}>
-              {verify.summary.passed}/{verify.summary.total} passed
-            </Badge>
-          </summary>
-          <div className="px-4 pb-4 border-t border-line/60">
-            {verify.msProjectOverlay &&
-            (verify.msProjectOverlay.milestones > 0 ||
-              verify.msProjectOverlay.plannedActual > 0 ||
-              verify.msProjectOverlay.activityLines > 0) ? (
-              <p className="text-xs text-steel-muted mt-2 mb-2">
-                MS Project overlay excluded: {verify.msProjectOverlay.milestones} milestones ·{" "}
-                {verify.msProjectOverlay.plannedActual} S-curve months · {verify.msProjectOverlay.activityLines} schedule
-                lines
-              </p>
-            ) : null}
-            <div className="overflow-x-auto max-h-48 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase text-steel-muted border-b border-line">
-                    <th className="py-2 pr-3">Check</th>
-                    <th className="py-2 pr-3">Expected (Excel)</th>
-                    <th className="py-2 pr-3">Actual (DB)</th>
-                    <th className="py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {verify.checks.map((c: any) => (
-                    <tr key={c.key} className="border-b border-line/60">
-                      <td className="py-1.5 pr-3">{c.label}</td>
-                      <td className="py-1.5 pr-3 font-mono text-xs">{String(c.expected)}</td>
-                      <td className="py-1.5 pr-3 font-mono text-xs">{String(c.actual)}</td>
-                      <td className="py-1.5">
-                        <Badge tone={c.ok ? "ok" : "danger"}>{c.ok ? "OK" : "Fail"}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {canResyncExcel && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
-                {sorCheckFailed ? (
-                  <p className="text-xs text-danger flex-1 min-w-[12rem]">
-                    Monthly SOR count differs from Excel — duplicate rows from an older seed. Resync replaces them with
-                    the 3 summary rows from the Monthly Progress Dashboard pack.
-                  </p>
-                ) : (
-                  <p className="text-xs text-steel-muted flex-1 min-w-[12rem]">
-                    Re-import Monthly SOR summary from the client Excel pack (admin/office).
-                  </p>
-                )}
-                <Button
-                  type="button"
-                  variant={sorCheckFailed ? "primary" : "secondary"}
-                  disabled={resyncBusy || verifyBusy}
-                  onClick={() => void runResyncSor()}
-                >
-                  {resyncBusy ? "Resyncing…" : "Resync SOR from Excel"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={registerSyncBusy || verifyBusy}
-                  onClick={() => void loadAllProgressTemplates(true)}
-                >
-                  {registerSyncBusy ? "Loading…" : "Resync all progress registers"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </details>
-      )}
 
       {!isProgressRegister && (
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 w-full shrink-0">
@@ -1059,27 +943,6 @@ export default function ProgressPage() {
 
       {tab === "planned" && (
         <div className="progress-sheet-block space-y-4">
-          <Card className="!p-3 shrink-0 border-brand/25 bg-brand-soft/30">
-            <div className="text-sm font-semibold text-ink">Demo flow — Planned vs Actual → DPR → WPR</div>
-            <ol className="mt-2 text-xs text-steel-muted space-y-1.5 list-decimal pl-4 max-w-3xl">
-              <li>
-                <strong className="text-ink">Cost</strong> — load SPDC budget, then use{" "}
-                <strong className="text-ink">Sync from Cost BOQ</strong> below (activity qty from monitoring).
-              </li>
-              <li>
-                <strong className="text-ink">S-curve tab</strong> — <strong className="text-ink">Load demo schedule</strong> or import MS Project XML.
-              </li>
-              <li>
-                <strong className="text-ink">This tab</strong> — load SPDC template or import client Excel; optional sync cashflow to Cost.
-              </li>
-              <li>
-                <strong className="text-ink">DPR maker</strong> — save per discipline; charts read BOQ progress + S-curve register.
-              </li>
-              <li>
-                <strong className="text-ink">WPR maker</strong> — export for week ending; charts pull DPR history + PvA cashflow.
-              </li>
-            </ol>
-          </Card>
           <ReferenceSheetToolbar
             sheetLabel="Planned Vs. Actual Dashboard"
             rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
@@ -1116,52 +979,54 @@ export default function ProgressPage() {
             busy={!!paBusy || registerSyncBusy}
             message={msg}
           />
-          <Card className="!p-3 shrink-0">
-            <div className="text-sm font-semibold">Planned Vs. Actual — three sheets from the Excel pack</div>
-            <p className="text-xs text-steel-muted mt-1 max-w-3xl">
-              Same workbook as <code className="font-mono">Planned Vs. Actual Dashboard.xlsx</code>. Qty % is{" "}
-              <strong>executed ÷ GFC</strong> (BOQ is the tender qty, not the %). Manpower is weekly <strong>headcount</strong>,
-              not hours. Cashflow ₹ is RA planned vs actual; Cost cashflow is the separate budget chart.
-            </p>
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {(
-                [
-                  ["all", "All"],
-                  ["cashflow", "Cashflow"],
-                  ["manpower", "Manpower"],
-                  ["activity", "Activity qty"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`text-xs px-2.5 py-1 rounded border ${
-                    pva === key
-                      ? "bg-brand text-white border-brand"
-                      : "bg-white text-steel border-line hover:border-brand/40"
-                  }`}
-                  onClick={() => {
-                    const next = new URLSearchParams(searchParams);
-                    next.set("tab", "planned");
-                    if (key === "all") next.delete("pva");
-                    else next.set("pva", key);
-                    setSearchParams(next, { replace: true });
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-              <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs font-semibold text-brand px-2 py-1">
-                Open Cost cashflow →
-              </Link>
+          <div className="flex flex-wrap items-center gap-2 shrink-0 border-b border-line pb-3">
+            {(
+              [
+                ["all", "All"],
+                ["cashflow", "Cashflow"],
+                ["manpower", "Manpower"],
+                ["activity", "Activity qty"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={`text-xs px-2.5 py-1.5 rounded border font-medium ${
+                  pva === key
+                    ? "bg-brand text-white border-brand"
+                    : "bg-white text-steel border-line hover:border-brand/40"
+                }`}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("tab", "planned");
+                  if (key === "all") next.delete("pva");
+                  else next.set("pva", key);
+                  setSearchParams(next, { replace: true });
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="hidden sm:inline text-line mx-1">|</span>
+            {canEdit && (
               <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void syncActivityFromBoq()}>
-                {paBusy === "boq" ? "…" : "Sync from Cost BOQ"}
+                {paBusy === "boq" ? "Syncing…" : "Sync BOQ qty from Cost"}
               </Button>
-              <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void syncPvaCashflowToCost()}>
-                {paBusy === "sync" ? "…" : "Sync cashflow → Cost"}
-              </Button>
-            </div>
-          </Card>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-brand disabled:opacity-50"
+                disabled={!!paBusy}
+                onClick={() => void syncPvaCashflowToCost()}
+              >
+                {paBusy === "sync" ? "Syncing cashflow…" : "Push cashflow to Cost"}
+              </button>
+            )}
+            <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs text-steel-muted hover:text-brand ml-auto">
+              Cost cashflow chart →
+            </Link>
+          </div>
           <input
             ref={paImportRef}
             type="file"

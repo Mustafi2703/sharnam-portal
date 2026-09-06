@@ -13,6 +13,7 @@ export type WorkspaceKey =
   | "inspection"
   | "progress"
   | "comms"
+  | "auditKpi"
   | "cost"
   | "finance"
   | "reports"
@@ -123,6 +124,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Quality Dashboard.xlsx · Dashboard",
     },
     {
+      to: "quality/files",
+      label: "Quality files",
+      blurb: "SharePoint ISO 08 tree + portal RFIs, NCR/CAR, QAP and cube exports.",
+    },
+    {
       to: "inspections",
       label: "SOR Log",
       query: "sheet=sor-log",
@@ -228,6 +234,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   safety: [
     { to: "safety", label: "Dashboard", blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
     {
+      to: "safety/files",
+      label: "Safety files",
+      blurb: "SharePoint HSE folder + safety RFIs and NCR forms — open in SharePoint anytime.",
+    },
+    {
       to: "safety",
       label: "Site Instruction",
       query: "sheet=site-instruction",
@@ -303,6 +314,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   inspection: [
     {
+      to: "inspection/files",
+      label: "Inspection files",
+      blurb: "SharePoint pour cards / IR folder + activity inspection exports.",
+    },
+    {
       to: "inspection-register",
       label: "Quality IR (F-01)",
       end: true,
@@ -362,6 +378,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       end: true,
       blurb: "Workday-style progress KPIs and charts.",
       sheet: "Progress Overview.xlsx",
+    },
+    {
+      to: "progress/files",
+      label: "Progress files",
+      blurb: "DPR/WPR SharePoint folders, daily site records, published exports.",
     },
     {
       to: "progress",
@@ -443,6 +464,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Who talks to whom (roles / channels).",
       sheet: "Communication Matrix_BPCL",
     },
+    {
+      to: "comms/files",
+      label: "Comms files",
+      blurb: "MoM exports, meeting packs — SharePoint ISO 03.08 folder.",
+    },
     { to: "comms", label: "Agenda", query: "tab=agenda", blurb: "Create meeting → generate agenda before MoM." },
     { to: "comms", label: "MoM", query: "tab=mom", blurb: "Minutes + action items." },
     { to: "comms", label: "Follow-up", query: "tab=followup", blurb: "Open actions from MoM." },
@@ -495,6 +521,27 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Request a site execution checklist fill.",
     },
   ],
+  auditKpi: [
+    {
+      to: "audit-kpi",
+      label: "Audit dashboard",
+      end: true,
+      blurb: "Open/closed findings, RAG — SITE_AUDIT_Pack DASHBOARD.",
+      sheet: "DASHBOARD",
+    },
+    {
+      to: "audit-kpi/files",
+      label: "Audit files",
+      blurb: "SharePoint audit programme folder + KPI workbook exports.",
+    },
+    { to: "audit-kpi", label: "Findings", query: "tab=findings", blurb: "NC / observation + CAPA.", sheet: "FINDINGS" },
+    { to: "audit-kpi", label: "Site walk", query: "tab=site-walk", blurb: "Walkthrough checklist.", sheet: "SITE_WALK" },
+    { to: "audit-kpi", label: "DC interview", query: "tab=dc-interview", blurb: "Document controller interview.", sheet: "DC_INTERVIEW" },
+    { to: "audit-kpi", label: "Folder sample", query: "tab=folder-sample", blurb: "Controlled folder sampling.", sheet: "FOLDER_SAMPLE" },
+    { to: "audit-kpi", label: "KPI dashboard", query: "tab=kpi-dashboard", blurb: "127 subjects RAG rollup.", sheet: "00_KPI_DASHBOARD" },
+    { to: "audit-kpi", label: "Subject data", query: "tab=subjects", blurb: "Per-subject workbook health.", sheet: "03_SUBJECT_DATA" },
+    { to: "audit-kpi", label: "Role KRA", query: "tab=role-kra", blurb: "Appraisal scorecard by role.", sheet: "06_ROLE_KRA" },
+  ],
   cost: [
     {
       to: "cost",
@@ -502,6 +549,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       end: true,
       blurb: "Monitoring packages — GFC qty, excess / saving.",
       sheet: "Cashflow Dashboard · Monitoring",
+    },
+    {
+      to: "cost/files",
+      label: "Cost files",
+      blurb: "BOQ, MB/BBS, vendor bills — SharePoint commercial ISO tree.",
     },
     { to: "cost", label: "MB sheets", query: "tab=mb", blurb: "Measurement books by package.", sheet: "SPDC Budget · MB" },
     { to: "cost", label: "BBS", query: "tab=bbs", blurb: "Bar bending schedule.", sheet: "SPDC Budget · BBS" },
@@ -557,6 +609,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   finance: [
     { to: "finance", label: "Bill registers", query: "tab=bills", blurb: "Sharnam Payment Summary sheets — create & edit per discipline." },
+    {
+      to: "finance/files",
+      label: "Finance files",
+      blurb: "RA certified/submission workbooks, COP — open in SharePoint.",
+    },
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
     { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Capital expenditure lines." },
     { to: "finance", label: "RA Bills & COP", query: "tab=ra", blurb: "RA bill tracker (3 stages) and certificates of payment." },
@@ -568,6 +625,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   reports: [
     { to: "dpr-maker", label: "DPR maker", blurb: "Fill SPDC INPUT → publish template XLSX per discipline.", sheet: "SPDC_DPR_*_DASHBOARD" },
+    {
+      to: "reports/files",
+      label: "Reports files",
+      blurb: "Published WPR/DPR packs and MIS exports in SharePoint.",
+    },
     { to: "wpr-maker", label: "WPR maker", blurb: "24-section weekly pack · photos · sign-off.", sheet: "WPR File" },
     { to: "reports", label: "DPR dashboard", query: "kind=dpr", blurb: "Live KPIs + downloadable client pack.", sheet: "DPR-Sharnam PMC" },
     { to: "reports", label: "WPR dashboard", query: "kind=wpr", blurb: "Weekly register + downloadable pack.", sheet: "WPR File" },
@@ -671,6 +733,16 @@ export const MODULE_META: Record<
     ink: "#4C1D95",
     icon: "PRG",
   },
+  auditKpi: {
+    title: "Audit & KPI",
+    desc: "Site document audit pack + Master KPI dashboard — findings, walk, folder sample, subjects, role KRA.",
+    path: "hub/auditKpi",
+    accent: "#9333EA",
+    soft: "#F3E8FF",
+    glow: "rgba(147,51,234,0.32)",
+    ink: "#581C87",
+    icon: "KPI",
+  },
   comms: {
     title: "Comms",
     desc: "Matrix, Agenda, MoM, Follow-up, Ask (PMC RFI), Email — separate tools.",
@@ -753,6 +825,7 @@ export const WORKSPACES: {
   if (key === "cost") roles = ["admin", "office", "employee"];
   if (key === "finance") roles = ["admin", "office", "employee", "vendor"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
+  if (key === "auditKpi") roles = ["admin", "office", "employee", "client"];
   if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
   return {
     key,
@@ -824,6 +897,7 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "inspection",
   "progress",
   "comms",
+  "auditKpi",
   "cost",
   "finance",
   "reports",
