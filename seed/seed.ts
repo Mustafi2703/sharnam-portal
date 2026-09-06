@@ -148,6 +148,7 @@ async function seedUsers() {
     { email: "pmc@sharnam.demo", fullName: "Partner PMC Lead", role: "employee" },
     { email: "mep@sharnam.demo", fullName: "MEP Design Engineer", role: "employee" },
     { email: "struct@sharnam.demo", fullName: "Structural Reviewer", role: "employee" },
+    { email: "ak@consultant.demo", fullName: "A. Kumar — AK Consultant", role: "employee" },
     { email: "vendor@sharnam.demo", fullName: "Vendor Partner", role: "vendor" },
     { email: "tcc@sharnam.demo", fullName: "TCC Bid Manager", role: "vendor" },
     { email: "pearl@sharnam.demo", fullName: "Pearl Bid Manager", role: "vendor" },

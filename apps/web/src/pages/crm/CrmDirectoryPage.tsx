@@ -6,6 +6,7 @@ import { UserAccountEditModal, type UserAccountRow } from "../../components/User
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
+  STAKEHOLDER_CONSULTANT_TRADES,
   VENDOR_PARTY_TYPES,
   vendorToForm,
   type VendorFormState,
@@ -38,9 +39,10 @@ const TAB_META: Record<
   },
   stakeholders: {
     title: "Stakeholders & consultants",
-    subtitle: "Design consultants, PMC partners, and third-party reviewers on projects.",
-    partyTypes: ["Consultant", "PMC"],
+    subtitle: "Structural, MEP, architectural, PMC partners — assign to projects and issue stakeholder desk logins.",
+    partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",
+    loginRole: "employee",
   },
   people: {
     title: "People & portal access",
@@ -128,7 +130,7 @@ export function DirectoryCompaniesPanel({
     }
     setLoginMsg("");
     try {
-      const role = meta.loginRole || (tab === "vendors" ? "vendor" : "client");
+      const role = meta.loginRole || (tab === "vendors" ? "vendor" : tab === "stakeholders" ? "employee" : "client");
       await api("/api/hrm/employees", {
         method: "POST",
         token,
@@ -139,7 +141,11 @@ export function DirectoryCompaniesPanel({
           phone: selected.businessPhone,
         }),
       });
-      setLoginMsg(`Portal login created for ${selected.email} (${role}). Default password: Demo@1234`);
+      setLoginMsg(
+        `Portal login created for ${selected.email} (${role}). Default password: Demo@1234${
+          tab === "stakeholders" ? " · Sign in at /login/stakeholder" : ""
+        }`
+      );
     } catch (err) {
       setLoginMsg(err instanceof Error ? err.message : "Could not create login");
     }
@@ -206,6 +212,16 @@ export function DirectoryCompaniesPanel({
           <Input placeholder="Primary contact" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
           <Input placeholder="Email (for portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+          {tab === "stakeholders" ? (
+            <Select value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })}>
+              <option value="">Consultant type…</option>
+              {STAKEHOLDER_CONSULTANT_TRADES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           {(tab === "vendors" || meta.partyTypes.includes("Contractor")) && (
             <div className="space-y-3">
@@ -230,7 +246,7 @@ export function DirectoryCompaniesPanel({
           {canEdit && (
             <div className="flex flex-wrap gap-2">
               <Button type="submit">Save</Button>
-              {selected && (meta.loginRole || tab === "vendors" || tab === "clients") && (
+              {selected && (meta.loginRole || tab === "vendors" || tab === "clients" || tab === "stakeholders") && (
                 <Button type="button" variant="secondary" onClick={() => void createLogin()}>
                   Create portal login
                 </Button>

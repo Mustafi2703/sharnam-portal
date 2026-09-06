@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
+import { STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
 
 const USER_TOOLS: {
   key: string;
@@ -18,7 +19,7 @@ const USER_TOOLS: {
   { key: "Contractor", label: "Contractor", party: "Contractor", roles: [] },
 ];
 
-const PARTY_TYPES = ["PMC", "Contractor", "Client", "Consultant", "Vendor"] as const;
+const PARTY_TYPES = ["PMC", "Contractor", "Client", "Consultant", "Designer", "Vendor"] as const;
 
 /** Project directory — four user tools: Office · Site · Client · Contractor */
 export default function DirectoryPage() {
@@ -99,13 +100,25 @@ export default function DirectoryPage() {
       activeTool.party === "Site"
         ? ["Contractor", "Vendor"]
         : activeTool.party === "PMC"
-          ? ["PMC", "Consultant"]
+          ? ["PMC", "Consultant", "Designer"]
           : [activeTool.party];
     return rows.filter((r: any) => {
       const pt = r.vendor?.partyType || r.partyType || "";
       return want.includes(pt);
     });
   }, [overview, activeTool]);
+
+  const linkableParties = useMemo(() => {
+    const want =
+      activeTool.party === "Site"
+        ? ["Contractor", "Vendor"]
+        : activeTool.party === "PMC"
+          ? ["PMC", "Consultant", "Designer"]
+          : activeTool.party === "Contractor"
+            ? ["Contractor", "Vendor"]
+            : [activeTool.party];
+    return allParties.filter((v) => want.includes(v.partyType));
+  }, [allParties, activeTool.party]);
 
   async function createParty(e: FormEvent) {
     e.preventDefault();
@@ -130,6 +143,19 @@ export default function DirectoryPage() {
       city: "",
     });
     setMsg(`${created.partyType} added to directory and project`);
+    await load();
+  }
+
+  async function assignExistingParty(e: FormEvent) {
+    e.preventDefault();
+    if (!vendorId) return;
+    await api(`/api/vendors/project/${id}/assign`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ vendorId, tradeRole: trade }),
+    });
+    setMsg("Party linked from global directory.");
+    setVendorId("");
     await load();
   }
 
@@ -234,11 +260,22 @@ export default function DirectoryPage() {
                 onChange={(e) => setPartyForm({ ...partyForm, name: e.target.value })}
                 required
               />
-              <Input
-                placeholder="Trade / role"
-                value={partyForm.trade}
-                onChange={(e) => setPartyForm({ ...partyForm, trade: e.target.value })}
-              />
+              {partyForm.partyType === "Consultant" || partyForm.partyType === "Designer" ? (
+                <Select value={partyForm.trade} onChange={(e) => setPartyForm({ ...partyForm, trade: e.target.value })}>
+                  <option value="">Consultant type…</option>
+                  {STAKEHOLDER_CONSULTANT_TRADES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Input
+                  placeholder="Trade / role"
+                  value={partyForm.trade}
+                  onChange={(e) => setPartyForm({ ...partyForm, trade: e.target.value })}
+                />
+              )}
               <Input
                 placeholder="Primary contact"
                 value={partyForm.primaryContactName}
@@ -349,26 +386,22 @@ export default function DirectoryPage() {
             </form>
             <form
               className="flex flex-wrap gap-2 items-end mt-4 pt-4 border-t border-line"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await api(`/api/vendors/project/${id}/assign`, {
-                  method: "POST",
-                  token,
-                  body: JSON.stringify({ vendorId, tradeRole: trade }),
-                });
-                setMsg("Party linked.");
-                await load();
-              }}
+              onSubmit={assignExistingParty}
             >
-              <Select className="min-w-[180px] flex-1" value={vendorId} onChange={(e) => setVendorId(e.target.value)} required>
-                <option value="">Link existing party</option>
-                {allParties.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} · {v.partyType}
-                  </option>
-                ))}
-              </Select>
-              <Input placeholder="Trade" value={trade} onChange={(e) => setTrade(e.target.value)} />
+              <SearchableSelect
+                className="min-w-[180px] flex-1"
+                options={linkableParties.map((v) => ({
+                  value: v.id,
+                  label: v.name,
+                  sublabel: `${v.partyType}${v.trade ? ` · ${v.trade}` : ""}`,
+                }))}
+                value={vendorId}
+                onChange={setVendorId}
+                placeholder="Link from global directory…"
+                searchPlaceholder="Search company…"
+                required
+              />
+              <Input placeholder="Trade on project" value={trade} onChange={(e) => setTrade(e.target.value)} />
               <Button type="submit" variant="secondary">
                 Link
               </Button>

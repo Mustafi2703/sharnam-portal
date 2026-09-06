@@ -15,6 +15,7 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | 1 | [01-Whats-New.md](./01-Whats-New.md) | Everyone — what was delivered |
 | **13** | **[SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md](./SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md)** | **Leadership / client — 2–3 hr presentation deck (non-technical)** |
 | **14** | **[SPDC_DEMO_GUIDE.md](./SPDC_DEMO_GUIDE.md)** | **Demo day — quick walkthrough cheat sheet** |
+| **15** | **[SPDC_DEMO_WORKFLOW_CHECKLIST.md](./SPDC_DEMO_WORKFLOW_CHECKLIST.md)** | **Presenter — tick every module workflow** |
 | 2 | [02-Logins-and-Access.md](./02-Logins-and-Access.md) | All users — how to sign in |
 | 3 | [03-Module-Test-Plan.md](./03-Module-Test-Plan.md) | SPDC leads — test each module on your server |
 | 4 | [04-SharePoint-and-Files.md](./04-SharePoint-and-Files.md) | IT — photos & documents to SharePoint |

@@ -4,8 +4,25 @@ export const VENDOR_PARTY_TYPES = [
   { value: "Vendor", label: "Vendor / supplier" },
   { value: "Client", label: "Client" },
   { value: "Consultant", label: "Consultant" },
-  { value: "PMC", label: "PMC" },
+  { value: "PMC", label: "PMC / partner firm" },
+  { value: "Designer", label: "Designer / architect" },
 ] as const;
+
+/** Consultant & stakeholder trade roles (CRM → Stakeholders tab + project directory). */
+export const STAKEHOLDER_CONSULTANT_TRADES = [
+  "Structural Consultant",
+  "MEP Consultant",
+  "Architectural Consultant",
+  "Landscape Consultant",
+  "Geotechnical Consultant",
+  "PMC Partner",
+  "Third-Party Reviewer",
+  "Project Consultant",
+  "Fire & Safety Consultant",
+  "Facade Consultant",
+] as const;
+
+export type StakeholderConsultantTrade = (typeof STAKEHOLDER_CONSULTANT_TRADES)[number];
 
 export type VendorPartyType = (typeof VENDOR_PARTY_TYPES)[number]["value"];
 

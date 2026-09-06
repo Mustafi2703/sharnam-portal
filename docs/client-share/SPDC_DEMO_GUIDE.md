@@ -18,7 +18,11 @@ The portal replaces scattered Excel folders with **one project workspace** where
 |------|-------|-------------|
 | SPDC Office | `operations@spdc.in` or `office@sharnam.demo` | Full control — cost, finance, comms, close NCR |
 | Site engineer | `site@sharnam.demo` | DPR, safety NCR, site checklists |
-| Contractor | `nkinfra@sharnam.demo` | RA bill submission, bid BOQs |
+| Contractor | `nkinfra@sharnam.demo` | RA bill submission, bid BOQs, NCR/CAR response |
+| Structural consultant | `struct@sharnam.demo` | Stakeholder desk — RFI, coordination (`/login/stakeholder`) |
+| MEP consultant | `mep@sharnam.demo` | Stakeholder desk |
+| PMC partner | `pmc@sharnam.demo` | Stakeholder desk |
+| Project consultant | `ak@consultant.demo` | Stakeholder desk |
 | Client viewer | `client@sharnam.demo` | Read-only dashboards |
 
 ---
@@ -99,6 +103,9 @@ This loads: 7-day DPR, WPR #50, finance RA/COP chain, cost workbooks, HRMS leave
 
 **Full client presentation (digital transformation, all modules, DMS links, CRM → setup flow):**  
 [SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md](./SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md)
+
+**Tick-list for every module workflow (NCR, RFI, HRMS, stakeholders, bids):**  
+[SPDC_DEMO_WORKFLOW_CHECKLIST.md](./SPDC_DEMO_WORKFLOW_CHECKLIST.md)
 
 ---
 

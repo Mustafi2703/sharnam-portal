@@ -95,6 +95,14 @@ export async function seedUatLiveProject(db: PrismaClient = prisma, opts?: { upl
   }
 
   try {
+    const { seedUatDemoWalkthrough } = await import("./uatDemoWalkthroughSeed.js");
+    const walk = await seedUatDemoWalkthrough(db);
+    console.log("UAT walkthrough seed:", walk);
+  } catch (err) {
+    console.warn("UAT walkthrough seed skipped:", err instanceof Error ? err.message : err);
+  }
+
+  try {
     const openPkg = await db.crmBidPackage.findFirst({
       where: { status: "Open" },
       orderBy: { createdAt: "desc" },
