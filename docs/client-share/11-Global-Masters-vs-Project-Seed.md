@@ -157,13 +157,14 @@ Load when setting up **SPDC-xxx** after quotation award. Filenames should match 
 ## 5. New project setup order
 
 ```text
-1. Office creates project (Master → Projects) + enables modules
-2. Global masters already loaded (§1) — assign checklist types to project
-3. Cost → upload BOQ per structure
-4. Cost → MB / BBS → pick lines from global master
-5. Import project seed Excel pack (§3) or run seed sync from Sharnam_modules_docs/
-6. Drawings → seed register → publish GFC
-7. Site fills checklists · office runs DPR / WPR
+1. CRM → Lead → Quotation → Comparative bid → Convert to delivery project
+2. Master → Projects → Setup desk: assign people + pick contractors from global vendor directory
+3. Global masters already loaded (§1) — assign checklist types to project
+4. Cost → upload BOQ per structure
+5. Cost → MB / BBS → pick lines from global master
+6. Import project seed Excel pack (§3) or run seed sync from Sharnam_modules_docs/
+7. Drawings → seed register → publish GFC
+8. Site fills checklists · office runs DPR / WPR
 ```
 
 **Sync command (dev / Hostinger):**

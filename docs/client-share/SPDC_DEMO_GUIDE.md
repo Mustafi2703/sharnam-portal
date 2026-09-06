@@ -97,6 +97,9 @@ This loads: 7-day DPR, WPR #50, finance RA/COP chain, cost workbooks, HRMS leave
 - Portal issues: Twinoxis / dev team  
 - SPDC operations: `operations@spdc.in`, `nirav@spdc.in`
 
+**Full client presentation (digital transformation, all modules, DMS links, CRM → setup flow):**  
+[SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md](./SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md)
+
 ---
 
 *Document version: Sep 2026 · aligns with commits through demo prep sprint.*

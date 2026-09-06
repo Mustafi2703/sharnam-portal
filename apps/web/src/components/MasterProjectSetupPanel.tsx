@@ -260,14 +260,19 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               }
             }}
           >
-            <Select className="min-w-[180px] flex-1" value={assignVendorId} onChange={(e) => setAssignVendorId(e.target.value)} required>
-              <option value="">From global catalog…</option>
-              {allVendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} · {v.trade || v.partyType}
-                </option>
-              ))}
-            </Select>
+            <SearchableSelect
+              className="min-w-[180px] flex-1"
+              options={allVendors.map((v) => ({
+                value: v.id,
+                label: v.name,
+                sublabel: [v.trade, v.partyType].filter(Boolean).join(" · "),
+              }))}
+              value={assignVendorId}
+              onChange={setAssignVendorId}
+              placeholder="From global vendor directory…"
+              searchPlaceholder="Search contractor / vendor…"
+              required
+            />
             <Input placeholder="Trade on project" value={assignTrade} onChange={(e) => setAssignTrade(e.target.value)} />
             <Button type="submit" variant="secondary" disabled={busy}>
               Add
