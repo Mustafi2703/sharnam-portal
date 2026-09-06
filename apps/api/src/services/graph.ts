@@ -231,6 +231,7 @@ export const PROJECT_LIBRARY_FOLDERS = [
   "01_CONTEXT_AND_GOVERNANCE/01.01_Project_Charter_and_Context",
   "01_CONTEXT_AND_GOVERNANCE/01.02_Stakeholders_and_Communication",
   "01_CONTEXT_AND_GOVERNANCE/01.03_Organisation_and_Authority",
+  "01_CONTEXT_AND_GOVERNANCE/01.03_Organisation_and_Authority/Directory_Signatures",
   "01_CONTEXT_AND_GOVERNANCE/01.04_Stage_Gates_and_Assurance",
   "01_CONTEXT_AND_GOVERNANCE/01.05_Agreements_Bonds_and_Insurance",
   // 02

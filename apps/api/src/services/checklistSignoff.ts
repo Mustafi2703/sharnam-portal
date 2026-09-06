@@ -1,11 +1,13 @@
 /**
  * Sign-off images for branded checklist downloads (HTML + Excel).
  * Pulls fill-pad signatures and GFC receive/issue signs (client / PMC / site).
+ * Falls back to project directory signatures stored in DMS when revision/fill signs are absent.
  */
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
+import type { DirectorySignMap } from "./directorySignatures.js";
 
 export type SignSlot = {
   role: string;
@@ -185,28 +187,39 @@ function slot(role: string, name: string, date: string, url?: string | null): Si
   };
 }
 
-export function collectChecklistSignSlots(src: SignSource): SignSlot[] {
+export function collectChecklistSignSlots(src: SignSource, dir?: DirectorySignMap): SignSlot[] {
   const fillPhoto = (src.photos || []).find(isSignPhoto);
   const rev = src.revision;
   const filledName = src.submittedBy?.fullName || fillPhoto?.caption || "";
   const filledDate = fmtDate(src.createdAt);
   const reviewDate = fmtDate(src.reviewedAt) || filledDate;
+  const dirDate = (d?: Date | null) => (d ? fmtDate(d) : "");
 
   return [
     slot(
       "Filled by (Inspector)",
-      filledName,
+      filledName || dir?.contractor?.name || "",
       filledDate,
-      fillPhoto?.fileUrl || rev?.contractorSignUrl
+      fillPhoto?.fileUrl || rev?.contractorSignUrl || dir?.contractor?.url
     ),
-    slot("Reviewed by (SPDC PMC)", rev?.pmcSignName || "SPDC PMC", reviewDate, rev?.pmcSignUrl),
+    slot(
+      "Reviewed by (SPDC PMC)",
+      rev?.pmcSignName || dir?.pmc?.name || "SPDC PMC",
+      reviewDate || dirDate(dir?.pmc?.updatedAt),
+      rev?.pmcSignUrl || dir?.pmc?.url
+    ),
     slot(
       "Site engineer",
-      rev?.siteEngineerSignName || filledName,
-      filledDate,
-      rev?.siteEngineerSignUrl
+      rev?.siteEngineerSignName || dir?.site?.name || filledName,
+      filledDate || dirDate(dir?.site?.updatedAt),
+      rev?.siteEngineerSignUrl || dir?.site?.url
     ),
-    slot("Client / hold point", rev?.clientSignName || "", reviewDate, rev?.clientSignUrl),
+    slot(
+      "Client / hold point",
+      rev?.clientSignName || dir?.client?.name || "",
+      reviewDate || dirDate(dir?.client?.updatedAt),
+      rev?.clientSignUrl || dir?.client?.url
+    ),
   ];
 }
 

@@ -1,8 +1,8 @@
 # Sharnam Portal — Client share pack
 
 **Prepared for:** SPDC / Sharnam PMC  
-**Date:** 10 August 2026  
-**Demo:** https://sharnam-portal.onrender.com  
+**Date:** September 2026  
+**Demo:** https://portal.spdc.in  
 
 Share this folder with client stakeholders, IT, and module owners. Plain language — no engineering jargon.
 
@@ -16,6 +16,10 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | **13** | **[SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md](./SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md)** | **Leadership / client — 2–3 hr presentation deck (non-technical)** |
 | **14** | **[SPDC_DEMO_GUIDE.md](./SPDC_DEMO_GUIDE.md)** | **Demo day — quick walkthrough cheat sheet** |
 | **15** | **[SPDC_DEMO_WORKFLOW_CHECKLIST.md](./SPDC_DEMO_WORKFLOW_CHECKLIST.md)** | **Presenter — tick every module workflow** |
+| **16** | **[SPDC_MODULE_DELIVERY_STATUS.md](./SPDC_MODULE_DELIVERY_STATUS.md)** | **Leadership — module delivery matrix & go-live testing plan (Rev 02)** |
+| **16b** | **[SPDC_MODULE_DELIVERY_STATUS.html](./SPDC_MODULE_DELIVERY_STATUS.html)** | **Print to PDF — branded presentation with logo** |
+| **17** | **[SPDC_FE_DEMO_RUNBOOK.md](./SPDC_FE_DEMO_RUNBOOK.md)** | **Presenter — step-by-step FE demo (55 steps, 3 sessions)** |
+| **18** | **[SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md)** | **Everyone — Sep 8–19 UAT calendar, multi-user, security, daily→closure workflows** |
 | 2 | [02-Logins-and-Access.md](./02-Logins-and-Access.md) | All users — how to sign in |
 | 3 | [03-Module-Test-Plan.md](./03-Module-Test-Plan.md) | SPDC leads — test each module on your server |
 | 4 | [04-SharePoint-and-Files.md](./04-SharePoint-and-Files.md) | IT — photos & documents to SharePoint |

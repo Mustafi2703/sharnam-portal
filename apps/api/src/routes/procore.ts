@@ -804,6 +804,83 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
   });
 });
 
+const signUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+directoryRouter.get("/project/:projectId/signatures", async (req, res) => {
+  const { listDirectorySignatures, DIRECTORY_SIGNATURES_FOLDER } = await import("../services/directorySignatures.js");
+  const signatures = await listDirectorySignatures(prisma, req.params.projectId);
+  res.json({ signatures, folder: DIRECTORY_SIGNATURES_FOLDER });
+});
+
+directoryRouter.post(
+  "/project/:projectId/members/:memberId/signature",
+  signUpload.single("signature"),
+  async (req: AuthedRequest, res) => {
+    const { projectId, memberId } = req.params;
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "signature file required (field: signature)" });
+
+    const member = await prisma.projectMember.findFirst({
+      where: { id: memberId, projectId },
+      select: { userId: true },
+    });
+    if (!member) return res.status(404).json({ error: "Member not found" });
+
+    const isSelf = member.userId === req.user!.id;
+    const canManage = ["admin", "office"].includes(req.user!.role);
+    if (!isSelf && !canManage) return res.status(403).json({ error: "Not allowed to update this signature" });
+
+    try {
+      const { saveMemberDirectorySignature } = await import("../services/directorySignatures.js");
+      const updated = await saveMemberDirectorySignature(prisma, projectId, memberId, file.buffer, file.originalname, {
+        signatoryTitle: typeof req.body.signatoryTitle === "string" ? req.body.signatoryTitle : undefined,
+        uploadedById: req.user!.id,
+      });
+      await audit("directory.signature.member", {
+        userId: req.user!.id,
+        entity: "ProjectMember",
+        entityId: memberId,
+        meta: { projectId },
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Upload failed" });
+    }
+  }
+);
+
+directoryRouter.post(
+  "/project/:projectId/vendors/:projectVendorId/signature",
+  requireRoles("admin", "office", "site_employee", "employee", "vendor"),
+  signUpload.single("signature"),
+  async (req: AuthedRequest, res) => {
+    const { projectId, projectVendorId } = req.params;
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "signature file required (field: signature)" });
+
+    try {
+      const { saveVendorDirectorySignature } = await import("../services/directorySignatures.js");
+      const updated = await saveVendorDirectorySignature(
+        prisma,
+        projectId,
+        projectVendorId,
+        file.buffer,
+        file.originalname,
+        { signatoryName: typeof req.body.signatoryName === "string" ? req.body.signatoryName : undefined }
+      );
+      await audit("directory.signature.vendor", {
+        userId: req.user!.id,
+        entity: "ProjectVendor",
+        entityId: projectVendorId,
+        meta: { projectId },
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Upload failed" });
+    }
+  }
+);
+
 directoryRouter.post("/project/:projectId/submittals", requireRoles("admin", "office", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const count = await prisma.submittal.count({ where: { projectId: req.params.projectId } });
   const row = await prisma.submittal.create({

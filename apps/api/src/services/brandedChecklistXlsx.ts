@@ -11,6 +11,7 @@ import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import { checklistLogoPath, collectChecklistSignSlots, type SignSlot } from "./checklistSignoff.js";
+import type { DirectorySignMap } from "./directorySignatures.js";
 
 type ResponseCell = { answer?: string; remarks?: string; remark?: string; value?: string };
 type Item = {
@@ -81,6 +82,7 @@ function resolveTemplate(fileName: string): string | null {
 }
 
 type ProjectMeta = {
+  id?: string;
   name?: string;
   code?: string;
   clientName?: string | null;
@@ -267,12 +269,13 @@ function applySignoff(
   ws: ExcelJS.Worksheet,
   startRow: number,
   submission: BrandedChecklistSubmission,
-  cols: number[]
+  cols: number[],
+  dirSigns?: DirectorySignMap
 ) {
   let r = startRow;
   sectionBand(ws, r, cols, "8.  SIGNATURES");
   r += 1;
-  const signs = collectChecklistSignSlots(submission);
+  const signs = collectChecklistSignSlots(submission, dirSigns);
   const colStart = cols[0];
   const width = Math.max(1, Math.floor(cols.length / Math.max(signs.length, 1)));
   const roleRow = r;
@@ -377,7 +380,8 @@ function clearBodyRows(ws: ExcelJS.Worksheet, fromRow: number, toRow: number, fr
 
 async function fillActivityChecklist(
   submission: BrandedChecklistSubmission,
-  project?: ProjectMeta
+  project?: ProjectMeta,
+  dirSigns?: DirectorySignMap
 ): Promise<ExcelJS.Workbook> {
   const file = resolveTemplate("SPDC_Activity_Inspection_Checklist_Format.xlsx");
   if (!file) throw new Error("SPDC Activity Inspection Checklist template not found");
@@ -505,14 +509,15 @@ async function fillActivityChecklist(
 
   // Signature block (navy band like SPDC forms)
   r += 1;
-  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9]);
+  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9], dirSigns);
 
   return wb;
 }
 
 async function fillSafetyChecklist(
   submission: BrandedChecklistSubmission,
-  project?: ProjectMeta
+  project?: ProjectMeta,
+  dirSigns?: DirectorySignMap
 ): Promise<ExcelJS.Workbook> {
   const file = resolveTemplate("SPDC_Safety_Inspection_Request_and_Checklists.xlsx");
   if (!file) throw new Error("SPDC Safety Inspection checklist template not found");
@@ -652,7 +657,7 @@ async function fillSafetyChecklist(
   }
 
   r += 1;
-  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8]);
+  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8], dirSigns);
 
   // Safety IR cover particulars
   const ir = wb.getWorksheet("Safety IR Form");
@@ -667,7 +672,7 @@ async function fillSafetyChecklist(
     paintInput(ir, 18, 5, submission.submittedBy?.fullName || "");
     paintInput(ir, 19, 5, submission.remarks || "");
     embedLogo(wb, ir);
-    applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dirSigns);
   }
 
   return wb;
@@ -695,7 +700,8 @@ function fillIrParticulars(
 
 async function fillInspectionRequest(
   submission: BrandedChecklistSubmission,
-  project?: ProjectMeta
+  project?: ProjectMeta,
+  dirSigns?: DirectorySignMap
 ): Promise<ExcelJS.Workbook> {
   const file = resolveTemplate("SPDC_Request_for_Inspection_Form.xlsx");
   if (!file) throw new Error("SPDC Request for Inspection Form template not found");
@@ -746,13 +752,14 @@ async function fillInspectionRequest(
     r += 1;
   }
   r += 1;
-  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dirSigns);
   return wb;
 }
 
 async function fillRfiForm(
   submission: BrandedChecklistSubmission,
-  project?: ProjectMeta
+  project?: ProjectMeta,
+  dirSigns?: DirectorySignMap
 ): Promise<ExcelJS.Workbook> {
   const file = resolveTemplate("SPDC_RFI_Form_and_Register.xlsx");
   if (!file) throw new Error("SPDC RFI Form template not found");
@@ -792,7 +799,7 @@ async function fillRfiForm(
   paintInput(ws, 24, 2, bodyLines.join("\n") || submission.remarks || "");
   if (submission.remarks) paintInput(ws, 31, 2, submission.remarks);
 
-  applySignoff(wb, ws, Math.max(ws.rowCount || 40, 40) + 1, submission, [2, 3, 4, 5, 6, 7, 8]);
+  applySignoff(wb, ws, Math.max(ws.rowCount || 40, 40) + 1, submission, [2, 3, 4, 5, 6, 7, 8], dirSigns);
 
   return wb;
 }
@@ -823,15 +830,22 @@ export async function buildBrandedChecklistXlsxBuffer(
   const type = submission.assignment?.template?.checklistType || "";
   const family = familyOf(type);
 
+  let dirSigns: DirectorySignMap | undefined;
+  if (project?.id) {
+    const { getDirectorySignMap } = await import("./directorySignatures.js");
+    const { prisma } = await import("../prisma.js");
+    dirSigns = await getDirectorySignMap(prisma, project.id);
+  }
+
   let wb: ExcelJS.Workbook;
   if (family === "safety") {
-    wb = await fillSafetyChecklist(submission, project);
+    wb = await fillSafetyChecklist(submission, project, dirSigns);
   } else if (family === "rfi") {
-    wb = await fillRfiForm(submission, project);
+    wb = await fillRfiForm(submission, project, dirSigns);
   } else if (family === "ir") {
-    wb = await fillInspectionRequest(submission, project);
+    wb = await fillInspectionRequest(submission, project, dirSigns);
   } else {
-    wb = await fillActivityChecklist(submission, project);
+    wb = await fillActivityChecklist(submission, project, dirSigns);
     const isDrawingFill = String(type || "").toLowerCase().includes("drawing");
     if (!isDrawingFill) {
       try {
@@ -839,12 +853,12 @@ export async function buildBrandedChecklistXlsxBuffer(
         const act = wb.getWorksheet("Activity Checklist") || wb.worksheets[wb.worksheets.length - 1];
         if (act) {
           embedLogo(wb, act);
-          applySignoff(wb, act, Math.max(act.rowCount || 20, 20) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9]);
+          applySignoff(wb, act, Math.max(act.rowCount || 20, 20) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9], dirSigns);
         }
         const ir = wb.getWorksheet("IR Form");
         if (ir) {
           embedLogo(wb, ir);
-          applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+          applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dirSigns);
         }
       } catch {
         /* IR cover is best-effort */

@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sharnam Portal — Module Delivery Status & Go-Live Readiness</title>
+  <style>
+    :root {
+      --brand: #0B6A78;
+      --brand-soft: #E6F4F6;
+      --ink: #121417;
+      --muted: #5c6570;
+      --line: #d8dee4;
+      --ok: #15803D;
+      --warn: #B45309;
+      --paper: #ffffff;
+      --sand: #F0F2F4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      background: var(--sand);
+      line-height: 1.5;
+      font-size: 11pt;
+    }
+    .page {
+      max-width: 210mm;
+      margin: 0 auto 24px;
+      background: var(--paper);
+      padding: 18mm 16mm;
+      box-shadow: 0 2px 24px rgba(0,0,0,.08);
+    }
+    @media print {
+      body { background: white; }
+      .page { box-shadow: none; margin: 0; page-break-after: always; max-width: none; }
+      .no-print { display: none !important; }
+    }
+    .cover {
+      text-align: center;
+      padding-top: 12mm;
+      min-height: 240mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .cover img.logo {
+      width: 280px;
+      max-width: 80%;
+      height: auto;
+      margin-bottom: 24px;
+    }
+    .cover h1 {
+      font-size: 22pt;
+      font-weight: 700;
+      color: var(--brand);
+      margin: 0 0 8px;
+      line-height: 1.25;
+    }
+    .cover .tagline {
+      font-size: 12pt;
+      color: var(--muted);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+    .cover .meta {
+      margin-top: auto;
+      padding-top: 40px;
+      width: 100%;
+      border-top: 2px solid var(--brand);
+      text-align: left;
+    }
+    .cover .meta table { width: 100%; border-collapse: collapse; }
+    .cover .meta td { padding: 6px 0; vertical-align: top; }
+    .cover .meta td:first-child { width: 140px; font-weight: 600; color: var(--brand); }
+    h2 {
+      font-size: 14pt;
+      color: var(--brand);
+      border-bottom: 2px solid var(--brand-soft);
+      padding-bottom: 6px;
+      margin: 28px 0 14px;
+      page-break-after: avoid;
+    }
+    h3 { font-size: 11pt; color: var(--ink); margin: 18px 0 8px; }
+    p { margin: 0 0 10px; }
+    .lead {
+      font-size: 12pt;
+      color: var(--muted);
+      background: var(--brand-soft);
+      border-left: 4px solid var(--brand);
+      padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      margin-bottom: 16px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-weight: 700;
+    }
+    tr:nth-child(even) td { background: #fafbfc; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-live { background: #dcfce7; color: var(--ok); }
+    .badge-uat { background: #fef3c7; color: var(--warn); }
+    .badge-pilot { background: #e0e7ff; color: #3730a3; }
+    .check { width: 28px; text-align: center; }
+    .footer {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      font-size: 8.5pt;
+      color: var(--muted);
+      text-align: center;
+    }
+    .flow {
+      background: var(--sand);
+      border: 1px solid var(--line);
+      padding: 14px;
+      font-family: ui-monospace, monospace;
+      font-size: 9pt;
+      white-space: pre;
+      overflow-x: auto;
+      margin: 12px 0 20px;
+    }
+    .print-hint {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: var(--brand);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 10pt;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .summary-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--paper);
+    }
+    .summary-card strong { display: block; color: var(--brand); font-size: 10pt; margin-bottom: 4px; }
+    @media (max-width: 700px) {
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<p class="print-hint no-print">Print → Save as PDF · Enable <strong>Background graphics</strong></p>
+
+<!-- COVER -->
+<section class="page cover">
+  <img class="logo" src="../../apps/web/public/logo-transparent.png" alt="Sharnam — Project Management Consultants" />
+  <p class="tagline">Project Management Consultants</p>
+  <h1>Sharnam Portal<br />Module Delivery Status<br />& Go-Live Readiness</h1>
+  <p style="max-width: 480px; color: var(--muted); margin-top: 16px;">
+    A client presentation on system modules, delivery status, and the testing plan to reach full operational go-live.
+  </p>
+  <div class="meta">
+    <table>
+      <tr><td>Prepared for</td><td>SPDC / Sharnam PMC leadership & module owners</td></tr>
+      <tr><td>Demo project</td><td>SPDC-DEMO-01 · SPDC-UAT-LIVE</td></tr>
+      <tr><td>Portal (UAT)</td><td><strong>https://portal.spdc.in</strong></td></tr>
+      <tr><td>Document</td><td>September 2026 · <strong>Rev 03</strong></td></tr>
+      <tr><td>UAT window</td><td><strong>8–19 September 2026</strong> (two weeks)</td></tr>
+      <tr><td>Build window</td><td>15 July 2026 → present (~53 days)</td></tr>
+      <tr><td>Demo password</td><td><code>Demo@1234</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- EXEC SUMMARY -->
+<section class="page">
+  <h2>1. Executive summary</h2>
+  <p class="lead">
+    Sharnam Portal is a single online workspace per construction project — drawings, quality, safety, progress, cost, communications, reports, CRM bids, and HR — with SharePoint (ISO 19650) as the document store.
+  </p>
+  <div class="summary-grid">
+    <div class="summary-card"><strong>128 portal tools</strong>12 workspaces · 18 module areas · built since 15 Jul 2026</div>
+    <div class="summary-card"><strong>SharePoint integrated</strong>80+ ISO folders; module exports auto-file to <code>SharnamProjects</code></div>
+    <div class="summary-card"><strong>DPR → WPR hub</strong>7 disciplines feed 24 WPR sections · branded ExcelJS export</div>
+    <div class="summary-card"><strong>Go-live gate</strong>Sep 8–19 UAT · S1–S10 security · M1–M8 multi-user · all roles</div>
+  </div>
+  <p class="lead"><strong>Testing starts 8 September 2026.</strong> Two-week structured UAT on portal.spdc.in — office, site, client, contractor, vendor, and stakeholder — covering daily DPR, weekly WPR, monthly audit, and project closure workflows. Calendar: <code>SPDC_TWO_WEEK_UAT_PLAN.md</code>.</p>
+  <table>
+    <thead><tr><th>Dimension</th><th>Status today</th></tr></thead>
+    <tbody>
+      <tr><td>Core modules</td><td><span class="badge badge-live">Live</span> — 128 tools, 74 Excel sheet mappings, 500+ API endpoints</td></tr>
+      <tr><td>Directory sign-off</td><td><span class="badge badge-live">Live</span> — PNG per person in DMS → branded checklist Excel</td></tr>
+      <tr><td>CRM comparative bids</td><td><span class="badge badge-live">Live</span> — two-bidder demo, BOQ → SharePoint 05.05 / 05.06</td></tr>
+      <tr><td>Contractor portal</td><td><span class="badge badge-live">Live</span> — bids + RFI/NCR responses; registers read-only</td></tr>
+      <tr><td>Production operation</td><td><span class="badge badge-uat">UAT pending</span> — requires Phases A–E + S/M gates below</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Bottom line:</strong> Feature-complete for PMC demo and pilot UAT. Full operation needs testing on your server, real project data, signed acceptance per module, and concurrent-user hardening.</p>
+  <p><strong>Live demo script:</strong> <code>SPDC_FE_DEMO_RUNBOOK.md</code> — 55 numbered steps across 3 sessions with seeded record IDs.</p>
+  <div class="footer">Sharnam Project Development Consultants & Co. · Confidential — SPDC client share</div>
+</section>
+
+<!-- MODULE MATRIX -->
+<section class="page">
+  <h2>2. Module delivery matrix</h2>
+  <p><span class="badge badge-live">Live</span> built & demo-ready &nbsp; <span class="badge badge-uat">UAT</span> needs sign-off &nbsp; <span class="badge badge-pilot">Pilot</span> seed data; live Excel pending</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Module</th><th>Status</th><th>What works today</th><th class="check">✓</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Master & directory</td><td><span class="badge badge-live">Live</span></td><td>Project create, modules, people, <strong>sign-off register → DMS</strong></td><td class="check">☐</td></tr>
+      <tr><td>2</td><td>Drawings / GFC</td><td><span class="badge badge-live">Live</span></td><td>Register, revisions, drawing check gate, SharePoint publish</td><td class="check">☐</td></tr>
+      <tr><td>3</td><td>Documents (DMS)</td><td><span class="badge badge-live">Live</span></td><td>ISO tree, upload, PDF preview, SharePoint links</td><td class="check">☐</td></tr>
+      <tr><td>4</td><td>Quality</td><td><span class="badge badge-live">Live</span></td><td>Dashboard, SOR, QI, NCR/CAR, cube register, QAP, checklists</td><td class="check">☐</td></tr>
+      <tr><td>5</td><td>Safety & HSE</td><td><span class="badge badge-live">Live</span></td><td>NCR, SPDC HSE F-01 IR, checklist fills, HSE SharePoint</td><td class="check">☐</td></tr>
+      <tr><td>6</td><td>Inspection register</td><td><span class="badge badge-live">Live</span></td><td>Quality / Safety / Activity F-01 & F-02, Excel + PDF export</td><td class="check">☐</td></tr>
+      <tr><td>7</td><td>Comms & RFIs</td><td><span class="badge badge-live">Live</span></td><td>Matrix, MoM, follow-up, classic + checklist RFIs</td><td class="check">☐</td></tr>
+      <tr><td>8</td><td>Progress & PvA</td><td><span class="badge badge-live">Live</span></td><td>Milestones, S-curve, planned vs actual tables</td><td class="check">☐</td></tr>
+      <tr><td>9</td><td>Cost & cashflow</td><td><span class="badge badge-pilot">Pilot</span></td><td>BOQ monitoring, MB/BBS, three cashflow views</td><td class="check">☐</td></tr>
+      <tr><td>10</td><td>Finance (RA/COP)</td><td><span class="badge badge-pilot">Pilot</span></td><td>RA submission, COP certification chain on UAT seed</td><td class="check">☐</td></tr>
+      <tr><td>11</td><td>Reports — DPR</td><td><span class="badge badge-live">Live</span></td><td>Discipline DPR maker, SharePoint publish</td><td class="check">☐</td></tr>
+      <tr><td>12</td><td>Reports — WPR</td><td><span class="badge badge-live">Live</span></td><td>Weekly pack, branded Excel export, CAPEX from budget WBS</td><td class="check">☐</td></tr>
+      <tr><td>13</td><td>CRM & bids</td><td><span class="badge badge-live">Live</span></td><td>Lead → bid → two-bidder R2 comparative → SharePoint procurement</td><td class="check">☐</td></tr>
+      <tr><td>14</td><td>HRMS</td><td><span class="badge badge-pilot">Pilot</span></td><td>Attendance selfie+GPS, leave, payslip demo, geofence</td><td class="check">☐</td></tr>
+      <tr><td>15</td><td>Audit & KPI</td><td><span class="badge badge-live">Live</span></td><td>Audit dashboard, findings register</td><td class="check">☐</td></tr>
+      <tr><td>16</td><td>Closure</td><td><span class="badge badge-live">Live</span></td><td>Snaglist, lessons learnt</td><td class="check">☐</td></tr>
+      <tr><td>17</td><td>Client portal</td><td><span class="badge badge-live">Live</span></td><td>Read-only progress, reports, published GFC</td><td class="check">☐</td></tr>
+      <tr><td>18</td><td>Contractor portal</td><td><span class="badge badge-live">Live</span></td><td>Bid BOQs, RFI/NCR responses, checklist fills only</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <div class="footer">Tick ✓ column during UAT · See SPDC_FE_DEMO_RUNBOOK for step-by-step demo</div>
+</section>
+
+<!-- DELIVERY METRICS -->
+<section class="page">
+  <h2>1A. Delivery since 15 July 2026</h2>
+  <table>
+    <thead><tr><th>Category</th><th>Count</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Portal tools (sub-tools)</td><td><strong>128</strong></td><td>Hub cards in 12 workspaces</td></tr>
+      <tr><td>Module delivery areas</td><td><strong>18</strong></td><td>Includes client + contractor portals</td></tr>
+      <tr><td>Excel sheet mappings</td><td><strong>74</strong></td><td>Tool ↔ SPDC workbook tab</td></tr>
+      <tr><td>API route handlers</td><td><strong>500+</strong></td><td>Express across 20+ modules</td></tr>
+      <tr><td>ISO DMS folders</td><td><strong>80+</strong></td><td>Per project in SharePoint</td></tr>
+      <tr><td>WPR sections</td><td><strong>24</strong></td><td>Client weekly format (ExcelJS)</td></tr>
+      <tr><td>DPR disciplines</td><td><strong>7</strong></td><td>Civil, Structural, Arch, MEP, HSE, QA/QC, General</td></tr>
+      <tr><td>Branded export templates</td><td><strong>40+</strong></td><td>RFI, NCR, checklists, DPR, WPR, MoM</td></tr>
+    </tbody>
+  </table>
+  <h3>Milestone timeline</h3>
+  <table>
+    <thead><tr><th>Period</th><th>Delivered</th></tr></thead>
+    <tbody>
+      <tr><td>Jul 15 – Jul 31</td><td>Project hub, DMS ISO tree, GFC register, directory, auth & roles</td></tr>
+      <tr><td>Aug 1 – Aug 15</td><td>Quality/Safety, checklist fills, branded HTML/XLSX exports</td></tr>
+      <tr><td>Aug 16 – Aug 31</td><td>DPR maker, inspection register, NCR email loop, SharePoint sync</td></tr>
+      <tr><td>Sep 1 – Sep 6</td><td>WPR ExcelJS, CRM two-bidder comparative, directory signatures, demo runbook</td></tr>
+    </tbody>
+  </table>
+  <div class="footer">Sharnam · Module Delivery Status Rev 03</div>
+</section>
+
+<!-- DATA FLOW -->
+<section class="page">
+  <h2>3A. Sheet & data-flow integration (DPR ↔ WPR)</h2>
+  <p class="lead">DPR is the daily hub; WPR rolls up 24 sections in the client weekly format. Each portal tool maps to an Excel workbook tab.</p>
+  <div class="flow">Cost BOQ/MB/BBS ──▶ DPR Maker (7 disc.) ──▶ WPR Maker (24 sections)
+QI checklist / NCR / CAR / Cube / QAP ──▶ DPR quality block ──▶ WPR §Quality
+Safety IR / HSE obs / TBT ──▶ DPR HSE block ──▶ WPR §Safety
+MS Project XML ──▶ Progress PvA + S-curve ──▶ WPR progress slides</div>
+  <table>
+    <thead><tr><th>Source</th><th>Portal path</th><th>DPR</th><th>WPR</th></tr></thead>
+    <tbody>
+      <tr><td>QI checklist</td><td>Checklists → Quality</td><td>Inspection count</td><td>Quality · compliance</td></tr>
+      <tr><td>NCR / CAR</td><td>Quality → NCR/CAR</td><td>Open count</td><td>Quality list</td></tr>
+      <tr><td>Cube register</td><td>Quality → Cube</td><td>Cast/test today</td><td>Test agency summary</td></tr>
+      <tr><td>Safety checklist</td><td>Checklists → Safety</td><td>HSE statistics</td><td>Safety slide</td></tr>
+      <tr><td>Manpower</td><td>Progress registers</td><td>Manpower table</td><td>WPR manpower</td></tr>
+      <tr><td>Published DPR</td><td>DPR Maker</td><td>—</td><td>Regenerate source</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Demo flow:</strong> Fill checklist (site) → Publish DPR → Regenerate WPR → Download Client XLSX — same seeded counts throughout.</p>
+  <div class="footer">Sharnam · Module Delivery Status Rev 03</div>
+</section>
+
+<!-- TWO WEEK UAT -->
+<section class="page">
+  <h2>4. Two-week UAT (8–19 Sep 2026)</h2>
+  <p class="lead">All roles · module finals · security S1–S10 · multi-user M1–M8 · daily → weekly → monthly → closure workflows on portal.spdc.in.</p>
+  <h3>Week 1</h3>
+  <table>
+    <thead><tr><th>Day</th><th>Focus</th><th>Gates</th></tr></thead>
+    <tbody>
+      <tr><td>Mon 8</td><td>Kick-off · DMS · directory · all logins</td><td>S1–S5</td></tr>
+      <tr><td>Tue 9</td><td>Drawings · RFIs · comms</td><td>M5 · S2</td></tr>
+      <tr><td>Wed 10</td><td>Quality · NCR · inspection</td><td>M4 · S3–S4</td></tr>
+      <tr><td>Thu 11</td><td>Safety · daily workflow</td><td>Daily</td></tr>
+      <tr><td>Fri 12</td><td>DPR · progress</td><td>M1 · M2</td></tr>
+    </tbody>
+  </table>
+  <h3>Week 2</h3>
+  <table>
+    <thead><tr><th>Day</th><th>Focus</th><th>Gates</th></tr></thead>
+    <tbody>
+      <tr><td>Mon 15</td><td>WPR weekly · client pack</td><td>Weekly</td></tr>
+      <tr><td>Tue 16</td><td>Cost · finance · CRM</td><td>M3 · M7</td></tr>
+      <tr><td>Wed 17</td><td>HRMS · audit</td><td>M6</td></tr>
+      <tr><td>Thu 18</td><td>Monthly + closure · synthetic week</td><td>M8 · all roles</td></tr>
+      <tr><td>Fri 19</td><td><strong>Final sign-off</strong></td><td>S6–S10 · M1–M8</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>Cadence</th><th>Workflows</th><th>Roles</th></tr></thead>
+    <tbody>
+      <tr><td>Daily</td><td>Checklists · DPR · attendance · safety</td><td>Site, vendor</td></tr>
+      <tr><td>Weekly</td><td>WPR · QAP · MoM</td><td>Office, client</td></tr>
+      <tr><td>Monthly</td><td>Audit · cashflow · client pack</td><td>Office, client</td></tr>
+      <tr><td>Closure</td><td>Snag · lessons learnt</td><td>Office, site, client</td></tr>
+    </tbody>
+  </table>
+  <p>Calendar: <code>SPDC_TWO_WEEK_UAT_PLAN.md</code></p>
+</section>
+
+<!-- TESTING PLAN -->
+<section class="page">
+  <h2>4A. Module & gate checklists</h2>
+  <h3>Phase A — Foundation (Week 1)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Test</th><th>Owner</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>A1</td><td>Office login, project select, module hub</td><td>SPDC IT</td><td class="check">☐</td></tr>
+      <tr><td>A2</td><td>DMS: ISO tree, upload PDF, in-app preview</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>A3</td><td>SharePoint: file in correct folder; Open in SharePoint</td><td>IT</td><td class="check">☐</td></tr>
+      <tr><td>A4</td><td>Directory: assign contractor + sign-off PNG → DMS</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>A5</td><td>Role boundaries: client / vendor permissions</td><td>IT</td><td class="check">☐</td></tr>
+      <tr><td>A6</td><td>Branded Excel uses directory signature when fill sign absent</td><td>Office</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <h3>Phase B — Design & quality (Week 2)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Test</th><th>Owner</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>B1</td><td>GFC upload → drawing check → publish</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>B2</td><td>RFI raise → respond → close → DMS export</td><td>Office + consultant</td><td class="check">☐</td></tr>
+      <tr><td>B3</td><td>Quality IR → checklist fill → branded export</td><td>Site + vendor</td><td class="check">☐</td></tr>
+      <tr><td>B4</td><td>NCR/CAR → contractor response → close</td><td>Office + vendor</td><td class="check">☐</td></tr>
+      <tr><td>B5</td><td>Safety IR (HSE F-01) + PPE checklist</td><td>Site + HSE</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <h3>Phase C — Site & progress (Week 3)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Test</th><th>Owner</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>C1</td><td>Attendance: selfie + GPS + IST → SharePoint</td><td>Site</td><td class="check">☐</td></tr>
+      <tr><td>C2</td><td>Day log + photos to progress folders</td><td>Site</td><td class="check">☐</td></tr>
+      <tr><td>C3</td><td>DPR maker: save + export XLSX</td><td>Site + office</td><td class="check">☐</td></tr>
+      <tr><td>C4</td><td>Progress PvA sync from live qty</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>C5</td><td>WPR: Regenerate 24 sections → Client XLSX with logo</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>C6</td><td>WPR sections match DPR + quality + safety seed counts</td><td>Office</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <div class="footer">Continued on next page → Phases D & E</div>
+</section>
+
+<section class="page">
+  <h3>Phase D — Commercial & CRM (Week 4)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Test</th><th>Owner</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>D1</td><td>CRM comparative bid: two bidders, L1/L2 totals</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>D2</td><td>Contractor BOQ edit → SharePoint 05.05/{vendor}/{discipline}</td><td>Vendor</td><td class="check">☐</td></tr>
+      <tr><td>D3</td><td>Master comparative refreshes in 05.06 on save</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>D4</td><td>Cost monitoring + cashflow chart</td><td>Office</td><td class="check">☐</td></tr>
+      <tr><td>D5</td><td>RA bill → COP certification</td><td>Office + vendor</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <h3>Phase E — Security gates (S1–S10)</h3>
+  <table>
+    <thead><tr><th>Gate</th><th>Test</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>S1</td><td>Unauthenticated API → 401</td><td class="check">☐</td></tr>
+      <tr><td>S2</td><td>Cross-project URL → no data leak</td><td class="check">☐</td></tr>
+      <tr><td>S3</td><td>Client cannot upload drawings</td><td class="check">☐</td></tr>
+      <tr><td>S4</td><td>Vendor cannot edit registers</td><td class="check">☐</td></tr>
+      <tr><td>S5</td><td>Oversized upload rejected</td><td class="check">☐</td></tr>
+      <tr><td>S6</td><td>Audit log on NCR close</td><td class="check">☐</td></tr>
+      <tr><td>S7</td><td>Directory signature: self or office only</td><td class="check">☐</td></tr>
+      <tr><td>S8</td><td>SharePoint path scoped to project code</td><td class="check">☐</td></tr>
+      <tr><td>S9</td><td>JWT invalid after credential change</td><td class="check">☐</td></tr>
+      <tr><td>S10</td><td>No secrets in git; prod keys on server</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <h3>Phase E — Multi-user concurrent (M1–M8)</h3>
+  <p>Run with 5 browser profiles on SPDC-UAT-LIVE. No row loss, no cross-user overwrite.</p>
+  <table>
+    <thead><tr><th>#</th><th>Scenario</th><th>Users</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>M1</td><td>Two site users, different DPR disciplines, same date</td><td>site ×2</td><td class="check">☐</td></tr>
+      <tr><td>M2</td><td>Site publishes DPR while office Regenerates WPR</td><td>site + office</td><td class="check">☐</td></tr>
+      <tr><td>M3</td><td>Bhavna + Nikhra edit different BOQ disciplines</td><td>vendor ×2</td><td class="check">☐</td></tr>
+      <tr><td>M4</td><td>Office closes NCR while contractor fills action</td><td>office + vendor</td><td class="check">☐</td></tr>
+      <tr><td>M5</td><td>Two stakeholders respond different RFIs</td><td>struct + mep</td><td class="check">☐</td></tr>
+      <tr><td>M6</td><td>Directory signature + checklist XLSX download concurrently</td><td>office ×2</td><td class="check">☐</td></tr>
+      <tr><td>M7</td><td>Vendor BOQ save during comparative refresh</td><td>vendor + office</td><td class="check">☐</td></tr>
+      <tr><td>M8</td><td>Client read-only while office publishes drawing</td><td>client + office</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+  <h3>Phase E — Infrastructure</h3>
+  <table>
+    <thead><tr><th>#</th><th>Test</th><th>Owner</th><th class="check">Pass</th></tr></thead>
+    <tbody>
+      <tr><td>E4</td><td>Production email notifications</td><td>IT</td><td class="check">☐</td></tr>
+      <tr><td>E5</td><td>Backup & restore drill</td><td>IT</td><td class="check">☐</td></tr>
+      <tr><td>E6</td><td>Performance at scale</td><td>IT</td><td class="check">☐</td></tr>
+      <tr><td>E7</td><td>Client acceptance sign-off</td><td>SPDC lead</td><td class="check">☐</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. Path to operational go-live</h2>
+  <div class="flow">Today (demo ready)  →  Weeks 1–4 UAT  →  Workbook sign-off  →  Production
+        portal.spdc.in       office+site+client      all Pass ☐           live project data</div>
+
+  <h2>6. Sign-off — operational readiness</h2>
+  <table>
+    <thead><tr><th>Role</th><th>Name</th><th>Date</th><th>Signature</th></tr></thead>
+    <tbody>
+      <tr><td>SPDC Project Director</td><td></td><td></td><td></td></tr>
+      <tr><td>SPDC IT / SharePoint</td><td></td><td></td><td></td></tr>
+      <tr><td>PMC Office lead</td><td></td><td></td><td></td></tr>
+      <tr><td>Site lead</td><td></td><td></td><td></td></tr>
+      <tr><td>HSE / Quality lead</td><td></td><td></td><td></td></tr>
+      <tr><td>Development team</td><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Demo logins (password: Demo@1234)</h3>
+  <table>
+    <thead><tr><th>Role</th><th>Email</th><th>URL</th></tr></thead>
+    <tbody>
+      <tr><td>Office</td><td>office@sharnam.demo</td><td>/login/office</td></tr>
+      <tr><td>Site</td><td>site@sharnam.demo</td><td>/login/site</td></tr>
+      <tr><td>Contractor (Bhavna)</td><td>vendor@sharnam.demo</td><td>/login/vendor</td></tr>
+      <tr><td>Contractor (Nikhra)</td><td>nkinra@sharnam.demo</td><td>/login/vendor</td></tr>
+      <tr><td>Client</td><td>client@sharnam.demo</td><td>/login/client</td></tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <img src="../../apps/web/public/logo-transparent.png" alt="" style="height: 36px; opacity: .85; margin-bottom: 8px;" /><br />
+    Sharnam Project Development Consultants & Co. · SPDC Module Delivery Status Rev 03 · UAT Sep 8–19, 2026
+  </div>
+</section>
+
+</body>
+</html>

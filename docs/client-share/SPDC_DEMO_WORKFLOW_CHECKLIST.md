@@ -1,8 +1,9 @@
 # SPDC UAT — Full Demo Workflow Checklist
 
-**Project:** SPDC-UAT-LIVE  
+**Project:** SPDC-UAT-LIVE · SPDC-DEMO-01  
+**UAT window:** **8–19 September 2026** (two weeks)  
 **Password (all demo logins):** `Demo@1234`  
-**Use with:** [SPDC_DEMO_GUIDE.md](./SPDC_DEMO_GUIDE.md) · [SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md](./SPDC_DIGITAL_TRANSFORMATION_PRESENTATION.md)
+**Use with:** [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) · [SPDC_FE_DEMO_RUNBOOK.md](./SPDC_FE_DEMO_RUNBOOK.md) · [SPDC_MODULE_DELIVERY_STATUS.md](./SPDC_MODULE_DELIVERY_STATUS.md)
 
 Run on server before demo:
 
@@ -16,7 +17,18 @@ npm run hostinger:build
 
 ---
 
-## 1. Demo logins (who plays which role)
+## 0. Two-week UAT cadence (Sep 8–19)
+
+| Week | Daily test | Weekly test | Roles each day |
+|------|------------|-------------|----------------|
+| **1** | Checklist + DPR + safety (Thu–Fri) | WPR spot-check Fri | Office + site + vendor |
+| **2** | DPR continues | Full WPR Mon · QAP | + client + stakeholder |
+| **2 Thu** | Synthetic week replay | Monthly audit + closure snag | **All 6 role types concurrent** |
+| **2 Fri** | — | Final sign-off | IT runs S1–S10 + M1–M8 |
+
+See [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) for the day-by-day calendar.
+
+---
 
 | Role | Email | Portal URL | Demo use |
 |------|-------|------------|----------|
@@ -36,6 +48,7 @@ npm run hostinger:build
 
 | Step | Where | Action | Expected result |
 |------|-------|--------|-----------------|
+| 0 | **Directory → Sign-off register** | Upload PMC + site signatures | DMS `01.03…/Directory_Signatures` · used in branded Excel |
 | 1 | **CRM → Leads** | Show converted lead | Delivery project exists |
 | 2 | **Master → Projects → Setup** | Assign people + pick **contractor from global directory** | Directory populated |
 | 3 | **CRM → Directory → Stakeholders** | Show consultant types (Structural, MEP, …) | `Create portal login` → `/login/stakeholder` |
@@ -225,4 +238,4 @@ After `npx tsx seed/uatLiveProject.ts`:
 
 ---
 
-*Rev Sep 2026 · seed tag `uat-walkthrough-seed`*
+*Rev Sep 2026 · UAT window Sep 8–19 · See SPDC_TWO_WEEK_UAT_PLAN for daily schedule*

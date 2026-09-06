@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
+import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
 
 const USER_TOOLS: {
@@ -196,6 +197,18 @@ export default function DirectoryPage() {
             Open project DMS →
           </Link>
         </Card>
+      )}
+
+      {id && (
+        <DirectorySignOffRegister
+          projectId={id}
+          token={token}
+          members={overview?.members || []}
+          vendors={overview?.vendors || []}
+          canEditAll={canEdit}
+          currentUserId={user?.id}
+          onSaved={load}
+        />
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

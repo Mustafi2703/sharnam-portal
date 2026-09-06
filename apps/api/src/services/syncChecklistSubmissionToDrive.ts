@@ -34,7 +34,7 @@ export async function syncChecklistSubmissionToDrive(
       assignment: {
         include: {
           project: {
-            select: { name: true, code: true, clientName: true, contractorName: true, location: true },
+            select: { id: true, name: true, code: true, clientName: true, contractorName: true, location: true },
           },
           template: { include: { items: { orderBy: { sortOrder: "asc" } } } },
         },
@@ -63,6 +63,12 @@ export async function syncChecklistSubmissionToDrive(
 
   const exports: ChecklistDriveExport[] = [];
 
+  let dirSigns: Awaited<ReturnType<typeof import("./directorySignatures.js").getDirectorySignMap>> | undefined;
+  if (project.id) {
+    const { getDirectorySignMap } = await import("./directorySignatures.js");
+    dirSigns = await getDirectorySignMap(prisma, project.id);
+  }
+
   try {
     const xlsxBuf = await buildBrandedChecklistXlsxBuffer(submission as any, project);
     const xlsx = await mockOneDrive.upload(
@@ -79,7 +85,11 @@ export async function syncChecklistSubmissionToDrive(
 
   try {
     const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
-    const html = buildBrandedChecklistHtml(submission as any, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
+    const html = buildBrandedChecklistHtml(
+      submission as any,
+      `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`,
+      dirSigns
+    );
     const htmlFile = await mockOneDrive.upload(project.code, folder, `${base}.html`, Buffer.from(html, "utf8"), "text/html");
     exports.push({
       kind: "html",

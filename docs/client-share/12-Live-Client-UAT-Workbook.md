@@ -3,8 +3,11 @@
 **Prepared for:** SPDC / Sharnam PMC  
 **Portal (live):** https://portal.spdc.in  
 **Demo project:** SPDC-DEMO-01 — Sharnam Demo Dormitory Project  
-**Document version:** August 2026 · Rev 01  
-**Purpose:** One shared document for client testing — **features + UAT steps per page**, **meeting change stakes** (blank until session), sign-off.
+**Document version:** September 2026 · Rev 02  
+**UAT window:** **8–19 September 2026** (two weeks)  
+**Purpose:** One shared document for client testing — **features + UAT steps per page**, **meeting change stakes**, sign-off.
+
+**Master schedule:** [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md) — day-by-day · all roles · daily/weekly/monthly/closure workflows · multi-user + security gates.
 
 ---
 
@@ -48,6 +51,7 @@
 | Site | site@sharnam.demo | Field flows, attendance, site checklists |
 | Contractor | vendor@sharnam.demo · nkinra@sharnam.demo | Bid BOQs, RFI/NCR responses (no registers) |
 | Client | client@sharnam.demo | Read-only / client view confirmation |
+| Stakeholder | struct@ · mep@ · pmc@sharnam.demo | RFI response, coordination, MoM |
 
 ---
 
@@ -73,24 +77,31 @@ After each meeting, optionally copy items from **per-page Meeting changes** (Sec
 
 ---
 
-## Section 3 — Session schedule
+## Section 3 — Two-week session schedule (Sep 8–19, 2026)
 
-Tick **Done** when session completed. Write brief notes in the last column.
+Tick **Done** when session completed. Map each row to [SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md).
 
-| # | Session | Suggested attendees | Done | Session date | Notes |
-|---|---------|---------------------|:----:|--------------|-------|
-| 1 | Master · Directory · Vendors | Office + IT | ☐ | | |
-| 2 | **Drawings** (GFC · registers · signatures) | Office + PMC | ☐ | | |
-| 3 | Documents (DMS) | Office + Client | ☐ | | |
-| 4 | Quality | Office + Client | ☐ | | |
-| 5 | Safety | Office + HSE | ☐ | | |
-| 6 | Progress | Office + Client | ☐ | | |
-| 7 | Field · Photos · Diary | Site + Office | ☐ | | |
-| 8 | Comms · Matrix · MoM | Office + Client | ☐ | | |
-| 9 | Cost · Finance | Office | ☐ | | |
-| 10 | Reports · DPR · WPR | Office + Client | ☐ | | |
-| 11 | Closure · Snaglist | Office + Client | ☐ | | |
-| 12 | **CRM · Comparative bids** | Office + Contractor | ☐ | | |
+| # | Day | Session | Roles | Multi-user / security | Done | Notes |
+|---|-----|---------|-------|------------------------|:----:|-------|
+| 1 | Mon Sep 8 | Kick-off · Master · Directory · DMS · sign-off register | Office, IT, all logins | S1–S5 | ☐ | |
+| 2 | Tue Sep 9 | Drawings · RFIs · Comms matrix | Office, struct, mep | M5 · S2 | ☐ | |
+| 3 | Wed Sep 10 | Quality · NCR/CAR · Inspection · QAP | Office, site, vendor | M4 · S3–S4 | ☐ | |
+| 4 | Thu Sep 11 | Safety · HSE IR · daily site workflow | Site, office, vendor | Daily cadence | ☐ | |
+| 5 | Fri Sep 12 | DPR · Progress · photos | Site, office | M1 · M2 | ☐ | |
+| 6 | Mon Sep 15 | WPR weekly · client pack · reports | Office, client | Weekly cadence | ☐ | |
+| 7 | Tue Sep 16 | Cost · Finance · CRM comparative bids | Office, vendor×2 | M3 · M7 | ☐ | |
+| 8 | Wed Sep 17 | HRMS · Audit KPI · Inspection polish | Office, stakeholder | M6 | ☐ | |
+| 9 | Thu Sep 18 | Monthly audit · closure · synthetic week | **All roles** | M8 · closure | ☐ | |
+| 10 | Fri Sep 19 | Final gate · re-test · sign-off | IT + leadership | S6–S10 · M1–M8 | ☐ | |
+
+### Workflow cadence sign-off (tick during two weeks)
+
+| Cadence | Test completed | Date | Pass |
+|---------|----------------|------|:----:|
+| Daily (checklist + DPR + safety) | | | ☐ |
+| Weekly (WPR + QAP + MoM) | | | ☐ |
+| Monthly (audit + cashflow + client pack) | | | ☐ |
+| Project closure (snag + lessons + archive) | | | ☐ |
 
 ---
 

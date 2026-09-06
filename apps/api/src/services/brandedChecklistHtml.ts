@@ -1,5 +1,6 @@
 /** Branded checklist fill HTML — SPDC form colours (navy bands, yellow inputs, OK/Fail/NA coding) */
 import { checklistLogoDataUri, collectChecklistSignSlots } from "./checklistSignoff.js";
+import type { DirectorySignMap } from "./directorySignatures.js";
 
 function escapeHtml(s: string) {
   return String(s)
@@ -54,7 +55,7 @@ export function buildBrandedChecklistHtml(
       contractorSignUrl?: string | null;
     } | null;
     assignment?: {
-      project?: { name?: string | null; code?: string | null; clientName?: string | null } | null;
+      project?: { id?: string; name?: string | null; code?: string | null; clientName?: string | null } | null;
       template?: {
         name?: string | null;
         checklistType?: string | null;
@@ -68,7 +69,8 @@ export function buildBrandedChecklistHtml(
       } | null;
     } | null;
   },
-  logoUrl?: string
+  logoUrl?: string,
+  dirSigns?: DirectorySignMap
 ) {
   const template = submission?.assignment?.template;
   const items = template?.items || [];
@@ -120,7 +122,7 @@ export function buildBrandedChecklistHtml(
   const family = familyOf(template?.checklistType);
   const project = submission.assignment?.project;
   const logo = checklistLogoDataUri() || logoUrl || "";
-  const signs = collectChecklistSignSlots(submission);
+  const signs = collectChecklistSignSlots(submission, dirSigns);
   const signHtml = signs
     .map(
       (s) => `<div class="sig">
