@@ -91,10 +91,41 @@ export function ModulePortalFilesPanel({ projectId, token, config }: Props) {
     return { rfis, ncrs };
   }, [rows]);
 
-  if (!config.rfiKinds?.length && !config.showQualityNcr && !config.showSafetyNcr) return null;
+  if (!config.rfiKinds?.length && !config.showQualityNcr && !config.showSafetyNcr && !config.registerExports?.length) return null;
+
+  const registerExports = (config.registerExports || []).filter((r) => r.downloadPath);
 
   return (
     <Card className="!p-0 overflow-hidden shrink-0">
+      {registerExports.length > 0 && (
+        <div className="px-4 py-3 border-b border-line bg-brand/5 flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-ink">Register workbooks</h3>
+            <p className="text-xs text-steel-muted mt-0.5">
+              Download branded XLSX or refresh DMS — files drop into ISO folders above on publish / Dump logs.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {registerExports.map((r) => (
+              <Button
+                key={r.label}
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                onClick={() =>
+                  void downloadAuthFile(
+                    r.downloadPath.replace(":projectId", projectId),
+                    token,
+                    `${r.label.replace(/\s+/g, "-")}.xlsx`
+                  )
+                }
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-ink">Portal records</h3>

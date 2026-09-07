@@ -10,7 +10,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { notifyBidPackageOpened } from "../services/crmBidNotify.js";
-import { resolveVendorForUser } from "../services/vendorPortal.js";
+import { resolveVendorForUser, vendorBoqWhereForUser } from "../services/vendorPortal.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
   CRM_SHAREPOINT,
@@ -455,8 +455,14 @@ crmComparativeRouter.post(
     const isOffice = req.user!.role === "admin" || req.user!.role === "office";
     if (!isOffice && req.user!.role === "vendor") {
       const vendorUser = await resolveVendorForUser(req.user!);
-      if (!vendorUser?.id || slot.vendorId !== vendorUser.id) {
+      const ownsSlot =
+        vendorUser &&
+        (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name || !slot.vendorId);
+      if (!ownsSlot) {
         return res.status(403).json({ error: "You can only upload BOQ for your assigned vendor slot" });
+      }
+      if (vendorUser && !slot.vendorId) {
+        await prisma.crmVendorBoq.update({ where: { id: slot.id }, data: { vendorId: vendorUser.id } });
       }
     } else if (!isOffice) {
       return res.status(403).json({ error: "Office access required" });
@@ -574,7 +580,7 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/sheet", async (re
     const isOffice = role === "admin" || role === "office" || role === "employee";
     if (!isOffice) {
       if (role !== "vendor") return res.status(403).json({ error: "Forbidden" });
-      const canEdit = await vendorCanEditBoqSheet(prisma, role, req.user!.email, out.sheetId);
+      const canEdit = await vendorCanEditBoqSheet(prisma, role, req.user!, out.sheetId);
       if (!canEdit) return res.status(403).json({ error: "Forbidden" });
     }
 
@@ -585,7 +591,7 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/sheet", async (re
       created: out.created,
       canWrite:
         isOffice ||
-        (await vendorCanEditBoqSheet(prisma, role, req.user!.email, out.sheetId)),
+        (await vendorCanEditBoqSheet(prisma, role, req.user!, out.sheetId)),
     });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "load failed" });
@@ -604,7 +610,7 @@ crmComparativeRouter.put(
     if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
     if (!slot.sheetId) return res.status(400).json({ error: "No BOQ sheet linked to this slot" });
 
-    const canEdit = await vendorCanEditBoqSheet(prisma, req.user!.role, req.user!.email, slot.sheetId);
+    const canEdit = await vendorCanEditBoqSheet(prisma, req.user!.role, req.user!, slot.sheetId);
     if (!canEdit) return res.status(403).json({ error: "You cannot edit this BOQ sheet" });
 
     const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;
@@ -752,15 +758,17 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
   }
 
   let vendorId: string | null = null;
+  let vendorName: string | null = null;
   if (role === "vendor") {
     const v = await resolveVendorForUser(req.user!);
     if (!v) return res.json([]);
     vendorId = v.id;
+    vendorName = v.name;
   }
 
   const slots = await prisma.crmVendorBoq.findMany({
-    where: vendorId
-      ? { vendorId, bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } } }
+    where: vendorId && vendorName
+      ? await vendorBoqWhereForUser({ id: vendorId, name: vendorName })
       : { bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } } },
     include: {
       bidPackage: {
@@ -774,6 +782,7 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
           comparativeSharePointUrl: true,
           summarySheetId: true,
           comparativeSheetId: true,
+          awardedVendorId: true,
           project: { select: { id: true, code: true, name: true } },
         },
       },
@@ -782,9 +791,22 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
     orderBy: [{ bidPackage: { updatedAt: "desc" } }, { discipline: "asc" }],
   });
 
+  const awardedIds = [...new Set(slots.map((s) => s.bidPackage.awardedVendorId).filter(Boolean))] as string[];
+  const awardedById = awardedIds.length
+    ? Object.fromEntries(
+        (await prisma.vendor.findMany({ where: { id: { in: awardedIds } }, select: { id: true, name: true } })).map((v) => [
+          v.id,
+          v.name,
+        ])
+      )
+    : {};
+
   res.json(
     slots.map((s) => {
       const pkgDisc = parseDisciplinesJson(s.bidPackage.disciplinesJson);
+      const awardedLabel = s.bidPackage.awardedVendorId
+        ? awardedById[s.bidPackage.awardedVendorId] || null
+        : null;
       return {
         id: s.id,
         bidPackageId: s.bidPackageId,
@@ -798,6 +820,9 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
         comparativeSharePointUrl: s.bidPackage.comparativeSharePointUrl,
         summarySheetId: s.bidPackage.summarySheetId,
         comparativeSheetId: s.bidPackage.comparativeSheetId,
+        awardedVendorId: s.bidPackage.awardedVendorId,
+        awardedVendorLabel: awardedLabel,
+        isAwardedToYou: !!(vendorId && s.bidPackage.awardedVendorId === vendorId),
         vendorLabel: s.vendorLabel,
         discipline: s.discipline,
         disciplineLabel:
@@ -821,17 +846,25 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
   }
 
   let vendorId: string | null = null;
+  let vendorName: string | null = null;
   if (role === "vendor") {
     const v = await resolveVendorForUser(req.user!);
     if (!v) return res.status(404).json({ error: "vendor profile not found" });
     vendorId = v.id;
+    vendorName = v.name;
   }
 
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: req.params.id },
     include: {
       project: { select: { id: true, code: true, name: true } },
-      vendorBoqs: vendorId ? { where: { vendorId }, select: { id: true } } : { select: { id: true } },
+      vendorBoqs:
+        vendorId && vendorName
+          ? {
+              where: { OR: [{ vendorId }, { vendorLabel: vendorName }] },
+              select: { id: true },
+            }
+          : { select: { id: true } },
     },
   });
   if (!pkg) return res.status(404).json({ error: "bid package not found" });
@@ -849,13 +882,23 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
     }
   }
 
-  const mySlots = vendorId
-    ? await prisma.crmVendorBoq.findMany({
-        where: { bidPackageId: pkg.id, vendorId },
-        select: { id: true, discipline: true, fileName: true, sheetId: true, uploadedAt: true, sharePointUrl: true },
-        orderBy: { discipline: "asc" },
-      })
-    : [];
+  const mySlots =
+    vendorId && vendorName
+      ? await prisma.crmVendorBoq.findMany({
+          where: { bidPackageId: pkg.id, OR: [{ vendorId }, { vendorLabel: vendorName }] },
+          select: { id: true, discipline: true, fileName: true, sheetId: true, uploadedAt: true, sharePointUrl: true },
+          orderBy: { discipline: "asc" },
+        })
+      : [];
+
+  const awardedVendor = pkg.awardedVendorId
+    ? await prisma.vendor.findUnique({ where: { id: pkg.awardedVendorId }, select: { id: true, name: true } })
+    : null;
+  const myGrandTotal =
+    summary?.grandTotals && vendorName ? summary.grandTotals[vendorName] : undefined;
+  const lowestTotal = summary?.grandTotals
+    ? Math.min(...Object.values(summary.grandTotals).filter((n) => Number.isFinite(n)))
+    : undefined;
 
   res.json({
     id: pkg.id,
@@ -867,7 +910,13 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
     summarySheetId: pkg.summarySheetId,
     comparativeSheetId: pkg.comparativeSheetId,
     summary,
-    myVendorLabel: role === "vendor" ? (await prisma.vendor.findUnique({ where: { id: vendorId! }, select: { name: true } }))?.name : null,
+    awardedVendorId: pkg.awardedVendorId,
+    awardedVendorLabel: awardedVendor?.name || null,
+    isAwardedToYou: !!(vendorId && pkg.awardedVendorId === vendorId),
+    isLowestBidder: !!(vendorName && summary?.lowestVendor === vendorName),
+    myGrandTotal,
+    lowestGrandTotal: Number.isFinite(lowestTotal) ? lowestTotal : null,
+    myVendorLabel: role === "vendor" ? vendorName : null,
     mySlots: mySlots.map((s) => ({
       ...s,
       disciplineLabel: COMPARATIVE_DISCIPLINES.find((d) => d.key === s.discipline)?.label || s.discipline,

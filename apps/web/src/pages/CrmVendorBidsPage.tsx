@@ -23,6 +23,9 @@ type BidSlot = {
   comparativeSharePointUrl?: string | null;
   summarySheetId?: string | null;
   comparativeSheetId?: string | null;
+  awardedVendorId?: string | null;
+  awardedVendorLabel?: string | null;
+  isAwardedToYou?: boolean;
   vendorLabel: string;
   discipline: string;
   disciplineLabel: string;
@@ -35,7 +38,13 @@ type BidSlot = {
 type PackageSummary = {
   id: string;
   title: string;
+  status?: string;
   myVendorLabel?: string | null;
+  awardedVendorLabel?: string | null;
+  isAwardedToYou?: boolean;
+  isLowestBidder?: boolean;
+  myGrandTotal?: number;
+  lowestGrandTotal?: number | null;
   summary?: {
     vendorLabels: string[];
     sectionTotals: { section: string; title: string; totals: Record<string, number> }[];
@@ -55,6 +64,11 @@ type ProjectGroup = {
   packages: Record<string, BidSlot[]>;
 };
 
+function formatINR(n?: number | null) {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+}
+
 function VendorPackageCard({
   pkgId,
   pkgSlots,
@@ -73,16 +87,21 @@ function VendorPackageCard({
   const head = pkgSlots[0];
   const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
   const isOpen = head?.bidPackageStatus === "Open";
+  const isAwarded = head?.bidPackageStatus === "Awarded";
+  const awardedLabel = summary?.awardedVendorLabel || head?.awardedVendorLabel;
 
   return (
     <Card className={highlighted ? "ring-2 ring-brand" : isOpen ? "border-brand/40" : undefined}>
       <div className="mb-3">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-semibold">{head?.bidPackageTitle}</h3>
-          {isOpen ? <Badge tone="ok">Open for bids</Badge> : <Badge>{head?.bidPackageStatus}</Badge>}
+          {isOpen ? <Badge tone="ok">Open for bids</Badge> : isAwarded ? <Badge tone="ok">Awarded</Badge> : <Badge>{head?.bidPackageStatus}</Badge>}
+          {summary?.isLowestBidder && !isAwarded && <Badge tone="ok">L1 (lowest total)</Badge>}
+          {summary?.isAwardedToYou && <Badge tone="ok">Awarded to you</Badge>}
         </div>
         <p className="text-xs text-steel-muted mt-0.5">
           {head?.revisionLabel}
+          {head?.projectCode && <span className="ml-2 font-mono">{head.projectCode}</span>}
           <span className="ml-2">
             Your BOQs {done}/{pkgSlots.length}
           </span>
@@ -90,6 +109,25 @@ function VendorPackageCard({
             <span className="ml-2 font-mono">· {summary.myVendorLabel}</span>
           )}
         </p>
+        {(isAwarded || summary?.myGrandTotal != null) && (
+          <p className="text-[11px] text-steel-muted mt-1">
+            {isAwarded && awardedLabel && (
+              <span>
+                <strong className="text-ink">Award:</strong> {awardedLabel}
+                {summary?.isAwardedToYou ? " (your company)" : ""}
+                {" · "}
+              </span>
+            )}
+            {summary?.myGrandTotal != null && (
+              <span>
+                Your grand total: <strong className="text-ink">{formatINR(summary.myGrandTotal)}</strong>
+                {summary.summary?.lowestVendor && !isAwarded && (
+                  <span> · L1: {summary.summary.lowestVendor}</span>
+                )}
+              </span>
+            )}
+          </p>
+        )}
         <div className="flex flex-wrap gap-3 mt-1">
           {head?.comparativeSharePointUrl && (
             <a
@@ -312,11 +350,24 @@ export default function CrmVendorBidsPage() {
       {!slots.length && (
         <Card>
           <p className="text-sm text-steel-muted">
-            No bid slots yet. Office creates a package under{" "}
-            <Link to="/crm/bids" className="text-brand font-semibold">
-              Bid management
-            </Link>
-            .
+            No open bid packages assigned to your company yet.
+          </p>
+          <ul className="text-xs text-steel-muted mt-3 space-y-1.5 list-disc pl-5">
+            <li>
+              Sign in as <strong>vendor@sharnam.demo</strong> (M/s Bhavna Infra) or <strong>nkinra@sharnam.demo</strong> (M/s Nikhra Infra) — password <strong>Demo@1234</strong>
+            </li>
+            <li>
+              Demo package: <strong>SPDC-DEMO-01 · Civil & structural — R2 demo bid</strong> — structural, civil, and other discipline BOQs
+            </li>
+            <li>
+              Office opens bids at{" "}
+              <Link to="/crm/bids" className="text-brand font-semibold">
+                CRM → Comparative bids
+              </Link>
+            </li>
+          </ul>
+          <p className="text-xs text-steel-muted mt-3">
+            If this is a fresh server, run <code className="text-[10px]">npm run db:seed</code> to load demo bidders and pre-filled BOQs.
           </p>
         </Card>
       )}

@@ -303,9 +303,15 @@ export async function recomputeAndSyncBidPackage(prisma: PrismaClient, pkgId: st
   return result;
 }
 
-export async function findVendorBoqSlotForSheet(prisma: PrismaClient, sheetId: string, vendorId?: string | null) {
+export async function findVendorBoqSlotForSheet(
+  prisma: PrismaClient,
+  sheetId: string,
+  vendor?: { id: string; name: string } | null
+) {
   return prisma.crmVendorBoq.findFirst({
-    where: { sheetId, ...(vendorId ? { vendorId } : {}) },
+    where: vendor
+      ? { sheetId, OR: [{ vendorId: vendor.id }, { vendorLabel: vendor.name }] }
+      : { sheetId },
     include: {
       bidPackage: { select: { id: true, title: true, status: true } },
     },
@@ -315,13 +321,14 @@ export async function findVendorBoqSlotForSheet(prisma: PrismaClient, sheetId: s
 export async function vendorCanEditBoqSheet(
   prisma: PrismaClient,
   role: string,
-  email: string,
+  user: { email: string; role: string; vendorId?: string | null },
   sheetId: string
 ): Promise<boolean> {
   if (role === "admin" || role === "office") return true;
   if (role !== "vendor") return false;
-  const vendor = await prisma.vendor.findFirst({ where: { email }, select: { id: true } });
+  const { resolveVendorForUser } = await import("./vendorPortal.js");
+  const vendor = await resolveVendorForUser(user, prisma);
   if (!vendor) return false;
-  const slot = await findVendorBoqSlotForSheet(prisma, sheetId, vendor.id);
+  const slot = await findVendorBoqSlotForSheet(prisma, sheetId, vendor);
   return !!slot && slot.bidPackage.status !== "Awarded";
 }

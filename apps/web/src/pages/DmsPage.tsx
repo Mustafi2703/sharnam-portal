@@ -357,12 +357,18 @@ export default function DmsPage({
                   setDumping(true);
                   setMsg("");
                   try {
-                    const out = await api<{ registers?: { name: string }[] }>(`/api/dms/${id}/dump-logs`, {
-                      method: "POST",
-                      token,
-                    });
+                    const out = await api<{ registers?: { name: string }[]; workbooks?: { kind: string }[] }>(
+                      `/api/dms/${id}/dump-logs`,
+                      {
+                        method: "POST",
+                        token,
+                      }
+                    );
                     const n = out.registers?.length ?? 0;
-                    setMsg(`Refreshed ${n} register CSVs to ISO folders + _Registers mirror.`);
+                    const w = out.workbooks?.length ?? 0;
+                    setMsg(
+                      `Refreshed ${n} register CSVs to ISO folders + _Registers mirror.${w ? ` Published ${w} XLSX workbook(s).` : ""}`
+                    );
                     await load(path);
                   } catch (err) {
                     setMsg(err instanceof Error ? err.message : "Register refresh failed");

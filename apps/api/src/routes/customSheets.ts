@@ -284,10 +284,8 @@ customSheetsRouter.get("/:id", async (req: AuthedRequest, res) => {
   let bidSlot = null;
   if (!isOffice && row.category === "CRM Vendor BOQ") {
     const vendor =
-      role === "vendor"
-        ? await prisma.vendor.findFirst({ where: { email: req.user!.email }, select: { id: true } })
-        : null;
-    bidSlot = await findVendorBoqSlotForSheet(prisma, row.id, vendor?.id);
+      role === "vendor" ? await (await import("../services/vendorPortal.js")).resolveVendorForUser(req.user!) : null;
+    bidSlot = await findVendorBoqSlotForSheet(prisma, row.id, vendor);
     if (!bidSlot) return res.status(403).json({ error: "Forbidden" });
   }
 
@@ -309,7 +307,7 @@ customSheetsRouter.get("/:id", async (req: AuthedRequest, res) => {
       : null,
     canWrite:
       isOffice ||
-      (bidSlot ? await vendorCanEditBoqSheet(prisma, role, req.user!.email, row.id) : false),
+      (bidSlot ? await vendorCanEditBoqSheet(prisma, role, req.user!, row.id) : false),
   });
 });
 
@@ -432,7 +430,7 @@ customSheetsRouter.put("/:id", async (req: AuthedRequest, res) => {
   const isOffice = (WRITE_ROLES as readonly string[]).includes(role);
   const vendorMayEdit =
     existing.category === "CRM Vendor BOQ" &&
-    (await vendorCanEditBoqSheet(prisma, role, req.user!.email, req.params.id));
+    (await vendorCanEditBoqSheet(prisma, role, req.user!, req.params.id));
   if (!isOffice && !vendorMayEdit) return res.status(403).json({ error: "Forbidden" });
 
   const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;

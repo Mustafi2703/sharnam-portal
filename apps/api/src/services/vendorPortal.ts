@@ -24,6 +24,21 @@ export async function resolveVendorForUser(
   return contact?.vendor ?? null;
 }
 
+/** Where-clause for vendor BOQ slots — links orphaned rows by vendorLabel, then matches id or label. */
+export async function vendorBoqWhereForUser(
+  vendor: { id: string; name: string },
+  db: PrismaClient = defaultPrisma,
+) {
+  await db.crmVendorBoq.updateMany({
+    where: { vendorId: null, vendorLabel: vendor.name },
+    data: { vendorId: vendor.id },
+  });
+  return {
+    OR: [{ vendorId: vendor.id }, { vendorLabel: vendor.name }],
+    bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } },
+  };
+}
+
 /** Ensure a portal login exists for a vendor org contact and link to vendorId. */
 export async function ensureVendorPortalLogin(opts: {
   vendorId: string;

@@ -2078,6 +2078,24 @@ async function main() {
   }
 
   try {
+    const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
+    if (demoProject) {
+      const { dumpAllProjectLogs } = await import("../apps/api/src/services/logDump.js");
+      const dump = await dumpAllProjectLogs(demoProject.id);
+      console.log(
+        "Register mirror → ISO folders:",
+        dump.registers.length,
+        "CSVs,",
+        (dump.workbooks || []).length,
+        "XLSX workbooks on",
+        demoProject.code
+      );
+    }
+  } catch (e) {
+    console.warn("register ISO mirror seed failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
     const { seedSpdcLiveTeam } = await import("../apps/api/src/services/spdcLiveTeamSeed.js");
     await seedSpdcLiveTeam(prisma);
     console.log("SPDC UAT live team + comms matrix seeded");

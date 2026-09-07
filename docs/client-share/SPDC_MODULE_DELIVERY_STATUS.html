@@ -307,6 +307,39 @@ MS Project XML ──▶ Progress PvA + S-curve ──▶ WPR progress slides</d
   <div class="footer">Sharnam · Module Delivery Status Rev 03</div>
 </section>
 
+<!-- ISO REGISTER FOLDERS -->
+<section class="page">
+  <h2>3B. Register files → ISO folders (Excel / CSV / PDF)</h2>
+  <p class="lead">Every portal register drops into its designated ISO folder when you <strong>Refresh registers → drive</strong> (DMS) or publish from Quality tools. Module <strong>Files</strong> pages browse the same tree.</p>
+  <table>
+    <thead><tr><th>Register</th><th>Portal path</th><th>ISO folder (under project)</th><th>Format</th></tr></thead>
+    <tbody>
+      <tr><td>QAP weekly plan</td><td>Quality → QAP → Publish / Dump logs</td><td><code>08.01_Quality_Plans_and_Inspection_Test_Plans</code></td><td>XLSX + CSV</td></tr>
+      <tr><td>Cube test register</td><td>Quality → Cube → Publish / Dump logs</td><td><code>08.03_Testing_Test_Report_Control</code></td><td>XLSX + CSV</td></tr>
+      <tr><td>NCR / CAR log</td><td>Quality → NCR/CAR + Dump logs</td><td><code>08.06_Control_of_Nonconforming_Output</code></td><td>CSV + per-NCR XLSX</td></tr>
+      <tr><td>Checklist submissions</td><td>Checklist logs + Dump logs</td><td><code>08.02_Inspection_Checklists_Pour_Cards</code></td><td>CSV</td></tr>
+      <tr><td>RFI correspondence</td><td>Drawings / Comms RFIs + Dump logs</td><td><code>03.06_Correspondence_Control</code></td><td>CSV + RFI XLSX</td></tr>
+      <tr><td>Safety / observations</td><td>Safety module + Dump logs</td><td><code>08.07_Hazard_Identification_Risk_Assessment</code></td><td>CSV</td></tr>
+      <tr><td>GFC drawings</td><td>Drawings → publish revision</td><td><code>04.02_Drawings_and_Specifications/{discipline}</code></td><td>PDF / DWG</td></tr>
+      <tr><td>Flat mirror (all logs)</td><td>DMS → <code>_Registers/</code></td><td><code>_Registers/{RFI|Quality|Safety|Progress|…}</code></td><td>CSV index</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Where to view:</strong> Project → any module → <strong>Files</strong> tab (e.g. Quality files) — portal records table + SharePoint folder browser. Run <code>npm run db:seed</code> on a fresh server to pre-fill demo registers on <strong>SPDC-DEMO-01</strong>.</p>
+
+  <h2>3C. Contractor bid portal (open packages &amp; award status)</h2>
+  <table>
+    <thead><tr><th>Step</th><th>Who</th><th>Path</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Open bid package</td><td>Office</td><td><code>/crm/bids</code> → create package → Open bid &amp; notify</td></tr>
+      <tr><td>2 · Upload discipline BOQs</td><td>Contractor</td><td><code>/login/vendor</code> → <code>/crm/vendor-bids</code> — Fill online or Upload Excel per discipline (Structural, Civil, …)</td></tr>
+      <tr><td>3 · Comparative &amp; L1/L2</td><td>Office</td><td><code>/crm/bids</code> — section totals, grand totals, SharePoint <code>05.06</code> master</td></tr>
+      <tr><td>4 · Award status</td><td>Both</td><td>Vendor sees <strong>Awarded</strong> badge + L1 on package card; office locks package on award</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Demo logins:</strong> <code>vendor@sharnam.demo</code> (M/s Bhavna Infra) · <code>nkinra@sharnam.demo</code> (M/s Nikhra Infra) · password <code>Demo@1234</code> · project <strong>SPDC-DEMO-01</strong>.</p>
+  <div class="footer">Sharnam · Module Delivery Status Rev 03</div>
+</section>
+
 <!-- TWO WEEK UAT -->
 <section class="page">
   <h2>4. Two-week UAT (8–19 Sep 2026)</h2>

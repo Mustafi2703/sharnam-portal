@@ -149,6 +149,40 @@ The portal mirrors the **client Excel pack** — each tool maps to a workbook ta
 
 **Diagram pack:** [05-Sheet-Connection-Maps.md](./05-Sheet-Connection-Maps.md) · SVG assets in `docs/client-share/assets/`
 
+---
+
+## 3B. Register files → ISO folders (Excel / CSV / PDF)
+
+Every portal register is filed to its **designated ISO folder** when you run **Refresh registers → drive** (DMS) or publish from Quality tools. Module **Files** pages browse the same SharePoint tree.
+
+| Register | Portal path | ISO folder | Format |
+|----------|-------------|------------|--------|
+| QAP weekly plan | Quality → QAP → Publish / Dump logs | `08.01_Quality_Plans_and_Inspection_Test_Plans` | XLSX + CSV |
+| Cube test register | Quality → Cube → Publish / Dump logs | `08.03_Testing_Test_Report_Control` | XLSX + CSV |
+| NCR / CAR log | Quality → NCR/CAR + Dump logs | `08.06_Control_of_Nonconforming_Output` | CSV + per-NCR XLSX |
+| Checklist submissions | Checklist logs + Dump logs | `08.02_Inspection_Checklists_Pour_Cards` | CSV |
+| RFI correspondence | Drawings / Comms RFIs + Dump logs | `03.06_Correspondence_Control` | CSV + RFI XLSX |
+| Safety / observations | Safety module + Dump logs | `08.07_Hazard_Identification_Risk_Assessment` | CSV |
+| GFC drawings | Drawings → publish revision | `04.02_Drawings_and_Specifications/{discipline}` | PDF / DWG |
+| Flat mirror (all logs) | DMS → `_Registers/` | `_Registers/{RFI\|Quality\|Safety\|Progress\|…}` | CSV index |
+
+**Where to view:** Project → any module → **Files** tab (e.g. Quality files) — portal records table + SharePoint folder browser. On a fresh server run `npm run db:seed` to pre-fill demo registers on **SPDC-DEMO-01**.
+
+---
+
+## 3C. Contractor bid portal (open packages & award status)
+
+| Step | Who | Path |
+|------|-----|------|
+| 1 · Open bid package | Office | `/crm/bids` → create package → Open bid & notify |
+| 2 · Upload discipline BOQs | Contractor | `/login/vendor` → `/crm/vendor-bids` — Fill online or Upload Excel per discipline |
+| 3 · Comparative & L1/L2 | Office | `/crm/bids` — section totals, SharePoint `05.05` / `05.06` |
+| 4 · Award status | Both | Vendor sees **Awarded** badge + L1 on package card; office locks on award |
+
+**Demo logins:** `vendor@sharnam.demo` (Bhavna) · `nkinra@sharnam.demo` (Nikhra) · password `Demo@1234` · project **SPDC-DEMO-01**.
+
+---
+
 **Demo flow:** Fill checklist (site) → publish DPR (site) → Regenerate WPR (office) → download Client XLSX — all three show the same seeded counts.
 
 ---

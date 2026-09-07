@@ -24,6 +24,8 @@ export type ModuleFileConfig = {
   showQualityNcr?: boolean;
   /** Show safety NCR rows in portal panel */
   showSafetyNcr?: boolean;
+  /** Branded register exports (XLSX) filed to this module's ISO folder */
+  registerExports?: { label: string; downloadPath: string; isoSubfolder?: string }[];
 };
 
 export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
@@ -36,6 +38,18 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
       "QAP, checklists, cube tests, NCR/CAR — browse the SharePoint ISO tree and open portal exports (RFI, forms, registers).",
     rfiKinds: ["QualityInspection", "SiteExecution", "QualityIR"],
     showQualityNcr: true,
+    registerExports: [
+      {
+        label: "QAP register (XLSX)",
+        downloadPath: "/api/checklist/project/:projectId/qap/download.xlsx",
+        isoSubfolder: "08.01_Quality_Plans_and_Inspection_Test_Plans",
+      },
+      {
+        label: "Cube test register (XLSX)",
+        downloadPath: "/api/checklist/project/:projectId/cubes/download.xlsx",
+        isoSubfolder: "08.03_Testing_Test_Report_Control",
+      },
+    ],
   },
   safety: {
     root: "08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment",
@@ -45,6 +59,13 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     subtitle: "HIRA, safety NCR, observations — SharePoint HSE folder plus live safety RFIs and NCR forms.",
     rfiKinds: ["SafetyChecklist", "SafetyIR"],
     showSafetyNcr: true,
+    registerExports: [
+      {
+        label: "Safety / observation log (CSV via DMS refresh)",
+        downloadPath: "",
+        isoSubfolder: "08.07_Hazard_Identification_Risk_Assessment",
+      },
+    ],
   },
   drawings: {
     root: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications",
@@ -53,6 +74,13 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     hubPath: "hub/drawings",
     subtitle: "GFC PDFs/DWG by discipline. Live register CSVs → _Registers/Drawings (use Refresh registers in DMS).",
     rfiKinds: ["RequestForInformation", "DrawingChecklist"],
+    registerExports: [
+      {
+        label: "RFI correspondence log (CSV)",
+        downloadPath: "",
+        isoSubfolder: "03.06_Correspondence_Control",
+      },
+    ],
   },
   progress: {
     root: "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records",

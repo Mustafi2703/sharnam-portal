@@ -6,6 +6,7 @@
  */
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
+import { MODULE_TO_ISO_FOLDER } from "./graph.js";
 
 type Row = Record<string, string | number | boolean | null | undefined>;
 
@@ -69,6 +70,22 @@ const FOLDER = {
   registers: "_Registers",
 } as const;
 
+/** Mirror register CSVs into designated ISO module folders (not only _Registers). */
+const ISO_MIRROR: Partial<Record<RegisterBucket, string>> = {
+  rfi: MODULE_TO_ISO_FOLDER.rfiInformation,
+  drawings: MODULE_TO_ISO_FOLDER.drawings,
+  designCoordination: MODULE_TO_ISO_FOLDER.designCoordination,
+  submittals: MODULE_TO_ISO_FOLDER.submittals,
+  dpr: MODULE_TO_ISO_FOLDER.dpr,
+  hindrance: MODULE_TO_ISO_FOLDER.hindrance,
+  progress: MODULE_TO_ISO_FOLDER.progress,
+  checklist: MODULE_TO_ISO_FOLDER.qualityChecklist,
+  cube: MODULE_TO_ISO_FOLDER.cube,
+  ncr: MODULE_TO_ISO_FOLDER.ncr,
+  hira: MODULE_TO_ISO_FOLDER.safety,
+  meetings: MODULE_TO_ISO_FOLDER.meetings,
+};
+
 async function upload(projectCode: string, folder: string, fileName: string, content: string, replace = false) {
   return mockOneDrive.upload(projectCode, folder, fileName, Buffer.from(content, "utf8"), "text/csv", { replace });
 }
@@ -77,7 +94,66 @@ async function dropRegister(projectCode: string, bucket: RegisterBucket, name: s
   const folder = REGISTER_BUCKETS[bucket];
   const csv = toCsv(rows);
   const saved = await upload(projectCode, folder, `${name}.csv`, csv, true);
-  return { name, rows: rows.length, folder, saved };
+  const isoFolder = ISO_MIRROR[bucket];
+  if (isoFolder) {
+    await upload(projectCode, isoFolder, `${name}.csv`, csv, true);
+  }
+  return { name, rows: rows.length, folder, isoFolder: isoFolder || null, saved };
+}
+
+/** Publish branded QAP / cube XLSX workbooks into ISO folders after CSV dump. */
+async function publishRegisterWorkbooks(projectId: string, projectCode: string) {
+  const office = await prisma.user.findFirst({ where: { role: { in: ["office", "admin"] } }, select: { id: true } });
+  if (!office) return [];
+
+  const published: { kind: string; fileName: string; folder: string }[] = [];
+  const { publishRegisterWorkbook } = await import("./registerWorkbookPublish.js");
+
+  const qapCount = await prisma.qapActivity.count({ where: { projectId } });
+  if (qapCount > 0) {
+    try {
+      const { exportQapWorkbook } = await import("./qapImportExport.js");
+      const { stampSpdcWorkbookLogo } = await import("./brandedExport.js");
+      const { buffer, weekLabel } = await exportQapWorkbook(projectId);
+      const stamped = await stampSpdcWorkbookLogo(buffer);
+      const fileName = `QAP-${projectCode}-${weekLabel.replace(/\s+/g, "-")}.xlsx`;
+      const out = await publishRegisterWorkbook({
+        projectId,
+        userId: office.id,
+        moduleKey: "qap",
+        fileName,
+        buffer: stamped,
+        auditAction: "qap.published.dump",
+        auditMeta: { weekLabel, source: "dump-logs" },
+      });
+      published.push({ kind: "qap", fileName, folder: MODULE_TO_ISO_FOLDER.qap });
+    } catch (e) {
+      console.warn("dump-logs: QAP workbook publish skipped:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  const cubeCount = await prisma.cubeTest.count({ where: { projectId } });
+  if (cubeCount > 0) {
+    try {
+      const { exportCubeWorkbook } = await import("./cubeRegisterImport.js");
+      const { buffer } = await exportCubeWorkbook(projectId);
+      const fileName = `Cube-Register-${projectCode}.xlsx`;
+      const out = await publishRegisterWorkbook({
+        projectId,
+        userId: office.id,
+        moduleKey: "cube",
+        fileName,
+        buffer,
+        auditAction: "cube.published.dump",
+        auditMeta: { rowCount: cubeCount, source: "dump-logs" },
+      });
+      published.push({ kind: "cube", fileName, folder: MODULE_TO_ISO_FOLDER.cube });
+    } catch (e) {
+      console.warn("dump-logs: cube workbook publish skipped:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  return published;
 }
 
 /** Dump every register for a project. Idempotent, safe to run repeatedly. */
@@ -610,10 +686,13 @@ export async function dumpAllProjectLogs(projectId: string) {
     true
   );
 
+  const workbooks = await publishRegisterWorkbooks(projectId, code);
+
   return {
     projectId,
     projectCode: code,
     refreshedAt: new Date().toISOString(),
     registers: results,
+    workbooks,
   };
 }
