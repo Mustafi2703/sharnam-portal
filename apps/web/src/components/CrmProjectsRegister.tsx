@@ -159,11 +159,11 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit }: Props) {
                   </td>
                   <td className="whitespace-nowrap">
                     <Link
-                      to={`/projects/${p.id}`}
+                      to={`/crm/setup?projectId=${p.id}&step=matrix`}
                       className="text-[10px] font-semibold text-brand"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      Open →
+                      Setup →
                     </Link>
                   </td>
                 </tr>
@@ -186,6 +186,9 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit }: Props) {
               </div>
               <CrmDetailLines lines={projectDetailLines(selected)} />
               <div className="flex flex-col gap-2 border-t border-line pt-3">
+                <Link to={`/crm/setup?projectId=${selected.id}&step=matrix`} className="text-sm font-semibold text-brand">
+                  Project setup (parties · comms · portals) →
+                </Link>
                 <Link to={`/projects/${selected.id}`} className="text-sm font-semibold text-brand">
                   Open project tools →
                 </Link>

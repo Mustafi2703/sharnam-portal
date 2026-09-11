@@ -25,7 +25,7 @@ vendorsRouter.get("/", async (req, res) => {
 });
 
 vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const partyType = ["Contractor", "Vendor", "Client", "Consultant", "PMC"].includes(req.body.partyType)
+  const partyType = ["Contractor", "Vendor", "Client", "Consultant", "PMC", "Designer"].includes(req.body.partyType)
     ? req.body.partyType
     : "Vendor";
   const v = await prisma.vendor.create({

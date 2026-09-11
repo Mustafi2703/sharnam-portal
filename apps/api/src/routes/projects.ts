@@ -434,25 +434,36 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       contractorName,
     },
   });
-  await mockOneDrive.ensureProjectTree(project.id);
   await audit("project.create", { userId: req.user!.id, entity: "Project", entityId: project.id });
-  try {
-    const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
-    const out = await provisionProjectSheetPack(project.id, req.user!.id);
-    await audit("project.provision_sheets", {
-      userId: req.user!.id,
-      entity: "Project",
-      entityId: project.id,
-      meta: { auto: true, steps: out.steps.map((s) => ({ key: s.key, ok: s.ok, skipped: s.skipped })) },
+
+  const memberIds: string[] = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+  for (const userId of memberIds) {
+    await prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId: project.id, userId } },
+      create: { projectId: project.id, userId, role: "member" },
+      update: {},
     });
-  } catch (err) {
-    console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
   }
+  const vendorIds: string[] = Array.isArray(req.body.vendorIds) ? req.body.vendorIds : [];
+  for (const vendorId of vendorIds) {
+    await prisma.projectVendor.upsert({
+      where: { projectId_vendorId: { projectId: project.id, vendorId } },
+      create: { projectId: project.id, vendorId, assignedVia: "Project setup" },
+      update: {},
+    });
+  }
+  await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId: project.id, userId: req.user!.id } },
+    create: { projectId: project.id, userId: req.user!.id, role: "office" },
+    update: {},
+  });
+
   try {
-    const { seedStandardCommsMatrix } = await import("../services/commsMatrixSeed.js");
-    await seedStandardCommsMatrix(project.id);
+    const { completeProjectSetup } = await import("../services/completeProjectSetup.js");
+    await completeProjectSetup(project.id, req.user!.id);
   } catch (err) {
-    console.error("Auto comms matrix seed failed:", err instanceof Error ? err.message : err);
+    console.error("Project setup pack failed:", err instanceof Error ? err.message : err);
+    await mockOneDrive.ensureProjectTree(project.id).catch(() => null);
   }
   res.status(201).json(project);
 });
@@ -534,6 +545,11 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
       location: true,
       clientContactName: true,
       clientEmail: true,
+      clientPhone: true,
+      clientAddress: true,
+      clientGst: true,
+      designConsultant: true,
+      contractorName: true,
     },
   });
   if (!project) return res.status(404).json({ error: "Not found" });
@@ -600,6 +616,86 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
     })),
     bidDisciplines: parseDisciplinesJson(project.bidDisciplinesJson) || defaultDisciplines(),
   });
+});
+
+projectsRouter.get("/:id/setup-status", requireRoles("admin", "office"), async (req, res) => {
+  const { getProjectSetupStatus } = await import("../services/completeProjectSetup.js");
+  const status = await getProjectSetupStatus(req.params.id);
+  if (!status) return res.status(404).json({ error: "Not found" });
+  res.json(status);
+});
+
+projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.id;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const vendorIds: string[] = Array.isArray(req.body?.vendorIds) ? req.body.vendorIds.map(String) : [];
+  const replaceKinds = new Set(["Consultant", "Contractor", "Designer", "Vendor"]);
+
+  for (const vendorId of vendorIds) {
+    await prisma.projectVendor.upsert({
+      where: { projectId_vendorId: { projectId, vendorId } },
+      create: { projectId, vendorId, assignedVia: "Project setup" },
+      update: {},
+    });
+  }
+
+  const assigned = await prisma.projectVendor.findMany({
+    where: { projectId },
+    include: { vendor: { select: { id: true, partyType: true } } },
+  });
+  const selected = new Set(vendorIds);
+  const toDrop = assigned.filter((pv) => replaceKinds.has(pv.vendor.partyType) && !selected.has(pv.vendorId));
+  if (toDrop.length) {
+    await prisma.projectVendor.deleteMany({ where: { id: { in: toDrop.map((p) => p.id) } } });
+  }
+
+  const firstConsultant = await prisma.projectVendor.findFirst({
+    where: { projectId, vendor: { partyType: { in: ["Consultant", "Designer"] } } },
+    include: { vendor: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const firstContractor = await prisma.projectVendor.findFirst({
+    where: { projectId, vendor: { partyType: { in: ["Contractor", "Vendor"] } } },
+    include: { vendor: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      ...(firstConsultant ? { designConsultant: firstConsultant.vendor.name } : {}),
+      ...(firstContractor ? { contractorName: firstContractor.vendor.name } : {}),
+    },
+  });
+
+  await audit("project.assign_parties", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: projectId,
+    meta: { vendorIds, dropped: toDrop.length },
+  });
+  res.json({ ok: true, assigned: vendorIds.length, dropped: toDrop.length });
+});
+
+projectsRouter.post("/:id/complete-setup", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { completeProjectSetup } = await import("../services/completeProjectSetup.js");
+  const out = await completeProjectSetup(project.id, req.user!.id);
+  await audit("project.complete_setup", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: {
+      folders: out.folders.count,
+      contacts: out.comms.contacts.created,
+      clientPortals: out.clientPortals.length,
+      contractorPortals: out.contractorPortals.length,
+      dpr: out.reports.dpr.created,
+      wpr: out.reports.wpr.created,
+    },
+  });
+  res.json(out);
 });
 
 projectsRouter.get("/:id", async (req, res) => {

@@ -64,15 +64,22 @@ export default function CommsPage() {
 
     if (canEdit && techContacts.length === 0 && commContacts.length === 0) {
       try {
-        await api(`/api/comms/contacts/${id}/seed-bpcl`, {
-          method: "POST",
-          token,
-          body: JSON.stringify({ force: false, both: true }),
-        });
-        const [tech2, comm2] = await Promise.all([
-          api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }),
-          api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }),
+        await api(`/api/comms/contacts/${id}/sync-from-directory`, { method: "POST", token }).catch(() => null);
+        let [tech2, comm2] = await Promise.all([
+          api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() => []),
+          api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }).catch(() => []),
         ]);
+        if (!tech2.length && !comm2.length) {
+          await api(`/api/comms/contacts/${id}/seed-bpcl`, {
+            method: "POST",
+            token,
+            body: JSON.stringify({ force: false, both: true }),
+          });
+          [tech2, comm2] = await Promise.all([
+            api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }),
+            api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }),
+          ]);
+        }
         setContacts(matrixKind === "COMMERCIAL" ? comm2 : tech2);
         const allEmails = [...tech2, ...comm2]
           .filter((r: any) => !r.isSectionHeader && r.email)

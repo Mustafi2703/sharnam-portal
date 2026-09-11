@@ -273,8 +273,8 @@ export default function CrmPage() {
 
       if (res.alreadyConverted) {
         setConvertLead(null);
-        setMsg(`Lead already linked to ${res.project.code} — opening bid setup.`);
-        navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+        setMsg(`Lead already linked to ${res.project.code} — opening project setup.`);
+        navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
         await load();
         return;
       }
@@ -303,7 +303,7 @@ export default function CrmPage() {
             `Project ${res.project.code} created. Bid package failed: ${err instanceof Error ? err.message : "unknown"} — open Bid desk to set up manually.`,
           );
           setConvertLead(null);
-          navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+          navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
           await load();
           return;
         }
@@ -311,13 +311,11 @@ export default function CrmPage() {
 
       setConvertLead(null);
       if (bidPackageId) {
-        setMsg(`Project ${res.project.code} created with sheets, comms matrix, and discipline-wise bid package.`);
-        navigate(`/crm/bids/${bidPackageId}`);
+        setMsg(`Project ${res.project.code} created. Finish team, comms, and portals on Project setup — bid package is ready.`);
+        navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
       } else {
-        setMsg(
-          `Project ${res.project.code} created with sheets + comms matrix. Select 2+ contractors on convert to auto-open bids — or set up from Bid desk.`,
-        );
-        navigate(`/crm/bids?projectId=${res.project.id}&leadId=${leadId}`);
+        setMsg(`Project ${res.project.code} created. Assign parties and complete setup (portals, folders, DPR, WPR).`);
+        navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
       }
       await load();
     } catch (err) {

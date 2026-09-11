@@ -551,39 +551,11 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
     update: {},
   });
 
-  const { mockOneDrive } = await import("../services/mockOneDrive.js");
-  await mockOneDrive.ensureProjectTree(project.id);
   try {
-    const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
-    await provisionProjectSheetPack(project.id, req.user!.id);
+    const { completeProjectSetup } = await import("../services/completeProjectSetup.js");
+    await completeProjectSetup(project.id, req.user!.id);
   } catch (err) {
-    console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
-  }
-  try {
-    const { seedStandardCommsMatrix } = await import("../services/commsMatrixSeed.js");
-    await seedStandardCommsMatrix(project.id);
-  } catch (err) {
-    console.error("Auto comms matrix seed failed:", err instanceof Error ? err.message : err);
-  }
-
-  if (req.body.clientEmail) {
-    try {
-      const { ensureClientPortalLogin } = await import("../services/crmVendorCredentials.js");
-      const login = await ensureClientPortalLogin({
-        email: String(req.body.clientEmail),
-        name: String(req.body.clientContactName || req.body.clientName || name),
-        businessPhone: req.body.clientPhone ? String(req.body.clientPhone) : null,
-      });
-      if (login?.userId) {
-        await prisma.projectMember.upsert({
-          where: { projectId_userId: { projectId: project.id, userId: login.userId } },
-          create: { projectId: project.id, userId: login.userId, role: "client" },
-          update: { role: "client" },
-        });
-      }
-    } catch (err) {
-      console.warn("Client portal login skipped:", err instanceof Error ? err.message : err);
-    }
+    console.error("Project setup pack failed:", err instanceof Error ? err.message : err);
   }
 
   res.status(201).json({ project, leadId: lead.id });

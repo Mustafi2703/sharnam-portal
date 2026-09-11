@@ -98,6 +98,55 @@ commsRouter.delete("/contacts/:id", requireRoles("admin", "office"), async (req:
   res.json({ ok: true });
 });
 
+/** Create empty Client / PMC / Consultant / Contractor sections on both matrices. */
+commsRouter.post("/contacts/:projectId/scaffold", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { ensureMatrixScaffold } = await import("../services/syncCommsFromDirectory.js");
+  const out = await ensureMatrixScaffold(projectId);
+  await audit("comms.contact.scaffold", { userId: req.user!.id, entity: "Project", entityId: projectId, meta: out });
+  res.json({ ok: true, ...out });
+});
+
+/** Fill a matrix row from project setup — all fields, optional user/vendor in directory. */
+commsRouter.post("/contacts/:projectId/from-setup", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  try {
+    const { addSetupMatrixContact } = await import("../services/syncCommsFromDirectory.js");
+    const out = await addSetupMatrixContact(projectId, req.body || {});
+    await audit("comms.contact.from_setup", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: projectId,
+      meta: { email: out.email, section: out.orgSection, contacts: out.contacts.length },
+    });
+    res.status(201).json({ ok: true, ...out });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not add matrix row" });
+  }
+});
+
+/** Import CRM / project directory people into the in-project comms contact matrix. */
+commsRouter.post("/contacts/:projectId/sync-from-directory", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { seedStandardCommsMatrix } = await import("../services/commsMatrixSeed.js");
+  const roleFlows = await seedStandardCommsMatrix(projectId);
+  const { syncCommsContactsFromDirectory } = await import("../services/syncCommsFromDirectory.js");
+  const contacts = await syncCommsContactsFromDirectory(projectId);
+  await audit("comms.contact.sync_directory", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: projectId,
+    meta: { roleFlows, ...contacts },
+  });
+  res.json({ ok: true, roleFlows, ...contacts });
+});
+
 /** Seed exact BPCL TECHNICAL + COMMERCIAL matrices from Communication Matrix_BPCL (2).xlsx */
 commsRouter.post("/contacts/:projectId/seed-bpcl", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;

@@ -19,6 +19,7 @@ export async function seedWprSections(
     project,
     stakeholders,
     matrix,
+    matrixContacts,
     budgetWbs,
     poList,
     hindrance,
@@ -56,6 +57,11 @@ export async function seedWprSections(
       take: 40,
     }),
     prisma.communicationMatrix.findMany({ where: { projectId, isActive: true }, take: 40 }),
+    prisma.communicationContact.findMany({
+      where: { projectId, isSectionHeader: false, matrixKind: "TECHNICAL" },
+      orderBy: { sortOrder: "asc" },
+      take: 60,
+    }),
     prisma.costBudgetLine.findMany({ where: { projectId }, orderBy: [{ srNo: "asc" }], take: 80 }),
     prisma.purchaseOrder.findMany({ where: { projectId }, take: 40 }),
     prisma.progressHindrance.findMany({ where: { projectId }, take: 40 }),
@@ -179,7 +185,16 @@ export async function seedWprSections(
   const communicationMatrix: WprSection = {
     title: DEFAULT_WPR_TITLES.communicationMatrix,
     headers: ["Communication Type", "From role", "To role", "Channel", "SLA"],
-    rows: matrix.map((r: any) => [r.communicationType, r.fromRole, r.toRole, r.channel, r.slaDays ?? ""]),
+    rows: [
+      ...matrix.map((r: any) => [r.communicationType, r.fromRole, r.toRole, r.channel, r.slaDays ?? ""]),
+      ...matrixContacts.map((r: any) => [
+        r.orgSection || "Contact",
+        r.personName || "",
+        r.mailRole || "CC",
+        "Email",
+        r.email || "",
+      ]),
+    ],
   };
 
   const capexSec: WprSection = {

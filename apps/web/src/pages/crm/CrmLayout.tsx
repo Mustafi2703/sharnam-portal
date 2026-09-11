@@ -21,9 +21,12 @@ export default function CrmLayout() {
   const isVendor = user?.role === "vendor";
   const tools = isVendor ? CRM_VENDOR_TOOLS : CRM_TOOLS;
 
-  const activeTool = CRM_TOOLS.find((t) => toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects"));
+  const activeTool = CRM_TOOLS.find((t) =>
+    toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup")
+  );
 
   const onBids = loc.pathname.startsWith("/crm/bids");
+  const onSetup = loc.pathname.startsWith("/crm/setup");
   const onBidDetail = /\/crm\/bids\/[^/]+/.test(loc.pathname);
   const onProposalEdit = /\/crm\/proposals\/(new|[^/]+)/.test(loc.pathname);
 
@@ -37,7 +40,7 @@ export default function CrmLayout() {
     activeTool?.subtitle ||
     (isVendor
       ? "Fill R2 discipline BOQs in-portal — no separate sheet maker."
-      : "Leads, comparative bids, and PMC proposals — one desk.");
+      : "Project setup, leads, comparative bids, and PMC proposals — one desk.");
 
   return (
     <div
@@ -106,13 +109,13 @@ export default function CrmLayout() {
                   {section.tools.map((t) => {
                     const to = `/crm/${t.to}`;
                     const active =
-                      toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects") ||
+                      toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup") ||
                       (t.to === "proposals" && loc.pathname.startsWith("/crm/proposals"));
                     return (
                       <NavLink
                         key={t.to}
                         to={to}
-                        end={t.to === "leads" || t.to === "projects"}
+                        end={t.to === "leads" || t.to === "projects" || t.to === "setup"}
                         className={() => tabClass(active)}
                         style={active ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined}
                       >
@@ -139,6 +142,19 @@ export default function CrmLayout() {
             </span>
             <span>
               <strong className="text-ink font-semibold">4.</strong> Compare & award L1
+            </span>
+          </div>
+        )}
+        {onSetup && !isVendor && (
+          <div className="module-hub__workflow border-t border-line bg-sand/80 px-3 sm:px-5 py-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
+            <span>
+              <strong className="text-ink font-semibold">1.</strong> Project card · client location · consultants & contractors
+            </span>
+            <span>
+              <strong className="text-ink font-semibold">2.</strong> Fill Technical + Commercial matrix (add users / vendors)
+            </span>
+            <span>
+              <strong className="text-ink font-semibold">3.</strong> Launch portals, folders, DPR, WPR
             </span>
           </div>
         )}

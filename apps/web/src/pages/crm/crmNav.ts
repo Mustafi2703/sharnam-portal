@@ -20,9 +20,10 @@ export const CRM_SECTIONS: CrmSection[] = [
     id: "pipeline",
     label: "Pipeline",
     tools: [
+      { to: "setup", label: "Project setup", subtitle: "Create the delivery project · assign parties · comms matrix · client & contractor portals · DPR / WPR." },
       { to: "leads", label: "Leads", subtitle: "Market register · filter · convert to SPDC delivery project." },
       { to: "proposals", label: "Proposals", subtitle: "PMC quotation register, status log, and letter export." },
-      { to: "projects", label: "Projects register", subtitle: "Delivery projects from converted leads — edit client card, open Master for setup." },
+      { to: "projects", label: "Projects register", subtitle: "Delivery projects from converted leads — open Project setup for parties, portals, and comms." },
     ],
   },
   {
