@@ -42,6 +42,12 @@ export async function seedWprSections(
     dprSnaps,
     cops,
     materialInvoices,
+    valueAdditions,
+    procurementLines,
+    siteMaterials,
+    prRequisitions,
+    invoiceTrackers,
+    sorStats,
   ] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.projectMember.findMany({
@@ -78,7 +84,7 @@ export async function seedWprSections(
       take: 80,
     }),
     prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 40 }),
-    prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
+    prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 200 }),
     prisma.projectPhoto.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" },
@@ -129,6 +135,12 @@ export async function seedWprSections(
     }),
     prisma.certificateOfPayment.findMany({ where: { projectId }, take: 20, orderBy: { certificateDate: "desc" } }),
     prisma.financeMaterialInvoice.findMany({ where: { projectId }, take: 30, orderBy: { invoiceDate: "desc" } }),
+    prisma.progressValueAddition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 40 }),
+    prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 40 }),
+    prisma.siteMaterialStock.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 40 }),
+    prisma.progressPurchaseRequisition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
+    prisma.progressInvoiceTracker.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
+    prisma.progressSorStat.findMany({ where: { projectId }, take: 20 }),
   ]);
 
   void submittals;
@@ -205,16 +217,46 @@ export async function seedWprSections(
 
   const prTracker: WprSection = {
     title: DEFAULT_WPR_TITLES.prTracker,
-    headers: ["Sr", "PO No", "Vendor", "Trade / Package", "Original ₹", "Certified ₹", "Status"],
-    rows: poList.map((p: any, i: number) => [
-      i + 1,
-      p.poNumber || "",
-      p.vendorName || "",
-      p.workTrade || p.packageName || "",
-      p.originalValue || 0,
-      p.totalCertified || 0,
-      p.status || "",
+    headers: ["Sr", "PR No", "Type", "Discipline", "Amount ₹", "PO No", "Status"],
+    rows:
+      prRequisitions.length > 0
+        ? prRequisitions.map((p: any) => [
+            p.srNo || "",
+            p.prNumber || "",
+            p.prType || "",
+            p.discipline || "",
+            p.amount || 0,
+            p.poNumber || "",
+            p.poNumber ? "PO linked" : "Open",
+          ])
+        : poList.map((p: any, i: number) => [
+            i + 1,
+            p.poNumber || "",
+            "PO",
+            p.workTrade || p.packageName || "",
+            p.originalValue || 0,
+            p.poNumber || "",
+            p.status || "",
+          ]),
+    notes: prRequisitions.length ? "From Finance → PR Tracker (client SAP PR register · ISO 05.01)." : "Import PR Tracker-52.xlsx under Finance → PR Tracker.",
+  };
+
+  const invoiceTracker: WprSection = {
+    title: DEFAULT_WPR_TITLES.invoiceTracker,
+    headers: ["Sr", "Name of work", "Invoice No", "PO", "Vendor", "Invoice date", "Amount excl. GST ₹", "COP status"],
+    rows: invoiceTrackers.map((r: any) => [
+      r.srNo || "",
+      r.workName || "",
+      r.invoiceNumber || "",
+      r.poNumber || "",
+      r.vendorName || "",
+      r.invoiceDate ? isoDate(r.invoiceDate) : "",
+      r.amountExclGst || 0,
+      r.copStatus || "Open",
     ]),
+    notes: invoiceTrackers.length
+      ? "Invoice processing tracker — from Progress → WPR trackers (Invoice tab)."
+      : "Import PR Tracker workbook (Invoicen Tracker sheet) or add rows from the Invoice popup.",
   };
 
   const hindranceSec: WprSection = {
@@ -296,20 +338,30 @@ export async function seedWprSections(
 
   const procurement: WprSection = {
     title: DEFAULT_WPR_TITLES.procurement,
-    headers: ["Sr", "Package / PO", "Vendor", "Status", "Value (₹)"],
+    headers: ["Sr", "Work package", "Item", "Stakeholder", "Vendor appointed", "Target inquiry", "Priority"],
     rows:
-      poList.length > 0
-        ? poList.map((po: any, i: number) => [
-            i + 1,
-            po.packageName || po.workTrade || po.poNumber,
-            po.vendorName || "—",
-            po.status || "Active",
-            po.amendedValue || po.originalValue || 0,
+      procurementLines.length > 0
+        ? procurementLines.map((r: any) => [
+            r.srNo || "",
+            r.workPackage || "",
+            (r.itemDescription || "").slice(0, 80),
+            r.responsibleStakeholder || "",
+            r.vendorAppointed ? "Yes" : "No",
+            r.targetInquiryDate ? isoDate(r.targetInquiryDate) : "",
+            r.priorityLevel || "",
           ])
-        : [
-            [1, "Civil & Structural", "Main contractor", "Active", "—"],
-            [2, "MEP packages", "Vendor pool", "In progress", "—"],
-          ],
+        : poList.length > 0
+          ? poList.map((po: any, i: number) => [
+              i + 1,
+              po.packageName || po.workTrade || po.poNumber,
+              po.workTrade || "",
+              po.vendorName || "—",
+              po.status === "Active" ? "Yes" : "No",
+              po.poDate ? isoDate(po.poDate) : "",
+              "",
+            ])
+          : [[1, "Civil & Structural", "Main contractor package", "Client", "No", "", 1]],
+    notes: procurementLines.length ? "Procurement tracker — inquiry float & vendor appointment." : "Import WPR client pack or add POs under Finance.",
   };
 
   const milestonesSec: WprSection = {
@@ -413,16 +465,21 @@ export async function seedWprSections(
 
   const quality: WprSection = {
     title: DEFAULT_WPR_TITLES.quality,
-    headers: ["Week", "Activity", "Discipline", "Contractor", "PMC", "Client", "Status"],
-    rows: qap.map((q: any) => [
-      q.weekLabel || "",
-      q.activity || "",
-      q.discipline || "",
-      q.contractorOk ? "Yes" : "No",
-      q.pmcOk ? "Yes" : "No",
-      q.clientOk ? "Yes" : "No",
-      q.status || "",
-    ]),
+    headers: sorStats.length
+      ? ["Sr", "Observation", "Total", "Open", "Closed"]
+      : ["Week", "Activity", "Discipline", "Contractor", "PMC", "Client", "Status"],
+    rows: sorStats.length
+      ? sorStats.map((s: any, i: number) => [i + 1, s.observation || "", s.total ?? 0, s.openCount ?? 0, s.closedCount ?? 0])
+      : qap.map((q: any) => [
+          q.weekLabel || "",
+          q.activity || "",
+          q.discipline || "",
+          q.contractorOk ? "Yes" : "No",
+          q.pmcOk ? "Yes" : "No",
+          q.clientOk ? "Yes" : "No",
+          q.status || "",
+        ]),
+    notes: sorStats.length ? "Quality statistics — Site Observation / NCR counts (WPR client format)." : "QAP weekly sign-off rows.",
   };
 
   const cubeTest: WprSection = {
@@ -505,22 +562,46 @@ export async function seedWprSections(
 
   const materialStock: WprSection = {
     title: DEFAULT_WPR_TITLES.materialStock,
-    headers: ["Material / Invoice", "Unit", "Received (₹ w/o GST)", "Received (₹ w/ GST)", "Net payable", "Date"],
+    headers: ["Sr", "Material", "Total purchase", "Balance", "Unit", "Location", "Date"],
     rows:
-      materialInvoices.length > 0
-        ? materialInvoices.slice(0, 12).map((m: any) => [
-            m.description || m.sheetCategory || m.taxInvoiceNo || "Material",
-            "Lot",
-            m.amountWithoutGst || 0,
-            m.amountWithGst || 0,
-            m.netPayable || 0,
-            isoDate(m.receivedDate || m.invoiceDate),
+      siteMaterials.length > 0
+        ? siteMaterials.map((m: any) => [
+            m.srNo || "",
+            m.materialName || "",
+            m.totalPurchase || 0,
+            m.balanceQuantity || 0,
+            m.unit || "",
+            m.location || "",
+            m.recordDate ? isoDate(m.recordDate) : "",
           ])
-        : [
-            ["Cement / steel (site)", "MT", "—", "—", "—", isoDate(weekEnd)],
-            ["PEB supply invoices", "Lot", "—", "—", "—", isoDate(weekEnd)],
-          ],
-    notes: materialInvoices.length ? "From Finance → Material / tax invoices register." : "Fill from site stock register or import Payment Summary material sheets.",
+        : materialInvoices.length > 0
+          ? materialInvoices.slice(0, 12).map((m: any, i: number) => [
+              i + 1,
+              m.description || m.sheetCategory || m.taxInvoiceNo || "Material",
+              m.amountWithoutGst || 0,
+              "—",
+              "Lot",
+              "Finance",
+              isoDate(m.receivedDate || m.invoiceDate),
+            ])
+          : [["1", "Cement / steel (site)", "—", "—", "MT", "Site", isoDate(weekEnd)]],
+    notes: siteMaterials.length ? "Site materials stock register." : "Import Site Materials workbook or Finance material invoices.",
+  };
+
+  const valueAdditionSec: WprSection = {
+    title: DEFAULT_WPR_TITLES.valueAddition,
+    headers: ["Sr", "Block", "Package", "VE points", "Cost ₹", "Earlier quote ₹", "Final ₹", "Approval"],
+    rows: valueAdditions.map((v: any) => [
+      v.srNo || "",
+      v.block || "",
+      v.packageName || "",
+      (v.valueEngineeringPoints || v.suggestions || "").slice(0, 120),
+      v.cost || 0,
+      v.earlierQuoted || 0,
+      v.finalPrice || 0,
+      v.approvalAuthority || v.status || "",
+    ]),
+    notes: valueAdditions.length ? "Value engineering / cost-time-quality improvements." : "Import WPR client pack → Value Addition sheet.",
   };
 
   const photoEntries = photos
@@ -556,22 +637,24 @@ export async function seedWprSections(
       [6, "Critical Areas"],
       [7, "Project CAPEX"],
       [8, "PR Tracker"],
-      [9, "Hindrance Register"],
-      [10, "Risk Register"],
-      [11, "Legal Approvals"],
-      [12, "Drawing Register / DCI"],
-      [13, "Design Status"],
-      [14, "Procurement Status"],
-      [15, "Project Milestone Schedule"],
-      [16, "Manpower Histogram"],
-      [17, "Weekly Executed Plan"],
-      [18, "Cashflow Overview"],
-      [19, "Quality Updates (QAP)"],
-      [20, "Cube Test"],
-      [21, "Safety Updates"],
-      [22, "Planned vs Actual"],
-      [23, "Material Stock"],
-      [24, "Progress Pictures"],
+      [9, "Invoice Processing Tracker"],
+      [10, "Hindrance Register"],
+      [11, "Risk Register"],
+      [12, "Legal Approvals"],
+      [13, "Drawing Register / DCI"],
+      [14, "Design Status"],
+      [15, "Procurement Status"],
+      [16, "Project Milestone Schedule"],
+      [17, "Manpower Histogram"],
+      [18, "Weekly Executed Plan"],
+      [19, "Cashflow Overview"],
+      [20, "Quality Updates"],
+      [21, "Cube Test"],
+      [22, "Safety / HSE Updates"],
+      [23, "Planned vs Actual"],
+      [24, "Value Addition"],
+      [25, "Material Stock"],
+      [26, "Progress Pictures"],
     ],
   };
 
@@ -661,6 +744,7 @@ export async function seedWprSections(
       criticalAreas,
       capex: capexSec,
       prTracker,
+      invoiceTracker,
       hindrance: hindranceSec,
       risk: riskSec,
       legal: legalSec,
@@ -675,6 +759,7 @@ export async function seedWprSections(
       cubeTest,
       safety: safetySec,
       plannedVsActual: plannedVsActualSec,
+      valueAddition: valueAdditionSec,
       materialStock,
       progressPictures,
     },

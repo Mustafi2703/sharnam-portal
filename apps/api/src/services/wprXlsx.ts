@@ -30,6 +30,7 @@ export type WprSections = {
   criticalAreas?: WprSection;
   capex?: WprSection;
   prTracker?: WprSection;
+  invoiceTracker?: WprSection;
   hindrance?: WprSection;
   risk?: WprSection;
   legal?: WprSection;
@@ -44,6 +45,7 @@ export type WprSections = {
   cubeTest?: WprSection;
   safety?: WprSection;
   plannedVsActual?: WprSection;
+  valueAddition?: WprSection;
   materialStock?: WprSection;
   progressPictures?: WprSection;
 };
@@ -81,6 +83,7 @@ export const SECTION_ORDER: (keyof WprSections)[] = [
   "criticalAreas",
   "capex",
   "prTracker",
+  "invoiceTracker",
   "hindrance",
   "risk",
   "legal",
@@ -95,6 +98,7 @@ export const SECTION_ORDER: (keyof WprSections)[] = [
   "cubeTest",
   "safety",
   "plannedVsActual",
+  "valueAddition",
   "materialStock",
   "progressPictures",
 ];
@@ -109,21 +113,23 @@ export const DEFAULT_WPR_TITLES: Record<keyof WprSections, string> = {
   projectDashboard: "Project Dashboard",
   criticalAreas: "Critical Areas",
   capex: "Project CAPEX",
-  prTracker: "Project PR Tracker",
-  hindrance: "Hindrance Register",
+  prTracker: "PR Tracker",
+  invoiceTracker: "Invoice Processing Tracker",
+  hindrance: "Hinderance Register",
   risk: "Risk Register",
   legal: "Legal Approval Tracker",
   drawingRegister: "Drawing Register (DCI)",
-  designStatus: "Design Status",
-  procurement: "Procurement Status",
+  designStatus: "Design status",
+  procurement: "Procurement tracker",
   milestones: "Project Milestone Schedule",
-  manpowerHistogram: "Weekly Manpower Histogram",
+  manpowerHistogram: "Weekly Manpower",
   weeklyExecuted: "Weekly Executed Plan",
-  cashflow: "Project Cashflow Overview",
-  quality: "Weekly Quality Updates (QAP)",
+  cashflow: "Project Cashflow",
+  quality: "Quality Statistic",
   cubeTest: "Cube Test",
-  safety: "Weekly Safety Updates",
-  plannedVsActual: "Planned vs. Actual",
+  safety: "HSE Statistic",
+  plannedVsActual: "Planned Vs Actual",
+  valueAddition: "Value Addition",
   materialStock: "Material Stock",
   progressPictures: "Project Progress Pictures",
 };

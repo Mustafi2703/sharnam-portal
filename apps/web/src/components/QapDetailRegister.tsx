@@ -10,7 +10,8 @@ import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
 import { RegisterScrollArea } from "./RegisterScrollArea";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { RegisterBrandHeader } from "./RegisterBrandHeader";
-import { Badge, Button, Card, Select } from "./ui";
+import { RegisterEntryModal } from "./RegisterEntryModal";
+import { Badge, Button, Card, Input, Select } from "./ui";
 
 function formatDayLabel(raw: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
@@ -86,6 +87,8 @@ export function QapDetailRegister({
   const { localRows, mergeRow } = useLocalRegisterRows(rows);
   const [weekFilter, setWeekFilter] = useState("");
   const [patchErr, setPatchErr] = useState("");
+  const [editRow, setEditRow] = useState<QapRow | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
 
   const weeks = useMemo(() => {
     const set = new Set<string>();
@@ -152,9 +155,36 @@ export function QapDetailRegister({
     setPatchErr("");
     try {
       await api(`/api/checklist/project/${projectId}/qap/${id}`, { method: "DELETE", token });
+      if (editRow?.id === id) setEditRow(null);
       await onUpdated();
     } catch (err) {
       setPatchErr(err instanceof Error ? err.message : "Delete failed");
+    }
+  }
+
+  async function saveEdit() {
+    if (!editRow) return;
+    setEditBusy(true);
+    setPatchErr("");
+    try {
+      await patchRow(editRow.id, {
+        srNo: editRow.srNo || null,
+        section: editRow.section || editRow.activity,
+        activity: editRow.section || editRow.activity,
+        description: editRow.description || "",
+        frequency: editRow.frequency || null,
+        codeOfConformance: editRow.codeOfConformance || null,
+        testAgency: editRow.testAgency || null,
+        contractorPerformer: editRow.contractorPerformer || null,
+        contractorChecker: editRow.contractorChecker || null,
+        pmcRole: editRow.pmcRole || null,
+        clientRole: editRow.clientRole || null,
+        records: editRow.records || null,
+        remarks: editRow.remarks || null,
+      }, true);
+      setEditRow(null);
+    } finally {
+      setEditBusy(false);
     }
   }
 
@@ -259,7 +289,7 @@ export function QapDetailRegister({
                   <th rowSpan={2} className="text-left">
                     Status
                   </th>
-                  {canEdit && <th rowSpan={2} className="w-12" />}
+                  {canEdit && <th rowSpan={2} className="w-28">Edit / Delete</th>}
                 </tr>
                 <tr>
                   <th className="spdc-th-contractor spdc-th-sub">Performer</th>
@@ -419,7 +449,7 @@ export function QapDetailRegister({
                                   checked={checked}
                                   onChange={(e) => {
                                     const next = { ...parseDaily(q), [d]: e.target.checked };
-                                    void patchRow(q.id, { dailyChecks: next });
+                                    void patchRow(q.id, { dailyChecks: next }, true);
                                   }}
                                 />
                               ) : checked ? (
@@ -444,10 +474,21 @@ export function QapDetailRegister({
                           )}
                         </td>
                         {canEdit && (
-                          <td className="align-top">
-                            <Button type="button" variant="ghost" className="!text-xs !py-0.5" onClick={() => void deleteRow(q.id)}>
-                              Del
-                            </Button>
+                          <td className="align-top whitespace-nowrap">
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-brand mr-2"
+                              onClick={() => setEditRow({ ...q })}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-danger"
+                              onClick={() => void deleteRow(q.id)}
+                            >
+                              Delete
+                            </button>
                           </td>
                         )}
                       </tr>
@@ -466,6 +507,45 @@ export function QapDetailRegister({
           </RegisterScrollArea>
         </div>
       </Card>
+
+      <RegisterEntryModal
+        open={Boolean(canEdit && editRow)}
+        title={`Edit QAP line${editRow?.srNo ? ` · Sr ${editRow.srNo}` : ""}`}
+        onClose={() => setEditRow(null)}
+        onSave={() => void saveEdit()}
+        saving={editBusy}
+        size="3xl"
+        saveLabel="Save line"
+      >
+        {editRow && (
+          <div className="register-form-grid register-form-grid--wide">
+            {(
+              [
+                ["srNo", "Sr. No."],
+                ["section", "Activity / section"],
+                ["description", "Description"],
+                ["frequency", "Frequency of check"],
+                ["codeOfConformance", "Code of conformance"],
+                ["testAgency", "Test agency"],
+                ["contractorPerformer", "Contractor performer"],
+                ["contractorChecker", "Contractor checker"],
+                ["pmcRole", "PMC checker (R / W / A)"],
+                ["clientRole", "Client checker (W / RA)"],
+                ["records", "Records"],
+                ["remarks", "Remarks (Done / Complete marks status)"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="register-form-field">
+                <span>{label}</span>
+                <Input
+                  value={String(editRow[key] ?? "")}
+                  onChange={(e) => setEditRow({ ...editRow, [key]: e.target.value })}
+                />
+              </label>
+            ))}
+          </div>
+        )}
+      </RegisterEntryModal>
     </>
   );
 }

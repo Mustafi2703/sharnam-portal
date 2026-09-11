@@ -125,6 +125,7 @@ export async function loadWprChartPack(
     safetyCurrent,
     safetyPrev,
     ncrs,
+    sorStats,
   ] = await Promise.all([
     prisma.dprSnapshot.findMany({
       where: { projectId, logDate: { gte: start, lte: end } },
@@ -149,7 +150,7 @@ export async function loadWprChartPack(
     prisma.progressActivityLine.findMany({
       where: { projectId },
       orderBy: { srNo: "asc" },
-      take: 16,
+      take: 40,
     }),
     prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 20 }),
     prisma.qapActivity.findMany({
@@ -173,6 +174,7 @@ export async function loadWprChartPack(
       where: { projectId, OR: [{ status: "Open" }, { issueDate: { gte: start, lte: end } }] },
       take: 60,
     }),
+    prisma.progressSorStat.findMany({ where: { projectId }, take: 20 }),
   ]);
 
   const rangeDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
@@ -300,7 +302,13 @@ export async function loadWprChartPack(
     const st = (q.status || "Pending").trim();
     qapStatus.set(st, (qapStatus.get(st) || 0) + 1);
   }
-  const quality: WprPiePoint[] = [...qapStatus.entries()].map(([label, value]) => ({ label, value }));
+  let quality: WprPiePoint[] = [...qapStatus.entries()].map(([label, value]) => ({ label, value }));
+  if (!quality.length && sorStats.length) {
+    quality = sorStats.map((s) => ({
+      label: (s.observation || "Observation").slice(0, 28),
+      value: Number(s.closedCount || s.total || 0),
+    }));
+  }
   if (cubes.length) {
     quality.push({ label: "Cube tests (period)", value: cubes.length });
   }

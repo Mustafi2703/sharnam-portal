@@ -27,6 +27,7 @@ const SECTION_ORDER: string[] = [
   "criticalAreas",
   "capex",
   "prTracker",
+  "invoiceTracker",
   "hindrance",
   "risk",
   "legal",
@@ -41,6 +42,7 @@ const SECTION_ORDER: string[] = [
   "cubeTest",
   "safety",
   "plannedVsActual",
+  "valueAddition",
   "materialStock",
   "progressPictures",
 ];

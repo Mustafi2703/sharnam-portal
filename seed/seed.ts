@@ -2080,6 +2080,17 @@ async function main() {
   try {
     const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
     if (demoProject) {
+      const { importWprTrackerPack } = await import("../apps/api/src/services/wprTrackerPackImport.js");
+      const wprTrackers = await importWprTrackerPack(prisma, demoProject.id);
+      console.log("WPR client trackers imported:", wprTrackers);
+    }
+  } catch (e) {
+    console.warn("wprTrackerPackImport failed:", e instanceof Error ? e.message : e);
+  }
+
+  try {
+    const demoProject = await prisma.project.findUnique({ where: { code: "SPDC-DEMO-01" } });
+    if (demoProject) {
       const { dumpAllProjectLogs } = await import("../apps/api/src/services/logDump.js");
       const dump = await dumpAllProjectLogs(demoProject.id);
       console.log(

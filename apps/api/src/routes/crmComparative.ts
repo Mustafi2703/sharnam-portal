@@ -537,6 +537,47 @@ crmComparativeRouter.post(
   }
 );
 
+/** Clear a vendor BOQ upload so they can replace the file (slot stays assigned). */
+crmComparativeRouter.delete("/bid-packages/:id/vendor-boq/:slotId", async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+  const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
+  if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
+
+  const isOffice = req.user!.role === "admin" || req.user!.role === "office";
+  if (!isOffice && req.user!.role === "vendor") {
+    const vendorUser = await resolveVendorForUser(req.user!);
+    const ownsSlot =
+      vendorUser &&
+      (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name || !slot.vendorId);
+    if (!ownsSlot) return res.status(403).json({ error: "You can only clear your own BOQ" });
+    if (pkg.status !== "Open") return res.status(400).json({ error: "Package is not open for uploads" });
+  } else if (!isOffice) {
+    return res.status(403).json({ error: "Office access required" });
+  }
+
+  await prisma.crmVendorBoq.update({
+    where: { id: slot.id },
+    data: {
+      fileName: null,
+      storagePath: null,
+      sharePointUrl: null,
+      sheetId: null,
+      uploadedById: null,
+      uploadedAt: null,
+    },
+  });
+  await audit("crm.vendor_boq.clear", {
+    userId: req.user!.id,
+    entity: "CrmVendorBoq",
+    entityId: slot.id,
+    meta: { bidPackageId: pkg.id, discipline: slot.discipline, vendorLabel: slot.vendorLabel },
+  });
+  const recomputed = await recomputeAndSyncBidPackage(prisma, pkg.id);
+  res.json({ ok: true, uploadProgress: { done: recomputed.filledSlots, total: recomputed.totalSlots } });
+});
+
 /** Office / vendor — browse SharePoint procurement folders for this bid package. */
 crmComparativeRouter.get("/bid-packages/:id/sharepoint", async (req: AuthedRequest, res) => {
   const pkg = await prisma.crmBidPackage.findUnique({

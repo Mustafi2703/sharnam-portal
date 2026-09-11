@@ -1,10 +1,11 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { PageHeader } from "../../components/ui";
 import { MODULE_TOOLS, MODULE_META, type WorkspaceKey } from "../../workspaces";
 import { formatUiText } from "../../lib/formatUiText";
 import { useAuth } from "../../auth";
+import { moduleToolHref, openModuleToolWindow } from "../../lib/moduleToolWindow";
 
-/** Module hub — numbered tool cards with workflow hints (Procore-style desk). */
+/** Module hub — pick a tool; each card opens a dedicated edit window. */
 export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }) {
   const { id } = useParams();
   const { user } = useAuth();
@@ -26,40 +27,45 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
           </span>
           <div className="min-w-0 flex-1">
             <PageHeader
-              eyebrow={`${meta.title} module · Project desk`}
+              eyebrow={`${meta.title} module · Tool desk`}
               title={meta.title}
               subtitle={formatUiText(
-                `${meta.desc} Pick a tool below — each card opens a dedicated register or form. Upload sheets through modals; data saves to this project only.`
+                `${meta.desc} Open a tool in a new window to add rows, edit, and save. Close that window or use Back to hub to return here.`
               )}
             />
           </div>
         </div>
         <div className="module-hub__workflow border-t border-line bg-sand/80 px-5 sm:px-6 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
           <span>
-            <strong className="text-ink font-semibold">1.</strong> Select tool
+            <strong className="text-ink font-semibold">1.</strong> Open tool (new window)
           </span>
           <span>
-            <strong className="text-ink font-semibold">2.</strong> Enter / upload data
+            <strong className="text-ink font-semibold">2.</strong> Add row / section
           </span>
           <span>
-            <strong className="text-ink font-semibold">3.</strong> Review register
+            <strong className="text-ink font-semibold">3.</strong> Save — stays on this project
           </span>
           <span>
-            <strong className="text-ink font-semibold">4.</strong> Export or distribute
+            <strong className="text-ink font-semibold">4.</strong> Back to this desk
           </span>
         </div>
       </div>
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {tools.map((t, i) => {
-          const href = !t.to
-            ? `/projects/${id}`
-            : t.to.startsWith("/")
-              ? t.to
-              : `/projects/${id}/${t.to}${t.query ? `?${t.query}` : ""}`;
+          const href = moduleToolHref(id!, t.to, t.query);
           const ready = t.status === "ready";
           return (
-            <Link key={`${t.to}-${t.query || ""}-${t.label}`} to={href} className="module-hub__card group block h-full">
+            <a
+              key={`${t.to}-${t.query || ""}-${t.label}`}
+              href={href}
+              className="module-hub__card group block h-full"
+              onClick={(e) => {
+                e.preventDefault();
+                const w = openModuleToolWindow(href, t.label);
+                if (!w) window.location.assign(href);
+              }}
+            >
               <div
                 className={`h-full rounded-xl border bg-paper p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 ${
                   ready ? "border-dashed border-line opacity-90" : "border-line hover:border-brand/50"
@@ -70,14 +76,14 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
                     className="module-hub__step text-[11px] font-bold uppercase tracking-[0.12em] px-2 py-0.5 rounded-md"
                     style={{ background: `${meta.accent}18`, color: meta.accent }}
                   >
-                    Step {String(i + 1).padStart(2, "0")}
+                    Tool {String(i + 1).padStart(2, "0")}
                   </span>
                   <span
                     className={`text-[10px] font-mono uppercase tracking-wide shrink-0 px-2 py-0.5 rounded-full border ${
                       ready ? "text-warn border-warn/30 bg-warn/5" : "text-brand border-brand/25 bg-brand-soft/40"
                     }`}
                   >
-                    {ready ? "Placeholder" : t.sheet ? "Sheet-backed" : "Live"}
+                    {ready ? "Placeholder" : t.sheet ? "Sheet" : "Live"}
                   </span>
                 </div>
                 <div className="font-display text-base font-semibold text-ink group-hover:text-brand leading-snug">
@@ -88,15 +94,16 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
                 )}
                 {t.sheet && (
                   <p className="mt-2.5 text-[11px] font-mono text-steel-muted truncate rounded-md bg-sand px-2 py-1" title={t.sheet}>
-                    Template: {t.sheet}
+                    Sheet → {t.sheet}
                   </p>
                 )}
+                <p className="mt-2 text-[11px] text-steel-muted">Saves to this project only · add / edit / save in the tool window</p>
                 <div className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold text-brand flex items-center justify-between gap-2">
-                  <span>{ready ? "Open placeholder" : "Open tool"}</span>
-                  <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">→</span>
+                  <span>{ready ? "Open placeholder" : "Open in new window"}</span>
+                  <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">↗</span>
                 </div>
               </div>
-            </Link>
+            </a>
           );
         })}
       </div>

@@ -75,6 +75,7 @@ function VendorPackageCard({
   summary,
   highlighted,
   onUpload,
+  onClear,
   vendorView = false,
 }: {
   pkgId: string;
@@ -82,6 +83,7 @@ function VendorPackageCard({
   summary?: PackageSummary;
   highlighted?: boolean;
   onUpload: (slot: BidSlot, mode: "online" | "excel") => void;
+  onClear?: (slot: BidSlot) => void;
   vendorView?: boolean;
 }) {
   const head = pkgSlots[0];
@@ -180,8 +182,13 @@ function VendorPackageCard({
                 {s.fileName ? "Edit BOQ" : "Fill BOQ online"}
               </Button>
               <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => onUpload(s, "excel")}>
-                Upload Excel
+                {s.fileName ? "Replace Excel" : "Upload Excel"}
               </Button>
+              {s.fileName && onClear && (
+                <Button type="button" variant="ghost" className="!text-xs !py-1" onClick={() => onClear(s)}>
+                  Clear
+                </Button>
+              )}
             </div>
           </li>
         ))}
@@ -201,6 +208,7 @@ export default function CrmVendorBidsPage() {
   const [uploadSlot, setUploadSlot] = useState<BidSlot | null>(null);
   const [uploadMode, setUploadMode] = useState<"online" | "excel" | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [scope, setScope] = useState<"open" | "all">("open");
 
   function openUpload(slot: BidSlot, mode: "online" | "excel") {
     setUploadSlot(slot);
@@ -244,11 +252,16 @@ export default function CrmVendorBidsPage() {
     void load();
   }, [load]);
 
+  const visibleSlots = useMemo(() => {
+    if (scope === "all") return slots;
+    return slots.filter((s) => s.bidPackageStatus === "Open" || (s.bidPackageStatus === "Awarded" && s.isAwardedToYou));
+  }, [slots, scope]);
+
   const byProject = useMemo(() => {
     const groups: ProjectGroup[] = [];
     const index = new Map<string, ProjectGroup>();
 
-    for (const slot of slots) {
+    for (const slot of visibleSlots) {
       const key = slot.projectId || slot.projectCode || "unlinked";
       let group = index.get(key);
       if (!group) {
@@ -264,7 +277,7 @@ export default function CrmVendorBidsPage() {
       (group.packages[slot.bidPackageId] ||= []).push(slot);
     }
     return groups;
-  }, [slots]);
+  }, [visibleSlots]);
 
   const openPackageCount = useMemo(() => {
     const seen = new Set<string>();
@@ -274,7 +287,25 @@ export default function CrmVendorBidsPage() {
     return seen.size;
   }, [slots]);
 
-  const pendingUploads = useMemo(() => slots.filter((s) => !s.fileName && !s.uploadedAt).length, [slots]);
+  const pendingUploads = useMemo(
+    () => visibleSlots.filter((s) => s.bidPackageStatus === "Open" && !s.fileName && !s.uploadedAt).length,
+    [visibleSlots]
+  );
+
+  async function clearBoq(slot: BidSlot) {
+    if (!window.confirm(`Clear the uploaded BOQ for ${slot.disciplineLabel}? You can upload again.`)) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/crm/bid-packages/${slot.bidPackageId}/vendor-boq/${slot.id}`, { method: "DELETE", token });
+      setMsg(`Cleared ${slot.disciplineLabel}`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Clear failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function uploadBoq(e: FormEvent) {
     e.preventDefault();
@@ -326,12 +357,18 @@ export default function CrmVendorBidsPage() {
         <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-1">Contractor bid desk</p>
         <h2 className="font-display text-lg text-ink">Open packages & discipline BOQs</h2>
         <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-          Each project below lists bid packages assigned to you. Upload one R2 Excel per discipline, or fill BOQ online — PMC sees updates in Comparative Statement.
+          Only <strong>open</strong> packages and the disciplines assigned to your company are listed. Upload one R2 Excel per open discipline, or fill the BOQ online — PMC sees it on the comparative.
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
           <Badge tone="ok">{openPackageCount} open package{openPackageCount === 1 ? "" : "s"}</Badge>
           <Badge tone={pendingUploads ? "warn" : "neutral"}>{pendingUploads} pending upload{pendingUploads === 1 ? "" : "s"}</Badge>
-          <Badge tone="neutral">{slots.length} discipline slot{slots.length === 1 ? "" : "s"}</Badge>
+          <Badge tone="neutral">{visibleSlots.length} open discipline{visibleSlots.length === 1 ? "" : "s"}</Badge>
+          <Button type="button" variant={scope === "open" ? "primary" : "secondary"} className="!text-xs !py-1" onClick={() => setScope("open")}>
+            Open for me
+          </Button>
+          <Button type="button" variant={scope === "all" ? "primary" : "secondary"} className="!text-xs !py-1" onClick={() => setScope("all")}>
+            All assignments
+          </Button>
         </div>
       </Card>
 
@@ -346,6 +383,14 @@ export default function CrmVendorBidsPage() {
       </div>
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
+
+      {scope === "open" && !visibleSlots.length && slots.length > 0 && (
+        <Card>
+          <p className="text-sm text-steel-muted">
+            No packages are open for bids right now. Switch to <strong>All assignments</strong> to see awarded or closed packages.
+          </p>
+        </Card>
+      )}
 
       {!slots.length && (
         <Card>
@@ -389,6 +434,7 @@ export default function CrmVendorBidsPage() {
                 summary={summaries[pkgId]}
                 highlighted={focusPkgId === pkgId}
                 onUpload={openUpload}
+                onClear={(s) => void clearBoq(s)}
                 vendorView
               />
               {token && (

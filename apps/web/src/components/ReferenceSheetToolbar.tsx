@@ -8,6 +8,8 @@ type ReferenceSheetToolbarProps = {
   canEdit?: boolean;
   onAddRow?: () => void;
   addRowLabel?: string;
+  onAddSection?: () => void;
+  addSectionLabel?: string;
   /** When set, shows one button per row kind instead of a single + Add row. */
   addKinds?: { key: string; label: string }[];
   onAddKind?: (key: string) => void;
@@ -33,6 +35,8 @@ export function ReferenceSheetToolbar({
   canEdit,
   onAddRow,
   addRowLabel = "+ Add row",
+  onAddSection,
+  addSectionLabel = "+ Add section",
   addKinds,
   onAddKind,
   onUpload,
@@ -98,6 +102,11 @@ export function ReferenceSheetToolbar({
               </Button>
             ))}
           </div>
+        )}
+        {canEdit && onAddSection && (
+          <Button type="button" variant="secondary" onClick={onAddSection} disabled={busy}>
+            {formatUiText(addSectionLabel)}
+          </Button>
         )}
         {canEdit && onAddRow && !addKinds?.length && (
           <Button type="button" onClick={onAddRow} disabled={busy}>

@@ -132,6 +132,11 @@ model Project {
   activityLines           ProgressActivityLine[]
   scurvePoints            ProgressScurvePoint[]
   sorStats                ProgressSorStat[]
+  valueAdditions          ProgressValueAddition[]
+  procurementLines        ProgressProcurementLine[]
+  siteMaterialStocks      SiteMaterialStock[]
+  purchaseRequisitions    ProgressPurchaseRequisition[]
+  invoiceTrackers         ProgressInvoiceTracker[]
   qapActivities           QapActivity[]
   cubeTests               CubeTest[]
   qualityNcrs             QualityNcr[]
@@ -2014,6 +2019,122 @@ model ProgressSorStat {
   closureRate Float  @default(0)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/** WPR Value Addition / VE register — client WPR tab "Value Addition". */
+model ProgressValueAddition {
+  id                    String   @id @default(cuid())
+  projectId             String
+  srNo                  Int      @default(0)
+  block                 String?
+  packageName           String?
+  planning              String?
+  suggestions           String?
+  valueEngineeringPoints String? @db.Text
+  cost                  Float    @default(0)
+  timeImpact            String?
+  qualityImpact         String?
+  approvalAuthority     String?
+  earlierQuoted         Float    @default(0)
+  finalPrice            Float    @default(0)
+  savings               Float    @default(0)
+  status                String   @default("Open")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/** WPR Procurement tracker — inquiry float / vendor appointment lines. */
+model ProgressProcurementLine {
+  id                      String    @id @default(cuid())
+  projectId               String
+  srNo                    Int       @default(0)
+  workPackage             String?
+  itemDescription         String?   @db.Text
+  responsibleStakeholder  String?
+  contractorName          String?
+  targetInquiryDate       DateTime?
+  vendorAppointmentDate   DateTime?
+  leadTimeDays            Int?
+  priorityLevel           Int       @default(1)
+  vendorAppointed         Boolean   @default(false)
+  remarks                 String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/** Site materials stock register — client Site Materials workbook. */
+model SiteMaterialStock {
+  id              String    @id @default(cuid())
+  projectId       String
+  srNo            Int       @default(0)
+  recordDate      DateTime?
+  materialName    String
+  totalPurchase   Float     @default(0)
+  balanceQuantity Float     @default(0)
+  unit            String?
+  location        String?
+  remarks         String?
+  buildingQty     Float?
+  externalQty     Float?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/** SAP-style PR tracker lines — links to PO on award. */
+model ProgressPurchaseRequisition {
+  id           String   @id @default(cuid())
+  projectId    String
+  srNo         Int      @default(0)
+  prType       String?
+  prNumber     String?
+  discipline   String?
+  qty          Float    @default(1)
+  unit         String?
+  rate         Float    @default(0)
+  amount       Float    @default(0)
+  materialCode String?
+  poNumber     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, prNumber])
+}
+
+/** Invoice processing tracker — client PR Tracker workbook "Invoicen Tracker" tab. */
+model ProgressInvoiceTracker {
+  id             String    @id @default(cuid())
+  projectId      String
+  srNo           Int       @default(0)
+  workName       String
+  invoiceNumber  String?
+  poNumber       String?
+  vendorName     String?
+  invoiceDate    DateTime?
+  amountExclGst  Float     @default(0)
+  copStatus      String?
+  remarks        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, invoiceNumber])
 }
 
 /**

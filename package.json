@@ -18,6 +18,7 @@
     "db:seed-full-demo": "tsx seed/runFullDemoPack.ts",
     "db:seed-dpr-demo": "tsx seed/dprDemoDay.ts",
     "db:seed-week-of-dprs": "tsx scripts/seed-week-of-dprs.mts",
+    "wpr:july-pptx": "tsx scripts/generate-july-wpr-pptx.mts",
     "review-pack": "tsx scripts/generate-review-pack.mts --offline",
     "review-pack:export": "tsx scripts/generate-review-pack.mts",
     "db:seed-pilot-week": "tsx seed/pilotWeekDemo.ts",

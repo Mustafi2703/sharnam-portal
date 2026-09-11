@@ -1279,7 +1279,7 @@ costRouter.post(
       const billNo = `INV-${Date.now()}-${created.length + 1}`;
       const saved = await mockOneDrive.upload(
         project.code,
-        "09_COMMERCIAL_AND_CHANGE/09.02_Contractor_Invoices",
+        (await import("../services/graph.js")).MODULE_TO_ISO_FOLDER.contractorInvoices,
         `${vendorName.replace(/[^\w-]+/g, "_").slice(0, 40)}-${billNo}-${rawName}`,
         f.buffer
       );

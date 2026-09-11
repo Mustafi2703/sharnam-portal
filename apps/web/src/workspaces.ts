@@ -476,6 +476,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "progress",
+      label: "WPR trackers",
+      query: "tab=wpr-trackers",
+      blurb: "Value Addition, Procurement, Site Materials — PR and invoices live in Finance.",
+      sheet: "WPR-Client-Week-Template.xlsx",
+    },
+    {
+      to: "progress",
       label: "S-curve",
       query: "tab=scurve",
       blurb: "Weekly planned vs actual % from MS Project — feeds DPR/WPR.",
@@ -662,6 +669,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "RA certified/submission workbooks, COP — open in SharePoint.",
     },
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
+    { to: "finance", label: "PR Tracker", query: "tab=pr-tracker", blurb: "SAP PR register — files to ISO 05.01, feeds WPR." },
+    { to: "finance", label: "Invoice processing", query: "tab=invoice-processing", blurb: "Client invoice tracker + COP status — ISO 09.01." },
     { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Capital expenditure lines." },
     { to: "finance", label: "RA Bills & COP", query: "tab=ra", blurb: "RA bill tracker (3 stages) and certificates of payment." },
     { to: "finance", label: "RA Bill Tracker", query: "tab=ra", blurb: "Running account bills." },

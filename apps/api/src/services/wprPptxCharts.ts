@@ -3,7 +3,7 @@
  */
 import type { WprChartPack, WprBarPoint, WprPiePoint } from "./wprCharts.js";
 
-const BRAND = "0F766E";
+const BRAND = "156082";
 const BLUE = "2563EB";
 const DARK = "1A1D26";
 const MUTED = "5C6578";
@@ -340,8 +340,8 @@ function safetyChartSlide(
     actual: s.current,
   }));
   barChartSlide(pptx, {
-    title: "Weekly safety update · previous vs current period",
-    subtitle: "Toolbox talks, inductions, incidents — editable series in PowerPoint",
+    title: "HSE Statistic · previous vs current week",
+    subtitle: "Safe manhours, TBT, induction, trainings — PW vs CW from the week sheet",
     bars,
     valAxisTitle: "Count",
     client: opts.client,
@@ -414,8 +414,8 @@ export function renderWprChartSlide(
       break;
     case "quality":
       pieChartSlide(pptx, {
-        title: "Weekly quality updates · QAP status",
-        subtitle: "Inspection / cube test mix for the period",
+        title: "Quality Statistic",
+        subtitle: "Site Observation / Instruction / NCR — totals from the week sheet",
         slices: charts.quality,
         ...meta,
       });

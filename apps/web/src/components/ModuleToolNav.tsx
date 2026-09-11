@@ -1,8 +1,9 @@
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { DrawingsModuleNav } from "./DrawingsModuleNav";
 import { useAuth } from "../auth";
 import { isToolActive } from "../lib/moduleToolNav";
 import { MODULE_TOOLS, type WorkspaceKey } from "../workspaces";
+import { isToolWindow, moduleToolHref, openModuleToolWindow, withToolWindowParam } from "../lib/moduleToolWindow";
 
 type ModuleNavKey = WorkspaceKey | "home";
 
@@ -44,18 +45,24 @@ export function ModuleToolNav({
         {hubLabel}
       </Link>
       {items.map((t) => {
-        const href = t.to ? `/projects/${projectId}/${t.to}${t.query ? `?${t.query}` : ""}` : `/projects/${projectId}`;
+        const href = moduleToolHref(projectId, t.to, t.query);
         const on = isToolActive(t, location.pathname, location.search, projectId);
+        const inWin = isToolWindow(location.search);
         return (
-          <NavLink
+          <a
             key={`${t.to}-${t.query || ""}-${t.label}`}
-            to={href}
-            end={t.end}
-            className={() => tabClass(on)}
+            href={inWin ? withToolWindowParam(href, true) : href}
+            className={tabClass(on)}
             style={on ? { background: accent, borderColor: accent } : undefined}
+            onClick={(e) => {
+              if (inWin) return;
+              e.preventDefault();
+              const w = openModuleToolWindow(href, t.label);
+              if (!w) window.location.assign(href);
+            }}
           >
             {t.label}
-          </NavLink>
+          </a>
         );
       })}
     </nav>

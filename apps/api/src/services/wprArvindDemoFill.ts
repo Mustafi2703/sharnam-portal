@@ -133,13 +133,13 @@ export function applyWprArvindDemoFill(
   if (!hasRows(out.quality)) {
     out.quality = {
       title: out.quality?.title ?? "Quality Updates",
-      notes: out.quality?.notes,
+      notes: "Quality statistics — week ending 29 July (Site Observation / Instruction / NCR).",
       photos: out.quality?.photos,
-      headers: ["Week", "Activity", "Discipline", "Contractor", "PMC", "Client", "Status"],
+      headers: ["Sr", "Observation", "Total", "Open", "Closed"],
       rows: [
-        ["Week 50", "Cube casting — footing F-12", "Civil", "Yes", "Yes", "Pending", "Under review"],
-        ["Week 50", "Rebar cover check — columns", "Civil", "Yes", "Yes", "Yes", "Closed"],
-        ["Week 50", "QI — block masonry", "Civil", "Yes", "Yes", "—", "Open"],
+        [1, "Site Observation", 89, 0, 89],
+        [2, "Site Instruction", 89, 0, 89],
+        [3, "NCR", 4, 0, 4],
       ],
     };
   }
@@ -151,10 +151,13 @@ export function applyWprArvindDemoFill(
       photos: out.safety?.photos,
       headers: ["HSE indicator", "Previous week (PW)", "Current week (CW)", "Cumulative"],
       rows: [
-        ["Toolbox Talk", 5, 6, 6],
-        ["HSE Inductions", 12, 8, 8],
-        ["Incidents / Accidents", 0, 0, 0],
-        ["Total safety events", 17, 14, 14],
+        ["Safe-manhours", 253648, 2200, 255848],
+        ["Safe-man-days", 364, 7, 371],
+        ["Toolbox Talk", 64, 0, 64],
+        ["HSE induction", 17, 0, 17],
+        ["HSE trainings", 4, 0, 4],
+        ["Reported Incident/Accident", 0, 0, 0],
+        ["Site safety instructions", 241, 0, 241],
       ],
     };
   }
@@ -216,6 +219,39 @@ export function applyWprArvindDemoFill(
     };
   }
 
+  if (!hasRows(out.prTracker)) {
+    out.prTracker = {
+      title: out.prTracker?.title ?? "Project PR Tracker",
+      notes: "PR Tracker — Construction of Worker Dormitory (client SAP register).",
+      photos: out.prTracker?.photos,
+      headers: ["Sr", "PR No", "Type", "Discipline", "Amount ₹", "PO No", "Status"],
+      rows: [
+        [1, "1300087731", "Service", "Civil work — dormitory phase-1 & external", 67396394, "3100007903", "PO linked"],
+        [2, "1300087775", "Service", "Borewell charges", 1790460, "3100007908", "PO linked"],
+        [3, "1300087776", "Service", "Temporary power connection", 350050, "3100007990", "PO linked"],
+        [4, "1300087778", "Service", "PMC charges — dormitory Santej", 1720000, "3100007909", "PO linked"],
+        [5, "1300087945", "Service", "Design consultancy charges", 750000, "3100008018", "PO linked"],
+      ],
+    };
+  }
+
+  if (!hasRows(out.invoiceTracker)) {
+    out.invoiceTracker = {
+      title: out.invoiceTracker?.title ?? "Invoice Processing Tracker",
+      notes: "Invoice processing — week pack from PR Tracker-52 (excl. GST).",
+      photos: out.invoiceTracker?.photos,
+      headers: ["Sr", "Name of work", "Invoice No", "PO", "Vendor", "Invoice date", "Amount excl. GST ₹", "COP status"],
+      rows: [
+        [1, "PMC Services for Worker Dormitory (July-25)", "32/25-26", "3100007909", "Sharnam", "2025-11-13", 37096.77, "Open"],
+        [2, "PMC Services for Worker Dormitory (Aug-25)", "33/25-26", "3100007909", "Sharnam", "2025-11-13", 115000, "Open"],
+        [3, "Borewell work for Worker Dormitory", "119", "3100007908", "Shree Shakti Pump", "", 895230, "Done"],
+        [5, "Civil work for Worker Dormitory", "27", "3100007903", "Bhavana Infra", "2025-09-18", 4758645.56, "Done"],
+        [6, "PMC Services for Worker Dormitory (Sep-25)", "34/25-26", "3100007909", "Sharnam", "2025-10-04", 168333, "Open"],
+        [7, "Design consultancy charges", "VPA-03-25-26", "3100008018", "VPA", "2025-10-04", 750000, "Open"],
+      ],
+    };
+  }
+
   if (!hasRows(out.projectDashboard)) {
     out.projectDashboard = {
       title: out.projectDashboard?.title ?? "Project Dashboard",
@@ -223,14 +259,15 @@ export function applyWprArvindDemoFill(
       photos: out.projectDashboard?.photos,
       headers: ["KPI", "Value"],
       rows: [
-        ["Reporting window", `${ws} → ${we}`],
-        ["Planned progress %", "68.2%"],
-        ["Actual progress %", "65.4%"],
-        ["SPI / variance", "0.96 · −2.8%"],
-        ["DPR days logged", "6 / 7"],
-        ["Open NCRs", "1"],
-        ["Milestones on track", "4 / 5"],
-        ["Safety events (period)", "14"],
+        ["Reporting window", "23 Jul 2026 → 29 Jul 2026"],
+        ["Planned progress %", "Against GFC (dormitory / infra)"],
+        ["Actual progress %", "Weekly actual vs GFC — see PvA"],
+        ["SPI / variance", "Catch-up on finishing manpower"],
+        ["Open NCRs", "0 open · 4 closed"],
+        ["Quality observations", "89 closed / 89"],
+        ["Safe manhours (CW)", "2,200 · cum 255,848"],
+        ["LTI / incidents (CW)", "0"],
+        ["Open hindrances", "1 (finishing manpower)"],
       ],
     };
   }

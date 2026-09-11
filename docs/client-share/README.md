@@ -21,6 +21,8 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | **17** | **[SPDC_FE_DEMO_RUNBOOK.md](./SPDC_FE_DEMO_RUNBOOK.md)** | **Presenter — step-by-step FE demo (55 steps, 3 sessions)** |
 | **18** | **[SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md)** | **Everyone — Sep 8–19 calendar · soft launch · multi-user · security** |
 | **19** | **[SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md)** | **Testers — ~147 scenarios (HP/EC/NEG/MU/EXP/MOB) per module** |
+| **20** | **[WHATSAPP_OWNER_CLIENT_UPDATES.md](./WHATSAPP_OWNER_CLIENT_UPDATES.md)** | **Leadership / IT — WhatsApp options, MSG91 setup today, owner+client only (no broadcast)** |
+| **21** | **[WPR-Arvind-23-29-Jul-2026.pptx](./WPR-Arvind-23-29-Jul-2026.pptx)** | **Client WPR deck — 23–29 Jul 2026, sheet titles + charts** |
 | 2 | [02-Logins-and-Access.md](./02-Logins-and-Access.md) | All users — how to sign in |
 | 3 | [03-Module-Test-Plan.md](./03-Module-Test-Plan.md) | SPDC leads — test each module on your server |
 | 4 | [04-SharePoint-and-Files.md](./04-SharePoint-and-Files.md) | IT — photos & documents to SharePoint |

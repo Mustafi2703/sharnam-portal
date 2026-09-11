@@ -94,7 +94,7 @@ export default function CrmBidComparePage() {
   const [customDiscSheet, setCustomDiscSheet] = useState("");
   const [addDiscKeys, setAddDiscKeys] = useState<string[]>([]);
   const [addVendorIds, setAddVendorIds] = useState<string[]>([]);
-  const [deskFilter, setDeskFilter] = useState<"converted" | "all">("converted");
+  const [deskFilter, setDeskFilter] = useState<"open" | "converted" | "all">("open");
   const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
   const [deskView, setDeskView] = useState<"packages" | "setup">("packages");
   const [setupStep, setSetupStep] = useState(1);
@@ -111,6 +111,7 @@ export default function CrmBidComparePage() {
     [projects, convertedProjectIds],
   );
   const packagesForDesk = useMemo(() => {
+    if (deskFilter === "open") return packages.filter((p) => p.status === "Open" || p.status === "Draft");
     if (deskFilter === "all") return packages;
     return packages.filter((p) => {
       const pid = p.project?.id || p.projectId;
@@ -840,6 +841,14 @@ export default function CrmBidComparePage() {
               </Button>
             </div>
             <div className="flex gap-1">
+              <Button
+                variant={deskFilter === "open" ? "primary" : "secondary"}
+                type="button"
+                className="!text-xs flex-1"
+                onClick={() => setDeskFilter("open")}
+              >
+                Open
+              </Button>
               <Button
                 variant={deskFilter === "converted" ? "primary" : "secondary"}
                 type="button"

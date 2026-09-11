@@ -209,16 +209,23 @@ export function parseQapDetailSheet(rows: unknown[][], startRow = 9): QapDetailR
   return out;
 }
 
-export function qapStatusFromRow(row: QapDetailRow): { status: string; contractorOk: boolean; pmcOk: boolean; clientOk: boolean } {
-  const done = /complete|done|yes/i.test(row.remarks);
+export function qapStatusFromRow(row: QapDetailRow & { dailyChecks?: Record<string, boolean> }): {
+  status: string;
+  contractorOk: boolean;
+  pmcOk: boolean;
+  clientOk: boolean;
+} {
+  const doneRemark = /complete|done|yes/i.test(row.remarks || "");
   const contractorOk = !!(row.contractorPerformer || row.contractorChecker);
-  const pmcOk = /review|witness|yes/i.test(row.pmcRole);
-  const clientOk = /witness|random|yes/i.test(row.clientRole);
+  const pmcOk = /review|witness|yes|approve|^r$|^w$|^a$/i.test(row.pmcRole || "");
+  const clientOk = /witness|random|yes|approve|^w$|^ra$/i.test(row.clientRole || "");
+  const days = row.dailyChecks ? Object.values(row.dailyChecks) : [];
+  const weekComplete = days.length > 0 && days.every(Boolean);
   return {
     contractorOk,
     pmcOk,
     clientOk,
-    status: done || (pmcOk && clientOk) ? "Done" : "Open",
+    status: doneRemark || weekComplete || (pmcOk && clientOk && contractorOk) ? "Done" : "Open",
   };
 }
 

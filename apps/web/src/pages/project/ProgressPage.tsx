@@ -12,6 +12,7 @@ import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
 import { RegisterSheetCell } from "../../components/RegisterSheetCell";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { CRM_BID_DISCIPLINES } from "../../lib/crmBidDisciplines";
+import { WprTrackerRegisters } from "../../components/WprTrackerRegisters";
 
 /** Dev-only — hide re-seed buttons in production demo builds. */
 const SHOW_DEMO_CONTROLS = import.meta.env.DEV;
@@ -26,10 +27,11 @@ type Tab =
   | "hindrance"
   | "risk"
   | "legal"
+  | "wpr-trackers"
   | "scurve"
   | "msproject";
 
-const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "milestones", "monthly", "msproject"];
+const PROGRESS_REGISTER_TABS: Tab[] = ["planned", "hindrance", "risk", "legal", "wpr-trackers", "milestones", "monthly", "msproject"];
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
@@ -1890,6 +1892,17 @@ export default function ProgressPage() {
             )}
           </Card>
         </div>
+      )}
+
+      {tab === "wpr-trackers" && id && (
+        <WprTrackerRegisters
+          projectId={id}
+          token={token}
+          data={data}
+          canEdit={canEdit}
+          onReload={() => void load()}
+          visibleTabs={["value", "procurement", "materials", "quality"]}
+        />
       )}
 
       <RegisterEntryModal

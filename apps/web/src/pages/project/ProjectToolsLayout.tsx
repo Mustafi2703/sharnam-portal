@@ -18,6 +18,8 @@ import { applyModuleAccent, clearModuleAccent, MODULE_THEME_EVENT } from "../../
 import { isToolActive } from "../../lib/moduleToolNav";
 import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
+import { closeToolWindowOrGo, isToolWindow } from "../../lib/moduleToolWindow";
+import { useStandaloneFormPage } from "../../lib/useStandaloneFormPage";
 
 const TOP_MODULES = (
   [
@@ -146,8 +148,12 @@ export default function ProjectToolsLayout() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
+  const toolWin = isToolWindow(location.search);
+  const hubHref = activeMod === "home" ? `/projects/${id}` : `/projects/${id}/hub/${activeMod}`;
+
   const showModuleNav =
     !!id &&
+    !toolWin &&
     activeTool !== "hub" &&
     (activeMod !== "home" || activeTool === "directory" || activeTool === "vendors");
 
@@ -170,12 +176,13 @@ export default function ProjectToolsLayout() {
     : null;
 
   const actionPanel =
-    rightOpen && panelCtx ? (
+    !toolWin && rightOpen && panelCtx ? (
       <ToolRightPanel accent={accent} ctx={panelCtx} />
     ) : null;
 
   return (
-    <div className="w-full tool-workspace" style={{ ["--tool-accent" as string]: accent }}>
+    <div className={`w-full tool-workspace ${toolWin ? "tool-workspace--window" : ""}`} style={{ ["--tool-accent" as string]: accent }}>
+      {toolWin ? <ToolWindowScrollUnlock /> : null}
       <div className="tool-chrome bg-paper border-b border-line sticky top-0 z-20">
         <div className="px-3 sm:px-5 py-2.5 flex flex-wrap items-center gap-3 justify-between">
           <div className="min-w-0 flex items-center gap-3">
@@ -198,6 +205,16 @@ export default function ProjectToolsLayout() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {toolWin ? (
+              <>
+                <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo(hubHref)}>
+                  Back to {moduleLabel} hub
+                </Button>
+                <Button type="button" variant="ghost" className="!text-sm" onClick={() => window.close()}>
+                  Close window
+                </Button>
+              </>
+            ) : (
             <Button
               type="button"
               variant="ghost"
@@ -206,6 +223,7 @@ export default function ProjectToolsLayout() {
             >
               {rightOpen ? "Hide panel" : "Actions"}
             </Button>
+            )}
             {openRfis > 0 && (
               <Link
                 to={`/projects/${id}/rfis${
@@ -226,6 +244,11 @@ export default function ProjectToolsLayout() {
             <Badge tone="ok">{gate.publishedCount} drawings</Badge>
           </div>
         </div>
+        {toolWin && (
+          <div className="px-3 sm:px-5 pb-2.5 text-xs text-steel-muted">
+            Editing <strong className="text-ink">{toolLabel}</strong> — add a row or section, save, then return to the hub.
+          </div>
+        )}
 
         {showModuleNav && (
           <div className="tool-strip px-2 sm:px-4 py-2 border-t border-line bg-paper">
@@ -238,7 +261,7 @@ export default function ProjectToolsLayout() {
         )}
       </div>
 
-      <div className={`tool-shell ${rightOpen ? "has-right" : ""} bg-sand w-full`}>
+      <div className={`tool-shell ${!toolWin && rightOpen ? "has-right" : ""} bg-sand w-full`}>
         {rightOpen && !isDesktopPanel && (
           <button
             type="button"
@@ -269,4 +292,9 @@ export default function ProjectToolsLayout() {
       </div>
     </div>
   );
+}
+
+function ToolWindowScrollUnlock() {
+  useStandaloneFormPage();
+  return null;
 }

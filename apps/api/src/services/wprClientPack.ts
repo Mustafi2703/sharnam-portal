@@ -21,8 +21,10 @@ function excelSerial(d: Date | null | undefined): number | "" {
 function resolveWprClientTemplate(): string | null {
   const candidates = [
     process.env.SHARNAM_EXCEL_ROOT ? path.join(process.env.SHARNAM_EXCEL_ROOT, "WPR File.xlsx") : "",
+    path.join(process.cwd(), "templates", "wpr-client", "WPR-Client-Week-Template.xlsx"),
     path.join(process.cwd(), "templates", "WPR-File.xlsx"),
     path.join(process.cwd(), "seed", "data", "WPR File.xlsx"),
+    path.join(process.cwd(), "packages", "shared", "untitled folder", "WPR  23 July to 29 July.xlsx"),
   ].filter(Boolean);
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
@@ -82,6 +84,8 @@ export async function buildWprClientWorkbook(
     dprSnaps,
     activityLines,
     sorStats,
+    valueAdditions,
+    procurementLines,
   ] = await Promise.all([
     prisma.drawingRegisterLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
     prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" }, take: 50 }),
@@ -112,7 +116,9 @@ export async function buildWprClientWorkbook(
       orderBy: { logDate: "asc" },
     }),
     prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 120 }),
-    prisma.progressSorStat.findMany({ where: { projectId }, take: 40 }),
+    prisma.progressSorStat.findMany({ where: { projectId }, take: 20 }),
+    prisma.progressValueAddition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 30 }),
+    prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 30 }),
   ]);
 
   const masterKey = findSheet(wb, /Master Drawing Register/i);
@@ -363,13 +369,66 @@ export async function buildWprClientWorkbook(
         a.unit ?? "",
         a.boqQty ?? 0,
         a.gfcQty ?? 0,
-        a.executedQty ?? 0,
-        a.balanceQty ?? 0,
         a.weeklyPlanned ?? 0,
         a.weeklyActual ?? 0,
+        a.executedQty ?? 0,
         a.cumulativeQty ?? a.executedQty ?? 0,
         a.pctComplete ?? 0,
       ])
+    );
+  }
+
+  const vaKey = findSheet(wb, /Value Addition/i);
+  if (vaKey && valueAdditions.length) {
+    writeRows(
+      wb.Sheets[vaKey],
+      1,
+      valueAdditions.map((v, i) => [
+        i + 1,
+        v.block ?? "",
+        v.packageName ?? "",
+        v.planning ?? "",
+        v.suggestions ?? "",
+        v.valueEngineeringPoints ?? "",
+        v.cost ?? 0,
+        v.timeImpact ?? "",
+        v.qualityImpact ?? "",
+        v.approvalAuthority ?? "",
+        "",
+        "",
+        v.earlierQuoted ?? 0,
+        v.finalPrice ?? 0,
+        v.savings ?? 0,
+      ])
+    );
+  }
+
+  const procKey = findSheet(wb, /^Procurement tracker$/i);
+  if (procKey && procurementLines.length) {
+    writeRows(
+      wb.Sheets[procKey],
+      1,
+      procurementLines.map((p, i) => [
+        i + 1,
+        p.workPackage ?? "",
+        p.itemDescription ?? "",
+        p.responsibleStakeholder ?? "",
+        p.contractorName ?? "",
+        p.targetInquiryDate ? excelSerial(p.targetInquiryDate) : "",
+        p.vendorAppointmentDate ? excelSerial(p.vendorAppointmentDate) : "",
+        p.leadTimeDays ?? "",
+        p.priorityLevel ?? "",
+        p.vendorAppointed ? "Yes" : "No",
+      ])
+    );
+  }
+
+  const qualStatKey = findSheet(wb, /Quality Statistic/i);
+  if (qualStatKey && sorStats.length) {
+    writeRows(
+      wb.Sheets[qualStatKey],
+      1,
+      sorStats.map((s, i) => [i + 1, s.observation ?? "", s.total ?? 0, s.openCount ?? 0, s.closedCount ?? 0])
     );
   }
 

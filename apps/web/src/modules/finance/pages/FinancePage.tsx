@@ -15,11 +15,15 @@ import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
 import { FilePickButton } from "../../../components/FilePickButton";
+import { WprTrackerRegisters } from "../../../components/WprTrackerRegisters";
+import { ReferenceSheetToolbar } from "../../../components/ReferenceSheetToolbar";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../../components/ui";
 
 const TOOLS = [
   { id: "overview", label: "Overview" },
   { id: "bills", label: "Bill registers" },
+  { id: "pr-tracker", label: "PR Tracker" },
+  { id: "invoice-processing", label: "Invoice processing" },
   { id: "capex", label: "Project CAPEX" },
   { id: "ra", label: "RA Bill Tracker" },
   { id: "cop", label: "COP (Certificate of Payment)" },
@@ -63,21 +67,27 @@ export default function FinancePage() {
   const [ras, setRas] = useState<any[]>([]);
   const [cops, setCops] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [prRequisitions, setPrRequisitions] = useState<any[]>([]);
+  const [invoiceTrackers, setInvoiceTrackers] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
 
   const reload = async () => {
-    const [sum, cx, ra, cop, inv] = await Promise.all([
+    const [sum, cx, ra, cop, inv, prs, invTrk] = await Promise.all([
       api<any>(`/api/finance/${id}/summary`, { token }),
       api<any[]>(`/api/finance/${id}/capex`, { token }),
       api<any[]>(`/api/finance/${id}/ra`, { token }),
       api<any[]>(`/api/finance/${id}/cop`, { token }),
       api<any[]>(`/api/finance/${id}/material-invoices`, { token }),
+      api<any[]>(`/api/finance/${id}/purchase-requisitions`, { token }).catch(() => []),
+      api<any[]>(`/api/finance/${id}/invoice-trackers`, { token }).catch(() => []),
     ]);
     setSummary(sum);
     setCapex(cx);
     setRas(ra);
     setCops(cop);
     setInvoices(inv);
+    setPrRequisitions(prs);
+    setInvoiceTrackers(invTrk);
   };
   useEffect(() => {
     void reload();
@@ -191,6 +201,19 @@ export default function FinancePage() {
         />
       )}
 
+      {(active.id === "pr-tracker" || active.id === "invoice-processing") && id && (
+        <WprTrackerRegisters
+          key={active.id}
+          projectId={id}
+          token={token}
+          canEdit={canWrite}
+          onReload={() => void reload()}
+          apiBase="finance"
+          visibleTabs={active.id === "pr-tracker" ? ["pr"] : ["invoice"]}
+          data={{ prRequisitions, invoiceTrackers }}
+        />
+      )}
+
       {active.id === "invoices" && (
         <MaterialInvoicesTab
           invoices={invoices}
@@ -255,6 +278,8 @@ function Overview({
     ["Advance adjusted", money(t.raAdvanceAdjusted)],
     ["COP certified", money(t.copCertified)],
     ["COP payable", money(t.copPayable)],
+    ["PR Tracker lines", String(summary?.counts?.prRequisitions ?? 0)],
+    ["Invoices tracked", String(summary?.counts?.invoiceTrackers ?? 0)],
   ] as const;
   return (
     <div className="space-y-4">
@@ -389,8 +414,15 @@ function CapexTab({ capex, canWrite, reload, setMsg, projectId, token }: any) {
   const total = capex.reduce((s: number, r: any) => s + Number(r.budgetedAmount || 0), 0);
   return (
     <div className="space-y-3">
+      <ReferenceSheetToolbar
+        sheetLabel="Project CAPEX"
+        rowCount={capex.length}
+        canEdit={canWrite}
+        onAddRow={() => document.getElementById("add-capex-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        addRowLabel="+ Add row"
+      />
       {canWrite && (
-        <Card>
+        <Card id="add-capex-form">
           <h3 className="font-semibold text-sm mb-2">Add CAPEX line</h3>
           <form onSubmit={add} className="grid md:grid-cols-6 gap-2">
             <Input placeholder="Sr" value={row.srNo} onChange={(e) => setRow({ ...row, srNo: e.target.value })} />
@@ -1015,6 +1047,13 @@ function MaterialInvoicesTab({ invoices, canWrite, reload, setMsg, projectId, to
 
   return (
     <div className="space-y-3">
+      <ReferenceSheetToolbar
+        sheetLabel="Material / tax invoices"
+        rowCount={filtered.length}
+        canEdit={canWrite}
+        onAddRow={() => document.getElementById("add-invoice-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        addRowLabel="+ Add invoice"
+      />
       {activePkg && activePkg.billKind === "ra" && (
         <Card className="!p-4 text-sm text-steel-muted">
           <strong>{activePkg.label}</strong> uses RA bills, not material invoices. Switch to{" "}
@@ -1030,7 +1069,7 @@ function MaterialInvoicesTab({ invoices, canWrite, reload, setMsg, projectId, to
         </p>
       </Card>
       {canWrite && (!activePkg || activePkg.billKind === "material") && (
-        <Card>
+        <Card id="add-invoice-form">
           <h3 className="font-semibold text-sm mb-2">Add material / tax invoice {activePkg ? `· ${activePkg.label}` : ""}</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Select

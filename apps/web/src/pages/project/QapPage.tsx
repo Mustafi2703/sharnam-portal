@@ -280,6 +280,34 @@ export default function QapPage() {
             New week sheet
           </Button>
         )}
+        {canManage && weekFilter && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="!text-xs"
+            disabled={busy}
+            onClick={async () => {
+              if (!id) return;
+              if (!window.confirm(`Delete the entire QAP sheet "${weekFilter}" and all its lines?`)) return;
+              setBusy(true);
+              try {
+                const out = await api<{ deleted: number; weekLabel: string }>(
+                  `/api/checklist/project/${id}/qap/delete-sheet`,
+                  { method: "POST", token, body: JSON.stringify({ weekLabel: weekFilter }) }
+                );
+                setMsg(`Deleted ${out.deleted} lines from ${out.weekLabel}`);
+                setWeekFilter("");
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Delete sheet failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Delete week sheet
+          </Button>
+        )}
         {canManage && (
           <Button
             type="button"
@@ -315,7 +343,24 @@ export default function QapPage() {
         canEdit={canManage}
         busy={busy}
         message={msg || undefined}
-        onAddRow={canManage ? () => setAddOpen(true) : undefined}
+        onAddRow={
+          canManage
+            ? () => {
+                setAddForm({ ...addForm, addMode: "line" });
+                setAddOpen(true);
+              }
+            : undefined
+        }
+        addRowLabel="+ Add row"
+        onAddSection={
+          canManage
+            ? () => {
+                setAddForm({ ...addForm, addMode: "section", section: "", srNo: "" });
+                setAddOpen(true);
+              }
+            : undefined
+        }
+        addSectionLabel="+ Add section"
         onUpload={async (file) => {
           if (/\.xlsx?$/i.test(file.name)) await importExcel(file);
           else await uploadToDms(file);

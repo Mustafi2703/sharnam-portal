@@ -77,7 +77,7 @@ progressRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "e
 
 progressRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLineCount, lessons] =
+  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLineCount, lessons, valueAdditions, procurementLines, siteMaterials, prRequisitions, invoiceTrackers] =
     await Promise.all([
       prisma.progressMilestone.findMany({ where: { projectId }, orderBy: { code: "asc" } }),
       prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" } }),
@@ -89,6 +89,11 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       prisma.progressSorStat.findMany({ where: { projectId } }),
       prisma.costMonitoringLine.count({ where: { projectId } }),
       prisma.lessonLearnt.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
+      prisma.progressValueAddition.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
+      prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
+      prisma.siteMaterialStock.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
+      prisma.progressPurchaseRequisition.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
+      prisma.progressInvoiceTracker.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
     ]);
 
   const { readProgressOverviewDashboard } = await import("../services/progressRegistersImport.js");
@@ -163,8 +168,363 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     activityLines,
     boqLineCount,
     sorStats,
+    valueAdditions,
+    procurementLines,
+    siteMaterials,
+    prRequisitions,
+    invoiceTrackers,
     lessons: lessons.filter(isContentLessonRow),
   });
+});
+
+/** Import client WPR tracker pack (Value Addition, Procurement, PR, Site Materials, Quality stats). */
+progressRouter.post(
+  "/:projectId/import-wpr-trackers",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    try {
+      const { importWprTrackerPack } = await import("../services/wprTrackerPackImport.js");
+      const result = await importWprTrackerPack(prisma, project.id);
+      await audit("progress.wpr_trackers.import", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: project.id,
+        meta: result,
+      });
+      res.json({ ok: true, projectCode: project.code, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+    }
+  }
+);
+
+const TRACKER_ROLES = ["admin", "office", "employee", "site_employee"] as const;
+
+function moneyBody(v: unknown) {
+  const n = Number(String(v ?? "").replace(/[₹,\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+progressRouter.post("/:projectId/value-additions", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const last = await prisma.progressValueAddition.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const earlier = moneyBody(body.earlierQuoted);
+  const finalP = moneyBody(body.finalPrice);
+  const row = await prisma.progressValueAddition.create({
+    data: {
+      projectId,
+      srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+      block: body.block || null,
+      packageName: body.packageName || null,
+      planning: body.planning || null,
+      suggestions: body.suggestions || null,
+      valueEngineeringPoints: body.valueEngineeringPoints || null,
+      cost: moneyBody(body.cost),
+      timeImpact: body.timeImpact || null,
+      qualityImpact: body.qualityImpact || null,
+      approvalAuthority: body.approvalAuthority || null,
+      earlierQuoted: earlier,
+      finalPrice: finalP,
+      savings: moneyBody(body.savings) || earlier - finalP,
+      status: body.status || "Open",
+    },
+  });
+  await audit("progress.valueAddition.create", { userId: req.user!.id, entity: "ProgressValueAddition", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/value-additions/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressValueAddition.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const earlier = body.earlierQuoted != null ? moneyBody(body.earlierQuoted) : existing.earlierQuoted;
+  const finalP = body.finalPrice != null ? moneyBody(body.finalPrice) : existing.finalPrice;
+  const row = await prisma.progressValueAddition.update({
+    where: { id: existing.id },
+    data: {
+      block: body.block != null ? body.block : undefined,
+      packageName: body.packageName != null ? body.packageName : undefined,
+      planning: body.planning != null ? body.planning : undefined,
+      suggestions: body.suggestions != null ? body.suggestions : undefined,
+      valueEngineeringPoints: body.valueEngineeringPoints != null ? body.valueEngineeringPoints : undefined,
+      cost: body.cost != null ? moneyBody(body.cost) : undefined,
+      timeImpact: body.timeImpact != null ? body.timeImpact : undefined,
+      qualityImpact: body.qualityImpact != null ? body.qualityImpact : undefined,
+      approvalAuthority: body.approvalAuthority != null ? body.approvalAuthority : undefined,
+      earlierQuoted: earlier,
+      finalPrice: finalP,
+      savings: body.savings != null ? moneyBody(body.savings) : earlier - finalP,
+      status: body.status != null ? body.status : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/value-additions/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressValueAddition.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressValueAddition.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+progressRouter.post("/:projectId/procurement-lines", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const last = await prisma.progressProcurementLine.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const row = await prisma.progressProcurementLine.create({
+    data: {
+      projectId,
+      srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+      workPackage: body.workPackage || null,
+      itemDescription: body.itemDescription || null,
+      responsibleStakeholder: body.responsibleStakeholder || null,
+      contractorName: body.contractorName || null,
+      targetInquiryDate: body.targetInquiryDate ? new Date(body.targetInquiryDate) : null,
+      vendorAppointmentDate: body.vendorAppointmentDate ? new Date(body.vendorAppointmentDate) : null,
+      leadTimeDays: body.leadTimeDays != null ? Number(body.leadTimeDays) : null,
+      priorityLevel: Number(body.priorityLevel || 1),
+      vendorAppointed: Boolean(body.vendorAppointed),
+      remarks: body.remarks || null,
+    },
+  });
+  await audit("progress.procurement.create", { userId: req.user!.id, entity: "ProgressProcurementLine", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/procurement-lines/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressProcurementLine.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const row = await prisma.progressProcurementLine.update({
+    where: { id: existing.id },
+    data: {
+      workPackage: body.workPackage != null ? body.workPackage : undefined,
+      itemDescription: body.itemDescription != null ? body.itemDescription : undefined,
+      responsibleStakeholder: body.responsibleStakeholder != null ? body.responsibleStakeholder : undefined,
+      contractorName: body.contractorName != null ? body.contractorName : undefined,
+      targetInquiryDate: body.targetInquiryDate !== undefined ? (body.targetInquiryDate ? new Date(body.targetInquiryDate) : null) : undefined,
+      vendorAppointmentDate: body.vendorAppointmentDate !== undefined ? (body.vendorAppointmentDate ? new Date(body.vendorAppointmentDate) : null) : undefined,
+      leadTimeDays: body.leadTimeDays != null ? Number(body.leadTimeDays) : undefined,
+      priorityLevel: body.priorityLevel != null ? Number(body.priorityLevel) : undefined,
+      vendorAppointed: body.vendorAppointed != null ? Boolean(body.vendorAppointed) : undefined,
+      remarks: body.remarks != null ? body.remarks : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/procurement-lines/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressProcurementLine.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressProcurementLine.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+progressRouter.post("/:projectId/purchase-requisitions", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const last = await prisma.progressPurchaseRequisition.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const qty = Number(body.qty || 1);
+  const rate = moneyBody(body.rate);
+  const row = await prisma.progressPurchaseRequisition.create({
+    data: {
+      projectId,
+      srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+      prType: body.prType || "Service",
+      prNumber: body.prNumber || null,
+      discipline: body.discipline || null,
+      qty,
+      unit: body.unit || null,
+      rate,
+      amount: moneyBody(body.amount) || qty * rate,
+      materialCode: body.materialCode || null,
+      poNumber: body.poNumber || null,
+    },
+  });
+  await audit("progress.pr.create", { userId: req.user!.id, entity: "ProgressPurchaseRequisition", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/purchase-requisitions/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressPurchaseRequisition.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const qty = body.qty != null ? Number(body.qty) : existing.qty;
+  const rate = body.rate != null ? moneyBody(body.rate) : existing.rate;
+  const row = await prisma.progressPurchaseRequisition.update({
+    where: { id: existing.id },
+    data: {
+      prType: body.prType != null ? body.prType : undefined,
+      prNumber: body.prNumber != null ? body.prNumber : undefined,
+      discipline: body.discipline != null ? body.discipline : undefined,
+      qty,
+      unit: body.unit != null ? body.unit : undefined,
+      rate,
+      amount: body.amount != null ? moneyBody(body.amount) : qty * rate,
+      materialCode: body.materialCode != null ? body.materialCode : undefined,
+      poNumber: body.poNumber != null ? body.poNumber : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/purchase-requisitions/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressPurchaseRequisition.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressPurchaseRequisition.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+progressRouter.post("/:projectId/invoice-trackers", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const workName = String(body.workName || "").trim();
+  if (!workName) return res.status(400).json({ error: "workName required" });
+  const last = await prisma.progressInvoiceTracker.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const row = await prisma.progressInvoiceTracker.create({
+    data: {
+      projectId,
+      srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+      workName,
+      invoiceNumber: body.invoiceNumber || null,
+      poNumber: body.poNumber || null,
+      vendorName: body.vendorName || null,
+      invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : null,
+      amountExclGst: moneyBody(body.amountExclGst),
+      copStatus: body.copStatus || "Open",
+      remarks: body.remarks || null,
+    },
+  });
+  await audit("progress.invoice.create", { userId: req.user!.id, entity: "ProgressInvoiceTracker", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/invoice-trackers/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressInvoiceTracker.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const row = await prisma.progressInvoiceTracker.update({
+    where: { id: existing.id },
+    data: {
+      workName: body.workName != null ? body.workName : undefined,
+      invoiceNumber: body.invoiceNumber != null ? body.invoiceNumber : undefined,
+      poNumber: body.poNumber != null ? body.poNumber : undefined,
+      vendorName: body.vendorName != null ? body.vendorName : undefined,
+      invoiceDate: body.invoiceDate !== undefined ? (body.invoiceDate ? new Date(body.invoiceDate) : null) : undefined,
+      amountExclGst: body.amountExclGst != null ? moneyBody(body.amountExclGst) : undefined,
+      copStatus: body.copStatus != null ? body.copStatus : undefined,
+      remarks: body.remarks != null ? body.remarks : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/invoice-trackers/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressInvoiceTracker.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressInvoiceTracker.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+progressRouter.post("/:projectId/site-materials", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const materialName = String(body.materialName || "").trim();
+  if (!materialName) return res.status(400).json({ error: "materialName required" });
+  const last = await prisma.siteMaterialStock.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const row = await prisma.siteMaterialStock.create({
+    data: {
+      projectId,
+      srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+      recordDate: body.recordDate ? new Date(body.recordDate) : null,
+      materialName,
+      totalPurchase: moneyBody(body.totalPurchase),
+      balanceQuantity: moneyBody(body.balanceQuantity),
+      unit: body.unit || null,
+      location: body.location || null,
+      remarks: body.remarks || null,
+      buildingQty: body.buildingQty != null ? moneyBody(body.buildingQty) : null,
+      externalQty: body.externalQty != null ? moneyBody(body.externalQty) : null,
+    },
+  });
+  await audit("progress.material.create", { userId: req.user!.id, entity: "SiteMaterialStock", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/site-materials/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.siteMaterialStock.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const row = await prisma.siteMaterialStock.update({
+    where: { id: existing.id },
+    data: {
+      materialName: body.materialName != null ? body.materialName : undefined,
+      recordDate: body.recordDate !== undefined ? (body.recordDate ? new Date(body.recordDate) : null) : undefined,
+      totalPurchase: body.totalPurchase != null ? moneyBody(body.totalPurchase) : undefined,
+      balanceQuantity: body.balanceQuantity != null ? moneyBody(body.balanceQuantity) : undefined,
+      unit: body.unit != null ? body.unit : undefined,
+      location: body.location != null ? body.location : undefined,
+      remarks: body.remarks != null ? body.remarks : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/site-materials/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.siteMaterialStock.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.siteMaterialStock.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+progressRouter.post("/:projectId/sor-stats", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const body = req.body || {};
+  const observation = String(body.observation || "").trim();
+  if (!observation) return res.status(400).json({ error: "observation required" });
+  const total = moneyBody(body.total);
+  const openCount = moneyBody(body.openCount);
+  const closedCount = moneyBody(body.closedCount);
+  const row = await prisma.progressSorStat.create({
+    data: {
+      projectId: req.params.projectId,
+      observation,
+      total,
+      openCount,
+      closedCount,
+      closureRate: total ? closedCount / total : 0,
+    },
+  });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/sor-stats/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressSorStat.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const total = body.total != null ? moneyBody(body.total) : existing.total;
+  const openCount = body.openCount != null ? moneyBody(body.openCount) : existing.openCount;
+  const closedCount = body.closedCount != null ? moneyBody(body.closedCount) : existing.closedCount;
+  const row = await prisma.progressSorStat.update({
+    where: { id: existing.id },
+    data: {
+      observation: body.observation != null ? body.observation : undefined,
+      total,
+      openCount,
+      closedCount,
+      closureRate: total ? closedCount / total : 0,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/sor-stats/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressSorStat.findFirst({ where: { id: req.params.rowId, projectId: req.params.projectId } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressSorStat.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
 });
 
 progressRouter.post(

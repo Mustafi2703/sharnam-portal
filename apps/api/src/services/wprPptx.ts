@@ -18,11 +18,44 @@ import {
 } from "./wprPptxCharts.js";
 import { mergeWprChartsForExport } from "./wprChartMerge.js";
 
-const BRAND = "0F766E";
-const DARK = "1A1D26";
+/** Client WPR_50 theme (Office accent1) — not portal teal. */
+const BRAND = "156082";
+const TEAL_DEEP = "0E2841";
+const INK = "1F2937";
 const MUTED = "5C6578";
-const LIGHT = "F0F2F5";
+const LIGHT = "E8F3F1";
+const SAND = "F4F7FA";
 const WHITE = "FFFFFF";
+
+/** Slide titles as printed on SPDC_Arvind Limited_WPR_50.pptx */
+const PPTX_TITLES: Record<string, string> = {
+  cover: "WEEKLY PROGRESS REPORT",
+  index: "INDEX",
+  brief: "Project Brief",
+  stakeholders: "Project Stakeholders",
+  mobilisation: "Mobilization Plan",
+  communicationMatrix: "Communication Matrix",
+  projectDashboard: "Project Dashboard",
+  criticalAreas: "Critical Areas",
+  capex: "Project CAPEX",
+  prTracker: "Project PR Tracker",
+  hindrance: "Hinderance Register",
+  risk: "Risk Register",
+  legal: "Legal Approval Tracker",
+  drawingRegister: "Drawing Register _ DCI",
+  designStatus: "Design Status",
+  procurement: "Procurement Status",
+  milestones: "Project Milestone Schedule",
+  manpowerHistogram: "Weekly Manpower Histogram",
+  weeklyExecuted: "Weekly Executed Plan",
+  cashflow: "Project Cashflow Overview",
+  quality: "Weekly Quality Updates",
+  cubeTest: "Cube Test",
+  safety: "Weekly Safety Updates",
+  plannedVsActual: "Planned Vs. Actual",
+  materialStock: "Material Stock",
+  progressPictures: "Project Progress",
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,13 +102,11 @@ type PptxDeck = {
   write: (opts: { outputType: "nodebuffer" }) => Promise<Buffer | Uint8Array>;
 };
 
-/** Native chart slides inserted after matching table sections (client WPR deck). */
+/** Charts only where the client deck pastes Excel/EMF — not after every table. */
 const CHART_AFTER: Partial<Record<keyof WprSections, WprChartSlideKey[]>> = {
-  projectDashboard: ["dashboardKpis", "scurve"],
-  milestones: ["milestones"],
+  projectDashboard: ["dashboardKpis"],
   manpowerHistogram: ["manpower"],
   cashflow: ["cashflow"],
-  drawingRegister: ["drawingDci"],
   quality: ["quality"],
   safety: ["safety"],
   plannedVsActual: ["plannedVsActual"],
@@ -127,24 +158,32 @@ function dividerSlide(
   meta: { client?: string; page: number; total: number }
 ) {
   const slide = pptx.addSlide();
-  slide.background = { color: DARK };
+  slide.background = { color: SAND };
   brandBar(pptx, slide);
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0,
+    y: 0.08,
+    w: 0.18,
+    h: 5.545,
+    fill: { color: BRAND },
+  });
+  addSharnamLogo(slide, pptx);
   slide.addText(pageNo, {
     x: 0.6,
     y: 1.6,
     w: 8.8,
     h: 0.5,
     fontSize: 14,
-    color: "99F6E4",
+    color: BRAND,
   });
   slide.addText(title, {
     x: 0.6,
     y: 2.2,
     w: 8.8,
     h: 1,
-    fontSize: 36,
+    fontSize: 32,
     bold: true,
-    color: WHITE,
+    color: TEAL_DEEP,
   });
   slide.addText(meta.client || "Sharnam PMC · Weekly Progress Report", {
     x: 0.6,
@@ -152,7 +191,7 @@ function dividerSlide(
     w: 8.8,
     h: 0.4,
     fontSize: 14,
-    color: "E2E5EB",
+    color: MUTED,
   });
   footer(slide, meta.page, meta.total, meta.client);
 }
@@ -198,7 +237,7 @@ function tableSlide(
     h: 0.4,
     fontSize: 18,
     bold: true,
-    color: DARK,
+    color: INK,
   });
   slide.addShape(pptx.ShapeType.rect, {
     x: 0.4,
@@ -227,12 +266,12 @@ function tableSlide(
   const tableRows = [
     headers.map((h) => ({
       text: h,
-      options: { bold: true, fill: { color: LIGHT }, color: DARK, fontSize: 8 },
+      options: { bold: true, fill: { color: BRAND }, color: WHITE, fontSize: 8 },
     })),
     ...body.map((r) =>
       headers.map((_, i) => ({
         text: String(r[i] ?? ""),
-        options: { fontSize: 8, color: DARK },
+        options: { fontSize: 8, color: INK },
       }))
     ),
   ];
@@ -309,7 +348,7 @@ function photoGridSlide(
   });
   const title = opts.partLabel ? `${opts.title}  ·  ${opts.partLabel}` : opts.title;
   slide.addText(title, {
-    x: 0.4, y: 0.45, w: 9.2, h: 0.4, fontSize: 18, bold: true, color: DARK,
+    x: 0.4, y: 0.45, w: 9.2, h: 0.4, fontSize: 18, bold: true, color: INK,
   });
   slide.addShape(pptx.ShapeType.rect, {
     x: 0.4, y: 0.88, w: 1.1, h: 0.05, fill: { color: BRAND },
@@ -340,7 +379,7 @@ function photoGridSlide(
       });
     }
     slide.addText(opts.captions[i] || `Photo ${i + 1}`, {
-      x, y: y + cellH + 0.02, w: cellW, h: 0.22, fontSize: 9, color: DARK,
+      x, y: y + cellH + 0.02, w: cellW, h: 0.22, fontSize: 9, color: INK,
     });
   }
 
@@ -370,7 +409,7 @@ function siteImageSlide(
     h: 0.4,
     fontSize: 18,
     bold: true,
-    color: DARK,
+    color: INK,
   });
   slide.addShape(pptx.ShapeType.rect, {
     x: 0.4,
@@ -405,6 +444,7 @@ const ROWS_PER: Partial<Record<string, number>> = {
   drawingRegister: 12,
   quality: 9,
   plannedVsActual: 12,
+  valueAddition: 12,
   weeklyExecuted: 10,
   progressPictures: 8,
   cashflow: 14,
@@ -413,6 +453,7 @@ const ROWS_PER: Partial<Record<string, number>> = {
   legal: 12,
   communicationMatrix: 12,
   prTracker: 12,
+  invoiceTracker: 12,
   capex: 12,
   cubeTest: 12,
   safety: 10,
@@ -428,26 +469,30 @@ const ROWS_PER: Partial<Record<string, number>> = {
   index: 20,
 };
 
-/** Fixed multi-slide counts matching SPDC_Arvind Limited_WPR_50.pptx layout. */
+/** Cap pages to the real deck — never pad empty slides. */
 function slidesFor(key: string, natural: number): number {
-  const fixed: Record<string, number> = {
-    milestones: 13,
-    quality: 10,
+  const cap: Record<string, number> = {
+    milestones: 6,
+    quality: 2,
     plannedVsActual: 3,
     weeklyExecuted: 3,
     progressPictures: 2,
     drawingRegister: 2,
-    safety: 2,
+    safety: 1,
+    hindrance: 2,
+    risk: 2,
+    prTracker: 2,
+    materialStock: 1,
   };
-  if (fixed[key] != null) return fixed[key];
-  return Math.min(Math.max(natural, 1), 4);
+  const max = cap[key] ?? 2;
+  return Math.min(Math.max(natural, 1), max);
 }
 
 function ensureSection(pack: WprPackInput, key: keyof typeof DEFAULT_WPR_TITLES): WprSection {
   const sec = pack.sections[key];
   if (sec) return sec;
   return {
-    title: DEFAULT_WPR_TITLES[key],
+    title: PPTX_TITLES[key] || DEFAULT_WPR_TITLES[key],
     headers: ["Item", "Status"],
     rows: [["(Awaiting data)", "Open"]],
     notes: "Populate via WPR Maker sync from portal registers.",
@@ -520,7 +565,9 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
     // photos past the cap when the client supplied more than 8).
     let useChunks: number;
     if (n.key === "progressPictures" && sec.photos && sec.photos.length) {
-      useChunks = Math.max(1, Math.ceil(sec.photos.length / 4));
+      useChunks = Math.max(1, Math.min(2, Math.ceil(sec.photos.length / 4)));
+    } else if (n.key === "weeklyExecuted" && sec.photos && sec.photos.length) {
+      useChunks = Math.max(1, Math.min(3, Math.ceil(sec.photos.length / 2)));
     } else {
       useChunks = slidesFor(n.key, natural);
     }
@@ -555,13 +602,21 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
   pptx.title = `Weekly Progress Report — ${fullPack.header.projectName || "Project"}`;
 
   const client = fullPack.header.clientName || fullPack.header.projectName || "Project";
+  const weekStartLabel = fullPack.header.weekStart
+    ? new Date(fullPack.header.weekStart).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
   const weekLabel = fullPack.header.weekEnd
     ? new Date(fullPack.header.weekEnd).toLocaleDateString("en-IN", {
         day: "2-digit",
-        month: "short",
+        month: "long",
         year: "numeric",
       })
     : "—";
+  const weekRange = weekStartLabel ? `(${weekStartLabel} to ${weekLabel})` : weekLabel;
   const reportNo = fullPack.header.reportNumber || "—";
   const plan = buildPlan(fullPack);
   const total = plan.length;
@@ -571,39 +626,53 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
     page += 1;
     if (item.type === "cover") {
       const slide = pptx.addSlide();
-      slide.background = { color: DARK };
+      slide.background = { color: WHITE };
       brandBar(pptx, slide);
+      slide.addShape(pptx.ShapeType.rect, {
+        x: 0,
+        y: 0.08,
+        w: 0.18,
+        h: 5.545,
+        fill: { color: BRAND },
+      });
+      slide.addShape(pptx.ShapeType.rect, {
+        x: 0.18,
+        y: 0.08,
+        w: 9.82,
+        h: 1.35,
+        fill: { color: SAND },
+      });
       addSharnamLogo(slide, pptx);
       slide.addText("WEEKLY PROGRESS REPORT", {
-        x: 0.6,
-        y: 1.3,
-        w: 8.8,
-        h: 0.55,
-        fontSize: 14,
-        color: "99F6E4",
+        x: 0.55,
+        y: 0.28,
+        w: 6.4,
+        h: 0.32,
+        fontSize: 12,
+        color: BRAND,
         bold: true,
       });
-      slide.addText(fullPack.header.projectName || "Project", {
-        x: 0.6,
-        y: 1.9,
-        w: 8.8,
-        h: 0.7,
-        fontSize: 28,
+      slide.addText(fullPack.header.clientName || fullPack.header.projectName || "Project", {
+        x: 0.55,
+        y: 0.62,
+        w: 6.6,
+        h: 0.62,
+        fontSize: 24,
         bold: true,
-        color: WHITE,
+        color: TEAL_DEEP,
       });
       slide.addText(
         [
           `REPORT NO.  ${reportNo}`,
-          `Week ending  ${weekLabel}`,
-          `Client  ${fullPack.header.clientName || "—"}`,
+          weekRange,
+          fullPack.header.projectName || "",
           `Contractor  ${fullPack.header.contractorName || "—"}`,
           `PMC  ${fullPack.header.pmc || "Sharnam Project Development Consultants & Co."}`,
-        ].join("\n"),
-        { x: 0.6, y: 2.9, w: 8.8, h: 1.6, fontSize: 13, color: "E2E5EB" }
+        ].filter(Boolean).join("\n"),
+        { x: 0.55, y: 1.7, w: 8.8, h: 1.7, fontSize: 14, color: INK }
       );
-      slide.addText("Generated from Sharnam Portal · शरणम् PMC", {
-        x: 0.6,
+      slide.addText("Sharnam Project Development Consultants & Co.", {
+        x: 0.55,
         y: 4.8,
         w: 8.8,
         h: 0.3,
@@ -642,14 +711,14 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
     // Progress-pictures: render a proper 4-photo grid per slide when the
     // section carries any photo paths.  Falls back to the caption-only
     // tableSlide when photos array is empty (keeps prior behaviour).
-    if (item.key === "progressPictures" && sec.photos && sec.photos.length) {
-      const perSlide = 4;
-      const start = item.chunk * perSlide;
-      const photos = sec.photos.slice(start, start + perSlide);
-      const captions = (sec.rows || []).slice(start, start + perSlide).map((r) => String(r?.[0] ?? ""));
+    const photoPer = item.key === "progressPictures" ? 4 : item.key === "weeklyExecuted" ? 2 : 0;
+    if (photoPer && sec.photos && sec.photos.length) {
+      const start = item.chunk * photoPer;
+      const photos = sec.photos.slice(start, start + photoPer);
+      const captions = (sec.rows || []).slice(start, start + photoPer).map((r) => String(r?.[0] ?? r?.[1] ?? ""));
       if (photos.length) {
         photoGridSlide(pptx, {
-          title: sec.title || DEFAULT_WPR_TITLES[item.key],
+          title: PPTX_TITLES[item.key] || sec.title || DEFAULT_WPR_TITLES[item.key],
           captions,
           photos,
           client,
@@ -671,7 +740,7 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
         ? [["(Continuation — add more rows in registers)", ""]]
         : rows;
     tableSlide(pptx, {
-      title: sec.title || DEFAULT_WPR_TITLES[item.key],
+      title: PPTX_TITLES[item.key] || sec.title || DEFAULT_WPR_TITLES[item.key],
       notes: item.chunk === 0 ? sec.notes : undefined,
       headers: sec.headers || ["Item", "Detail"],
       rows: showEmpty,

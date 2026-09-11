@@ -67,23 +67,63 @@ export function mergeWprChartsForExport(
       ? barRows(sections.milestones, 1, 2, 3)
       : barRows(sections.milestones, 0, 1, 2);
 
+  const pvaDirect = barRows(sections.plannedVsActual, 0, 1, 2);
+  const pvaActivity = (sections.plannedVsActual?.rows || [])
+    .map((row) => ({
+      label: `${String(row[1] ?? "")} ${String(row[2] ?? "")}`.trim().slice(0, 28),
+      planned: num(row[10] ?? row[6]),
+      actual: num(row[11] ?? row[7]),
+    }))
+    .filter((r) => r.label && (r.planned || r.actual));
+  const execBars = (sections.weeklyExecuted?.rows || [])
+    .map((row) => ({
+      label: `${String(row[1] ?? "")} ${String(row[2] ?? "")}`.trim().slice(0, 28),
+      planned: num(row[6]),
+      actual: num(row[7]),
+    }))
+    .filter((r) => r.label && (r.planned || r.actual));
   const plannedVsActual = base.plannedVsActual.length
     ? base.plannedVsActual
-    : barRows(sections.plannedVsActual, 0, 1, 2);
+    : pvaActivity.length
+      ? pvaActivity.slice(0, 24)
+      : pvaDirect.length
+        ? pvaDirect
+        : execBars.slice(0, 24);
 
   const manpowerHistogram = base.manpowerHistogram.length
     ? base.manpowerHistogram
     : barRows(sections.manpowerHistogram, 0, 1, 2);
 
+  const cashflowSeed = barRows(sections.cashflow, 0, 2, 3);
+  const cashflowJuly = barRows(sections.cashflow, 0, 3, 4);
+  const cashflowScore = (rows: { planned: number; actual: number }[]) =>
+    rows.filter((r) => r.planned || r.actual).length;
   const cashflow = base.cashflow.length
     ? base.cashflow
-    : barRows(sections.cashflow, 0, 1, 2);
+    : cashflowScore(cashflowJuly) > cashflowScore(cashflowSeed)
+      ? cashflowJuly
+      : cashflowSeed.length
+        ? cashflowSeed
+        : barRows(sections.cashflow, 0, 1, 2);
 
   const drawingDci = base.drawingDci.length
     ? base.drawingDci
     : pieFromRows(sections.drawingRegister, 1, 4);
 
-  const quality = base.quality.length ? base.quality : pieFromRows(sections.quality, 0, 1);
+  const qualityFromObs = pieFromRows(sections.quality, 1, 2);
+  const quality = base.quality.length
+    ? base.quality
+    : qualityFromObs.length
+      ? qualityFromObs
+      : pieFromRows(sections.quality, 0, 1);
+
+  const safetyFromHse = (sections.safety?.rows || [])
+    .map((row) => ({
+      label: String(row[1] ?? row[0] ?? "").trim(),
+      previous: num(row[2]),
+      current: num(row[3]),
+    }))
+    .filter((r) => r.label && !/^sr\.?no/i.test(r.label) && (r.previous > 0 || r.current > 0));
 
   const scurve =
     base.scurve.length > 0
@@ -147,12 +187,14 @@ export function mergeWprChartsForExport(
     quality,
     safety: base.safety.length
       ? base.safety
-      : [
-          { label: "Toolbox Talk", previous: 0, current: 0 },
-          { label: "HSE Inductions", previous: 0, current: 0 },
-          { label: "Incidents", previous: 0, current: 0 },
-          { label: "All events", previous: 0, current: 0 },
-        ],
+      : safetyFromHse.length
+        ? safetyFromHse
+        : [
+            { label: "Toolbox Talk", previous: 0, current: 0 },
+            { label: "HSE Inductions", previous: 0, current: 0 },
+            { label: "Incidents", previous: 0, current: 0 },
+            { label: "All events", previous: 0, current: 0 },
+          ],
     dashboardKpis,
   };
 }

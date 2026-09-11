@@ -108,7 +108,19 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     title: "Finance & RA files",
     eyebrow: "Finance · ISO 09.01",
     hubPath: "hub/finance",
-    subtitle: "RA submission / certified workbooks, COP documents — open directly in SharePoint.",
+    subtitle: "RA workbooks, COP, PR Tracker, invoice processing — ISO 09.01. PRs also file under 05.01 Procurement.",
+    registerExports: [
+      {
+        label: "PR Tracker (XLSX)",
+        downloadPath: "/api/finance/:projectId/pr-tracker/download.xlsx",
+        isoSubfolder: "../05_PROCUREMENT_AND_CONTRACTS/05.01_Procurement_Strategy_and_Packages",
+      },
+      {
+        label: "Invoice processing tracker (XLSX)",
+        downloadPath: "/api/finance/:projectId/invoice-trackers/download.xlsx",
+        isoSubfolder: "09.01_Interim_Bill_Verification_Certification",
+      },
+    ],
   },
   comms: {
     root: "03_SUPPORT_AND_RESOURCES/03.08_Meetings_Minutes_Action_Tracking",

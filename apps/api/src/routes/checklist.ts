@@ -1630,6 +1630,25 @@ checklistRouter.post(
   }
 );
 
+checklistRouter.post(
+  "/project/:projectId/qap/delete-sheet",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const weekLabel = String(req.body.weekLabel || "").trim();
+    if (!weekLabel) return res.status(400).json({ error: "weekLabel is required" });
+    const result = await prisma.qapActivity.deleteMany({
+      where: { projectId: req.params.projectId, weekLabel },
+    });
+    await audit("qap.sheet.delete", {
+      userId: req.user!.id,
+      entity: "QapActivity",
+      entityId: req.params.projectId,
+      meta: { weekLabel, deleted: result.count },
+    });
+    res.json({ ok: true, weekLabel, deleted: result.count });
+  }
+);
+
 checklistRouter.delete(
   "/project/:projectId/qap/:qapId",
   requireRoles("admin", "office", "employee", "site_employee"),
@@ -1675,6 +1694,40 @@ checklistRouter.patch(
     if (body.srNo != null) data.srNo = String(body.srNo);
     if (body.status === "Done" || body.completedAt) data.completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
     if (body.status === "Open") data.completedAt = null;
+
+    if (body.status == null) {
+      let daily: Record<string, boolean> = {};
+      const rawDaily = data.dailyChecks ?? existing.dailyChecks;
+      if (typeof rawDaily === "string") {
+        try {
+          daily = JSON.parse(rawDaily) as Record<string, boolean>;
+        } catch {
+          daily = {};
+        }
+      }
+      const { qapStatusFromRow } = await import("../services/qualityDashboardSheets.js");
+      const flags = qapStatusFromRow({
+        srNo: String(data.srNo ?? existing.srNo ?? ""),
+        section: String(data.section ?? existing.section ?? existing.activity ?? ""),
+        description: String(data.description ?? existing.description ?? ""),
+        frequency: String(data.frequency ?? existing.frequency ?? ""),
+        codeOfConformance: String(data.codeOfConformance ?? existing.codeOfConformance ?? ""),
+        testAgency: String(data.testAgency ?? existing.testAgency ?? ""),
+        contractorPerformer: String(data.contractorPerformer ?? existing.contractorPerformer ?? ""),
+        contractorChecker: String(data.contractorChecker ?? existing.contractorChecker ?? ""),
+        pmcRole: String(data.pmcRole ?? existing.pmcRole ?? ""),
+        clientRole: String(data.clientRole ?? existing.clientRole ?? ""),
+        records: String(data.records ?? existing.records ?? ""),
+        remarks: String(data.remarks ?? existing.remarks ?? ""),
+        dailyChecks: daily,
+      });
+      data.contractorOk = flags.contractorOk;
+      data.pmcOk = flags.pmcOk;
+      data.clientOk = flags.clientOk;
+      data.status = flags.status;
+      data.completedAt = flags.status === "Done" ? existing.completedAt || new Date() : null;
+    }
+
     const row = await prisma.qapActivity.update({
       where: { id: existing.id },
       data,

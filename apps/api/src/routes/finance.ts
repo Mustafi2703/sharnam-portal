@@ -10,6 +10,7 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { resolveVendorForUser } from "../services/vendorPortal.js";
+import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 
 export const financeRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -77,7 +78,7 @@ function iso(d: Date | null | undefined) {
   return d ? new Date(d).toISOString() : "";
 }
 
-const RA_ISO_ROOT = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
+const RA_ISO_ROOT = MODULE_TO_ISO_FOLDER.finance;
 
 function safeRaFolder(raNumber: string): string {
   return `RA-${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
@@ -111,11 +112,13 @@ async function saveRaBillFile(
 
 financeRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [capex, pos, ras, cops] = await Promise.all([
+  const [capex, pos, ras, cops, prRequisitions, invoiceTrackers] = await Promise.all([
     prisma.projectCapex.findMany({ where: { projectId } }),
     prisma.purchaseOrder.findMany({ where: { projectId }, include: { vendor: true } }),
     prisma.raBill.findMany({ where: { projectId }, include: { purchaseOrder: true } }),
     prisma.certificateOfPayment.findMany({ where: { projectId } }),
+    prisma.progressPurchaseRequisition.findMany({ where: { projectId } }),
+    prisma.progressInvoiceTracker.findMany({ where: { projectId } }),
   ]);
 
   const totals = {
@@ -187,7 +190,17 @@ financeRouter.get("/:projectId/summary", async (req, res) => {
     copByStatus,
     paymentSummary,
     byDiscipline,
-    counts: { capex: capex.length, pos: pos.length, ras: ras.length, cops: cops.length, materials: materials.length },
+    counts: {
+      capex: capex.length,
+      pos: pos.length,
+      ras: ras.length,
+      cops: cops.length,
+      materials: materials.length,
+      prRequisitions: prRequisitions.length,
+      invoiceTrackers: invoiceTrackers.length,
+    },
+    prRequisitions,
+    invoiceTrackers,
     costBridge,
   });
 });
@@ -343,6 +356,166 @@ financeRouter.delete("/po/:id", requireRoles("admin", "office"), async (req: Aut
   res.json({ ok: true });
 });
 
+/* ─────────────────────────────────────────  PR TRACKER + INVOICE PROCESSING  ───────────────────────────────────────── */
+
+financeRouter.get("/:projectId/purchase-requisitions", async (req, res) => {
+  const rows = await prisma.progressPurchaseRequisition.findMany({
+    where: { projectId: req.params.projectId },
+    orderBy: { srNo: "asc" },
+  });
+  res.json(rows);
+});
+
+financeRouter.post("/:projectId/purchase-requisitions", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const last = await prisma.progressPurchaseRequisition.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const qty = num(req.body.qty) || 1;
+  const rate = num(req.body.rate);
+  const row = await prisma.progressPurchaseRequisition.create({
+    data: {
+      projectId,
+      srNo: Number(req.body.srNo || (last?.srNo || 0) + 1),
+      prType: s(req.body.prType) || "Service",
+      prNumber: s(req.body.prNumber) || null,
+      discipline: s(req.body.discipline) || null,
+      qty,
+      unit: s(req.body.unit) || null,
+      rate,
+      amount: num(req.body.amount) || qty * rate,
+      materialCode: s(req.body.materialCode) || null,
+      poNumber: s(req.body.poNumber) || null,
+    },
+  });
+  await audit("finance.pr.create", { userId: req.user!.id, entity: "ProgressPurchaseRequisition", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+financeRouter.patch("/:projectId/purchase-requisitions/:rowId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressPurchaseRequisition.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const qty = req.body.qty != null ? num(req.body.qty) : existing.qty;
+  const rate = req.body.rate != null ? num(req.body.rate) : existing.rate;
+  const row = await prisma.progressPurchaseRequisition.update({
+    where: { id: existing.id },
+    data: {
+      prType: req.body.prType != null ? s(req.body.prType) : undefined,
+      prNumber: req.body.prNumber != null ? s(req.body.prNumber) || null : undefined,
+      discipline: req.body.discipline != null ? s(req.body.discipline) || null : undefined,
+      qty,
+      unit: req.body.unit != null ? s(req.body.unit) || null : undefined,
+      rate,
+      amount: req.body.amount != null ? num(req.body.amount) : qty * rate,
+      materialCode: req.body.materialCode != null ? s(req.body.materialCode) || null : undefined,
+      poNumber: req.body.poNumber != null ? s(req.body.poNumber) || null : undefined,
+    },
+  });
+  res.json(row);
+});
+
+financeRouter.delete("/:projectId/purchase-requisitions/:rowId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressPurchaseRequisition.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressPurchaseRequisition.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+financeRouter.get("/:projectId/invoice-trackers", async (req, res) => {
+  const rows = await prisma.progressInvoiceTracker.findMany({
+    where: { projectId: req.params.projectId },
+    orderBy: { srNo: "asc" },
+  });
+  res.json(rows);
+});
+
+financeRouter.post("/:projectId/invoice-trackers", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const workName = s(req.body.workName);
+  if (!workName) return res.status(400).json({ error: "workName required" });
+  const last = await prisma.progressInvoiceTracker.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const row = await prisma.progressInvoiceTracker.create({
+    data: {
+      projectId,
+      srNo: Number(req.body.srNo || (last?.srNo || 0) + 1),
+      workName,
+      invoiceNumber: s(req.body.invoiceNumber) || null,
+      poNumber: s(req.body.poNumber) || null,
+      vendorName: s(req.body.vendorName) || null,
+      invoiceDate: req.body.invoiceDate ? new Date(req.body.invoiceDate) : null,
+      amountExclGst: num(req.body.amountExclGst),
+      copStatus: s(req.body.copStatus) || "Open",
+      remarks: s(req.body.remarks) || null,
+    },
+  });
+  await audit("finance.invoice.create", { userId: req.user!.id, entity: "ProgressInvoiceTracker", entityId: row.id, meta: { projectId } });
+  res.status(201).json(row);
+});
+
+financeRouter.patch("/:projectId/invoice-trackers/:rowId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressInvoiceTracker.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const row = await prisma.progressInvoiceTracker.update({
+    where: { id: existing.id },
+    data: {
+      workName: req.body.workName != null ? s(req.body.workName) : undefined,
+      invoiceNumber: req.body.invoiceNumber != null ? s(req.body.invoiceNumber) || null : undefined,
+      poNumber: req.body.poNumber != null ? s(req.body.poNumber) || null : undefined,
+      vendorName: req.body.vendorName != null ? s(req.body.vendorName) || null : undefined,
+      invoiceDate: req.body.invoiceDate !== undefined ? (req.body.invoiceDate ? new Date(req.body.invoiceDate) : null) : undefined,
+      amountExclGst: req.body.amountExclGst != null ? num(req.body.amountExclGst) : undefined,
+      copStatus: req.body.copStatus != null ? s(req.body.copStatus) : undefined,
+      remarks: req.body.remarks != null ? s(req.body.remarks) || null : undefined,
+    },
+  });
+  res.json(row);
+});
+
+financeRouter.delete("/:projectId/invoice-trackers/:rowId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressInvoiceTracker.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressInvoiceTracker.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+financeRouter.post("/:projectId/import-pr-tracker", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { importPrInvoiceFromWorkbook } = await import("../services/wprTrackerPackImport.js");
+  const counts = await importPrInvoiceFromWorkbook(prisma, req.params.projectId);
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  if (project) {
+    const { buildPrInvoiceWorkbook } = await import("../modules/finance/prInvoiceWorkbook.js");
+    const buf = await buildPrInvoiceWorkbook(req.params.projectId);
+    await mockOneDrive.upload(project.code, MODULE_TO_ISO_FOLDER.prTracker, `PR-Tracker-${project.code}.xlsx`, buf);
+    await mockOneDrive.upload(project.code, MODULE_TO_ISO_FOLDER.invoiceTracker, `Invoice-Processing-${project.code}.xlsx`, buf);
+  }
+  await audit("finance.pr.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: counts });
+  res.json(counts);
+});
+
+financeRouter.get("/:projectId/pr-tracker/download.xlsx", async (req, res) => {
+  const { buildPrInvoiceWorkbook } = await import("../modules/finance/prInvoiceWorkbook.js");
+  const buf = await buildPrInvoiceWorkbook(req.params.projectId);
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="PR-Tracker-${project?.code || "export"}.xlsx"`);
+  res.send(buf);
+});
+
+financeRouter.get("/:projectId/invoice-trackers/download.xlsx", async (req, res) => {
+  const { buildPrInvoiceWorkbook } = await import("../modules/finance/prInvoiceWorkbook.js");
+  const buf = await buildPrInvoiceWorkbook(req.params.projectId);
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Invoice-Processing-${project?.code || "export"}.xlsx"`);
+  res.send(buf);
+});
+
 /* ─────────────────────────────────────────  RA BILLS  ───────────────────────────────────────── */
 
 financeRouter.get("/:projectId/ra", async (req: AuthedRequest, res) => {
@@ -439,6 +612,9 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fie
     },
   });
 
+  const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+  await recomputeRaCumulativeChain(prisma, req.params.projectId, { discipline, purchaseOrderId });
+
   if (purchaseOrderId) {
     const totals = await prisma.raBill.aggregate({
       where: { purchaseOrderId },
@@ -509,11 +685,25 @@ financeRouter.put("/ra/:id", requireRoles("admin", "office"), async (req: Authed
     if (req.body[k] != null && req.body[k] !== "") data[k] = num(req.body[k]);
   }
   const row = await prisma.raBill.update({ where: { id: req.params.id }, data });
-  res.json(row);
+  const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+  await recomputeRaCumulativeChain(prisma, row.projectId, {
+    discipline: row.discipline,
+    purchaseOrderId: row.purchaseOrderId,
+  });
+  const refreshed = await prisma.raBill.findUnique({ where: { id: row.id } });
+  res.json(refreshed || row);
 });
 
 financeRouter.delete("/ra/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const before = await prisma.raBill.findUnique({ where: { id: req.params.id } });
   await prisma.raBill.delete({ where: { id: req.params.id } });
+  if (before) {
+    const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+    await recomputeRaCumulativeChain(prisma, before.projectId, {
+      discipline: before.discipline,
+      purchaseOrderId: before.purchaseOrderId,
+    });
+  }
   await audit("finance.ra.delete", { userId: req.user!.id, entity: "RaBill", entityId: req.params.id });
   res.json({ ok: true });
 });
@@ -747,26 +937,34 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
     );
     attachmentUrl = saved.url || `/uploads/onedrive/${project.code}/${saved.path}`;
   }
+  const linkedRa = raBillId
+    ? await prisma.raBill.findFirst({ where: { id: raBillId, projectId: req.params.projectId } })
+    : null;
+  const amountCertified = num(req.body.amountCertified) || linkedRa?.totalInvoiceWithoutGst || 0;
+  const amountPayable = num(req.body.amountPayable) || linkedRa?.netAmountPayable || 0;
+  const gstAmount = num(req.body.gstAmount) || linkedRa?.gstAmount || 0;
+  const retentionAmount = num(req.body.retentionAmount) || linkedRa?.retentionAmount || 0;
+
   const created = await prisma.certificateOfPayment.create({
     data: {
       projectId: req.params.projectId,
       certificateNumber: s(req.body.certificateNumber) || `COP-${Date.now()}`,
       certificateType: s(req.body.certificateType) || null,
       certificateDate: req.body.certificateDate ? new Date(req.body.certificateDate) : new Date(),
-      contractor: s(req.body.contractor) || "Contractor",
-      workTrade: s(req.body.workTrade) || null,
+      contractor: s(req.body.contractor) || linkedRa?.vendorName || "Contractor",
+      workTrade: s(req.body.workTrade) || linkedRa?.discipline || null,
       budgetCode: s(req.body.budgetCode) || null,
-      purchaseOrderId: s(req.body.purchaseOrderId) || null,
+      purchaseOrderId: s(req.body.purchaseOrderId) || linkedRa?.purchaseOrderId || null,
       poNumberDate: s(req.body.poNumberDate) || null,
       originalWoValue: num(req.body.originalWoValue),
       amendmentNo: s(req.body.amendmentNo) || null,
       amendedWoValue: num(req.body.amendedWoValue),
-      invoiceNoDate: s(req.body.invoiceNoDate) || null,
+      invoiceNoDate: s(req.body.invoiceNoDate) || linkedRa?.invoiceNumber || null,
       raBillId: s(req.body.raBillId) || null,
-      amountCertified: num(req.body.amountCertified),
-      amountPayable: num(req.body.amountPayable),
-      gstAmount: num(req.body.gstAmount),
-      retentionAmount: num(req.body.retentionAmount),
+      amountCertified,
+      amountPayable,
+      gstAmount,
+      retentionAmount,
       panNumber: s(req.body.panNumber) || null,
       gstNumber: s(req.body.gstNumber) || null,
       payableTo: s(req.body.payableTo) || null,
@@ -779,6 +977,11 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
 
   if (created.raBillId) {
     await prisma.raBill.update({ where: { id: created.raBillId }, data: { copNo: created.certificateNumber } });
+    const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+    await recomputeRaCumulativeChain(prisma, req.params.projectId, {
+      discipline: linkedRa?.discipline,
+      purchaseOrderId: created.purchaseOrderId,
+    });
   }
 
   const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
@@ -1146,19 +1349,28 @@ financeRouter.post("/:projectId/cop/upload-all-to-dms", requireRoles("admin", "o
 financeRouter.put("/cop/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
+  const data: Record<string, unknown> = {
+    status: s(req.body.status) || before.status,
+    remarks: req.body.remarks != null ? s(req.body.remarks) || before.remarks : before.remarks,
+    certifiedById: req.body.certified ? req.user!.id : before.certifiedById,
+    approvedById: req.body.approved ? req.user!.id : before.approvedById,
+  };
+  if (req.body.amountCertified != null && req.body.amountCertified !== "") data.amountCertified = num(req.body.amountCertified);
+  if (req.body.amountPayable != null && req.body.amountPayable !== "") data.amountPayable = num(req.body.amountPayable);
+  if (req.body.gstAmount != null && req.body.gstAmount !== "") data.gstAmount = num(req.body.gstAmount);
+  if (req.body.retentionAmount != null && req.body.retentionAmount !== "") data.retentionAmount = num(req.body.retentionAmount);
   const row = await prisma.certificateOfPayment.update({
     where: { id: req.params.id },
-    data: {
-      status: s(req.body.status) || before.status,
-      remarks: s(req.body.remarks) || before.remarks,
-      amountCertified: num(req.body.amountCertified),
-      amountPayable: num(req.body.amountPayable),
-      gstAmount: num(req.body.gstAmount),
-      retentionAmount: num(req.body.retentionAmount),
-      certifiedById: req.body.certified ? req.user!.id : before.certifiedById,
-      approvedById: req.body.approved ? req.user!.id : before.approvedById,
-    },
+    data,
   });
+  if (row.raBillId) {
+    const ra = await prisma.raBill.findUnique({ where: { id: row.raBillId } });
+    const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+    await recomputeRaCumulativeChain(prisma, row.projectId, {
+      discipline: ra?.discipline,
+      purchaseOrderId: row.purchaseOrderId,
+    });
+  }
   const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
   await syncCopToCashflow(row.projectId);
   res.json(row);
@@ -1168,6 +1380,17 @@ financeRouter.delete("/cop/:id", requireRoles("admin", "office"), async (req: Au
   const before = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id } });
   await prisma.certificateOfPayment.delete({ where: { id: req.params.id } });
   if (before) {
+    if (before.raBillId) {
+      const ra = await prisma.raBill.findUnique({ where: { id: before.raBillId } });
+      if (ra) {
+        await prisma.raBill.update({ where: { id: ra.id }, data: { copNo: null } });
+        const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+        await recomputeRaCumulativeChain(prisma, before.projectId, {
+          discipline: ra.discipline,
+          purchaseOrderId: before.purchaseOrderId,
+        });
+      }
+    }
     const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
     await syncCopToCashflow(before.projectId);
   }
