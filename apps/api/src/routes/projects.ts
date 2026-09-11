@@ -416,22 +416,28 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
     clientGst,
     designConsultant,
     contractorName,
+    pmcName,
+    startDate,
+    endDate,
   } = req.body;
   if (!code || !name) return res.status(400).json({ error: "code and name required" });
   const project = await prisma.project.create({
     data: {
-      code,
-      name,
-      clientName,
-      location,
+      code: String(code).trim(),
+      name: String(name).trim(),
+      clientName: clientName ? String(clientName).trim() : null,
+      location: location ? String(location).trim() : null,
       status: status || "Planning",
-      clientContactName,
-      clientEmail,
-      clientPhone,
-      clientAddress,
-      clientGst,
-      designConsultant,
-      contractorName,
+      clientContactName: clientContactName ? String(clientContactName).trim() : null,
+      clientEmail: clientEmail ? String(clientEmail).trim() : null,
+      clientPhone: clientPhone ? String(clientPhone).trim() : null,
+      clientAddress: clientAddress ? String(clientAddress).trim() : null,
+      clientGst: clientGst ? String(clientGst).trim() : null,
+      designConsultant: designConsultant ? String(designConsultant).trim() : null,
+      contractorName: contractorName ? String(contractorName).trim() : null,
+      pmcName: pmcName ? String(pmcName).trim() : "SPDC",
+      startDate: startDate ? new Date(String(startDate)) : null,
+      endDate: endDate ? new Date(String(endDate)) : null,
     },
   });
   await audit("project.create", { userId: req.user!.id, entity: "Project", entityId: project.id });
@@ -459,11 +465,9 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   });
 
   try {
-    const { completeProjectSetup } = await import("../services/completeProjectSetup.js");
-    await completeProjectSetup(project.id, req.user!.id);
+    await mockOneDrive.ensureProjectTree(project.id);
   } catch (err) {
-    console.error("Project setup pack failed:", err instanceof Error ? err.message : err);
-    await mockOneDrive.ensureProjectTree(project.id).catch(() => null);
+    console.error("Project folder tree failed:", err instanceof Error ? err.message : err);
   }
   res.status(201).json(project);
 });
@@ -550,6 +554,9 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
       clientGst: true,
       designConsultant: true,
       contractorName: true,
+      pmcName: true,
+      startDate: true,
+      endDate: true,
     },
   });
   if (!project) return res.status(404).json({ error: "Not found" });
@@ -772,6 +779,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     designConsultant,
     contractorName,
     pmcName,
+    startDate,
+    endDate,
   } = req.body;
   const project = await prisma.project.update({
     where: { id: req.params.id },
@@ -803,6 +812,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
       designConsultant: designConsultant !== undefined ? designConsultant : undefined,
       contractorName: contractorName !== undefined ? contractorName : undefined,
       pmcName: pmcName !== undefined ? pmcName : undefined,
+      startDate: startDate !== undefined ? (startDate ? new Date(String(startDate)) : null) : undefined,
+      endDate: endDate !== undefined ? (endDate ? new Date(String(endDate)) : null) : undefined,
     },
   });
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });

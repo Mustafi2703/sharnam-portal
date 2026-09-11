@@ -65,6 +65,7 @@ import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
 import HrmsVendorsPage from "./pages/hrms/HrmsVendorsPage";
 import CrmDirectoryPage from "./pages/crm/CrmDirectoryPage";
+import CrmHubPage from "./pages/crm/CrmHubPage";
 import CrmProjectSetupPage from "./pages/crm/CrmProjectSetupPage";
 import CrmProjectsPage from "./pages/crm/CrmProjectsPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
@@ -267,7 +268,7 @@ export default function App() {
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />
                 <Route path="/crm" element={<CrmLayout />}>
-                  <Route index element={<Navigate to="/crm/setup" replace />} />
+                  <Route index element={<CrmHubPage />} />
                   <Route path="setup" element={<CrmProjectSetupPage />} />
                   <Route path="leads" element={<CrmPage />} />
                   <Route path="proposals/new" element={<QuotationMakerPage />} />

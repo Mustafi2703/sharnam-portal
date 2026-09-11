@@ -146,7 +146,10 @@ export async function getProjectSetupStatus(projectId: string) {
       status: true,
       clientName: true,
       clientEmail: true,
+      clientContactName: true,
+      location: true,
       contractorName: true,
+      pmcName: true,
     },
   });
   if (!project) return null;
@@ -207,6 +210,15 @@ export async function getProjectSetupStatus(projectId: string) {
   const contractorPortalOk = contractors.length === 0 || vendorMembers.length > 0 || contractors.some((c) => !c.vendor.email);
 
   const checks: SetupCheck[] = [
+    {
+      key: "card",
+      ok: Boolean(project.name && project.location && project.clientName),
+      label: "Project card saved",
+      detail:
+        project.name && project.location && project.clientName
+          ? `${project.code} · ${project.clientName} · ${project.location}`
+          : "Save name, client organisation, and site location on the project card",
+    },
     {
       key: "folders",
       ok: folderCount > 0,

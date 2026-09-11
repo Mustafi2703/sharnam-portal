@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, Input } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
@@ -39,6 +39,9 @@ type SetupSummary = {
     designConsultant?: string | null;
     contractorName?: string | null;
     pmcName?: string | null;
+    clientGst?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
   };
   lead?: { id: string; title: string; stage: string } | null;
   members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string }[];
@@ -71,10 +74,18 @@ const EMPTY_PROJECT = {
   clientEmail: "",
   clientPhone: "",
   clientAddress: "",
+  clientGst: "",
   location: "",
   designConsultant: "",
   contractorName: "",
+  pmcName: "SPDC",
+  startDate: "",
+  endDate: "",
 };
+
+function dayField(v?: string | null) {
+  return v ? String(v).slice(0, 10) : "";
+}
 
 const STEPS: { id: Step; n: string; label: string }[] = [
   { id: "project", n: "1", label: "Project card" },
@@ -149,6 +160,10 @@ export default function CrmProjectSetupPage() {
       location: s.project.location || "",
       designConsultant: s.project.designConsultant || "",
       contractorName: s.project.contractorName || "",
+      pmcName: s.project.pmcName || "SPDC",
+      clientGst: s.project.clientGst || "",
+      startDate: dayField(s.project.startDate),
+      endDate: dayField(s.project.endDate),
     });
     setConsultantIds(
       s.vendors.filter((v) => ["Consultant", "Designer", "PMC"].includes(v.partyType)).map((v) => v.vendorId)
@@ -185,8 +200,8 @@ export default function CrmProjectSetupPage() {
       });
       setCreateForm(EMPTY_PROJECT);
       await loadLists();
-      setStep("matrix", created.id);
-      setMsg(`Project ${created.code} created at ${createForm.location || "the client location"}. Fill the communication matrix next.`);
+      setStep("project", created.id);
+      setMsg(`Project ${created.code} saved. Card, client, and parties are stored. Continue the matrix, then launch.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -253,21 +268,18 @@ export default function CrmProjectSetupPage() {
   }
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="space-y-4 p-4 sm:p-5 pb-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · project start</p>
-          <h2 className="font-display text-lg text-ink">Project setup</h2>
-          <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
-            Start the delivery project here. The BPCL communication matrix (Technical and Commercial — all person fields)
-            can be filled in this step or later in Comms. It is not required to launch. Complete setup seeds clean registers
-            for DPR / WPR; each week and day is saved as history.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="CRM · project start"
+          title="Project setup"
+          subtitle="Save the delivery card first — code, client, location, PMC, consultants, and contractors stay on this project. Then fill the matrix and launch portals, folders, and the first DPR / WPR."
+        />
         {summary && (
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="brand">{summary.project.code}</Badge>
             <span className="text-sm font-medium">{summary.project.name}</span>
+            {status?.ready ? <Badge tone="ok">Ready to launch</Badge> : <Badge tone="warn">Setup in progress</Badge>}
           </div>
         )}
       </div>
@@ -301,12 +313,25 @@ export default function CrmProjectSetupPage() {
             <h3 className="font-semibold text-sm">{projectId ? "Project card" : "New delivery project"}</h3>
             {projectId ? (
               <form className="grid sm:grid-cols-2 gap-2" onSubmit={saveDetails}>
-                <Input placeholder="Project name" value={details.name} onChange={(e) => setDetails({ ...details, name: e.target.value })} />
+                <Input disabled value={details.code} placeholder="Project code" />
+                <Input required placeholder="Project name" value={details.name} onChange={(e) => setDetails({ ...details, name: e.target.value })} />
                 <Input placeholder="Client organisation" value={details.clientName} onChange={(e) => setDetails({ ...details, clientName: e.target.value })} />
                 <Input required placeholder="Client location (site / city)" value={details.location} onChange={(e) => setDetails({ ...details, location: e.target.value })} />
+                <Input placeholder="PMC / SPDC name" value={details.pmcName} onChange={(e) => setDetails({ ...details, pmcName: e.target.value })} />
+                <Input placeholder="Client GST" value={details.clientGst} onChange={(e) => setDetails({ ...details, clientGst: e.target.value })} />
+                <label className="text-xs text-steel-muted">
+                  Start date
+                  <Input type="date" value={details.startDate} onChange={(e) => setDetails({ ...details, startDate: e.target.value })} />
+                </label>
+                <label className="text-xs text-steel-muted">
+                  End date
+                  <Input type="date" value={details.endDate} onChange={(e) => setDetails({ ...details, endDate: e.target.value })} />
+                </label>
                 <Input placeholder="Client contact" value={details.clientContactName} onChange={(e) => setDetails({ ...details, clientContactName: e.target.value })} />
                 <Input type="email" placeholder="Client email" value={details.clientEmail} onChange={(e) => setDetails({ ...details, clientEmail: e.target.value })} />
                 <Input placeholder="Client phone" value={details.clientPhone} onChange={(e) => setDetails({ ...details, clientPhone: e.target.value })} />
+                <Input placeholder="Design consultant (name)" value={details.designConsultant} onChange={(e) => setDetails({ ...details, designConsultant: e.target.value })} />
+                <Input placeholder="Main contractor (name)" value={details.contractorName} onChange={(e) => setDetails({ ...details, contractorName: e.target.value })} />
                 <Input className="sm:col-span-2" placeholder="Client office address" value={details.clientAddress} onChange={(e) => setDetails({ ...details, clientAddress: e.target.value })} />
                 <div className="sm:col-span-2 grid lg:grid-cols-2 gap-3">
                   <SetupPartyMultiPick
@@ -347,10 +372,22 @@ export default function CrmProjectSetupPage() {
                 <Input required placeholder="Project name" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
                 <Input placeholder="Client organisation" value={createForm.clientName} onChange={(e) => setCreateForm({ ...createForm, clientName: e.target.value })} />
                 <Input required placeholder="Client location (site / city)" value={createForm.location} onChange={(e) => setCreateForm({ ...createForm, location: e.target.value })} />
+                <Input placeholder="PMC / SPDC name" value={createForm.pmcName} onChange={(e) => setCreateForm({ ...createForm, pmcName: e.target.value })} />
+                <Input placeholder="Client GST" value={createForm.clientGst} onChange={(e) => setCreateForm({ ...createForm, clientGst: e.target.value })} />
+                <label className="text-xs text-steel-muted">
+                  Start date
+                  <Input type="date" value={createForm.startDate} onChange={(e) => setCreateForm({ ...createForm, startDate: e.target.value })} />
+                </label>
+                <label className="text-xs text-steel-muted">
+                  End date
+                  <Input type="date" value={createForm.endDate} onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })} />
+                </label>
                 <Input placeholder="Client contact" value={createForm.clientContactName} onChange={(e) => setCreateForm({ ...createForm, clientContactName: e.target.value })} />
                 <Input type="email" placeholder="Client email (portal login)" value={createForm.clientEmail} onChange={(e) => setCreateForm({ ...createForm, clientEmail: e.target.value })} />
                 <Input placeholder="Client phone" value={createForm.clientPhone} onChange={(e) => setCreateForm({ ...createForm, clientPhone: e.target.value })} />
-                <Input placeholder="Client office address" value={createForm.clientAddress} onChange={(e) => setCreateForm({ ...createForm, clientAddress: e.target.value })} />
+                <Input placeholder="Design consultant (name)" value={createForm.designConsultant} onChange={(e) => setCreateForm({ ...createForm, designConsultant: e.target.value })} />
+                <Input placeholder="Main contractor (name)" value={createForm.contractorName} onChange={(e) => setCreateForm({ ...createForm, contractorName: e.target.value })} />
+                <Input className="sm:col-span-2" placeholder="Client office address" value={createForm.clientAddress} onChange={(e) => setCreateForm({ ...createForm, clientAddress: e.target.value })} />
                 <div className="sm:col-span-2 grid lg:grid-cols-2 gap-3">
                   <SetupPartyMultiPick
                     token={token}
@@ -376,13 +413,13 @@ export default function CrmProjectSetupPage() {
                   />
                 </div>
                 <Button type="submit" className="sm:col-span-2" disabled={busy}>
-                  Create project and open matrix
+                  Save project card
                 </Button>
               </form>
             )}
           </Card>
-          <Card className="!p-4 space-y-2">
-            <label className="text-xs font-semibold text-steel-muted">Or continue an existing project</label>
+          <Card className="!p-4 space-y-3">
+            <label className="text-xs font-semibold text-steel-muted">Continue a stored project</label>
             <SearchableSelect
               options={projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}`, sublabel: p.clientName || p.location || undefined }))}
               value={projectId}
@@ -391,6 +428,23 @@ export default function CrmProjectSetupPage() {
               searchPlaceholder="Search code or client…"
             />
             {summary?.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
+            {summary && (
+              <p className="text-xs text-steel-muted leading-relaxed">
+                Stored: {summary.members.length} people · {summary.vendors.length} companies
+                {details.location ? ` · ${details.location}` : ""}.
+              </p>
+            )}
+            <ul className="space-y-1.5">
+              {(status?.checks || []).map((c) => (
+                <li key={c.key} className="flex items-start gap-2 text-xs">
+                  <Badge tone={c.ok ? "ok" : "neutral"}>{c.ok ? "Saved" : "Open"}</Badge>
+                  <span>
+                    <span className="font-medium">{c.label}</span>
+                    {c.detail && <span className="block text-steel-muted">{c.detail}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </Card>
         </div>
       )}

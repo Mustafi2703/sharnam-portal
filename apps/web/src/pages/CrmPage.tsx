@@ -17,6 +17,13 @@ import {
   marketStatusTone,
 } from "../lib/crmLeadUtils";
 import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
+import { openModuleToolWindow, withToolWindowParam } from "../lib/moduleToolWindow";
+
+function openCrmSetup(projectId: string) {
+  const href = `/crm/setup?projectId=${projectId}&step=project`;
+  const w = openModuleToolWindow(href, "Project setup");
+  if (!w) window.location.assign(withToolWindowParam(href, true));
+}
 
 type LeadsView = "register" | "market" | "pipeline" | "converted";
 const LEAD_STAGES = PIPELINE_STAGES;
@@ -274,7 +281,7 @@ export default function CrmPage() {
       if (res.alreadyConverted) {
         setConvertLead(null);
         setMsg(`Lead already linked to ${res.project.code} — opening project setup.`);
-        navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
+        openCrmSetup(res.project.id);
         await load();
         return;
       }
@@ -303,7 +310,7 @@ export default function CrmPage() {
             `Project ${res.project.code} created. Bid package failed: ${err instanceof Error ? err.message : "unknown"} — open Bid desk to set up manually.`,
           );
           setConvertLead(null);
-          navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
+          openCrmSetup(res.project.id);
           await load();
           return;
         }
@@ -311,11 +318,11 @@ export default function CrmPage() {
 
       setConvertLead(null);
       if (bidPackageId) {
-        setMsg(`Project ${res.project.code} created. Finish team, comms, and portals on Project setup — bid package is ready.`);
-        navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
+        setMsg(`Project ${res.project.code} created. Finish the saved project card, matrix, and launch in Project setup.`);
+        openCrmSetup(res.project.id);
       } else {
-        setMsg(`Project ${res.project.code} created. Assign parties and complete setup (portals, folders, DPR, WPR).`);
-        navigate(`/crm/setup?projectId=${res.project.id}&step=matrix`);
+        setMsg(`Project ${res.project.code} created. Open Project setup to save parties and launch portals.`);
+        openCrmSetup(res.project.id);
       }
       await load();
     } catch (err) {

@@ -15,12 +15,14 @@ export type CrmSection = {
   tools: CrmTool[];
 };
 
+export const CRM_HUB = { to: "", label: "Hub", subtitle: "CRM desk — open each tool in its own window." };
+
 export const CRM_SECTIONS: CrmSection[] = [
   {
     id: "pipeline",
     label: "Pipeline",
     tools: [
-      { to: "setup", label: "Project setup", subtitle: "Create the delivery project · assign parties · comms matrix · client & contractor portals · DPR / WPR." },
+      { to: "setup", label: "Project setup", subtitle: "Create and save the delivery project card, parties, matrix, then launch portals, folders, DPR / WPR." },
       { to: "leads", label: "Leads", subtitle: "Market register · filter · convert to SPDC delivery project." },
       { to: "proposals", label: "Proposals", subtitle: "PMC quotation register, status log, and letter export." },
       { to: "projects", label: "Projects", subtitle: "All delivery projects with client cards — open module boxes, create a project, or continue setup." },

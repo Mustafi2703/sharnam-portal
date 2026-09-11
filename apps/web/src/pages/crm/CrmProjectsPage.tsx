@@ -84,7 +84,7 @@ export default function CrmProjectsPage() {
       n: "01",
       label: "Create project",
       blurb: "New delivery project — code, client, location, consultant, contractor.",
-      href: "/crm/projects?create=1",
+      href: "/crm/setup",
     },
     {
       n: "02",
@@ -152,13 +152,7 @@ export default function CrmProjectsPage() {
             key={card.n + card.label}
             type="button"
             className="text-left h-full rounded-xl border border-line bg-paper p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand/50"
-            onClick={() => {
-              if (card.href.includes("create=1")) {
-                setParams({ create: "1" }, { replace: true });
-                return;
-              }
-              openBox(card.href, card.label);
-            }}
+            onClick={() => openBox(card.href, card.label)}
           >
             <div className="flex items-center justify-between gap-2 mb-3">
               <span

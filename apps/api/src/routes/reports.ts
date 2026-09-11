@@ -612,6 +612,7 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
       clientGst: req.body.clientGst || undefined,
       designConsultant: req.body.designConsultant || undefined,
       contractorName: req.body.contractorName || undefined,
+      pmcName: req.body.pmcName || "SPDC",
       bidDisciplinesJson,
       ...(workPackagesJson ? { workPackages: workPackagesJson } : {}),
     },
@@ -657,10 +658,10 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
   });
 
   try {
-    const { completeProjectSetup } = await import("../services/completeProjectSetup.js");
-    await completeProjectSetup(project.id, req.user!.id);
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    await mockOneDrive.ensureProjectTree(project.id);
   } catch (err) {
-    console.error("Project setup pack failed:", err instanceof Error ? err.message : err);
+    console.error("Project folder tree failed:", err instanceof Error ? err.message : err);
   }
 
   res.status(201).json({ project, leadId: lead.id });

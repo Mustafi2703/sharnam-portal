@@ -1,6 +1,8 @@
-import { Fragment, type CSSProperties } from "react";
+import { Fragment, type CSSProperties, type MouseEvent } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth";
+import { Button } from "../../components/ui";
+import { closeToolWindowOrGo, isToolWindow, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
 import { CRM_ACCENT, CRM_SOFT, CRM_SECTIONS, CRM_TOOLS, CRM_VENDOR_TOOLS } from "./crmNav";
 
 const tabClass = (on: boolean) =>
@@ -14,12 +16,21 @@ function toolActive(pathname: string, to: string, end?: boolean) {
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
+function openCrmTool(e: MouseEvent, href: string, label: string, inWin: boolean) {
+  if (inWin) return;
+  e.preventDefault();
+  const w = openModuleToolWindow(href, label);
+  if (!w) window.location.assign(withToolWindowParam(href, true));
+}
+
 /** CRM module shell — Procore-style chrome matching project tool workspaces. */
 export default function CrmLayout() {
   const loc = useLocation();
   const { user } = useAuth();
   const isVendor = user?.role === "vendor";
   const tools = isVendor ? CRM_VENDOR_TOOLS : CRM_TOOLS;
+  const inWin = isToolWindow(loc.search);
+  const onHub = loc.pathname === "/crm" || loc.pathname === "/crm/";
 
   const activeTool = CRM_TOOLS.find((t) =>
     toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup")
@@ -30,21 +41,24 @@ export default function CrmLayout() {
   const onBidDetail = /\/crm\/bids\/[^/]+/.test(loc.pathname);
   const onProposalEdit = /\/crm\/proposals\/(new|[^/]+)/.test(loc.pathname);
 
-  const pageTitle = onBidDetail
-    ? "Comparative bids"
-    : onProposalEdit
-      ? "PMC proposal"
-      : activeTool?.label || (isVendor ? "My bids" : "CRM desk");
+  const pageTitle = onHub
+    ? "CRM desk"
+    : onBidDetail
+      ? "Comparative bids"
+      : onProposalEdit
+        ? "PMC proposal"
+        : activeTool?.label || (isVendor ? "My bids" : "CRM desk");
 
-  const pageSubtitle =
-    activeTool?.subtitle ||
-    (isVendor
-      ? "Fill R2 discipline BOQs in-portal — no separate sheet maker."
-      : "Project setup, leads, comparative bids, and PMC proposals — one desk.");
+  const pageSubtitle = onHub
+    ? "Open a tool in a new window — same pattern as Quality, Safety, and Drawings."
+    : activeTool?.subtitle ||
+      (isVendor
+        ? "Fill R2 discipline BOQs in-portal — no separate sheet maker."
+        : "Project setup, leads, comparative bids, and PMC proposals — one desk.");
 
   return (
     <div
-      className="crm-workspace tool-workspace w-full min-w-0 flex flex-col flex-1 min-h-0"
+      className={`crm-workspace tool-workspace w-full min-w-0 flex flex-col flex-1 min-h-0 ${inWin ? "tool-workspace--window" : ""}`}
       style={
         {
           ["--tool-accent" as string]: CRM_ACCENT,
@@ -77,13 +91,23 @@ export default function CrmLayout() {
               <h1 className="font-display text-base sm:text-lg text-ink truncate">{pageTitle}</h1>
             </div>
           </div>
-          <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
+          <div className="flex items-center gap-2 shrink-0">
+            {inWin && !onHub ? (
+              <>
+                <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo("/crm")}>
+                  Back to CRM hub
+                </Button>
+                <Button type="button" variant="ghost" className="!text-sm" onClick={() => window.close()}>
+                  Close window
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
+            )}
+          </div>
         </div>
 
-        <nav
-          className="tool-strip px-2 sm:px-4 py-2 border-t border-line bg-paper"
-          aria-label="CRM tools"
-        >
+        <nav className="tool-strip px-2 sm:px-4 py-2 border-t border-line bg-paper" aria-label="CRM tools">
           <div className="flex gap-1.5 overflow-x-auto scrollbars-visible items-center">
             {isVendor ? (
               tools.map((t) => {
@@ -91,43 +115,61 @@ export default function CrmLayout() {
                 return (
                   <NavLink
                     key={t.to}
-                    to={to}
+                    to={inWin ? withToolWindowParam(to, true) : to}
                     end={"end" in t ? t.end : false}
                     className={({ isActive }) => tabClass(isActive)}
                     style={({ isActive }) =>
                       isActive ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined
                     }
+                    onClick={(e) => openCrmTool(e, to, t.label, inWin)}
                   >
                     {t.label}
                   </NavLink>
                 );
               })
             ) : (
-              CRM_SECTIONS.map((section, sectionIndex) => (
-                <Fragment key={section.id}>
-                  {sectionIndex > 0 && <span className="crm-nav-divider" aria-hidden />}
-                  {section.tools.map((t) => {
-                    const to = `/crm/${t.to}`;
-                    const active =
-                      toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup") ||
-                      (t.to === "proposals" && loc.pathname.startsWith("/crm/proposals"));
-                    return (
-                      <NavLink
-                        key={t.to}
-                        to={to}
-                        end={t.to === "leads" || t.to === "projects" || t.to === "setup"}
-                        className={() => tabClass(active)}
-                        style={active ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined}
-                      >
-                        {t.label}
-                      </NavLink>
-                    );
-                  })}
-                </Fragment>
-              ))
+              <>
+                <NavLink
+                  to="/crm"
+                  end
+                  className={() => tabClass(onHub)}
+                  style={onHub ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined}
+                >
+                  Hub
+                </NavLink>
+                {CRM_SECTIONS.map((section, sectionIndex) => (
+                  <Fragment key={section.id}>
+                    {sectionIndex > 0 && <span className="crm-nav-divider" aria-hidden />}
+                    {section.tools.map((t) => {
+                      const to = `/crm/${t.to}`;
+                      const active =
+                        toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup") ||
+                        (t.to === "proposals" && loc.pathname.startsWith("/crm/proposals"));
+                      return (
+                        <NavLink
+                          key={t.to}
+                          to={inWin ? withToolWindowParam(to, true) : to}
+                          end={t.to === "leads" || t.to === "projects" || t.to === "setup"}
+                          className={() => tabClass(active)}
+                          style={active ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined}
+                          onClick={(e) => openCrmTool(e, to, t.label, inWin)}
+                        >
+                          {t.label}
+                        </NavLink>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </>
             )}
           </div>
         </nav>
+
+        {inWin && !onHub && (
+          <div className="px-3 sm:px-5 pb-2.5 text-xs text-steel-muted">
+            Editing <strong className="text-ink">{pageTitle}</strong> — add or save, then return to the CRM hub.
+          </div>
+        )}
 
         {onBids && !isVendor && (
           <div className="module-hub__workflow border-t border-line bg-sand/80 px-3 sm:px-5 py-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
@@ -148,10 +190,10 @@ export default function CrmLayout() {
         {onSetup && !isVendor && (
           <div className="module-hub__workflow border-t border-line bg-sand/80 px-3 sm:px-5 py-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
             <span>
-              <strong className="text-ink font-semibold">1.</strong> Project card · client location · consultants & contractors
+              <strong className="text-ink font-semibold">1.</strong> Save project card · client · consultants & contractors
             </span>
             <span>
-              <strong className="text-ink font-semibold">2.</strong> Fill Technical + Commercial matrix (add users / vendors)
+              <strong className="text-ink font-semibold">2.</strong> Communication matrix (stored in Comms)
             </span>
             <span>
               <strong className="text-ink font-semibold">3.</strong> Launch portals, folders, DPR, WPR
