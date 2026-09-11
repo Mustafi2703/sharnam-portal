@@ -23,6 +23,7 @@ import {
   type WorkspaceKey,
 } from "../workspaces";
 import { resolveProjectWorkspace, isProjectModuleActive } from "../lib/projectWorkspace";
+import { isToolWindow } from "../lib/moduleToolWindow";
 import { api } from "../api";
 import { downloadAuthFile, exportPaths, type ExportModule } from "../lib/downloadReport";
 import {
@@ -356,6 +357,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   /** Project + CRM use locked tool shell; master scrolls in the app frame like dashboard. */
   const deskFullBleed = inProject || inCrm;
   const deskWideCanvas = inMaster;
+  const toolWin = isToolWindow(location.search);
   const [projects, setProjects] = useState<Proj[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [hidden, setHidden] = useState(() => {
@@ -468,7 +470,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className={`app-frame ${hidden ? "is-hidden" : ""}`}>
+    <div className={`app-frame ${hidden ? "is-hidden" : ""} ${toolWin ? "app-frame--tool-win" : ""}`}>
+      {!toolWin && (
       <aside className={`side-nav hidden md:flex ${hidden ? "is-off" : ""}`} aria-label="Primary" aria-hidden={hidden}>
         {!hidden && (
           <SideNavBody
@@ -480,8 +483,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           />
         )}
       </aside>
+      )}
 
       <div className="app-frame__main">
+        {!toolWin && (
         <header className={`app-topbar ${inProject ? "app-topbar--project" : ""}`}>
           <div className={`flex items-center gap-2.5 px-3 sm:px-4 ${inProject ? "h-11" : "h-[52px]"}`}>
             <button
@@ -597,6 +602,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
+        )}
 
         <main
           className={`app-frame__scroll ${deskFullBleed ? "app-frame__scroll--project" : ""} ${
@@ -617,7 +623,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {drawerOpen && (
+      {drawerOpen && !toolWin && (
         <div className="app-mobile-drawer md:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
           <button
             type="button"

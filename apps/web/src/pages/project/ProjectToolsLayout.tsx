@@ -20,7 +20,6 @@ import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
 import { closeToolWindowOrGo, isToolWindow, searchWithToolWindow } from "../../lib/moduleToolWindow";
 import { ToolLink } from "../../components/ToolLink";
-import { useStandaloneFormPage } from "../../lib/useStandaloneFormPage";
 
 const TOP_MODULES = (
   [
@@ -159,6 +158,16 @@ export default function ProjectToolsLayout() {
     navigate({ pathname: location.pathname, search: next, hash: location.hash }, { replace: true });
   }, [id, location.hash, location.pathname, location.search, navigate, toolWin]);
 
+  useEffect(() => {
+    if (!toolWin) return;
+    document.documentElement.classList.add("is-tool-window");
+    document.body.classList.add("is-tool-window");
+    return () => {
+      document.documentElement.classList.remove("is-tool-window");
+      document.body.classList.remove("is-tool-window");
+    };
+  }, [toolWin]);
+
   const showModuleNav =
     !!id &&
     !toolWin &&
@@ -190,8 +199,7 @@ export default function ProjectToolsLayout() {
 
   return (
     <div className={`w-full tool-workspace ${toolWin ? "tool-workspace--window" : ""}`} style={{ ["--tool-accent" as string]: accent }}>
-      {toolWin ? <ToolWindowScrollUnlock /> : null}
-      <div className="tool-chrome bg-paper border-b border-line sticky top-0 z-20">
+      <div className="tool-chrome bg-paper border-b border-line shrink-0 z-20">
         <div className="px-3 sm:px-5 py-2.5 flex flex-wrap items-center gap-3 justify-between">
           <div className="min-w-0 flex items-center gap-3">
             <span
@@ -300,9 +308,4 @@ export default function ProjectToolsLayout() {
       </div>
     </div>
   );
-}
-
-function ToolWindowScrollUnlock() {
-  useStandaloneFormPage();
-  return null;
 }

@@ -724,16 +724,10 @@ html.is-standalone-form #root {
   overflow: hidden;
 }
 .tool-workspace--window {
-  height: auto;
-  max-height: none;
-  overflow: visible;
-}
-.tool-workspace--window .tool-shell,
-.tool-workspace--window .tool-main,
-.tool-workspace--window .tool-main__outlet {
-  overflow: visible;
-  height: auto;
-  max-height: none;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 .tool-workspace--window .page-header--tool-win {
   margin-bottom: 0.5rem;
@@ -2046,6 +2040,86 @@ html.is-standalone-form #root {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x pan-y;
+}
+
+/* Dedicated tool window — one scroll in the outlet so add/fill forms stay reachable */
+html.is-tool-window,
+html.is-tool-window body,
+html.is-tool-window #root {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+.tool-workspace--window .tool-shell,
+.tool-workspace--window .tool-main,
+.tool-workspace--window .tool-main:has(.page-stack--register),
+.tool-workspace--window .tool-main:has(.qap-page),
+.tool-workspace--window .tool-main:has(.spdc-register-page),
+.tool-workspace--window .tool-main:has(.cost-page--register),
+.tool-workspace--window .tool-main:has(.progress-page--register),
+.tool-workspace--window .tool-main:has(.maker-shell) {
+  overflow: hidden !important;
+  min-height: 0;
+  flex: 1 1 0%;
+  height: auto;
+  max-height: none;
+  padding: 0;
+}
+.tool-workspace--window .tool-main__outlet,
+.tool-workspace--window .tool-main__outlet:has(.page-stack--register),
+.tool-workspace--window .tool-main__outlet:has(.page-scroll-full),
+.tool-workspace--window .tool-main__outlet:has(.qap-page),
+.tool-workspace--window .tool-main__outlet:has(.quality-module),
+.tool-workspace--window .tool-main__outlet:has(.spdc-register-page),
+.tool-workspace--window .tool-main__outlet:has(.cost-page--register),
+.tool-workspace--window .tool-main__outlet:has(.progress-page--register),
+.tool-workspace--window .tool-main__outlet:has(.maker-shell),
+.tool-workspace--window .tool-main__outlet:has(.dpr-maker),
+.tool-workspace--window .tool-main__outlet:has(.wpr-maker) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  height: 0;
+  flex: 1 1 0%;
+  min-height: 0;
+  padding-bottom: 2.5rem;
+}
+.tool-workspace--window .tool-main__outlet > *,
+.tool-workspace--window .page-stack--register,
+.tool-workspace--window .page-scroll-full,
+.tool-workspace--window .qap-page,
+.tool-workspace--window .quality-module,
+.tool-workspace--window .spdc-register-page,
+.tool-workspace--window .progress-module,
+.tool-workspace--window .cost-page,
+.tool-workspace--window .register-page-fill,
+.tool-workspace--window .register-panel-fill,
+.tool-workspace--window .qap-page__register,
+.tool-workspace--window .cube-page__register,
+.tool-workspace--window .maker-shell,
+.tool-workspace--window .maker-shell__body,
+.tool-workspace--window .spdc-register-panel,
+.tool-workspace--window .register-sheet-shell,
+.tool-workspace--window .register-table-panel,
+.tool-workspace--window .sheet-register {
+  flex: none !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.tool-workspace--window .sheet-register__scroll,
+.tool-workspace--window .register-sheet-viewport,
+.tool-workspace--window .register-scroll-area,
+.tool-workspace--window .maker-table-wrap {
+  flex: none !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
 }
 
 /* Legacy stack aliases — keep in sync with .register-tab-body--stack above */
@@ -3505,6 +3579,25 @@ html.is-standalone-form #root {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+.app-frame--tool-win,
+.app-frame--tool-win .app-frame__main {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+.app-frame--tool-win .app-frame__scroll,
+.app-frame--tool-win .app-frame__scroll--project {
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.app-frame--tool-win .app-frame__scroll > div {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 100%;
 }
 .app-frame__canvas--wide {
   width: 100%;
