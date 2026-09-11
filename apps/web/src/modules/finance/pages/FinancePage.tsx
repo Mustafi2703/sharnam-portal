@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
+import { isToolWindow } from "../../../lib/moduleToolWindow";
+import { ToolLink } from "../../../components/ToolLink";
 import {
   FINANCE_PACKAGES,
   copMatchesPackage,
@@ -105,17 +107,19 @@ export default function FinancePage() {
             : "CAPEX · RA Bill (3 stages) · COP · discipline-wise Payment Summary"
         }
         actions={
+          isToolWindow() ? undefined : (
           <div className="flex flex-wrap gap-2">
-            <Link to={`/projects/${id}/hub/finance?tab=bills${disciplineKey !== "all" ? `&discipline=${disciplineKey}` : ""}`}>
+            <ToolLink to={`/projects/${id}/finance?tab=bills${disciplineKey !== "all" ? `&discipline=${disciplineKey}` : ""}`}>
               <Button type="button">Bill registers</Button>
-            </Link>
+            </ToolLink>
             <Link to={`/projects/${id}/hub/finance`}>
               <Button type="button" variant="secondary">Finance hub</Button>
             </Link>
-            <Link to={`/projects/${id}/cost`}>
+            <ToolLink to={`/projects/${id}/cost`} newWindow windowLabel="Cost">
               <Button type="button" variant="secondary">Cost (MB / BOQ) →</Button>
-            </Link>
+            </ToolLink>
           </div>
+          )
         }
       />
 
@@ -529,6 +533,13 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
   }
   return (
     <div className="space-y-4">
+      <ReferenceSheetToolbar
+        sheetLabel="RA Bill Tracker"
+        rowCount={filteredRas.length}
+        canEdit={canWrite && (!activePkg || activePkg.billKind === "ra")}
+        onAddRow={() => document.getElementById("add-ra-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        addRowLabel="+ Add RA bill"
+      />
       {vendorMode && (
         <Card className="!p-4 text-sm bg-brand-soft/40">
           Upload your <strong>Submission</strong> workbook on linked RA rows below. PMC uploads Corrected and Certified stages; COP is created only after Certified is filed.
@@ -554,7 +565,7 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
         </Card>
       )}
       {canWrite && (!activePkg || activePkg.billKind === "ra") && (
-        <Card>
+        <Card id="add-ra-form">
           <h3 className="font-semibold text-sm mb-2">Add RA Bill {activePkg ? `· ${activePkg.label}` : ""}</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Select
@@ -820,6 +831,13 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   }
   return (
     <div className="space-y-4">
+      <ReferenceSheetToolbar
+        sheetLabel="Certificate of Payment"
+        rowCount={filteredCops.length}
+        canEdit={canWrite}
+        onAddRow={() => document.getElementById("add-cop-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        addRowLabel="+ Add COP"
+      />
       <WorkflowStrip
         active={2}
         steps={[
@@ -830,7 +848,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
         ]}
       />
       {canWrite && (
-        <Card>
+        <Card id="add-cop-form">
           <h3 className="font-semibold text-sm mb-2">Certify a payment (COP)</h3>
           {form.raBillId && !linkedRaCertified && (
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">

@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { LessonsLearntRegister } from "../../components/LessonsLearntRegister";
+import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { closureSheetFromParams } from "../../lib/closureSheetViews";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -103,8 +104,15 @@ export default function ProjectClosurePage() {
 
       {(sheetKey === "snaglist" || sheetKey === "") && sheetKey === "snaglist" && (
         <>
+          <ReferenceSheetToolbar
+            sheetLabel="Snaglist register"
+            rowCount={data?.snags?.length}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => document.getElementById("add-snag-form")?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined}
+            addRowLabel="+ Add snag"
+          />
           {canEdit && (
-            <Card>
+            <Card id="add-snag-form">
               <h3 className="font-semibold mb-3">Raise snag</h3>
               <form
                 className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"
@@ -221,6 +229,15 @@ export default function ProjectClosurePage() {
       ) : null}
 
       {sheetKey === "closure-report" && report && (
+        <>
+        <ReferenceSheetToolbar
+          sheetLabel="Project closure report"
+          canEdit={canEdit}
+          onAddSection={canEdit ? () => document.getElementById("closure-sections")?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined}
+          addSectionLabel="Edit sections"
+          onGenerate={canEdit ? () => void saveReport() : undefined}
+          generateLabel="Save report"
+        />
         <Card>
           <div className="flex flex-wrap gap-2 mb-4">
             <a
@@ -259,7 +276,7 @@ export default function ProjectClosurePage() {
               <option key={s}>{s}</option>
             ))}
           </Select>
-          <div className="space-y-4">
+          <div id="closure-sections" className="space-y-4">
             {Object.entries(SECTION_LABELS).map(([key, label]) => (
               <label key={key} className="block text-sm">
                 <span className="font-semibold">{label}</span>
@@ -302,6 +319,7 @@ export default function ProjectClosurePage() {
             </div>
           )}
         </Card>
+        </>
       )}
     </div>
   );

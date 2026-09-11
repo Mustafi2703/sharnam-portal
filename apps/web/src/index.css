@@ -723,6 +723,21 @@ html.is-standalone-form #root {
   flex: 1 1 0%;
   overflow: hidden;
 }
+.tool-workspace--window {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+.tool-workspace--window .tool-shell,
+.tool-workspace--window .tool-main,
+.tool-workspace--window .tool-main__outlet {
+  overflow: visible;
+  height: auto;
+  max-height: none;
+}
+.tool-workspace--window .page-header--tool-win {
+  margin-bottom: 0.5rem;
+}
 .tool-workspace:has(.dpr-maker) .tool-chrome,
 .tool-workspace:has(.wpr-maker) .tool-chrome {
   position: relative;

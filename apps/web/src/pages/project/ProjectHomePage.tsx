@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
@@ -7,6 +7,7 @@ import { Badge, Button, Card, Stat } from "../../components/ui";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
+import { ToolLink } from "../../components/ToolLink";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -154,12 +155,12 @@ export default function ProjectHomePage() {
               <h3 className="font-display text-xl text-ink">Progress · Safety · Hindrance</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link to={`/projects/${id}/progress`} className="text-xs font-semibold text-brand">
+              <ToolLink to={`/projects/${id}/progress`} newWindow windowLabel="Progress" className="text-xs font-semibold text-brand">
                 Progress →
-              </Link>
-              <Link to={`/projects/${id}/safety`} className="text-xs font-semibold text-brand">
+              </ToolLink>
+              <ToolLink to={`/projects/${id}/safety`} newWindow windowLabel="Safety" className="text-xs font-semibold text-brand">
                 Safety →
-              </Link>
+              </ToolLink>
             </div>
           </div>
           <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -194,7 +195,7 @@ export default function ProjectHomePage() {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
         {tools.map(([to, title, , icon, accent]) => (
-          <Link key={to} to={`/projects/${id}/${to}`}>
+          <ToolLink key={to} to={`/projects/${id}/${to}`} newWindow windowLabel={String(title)}>
             <Card className="h-full hover:border-brand/40 transition !p-3">
               <div className="flex items-center gap-3">
                 <span
@@ -206,7 +207,7 @@ export default function ProjectHomePage() {
                 <div className="font-semibold text-sm">{title}</div>
               </div>
             </Card>
-          </Link>
+          </ToolLink>
         ))}
       </div>
 

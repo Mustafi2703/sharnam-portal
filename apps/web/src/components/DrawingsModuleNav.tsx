@@ -30,7 +30,7 @@ export function DrawingsModuleNav({ projectId, accent = "#2563EB" }: { projectId
               if (inWin || item.key === "hub") return;
               e.preventDefault();
               const w = openModuleToolWindow(href, item.label);
-              if (!w) window.location.assign(href);
+              if (!w) window.location.assign(withToolWindowParam(href, true));
             }}
           >
             {formatUiText(item.label)}

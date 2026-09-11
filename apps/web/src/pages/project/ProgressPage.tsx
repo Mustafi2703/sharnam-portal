@@ -13,6 +13,8 @@ import { RegisterSheetCell } from "../../components/RegisterSheetCell";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { CRM_BID_DISCIPLINES } from "../../lib/crmBidDisciplines";
 import { WprTrackerRegisters } from "../../components/WprTrackerRegisters";
+import { isToolWindow } from "../../lib/moduleToolWindow";
+import { ToolLink } from "../../components/ToolLink";
 
 /** Dev-only — hide re-seed buttons in production demo builds. */
 const SHOW_DEMO_CONTROLS = import.meta.env.DEV;
@@ -78,6 +80,8 @@ export default function ProgressPage() {
   const [actAddOpen, setActAddOpen] = useState(false);
   const [cashAddOpen, setCashAddOpen] = useState(false);
   const [manAddOpen, setManAddOpen] = useState(false);
+  const [sorAddOpen, setSorAddOpen] = useState(false);
+  const [sorForm, setSorForm] = useState({ observation: "", total: "", openCount: "", closedCount: "" });
   const [actBusy, setActBusy] = useState(false);
   const [actForm, setActForm] = useState({
     activity: "",
@@ -671,12 +675,38 @@ export default function ProgressPage() {
     }
   }
 
+  async function addSorStat(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setMsg("");
+    try {
+      await api(`/api/progress/${id}/sor-stats`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          observation: sorForm.observation,
+          total: Number(sorForm.total || 0),
+          openCount: Number(sorForm.openCount || 0),
+          closedCount: Number(sorForm.closedCount || 0),
+        }),
+      });
+      setSorForm({ observation: "", total: "", openCount: "", closedCount: "" });
+      setSorAddOpen(false);
+      setMsg("Monthly SOR row added");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Add failed");
+    }
+  }
+
   return (
     <div className="progress-module page-scroll-full w-full min-w-0 space-y-5 pb-8">
       <div className="w-full shrink-0">
+        {!isToolWindow() && (
         <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
           ← Project
         </Link>
+        )}
         <PageHeader
           eyebrow="Progress module"
           title="Progress"
@@ -739,9 +769,11 @@ export default function ProgressPage() {
                   </p>
                 )}
               </div>
+              {!isToolWindow() && (
               <Link to={`/projects/${id}/hub/progress`} className="text-sm font-semibold text-brand">
                 All Progress tools →
               </Link>
+              )}
             </div>
             <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
               {(
@@ -756,9 +788,11 @@ export default function ProgressPage() {
                 const total = rows.reduce((s: number, r: any) => s + (Number(r.value) || 0), 0);
                 const open = rows.find((r: any) => /open|active|pending/i.test(String(r.label || "")));
                 return (
-                  <Link
+                  <ToolLink
                     key={title}
                     to={`/projects/${id}/progress?tab=${tabKey}`}
+                    newWindow
+                    windowLabel={title}
                     className="block rounded-sm border border-line bg-sand/50 p-4 hover:border-brand/40 transition"
                   >
                     <div className="text-[11px] font-mono uppercase tracking-wider text-steel-muted">{title}</div>
@@ -766,7 +800,7 @@ export default function ProgressPage() {
                     <div className="text-xs text-steel-muted mt-1">
                       {open ? `${open.label}: ${open.value}` : "Open tool →"}
                     </div>
-                  </Link>
+                  </ToolLink>
                 );
               })}
             </div>
@@ -1315,6 +1349,8 @@ export default function ProgressPage() {
             sheetLabel="Monthly Progress Dashboard"
             rowCount={data.sorStats?.length}
             canEdit={canEdit}
+            onAddRow={canEdit ? () => setSorAddOpen(true) : undefined}
+            addRowLabel="+ Add SOR row"
             onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void runResyncSor() : undefined}
             generateLabel="Load Monthly Dashboard"
             busy={resyncBusy}
@@ -2114,6 +2150,21 @@ export default function ProgressPage() {
           <Input className="sm:col-span-2" placeholder="Type of manpower" value={manForm.trade} onChange={(e) => setManForm({ ...manForm, trade: e.target.value })} required />
           <Input type="number" placeholder="Required people this week" value={manForm.required} onChange={(e) => setManForm({ ...manForm, required: e.target.value })} />
           <Input type="number" placeholder="Available people" value={manForm.available} onChange={(e) => setManForm({ ...manForm, available: e.target.value })} />
+        </form>
+      </RegisterEntryModal>
+
+      <RegisterEntryModal
+        open={sorAddOpen && canEdit}
+        title="Add monthly SOR row"
+        onClose={() => setSorAddOpen(false)}
+        onSave={() => void addSorStat({ preventDefault: () => {} } as FormEvent)}
+        saveLabel="Add row"
+      >
+        <form className="grid sm:grid-cols-2 gap-3" onSubmit={addSorStat}>
+          <Input className="sm:col-span-2" placeholder="Observation" value={sorForm.observation} onChange={(e) => setSorForm({ ...sorForm, observation: e.target.value })} required />
+          <Input type="number" placeholder="Total" value={sorForm.total} onChange={(e) => setSorForm({ ...sorForm, total: e.target.value })} />
+          <Input type="number" placeholder="Open" value={sorForm.openCount} onChange={(e) => setSorForm({ ...sorForm, openCount: e.target.value })} />
+          <Input type="number" placeholder="Closed" value={sorForm.closedCount} onChange={(e) => setSorForm({ ...sorForm, closedCount: e.target.value })} />
         </form>
       </RegisterEntryModal>
 

@@ -1,4 +1,4 @@
-import { Outlet, useParams, Link, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api, ApiError } from "../../api";
@@ -18,7 +18,8 @@ import { applyModuleAccent, clearModuleAccent, MODULE_THEME_EVENT } from "../../
 import { isToolActive } from "../../lib/moduleToolNav";
 import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
-import { closeToolWindowOrGo, isToolWindow } from "../../lib/moduleToolWindow";
+import { closeToolWindowOrGo, isToolWindow, searchWithToolWindow } from "../../lib/moduleToolWindow";
+import { ToolLink } from "../../components/ToolLink";
 import { useStandaloneFormPage } from "../../lib/useStandaloneFormPage";
 
 const TOP_MODULES = (
@@ -151,6 +152,13 @@ export default function ProjectToolsLayout() {
   const toolWin = isToolWindow(location.search);
   const hubHref = activeMod === "home" ? `/projects/${id}` : `/projects/${id}/hub/${activeMod}`;
 
+  useEffect(() => {
+    if (!toolWin || !id) return;
+    const next = searchWithToolWindow(location.search, location.pathname);
+    if (!next) return;
+    navigate({ pathname: location.pathname, search: next, hash: location.hash }, { replace: true });
+  }, [id, location.hash, location.pathname, location.search, navigate, toolWin]);
+
   const showModuleNav =
     !!id &&
     !toolWin &&
@@ -225,7 +233,7 @@ export default function ProjectToolsLayout() {
             </Button>
             )}
             {openRfis > 0 && (
-              <Link
+              <ToolLink
                 to={`/projects/${id}/rfis${
                   activeMod === "quality"
                     ? "?kind=QualityInspection"
@@ -239,12 +247,12 @@ export default function ProjectToolsLayout() {
                 }`}
               >
                 <Badge tone="warn">{openRfis} open RFIs</Badge>
-              </Link>
+              </ToolLink>
             )}
             <Badge tone="ok">{gate.publishedCount} drawings</Badge>
           </div>
         </div>
-        {toolWin && (
+        {toolWin && activeTool !== "hub" && (
           <div className="px-3 sm:px-5 pb-2.5 text-xs text-steel-muted">
             Editing <strong className="text-ink">{toolLabel}</strong> — add a row or section, save, then return to the hub.
           </div>

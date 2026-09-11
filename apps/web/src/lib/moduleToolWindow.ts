@@ -46,3 +46,14 @@ export function closeToolWindowOrGo(hubHref: string) {
   }
   window.location.href = hubHref;
 }
+
+/** Keep `?win=1` on in-window navigations so chrome stays the edit workspace. */
+export function searchWithToolWindow(search: string, pathname: string): string | null {
+  const onHub = pathname.includes("/hub/");
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const hasWin = params.get(TOOL_WIN_PARAM) === "1";
+  if (onHub || hasWin) return null;
+  params.set(TOOL_WIN_PARAM, "1");
+  const next = params.toString();
+  return next ? `?${next}` : `?${TOOL_WIN_PARAM}=1`;
+}

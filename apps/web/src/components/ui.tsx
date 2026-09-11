@@ -1,5 +1,7 @@
 import { useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { isToolWindow } from "../lib/moduleToolWindow";
+import { ToolLink } from "./ToolLink";
 import { formatUiText } from "../lib/formatUiText";
 
 function fmt(children: ReactNode): ReactNode {
@@ -62,23 +64,36 @@ export function PageHeader({
   icon?: ReactNode;
   dense?: boolean;
 }) {
+  const location = useLocation();
+  const toolWin = isToolWindow(location.search);
+  const isDense = dense || toolWin;
   return (
     <header
-      className={`rise flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${dense ? "mb-3" : "mb-8"}`}
+      className={`page-header rise flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${
+        isDense ? "mb-3" : "mb-8"
+      }${toolWin ? " page-header--tool-win" : ""}`}
     >
       <div className="flex items-start gap-3 min-w-0 flex-1">
-        {icon ? (
+        {icon && !toolWin ? (
           <span className="mt-1 h-11 w-11 shrink-0 rounded-xl grid place-items-center bg-brand text-white shadow-sm">
             {icon}
           </span>
         ) : null}
         <div className="min-w-0">
-          {eyebrow && (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">{fmt(eyebrow)}</p>
+          {eyebrow && !toolWin && (
+            <p className="page-header__eyebrow text-[11px] font-semibold uppercase tracking-[0.18em] text-brand mb-2">
+              {fmt(eyebrow)}
+            </p>
           )}
-          <h1 className="font-display text-2xl sm:text-3xl font-semibold leading-tight tracking-tight text-ink">{fmt(title)}</h1>
-          {subtitle && (
-            <p className="mt-2 text-steel-muted max-w-4xl text-sm sm:text-[15px] leading-relaxed hidden sm:block">
+          <h1
+            className={`font-display font-semibold leading-tight tracking-tight text-ink ${
+              toolWin ? "text-lg sm:text-xl" : "text-2xl sm:text-3xl"
+            }`}
+          >
+            {fmt(title)}
+          </h1>
+          {subtitle && !toolWin && (
+            <p className="page-header__subtitle mt-2 text-steel-muted max-w-4xl text-sm sm:text-[15px] leading-relaxed hidden sm:block">
               {fmt(subtitle)}
             </p>
           )}
@@ -93,13 +108,15 @@ export function Card({
   children,
   className = "",
   padding = true,
+  id,
 }: {
   children: ReactNode;
   className?: string;
   padding?: boolean;
+  id?: string;
 }) {
   return (
-    <div className={`surface ${padding ? "p-5 sm:p-6" : ""} ${className}`}>{children}</div>
+    <div id={id} className={`surface ${padding ? "p-5 sm:p-6" : ""} ${className}`}>{children}</div>
   );
 }
 
@@ -192,9 +209,9 @@ export function WorkflowStrip({
           }`;
           if (s.href) {
             return (
-              <Link key={s.label} to={s.href} className={`${className} block no-underline text-inherit`}>
+              <ToolLink key={s.label} to={s.href} className={`${className} block no-underline text-inherit`}>
                 {body}
-              </Link>
+              </ToolLink>
             );
           }
           return (

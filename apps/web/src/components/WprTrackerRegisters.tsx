@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
+import { ReferenceSheetToolbar } from "./ReferenceSheetToolbar";
+import { ToolLink } from "./ToolLink";
 
 type Tab = "value" | "procurement" | "pr" | "invoice" | "materials" | "quality";
 
@@ -379,33 +380,26 @@ export function WprTrackerRegisters({
           {apiBase === "finance" ? (
             <>
               Fill PR and invoice rows here — they file to ISO 05.01 / 09.01 and feed{" "}
-              <Link to={`/projects/${projectId}/wpr-maker`} className="text-brand font-semibold">
+              <ToolLink to={`/projects/${projectId}/wpr-maker`} className="text-brand font-semibold">
                 WPR Maker
-              </Link>
+              </ToolLink>
               . Material / tax invoices stay on the invoices tab.
             </>
           ) : (
             <>
               Value Addition, procurement, site materials and quality stats. PR and invoices live in{" "}
-              <Link to={`/projects/${projectId}/finance?tab=pr-tracker`} className="text-brand font-semibold">
+              <ToolLink to={`/projects/${projectId}/finance?tab=pr-tracker`} className="text-brand font-semibold">
                 Finance → PR Tracker
-              </Link>
+              </ToolLink>
               .
             </>
           )}
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
-          {canEdit && (
-            <>
-              {!hideImport && (
+          {canEdit && !hideImport && (
               <Button type="button" variant="primary" disabled={busy} onClick={() => void importPack()}>
                 {busy ? "Importing…" : apiBase === "finance" ? "Import PR Tracker-52" : "Import 23–29 July WPR pack"}
               </Button>
-              )}
-              <Button type="button" variant="secondary" onClick={openAdd}>
-                Add {TITLE[sub]}
-              </Button>
-            </>
           )}
           <Badge tone="neutral">{pr.length} PR</Badge>
           <Badge tone="neutral">{inv.length} invoices</Badge>
@@ -413,6 +407,14 @@ export function WprTrackerRegisters({
         </div>
         {msg && <p className="text-xs text-brand mt-2">{msg}</p>}
       </Card>
+
+      <ReferenceSheetToolbar
+        sheetLabel={TITLE[sub]}
+        rowCount={tabs.find(([key]) => key === sub)?.[2]}
+        canEdit={canEdit}
+        onAddRow={canEdit ? openAdd : undefined}
+        addRowLabel={`+ Add ${TITLE[sub].toLowerCase()}`}
+      />
 
       <div className="flex flex-wrap gap-1.5">
         {tabs.map(([key, label, n]) => (

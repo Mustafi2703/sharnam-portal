@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Button, Card, PageHeader } from "../../components/ui";
+import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { ToolLink } from "../../components/ToolLink";
 import { InspectionRegisterTable, registerFormRefForTab } from "../../components/InspectionRegisterTable";
 import { SpdcInspectionFormPanel } from "../../components/SpdcInspectionFormPanel";
 import { SpdcInspectionIrPanel } from "../../components/SpdcInspectionIrPanel";
@@ -13,6 +15,7 @@ import {
   QUALITY_IR_FORM,
   SAFETY_IR_FORM,
   kindForRegisterTab,
+  parseFormDataJson,
   type InspectionRegisterTab,
 } from "../../lib/inspectionRequestForms";
 import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
@@ -183,6 +186,24 @@ export default function InspectionRegisterPage() {
         subtitle="Quality, Safety, and Activity inspections — pick the checklist from master, fill it, then the sheet-style report downloads when the fill is submitted."
       />
 
+      <ReferenceSheetToolbar
+        sheetLabel={tab === "hse-register" ? "HSE register" : `${formRef.title} register`}
+        rowCount={filtered.length}
+        canEdit={canCreate}
+        onAddRow={
+          canCreate
+            ? () => {
+                if (tab === "hse-register") {
+                  setTab("safety-ir");
+                  return;
+                }
+                document.getElementById("add-inspection-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            : undefined
+        }
+        addRowLabel={tab === "hse-register" ? "+ Raise Safety IR" : "+ Add request"}
+      />
+
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button
@@ -200,9 +221,9 @@ export default function InspectionRegisterPage() {
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
-        <Link to={tabChecklist.master} className="text-brand underline">
+        <ToolLink to={tabChecklist.master} className="text-brand underline">
           Checklist master
-        </Link>
+        </ToolLink>
         <span className="text-steel-muted">·</span>
         <Link to={tabChecklist.logs} className="text-brand underline">
           Fill log / reports
@@ -230,6 +251,7 @@ export default function InspectionRegisterPage() {
       </div>
 
       {tab !== "hse-register" && canCreate && (
+        <div id="add-inspection-form">
         <SpdcInspectionFormPanel
           formKind={formKind}
           users={users}
@@ -240,6 +262,7 @@ export default function InspectionRegisterPage() {
           onSubmit={raiseEntry}
           busy={busy}
         />
+        </div>
       )}
 
       <Card>

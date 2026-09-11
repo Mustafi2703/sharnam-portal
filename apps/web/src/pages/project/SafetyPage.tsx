@@ -284,6 +284,16 @@ export default function SafetyPage() {
 
       {sheetKey === "hira" && (
         <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="shrink-0">
+        <ReferenceSheetToolbar
+          sheetLabel="HIRA — Safety Dashboard.xlsx"
+          rowCount={hiraRows.length}
+          canEdit={canCreate}
+          busy={busy}
+          onAddRow={canCreate ? () => setAddOpen(true) : undefined}
+          addRowLabel="+ Add HIRA line"
+        />
+        </div>
         <HiraRegisterTable
           rows={hiraRows}
           activeId={active}
@@ -311,18 +321,7 @@ export default function SafetyPage() {
         </div>
       )}
 
-      {isRegisterSheet && (
-        <>
-        <div className="shrink-0 space-y-2">
-        <ReferenceSheetToolbar
-          sheetLabel={`${sheetView.label} — ${sheetView.sheet}`}
-          rowCount={registerRows.length}
-          canEdit={canCreate}
-          busy={busy}
-          message={msg || undefined}
-          onAddRow={canCreate ? () => setAddOpen(true) : undefined}
-        />
-
+      {(isRegisterSheet || sheetKey === "hira") && (
       <RegisterEntryModal
         open={addOpen && canCreate}
         title={showNcrFields ? "Raise Safety NCR" : `Log ${sheetView.label.toLowerCase()}`}
@@ -447,7 +446,20 @@ export default function SafetyPage() {
             />
         </form>
       </RegisterEntryModal>
+      )}
 
+      {isRegisterSheet && (
+        <>
+        <div className="shrink-0 space-y-2">
+        <ReferenceSheetToolbar
+          sheetLabel={`${sheetView.label} — ${sheetView.sheet}`}
+          rowCount={registerRows.length}
+          canEdit={canCreate}
+          busy={busy}
+          message={msg || undefined}
+          onAddRow={canCreate ? () => setAddOpen(true) : undefined}
+        />
+        </div>
         <div className="flex flex-wrap gap-1">
           {["All", "Open", "Closed", ...TYPES].map((f) => (
             <button
@@ -461,7 +473,6 @@ export default function SafetyPage() {
               {f}
             </button>
           ))}
-        </div>
         </div>
 
         <div className="register-tab-body">

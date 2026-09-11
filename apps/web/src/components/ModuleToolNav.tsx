@@ -58,7 +58,7 @@ export function ModuleToolNav({
               if (inWin) return;
               e.preventDefault();
               const w = openModuleToolWindow(href, t.label);
-              if (!w) window.location.assign(href);
+              if (!w) window.location.assign(withToolWindowParam(href, true));
             }}
           >
             {t.label}

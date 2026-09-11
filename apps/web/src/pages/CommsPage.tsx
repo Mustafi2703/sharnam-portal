@@ -4,6 +4,8 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../components/ui";
 import { CommsMatrixPanel } from "../components/CommsMatrixPanel";
+import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
+import { isToolWindow } from "../lib/moduleToolWindow";
 
 type Tab = "matrix" | "agenda" | "mom" | "followup" | "log";
 
@@ -210,6 +212,7 @@ export default function CommsPage() {
           title="Meetings · MoM"
           subtitle="Simple flow: set Matrix (who) → Create meeting → Agenda → MoM (minutes + actions) → Follow-up. Use Ask (PMC RFI) for questions — not inside MoM."
           actions={
+            isToolWindow() ? undefined : (
             <div className="flex flex-wrap gap-2">
               <Link to={`/projects/${id}/hub/comms`}>
                 <Button type="button" variant="secondary">
@@ -227,6 +230,7 @@ export default function CommsPage() {
                 </Button>
               </Link>
             </div>
+            )
           }
         />
       </div>
@@ -258,6 +262,14 @@ export default function CommsPage() {
       )}
 
       {(tab === "agenda" || tab === "mom" || tab === "followup") && (
+        <div className="space-y-3">
+        <ReferenceSheetToolbar
+          sheetLabel={tab === "agenda" ? "Agenda meetings" : tab === "mom" ? "Minutes of meeting" : "Follow-up actions"}
+          rowCount={listForTab.length}
+          canEdit={canEdit && tab === "agenda"}
+          onAddRow={tab === "agenda" ? () => document.getElementById("add-meeting-form")?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined}
+          addRowLabel="+ Add meeting"
+        />
         <div className="grid lg:grid-cols-[280px_1fr] gap-4">
           <Card padding={false} className="overflow-hidden h-fit">
             <div className="px-3 py-2.5 bg-procore-navy text-white text-sm font-semibold">
@@ -283,7 +295,7 @@ export default function CommsPage() {
               {!listForTab.length && <li className="p-4 text-sm text-steel-muted">None in this stage yet.</li>}
             </ul>
             {canEdit && tab === "agenda" && (
-              <form className="p-3 border-t border-line space-y-2" onSubmit={createMeeting}>
+              <form id="add-meeting-form" className="p-3 border-t border-line space-y-2" onSubmit={createMeeting}>
                 <Input value={schedule.title} onChange={(e) => setSchedule({ ...schedule, title: e.target.value })} />
                 <Input
                   type="datetime-local"
@@ -539,12 +551,20 @@ export default function CommsPage() {
             )}
           </div>
         </div>
+        </div>
       )}
 
       {tab === "log" && (
         <div className="space-y-4">
+          <ReferenceSheetToolbar
+            sheetLabel="Communication log"
+            rowCount={logs.length}
+            canEdit={canEdit}
+            onAddRow={canEdit ? () => document.getElementById("add-comm-log")?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined}
+            addRowLabel="+ Add log"
+          />
           {canEdit && (
-            <Card>
+            <Card id="add-comm-log">
               <h3 className="font-semibold mb-3">Log communication</h3>
               <form
                 className="space-y-2"

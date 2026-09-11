@@ -3,7 +3,7 @@ import { PageHeader } from "../../components/ui";
 import { MODULE_TOOLS, MODULE_META, type WorkspaceKey } from "../../workspaces";
 import { formatUiText } from "../../lib/formatUiText";
 import { useAuth } from "../../auth";
-import { moduleToolHref, openModuleToolWindow } from "../../lib/moduleToolWindow";
+import { moduleToolHref, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
 
 /** Module hub — pick a tool; each card opens a dedicated edit window. */
 export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }) {
@@ -63,7 +63,7 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
               onClick={(e) => {
                 e.preventDefault();
                 const w = openModuleToolWindow(href, t.label);
-                if (!w) window.location.assign(href);
+                if (!w) window.location.assign(withToolWindowParam(href, true));
               }}
             >
               <div
