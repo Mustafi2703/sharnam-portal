@@ -368,9 +368,8 @@ wprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
   if (!pack) return res.status(404).json({ error: "project not found" });
   const buf = await buildWprWorkbook({ header: pack.header, sections: pack.sections, charts: pack.charts });
   const fname = `WPR-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.xlsx`;
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(buf);
+  const { sendStampedXlsx } = await import("../services/brandedExport.js");
+  await sendStampedXlsx(res, buf, fname);
 });
 
 /** Client workbook — fills WPR File.xlsx template tabs (21 sheets) from live data. */

@@ -62,6 +62,12 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         subtitle: "Request leave, view balances, and approve or reject as HR.",
       },
       {
+        to: "vouchers",
+        label: "Vouchers",
+        icon: "finance",
+        subtitle: "Employee expense / petty vouchers — HR Head approves.",
+      },
+      {
         to: "payroll",
         label: "Payroll",
         icon: "finance",

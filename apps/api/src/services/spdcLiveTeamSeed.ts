@@ -15,6 +15,17 @@ export const LIVE_TEAM: { email: string; fullName: string; role: RoleKey; org: s
   { email: "hello@twinoxis.com", fullName: "Twinoxis Site Engineer", role: "site_employee", org: "Twinoxis" },
   { email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "office", org: "SPDC" },
   { email: "operations@spdc.in", fullName: "Saurabh Prajapati", role: "office", org: "SPDC Operations" },
+  { email: "saurabh@spdc.in", fullName: "Saurabh Prajapati", role: "office", org: "SPDC" },
+  { email: "akshay.lad@spdc.in", fullName: "Akshay Lad", role: "office", org: "SPDC" },
+  { email: "nitin.vankar@spdc.in", fullName: "Nitin Vankar", role: "office", org: "SPDC" },
+  { email: "hitesh.rajput@spdc.in", fullName: "Hitesh Rajput", role: "office", org: "SPDC" },
+  { email: "jaideep.parmar@spdc.in", fullName: "Jaideep Parmar", role: "office", org: "SPDC" },
+  { email: "ravi.solanki@spdc.in", fullName: "Ravi Solanki", role: "office", org: "SPDC" },
+  { email: "jaypal.rathod@spdc.in", fullName: "Jaypal Rathod", role: "office", org: "SPDC" },
+  { email: "planning.estimation@spdc.in", fullName: "Planning & Estimation", role: "office", org: "SPDC Planning" },
+  { email: "anushka.jha@spdc.in", fullName: "Anushka Jha (HR Head)", role: "office", org: "SPDC HR" },
+  { email: "info@spdc.in", fullName: "SPDC Info Desk", role: "office", org: "SPDC" },
+  { email: "pratik.solanki@spdc.in", fullName: "Pratik Solanki", role: "office", org: "SPDC" },
 ];
 
 const ALL_NOTIFY = LIVE_TEAM.map((t) => t.email).join(", ");

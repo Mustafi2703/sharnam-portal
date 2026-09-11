@@ -6,6 +6,8 @@ import { Badge, Button, Card, Input } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
+import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
+import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 
 type ProjectRow = {
   id: string;
@@ -92,6 +94,7 @@ export default function CrmProjectSetupPage() {
   const [vendors, setVendors] = useState<VendorRow[]>([]);
   const [summary, setSummary] = useState<SetupSummary | null>(null);
   const [status, setStatus] = useState<SetupStatus | null>(null);
+  const [overview, setOverview] = useState<{ members?: any[]; vendors?: any[] } | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_PROJECT);
@@ -122,14 +125,19 @@ export default function CrmProjectSetupPage() {
     if (!token || !projectId) {
       setSummary(null);
       setStatus(null);
+      setOverview(null);
       return;
     }
-    const [s, st] = await Promise.all([
+    const [s, st, ov] = await Promise.all([
       api<SetupSummary>(`/api/projects/${projectId}/setup-summary`, { token }),
       api<SetupStatus>(`/api/projects/${projectId}/setup-status`, { token }).catch(() => null),
+      api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${projectId}/overview`, { token }).catch(
+        () => null
+      ),
     ]);
     setSummary(s);
     setStatus(st);
+    setOverview(ov);
     setDetails({
       code: s.project.code,
       name: s.project.name,
@@ -251,8 +259,9 @@ export default function CrmProjectSetupPage() {
           <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · project start</p>
           <h2 className="font-display text-lg text-ink">Project setup</h2>
           <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
-            Start the delivery project here. The communication matrix is filled in this desk — Technical and Commercial —
-            and those people land in in-project Comms, directories, and client / contractor portals.
+            Start the delivery project here. The BPCL communication matrix (Technical and Commercial — all person fields)
+            can be filled in this step or later in Comms. It is not required to launch. Complete setup seeds clean registers
+            for DPR / WPR; each week and day is saved as history.
           </p>
         </div>
         {summary && (
@@ -412,7 +421,7 @@ export default function CrmProjectSetupPage() {
               Back · Project card
             </Button>
             <Button type="button" onClick={() => setStep("launch")}>
-              Next · Launch portals & reports
+              Next · Launch (matrix optional)
             </Button>
             <Link to={`/projects/${projectId}/comms`} className="text-sm font-semibold text-brand self-center">
               Open in-project Comms →
@@ -435,9 +444,35 @@ export default function CrmProjectSetupPage() {
                 seeds the first DPR and WPR from live data.
               </p>
             </div>
-            <Button type="button" disabled={busy} onClick={() => void completeSetup()}>
-              Complete setup
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={busy} onClick={() => void completeSetup()}>
+                Complete setup
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || !projectId}
+                onClick={async () => {
+                  if (!projectId || !token) return;
+                  setBusy(true);
+                  try {
+                    const out = await api<{ sent: { email: string }[]; sharePassword: string }>(
+                      `/api/projects/${projectId}/send-portal-invites`,
+                      { method: "POST", token, body: JSON.stringify({}) }
+                    );
+                    setMsg(
+                      `Portal invites emailed to ${out.sent.length} people. Shared password: ${out.sharePassword}. They can forward the login email.`
+                    );
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Invite send failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Email portal credentials
+              </Button>
+            </div>
           </div>
           <ul className="grid sm:grid-cols-2 gap-2">
             {(status?.checks || []).map((c) => (
@@ -450,6 +485,26 @@ export default function CrmProjectSetupPage() {
               </li>
             ))}
           </ul>
+          <div className="border border-amber-200 bg-amber-50/70 rounded-xl p-3 space-y-3">
+            <div>
+              <h4 className="font-semibold text-sm">Signatures (if missing)</h4>
+              <p className="text-xs text-steel-muted mt-0.5">
+                PMC, client, and contractor sign-offs must live on this project before checklists and the WPR deck export.
+              </p>
+            </div>
+            <DirectoryMySignaturePanel projectId={projectId} token={token} compact />
+            <DirectorySignOffRegister
+              projectId={projectId}
+              token={token}
+              members={overview?.members || []}
+              vendors={overview?.vendors || []}
+              canEditAll={canManage}
+              currentUserId={user?.id}
+              currentUserEmail={user?.email}
+              currentUserVendorId={user?.vendorId}
+              onSaved={() => void loadProject()}
+            />
+          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <Link to={`/projects/${projectId}/comms`} className="font-semibold text-brand">
               Comms →

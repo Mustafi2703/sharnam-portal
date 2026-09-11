@@ -197,16 +197,17 @@ export default function DrawingsPage() {
   }, [id, canUpload, searchParams, setSearchParams, drawings, drawingsLoaded]);
 
   useEffect(() => {
-    if (!id) return;
-    function onMessage(e: MessageEvent) {
+    const projectId = id;
+    if (!projectId) return;
+    const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
-      if (!isDrawingUnlockMessage(e.data, id)) return;
+      if (!isDrawingUnlockMessage(e.data, projectId)) return;
       applyDrawingUnlock(e.data.unlockToken);
-    }
-    function onStorage(e: StorageEvent) {
-      if (e.key !== drawingUnlockStorageKey(id) || !e.newValue) return;
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== drawingUnlockStorageKey(projectId) || !e.newValue) return;
       applyDrawingUnlock(e.newValue);
-    }
+    };
     window.addEventListener("message", onMessage);
     window.addEventListener("storage", onStorage);
     return () => {

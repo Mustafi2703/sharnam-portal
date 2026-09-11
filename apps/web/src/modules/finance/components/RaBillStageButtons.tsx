@@ -56,8 +56,8 @@ export function RaBillStageButtons({
   }
 
   useEffect(() => {
-    if (open) void reload();
-  }, [open, raBillId]);
+    void reload();
+  }, [raBillId]);
 
   function pick(stage: "Submitted" | "Corrected" | "Certified") {
     pendingStageRef.current = stage;
@@ -93,31 +93,40 @@ export function RaBillStageButtons({
 
   return (
     <div className="flex flex-col gap-1 items-start">
-      <div className="flex flex-wrap gap-1">
-        {STAGES.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            title={s.hint}
-            disabled={!canWrite || busyStage === s.key}
-            onClick={() => pick(s.key)}
-            className={`px-2 py-0.5 rounded border text-[10px] font-medium transition-colors ${
-              s.key === "Certified"
-                ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                : s.key === "Corrected"
+      <div className="flex flex-col items-start gap-1">
+        <div className="flex flex-wrap gap-1">
+          {STAGES.filter((s) => s.key !== "Certified").map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              title={s.hint}
+              disabled={!canWrite || busyStage === s.key || revisions.some((r) => r.stage === s.key)}
+              onClick={() => pick(s.key)}
+              className={`px-2 py-0.5 rounded border text-[10px] font-medium transition-colors ${
+                s.key === "Corrected"
                   ? "border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60"
                   : "border-brand/40 text-brand hover:bg-brand/5 disabled:opacity-60"
-            }`}
+              }`}
+            >
+              {busyStage === s.key ? "…" : s.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="px-2 py-0.5 rounded border border-line text-[10px] text-steel-muted hover:bg-sand"
           >
-            {busyStage === s.key ? "…" : s.label}
+            {open ? "Hide log" : "Log"}
           </button>
-        ))}
+        </div>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="px-2 py-0.5 rounded border border-line text-[10px] text-steel-muted hover:bg-sand"
+          title="Upload the certified copy — this locks the amount"
+          disabled={!canWrite || busyStage === "Certified" || revisions.some((r) => r.stage === "Certified")}
+          onClick={() => pick("Certified")}
+          className="px-2 py-0.5 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 text-[10px] font-medium ml-6"
         >
-          {open ? "Hide log" : "Log"}
+          {busyStage === "Certified" ? "…" : "+ Certified"}
         </button>
       </div>
       {latest && (

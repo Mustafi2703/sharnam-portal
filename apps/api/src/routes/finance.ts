@@ -32,9 +32,19 @@ async function canAccessRaBill(req: AuthedRequest, bill: { vendorId?: string | n
   return false;
 }
 
-async function canUploadRaStage(req: AuthedRequest, bill: { vendorId?: string | null }, stage: string) {
+async function canUploadRaStage(
+  req: AuthedRequest,
+  bill: { id: string; vendorId?: string | null },
+  stage: string
+) {
   const user = req.user!;
-  if (user.role === "admin" || user.role === "office") return true;
+  const existing = await prisma.raBillRevision.findFirst({
+    where: { raBillId: bill.id, stage },
+  });
+  if (existing) return false;
+  if (user.role === "admin" || user.role === "office") {
+    return stage === "Submitted" || stage === "Corrected" || stage === "Certified";
+  }
   if (user.role === "vendor") {
     const v = await vendorForRequest(req);
     if (!v || bill.vendorId !== v.id) return false;
@@ -822,8 +832,8 @@ financeRouter.post(
       return res.status(403).json({
         error:
           req.user?.role === "vendor"
-            ? "Contractors may upload the Submission workbook only"
-            : "Not allowed to upload this RA stage",
+            ? "Contractors may upload the Submission workbook only, and cannot replace an existing file"
+            : "This stage file is locked — Sharnam cannot replace Submission, Corrected, or Certified once filed",
       });
     }
     if (!req.file) {
@@ -1145,9 +1155,8 @@ financeRouter.get("/:projectId/cop/:copId/download.xlsx", async (req, res) => {
   if (!cop) return res.status(404).json({ error: "COP not found" });
   const { buildViatrixCopWorkbook } = await import("../modules/finance/copWorkbook.js");
   const { buffer, filename } = await buildViatrixCopWorkbook(cop.id);
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.send(buffer);
+  const { sendStampedXlsx } = await import("../services/brandedExport.js");
+  await sendStampedXlsx(res, buffer, filename);
 });
 
 /**

@@ -103,6 +103,9 @@ type Props = {
   overallPhotos: File[];
   onOverallPhotos: (files: File[]) => void;
   onSignature: (file: File | null) => void;
+  onPmcSignature?: (file: File | null) => void;
+  onClientSignature?: (file: File | null) => void;
+  canPmcSignClient?: boolean;
   signerName?: string;
   minPhotos?: number;
   photoTotal: number;
@@ -143,6 +146,9 @@ export function ChecklistFillForm({
   overallPhotos,
   onOverallPhotos,
   onSignature,
+  onPmcSignature,
+  onClientSignature,
+  canPmcSignClient,
   signerName,
   minPhotos = 0,
   photoTotal,
@@ -499,11 +505,28 @@ export function ChecklistFillForm({
                   onRemove={(i) => onOverallPhotos(overallPhotos.filter((_, idx) => idx !== i))}
                 />
               </div>
-              <SignaturePad
-                onCapture={onSignature}
-                personName={signerName}
-                label="Signed by (inspector / site engineer)"
-              />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 checklist-sign-grid">
+                <SignaturePad
+                  onCapture={onSignature}
+                  personName={signerName}
+                  label="Inspector / site engineer"
+                />
+                <SignaturePad
+                  onCapture={onPmcSignature || onSignature}
+                  personName={signerName}
+                  label="PMC"
+                />
+                <SignaturePad
+                  onCapture={onClientSignature || onSignature}
+                  personName={signerName}
+                  label={canPmcSignClient ? "Client (PMC may sign if client is away)" : "Client"}
+                />
+              </div>
+              {canPmcSignClient && (
+                <p className="text-[11px] text-steel-muted">
+                  PMC can sign the client box when the client is not available — the export marks it as Client (PMC proxy).
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {canFill && (

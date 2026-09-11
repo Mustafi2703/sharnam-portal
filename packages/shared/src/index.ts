@@ -274,3 +274,14 @@ export {
   roleCanModule,
   createModuleRoleHelpers,
 } from "./moduleRoles.js";
+
+export {
+  CUBE_SIZE_MM,
+  cubeStrengthFromLoadKN,
+  gradeTargetMPa,
+  cubeResultFromStrengths,
+  applyCubeFormula,
+  isPourCardTemplate,
+  normalizeCubeSr,
+  cubeGroupKey,
+} from "./cubeStrength.js";

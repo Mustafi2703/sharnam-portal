@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Button, Card, PageHeader } from "../../components/ui";
@@ -221,31 +221,31 @@ export default function InspectionRegisterPage() {
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs">
-        <ToolLink to={tabChecklist.master} className="text-brand underline">
+        <ToolLink to={tabChecklist.master} className="text-brand underline" windowLabel="Checklist master">
           Checklist master
         </ToolLink>
         <span className="text-steel-muted">·</span>
-        <Link to={tabChecklist.logs} className="text-brand underline">
+        <ToolLink to={tabChecklist.logs} className="text-brand underline" windowLabel="Fill log">
           Fill log / reports
-        </Link>
+        </ToolLink>
         <span className="text-steel-muted">·</span>
-        <Link to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-brand underline">
+        <ToolLink to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-brand underline" windowLabel="QI RFIs">
           Request QI fill
-        </Link>
+        </ToolLink>
         <span className="text-steel-muted">·</span>
-        <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-brand underline">
+        <ToolLink to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-brand underline" windowLabel="Safety fill">
           Safety checklist fill
-        </Link>
+        </ToolLink>
         <span className="text-steel-muted">·</span>
-        <Link to={`/projects/${id}/rfis?kind=SiteExecution`} className="text-brand underline">
+        <ToolLink to={`/projects/${id}/rfis?kind=SiteExecution`} className="text-brand underline" windowLabel="Field fill">
           Field checklist fill
-        </Link>
+        </ToolLink>
         {tab === "activity-checklist" && (
           <>
             <span className="text-steel-muted">·</span>
-            <Link to={`/projects/${id}/rfis?kind=ActivityInspection&compose=1`} className="text-brand underline">
+            <ToolLink to={`/projects/${id}/rfis?kind=ActivityInspection&compose=1`} className="text-brand underline" windowLabel="Activity fill">
               Request activity checklist fill
-            </Link>
+            </ToolLink>
           </>
         )}
       </div>

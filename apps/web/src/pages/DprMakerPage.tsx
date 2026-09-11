@@ -229,6 +229,7 @@ export default function DprMakerPage() {
   const [snap, setSnap] = useState<Snap | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [recent, setRecent] = useState<any[]>([]);
   const [lineModalOpen, setLineModalOpen] = useState(false);
   const [manpowerModalOpen, setManpowerModalOpen] = useState(false);
@@ -693,6 +694,21 @@ export default function DprMakerPage() {
     }
   }
 
+  async function previewDpr() {
+    if (!snap || !projectId) return;
+    const url = `${apiBase()}/api/dpr-maker/${projectId}/download.html?date=${logDate}&discipline=${discipline}`;
+    setBusy(true);
+    try {
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+      if (!res.ok) throw new Error(`Preview failed (${res.status})`);
+      setPreviewHtml(await res.text());
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function downloadPdf() {
     if (!snap) return;
     const url = `${apiBase()}/api/dpr-maker/${projectId}/download.html?date=${logDate}&discipline=${discipline}`;
@@ -748,6 +764,7 @@ export default function DprMakerPage() {
           <div className="maker-toolbar__actions">
             <Button onClick={save} disabled={busy} variant="secondary">Save draft</Button>
             <Button onClick={() => void publish()} disabled={busy}>Publish</Button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={() => void previewDpr()} disabled={busy}>Preview</button>
             <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadXlsx} disabled={busy}>XLSX</button>
             <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadPdf} disabled={busy}>PDF</button>
           </div>
@@ -1471,6 +1488,20 @@ export default function DprMakerPage() {
       />
 
       </div>
+
+      {previewHtml && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
+          <div className="bg-paper rounded-xl shadow-xl w-full max-w-5xl h-[90vh] flex flex-col min-h-0">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
+              <div className="font-semibold text-sm">DPR preview · {disciplineLabel} · {logDate}</div>
+              <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewHtml(null)}>
+                Close
+              </Button>
+            </div>
+            <iframe title="DPR preview" srcDoc={previewHtml} className="flex-1 w-full border-0 bg-white rounded-b-xl" />
+          </div>
+        </div>
+      )}
 
       <RegisterEntryModal
         open={lineModalOpen}

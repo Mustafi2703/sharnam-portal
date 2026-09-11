@@ -278,7 +278,8 @@ export function ProjectSetupMatrixDesk({
         <div>
           <h3 className="font-semibold text-sm">Communication matrix</h3>
           <p className="text-xs text-steel-muted mt-0.5 max-w-2xl">
-            Fill Technical and Commercial the same way as in-project Comms. Adding a row with a directory option also
+            Same BPCL fields as the Excel (Name, Designation, Company, SPOC, Mobile, E-mail, TO/CC, Office). None are
+            required to launch. You can keep editing this matrix in project Comms. Adding a row with a directory option also
             creates the user or vendor and assigns them to this project.
           </p>
         </div>
@@ -333,8 +334,8 @@ export function ProjectSetupMatrixDesk({
                 </option>
               ))}
             </Select>
-            <Input placeholder="Organisation" value={form.orgName} onChange={(e) => setForm({ ...form, orgName: e.target.value })} required />
-            <Input placeholder="Name" value={form.personName} onChange={(e) => setForm({ ...form, personName: e.target.value })} required />
+            <Input placeholder="Organisation (optional)" value={form.orgName} onChange={(e) => setForm({ ...form, orgName: e.target.value })} />
+            <Input placeholder="Name (optional)" value={form.personName} onChange={(e) => setForm({ ...form, personName: e.target.value })} />
             <Input placeholder="Designation" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
             <Input placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
             <Input placeholder="SPOC" value={form.spoc} onChange={(e) => setForm({ ...form, spoc: e.target.value })} />

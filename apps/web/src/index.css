@@ -572,6 +572,9 @@ html.is-standalone-form #root {
 .tool-strip {
   display: block;
   width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
 
 .tool-strip__tab.is-on {
@@ -712,6 +715,8 @@ html.is-standalone-form #root {
 .module-subnav {
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  touch-action: pan-x;
 }
 
 .tool-workspace {
@@ -3656,7 +3661,6 @@ html.is-tool-window #root {
   inset: 0;
   z-index: 100;
   display: flex;
-  touch-action: none;
 }
 
 .app-mobile-drawer__backdrop {
@@ -3667,7 +3671,7 @@ html.is-tool-window #root {
   border: 0;
   background: rgba(18, 20, 23, 0.55);
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
 }
 
 .app-mobile-drawer__panel {
@@ -3675,6 +3679,11 @@ html.is-tool-window #root {
   z-index: 1;
   height: 100%;
   max-height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  touch-action: pan-y;
   box-shadow: 0 16px 48px rgba(18, 20, 23, 0.28);
 }
 
@@ -3721,6 +3730,10 @@ html.is-tool-window #root {
   min-height: 0;
   width: 268px;
   color: var(--side-fg, #e8ecf0);
+}
+.side-nav--drawer .side-nav__inner {
+  height: 100%;
+  max-height: 100dvh;
 }
 
 .side-nav__head {
@@ -3800,6 +3813,7 @@ html.is-tool-window #root {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 0.65rem 0.7rem 0.85rem;
   display: flex;
   flex-direction: column;
@@ -10966,6 +10980,32 @@ html.is-standalone-form #root {
   display: block !important;
 }
 
+@media (max-width: 767px) {
+  .standalone-form-header__inner {
+    padding: 0.65rem 0.85rem;
+    align-items: flex-start;
+  }
+
+  .standalone-form-page__main {
+    padding: 1rem 0.85rem 5.5rem;
+  }
+
+  .standalone-form-footer {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .checklist-sign-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-sign-grid canvas,
+  .checklist-sign-grid .signature-pad,
+  .checklist-sign-grid .signature-pad canvas {
+    max-width: 100%;
+    touch-action: none;
+  }
+}
+
 /* Legacy class aliases */
 .checklist-fill-standalone,
 .ncr-form-standalone {
@@ -11084,4 +11124,39 @@ html.is-standalone-form #root {
 
 .cop-doc-files__ra .ra-bill-files__stages {
   grid-template-columns: repeat(3, minmax(4.5rem, 1fr));
+}
+
+/* MB / cost add buttons stay visible while the wide sheet scrolls */
+.cost-register-shell__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 24;
+  background: var(--color-paper);
+}
+
+/* 14" / 15" laptops */
+@media (max-width: 1366px) {
+  .cost-register-shell__toolbar {
+    flex-wrap: wrap;
+  }
+  .maker-toolbar__actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* 24" / 27" / 32" desks */
+@media (min-width: 1920px) {
+  .cost-register-shell__toolbar {
+    padding-inline: 0.25rem;
+  }
+}
+
+/* 65" TV wall */
+@media (min-width: 2560px) {
+  html {
+    font-size: 17px;
+  }
+  .cost-register-shell__toolbar {
+    font-size: 0.95rem;
+  }
 }

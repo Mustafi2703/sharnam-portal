@@ -457,6 +457,16 @@ checklistRouter.post(
         const itemId = scoped?.[1] || null;
         const kind = checklistUploadKind(f, scoped?.[2]);
         if (itemId) itemAttachCount += 1;
+        const signCaption =
+          f.fieldname === "signaturePmc"
+            ? "PMC"
+            : f.fieldname === "signatureClient"
+              ? req.body.clientSignedByPmc === "1" || req.body.clientSignedByPmc === "true"
+                ? "Client (PMC proxy)"
+                : "Client"
+              : f.fieldname === "signature"
+                ? "Inspector"
+                : null;
         const saved = await mockOneDrive.upload(
           assignment.project.code,
           checklistFolder,
@@ -469,7 +479,7 @@ checklistRouter.post(
             itemId,
             kind,
             fileUrl: storedUploadUrl(saved),
-            caption: f.originalname,
+            caption: signCaption || f.originalname,
             comment: itemId ? itemComments[itemId] || null : null,
           },
         });
@@ -564,9 +574,51 @@ checklistRouter.post(
       console.warn("[checklist] drive sync on submit:", err instanceof Error ? err.message : err);
     }
 
+    let cubeGroup: { created: number } | null = null;
+    try {
+      const { isPourCardTemplate } = await import("@sharnam/shared");
+      if (submitStatus === "Submitted" && isPourCardTemplate(assignment.template.name, assignment.template.checklistType)) {
+        const source = `pour-card:${assignment.id}`;
+        const already = await prisma.cubeTest.count({
+          where: { projectId: assignment.projectId, source },
+        });
+        if (already === 0) {
+          let location = "";
+          try {
+            const parsed = parseResponsesJson(typeof responses === "string" ? responses : JSON.stringify(responses));
+            const meta = (parsed as { _meta?: { location?: string } })._meta;
+            location = meta?.location ? String(meta.location) : "";
+          } catch {
+            /* ignore */
+          }
+          const description = [assignment.template.name, location].filter(Boolean).join(" · ") || "Pour card cube group";
+          const srNo = `PC-${assignment.id.slice(-4).toUpperCase()}`;
+          const created = await prisma.$transaction(
+            [0, 1, 2].map(() =>
+              prisma.cubeTest.create({
+                data: {
+                  projectId: assignment.projectId,
+                  srNo,
+                  castDate: new Date(),
+                  description,
+                  grade: "M25",
+                  result: "Pending",
+                  source,
+                },
+              })
+            )
+          );
+          cubeGroup = { created: created.length };
+        }
+      }
+    } catch (err) {
+      console.warn("[checklist] pour-card cube group:", err instanceof Error ? err.message : err);
+    }
+
     res.status(existingDraft ? 200 : 201).json({
       ...attachProgress(withPhotos || submission, itemCount),
       sharePointExports: driveExports.exports,
+      cubeGroup,
     });
   }
 );
@@ -2176,11 +2228,19 @@ checklistRouter.post(
   "/project/:projectId/cubes",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
+    const { applyCubeFormula } = await import("@sharnam/shared");
     const b = req.body || {};
-    const load7 = b.load7 != null ? Number(b.load7) : null;
-    const load28 = b.load28 != null ? Number(b.load28) : null;
-    const s7 = b.strength7 != null ? Number(b.strength7) : null;
-    const s28 = b.strength28 != null ? Number(b.strength28) : null;
+    const load7 = b.load7 != null && b.load7 !== "" ? Number(b.load7) : null;
+    const load28 = b.load28 != null && b.load28 !== "" ? Number(b.load28) : null;
+    const computed = applyCubeFormula({
+      load7,
+      load28,
+      strength7: b.strength7 != null && b.strength7 !== "" ? Number(b.strength7) : null,
+      strength28: b.strength28 != null && b.strength28 !== "" ? Number(b.strength28) : null,
+      avgStrength: b.avgStrength != null && b.avgStrength !== "" ? Number(b.avgStrength) : null,
+      grade: b.grade ? String(b.grade) : null,
+      result: b.result ? String(b.result) : null,
+    });
     const row = await prisma.cubeTest.create({
       data: {
         projectId: req.params.projectId,
@@ -2188,16 +2248,16 @@ checklistRouter.post(
         castDate: b.castDate ? new Date(b.castDate) : null,
         description: String(b.description || "Cube test"),
         grade: b.grade ? String(b.grade) : null,
-        cubeWeight: b.cubeWeight != null ? Number(b.cubeWeight) : null,
+        cubeWeight: b.cubeWeight != null && b.cubeWeight !== "" ? Number(b.cubeWeight) : null,
         testDate7: b.testDate7 ? new Date(b.testDate7) : null,
         testDate28: b.testDate28 ? new Date(b.testDate28) : null,
         load7,
         load28,
-        strength7: s7 ?? (load7 && b.strength != null ? Number(b.strength) : null),
-        strength28: s28 ?? (load28 && b.strength != null ? Number(b.strength) : null),
-        strength: s7 ?? s28 ?? (b.strength != null ? Number(b.strength) : null),
-        avgStrength: b.avgStrength != null ? Number(b.avgStrength) : null,
-        result: b.result ? String(b.result) : "Pending",
+        strength7: computed.strength7,
+        strength28: computed.strength28,
+        strength: computed.strength,
+        avgStrength: computed.avgStrength,
+        result: computed.result,
         testAgency: b.testAgency ? String(b.testAgency) : null,
         source: "portal",
       },
@@ -2227,7 +2287,7 @@ checklistRouter.post(
             grade,
             testAgency,
             result: "Pending",
-            source: "portal",
+            source: b.source ? String(b.source) : "portal",
           },
         })
       )
@@ -2266,18 +2326,26 @@ checklistRouter.patch(
     if (b.cubeWeight != null) data.cubeWeight = Number(b.cubeWeight);
     if (b.load7 != null) data.load7 = Number(b.load7);
     if (b.load28 != null) data.load28 = Number(b.load28);
-    if (b.strength7 != null) {
-      data.strength7 = Number(b.strength7);
-      data.strength = Number(b.strength7);
-    }
-    if (b.strength28 != null) data.strength28 = Number(b.strength28);
-    if (b.strength != null && !b.strength7 && !b.strength28) {
-      if (b.load28) data.strength28 = Number(b.strength);
-      else if (b.load7) data.strength7 = Number(b.strength);
-      data.strength = Number(b.strength);
-    }
-    if (b.avgStrength != null) data.avgStrength = Number(b.avgStrength);
-    const row = await prisma.cubeTest.update({ where: { id: req.params.cubeId }, data });
+    const existing = await prisma.cubeTest.findFirst({
+      where: { id: req.params.cubeId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const { applyCubeFormula } = await import("@sharnam/shared");
+    const computed = applyCubeFormula({
+      load7: (data.load7 as number | undefined) ?? existing.load7,
+      load28: (data.load28 as number | undefined) ?? existing.load28,
+      strength7: b.strength7 != null ? Number(b.strength7) : existing.strength7,
+      strength28: b.strength28 != null ? Number(b.strength28) : existing.strength28,
+      avgStrength: b.avgStrength != null ? Number(b.avgStrength) : existing.avgStrength,
+      grade: (data.grade as string | undefined) ?? existing.grade,
+      result: b.result != null ? String(b.result) : existing.result,
+    });
+    data.strength7 = computed.strength7;
+    data.strength28 = computed.strength28;
+    data.strength = computed.strength;
+    data.avgStrength = computed.avgStrength;
+    if (b.result == null || b.result === "Pending") data.result = computed.result;
+    const row = await prisma.cubeTest.update({ where: { id: existing.id }, data });
     res.json(row);
   }
 );

@@ -115,7 +115,7 @@ export function ModulePortalFilesPanel({ projectId, token, config }: Props) {
                 onClick={() =>
                   void downloadAuthFile(
                     r.downloadPath.replace(":projectId", projectId),
-                    token,
+                    token ?? null,
                     `${r.label.replace(/\s+/g, "-")}.xlsx`
                   )
                 }

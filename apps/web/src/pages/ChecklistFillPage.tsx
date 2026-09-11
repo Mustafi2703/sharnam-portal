@@ -29,6 +29,8 @@ export default function ChecklistFillPage() {
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [pmcSignatureFile, setPmcSignatureFile] = useState<File | null>(null);
+  const [clientSignatureFile, setClientSignatureFile] = useState<File | null>(null);
   const [drawings, setDrawings] = useState<ChecklistDrawingOption[]>([]);
   const [drawingId, setDrawingId] = useState("");
   const [revisionId, setRevisionId] = useState("");
@@ -135,6 +137,11 @@ export default function ChecklistFillPage() {
     if (status === "Submitted") fd.append("status", "Submitted");
     if (photos.length) photos.forEach((f) => fd.append("photos", f));
     if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
+    if (pmcSignatureFile) fd.append("signaturePmc", pmcSignatureFile, pmcSignatureFile.name);
+    if (clientSignatureFile) {
+      fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
+      if (["admin", "office", "employee"].includes(user?.role || "")) fd.append("clientSignedByPmc", "1");
+    }
     Object.entries(responses).forEach(([lineId, r]) => {
       r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
       r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
@@ -295,6 +302,9 @@ export default function ChecklistFillPage() {
       overallPhotos={photos}
       onOverallPhotos={setPhotos}
       onSignature={setSignatureFile}
+      onPmcSignature={setPmcSignatureFile}
+      onClientSignature={setClientSignatureFile}
+      canPmcSignClient={["admin", "office", "employee"].includes(user?.role || "")}
       signerName={user?.fullName || user?.email || undefined}
       minPhotos={minPhotos}
       photoTotal={photoTotal}

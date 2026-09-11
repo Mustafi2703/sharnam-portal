@@ -236,6 +236,13 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
     },
   });
   await audit("rfi.create", { userId: req.user!.id, entity: "Rfi", entityId: rfi.id });
+  let sharePointExports: Array<{ kind: string; path: string; url?: string | null }> = [];
+  try {
+    const { syncRfiToDrive } = await import("../services/syncRfiToDrive.js");
+    sharePointExports = (await syncRfiToDrive(rfi.id)).exports;
+  } catch (err) {
+    console.warn("[RFI] SharePoint fill sync failed:", err instanceof Error ? err.message : err);
+  }
   try {
     const [project, assignment] = await Promise.all([
       prisma.project.findUnique({
@@ -265,7 +272,7 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   } catch {
     /* email optional */
   }
-  res.status(201).json(rfi);
+  res.status(201).json({ ...rfi, sharePointExports });
 });
 
 rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
@@ -440,6 +447,12 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
     }
   } catch {
     /* email optional */
+  }
+  try {
+    const { syncRfiToDrive } = await import("../services/syncRfiToDrive.js");
+    await syncRfiToDrive(existing.id);
+  } catch (err) {
+    console.warn("[RFI] SharePoint respond sync failed:", err instanceof Error ? err.message : err);
   }
   res.status(201).json(response);
 });

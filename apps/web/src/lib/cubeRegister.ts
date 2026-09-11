@@ -40,7 +40,7 @@ export function groupCubeRows(rows: CubeRow[]): CubeGroup[] {
   const map = new Map<string, CubeGroup>();
 
   for (const row of rows) {
-    const sr = row.srNo || "—";
+    const sr = (row.srNo || "").replace(/-([23])$/, "") || "—";
     const cast = fmtDay(row.castDate);
     const key = `${sr}|${cast}|${row.description}`;
     if (!map.has(key)) {

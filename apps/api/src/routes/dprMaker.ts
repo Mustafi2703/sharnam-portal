@@ -566,9 +566,8 @@ dprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
     { projectId, logDate, scurveEntries: extras.scurveEntries }
   );
   const fname = `DPR-${project.code}-${discipline}-${logDate.toISOString().slice(0, 10)}.xlsx`;
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(buf);
+  const { sendStampedXlsx } = await import("../services/brandedExport.js");
+  await sendStampedXlsx(res, buf, fname);
 });
 
 /** Branded HTML for Print → Save as PDF (same snapshot as SPDC XLSX) */

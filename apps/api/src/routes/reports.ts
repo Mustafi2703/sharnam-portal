@@ -59,6 +59,7 @@ import {
   dprToSheets,
   workbookBuffer,
   wprToSheets,
+  sendStampedXlsx,
   type ModuleExportKey,
 } from "../services/brandedExport.js";
 import {
@@ -156,23 +157,131 @@ reportsRouter.get("/dpr/:projectId/download.xlsx", async (req, res) => {
   const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
   const buf = workbookBuffer(dprToSheets(pack), { title: "Daily Progress Report (DPR)", projectCode: pack.project.code });
   const fname = `DPR-${pack.project.code}-${new Date(pack.date).toISOString().slice(0, 10)}.xlsx`;
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(buf);
+  await sendStampedXlsx(res, buf, fname);
 });
 
 reportsRouter.get("/wpr/:projectId/download.xlsx", async (req, res) => {
   const pack = await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined);
   const buf = workbookBuffer(wprToSheets(pack), { title: "Weekly Progress Report (WPR)", projectCode: pack.project.code });
   const fname = `WPR-${pack.project.code}-${new Date(pack.end).toISOString().slice(0, 10)}.xlsx`;
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(buf);
+  await sendStampedXlsx(res, buf, fname);
 });
 
 /** Workday-style analytics dashboard pack */
 reportsRouter.get("/analytics/:projectId/pack", async (req, res) => {
   res.json(await buildAnalyticsPack(req.params.projectId));
+});
+
+reportsRouter.get("/:projectId/due-dates", requireAuth, async (req, res) => {
+  const projectId = req.params.projectId;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + 21);
+
+  const [rfis, ncrs, meetings, legal, milestones, coord] = await Promise.all([
+    prisma.rfi.findMany({
+      where: { projectId, dueDate: { not: null }, status: { notIn: ["Closed", "Void"] } },
+      select: { id: true, number: true, subject: true, dueDate: true, status: true },
+      orderBy: { dueDate: "asc" },
+      take: 40,
+    }),
+    prisma.qualityNcr.findMany({
+      where: { projectId, plannedClosure: { not: null }, status: { notIn: ["Closed"] } },
+      select: { id: true, number: true, description: true, plannedClosure: true, status: true },
+      orderBy: { plannedClosure: "asc" },
+      take: 40,
+    }),
+    prisma.meetingItem.findMany({
+      where: {
+        meeting: { projectId },
+        dueDate: { not: null },
+        resolutionStatus: { notIn: ["Closed"] },
+      },
+      select: { id: true, description: true, dueDate: true, resolutionStatus: true, meeting: { select: { title: true } } },
+      orderBy: { dueDate: "asc" },
+      take: 40,
+    }),
+    prisma.progressLegalApproval.findMany({
+      where: { projectId, requiredBy: { not: null }, status: { notIn: ["Received", "Closed"] } },
+      select: { id: true, approvalId: true, description: true, requiredBy: true, status: true },
+      orderBy: { requiredBy: "asc" },
+      take: 40,
+    }),
+    prisma.progressMilestone.findMany({
+      where: { projectId, plannedEnd: { not: null }, status: { notIn: ["Complete", "Closed"] } },
+      select: { id: true, code: true, activity: true, plannedEnd: true, status: true },
+      orderBy: { plannedEnd: "asc" },
+      take: 40,
+    }),
+    prisma.designCoordinationIssue.findMany({
+      where: { projectId, dueDate: { not: null } },
+      select: { id: true, title: true, dueDate: true, priority: true },
+      orderBy: { dueDate: "asc" },
+      take: 40,
+    }),
+  ]);
+
+  const items = [
+    ...rfis.map((r) => ({
+      id: r.id,
+      kind: "RFI",
+      title: `${r.number || "RFI"} · ${r.subject}`,
+      due: r.dueDate,
+      status: r.status,
+      href: `/projects/${projectId}/rfis`,
+    })),
+    ...ncrs.map((n) => ({
+      id: n.id,
+      kind: "NCR",
+      title: `${n.number || "NCR"} · ${n.description}`,
+      due: n.plannedClosure,
+      status: n.status,
+      href: `/projects/${projectId}/hub/quality`,
+    })),
+    ...meetings.map((m) => ({
+      id: m.id,
+      kind: "Action",
+      title: `${m.meeting.title} · ${m.description}`,
+      due: m.dueDate,
+      status: m.resolutionStatus,
+      href: `/projects/${projectId}/comms`,
+    })),
+    ...legal.map((l) => ({
+      id: l.id,
+      kind: "Legal",
+      title: `${l.approvalId} · ${l.description}`,
+      due: l.requiredBy,
+      status: l.status,
+      href: `/projects/${projectId}/progress`,
+    })),
+    ...milestones.map((m) => ({
+      id: m.id,
+      kind: "Milestone",
+      title: `${m.code || ""} ${m.activity}`.trim(),
+      due: m.plannedEnd,
+      status: m.status,
+      href: `/projects/${projectId}/progress`,
+    })),
+    ...coord.map((c) => ({
+      id: c.id,
+      kind: "Coordination",
+      title: c.title,
+      due: c.dueDate,
+      status: c.priority,
+      href: `/projects/${projectId}/hub/drawings`,
+    })),
+  ]
+    .filter((i) => i.due)
+    .sort((a, b) => new Date(a.due as Date).getTime() - new Date(b.due as Date).getTime());
+
+  const overdue = items.filter((i) => new Date(i.due as Date) < today).length;
+  const dueSoon = items.filter((i) => {
+    const d = new Date(i.due as Date);
+    return d >= today && d <= horizon;
+  }).length;
+
+  res.json({ overdue, dueSoon, items });
 });
 
 reportsRouter.get("/analytics/:projectId/download.xlsx", async (req, res) => {
@@ -182,9 +291,7 @@ reportsRouter.get("/analytics/:projectId/download.xlsx", async (req, res) => {
     projectCode: pack.project.code,
   });
   const fname = `Sharnam-Analytics-${pack.project.code}.xlsx`;
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(buf);
+  await sendStampedXlsx(res, buf, fname);
 });
 
 reportsRouter.get("/analytics/:projectId/download.html", async (req, res) => {
@@ -203,9 +310,7 @@ reportsRouter.get("/module/:projectId/:module/download.xlsx", async (req, res) =
   const code = (await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } }))?.code || "project";
   const buf = workbookBuffer(pack.sheets, { title: pack.title, projectCode: code });
   const fname = `Sharnam-${module}-${code}.xlsx`;
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(buf);
+  await sendStampedXlsx(res, buf, fname);
 });
 
 reportsRouter.get("/module/:projectId/:module/download.html", async (req, res) => {
@@ -1708,5 +1813,72 @@ hrmRouter.patch("/leave/:id", requireRoles("admin", "office"), async (req: Authe
       });
     }
   }
+  res.json(row);
+});
+
+const HR_HEAD_EMAIL = "anushka.jha@spdc.in";
+function canApproveVoucher(user?: { email?: string; role?: string } | null) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (user.email?.toLowerCase() === HR_HEAD_EMAIL) return true;
+  return user.role === "office";
+}
+
+hrmRouter.get("/vouchers", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const mine = !canApproveVoucher(req.user);
+  const rows = await prisma.expenseVoucher.findMany({
+    where: mine ? { userId: req.user!.id } : undefined,
+    include: {
+      user: { select: { fullName: true, email: true } },
+      approver: { select: { fullName: true } },
+      project: { select: { code: true, name: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  res.json(rows);
+});
+
+hrmRouter.post("/vouchers", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const amount = Number(req.body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Amount required" });
+  const count = await prisma.expenseVoucher.count({ where: { userId: req.user!.id } });
+  const voucherNo = `VOU-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+  const row = await prisma.expenseVoucher.create({
+    data: {
+      voucherNo,
+      userId: req.user!.id,
+      projectId: req.body.projectId || null,
+      voucherDate: req.body.voucherDate ? new Date(req.body.voucherDate) : new Date(),
+      category: String(req.body.category || "Site"),
+      description: String(req.body.description || ""),
+      amount,
+      status: "Submitted",
+      particularsJson: req.body.particulars ? JSON.stringify(req.body.particulars) : null,
+    },
+    include: { user: { select: { fullName: true } } },
+  });
+  await audit("hrm.voucher.raise", { userId: req.user!.id, entity: "ExpenseVoucher", entityId: row.id });
+  res.status(201).json(row);
+});
+
+hrmRouter.patch("/vouchers/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  if (!canApproveVoucher(req.user)) return res.status(403).json({ error: "HR approval only" });
+  const before = await prisma.expenseVoucher.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  const status = String(req.body.status || "");
+  if (!["Approved", "Rejected", "Paid"].includes(status)) {
+    return res.status(400).json({ error: "status must be Approved, Rejected, or Paid" });
+  }
+  const row = await prisma.expenseVoucher.update({
+    where: { id: before.id },
+    data: {
+      status,
+      approverId: req.user!.id,
+      decidedAt: new Date(),
+      decisionNote: req.body.decisionNote || null,
+    },
+  });
+  await audit("hrm.voucher.decide", { userId: req.user!.id, entity: "ExpenseVoucher", entityId: row.id, meta: { status } });
   res.json(row);
 });

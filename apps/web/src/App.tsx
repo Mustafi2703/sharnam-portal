@@ -59,6 +59,7 @@ import DprMakerPage from "./pages/DprMakerPage";
 import WprMakerPage from "./pages/WprMakerPage";
 import HrmsAttendancePage from "./pages/HrmsAttendancePage";
 import HrmsLeavePage from "./pages/HrmsLeavePage";
+import HrmsVouchersPage from "./pages/HrmsVouchersPage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
@@ -170,6 +171,7 @@ export default function App() {
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="attendance" element={<HrmsAttendancePage />} />
           <Route path="leave" element={<HrmsLeavePage />} />
+          <Route path="vouchers" element={<HrmsVouchersPage />} />
           <Route path="documents" element={<HrmsDocumentsPage />} />
           <Route path="masters" element={<HrmsMastersPage />} />
           <Route path="users" element={<HrmsUsersPage />} />

@@ -497,17 +497,37 @@ export async function seedWprSections(
     notes: sorStats.length ? "Quality statistics — Site Observation / NCR counts (WPR client format)." : "QAP weekly sign-off rows.",
   };
 
+  const cubeGroups = new Map<string, typeof cubes>();
+  for (const c of cubes) {
+    const sr = String(c.srNo || "").replace(/-([23])$/, "") || "—";
+    const key = `${sr}|${c.castDate ? isoDate(c.castDate) : ""}|${c.description || ""}`;
+    const list = cubeGroups.get(key) || [];
+    list.push(c);
+    cubeGroups.set(key, list);
+  }
   const cubeTest: WprSection = {
     title: DEFAULT_WPR_TITLES.cubeTest,
-    headers: ["Sr", "Description", "Grade", "Strength", "Cast date", "Result"],
-    rows: cubes.map((c: any, i: number) => [
-      i + 1,
-      c.description || "",
-      c.grade || "",
-      c.strength ?? "",
-      c.castDate ? isoDate(c.castDate) : "",
-      c.result || "",
-    ]),
+    headers: ["Sr", "Description", "Grade", "C1 MPa", "C2 MPa", "C3 MPa", "Avg", "Cast", "Result"],
+    rows: Array.from(cubeGroups.values()).map((group) => {
+      const head = group[0];
+      const mpa = [0, 1, 2].map((i) => {
+        const s = group[i];
+        return s?.strength28 ?? s?.strength7 ?? s?.strength ?? "";
+      });
+      const nums = mpa.map((v) => Number(v)).filter((n) => Number.isFinite(n));
+      const avg = nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100 : "";
+      return [
+        String(head.srNo || "").replace(/-([23])$/, "") || "",
+        head.description || "",
+        head.grade || "",
+        mpa[0],
+        mpa[1],
+        mpa[2],
+        avg,
+        head.castDate ? isoDate(head.castDate) : "",
+        head.result || "",
+      ];
+    }),
   };
 
   const safetyIndicators = {

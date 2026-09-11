@@ -418,6 +418,38 @@ function CapexTab({ capex, canWrite, reload, setMsg, projectId, token }: any) {
   const total = capex.reduce((s: number, r: any) => s + Number(r.budgetedAmount || 0), 0);
   return (
     <div className="space-y-3">
+      <p className="text-xs text-steel-muted leading-relaxed">
+        Project CAPEX is the monthly budget — same WBS as Cost. Upload the SPDC budget workbook each month; lines sync here and into WPR CAPEX. History stays on each published WPR week.
+      </p>
+      <div className="flex flex-wrap gap-2 items-center">
+        <Link to={`/projects/${projectId}/cost?tab=budget`} className="text-sm font-semibold text-brand">
+          Open Cost budget WBS →
+        </Link>
+        {canWrite && token && (
+          <FilePickButton
+            accept=".xls,.xlsx"
+            onPick={async (files) => {
+              const file = files[0];
+              if (!file) return;
+              const fd = new FormData();
+              fd.append("file", file);
+              try {
+                const r = await api<{ budget?: number; capex?: number }>(`/api/cost/${projectId}/workbook/import`, {
+                  method: "POST",
+                  token,
+                  body: fd,
+                });
+                setMsg(`Monthly budget uploaded — ${r.budget ?? 0} WBS lines, ${r.capex ?? 0} CAPEX rows.`);
+                await reload();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Upload failed");
+              }
+            }}
+          >
+            Upload this month's budget
+          </FilePickButton>
+        )}
+      </div>
       <ReferenceSheetToolbar
         sheetLabel="Project CAPEX"
         rowCount={capex.length}

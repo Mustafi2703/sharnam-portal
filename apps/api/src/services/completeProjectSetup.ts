@@ -106,6 +106,23 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   const reports = await initializeProjectReports(projectId, userId);
 
+  const { emailPortalCredentials } = await import("./portalInvites.js");
+  for (const portal of [...clientPortals, ...contractorPortals]) {
+    if (!portal.tempPassword) continue;
+    try {
+      await emailPortalCredentials({
+        projectId,
+        createdById: userId,
+        email: portal.email,
+        fullName: portal.email,
+        role: portal.role,
+        password: portal.tempPassword,
+      });
+    } catch (err) {
+      console.warn("Portal invite email failed:", portal.email, err instanceof Error ? err.message : err);
+    }
+  }
+
   return {
     projectId,
     folders: { root: folders.root, count: folders.folders.length, provider: folders.provider },
@@ -152,6 +169,8 @@ export async function getProjectSetupStatus(projectId: string) {
     dpr,
     wpr,
     projectVendors,
+    signedMembers,
+    signedVendors,
   ] = await Promise.all([
     prisma.documentFolder.count({ where: { projectId } }),
     prisma.projectMember.count({ where: { projectId } }),
@@ -180,6 +199,8 @@ export async function getProjectSetupStatus(projectId: string) {
       where: { projectId },
       include: { vendor: { select: { partyType: true, email: true, name: true } } },
     }),
+    prisma.projectMember.count({ where: { projectId, signatureUrl: { not: null } } }),
+    prisma.projectVendor.count({ where: { projectId, signatureUrl: { not: null } } }),
   ]);
 
   const contractors = projectVendors.filter((pv) => pv.vendor.partyType === "Contractor" || pv.vendor.partyType === "Vendor");
@@ -200,9 +221,11 @@ export async function getProjectSetupStatus(projectId: string) {
     },
     {
       key: "comms",
-      ok: matrixCount > 0 && contactCount > 0,
-      label: "Communication matrix",
-      detail: `${matrixCount} role flows · ${contactCount} contacts in Comms`,
+      ok: true,
+      label: "Communication matrix (optional)",
+      detail: contactCount
+        ? `${matrixCount} role flows · ${contactCount} BPCL contacts — editable in setup and Comms`
+        : "Optional — add BPCL TECHNICAL / COMMERCIAL people now or later in Comms",
     },
     {
       key: "clientPortal",
@@ -238,12 +261,21 @@ export async function getProjectSetupStatus(projectId: string) {
       label: "WPR pack",
       detail: wpr ? `Week ending ${wpr.weekEnding.toISOString().slice(0, 10)} · ${wpr.status}` : "Not generated yet",
     },
+    {
+      key: "signatures",
+      ok: signedMembers + signedVendors > 0,
+      label: "Directory signatures",
+      detail:
+        signedMembers + signedVendors > 0
+          ? `${signedMembers} people · ${signedVendors} companies signed`
+          : "Missing — add PMC / client / contractor signatures on project admin before checklists and WPR export",
+    },
   ];
 
   return {
     project,
     checks,
-    ready: checks.every((c) => c.ok),
+    ready: checks.filter((c) => c.key !== "signatures").every((c) => c.ok),
     counts: { folders: folderCount, members: memberCount, vendors: vendorCount, matrix: matrixCount, contacts: contactCount },
   };
 }

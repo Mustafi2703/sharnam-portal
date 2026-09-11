@@ -44,12 +44,13 @@ export async function syncBudgetWorkbookTemplate(projectId: string) {
   const { seedCostFromBudgetWorkbook } = await loadSeedModule();
   await seedCostFromBudgetWorkbook(prisma, projectId, excelRoot);
   const counts = await countCostRows(projectId, path.basename(file));
+  const capex = await syncCapexFromCostBudget(projectId, new Date().toISOString().slice(0, 7));
   try {
     const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
     await syncAllCashflowSources(projectId);
-    return { ...counts, reconciled: true };
+    return { ...counts, capex, reconciled: true };
   } catch {
-    return counts;
+    return { ...counts, capex };
   }
 }
 
@@ -75,7 +76,28 @@ export async function syncBudgetWorkbookFromBuffer(projectId: string, buffer: Bu
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  return countCostRows(projectId, originalName || "uploaded workbook");
+  const counts = await countCostRows(projectId, originalName || "uploaded workbook");
+  const capex = await syncCapexFromCostBudget(projectId, new Date().toISOString().slice(0, 7));
+  return { ...counts, capex };
+}
+
+/** Project CAPEX is the monthly budget register — keep Finance in sync with Cost WBS. */
+export async function syncCapexFromCostBudget(projectId: string, monthLabel?: string) {
+  const lines = await prisma.costBudgetLine.findMany({ where: { projectId }, orderBy: { createdAt: "asc" } });
+  await prisma.projectCapex.deleteMany({ where: { projectId } });
+  if (!lines.length) return 0;
+  await prisma.projectCapex.createMany({
+    data: lines.map((line) => ({
+      projectId,
+      srNo: line.srNo || null,
+      description: line.description,
+      packageName: monthLabel || null,
+      stakeholder: line.stakeholder || null,
+      budgetedAmount: line.budgetedAmount || 0,
+      workOrderValue: line.workOrderAmount || 0,
+    })),
+  });
+  return lines.length;
 }
 
 async function countCostRows(projectId: string, source: string) {

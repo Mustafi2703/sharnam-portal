@@ -1241,10 +1241,11 @@ export default function CostPage() {
             <div className="p-3 pt-0 space-y-3 border-t border-line">
           {canEdit && (
             <Card className="!p-4">
-              <h3 className="font-semibold text-sm mb-2">Upload Budget WBS (optional)</h3>
+              <h3 className="font-semibold text-sm mb-2">Upload this month's budget (CAPEX)</h3>
               <p className="text-xs text-steel-muted mb-3">
-                Or use <strong>Load SPDC template</strong> in the setup panel above for full{" "}
-                <code className="font-mono">SPDC_Budget_Arvind 49.xls</code>.
+                Project CAPEX is this budget. Upload the full{" "}
+                <code className="font-mono">SPDC_Budget_Arvind 52.xls</code> (or 49) each month. Finance CAPEX and WPR
+                pick up the same lines. Published WPR weeks keep history.
               </p>
               <form
                 className="space-y-3"

@@ -123,9 +123,11 @@ export function Card({
 export function Badge({
   children,
   tone = "neutral",
+  className = "",
 }: {
   children: ReactNode;
   tone?: "neutral" | "brand" | "ok" | "warn" | "danger";
+  className?: string;
 }) {
   const tones = {
     neutral: "bg-sand/80 text-steel-muted border-line",
@@ -136,7 +138,7 @@ export function Badge({
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${tones[tone]}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide ${tones[tone]} ${className}`}
     >
       {fmt(children)}
     </span>

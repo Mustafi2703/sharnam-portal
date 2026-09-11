@@ -8,7 +8,7 @@ type Props = LinkProps & {
 };
 
 /** In-app link that keeps `?win=1` when the tool is already in its own window. */
-export function ToolLink({ to, newWindow, windowLabel, onClick, ...rest }: Props) {
+export function ToolLink({ to, newWindow = true, windowLabel, onClick, ...rest }: Props) {
   const href = typeof to === "string" ? to : undefined;
   const next = href ? withToolWindowParam(href) : to;
 

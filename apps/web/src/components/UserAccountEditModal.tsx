@@ -8,6 +8,7 @@ export type UserAccountRow = {
   fullName: string;
   email: string;
   role: string;
+  portal?: string | null;
   phone?: string | null;
   isActive?: boolean;
   profile?: { empCode?: string; department?: string | null; designation?: string | null } | null;

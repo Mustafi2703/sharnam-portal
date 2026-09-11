@@ -50,6 +50,7 @@ export default function RfisPage() {
     return "All";
   });
   const [matrixCanRespond, setMatrixCanRespond] = useState(false);
+  const [syncNote, setSyncNote] = useState("");
   const [form, setForm] = useState({
     subject: "",
     question: "",
@@ -397,7 +398,7 @@ export default function RfisPage() {
                       queryRaised: form.question,
                     })
                   : undefined;
-              await api(`/api/rfis/project/${id}`, {
+              const created = await api<{ sharePointExports?: { kind: string; path: string }[] }>(`/api/rfis/project/${id}`, {
                 method: "POST",
                 token,
                 body: JSON.stringify({
@@ -409,6 +410,12 @@ export default function RfisPage() {
                   rfiKind: isClient ? "ClientConcern" : form.rfiKind,
                 }),
               });
+              const paths = (created.sharePointExports || []).map((e) => e.path).filter(Boolean);
+              setSyncNote(
+                paths.length
+                  ? `Written to SharePoint (sheet + print/PDF): ${paths.join(" · ")}`
+                  : "RFI saved. SharePoint write will retry on the next raise or close."
+              );
               setForm({
                 ...form,
                 subject: "",
@@ -569,6 +576,7 @@ export default function RfisPage() {
             <Button type="submit">
               {isClient ? "Submit concern" : moduleScope === "quality" ? "Request QI fill" : moduleScope === "drawings" && form.rfiKind === "DrawingChecklist" ? "Request checklist fill" : "Open RFI"}
             </Button>
+            {syncNote && <p className="text-xs text-ok leading-relaxed">{syncNote}</p>}
           </form>
         </Card>
         </div>

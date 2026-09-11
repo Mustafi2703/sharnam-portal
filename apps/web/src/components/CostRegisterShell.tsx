@@ -30,7 +30,7 @@ export function CostRegisterShell({ title, subtitle, sheetKind, toolbar, childre
         <h3 className="cost-register-shell__title font-semibold text-sm">{title}</h3>
         {subtitle && <p className="text-[10px] text-steel-muted mt-0.5">{subtitle}</p>}
       </div>
-      {toolbar && <div className="shrink-0 border-b border-line">{toolbar}</div>}
+      {toolbar && <div className="cost-register-shell__toolbar shrink-0 border-b border-line sticky top-0 z-20">{toolbar}</div>}
       <div className="cost-register-shell__scroll-hint register-scroll-hint shrink-0 px-4 py-1.5 border-b text-[10px]">
         Scroll ↔ ↕ for full SPDC sheet · all columns shown · white cells editable · saves on blur
       </div>

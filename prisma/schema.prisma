@@ -40,6 +40,8 @@ model User {
   safetyAssigned        SafetyRecord[]              @relation("SafetyAssignee")
   qualitySiteReported   QualitySiteRecord[]         @relation("QualitySiteReporter")
   vendor                Vendor?                     @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  expenseVouchersRaised    ExpenseVoucher[]            @relation("VoucherRaiser")
+  expenseVouchersApproved  ExpenseVoucher[]            @relation("VoucherApprover")
 }
 
 model RoleDefinition {
@@ -157,24 +159,30 @@ model Project {
   auditChecklistItems     AuditChecklistItem[]
   kpiSubjects             KpiSubject[]
   kpiRoleKras             KpiRoleKra[]
+  expenseVouchers         ExpenseVoucher[]
 }
 
 /**
  * Mock / queued outbound emails (swap to SMTP/Graph later)
  */
 model EmailOutbox {
-  id          String    @id @default(cuid())
-  projectId   String?
-  toEmails    String
-  subject     String
-  body        String    @db.Text
-  context     String?
-  status      String    @default("Queued")
-  createdById String?
-  createdAt   DateTime  @default(now())
-  sentAt      DateTime?
+  id                String    @id @default(cuid())
+  projectId         String?
+  toEmails          String
+  subject           String
+  body              String    @db.Text
+  context           String?
+  status            String    @default("Queued")
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  sentAt            DateTime?
+  /// RFC Message-ID so follow-ups stay in the same thread
+  internetMessageId String?
+  threadKey         String?
 
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, threadKey])
 }
 
 model ProjectMember {
@@ -1003,6 +1011,33 @@ model LeaveRequest {
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveType LeaveType? @relation(fields: [leaveTypeId], references: [id])
+}
+
+/// Employee expense / petty voucher — HR (Anushka) approves
+model ExpenseVoucher {
+  id              String    @id @default(cuid())
+  voucherNo       String
+  userId          String
+  projectId       String?
+  voucherDate     DateTime  @default(now())
+  category        String    @default("Site")
+  description     String    @db.Text
+  amount          Float
+  status          String    @default("Submitted")
+  approverId      String?
+  decidedAt       DateTime?
+  decisionNote    String?
+  particularsJson String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user     User     @relation("VoucherRaiser", fields: [userId], references: [id], onDelete: Cascade)
+  approver User?    @relation("VoucherApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([projectId])
 }
 
 model Holiday {

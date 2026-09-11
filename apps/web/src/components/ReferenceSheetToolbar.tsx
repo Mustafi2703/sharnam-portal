@@ -1,4 +1,6 @@
 import { formatUiText } from "../lib/formatUiText";
+import { useAuth } from "../auth";
+import { canBrowseSharePoint } from "../lib/driveAccess";
 import { FilePickButton } from "./FilePickButton";
 import { Button } from "./ui";
 
@@ -52,6 +54,8 @@ export function ReferenceSheetToolbar({
   busy,
   message,
 }: ReferenceSheetToolbarProps) {
+  const { user } = useAuth();
+  const showDrive = canBrowseSharePoint(user?.role);
   return (
     <div className="sheet-actions-bar shrink-0 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
       <div className="min-w-0 text-left">
@@ -59,7 +63,7 @@ export function ReferenceSheetToolbar({
         {rowCount != null && <span className="text-xs text-steel-muted ml-2">{rowCount} rows</span>}
         {uploadHint && <p className="text-xs text-steel-muted mt-0.5 max-w-xl">{uploadHint}</p>}
         {message && <p className="text-xs text-brand-dark mt-0.5">{message}</p>}
-        {sharePointUrl && (
+        {sharePointUrl && showDrive && (
           <a href={sharePointUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand font-semibold ml-2">
             Open in SharePoint ↗
           </a>

@@ -196,6 +196,22 @@ export async function seedArvindSitePack(db: PrismaClient) {
           "client@sharnam.demo",
           "employee@sharnam.demo",
           "vendor@sharnam.demo",
+          "baibhabmustafi@gmail.com",
+          "admin@twinoxis.com",
+          "hello@twinoxis.com",
+          "nirav@spdc.in",
+          "operations@spdc.in",
+          "saurabh@spdc.in",
+          "akshay.lad@spdc.in",
+          "nitin.vankar@spdc.in",
+          "hitesh.rajput@spdc.in",
+          "jaideep.parmar@spdc.in",
+          "ravi.solanki@spdc.in",
+          "jaypal.rathod@spdc.in",
+          "planning.estimation@spdc.in",
+          "anushka.jha@spdc.in",
+          "info@spdc.in",
+          "pratik.solanki@spdc.in",
         ],
       },
     },
@@ -370,6 +386,17 @@ export async function seedArvindSitePack(db: PrismaClient) {
     "As per Bhavana Infra - Final Construction Work of Dormitory for Workers ,  Arvind Limited.mpp",
   ]);
 
+  let portalInvites = { sent: 0, password: process.env.SEED_PASSWORD || "Demo@1234" };
+  try {
+    const { LIVE_TEAM } = await import("./spdcLiveTeamSeed.js");
+    const { sendProjectPortalInvites } = await import("./portalInvites.js");
+    const dormInvites = await sendProjectPortalInvites(dorm.id, office.id, LIVE_TEAM);
+    await sendProjectPortalInvites(ntx.id, office.id, LIVE_TEAM.filter((t) => t.role === "site_employee" || t.role === "office"));
+    portalInvites = { sent: dormInvites.sent.length, password: dormInvites.sharePassword };
+  } catch (err) {
+    console.warn("Arvind portal invites:", err instanceof Error ? err.message : err);
+  }
+
   return {
     checklistCatalog: checklistFillSummary(),
     ntx: {
@@ -395,6 +422,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
       dprDays: dormDprs,
       wpr: { week: "23–29 Jul 2026", reportNumber: 52 },
     },
+    portalInvites,
     mpp: mpp ? path.basename(mpp) : null,
     note: mpp
       ? "MPP is on file — convert to MS Project XML later to replace the cashflow S-curve."

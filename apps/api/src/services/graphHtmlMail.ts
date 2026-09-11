@@ -21,6 +21,7 @@ export async function sendGraphHtmlMail(opts: {
   bodyHtml: string;
   mailbox?: string;
   saveToSentItems?: boolean;
+  internetMessageHeaders?: { name: string; value: string }[];
 }) {
   const cfg = graphConfig();
   const mailbox = opts.mailbox || cfg.mailbox;
@@ -35,6 +36,7 @@ export async function sendGraphHtmlMail(opts: {
     toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
   };
   if (attachment) message.attachments = [attachment];
+  if (opts.internetMessageHeaders?.length) message.internetMessageHeaders = opts.internetMessageHeaders;
 
   await graphFetch(`/users/${encodeURIComponent(mailbox)}/sendMail`, {
     method: "POST",

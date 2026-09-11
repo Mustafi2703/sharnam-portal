@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
 import { FilePickButton } from "../../../components/FilePickButton";
+import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 
 const STAGES = [
   { key: "Submitted" as const, label: "Submission", uploadLabel: "Upload submission" },
@@ -26,8 +27,8 @@ type Attachment = {
   uploadedAt: string;
 };
 
-function openWorkbook(url: string) {
-  window.open(url, "_blank", "noopener,noreferrer");
+function portalUrl(rev: { sharePointUrl?: string | null; fileUrl?: string | null }) {
+  return rev.fileUrl || rev.sharePointUrl || "";
 }
 
 /**
@@ -57,6 +58,7 @@ export function RaBillWorkbookSlots({
   const [busyStage, setBusyStage] = useState<string | null>(null);
   const [busyDocs, setBusyDocs] = useState(false);
   const [msg, setMsg] = useState("");
+  const [preview, setPreview] = useState<{ url: string; title: string; fileName: string } | null>(null);
   const pendingStage = useRef<(typeof STAGES)[number]["key"] | null>(null);
   const stageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -120,8 +122,8 @@ export function RaBillWorkbookSlots({
       <div className="ra-bill-files__stages">
         {STAGES.map((s) => {
           const rev = latestForStage(s.key);
-          const url = rev?.sharePointUrl || rev?.fileUrl;
-          const slotWritable = canWrite && (!vendorMode || s.key === "Submitted");
+          const url = rev ? portalUrl(rev) : "";
+          const slotWritable = canWrite && !rev && (!vendorMode || s.key === "Submitted");
           return (
             <div key={s.key} className="ra-bill-files__slot">
               <div className="ra-bill-files__slot-label">{s.label}</div>
@@ -129,8 +131,8 @@ export function RaBillWorkbookSlots({
                 <button
                   type="button"
                   className="ra-bill-files__open"
-                  title={rev?.fileName || "Open workbook in SharePoint"}
-                  onClick={() => openWorkbook(url)}
+                  title={rev?.fileName || "Preview workbook"}
+                  onClick={() => setPreview({ url, title: `${raNumber} · ${s.label}`, fileName: rev?.fileName || "file" })}
                 >
                   Open sheet ↗
                 </button>
@@ -173,7 +175,7 @@ export function RaBillWorkbookSlots({
           </FilePickButton>
         )}
         {extraDocs.slice(0, compact ? 2 : 5).map((a) => {
-          const url = a.sharePointUrl || a.fileUrl;
+          const url = a.fileUrl || a.sharePointUrl;
           if (!url) return null;
           return (
             <button
@@ -181,7 +183,7 @@ export function RaBillWorkbookSlots({
               type="button"
               className="ra-bill-files__doc-link"
               title={a.fileName}
-              onClick={() => openWorkbook(url)}
+              onClick={() => setPreview({ url, title: a.fileName, fileName: a.fileName })}
             >
               {a.fileName}
             </button>
@@ -190,6 +192,14 @@ export function RaBillWorkbookSlots({
       </div>
       {msg && <div className="ra-bill-files__msg">{msg}</div>}
       <input ref={stageInputRef} type="file" hidden aria-hidden />
+      {preview && (
+        <DocumentPreviewModal
+          title={preview.title}
+          url={preview.url}
+          fileName={preview.fileName}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 }

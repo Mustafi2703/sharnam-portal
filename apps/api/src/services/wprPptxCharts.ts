@@ -4,11 +4,18 @@
 import type { WprChartPack, WprBarPoint, WprPiePoint } from "./wprCharts.js";
 
 const BRAND = "156082";
+const NAVY = "0E2841";
+const NAVY_XL = "002060";
+const ORANGE = "E97132";
 const BLUE = "2563EB";
 const DARK = "1A1D26";
 const MUTED = "5C6578";
 const WHITE = "FFFFFF";
 const LIGHT = "F0F2F5";
+const SLIDE_W = 13.333;
+const MARGIN = 0.45;
+const CONTENT_W = SLIDE_W - MARGIN * 2;
+const FOOTER_Y = 7.12;
 
 const CHART_PALETTE = ["0F766E", "2563EB", "C45C26", "7C3AED", "059669", "DB2777", "0891B2", "D97706"];
 
@@ -50,49 +57,50 @@ export type PptxDeckCharts = {
 
 function slideHeader(slide: PptxSlide, pptx: PptxDeckCharts, title: string, client?: string) {
   slide.background = { color: WHITE };
-  slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 10, h: 0.08, fill: { color: BRAND } });
+  slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: SLIDE_W, h: 0.08, fill: { color: BRAND } });
+  slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0.08, w: SLIDE_W, h: 0.035, fill: { color: ORANGE } });
   slide.addText(client || "Sharnam PMC", {
-    x: 0.4,
-    y: 0.18,
-    w: 5,
-    h: 0.28,
-    fontSize: 10,
+    x: MARGIN,
+    y: 0.2,
+    w: 8,
+    h: 0.26,
+    fontSize: 11,
     color: BRAND,
     bold: true,
   });
   slide.addText(title, {
-    x: 0.4,
-    y: 0.45,
-    w: 9.2,
-    h: 0.42,
-    fontSize: 18,
+    x: MARGIN,
+    y: 0.48,
+    w: CONTENT_W,
+    h: 0.4,
+    fontSize: 20,
     bold: true,
-    color: DARK,
+    color: NAVY,
   });
   slide.addShape(pptx.ShapeType.rect, {
-    x: 0.4,
-    y: 0.88,
-    w: 1.1,
-    h: 0.05,
-    fill: { color: BRAND },
+    x: MARGIN,
+    y: 0.92,
+    w: 1.55,
+    h: 0.055,
+    fill: { color: ORANGE },
   });
 }
 
 function footer(slide: PptxSlide, page: number, total: number, client?: string) {
   slide.addText(client || "Sharnam PMC", {
-    x: 0.4,
-    y: 5.15,
-    w: 5,
-    h: 0.25,
-    fontSize: 8,
+    x: MARGIN,
+    y: FOOTER_Y,
+    w: 8,
+    h: 0.22,
+    fontSize: 9,
     color: MUTED,
   });
   slide.addText(`${page} / ${total}`, {
-    x: 8.2,
-    y: 5.15,
-    w: 1.4,
-    h: 0.25,
-    fontSize: 8,
+    x: SLIDE_W - MARGIN - 1.6,
+    y: FOOTER_Y,
+    w: 1.6,
+    h: 0.22,
+    fontSize: 9,
     color: MUTED,
     align: "right",
   });
@@ -126,11 +134,11 @@ function barChartSlide(
   slideHeader(slide, pptx, opts.title, opts.client);
   if (opts.subtitle) {
     slide.addText(opts.subtitle, {
-      x: 0.4,
-      y: 0.92,
-      w: 9.2,
-      h: 0.35,
-      fontSize: 9,
+      x: MARGIN,
+      y: 1.05,
+      w: CONTENT_W,
+      h: 0.3,
+      fontSize: 10,
       color: MUTED,
     });
   }
@@ -141,10 +149,10 @@ function barChartSlide(
     { name: "Actual", labels, values: bars.map((b) => b.actual) },
   ];
   slide.addChart(pptx.ChartType.bar, data, {
-    x: 0.45,
-    y: opts.subtitle ? 1.25 : 1.05,
-    w: 9.1,
-    h: 3.75,
+    x: MARGIN,
+    y: opts.subtitle ? 1.4 : 1.15,
+    w: CONTENT_W,
+    h: 5.4,
     barDir: "col",
     barGrouping: "clustered",
     showLegend: true,
@@ -180,11 +188,11 @@ function lineChartSlide(
   slideHeader(slide, pptx, opts.title, opts.client);
   if (opts.subtitle) {
     slide.addText(opts.subtitle, {
-      x: 0.4,
-      y: 0.92,
-      w: 9.2,
-      h: 0.35,
-      fontSize: 9,
+      x: MARGIN,
+      y: 1.05,
+      w: CONTENT_W,
+      h: 0.3,
+      fontSize: 10,
       color: MUTED,
     });
   }
@@ -195,10 +203,10 @@ function lineChartSlide(
     { name: "Actual %", labels, values: pts.map((p) => p.actual) },
   ];
   slide.addChart(pptx.ChartType.line, data, {
-    x: 0.45,
-    y: opts.subtitle ? 1.25 : 1.05,
-    w: 9.1,
-    h: 3.75,
+    x: MARGIN,
+    y: opts.subtitle ? 1.4 : 1.15,
+    w: CONTENT_W,
+    h: 5.4,
     showLegend: true,
     legendPos: "b",
     legendFontSize: 9,
@@ -233,11 +241,11 @@ function pieChartSlide(
   slideHeader(slide, pptx, opts.title, opts.client);
   if (opts.subtitle) {
     slide.addText(opts.subtitle, {
-      x: 0.4,
-      y: 0.92,
-      w: 9.2,
-      h: 0.35,
-      fontSize: 9,
+      x: MARGIN,
+      y: 1.05,
+      w: CONTENT_W,
+      h: 0.3,
+      fontSize: 10,
       color: MUTED,
     });
   }
@@ -252,10 +260,10 @@ function pieChartSlide(
       },
     ],
     {
-      x: 0.55,
-      y: opts.subtitle ? 1.15 : 0.95,
-      w: 5.2,
-      h: 3.85,
+      x: 1.4,
+      y: opts.subtitle ? 1.4 : 1.2,
+      w: 7.2,
+      h: 5.2,
       showLegend: true,
       legendPos: "r",
       legendFontSize: 9,
@@ -276,22 +284,22 @@ function kpiDashboardSlide(
   const slide = pptx.addSlide();
   slideHeader(slide, pptx, "Project dashboard · KPI summary", opts.client);
   slide.addText(`Reporting window: ${charts.rangeStart} → ${charts.rangeEnd}`, {
-    x: 0.4,
-    y: 0.92,
-    w: 9.2,
-    h: 0.3,
-    fontSize: 9,
+    x: MARGIN,
+    y: 1.05,
+    w: CONTENT_W,
+    h: 0.28,
+    fontSize: 10,
     color: MUTED,
   });
 
   const kpis = charts.dashboardKpis.slice(0, 9);
   const cols = 3;
-  const cardW = 2.95;
-  const cardH = 0.72;
-  const gapX = 0.15;
-  const gapY = 0.12;
-  const startX = 0.45;
-  const startY = 1.2;
+  const cardW = 4.0;
+  const cardH = 1.55;
+  const gapX = 0.2;
+  const gapY = 0.18;
+  const startX = MARGIN;
+  const startY = 1.45;
 
   kpis.forEach(([label, value], i) => {
     const col = i % cols;
@@ -304,24 +312,24 @@ function kpiDashboardSlide(
       w: cardW,
       h: cardH,
       fill: { color: LIGHT },
-      line: { color: "E2E5EB", width: 0.5 },
+      line: { color: NAVY_XL, width: 0.75 },
     });
     slide.addText(String(label), {
-      x: x + 0.12,
-      y: y + 0.08,
-      w: cardW - 0.2,
-      h: 0.28,
-      fontSize: 8,
+      x: x + 0.18,
+      y: y + 0.22,
+      w: cardW - 0.36,
+      h: 0.38,
+      fontSize: 11,
       color: MUTED,
     });
     slide.addText(String(value), {
-      x: x + 0.12,
-      y: y + 0.32,
-      w: cardW - 0.2,
-      h: 0.32,
-      fontSize: 16,
+      x: x + 0.18,
+      y: y + 0.68,
+      w: cardW - 0.36,
+      h: 0.55,
+      fontSize: 22,
       bold: true,
-      color: DARK,
+      color: NAVY,
     });
   });
 

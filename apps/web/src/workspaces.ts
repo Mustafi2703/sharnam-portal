@@ -614,9 +614,16 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "cost", label: "BBS master", query: "tab=bbs-master", blurb: "Shape codes and diagrams.", sheet: "BBS shape library" },
     {
       to: "cost",
+      label: "Project CAPEX / monthly budget",
+      query: "tab=budget",
+      blurb: "CAPEX is the project budget. Upload the SPDC budget workbook each month.",
+      sheet: "SPDC_Budget · Budget",
+    },
+    {
+      to: "cost",
       label: "Budget WBS",
       query: "tab=budget",
-      blurb: "Budget structure.",
+      blurb: "Same register as Project CAPEX — monthly workbook upload.",
       sheet: "SPDC_Budget · Budget",
     },
     {
@@ -671,7 +678,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "finance", label: "Overview", end: true, blurb: "Open invoices, POs, RA bills, COPs." },
     { to: "finance", label: "PR Tracker", query: "tab=pr-tracker", blurb: "SAP PR register — files to ISO 05.01, feeds WPR." },
     { to: "finance", label: "Invoice processing", query: "tab=invoice-processing", blurb: "Client invoice tracker + COP status — ISO 09.01." },
-    { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Capital expenditure lines." },
+    { to: "finance", label: "Project CAPEX", query: "tab=capex", blurb: "Monthly budget (same as Cost CAPEX). Upload the budget workbook each month." },
     { to: "finance", label: "RA Bills & COP", query: "tab=ra", blurb: "RA bill tracker (3 stages) and certificates of payment." },
     { to: "finance", label: "RA Bill Tracker", query: "tab=ra", blurb: "Running account bills." },
     { to: "finance", label: "COP", query: "tab=cop", blurb: "Certificate of payment." },

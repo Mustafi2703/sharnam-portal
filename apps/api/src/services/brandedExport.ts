@@ -164,6 +164,17 @@ export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; pro
   return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 }
 
+export async function sendStampedXlsx(
+  res: { setHeader: (k: string, v: string) => void; send: (b: Buffer) => void },
+  buffer: Buffer,
+  filename: string
+) {
+  const stamped = await stampSpdcWorkbookLogo(buffer);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(stamped);
+}
+
 /** Stamp the SPDC / Sharnam logo on the first worksheet of an existing XLSX buffer. */
 export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
   const logo = sharnamLogoPath();

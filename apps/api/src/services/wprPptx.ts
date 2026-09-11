@@ -18,14 +18,24 @@ import {
 } from "./wprPptxCharts.js";
 import { mergeWprChartsForExport } from "./wprChartMerge.js";
 
-/** Client WPR_50 theme (Office accent1) — not portal teal. */
+/**
+ * Client WPR_50 theme (Office scheme) + Excel dashboard navy.
+ * Original deck is LAYOUT_WIDE 13.33 × 7.5" — not 16:9 10 × 5.625.
+ */
+const NAVY = "0E2841";
+const NAVY_XL = "002060";
 const BRAND = "156082";
-const TEAL_DEEP = "0E2841";
+const ORANGE = "E97132";
 const INK = "1F2937";
 const MUTED = "5C6578";
-const LIGHT = "E8F3F1";
-const SAND = "F4F7FA";
+const LIGHT = "E8EEF4";
+const BAND = "F3F6F9";
 const WHITE = "FFFFFF";
+const SLIDE_W = 13.333;
+const SLIDE_H = 7.5;
+const MARGIN = 0.45;
+const CONTENT_W = SLIDE_W - MARGIN * 2;
+const FOOTER_Y = 7.12;
 
 /** Slide titles as printed on SPDC_Arvind Limited_WPR_50.pptx */
 const PPTX_TITLES: Record<string, string> = {
@@ -71,11 +81,11 @@ function sharnamLogoPath(): string | null {
   return null;
 }
 
-function addSharnamLogo(slide: PptxSlide, pptx: PptxDeck) {
+function addSharnamLogo(slide: PptxSlide, x = 11.55, y = 0.14, w = 1.35, h = 0.42) {
   const logo = sharnamLogoPath();
   if (!logo) return;
   try {
-    slide.addImage({ path: logo, x: 7.15, y: 0.22, w: 2.35, h: 1.12 });
+    slide.addImage({ path: logo, x, y, w, h });
   } catch {
     /* optional */
   }
@@ -123,22 +133,22 @@ function createPptx(): PptxDeck {
   return new Ctor();
 }
 
-function footer(slide: PptxSlide, page: number, total: number, client?: string) {
+function footer(slide: PptxSlide, page: number, total: number, client?: string, ink = MUTED) {
   slide.addText(client || "Sharnam PMC", {
-    x: 0.4,
-    y: 5.15,
-    w: 5,
-    h: 0.25,
-    fontSize: 8,
-    color: MUTED,
+    x: MARGIN,
+    y: FOOTER_Y,
+    w: 8,
+    h: 0.22,
+    fontSize: 9,
+    color: ink,
   });
   slide.addText(`${page} / ${total}`, {
-    x: 8.2,
-    y: 5.15,
-    w: 1.4,
-    h: 0.25,
-    fontSize: 8,
-    color: MUTED,
+    x: SLIDE_W - MARGIN - 1.6,
+    y: FOOTER_Y,
+    w: 1.6,
+    h: 0.22,
+    fontSize: 9,
+    color: ink,
     align: "right",
   });
 }
@@ -147,9 +157,16 @@ function brandBar(pptx: PptxDeck, slide: PptxSlide) {
   slide.addShape(pptx.ShapeType.rect, {
     x: 0,
     y: 0,
-    w: 10,
+    w: SLIDE_W,
     h: 0.08,
     fill: { color: BRAND },
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0,
+    y: 0.08,
+    w: SLIDE_W,
+    h: 0.035,
+    fill: { color: ORANGE },
   });
 }
 
@@ -160,42 +177,153 @@ function dividerSlide(
   meta: { client?: string; page: number; total: number }
 ) {
   const slide = pptx.addSlide();
-  slide.background = { color: SAND };
-  brandBar(pptx, slide);
+  slide.background = { color: NAVY };
   slide.addShape(pptx.ShapeType.rect, {
     x: 0,
-    y: 0.08,
-    w: 0.18,
-    h: 5.545,
+    y: 0,
+    w: 0.22,
+    h: SLIDE_H,
+    fill: { color: ORANGE },
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0.22,
+    y: 0,
+    w: SLIDE_W - 0.22,
+    h: 0.08,
     fill: { color: BRAND },
   });
-  addSharnamLogo(slide, pptx);
+  addSharnamLogo(slide);
   slide.addText(pageNo, {
-    x: 0.6,
-    y: 1.6,
-    w: 8.8,
-    h: 0.5,
-    fontSize: 14,
-    color: BRAND,
-  });
-  slide.addText(title, {
-    x: 0.6,
-    y: 2.2,
-    w: 8.8,
-    h: 1,
-    fontSize: 32,
-    bold: true,
-    color: TEAL_DEEP,
-  });
-  slide.addText(meta.client || "Sharnam PMC · Weekly Progress Report", {
-    x: 0.6,
-    y: 3.5,
-    w: 8.8,
+    x: 0.7,
+    y: 2.15,
+    w: 12,
     h: 0.4,
     fontSize: 14,
-    color: MUTED,
+    color: ORANGE,
+    bold: true,
+  });
+  slide.addText(title, {
+    x: 0.7,
+    y: 2.55,
+    w: 12,
+    h: 1.05,
+    fontSize: 36,
+    bold: true,
+    color: WHITE,
+  });
+  slide.addText(meta.client || "Sharnam PMC · Weekly Progress Report", {
+    x: 0.7,
+    y: 3.7,
+    w: 12,
+    h: 0.4,
+    fontSize: 16,
+    color: "B8C4D0",
+  });
+  footer(slide, meta.page, meta.total, meta.client, "B8C4D0");
+}
+
+const INDEX_ITEMS = [
+  "Project Brief",
+  "Project Stakeholders",
+  "Mobilisation Plan",
+  "Risk Register",
+  "Procurement Tracker",
+  "Weekly Safety Update",
+  "Weekly Quality Update",
+  "Project Progress",
+  "Weekly Planned Vs. Actual",
+  "Project Progress Pictures",
+];
+
+function indexSlide(
+  pptx: PptxDeck,
+  meta: { client?: string; page: number; total: number }
+) {
+  const slide = pptx.addSlide();
+  slide.background = { color: WHITE };
+  brandBar(pptx, slide);
+  addSharnamLogo(slide);
+  slide.addText(meta.client || "Sharnam PMC", {
+    x: MARGIN,
+    y: 0.22,
+    w: 8,
+    h: 0.28,
+    fontSize: 12,
+    color: BRAND,
+    bold: true,
+  });
+  slide.addText("INDEX", {
+    x: MARGIN,
+    y: 0.52,
+    w: 8,
+    h: 0.45,
+    fontSize: 28,
+    bold: true,
+    color: NAVY,
+  });
+  slide.addShape(pptx.ShapeType.rect, {
+    x: MARGIN,
+    y: 1.02,
+    w: 1.4,
+    h: 0.06,
+    fill: { color: ORANGE },
+  });
+
+  INDEX_ITEMS.forEach((label, i) => {
+    const col = i < 5 ? 0 : 1;
+    const row = i % 5;
+    const x = MARGIN + col * 6.3;
+    const y = 1.3 + row * 1.05;
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y,
+      w: 5.95,
+      h: 0.88,
+      fill: { color: i % 2 ? BAND : LIGHT },
+    });
+    slide.addShape(pptx.ShapeType.rect, {
+      x,
+      y,
+      w: 0.88,
+      h: 0.88,
+      fill: { color: BRAND },
+    });
+    slide.addText(String(i + 1), {
+      x,
+      y,
+      w: 0.88,
+      h: 0.88,
+      fontSize: 22,
+      bold: true,
+      color: WHITE,
+      align: "center",
+      valign: "middle",
+    });
+    slide.addText(label, {
+      x: x + 1.05,
+      y,
+      w: 4.7,
+      h: 0.88,
+      fontSize: 16,
+      bold: true,
+      color: NAVY,
+      valign: "middle",
+    });
   });
   footer(slide, meta.page, meta.total, meta.client);
+}
+
+function colWidths(headers: string[], totalW: number): number[] {
+  const weights = headers.map((h, i) => {
+    const s = String(h || "").toLowerCase();
+    if (/^(sr|no\.?|#|s\.?\s*no)/.test(s)) return 0.55;
+    if (/date|cast|week|status|result|grade|avg|mpa|qty|%|c\d/.test(s)) return 0.85;
+    if (/desc|item|activity|name|drawing|title|location|remark|observation/.test(s)) return 1.9;
+    if (i === 1 && headers.length > 3) return 1.55;
+    return 1;
+  });
+  const sum = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => (w / sum) * totalW);
 }
 
 function chunkRows(rows: (string | number | null)[][], size: number) {
@@ -214,11 +342,11 @@ function addSignOffStrip(
   const order = ["pmc", "client", "contractor"] as const;
   order.forEach((role, i) => {
     const hit = (signatures || []).find((s) => s.role.toLowerCase().includes(role));
-    const x = 0.4 + i * 3.1;
+    const x = MARGIN + i * 4.15;
     slide.addText(`${role.toUpperCase()} sign`, {
       x,
-      y: 4.48,
-      w: 2.9,
+      y: 6.42,
+      w: 3.9,
       h: 0.16,
       fontSize: 8,
       color: MUTED,
@@ -227,13 +355,13 @@ function addSignOffStrip(
     const resolved = hit ? resolvePhotoPath(hit.url || hit.path, projectCode) : undefined;
     if (resolved) {
       try {
-        slide.addImage({ path: resolved, x, y: 4.64, w: 2.7, h: 0.42 });
+        slide.addImage({ path: resolved, x, y: 6.58, w: 3.6, h: 0.42 });
         return;
       } catch {
         /* line fallback */
       }
     }
-    slide.addShape(pptx.ShapeType.rect, { x, y: 4.92, w: 2.4, h: 0.015, fill: { color: "C5CAD3" } });
+    slide.addShape(pptx.ShapeType.rect, { x, y: 6.88, w: 3.2, h: 0.015, fill: { color: "C5CAD3" } });
   });
 }
 
@@ -255,69 +383,74 @@ function tableSlide(
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
   brandBar(pptx, slide);
-  addSharnamLogo(slide, pptx);
+  addSharnamLogo(slide);
   slide.addText(opts.client || "Sharnam PMC", {
-    x: 0.4,
-    y: 0.18,
-    w: 5,
-    h: 0.28,
-    fontSize: 10,
+    x: MARGIN,
+    y: 0.2,
+    w: 8,
+    h: 0.26,
+    fontSize: 11,
     color: BRAND,
     bold: true,
   });
   const title = opts.partLabel ? `${opts.title}  ·  ${opts.partLabel}` : opts.title;
   slide.addText(title, {
-    x: 0.4,
-    y: 0.45,
-    w: 9.2,
+    x: MARGIN,
+    y: 0.48,
+    w: CONTENT_W - 1.6,
     h: 0.4,
-    fontSize: 18,
+    fontSize: 20,
     bold: true,
-    color: INK,
+    color: NAVY,
   });
   slide.addShape(pptx.ShapeType.rect, {
-    x: 0.4,
-    y: 0.88,
-    w: 1.1,
-    h: 0.05,
-    fill: { color: BRAND },
+    x: MARGIN,
+    y: 0.92,
+    w: 1.55,
+    h: 0.055,
+    fill: { color: ORANGE },
   });
 
-  let y = 1.05;
+  let y = 1.12;
   if (opts.notes) {
     slide.addText(opts.notes, {
-      x: 0.4,
+      x: MARGIN,
       y,
-      w: 9.2,
-      h: 0.45,
+      w: CONTENT_W,
+      h: 0.38,
       fontSize: 10,
       color: MUTED,
     });
-    y += 0.5;
+    y += 0.42;
   }
 
   const headers = opts.headers.length ? opts.headers : ["Item", "Detail"];
   const body = opts.rows.length ? opts.rows : [["(No rows — fill in WPR Maker / sync registers)", ""]];
-  const colW = headers.map(() => 9.2 / headers.length);
+  const colW = colWidths(headers, CONTENT_W);
   const tableRows = [
     headers.map((h) => ({
       text: h,
-      options: { bold: true, fill: { color: BRAND }, color: WHITE, fontSize: 8 },
+      options: { bold: true, fill: { color: NAVY_XL }, color: WHITE, fontSize: 9, align: "center" },
     })),
-    ...body.map((r) =>
+    ...body.map((r, ri) =>
       headers.map((_, i) => ({
         text: String(r[i] ?? ""),
-        options: { fontSize: 8, color: INK },
+        options: {
+          fontSize: 9,
+          color: INK,
+          fill: { color: ri % 2 ? BAND : WHITE },
+        },
       }))
     ),
   ];
   slide.addTable(tableRows, {
-    x: 0.4,
+    x: MARGIN,
     y,
-    w: 9.2,
+    w: CONTENT_W,
     colW,
-    border: { type: "solid", color: "E2E5EB", pt: 0.5 },
+    border: { type: "solid", color: "D6DEE8", pt: 0.5 },
     fontFace: "Calibri",
+    valign: "middle",
   });
   if (opts.signatures) addSignOffStrip(pptx, slide, opts.signatures, opts.projectCode);
   footer(slide, opts.page, opts.total, opts.client);
@@ -380,28 +513,28 @@ function photoGridSlide(
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
   brandBar(pptx, slide);
+  addSharnamLogo(slide);
   slide.addText(opts.client || "Sharnam PMC", {
-    x: 0.4, y: 0.18, w: 5, h: 0.28, fontSize: 10, color: BRAND, bold: true,
+    x: MARGIN, y: 0.2, w: 8, h: 0.26, fontSize: 11, color: BRAND, bold: true,
   });
   const title = opts.partLabel ? `${opts.title}  ·  ${opts.partLabel}` : opts.title;
   slide.addText(title, {
-    x: 0.4, y: 0.45, w: 9.2, h: 0.4, fontSize: 18, bold: true, color: INK,
+    x: MARGIN, y: 0.48, w: CONTENT_W - 1.6, h: 0.4, fontSize: 20, bold: true, color: NAVY,
   });
   slide.addShape(pptx.ShapeType.rect, {
-    x: 0.4, y: 0.88, w: 1.1, h: 0.05, fill: { color: BRAND },
+    x: MARGIN, y: 0.92, w: 1.55, h: 0.055, fill: { color: ORANGE },
   });
 
-  // 2 × 2 grid inside the 9.2 × 4.05 content area starting y = 1.0.
-  const cellW = 4.5;
-  const cellH = 1.95;
-  const gap = 0.2;
-  const originY = 1.0;
+  const cellW = 6.05;
+  const cellH = 2.55;
+  const gap = 0.22;
+  const originY = 1.15;
 
   for (let i = 0; i < 4; i++) {
     const col = i % 2;
     const row = Math.floor(i / 2);
-    const x = 0.4 + col * (cellW + gap);
-    const y = originY + row * (cellH + gap + 0.25); // extra 0.25 for caption
+    const x = MARGIN + col * (cellW + gap);
+    const y = originY + row * (cellH + gap + 0.28);
     const src = opts.photos[i] ? resolvePhotoPath(opts.photos[i], opts.projectCode) : undefined;
     if (src) {
       slide.addImage({ path: src, x, y, w: cellW, h: cellH, sizing: { type: "contain", w: cellW, h: cellH } });
@@ -430,29 +563,30 @@ function siteImageSlide(
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
   brandBar(pptx, slide);
+  addSharnamLogo(slide);
   slide.addText(meta.client || "Sharnam PMC", {
-    x: 0.4,
-    y: 0.18,
-    w: 5,
-    h: 0.28,
-    fontSize: 10,
+    x: MARGIN,
+    y: 0.2,
+    w: 8,
+    h: 0.26,
+    fontSize: 11,
     color: BRAND,
     bold: true,
   });
   slide.addText("Site location / Google Earth view", {
-    x: 0.4,
-    y: 0.45,
-    w: 9.2,
+    x: MARGIN,
+    y: 0.48,
+    w: CONTENT_W - 1.6,
     h: 0.4,
-    fontSize: 18,
+    fontSize: 20,
     bold: true,
-    color: INK,
+    color: NAVY,
   });
   slide.addShape(pptx.ShapeType.rect, {
-    x: 0.4,
-    y: 1.1,
-    w: 9.2,
-    h: 3.5,
+    x: MARGIN,
+    y: 1.12,
+    w: CONTENT_W,
+    h: 5.7,
     fill: { color: LIGHT },
   });
   slide.addText(
@@ -463,11 +597,11 @@ function siteImageSlide(
       "Placeholder — portal photos appear on Progress Pictures slides.",
     ].join("\n"),
     {
-      x: 0.8,
-      y: 2.2,
-      w: 8.4,
-      h: 1.5,
-      fontSize: 14,
+      x: MARGIN + 0.4,
+      y: 3.1,
+      w: CONTENT_W - 0.8,
+      h: 1.6,
+      fontSize: 16,
       color: MUTED,
       align: "center",
     }
@@ -538,20 +672,20 @@ function ensureSection(pack: WprPackInput, key: keyof typeof DEFAULT_WPR_TITLES)
 
 type PlanItem =
   | { type: "cover" }
+  | { type: "index" }
   | { type: "divider"; title: string; no: string }
   | { type: "siteImage" }
   | { type: "section"; key: keyof typeof DEFAULT_WPR_TITLES; chunk: number; chunks: number }
   | { type: "chart"; key: WprChartSlideKey };
 
 function buildPlan(pack: WprPackInput): PlanItem[] {
-  const plan: PlanItem[] = [{ type: "cover" }];
+  const plan: PlanItem[] = [{ type: "cover" }, { type: "index" }];
 
   const narrative: Array<
     | { kind: "divider"; title: string; no: string }
     | { kind: "siteImage" }
     | { kind: "section"; key: keyof typeof DEFAULT_WPR_TITLES }
   > = [
-    { kind: "section", key: "index" },
     { kind: "divider", title: "Project Brief", no: "03" },
     { kind: "section", key: "brief" },
     { kind: "siteImage" },
@@ -630,11 +764,8 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
   const fullPack: WprPackInput = { ...pack, charts };
 
   const pptx = createPptx();
-  // LAYOUT_16x9 = 10.0 × 5.625" — matches every hard-coded coordinate in this
-  // file (x 0.4 → w 9.2, footer y 5.15).  LAYOUT_WIDE (13.33 × 7.5") pushed
-  // all content into the top-left quadrant, leaving the right and bottom of
-  // each slide empty and causing prints / photos to look truncated.
-  pptx.layout = "LAYOUT_16x9";
+  // Original SPDC WPR_50 is Office widescreen 13.33 × 7.5" (LAYOUT_WIDE).
+  pptx.layout = "LAYOUT_WIDE";
   pptx.author = "Sharnam PMC";
   pptx.company = "Sharnam Project Development Consultants & Co.";
   pptx.subject = `WPR ${fullPack.header.reportNumber || fullPack.header.projectCode || ""}`;
@@ -666,59 +797,79 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
     if (item.type === "cover") {
       const slide = pptx.addSlide();
       slide.background = { color: WHITE };
-      brandBar(pptx, slide);
       slide.addShape(pptx.ShapeType.rect, {
         x: 0,
-        y: 0.08,
-        w: 0.18,
-        h: 5.545,
-        fill: { color: BRAND },
+        y: 0,
+        w: SLIDE_W,
+        h: SLIDE_H,
+        fill: { color: NAVY },
       });
       slide.addShape(pptx.ShapeType.rect, {
-        x: 0.18,
-        y: 0.08,
-        w: 9.82,
-        h: 1.35,
-        fill: { color: SAND },
+        x: 0,
+        y: 0,
+        w: 0.22,
+        h: SLIDE_H,
+        fill: { color: ORANGE },
       });
-      addSharnamLogo(slide, pptx);
+      addSharnamLogo(slide, 11.4, 0.28, 1.5, 0.48);
       slide.addText("WEEKLY PROGRESS REPORT", {
-        x: 0.55,
-        y: 0.28,
-        w: 6.4,
-        h: 0.32,
-        fontSize: 12,
-        color: BRAND,
+        x: 0.7,
+        y: 1.55,
+        w: 12,
+        h: 0.7,
+        fontSize: 32,
         bold: true,
+        color: WHITE,
       });
       slide.addText(fullPack.header.clientName || fullPack.header.projectName || "Project", {
-        x: 0.55,
-        y: 0.62,
-        w: 6.6,
-        h: 0.62,
-        fontSize: 24,
+        x: 0.7,
+        y: 2.3,
+        w: 12,
+        h: 0.7,
+        fontSize: 28,
         bold: true,
-        color: TEAL_DEEP,
+        color: ORANGE,
+      });
+      slide.addShape(pptx.ShapeType.rect, {
+        x: 0.7,
+        y: 3.15,
+        w: 2.2,
+        h: 0.06,
+        fill: { color: BRAND },
+      });
+      slide.addText(`REPORT NO.  ${reportNo}`, {
+        x: 0.7,
+        y: 3.45,
+        w: 12,
+        h: 0.42,
+        fontSize: 20,
+        bold: true,
+        color: WHITE,
+      });
+      slide.addText(weekRange, {
+        x: 0.7,
+        y: 3.95,
+        w: 12,
+        h: 0.38,
+        fontSize: 16,
+        color: "D6DEE8",
       });
       slide.addText(
         [
-          `REPORT NO.  ${reportNo}`,
-          weekRange,
           fullPack.header.projectName || "",
           `Contractor  ${fullPack.header.contractorName || "—"}`,
           `PMC  ${fullPack.header.pmc || "Sharnam Project Development Consultants & Co."}`,
-        ].filter(Boolean).join("\n"),
-        { x: 0.55, y: 1.7, w: 8.8, h: 1.7, fontSize: 14, color: INK }
+        ]
+          .filter(Boolean)
+          .join("   ·   "),
+        { x: 0.7, y: 5.85, w: 12, h: 0.4, fontSize: 13, color: "B8C4D0" }
       );
-      slide.addText("Sharnam Project Development Consultants & Co.", {
-        x: 0.55,
-        y: 4.8,
-        w: 8.8,
-        h: 0.3,
-        fontSize: 10,
-        color: MUTED,
-      });
-      footer(slide, page, total, client);
+      footer(slide, page, total, client, "B8C4D0");
+      continue;
+    }
+
+    if (item.type === "index") {
+      indexSlide(pptx, { client, page, total });
       continue;
     }
 

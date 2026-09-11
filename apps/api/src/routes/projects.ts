@@ -698,6 +698,21 @@ projectsRouter.post("/:id/complete-setup", requireRoles("admin", "office"), asyn
   res.json(out);
 });
 
+projectsRouter.post("/:id/send-portal-invites", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { sendProjectPortalInvites } = await import("../services/portalInvites.js");
+  const extra = Array.isArray(req.body?.people) ? req.body.people : [];
+  const out = await sendProjectPortalInvites(project.id, req.user!.id, extra);
+  await audit("project.portal_invites", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { sent: out.sent.length },
+  });
+  res.json(out);
+});
+
 projectsRouter.get("/:id", async (req, res) => {
   const project = await prisma.project.findUnique({
     where: { id: req.params.id },

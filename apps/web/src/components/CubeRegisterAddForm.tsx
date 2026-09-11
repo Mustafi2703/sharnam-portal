@@ -1,4 +1,5 @@
 import { FormEvent, useRef } from "react";
+import { applyCubeFormula } from "@sharnam/shared";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { Input, Select } from "./ui";
 
@@ -30,12 +31,27 @@ type Props = {
 
 export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onClose }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
-  const set = (patch: Partial<CubeAddFormState>) => onChange({ ...form, ...patch });
+  const set = (patch: Partial<CubeAddFormState>) => {
+    const next = { ...form, ...patch };
+    const computed = applyCubeFormula({
+      load7: next.load7 ? Number(next.load7) : null,
+      load28: next.load28 ? Number(next.load28) : null,
+      grade: next.grade,
+      result: next.result,
+    });
+    if (patch.load7 != null || patch.load28 != null || patch.grade != null) {
+      next.strength7 = computed.strength7 != null ? String(computed.strength7) : next.strength7;
+      next.strength28 = computed.strength28 != null ? String(computed.strength28) : next.strength28;
+      next.avgStrength = computed.avgStrength != null ? String(computed.avgStrength) : next.avgStrength;
+      next.result = computed.result;
+    }
+    onChange(next);
+  };
 
   return (
     <RegisterEntryModal
       open={open}
-      title="Add cube test"
+      title="Add cube group (3 cubes)"
       onClose={onClose}
       onSave={() => formRef.current?.requestSubmit()}
       saving={busy}
@@ -44,7 +60,7 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
     >
       <form ref={formRef} className="space-y-4" onSubmit={onSubmit}>
         <div className="register-form-section">
-          <p className="register-form-section__title">Pour / footing</p>
+          <p className="register-form-section__title">Pour / footing — saves as 3 cube specimens</p>
           <div className="register-form-grid register-form-grid--wide">
             <label className="register-form-field">
               <span>Sr. no.</span>
@@ -106,16 +122,16 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
               <Input value={form.load28} onChange={(e) => set({ load28: e.target.value })} />
             </label>
             <label className="register-form-field">
-              <span>7-day strength (MPa)</span>
-              <Input value={form.strength7} onChange={(e) => set({ strength7: e.target.value })} />
+              <span>7-day strength (MPa) — auto IS 516</span>
+              <Input value={form.strength7} readOnly className="bg-sand/50" />
             </label>
             <label className="register-form-field">
-              <span>28-day strength (MPa)</span>
-              <Input value={form.strength28} onChange={(e) => set({ strength28: e.target.value })} />
+              <span>28-day strength (MPa) — auto IS 516</span>
+              <Input value={form.strength28} readOnly className="bg-sand/50" />
             </label>
             <label className="register-form-field">
               <span>Average strength (MPa)</span>
-              <Input value={form.avgStrength} onChange={(e) => set({ avgStrength: e.target.value })} />
+              <Input value={form.avgStrength} readOnly className="bg-sand/50" />
             </label>
           </div>
         </div>

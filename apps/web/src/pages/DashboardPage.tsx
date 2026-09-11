@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [safetyOpen, setSafetyOpen] = useState(0);
   const [busy, setBusy] = useState(true);
   const [rfiModalOpen, setRfiModalOpen] = useState(false);
+  const [dues, setDues] = useState<{ overdue: number; dueSoon: number; items: { id: string; kind: string; title: string; due: string; status: string; href: string }[] } | null>(null);
 
   const selected = projects.find((p) => p.id === projectId) || projects[0];
   const pid = selected?.id;
@@ -69,14 +70,16 @@ export default function DashboardPage() {
       api(`/api/comms/meetings/${pid}`, { token }).catch(() => []),
       api<any[]>(`/api/checklist/project/${pid}/submissions`, { token }).catch(() => []),
       api<{ stats?: { open?: number } }>(`/api/safety/project/${pid}`, { token }).catch(() => null),
+      api<{ overdue: number; dueSoon: number; items: any[] }>(`/api/reports/${pid}/due-dates`, { token }).catch(() => null),
     ])
-      .then(([a, r, m, l, s]) => {
+      .then(([a, r, m, l, s, d]) => {
         setAnalytics(a);
         const list = Array.isArray(r) ? r : (r as any)?.rfis || [];
         setOpenRfis(list.filter((x: any) => x.status === "Open" || x.status === "Draft"));
         setMeetings(Array.isArray(m) ? m.slice(0, 20) : []);
         setLogs(Array.isArray(l) ? l.slice(0, 20) : []);
         setSafetyOpen(s?.stats?.open ?? a?.kpis?.openSafety ?? 0);
+        setDues(d);
       })
       .finally(() => setBusy(false));
   }, [pid, token]);
@@ -95,6 +98,34 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5">
       <OfficeClockInCard />
+      {dues && (dues.overdue > 0 || dues.dueSoon > 0 || dues.items.length > 0) && (
+        <Card className="!p-4 border-amber-200 bg-amber-50/60">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <h3 className="font-semibold text-sm">Due dates</h3>
+            <p className="text-xs text-steel-muted">
+              <span className="text-danger font-semibold">{dues.overdue} overdue</span>
+              {" · "}
+              {dues.dueSoon} in the next 21 days
+            </p>
+          </div>
+          <ul className="space-y-1.5 max-h-48 overflow-y-auto text-sm">
+            {dues.items.slice(0, 12).map((item) => {
+              const overdue = item.due && new Date(item.due) < new Date();
+              return (
+                <li key={`${item.kind}-${item.id}`} className="flex justify-between gap-3">
+                  <Link to={item.href} className="min-w-0 truncate">
+                    <span className="font-mono text-[10px] text-brand mr-1">{item.kind}</span>
+                    {item.title}
+                  </Link>
+                  <span className={`shrink-0 text-[11px] tabular-nums ${overdue ? "text-danger font-semibold" : "text-steel-muted"}`}>
+                    {item.due ? new Date(item.due).toLocaleDateString("en-IN") : "—"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
       <PageHero
         accent="graphite"
         title={`Analytics · ${firstName}`}

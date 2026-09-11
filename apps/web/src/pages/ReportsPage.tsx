@@ -17,6 +17,7 @@ export default function ReportsPage() {
   const [wpr, setWpr] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -81,6 +82,20 @@ export default function ReportsPage() {
 
       {msg && <p className="text-sm text-brand bg-brand-soft/50 px-3 py-2 rounded-lg">{msg}</p>}
 
+      {previewHtml && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
+          <div className="bg-paper rounded-xl shadow-xl w-full max-w-5xl h-[90vh] flex flex-col min-h-0">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
+              <div className="font-semibold text-sm">DPR preview</div>
+              <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewHtml(null)}>
+                Close
+              </Button>
+            </div>
+            <iframe title="DPR preview" srcDoc={previewHtml} className="flex-1 w-full border-0 bg-white rounded-b-xl" />
+          </div>
+        </div>
+      )}
+
       {project && (
         <Card className="border-brand/30 bg-brand-soft/20">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -96,6 +111,29 @@ export default function ReportsPage() {
               <Link to={`/projects/${id}/dpr-maker`}>
                 <Button type="button">Open DPR maker</Button>
               </Link>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || !id}
+                onClick={async () => {
+                  if (!id) return;
+                  setBusy(true);
+                  setMsg("");
+                  try {
+                    const res = await fetch(`${API_BASE}/api/reports/dpr/${id}/download.html`, {
+                      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    });
+                    if (!res.ok) throw new Error(`Preview failed (${res.status})`);
+                    setPreviewHtml(await res.text());
+                  } catch (e) {
+                    setMsg(e instanceof Error ? e.message : "Preview failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Preview
+              </Button>
               <Link to={`/projects/${id}/wpr-maker`}>
                 <Button type="button" variant="secondary">Open WPR maker</Button>
               </Link>

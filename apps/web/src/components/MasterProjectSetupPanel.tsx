@@ -1,8 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableSelect } from "./SearchableSelect";
+import { DirectoryMySignaturePanel } from "./DirectoryMySignaturePanel";
+import { DirectorySignOffRegister } from "./DirectorySignOffRegister";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; status: string; clientName?: string | null };
@@ -46,7 +49,9 @@ type Props = {
 };
 
 export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors, onMsg }: Props) {
+  const { user } = useAuth();
   const [summary, setSummary] = useState<SetupSummary | null>(null);
+  const [overview, setOverview] = useState<{ members?: any[]; vendors?: any[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState("project_manager");
@@ -64,8 +69,14 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
 
   const load = useCallback(async () => {
     if (!projectId) return;
-    const s = await api<SetupSummary>(`/api/projects/${projectId}/setup-summary`, { token });
+    const [s, ov] = await Promise.all([
+      api<SetupSummary>(`/api/projects/${projectId}/setup-summary`, { token }),
+      api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${projectId}/overview`, { token }).catch(
+        () => null
+      ),
+    ]);
     setSummary(s);
+    setOverview(ov);
   }, [projectId, token]);
 
   useEffect(() => {
@@ -280,6 +291,39 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
           </form>
         </Card>
       </div>
+
+      {(() => {
+        const members = overview?.members || [];
+        const vendors = overview?.vendors || [];
+        const missingPeople = members.filter((m) => !m.signatureUrl).length;
+        const missingCompanies = vendors.filter((v) => !v.signatureUrl).length;
+        const missing = missingPeople + missingCompanies;
+        return (
+          <Card className={`!p-4 space-y-3 ${missing ? "border-amber-300 bg-amber-50/60" : ""}`}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold text-sm">Sign-off register</h3>
+                <p className="text-xs text-steel-muted mt-0.5">
+                  Required for checklists, RA bills, and WPR export. Set up here if Directory is still empty.
+                </p>
+              </div>
+              <Badge tone={missing ? "warn" : "ok"}>{missing ? `${missing} missing` : "All set"}</Badge>
+            </div>
+            <DirectoryMySignaturePanel projectId={projectId} token={token} compact />
+            <DirectorySignOffRegister
+              projectId={projectId}
+              token={token}
+              members={members}
+              vendors={vendors}
+              canEditAll
+              currentUserId={user?.id}
+              currentUserEmail={user?.email}
+              currentUserVendorId={user?.vendorId}
+              onSaved={() => void load()}
+            />
+          </Card>
+        );
+      })()}
 
       <Card className="!p-4 space-y-2 bg-sand/30">
         <h3 className="font-semibold text-sm">DMS · ISO folder tree (OneDrive)</h3>

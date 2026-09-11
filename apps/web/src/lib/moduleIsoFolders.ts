@@ -83,11 +83,11 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     ],
   },
   progress: {
-    root: "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records",
-    title: "Progress & site files",
-    eyebrow: "Progress · ISO 07.02",
+    root: "07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve",
+    title: "Progress files",
+    eyebrow: "Progress · ISO 07.08",
     hubPath: "hub/progress",
-    subtitle: "DPR discipline folders, photos, daily records — open SharePoint copies alongside portal registers.",
+    subtitle: "Planned vs actual, S-curve, measurement books — ISO 07.08 Progress Measurement. Daily site records stay under 07.02 (DPR / Photos).",
   },
   reports: {
     root: "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS",
