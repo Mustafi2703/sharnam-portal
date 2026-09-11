@@ -26,6 +26,8 @@ type Props = {
   projects: CrmProjectRow[];
   canWrite: boolean;
   onEdit?: (project: CrmProjectRow) => void;
+  selectedId?: string | null;
+  onSelect?: (project: CrmProjectRow) => void;
 };
 
 function projectDetailLines(p: CrmProjectRow) {
@@ -58,11 +60,17 @@ function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
   });
 }
 
-export function CrmProjectsRegister({ projects, canWrite, onEdit }: Props) {
+export function CrmProjectsRegister({ projects, canWrite, onEdit, selectedId: selectedIdProp, onSelect }: Props) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIdLocal, setSelectedIdLocal] = useState<string | null>(null);
+  const selectedId = selectedIdProp !== undefined ? selectedIdProp : selectedIdLocal;
+  const setSelectedId = (id: string | null) => {
+    setSelectedIdLocal(id);
+    const row = projects.find((p) => p.id === id);
+    if (row && onSelect) onSelect(row);
+  };
 
   const statusOptions = useMemo(
     () => [...new Set(projects.map((p) => p.status).filter(Boolean))].sort() as string[],

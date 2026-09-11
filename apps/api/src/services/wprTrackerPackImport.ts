@@ -8,26 +8,36 @@ import type { PrismaClient } from "@prisma/client";
 import XLSX from "../lib/xlsx.js";
 import type { WorkBook } from "../lib/xlsx.js";
 
+function searchRoots(): string[] {
+  return [process.cwd(), path.resolve(process.cwd(), ".."), path.resolve(process.cwd(), "../..")];
+}
+
 export function resolveWprPackDir() {
-  const candidates = [
-    path.join(process.cwd(), "templates", "wpr-client"),
-    path.join(process.cwd(), "packages", "shared", "untitled folder"),
-    path.join(process.cwd(), "module_prompts", "untitled folder"),
+  const rels = [
+    ["templates", "wpr-client"],
+    ["packages", "shared", "untitled folder"],
+    ["module_prompts", "untitled folder"],
   ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+  for (const root of searchRoots()) {
+    for (const rel of rels) {
+      const p = path.join(root, ...rel);
+      if (fs.existsSync(p)) return p;
+    }
   }
-  return candidates[0];
+  return path.join(process.cwd(), "templates", "wpr-client");
 }
 
 export function resolveJulyWprWorkbook(): string | null {
   const names = [
-    path.join(process.cwd(), "module_prompts", "untitled folder", "WPR  23 July to 29 July.xlsx"),
-    path.join(process.cwd(), "templates", "wpr-client", "WPR-Client-Week-Template.xlsx"),
-    path.join(process.cwd(), "templates", "WPR-File.xlsx"),
+    ["module_prompts", "untitled folder", "WPR  23 July to 29 July.xlsx"],
+    ["templates", "wpr-client", "WPR-Client-Week-Template.xlsx"],
+    ["templates", "WPR-File.xlsx"],
   ];
-  for (const p of names) {
-    if (fs.existsSync(p)) return p;
+  for (const root of searchRoots()) {
+    for (const rel of names) {
+      const p = path.join(root, ...rel);
+      if (fs.existsSync(p)) return p;
+    }
   }
   const dir = resolveWprPackDir();
   if (!fs.existsSync(dir)) return null;

@@ -104,9 +104,11 @@ type PptxDeck = {
 
 /** Charts only where the client deck pastes Excel/EMF — not after every table. */
 const CHART_AFTER: Partial<Record<keyof WprSections, WprChartSlideKey[]>> = {
-  projectDashboard: ["dashboardKpis"],
+  projectDashboard: ["dashboardKpis", "scurve"],
+  milestones: ["milestones"],
   manpowerHistogram: ["manpower"],
   cashflow: ["cashflow"],
+  drawingRegister: ["drawingDci"],
   quality: ["quality"],
   safety: ["safety"],
   plannedVsActual: ["plannedVsActual"],
@@ -203,6 +205,38 @@ function chunkRows(rows: (string | number | null)[][], size: number) {
   return out;
 }
 
+function addSignOffStrip(
+  pptx: PptxDeck,
+  slide: PptxSlide,
+  signatures: { path: string; role: string; url?: string }[] | undefined,
+  projectCode?: string
+) {
+  const order = ["pmc", "client", "contractor"] as const;
+  order.forEach((role, i) => {
+    const hit = (signatures || []).find((s) => s.role.toLowerCase().includes(role));
+    const x = 0.4 + i * 3.1;
+    slide.addText(`${role.toUpperCase()} sign`, {
+      x,
+      y: 4.48,
+      w: 2.9,
+      h: 0.16,
+      fontSize: 8,
+      color: MUTED,
+      bold: true,
+    });
+    const resolved = hit ? resolvePhotoPath(hit.url || hit.path, projectCode) : undefined;
+    if (resolved) {
+      try {
+        slide.addImage({ path: resolved, x, y: 4.64, w: 2.7, h: 0.42 });
+        return;
+      } catch {
+        /* line fallback */
+      }
+    }
+    slide.addShape(pptx.ShapeType.rect, { x, y: 4.92, w: 2.4, h: 0.015, fill: { color: "C5CAD3" } });
+  });
+}
+
 function tableSlide(
   pptx: PptxDeck,
   opts: {
@@ -214,6 +248,8 @@ function tableSlide(
     page: number;
     total: number;
     partLabel?: string;
+    signatures?: { path: string; role: string; url?: string }[];
+    projectCode?: string;
   }
 ) {
   const slide = pptx.addSlide();
@@ -283,6 +319,7 @@ function tableSlide(
     border: { type: "solid", color: "E2E5EB", pt: 0.5 },
     fontFace: "Calibri",
   });
+  if (opts.signatures) addSignOffStrip(pptx, slide, opts.signatures, opts.projectCode);
   footer(slide, opts.page, opts.total, opts.client);
 }
 
@@ -525,6 +562,7 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
     { kind: "section", key: "criticalAreas" },
     { kind: "section", key: "capex" },
     { kind: "section", key: "prTracker" },
+    { kind: "section", key: "invoiceTracker" },
     { kind: "section", key: "hindrance" },
     { kind: "section", key: "risk" },
     { kind: "section", key: "legal" },
@@ -543,6 +581,7 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
     { kind: "section", key: "safety" },
     { kind: "divider", title: "Weekly Planned Vs. Actual", no: "54" },
     { kind: "section", key: "plannedVsActual" },
+    { kind: "section", key: "valueAddition" },
     { kind: "section", key: "materialStock" },
     { kind: "divider", title: "Project Progress Pictures", no: "59" },
     { kind: "section", key: "progressPictures" },
@@ -739,6 +778,7 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
       item.chunk >= parts.length
         ? [["(Continuation — add more rows in registers)", ""]]
         : rows;
+    const signKeys = item.key === "brief" || item.key === "projectDashboard";
     tableSlide(pptx, {
       title: PPTX_TITLES[item.key] || sec.title || DEFAULT_WPR_TITLES[item.key],
       notes: item.chunk === 0 ? sec.notes : undefined,
@@ -748,6 +788,8 @@ export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
       page,
       total,
       partLabel: item.chunks > 1 ? `Part ${item.chunk + 1} of ${item.chunks}` : undefined,
+      signatures: signKeys && item.chunk === item.chunks - 1 ? fullPack.packExtras?.signatures : undefined,
+      projectCode: fullPack.header.projectCode,
     });
   }
 

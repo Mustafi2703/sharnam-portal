@@ -65,6 +65,7 @@ import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
 import HrmsVendorsPage from "./pages/hrms/HrmsVendorsPage";
 import CrmDirectoryPage from "./pages/crm/CrmDirectoryPage";
 import CrmProjectSetupPage from "./pages/crm/CrmProjectSetupPage";
+import CrmProjectsPage from "./pages/crm/CrmProjectsPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 import TrainingPage from "./pages/TrainingPage";
 import { SiteAttendanceGate } from "./components/SiteAttendanceGate";
@@ -270,7 +271,7 @@ export default function App() {
                   <Route path="proposals/new" element={<QuotationMakerPage />} />
                   <Route path="proposals/:id" element={<QuotationMakerPage />} />
                   <Route path="proposals" element={<CrmPage />} />
-                  <Route path="projects" element={<CrmPage />} />
+                  <Route path="projects" element={<CrmProjectsPage />} />
                   <Route path="directory/:tab" element={<CrmDirectoryPage />} />
                   <Route path="directory" element={<Navigate to="/crm/directory/vendors" replace />} />
                   <Route path="bids" element={<CrmBidComparePage />} />

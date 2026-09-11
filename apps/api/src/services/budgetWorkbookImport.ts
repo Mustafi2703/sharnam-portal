@@ -7,20 +7,14 @@ import os from "os";
 import path from "path";
 import { pathToFileURL } from "url";
 import { prisma } from "../prisma.js";
+import { findWorkbook } from "../lib/excelRoot.js";
 import { isFullSpdcWorkbook } from "./costSheetParser.js";
 
 export function resolveBudgetWorkbookPath(): string | null {
-  const candidates = [
-    process.env.SHARNAM_EXCEL_ROOT ? path.join(process.env.SHARNAM_EXCEL_ROOT, "SPDC_Budget_Arvind 49.xls") : "",
-    path.join(process.cwd(), "seed", "data", "SPDC_Budget_Arvind 49.xls"),
-    path.join(process.cwd(), "..", "..", "seed", "data", "SPDC_Budget_Arvind 49.xls"),
-    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "SPDC_Budget_Arvind 49.xls"),
-    path.join(process.cwd(), "..", "..", "module_prompts", "Sharnam_modules_docs 2", "SPDC_Budget_Arvind 49.xls"),
-  ].filter(Boolean);
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
+  return (
+    findWorkbook(["SPDC_Budget_Arvind 52.xls", "SPDC_Budget_Arvind 49.xls"]) ||
+    null
+  );
 }
 
 async function loadSeedModule(): Promise<{

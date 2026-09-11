@@ -101,20 +101,33 @@ export function WprDashboardCharts({ charts, emptyHint }: { charts: WprCharts; e
           Showing section-table preview — click <strong>Regenerate from live data</strong> for full DPR-linked charts.
         </p>
       )}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-        <KpiTile label="Planned %" value={s.plannedPct ? `${s.plannedPct}%` : "—"} />
-        <KpiTile label="Actual %" value={s.actualPct ? `${s.actualPct}%` : "—"} tone={varTone} />
-        <KpiTile label="Variance" value={s.variancePct ? `${s.variancePct}%` : "—"} tone={varTone} />
-        <KpiTile label="SPI" value={s.spi || "—"} tone={spiTone} />
-        <KpiTile label="Open NCRs" value={s.openNcrs} tone={s.openNcrs > 0 ? "warn" : "ok"} />
-        <KpiTile label="DPR days" value={s.dprDaysInRange} />
-        <KpiTile
-          label="Milestones"
-          value={s.milestonesTotal ? `${s.milestonesOnTrack}/${s.milestonesTotal}` : "—"}
-        />
-        <KpiTile label="Drawings" value={s.drawingsRegistered || "—"} />
-        <KpiTile label="Safety events" value={s.safetyEvents} />
-      </div>
+      {charts.dashboardKpis.length > 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {charts.dashboardKpis.slice(0, 10).map(([label, value]) => (
+            <KpiTile
+              key={label}
+              label={label}
+              value={value}
+              tone={/delay|open ncr|variance/i.test(label) ? "warn" : /completion|achieved|budgeted/i.test(label) ? "ok" : undefined}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <KpiTile label="Planned %" value={s.plannedPct ? `${s.plannedPct}%` : "—"} />
+          <KpiTile label="Actual %" value={s.actualPct ? `${s.actualPct}%` : "—"} tone={varTone} />
+          <KpiTile label="Variance" value={s.variancePct ? `${s.variancePct}%` : "—"} tone={varTone} />
+          <KpiTile label="SPI" value={s.spi || "—"} tone={spiTone} />
+          <KpiTile label="Open NCRs" value={s.openNcrs} tone={s.openNcrs > 0 ? "warn" : "ok"} />
+          <KpiTile label="DPR days" value={s.dprDaysInRange} />
+          <KpiTile
+            label="Milestones"
+            value={s.milestonesTotal ? `${s.milestonesOnTrack}/${s.milestonesTotal}` : "—"}
+          />
+          <KpiTile label="Drawings" value={s.drawingsRegistered || "—"} />
+          <KpiTile label="Safety events" value={s.safetyEvents} />
+        </div>
+      )}
 
       <p className="text-xs text-steel-muted px-1">
         Reporting window: {charts.rangeStart} → {charts.rangeEnd} · S-curve = cumulative % · Cashflow = ₹ lakh (Cost) · Planned vs actual = weekly activity qty

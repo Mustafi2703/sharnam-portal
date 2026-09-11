@@ -6,7 +6,7 @@ import fs from "fs";
 import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
-import { resolveExcelRoot } from "../lib/excelRoot.js";
+import { findWorkbook, resolveExcelRoot } from "../lib/excelRoot.js";
 import { MS_PROJECT_SOURCE } from "./msProjectSchedule.js";
 
 function firstExisting(root: string, names: string[]) {
@@ -62,19 +62,19 @@ function sheetRows(file: string, picker: (names: string[]) => string | undefined
 }
 
 export function resolveMilestonePath() {
-  return firstExisting(resolveExcelRoot(), ["Milestone tracking.xlsx", "Progress Overview.xlsx"]);
+  return findWorkbook(["Milestone tracking (2).xlsx", "Milestone tracking.xlsx", "Progress Overview.xlsx"]);
 }
 
 export function resolveHindrancePath() {
-  return firstExisting(resolveExcelRoot(), [
-    "HInderance Register Dashboard (1).xlsx",
+  return findWorkbook([
     "HInderance Register Dashboard.xlsx",
+    "HInderance Register Dashboard (1).xlsx",
     "Progress Overview.xlsx",
   ]);
 }
 
 export function resolveRiskPath() {
-  return firstExisting(resolveExcelRoot(), [
+  return findWorkbook([
     "Risk Register - Dashboard 1.xlsx",
     "Risk Register - Dashboard.xlsx",
     "Progress Overview.xlsx",
@@ -82,15 +82,15 @@ export function resolveRiskPath() {
 }
 
 export function resolveLegalPath() {
-  return firstExisting(resolveExcelRoot(), [
-    "Legal Approvals - Dashboard.xlsx",
+  return findWorkbook([
     "Legal Approvals - Dashboard (1).xlsx",
+    "Legal Approvals - Dashboard.xlsx",
     "Progress Overview.xlsx",
   ]);
 }
 
 export function resolveProgressOverviewPath() {
-  return firstExisting(resolveExcelRoot(), ["Progress Overview.xlsx"]);
+  return findWorkbook(["Progress Overview.xlsx"]);
 }
 
 export async function syncMilestonesFromTemplate(projectId: string, opts?: { force?: boolean }) {

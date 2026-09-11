@@ -57,9 +57,11 @@ async function createManyChunks(
 }
 
 export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId: string, excelRoot: string) {
-  const file = path.join(excelRoot, "SPDC_Budget_Arvind 49.xls");
-  if (!fs.existsSync(file)) {
-    console.warn("Missing budget workbook:", file);
+  const file = ["SPDC_Budget_Arvind 52.xls", "SPDC_Budget_Arvind 49.xls"]
+    .map((name) => path.join(excelRoot, name))
+    .find((p) => fs.existsSync(p));
+  if (!file) {
+    console.warn("Missing budget workbook in", excelRoot);
     return;
   }
   const wb = XLSX.readFile(file);

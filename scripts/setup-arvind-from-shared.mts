@@ -145,6 +145,9 @@ async function main() {
     update: {},
   });
 
+  const { seedArvindSitePack } = await import("../apps/api/src/services/arvindSiteSeed.ts");
+  const arvind = await seedArvindSitePack(prisma);
+  console.log("Arvind site pack", arvind.ntx.code, arvind.dormitory.code);
   const setup = await completeProjectSetup(project.id, admin.id);
   console.log("Setup", {
     project: project.code,

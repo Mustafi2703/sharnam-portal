@@ -61,11 +61,15 @@ export function mergeWprChartsForExport(
     dashboardKpis: [],
   };
 
+  const milestoneNamed = barRows(sections.milestones, 2, 5, 8);
+  const milestoneShort = barRows(sections.milestones, 1, 2, 3);
   const milestones = base.milestones.length
     ? base.milestones
-    : barRows(sections.milestones, 1, 2, 3).length
-      ? barRows(sections.milestones, 1, 2, 3)
-      : barRows(sections.milestones, 0, 1, 2);
+    : milestoneNamed.filter((r) => r.planned || r.actual).length
+      ? milestoneNamed
+      : milestoneShort.length
+        ? milestoneShort
+        : barRows(sections.milestones, 0, 1, 2);
 
   const pvaDirect = barRows(sections.plannedVsActual, 0, 1, 2);
   const pvaActivity = (sections.plannedVsActual?.rows || [])
@@ -106,9 +110,31 @@ export function mergeWprChartsForExport(
         ? cashflowSeed
         : barRows(sections.cashflow, 0, 1, 2);
 
+  const drawingByDisc = (() => {
+    const counts = new Map<string, number>();
+    for (const row of sections.drawingRegister?.rows || []) {
+      const a = String(row[0] ?? "").trim();
+      if (!a || /^sr/i.test(a) || /^total$/i.test(a) || /discipline/i.test(a)) continue;
+      const key = /^(ST|S)/i.test(a)
+        ? "Structural"
+        : /^A/i.test(a)
+          ? "Architecture"
+          : /^E/i.test(a)
+            ? "Electrical"
+            : /^P/i.test(a)
+              ? "Plumbing"
+              : /^F/i.test(a)
+                ? "Fire"
+                : a.slice(0, 18);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts].map(([label, value]) => ({ label, value }));
+  })();
   const drawingDci = base.drawingDci.length
     ? base.drawingDci
-    : pieFromRows(sections.drawingRegister, 1, 4);
+    : drawingByDisc.length
+      ? drawingByDisc
+      : pieFromRows(sections.drawingRegister, 1, 4);
 
   const qualityFromObs = pieFromRows(sections.quality, 1, 2);
   const quality = base.quality.length
@@ -125,24 +151,44 @@ export function mergeWprChartsForExport(
     }))
     .filter((r) => r.label && !/^sr\.?no/i.test(r.label) && (r.previous > 0 || r.current > 0));
 
+  const scurveFromCash = (() => {
+    if (!cashflow.length) return [];
+    const pTot = cashflow.reduce((s, r) => s + r.planned, 0);
+    const aTot = cashflow.reduce((s, r) => s + r.actual, 0);
+    if (!pTot && !aTot) return [];
+    let p = 0;
+    let a = 0;
+    return cashflow.map((r) => {
+      p += r.planned;
+      a += r.actual;
+      return {
+        date: rangeStart,
+        label: r.label,
+        planned: pTot ? Math.round((p / pTot) * 1000) / 10 : 0,
+        actual: aTot ? Math.round((a / aTot) * 1000) / 10 : 0,
+      };
+    });
+  })();
   const scurve =
-    base.scurve.length > 0
+    base.scurve.some((p) => p.planned || p.actual)
       ? base.scurve
-      : plannedVsActual.length > 0
-        ? plannedVsActual.map((r, i) => ({
-            date: rangeStart,
-            label: r.label || `P${i + 1}`,
-            planned: r.planned,
-            actual: r.actual,
-          }))
-        : [
-            {
-              date: rangeEnd,
-              label: "Period",
-              planned: base.summary.plannedPct,
-              actual: base.summary.actualPct,
-            },
-          ];
+      : scurveFromCash.length
+        ? scurveFromCash
+        : plannedVsActual.length > 0
+          ? plannedVsActual.slice(0, 12).map((r, i) => ({
+              date: rangeStart,
+              label: r.label || `P${i + 1}`,
+              planned: r.planned,
+              actual: r.actual,
+            }))
+          : [
+              {
+                date: rangeEnd,
+                label: "Period",
+                planned: base.summary.plannedPct,
+                actual: base.summary.actualPct,
+              },
+            ];
 
   const summary = {
     ...base.summary,
@@ -156,22 +202,28 @@ export function mergeWprChartsForExport(
     summary.spi ||
     (summary.plannedPct > 0 ? Math.round((summary.actualPct / summary.plannedPct) * 100) / 100 : 1);
 
+  const dashRows = (sections.projectDashboard?.rows || [])
+    .filter((r) => String(r[0] || "").trim())
+    .slice(0, 10)
+    .map((r) => [String(r[0]), r[1] ?? "—"] as [string, string | number]);
   const dashboardKpis: [string, string | number][] = base.dashboardKpis.length
     ? base.dashboardKpis
-    : [
-        ["Planned progress %", summary.plannedPct || "—"],
-        ["Actual progress %", summary.actualPct || "—"],
-        ["Variance %", summary.variancePct || "—"],
-        ["SPI", summary.spi || "—"],
-        ["DPR days in period", summary.dprDaysInRange || "—"],
-        ["Open NCRs", summary.openNcrs || "—"],
-        [
-          "Milestones on track",
-          summary.milestonesTotal ? `${summary.milestonesOnTrack}/${summary.milestonesTotal}` : "—",
-        ],
-        ["Drawings registered", summary.drawingsRegistered || "—"],
-        ["Safety events (period)", summary.safetyEvents || "—"],
-      ];
+    : dashRows.length
+      ? dashRows
+      : [
+          ["Planned progress %", summary.plannedPct || "—"],
+          ["Actual progress %", summary.actualPct || "—"],
+          ["Variance %", summary.variancePct || "—"],
+          ["SPI", summary.spi || "—"],
+          ["DPR days in period", summary.dprDaysInRange || "—"],
+          ["Open NCRs", summary.openNcrs || "—"],
+          [
+            "Milestones on track",
+            summary.milestonesTotal ? `${summary.milestonesOnTrack}/${summary.milestonesTotal}` : "—",
+          ],
+          ["Drawings registered", summary.drawingsRegistered || "—"],
+          ["Safety events (period)", summary.safetyEvents || "—"],
+        ];
 
   return {
     ...base,

@@ -116,7 +116,7 @@ async function buildWprExportPack(
   const sectionsRaw: WprSections =
     existingSections ||
     (existing ? JSON.parse(existing.sectionsJson || "{}") : await seedSections(projectId, weekStart, weekEnd));
-  const { sections } = stripPackExtras(sectionsRaw);
+  const { sections, extras: packExtras } = stripPackExtras(sectionsRaw);
   const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
   const charts = mergeWprChartsForExport(
     sections,
@@ -124,7 +124,7 @@ async function buildWprExportPack(
     weekStart.toISOString().slice(0, 10),
     weekEnd.toISOString().slice(0, 10)
   );
-  return { project, weekStart, weekEnd, header, sections, charts, existing };
+  return { project, weekStart, weekEnd, header, sections, charts, existing, packExtras };
 }
 
 async function seedSections(projectId: string, weekStart: Date, weekEnd: Date): Promise<WprSections> {
@@ -208,7 +208,13 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
     : await seedSections(projectId, weekStart, weekEnd);
   const { sections, extras: packExtras } = stripPackExtras(rawSections);
 
-  const charts = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const charts = mergeWprChartsForExport(
+    sections,
+    chartsRaw,
+    weekStart.toISOString().slice(0, 10),
+    weekEnd.toISOString().slice(0, 10)
+  );
 
   res.json({
     projectId,
@@ -241,7 +247,13 @@ wprMakerRouter.post("/:projectId/refresh", async (req: AuthedRequest, res) => {
   });
   const { start: weekStart, end: weekEnd } = range;
   const sections = await seedSections(projectId, weekStart, weekEnd);
-  const charts = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
+  const charts = mergeWprChartsForExport(
+    sections,
+    chartsRaw,
+    weekStart.toISOString().slice(0, 10),
+    weekEnd.toISOString().slice(0, 10)
+  );
   const reportNumber = req.body.reportNumber != null ? Number(req.body.reportNumber) : undefined;
 
   const saved = await prisma.wprSnapshot.upsert({
@@ -281,6 +293,48 @@ wprMakerRouter.post("/:projectId/refresh", async (req: AuthedRequest, res) => {
     rangePreset: range.preset,
     sections,
     charts,
+    status: saved.status,
+  });
+});
+
+/** Load the client 23–29 July WPR + budget / PR / materials workbooks into this project week. */
+wprMakerRouter.post("/:projectId/import-july", async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return res.status(404).json({ error: "project not found" });
+  const { buildJulyWprPack } = await import("../services/wprJulyWorkbook.js");
+  const pack = buildJulyWprPack();
+  const weekEnd = snapWeekEnding(new Date(`${pack.header.weekEnd || "2026-07-29"}T12:00:00`));
+  const weekStart = new Date(`${pack.header.weekStart || "2026-07-23"}T00:00:00`);
+  weekStart.setHours(0, 0, 0, 0);
+  const existing = await prisma.wprSnapshot.findUnique({
+    where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
+  });
+  const prior = existing ? stripPackExtras(JSON.parse(existing.sectionsJson || "{}")).extras : null;
+  const stored = mergePackExtras(pack.sections, prior);
+  const saved = await upsertWprDraft(
+    projectId,
+    weekEnd,
+    stored,
+    pack.header.reportNumber,
+    req.user!.id
+  );
+  await audit("wpr.import_july", {
+    userId: req.user!.id,
+    entity: "WprSnapshot",
+    entityId: saved.id,
+    meta: { weekEnd: weekEnd.toISOString(), sections: Object.keys(pack.sections).length },
+  });
+  res.json({
+    ok: true,
+    id: saved.id,
+    weekStart: weekStart.toISOString(),
+    weekEnd: weekEnd.toISOString(),
+    header: { ...pack.header, projectName: project.name || pack.header.projectName, projectCode: project.code },
+    sections: pack.sections,
+    charts: pack.charts,
+    packExtras: prior,
+    reportNumber: pack.header.reportNumber,
     status: saved.status,
   });
 });
@@ -338,7 +392,12 @@ wprMakerRouter.get("/:projectId/download.pptx", async (req, res) => {
   const range = rangeFromQuery(req.query as Record<string, unknown>);
   const pack = await buildWprExportPack(projectId, range);
   if (!pack) return res.status(404).json({ error: "project not found" });
-  const buf = await buildWprPptx({ header: pack.header, sections: pack.sections, charts: pack.charts });
+  const buf = await buildWprPptx({
+    header: pack.header,
+    sections: pack.sections,
+    charts: pack.charts,
+    packExtras: pack.packExtras || undefined,
+  });
   const fname = `WPR-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.pptx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
@@ -381,7 +440,7 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
   const { buildWprClientWorkbook } = await import("../services/wprClientPack.js");
   const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
   await mockOneDrive.upload(project.code, folder, clientFname, clientBuf);
-  const pptxBuf = await buildWprPptx({ header, sections, charts });
+  const pptxBuf = await buildWprPptx({ header, sections, charts, packExtras: pack.packExtras || undefined });
   const pptxSaved = await mockOneDrive.upload(project.code, folder, pptxFname, pptxBuf);
 
   const publishedUrl = saved.sharePointUrl || saved.url || pptxSaved.sharePointUrl || pptxSaved.url || null;

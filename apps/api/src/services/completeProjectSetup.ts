@@ -6,7 +6,7 @@ import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { PROJECT_LIBRARY_FOLDERS } from "./graph.js";
 import { provisionProjectSheetPack } from "./projectSheetPack.js";
-import { seedStandardCommsMatrix } from "./commsMatrixSeed.js";
+import { seedArvindCommsMatrix, seedStandardCommsMatrix } from "./commsMatrixSeed.js";
 import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncCommsFromDirectory.js";
 import { initializeProjectReports } from "./initializeProjectReports.js";
 import { ensureClientPortalLogin, ensureVendorPortalLogin, type PortalLoginResult } from "./crmVendorCredentials.js";
@@ -37,7 +37,10 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     console.error("Sheet pack failed:", err instanceof Error ? err.message : err);
   }
 
-  const matrixCreated = await seedStandardCommsMatrix(projectId);
+  const arvindSite = /arvind/i.test(project.code) || /arvind/i.test(project.clientName || "") || /ntx/i.test(project.name);
+  const matrixCreated = arvindSite
+    ? await seedArvindCommsMatrix(projectId)
+    : await seedStandardCommsMatrix(projectId);
   await ensureMatrixScaffold(projectId);
   const contacts = await syncCommsContactsFromDirectory(projectId);
 

@@ -2114,6 +2114,14 @@ async function main() {
     console.warn("seedSpdcLiveTeam failed:", e instanceof Error ? e.message : e);
   }
 
+  try {
+    const { seedArvindSitePack } = await import("../apps/api/src/services/arvindSiteSeed.ts");
+    const arvind = await seedArvindSitePack(prisma);
+    console.log("Arvind site pack:", arvind.ntx.code, arvind.dormitory.code);
+  } catch (e) {
+    console.warn("seedArvindSitePack failed:", e instanceof Error ? e.message : e);
+  }
+
   console.log("Done.");
   console.log("Password for all demo users:", SEED_PASSWORD);
   console.log(

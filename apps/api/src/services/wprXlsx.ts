@@ -70,6 +70,10 @@ export type WprPackInput = {
   sections: WprSections;
   /** Merged chart pack — when set, PPTX export adds native editable chart slides. */
   charts?: WprChartPack;
+  packExtras?: {
+    attachments?: { path: string; caption?: string; url?: string }[];
+    signatures?: { path: string; role: string; url?: string }[];
+  };
 };
 
 export const SECTION_ORDER: (keyof WprSections)[] = [

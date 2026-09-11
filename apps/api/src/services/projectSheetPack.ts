@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
-import { resolveExcelRoot } from "../lib/excelRoot.js";
+import { findWorkbook } from "../lib/excelRoot.js";
 import { verifyPackCompleteness } from "./packCompleteness.js";
 import { MS_PROJECT_SCURVE_PACKAGE, MS_PROJECT_SOURCE } from "./msProjectSchedule.js";
 
@@ -18,16 +18,8 @@ export type PackStep = {
   error?: string;
 };
 
-function firstExisting(root: string, names: string[]) {
-  for (const name of names) {
-    const p = path.join(root, name);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
 export function resolvePlannedActualPath(): string | null {
-  return firstExisting(resolveExcelRoot(), [
+  return findWorkbook([
     "Planned Vs. Actual Dashboard (1).xlsx",
     "Planned Vs. Actual Dashboard.xlsx",
   ]);
@@ -164,6 +156,12 @@ export async function provisionProjectSheetPack(
     const { syncHindranceFromTemplate } = await import("./progressRegistersImport.js");
     const out = await syncHindranceFromTemplate(projectId, { force });
     return out.imported;
+  });
+
+  await step("drawings", "progress", false, async () => {
+    const { syncDrawingRegisterToProject } = await import("./drawingRegisterSheets.js");
+    const out = await syncDrawingRegisterToProject(projectId, userId);
+    return out.drawings;
   });
 
   await step("risk-legal", "progress", false, async () => {

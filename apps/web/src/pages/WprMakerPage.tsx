@@ -5,8 +5,8 @@ import { useAuth } from "../auth";
 import { Badge, Button, Input, Select } from "../components/ui";
 import { MakerToolHeader } from "../components/MakerToolHeader";
 import { FilePickButton } from "../components/FilePickButton";
-import { SignaturePad } from "../components/SignaturePad";
 import { WprDashboardCharts, type WprCharts } from "../components/WprDashboardCharts";
+import { WprSignOffPanel } from "../components/WprSignOffPanel";
 import { MakerRecentPanel, fileNameFromPublishedPath } from "../components/MakerRecentPanel";
 import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { mergeWprCharts } from "../lib/wprChartFallback";
@@ -208,6 +208,47 @@ export default function WprMakerPage() {
       setMsg("WPR regenerated from live portal data (Progress, DPR, Quality, Safety, Drawings, Cost).");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importJulyPack() {
+    if (!projectId) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{
+        sections: Sections;
+        charts: WprCharts;
+        weekStart: string;
+        weekEnd: string;
+        reportNumber?: number;
+        header?: Header;
+        packExtras?: Pack["packExtras"];
+      }>(`/api/wpr-maker/${projectId}/import-july`, { method: "POST", token, body: JSON.stringify({}) });
+      setWeekEnd((out.weekEnd || "2026-07-29").slice(0, 10));
+      setWeekStart((out.weekStart || "2026-07-23").slice(0, 10));
+      setRangePreset("custom");
+      if (out.reportNumber != null) setReportNumber(String(out.reportNumber));
+      setPack((prev) =>
+        prev
+          ? {
+              ...prev,
+              weekStart: out.weekStart,
+              weekEnd: out.weekEnd,
+              header: { ...prev.header, ...out.header },
+              sections: out.sections,
+              reportNumber: out.reportNumber,
+            }
+          : prev
+      );
+      setCharts(out.charts);
+      if (out.packExtras?.signatures) setSignatures(out.packExtras.signatures);
+      if (out.packExtras?.attachments) setAttachments(out.packExtras.attachments);
+      setMsg("Loaded 23–29 July WPR from client sheets (brief, dashboard, manpower, cashflow, PvA, PR, materials).");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "July pack import failed");
     } finally {
       setBusy(false);
     }
@@ -490,6 +531,9 @@ export default function WprMakerPage() {
           <div className="maker-toolbar__actions flex-wrap">
             <Button onClick={() => void load()} disabled={busy} variant="secondary">Load</Button>
             <Button onClick={refreshFromLive} disabled={busy} variant="secondary">Regenerate</Button>
+            <Button onClick={() => void importJulyPack()} disabled={busy} variant="secondary">
+              Load 23–29 July pack
+            </Button>
             <Button onClick={save} disabled={busy} variant="secondary">Save</Button>
             <Button onClick={publish} disabled={busy}>Publish</Button>
             <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadXlsx} disabled={busy}>XLSX</button>
@@ -541,17 +585,29 @@ export default function WprMakerPage() {
               <p>Loading WPR dashboard…</p>
             </div>
           )}
-          {!charts?.scurve?.length && (
+          {!displayCharts?.scurve?.some((p) => p.planned || p.actual) && (
             <div className="mt-4 p-3 rounded-lg border border-brand/30 bg-brand/5 text-sm">
-              <p className="font-semibold text-brand mb-1">Charts need live data</p>
+              <p className="font-semibold text-brand mb-1">Charts need source or live data</p>
               <p className="text-steel-muted mb-2">
-                Publish DPRs for this week, then click <strong>Regenerate from live data</strong> to fill milestone, manpower, and S-curve charts.
+                Load the 23–29 July client pack for exact cashflow, manpower, PvA and budget charts — or regenerate from published DPRs.
               </p>
-              <Button onClick={refreshFromLive} disabled={busy} variant="secondary">
-                Regenerate from live data
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void importJulyPack()} disabled={busy} variant="secondary">
+                  Load 23–29 July pack
+                </Button>
+                <Button onClick={refreshFromLive} disabled={busy} variant="secondary">
+                  Regenerate from live data
+                </Button>
+              </div>
             </div>
           )}
+          <WprSignOffPanel
+            title="Dashboard sign-off"
+            signatures={signatures}
+            onUpload={(file, role) => void uploadPackSignature(file, role)}
+            onRemove={(index) => setSignatures((s) => s.filter((_, k) => k !== index))}
+            resolveUrl={resolveMediaUrl}
+          />
         </div>
       ) : null}
 
@@ -587,6 +643,15 @@ export default function WprMakerPage() {
                       onChange={(e) => updateSection(key, { notes: e.target.value })}
                     />
                   </label>
+                  {key === "brief" ? (
+                    <WprSignOffPanel
+                      title="Project brief sign-off"
+                      signatures={signatures}
+                      onUpload={(file, role) => void uploadPackSignature(file, role)}
+                      onRemove={(index) => setSignatures((s) => s.filter((_, k) => k !== index))}
+                      resolveUrl={resolveMediaUrl}
+                    />
+                  ) : null}
 
                   {(sec.headers?.length || sec.rows?.length) ? (
                     <div
@@ -726,27 +791,13 @@ export default function WprMakerPage() {
             )}
           </section>
 
-          <section className="rounded-lg border border-line p-3 space-y-3 bg-sand/30">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Sign-off ({signatures.length})</h4>
-            <div className="grid md:grid-cols-3 gap-3">
-              <SignaturePad label="PMC sign" personName="PMC" height={140} onCapture={(f) => f && uploadPackSignature(f, "pmc")} />
-              <SignaturePad label="Client sign" personName="Client" height={140} onCapture={(f) => f && uploadPackSignature(f, "client")} />
-              <SignaturePad label="Contractor sign" personName="Contractor" height={140} onCapture={(f) => f && uploadPackSignature(f, "contractor")} />
-            </div>
-            {signatures.length > 0 && (
-              <div className="grid sm:grid-cols-3 gap-3">
-                {signatures.map((p, i) => (
-                  <div key={i} className="rounded-lg border border-line bg-white p-2 space-y-1">
-                    <div className="text-[10px] uppercase text-steel-muted">{p.role}</div>
-                    <a href={resolveMediaUrl(p.url || p.path)} target="_blank" rel="noopener noreferrer">
-                      <img src={resolveMediaUrl(p.url || p.path)} alt={p.role} className="w-full h-24 object-contain bg-sand/20" />
-                    </a>
-                    <button className="text-danger text-xs" onClick={() => setSignatures((s) => s.filter((_, k) => k !== i))}>Remove</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <WprSignOffPanel
+            title="Pack sign-off"
+            signatures={signatures}
+            onUpload={(file, role) => void uploadPackSignature(file, role)}
+            onRemove={(index) => setSignatures((s) => s.filter((_, k) => k !== index))}
+            resolveUrl={resolveMediaUrl}
+          />
         </div>
       </div>
       ) : null}

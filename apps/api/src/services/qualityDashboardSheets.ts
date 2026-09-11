@@ -4,6 +4,7 @@
 import fs from "fs";
 import path from "path";
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
+import { findWorkbook } from "../lib/excelRoot.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -21,27 +22,7 @@ function s(v: unknown, max = 200) {
 }
 
 function resolveQualityDashboardPath(): string | null {
-  const candidates = [
-    process.env.SHARNAM_EXCEL_ROOT
-      ? path.join(process.env.SHARNAM_EXCEL_ROOT, "Quality Dashboard.xlsx")
-      : "",
-    path.join(process.cwd(), "seed", "data", "Quality Dashboard.xlsx"),
-    path.join(process.cwd(), "Sharnam_modules_docs", "Quality Dashboard.xlsx"),
-    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Quality Dashboard.xlsx"),
-    path.join(
-      process.cwd(),
-      "module_prompts",
-      "Sharnam_modules_docs 2",
-      "modules",
-      "files (2)",
-      "New folder",
-      "Final Index.xlsx"
-    ),
-  ].filter(Boolean);
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
+  return findWorkbook(["Quality Dashboard (1).xlsx", "Quality Dashboard.xlsx"]);
 }
 
 function readSheet(wb: WorkBook, pattern: RegExp) {
