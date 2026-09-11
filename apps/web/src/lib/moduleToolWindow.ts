@@ -1,14 +1,26 @@
 /** Open a module tool in a dedicated window so the hub stays on the desk. */
 
+import { isStandaloneFormPath } from "./standaloneFormWindow";
+
 export const TOOL_WIN_PARAM = "win";
 
 export function isToolWindow(search = typeof window !== "undefined" ? window.location.search : ""): boolean {
+  if (typeof window !== "undefined" && isStandaloneFormPath(window.location.pathname)) return false;
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   if (params.get(TOOL_WIN_PARAM) === "1") return true;
   return typeof window !== "undefined" && Boolean(window.opener && !window.opener.closed);
 }
 
 export function withToolWindowParam(href: string, force = false): string {
+  try {
+    const url = new URL(href, typeof window !== "undefined" ? window.location.origin : "https://portal.local");
+    if (isStandaloneFormPath(url.pathname)) {
+      url.searchParams.delete(TOOL_WIN_PARAM);
+      return href.startsWith("http") ? url.toString() : `${url.pathname}${url.search}${url.hash}`;
+    }
+  } catch {
+    /* fall through */
+  }
   if (!force && !isToolWindow()) return href;
   try {
     const url = new URL(href, typeof window !== "undefined" ? window.location.origin : "https://portal.local");
@@ -50,6 +62,7 @@ export function closeToolWindowOrGo(hubHref: string) {
 /** Keep `?win=1` on in-window navigations so chrome stays the edit workspace. */
 export function searchWithToolWindow(search: string, pathname: string): string | null {
   const onHub = pathname.includes("/hub/");
+  if (isStandaloneFormPath(pathname)) return null;
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const hasWin = params.get(TOOL_WIN_PARAM) === "1";
   if (onHub || hasWin) return null;

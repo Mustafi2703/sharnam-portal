@@ -221,6 +221,14 @@ export default function ChecklistFillPage() {
       }
       setPhotos([]);
       setDraftId(null);
+      try {
+        window.opener?.postMessage(
+          { type: "sharnam-checklist-filled", projectId, assignmentId, family },
+          window.location.origin
+        );
+      } catch {
+        /* ignore */
+      }
       setDone(true);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");

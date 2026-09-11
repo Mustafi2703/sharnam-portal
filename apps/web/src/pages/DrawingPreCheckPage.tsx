@@ -27,7 +27,16 @@ export default function DrawingPreCheckPage() {
   const { token, user } = useAuth();
   useStandaloneFormPage();
 
-  const [template, setTemplate] = useState<{ name: string; items: ChecklistFillItem[]; requirePhotosMin?: number } | null>(null);
+  const [template, setTemplate] = useState<{
+    name: string;
+    items: ChecklistFillItem[];
+    requirePhotosMin?: number;
+    assignmentId?: string;
+    myDraft?: { id: string; remarks?: string | null; responsesJson?: string; drawingId?: string | null; revisionId?: string | null } | null;
+  } | null>(null);
+  const [assignmentId, setAssignmentId] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [responses, setResponses] = useState<Record<string, ChecklistFillLine>>({});
   const [fillMeta, setFillMeta] = useState<ChecklistFillMeta>(emptyChecklistMeta);
   const [remarks, setRemarks] = useState("");
@@ -38,6 +47,7 @@ export default function DrawingPreCheckPage() {
   const [revisionId, setRevisionId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [done, setDone] = useState<{ unlockToken: string; name: string } | null>(null);
 
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
@@ -45,19 +55,54 @@ export default function DrawingPreCheckPage() {
   useEffect(() => {
     if (!projectId) return;
     Promise.all([
-      api<{ name: string; items: ChecklistFillItem[]; requirePhotosMin?: number }>(
-        `/api/checklist/project/${projectId}/drawing-check-template`,
-        { token }
-      ),
+      api<{
+        name: string;
+        items: ChecklistFillItem[];
+        requirePhotosMin?: number;
+        assignmentId?: string;
+        myDraft?: { id: string; remarks?: string | null; responsesJson?: string; drawingId?: string | null; revisionId?: string | null } | null;
+      }>(`/api/checklist/project/${projectId}/drawing-check-template`, { token }),
       api<ChecklistDrawingOption[]>(`/api/drawings/project/${projectId}`, { token }).catch(() => []),
     ])
       .then(([t, dwg]) => {
         setTemplate(t);
+        setAssignmentId(t.assignmentId || null);
         setDrawings((dwg || []).filter((d) => d.isPublished));
         const init: Record<string, ChecklistFillLine> = {};
         (t.items || []).forEach((i) => {
           init[i.id] = emptyChecklistLine();
         });
+        const draft = t.myDraft;
+        if (draft) {
+          setDraftId(draft.id);
+          setRemarks(draft.remarks || "");
+          if (draft.drawingId) setDrawingId(draft.drawingId);
+          if (draft.revisionId) setRevisionId(draft.revisionId);
+          let saved: Record<string, { answer?: string; remarks?: string; evidenceLinks?: string[] } & Partial<ChecklistFillMeta>> = {};
+          try {
+            saved = JSON.parse(draft.responsesJson || "{}");
+          } catch {
+            saved = {};
+          }
+          const metaRaw = saved._meta as Partial<ChecklistFillMeta> | undefined;
+          if (metaRaw && typeof metaRaw === "object") {
+            setFillMeta({
+              reportNo: metaRaw.reportNo || "",
+              location: metaRaw.location || "",
+              refDrawing: metaRaw.refDrawing || "",
+              quantity: metaRaw.quantity || "",
+            });
+          }
+          Object.keys(init).forEach((itemId) => {
+            const row = saved[itemId] || {};
+            init[itemId] = {
+              ...emptyChecklistLine(),
+              answer: row.answer || "",
+              remarks: row.remarks || "",
+              evidenceLinks: Array.isArray(row.evidenceLinks) ? row.evidenceLinks : [],
+            };
+          });
+        }
         setResponses(init);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load Drawing Check Master"));
@@ -84,38 +129,66 @@ export default function DrawingPreCheckPage() {
     return d?.revisions?.find((r) => r.id === revisionId)?.revisionNumber || "";
   }
 
+  function buildFormData() {
+    const payload: Record<string, { answer: string; remarks: string; evidenceLinks?: string[] } | ChecklistFillMeta> = {};
+    const itemComments: Record<string, string> = {};
+    Object.entries(responses).forEach(([lineId, r]) => {
+      payload[lineId] = {
+        answer: r.answer,
+        remarks: r.remarks,
+        evidenceLinks: r.evidenceLinks?.filter(Boolean) || [],
+      };
+      if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
+    });
+    payload._meta = { ...fillMeta };
+    const fd = new FormData();
+    fd.append("responsesJson", JSON.stringify(payload));
+    fd.append("itemCommentsJson", JSON.stringify(itemComments));
+    fd.append("remarks", remarks || "Pre-upload drawing check");
+    if (drawingId) fd.append("drawingId", drawingId);
+    if (revisionId) fd.append("revisionId", revisionId);
+    const revNo = selectedRevisionNumber();
+    if (revNo) fd.append("revisionNumber", revNo);
+    photos.forEach((f) => fd.append("photos", f));
+    if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
+    Object.entries(responses).forEach(([lineId, r]) => {
+      r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
+      r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
+    });
+    return fd;
+  }
+
+  async function saveDraft() {
+    if (!assignmentId) {
+      setError("Checklist assignment is not ready yet — try again in a moment.");
+      return;
+    }
+    setSavingDraft(true);
+    setError("");
+    setNotice("");
+    try {
+      const saved = await api<{ id: string }>(`/api/checklist/assignments/${assignmentId}/draft`, {
+        method: "POST",
+        token,
+        body: buildFormData(),
+      });
+      setDraftId(saved.id);
+      setNotice(`Draft saved — ${answered}/${items.length} answered. You can close this window and continue later.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Draft save failed");
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!template || !projectId) return;
     setBusy(true);
     setError("");
+    setNotice("");
     try {
-      const payload: Record<string, { answer: string; remarks: string; evidenceLinks?: string[] } | ChecklistFillMeta> = {};
-      const itemComments: Record<string, string> = {};
-      Object.entries(responses).forEach(([lineId, r]) => {
-        payload[lineId] = {
-          answer: r.answer,
-          remarks: r.remarks,
-          evidenceLinks: r.evidenceLinks?.filter(Boolean) || [],
-        };
-        if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
-      });
-      payload._meta = { ...fillMeta };
-
-      const fd = new FormData();
-      fd.append("responsesJson", JSON.stringify(payload));
-      fd.append("itemCommentsJson", JSON.stringify(itemComments));
-      fd.append("remarks", remarks || "Pre-upload drawing check");
-      if (drawingId) fd.append("drawingId", drawingId);
-      if (revisionId) fd.append("revisionId", revisionId);
-      const revNo = selectedRevisionNumber();
-      if (revNo) fd.append("revisionNumber", revNo);
-      photos.forEach((f) => fd.append("photos", f));
-      if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
-      Object.entries(responses).forEach(([lineId, r]) => {
-        r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
-        r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
-      });
+      const fd = buildFormData();
 
       const res = await api<{ unlockToken: string; template: { name: string } }>(
         `/api/checklist/project/${projectId}/drawing-precheck`,
@@ -224,8 +297,11 @@ export default function DrawingPreCheckPage() {
       photoTotal={photoTotal}
       answered={answered}
       canFill={canFill}
+      draftId={draftId}
+      savingDraft={savingDraft}
       submitting={busy}
-      msg={error}
+      msg={error || notice}
+      onSaveDraft={assignmentId ? () => void saveDraft() : undefined}
       onSubmit={submit}
       submitLabel="Submit & unlock upload"
     />

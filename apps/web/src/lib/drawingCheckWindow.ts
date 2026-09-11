@@ -1,3 +1,5 @@
+import { openStandaloneFormWindow } from "./standaloneFormWindow";
+
 /** Open Drawing Check Master in a dedicated window (same pattern as QI / Safety fill). */
 
 export const DRAWING_UNLOCK_MESSAGE = "sharnam-drawing-unlock";
@@ -12,8 +14,7 @@ export function drawingCheckUrl(projectId: string, mode?: "register" | "revision
 }
 
 export function openDrawingCheckWindow(projectId: string, mode?: "register" | "revision") {
-  const url = `${window.location.origin}${drawingCheckUrl(projectId, mode)}`;
-  return window.open(url, "sharnam-drawing-precheck", "width=1400,height=920,scrollbars=yes,resizable=yes");
+  return openStandaloneFormWindow(drawingCheckUrl(projectId, mode), "sharnam-drawing-precheck");
 }
 
 export function isDrawingUnlockMessage(

@@ -1,3 +1,5 @@
+import { openStandaloneFormWindow } from "./standaloneFormWindow";
+
 /** NCR / CAR form field helpers (mirrors API ncrFormExport validation). */
 
 export type QualityNcrFormData = {
@@ -133,7 +135,7 @@ export function ncrComplianceSummary(formDataJson?: string | null): {
 
 export function openNcrFormWindow(projectId: string, scope: "quality" | "safety", recordId: string) {
   const url = `/projects/${projectId}/ncr-form/${scope}/${recordId}`;
-  window.open(url, `ncr-${recordId}`, "width=980,height=860,scrollbars=yes,resizable=yes");
+  return openStandaloneFormWindow(url, `ncr-${recordId}`);
 }
 
 /** Open branded NCR HTML for Print → Save as PDF */

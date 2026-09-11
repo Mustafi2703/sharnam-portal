@@ -1379,7 +1379,8 @@ checklistRouter.post(
   }
 );
 
-checklistRouter.get("/project/:projectId/drawing-check-template", async (req, res) => {
+checklistRouter.get("/project/:projectId/drawing-check-template", async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
   let template = await prisma.checklistTemplate.findFirst({
     where: { checklistType: "DrawingCheck", isActive: true },
     include: { items: { orderBy: { sortOrder: "asc" } } },
@@ -1397,7 +1398,23 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req, re
     });
   }
   if (!template) return res.status(404).json({ error: "Drawing Check Master not found" });
-  res.json(template);
+
+  const assignment = await prisma.checklistAssignment.upsert({
+    where: { projectId_templateId: { projectId, templateId: template.id } },
+    create: { projectId, templateId: template.id },
+    update: {},
+  });
+
+  let myDraft: { id: string; remarks: string | null; responsesJson: string; drawingId: string | null; revisionId: string | null } | null =
+    null;
+  if (req.user?.id) {
+    myDraft = await prisma.checklistSubmission.findFirst({
+      where: { assignmentId: assignment.id, submittedById: req.user.id, status: "Draft" },
+      select: { id: true, remarks: true, responsesJson: true, drawingId: true, revisionId: true },
+    });
+  }
+
+  res.json({ ...template, assignmentId: assignment.id, myDraft });
 });
 
 /** Quality + Safety module dashboards */
