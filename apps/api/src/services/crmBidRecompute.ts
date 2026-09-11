@@ -321,7 +321,7 @@ export async function findVendorBoqSlotForSheet(
 export async function vendorCanEditBoqSheet(
   prisma: PrismaClient,
   role: string,
-  user: { email: string; role: string; vendorId?: string | null },
+  user: { id: string; email: string; role: string; vendorId?: string | null },
   sheetId: string
 ): Promise<boolean> {
   if (role === "admin" || role === "office") return true;
