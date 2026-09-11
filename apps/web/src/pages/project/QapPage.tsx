@@ -90,7 +90,7 @@ export default function QapPage() {
           `/api/checklist/project/${id}/qap/sync-template`,
           { method: "POST", token }
         );
-        setMsg(`Loaded ${out.imported} QAP lines from Week 50 template (${out.weekLabel})`);
+        setMsg(`Loaded ${out.imported} QAP lines from Week 50 template (${out.weekLabel}) and saved the sheet to Drive.`);
         setWeekFilter(out.weekLabel);
         await load();
       } catch (err) {
@@ -322,7 +322,7 @@ export default function QapPage() {
                   `/api/checklist/project/${id}/qap/sync-template`,
                   { method: "POST", token }
                 );
-                setMsg(`Loaded ${out.imported} QAP lines (${out.weekLabel})`);
+                setMsg(`Loaded ${out.imported} QAP lines (${out.weekLabel}) and saved the Week 50 sheet to Drive.`);
                 setWeekFilter(out.weekLabel);
                 await load();
               } catch (err) {
@@ -388,7 +388,7 @@ export default function QapPage() {
                   );
                   const link = out.sharePointUrl || out.url || null;
                   setSharePointUrl(link);
-                  setMsg(`QAP published to SharePoint${out.weekLabel ? ` (${out.weekLabel})` : ""}`);
+                  setMsg(`QAP + cube register saved to Drive in the original SPDC Excel format${out.weekLabel ? ` (${out.weekLabel})` : ""}`);
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Publish failed");
                 } finally {

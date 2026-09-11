@@ -18,7 +18,7 @@ import {
   parseFormDataJson,
   type InspectionRegisterTab,
 } from "../../lib/inspectionRequestForms";
-import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
+import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 
 const TABS: { key: InspectionRegisterTab; label: string; doc: string }[] = [
   { key: "quality-ir", label: "Quality IR (F-01)", doc: "SPDC/QA/F-01" },
@@ -220,7 +220,7 @@ export default function InspectionRegisterPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 text-xs">
+      <div className="flex flex-wrap gap-2 text-xs items-center">
         <ToolLink to={tabChecklist.master} className="text-brand underline" windowLabel="Checklist master">
           Checklist master
         </ToolLink>
@@ -229,25 +229,37 @@ export default function InspectionRegisterPage() {
           Fill log / reports
         </ToolLink>
         <span className="text-steel-muted">·</span>
-        <ToolLink to={`/projects/${id}/rfis?kind=QualityInspection`} className="text-brand underline" windowLabel="QI RFIs">
-          Request QI fill
-        </ToolLink>
+        <button
+          type="button"
+          className="text-brand underline font-semibold"
+          onClick={() => id && void openFamilyChecklistFill(id, "QualityInspection", token)}
+        >
+          Fill quality checklist
+        </button>
         <span className="text-steel-muted">·</span>
-        <ToolLink to={`/projects/${id}/rfis?kind=SafetyChecklist`} className="text-brand underline" windowLabel="Safety fill">
-          Safety checklist fill
-        </ToolLink>
+        <button
+          type="button"
+          className="text-brand underline font-semibold"
+          onClick={() => id && void openFamilyChecklistFill(id, "Safety", token)}
+        >
+          Fill safety checklist
+        </button>
         <span className="text-steel-muted">·</span>
-        <ToolLink to={`/projects/${id}/rfis?kind=SiteExecution`} className="text-brand underline" windowLabel="Field fill">
-          Field checklist fill
-        </ToolLink>
-        {tab === "activity-checklist" && (
-          <>
-            <span className="text-steel-muted">·</span>
-            <ToolLink to={`/projects/${id}/rfis?kind=ActivityInspection&compose=1`} className="text-brand underline" windowLabel="Activity fill">
-              Request activity checklist fill
-            </ToolLink>
-          </>
-        )}
+        <button
+          type="button"
+          className="text-brand underline font-semibold"
+          onClick={() => id && void openFamilyChecklistFill(id, "SiteExecution", token)}
+        >
+          Fill site checklist
+        </button>
+        <span className="text-steel-muted">·</span>
+        <button
+          type="button"
+          className="text-brand underline font-semibold"
+          onClick={() => id && void openFamilyChecklistFill(id, "ActivityInspection", token)}
+        >
+          Fill activity checklist
+        </button>
       </div>
 
       {tab !== "hse-register" && canCreate && (
@@ -293,7 +305,9 @@ export default function InspectionRegisterPage() {
               ? (row) => {
                   if (row.linkedAssignmentId) {
                     openChecklistFillWindow(id, row.linkedAssignmentId, tabChecklist.family);
+                    return;
                   }
+                  void openFamilyChecklistFill(id, tabChecklist.family, token);
                 }
               : undefined
           }

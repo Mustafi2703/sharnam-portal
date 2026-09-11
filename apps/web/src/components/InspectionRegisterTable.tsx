@@ -145,20 +145,16 @@ export function InspectionRegisterTable({ rows, formRef, variant = "register", o
                 )}
                 {onFillChecklist && (
                   <td className="p-2 align-top">
-                    {row.linkedAssignmentId ? (
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-brand underline hover:no-underline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onFillChecklist(row);
-                        }}
-                      >
-                        Fill →
-                      </button>
-                    ) : (
-                      <span className="text-steel-muted">—</span>
-                    )}
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-brand underline hover:no-underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFillChecklist(row);
+                      }}
+                    >
+                      Fill →
+                    </button>
                   </td>
                 )}
                 {variant === "register" && (

@@ -3,6 +3,7 @@ import { DrawingsModuleNav } from "./DrawingsModuleNav";
 import { useAuth } from "../auth";
 import { isToolActive } from "../lib/moduleToolNav";
 import { MODULE_TOOLS, type WorkspaceKey } from "../workspaces";
+import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
 import { isToolWindow, moduleToolHref, openModuleToolWindow, withToolWindowParam } from "../lib/moduleToolWindow";
 
 type ModuleNavKey = WorkspaceKey | "home";
@@ -23,7 +24,7 @@ export function ModuleToolNav({
   accent: string;
 }) {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   if (moduleKey === "drawings") {
     return <DrawingsModuleNav projectId={projectId} accent={accent} />;
@@ -55,6 +56,11 @@ export function ModuleToolNav({
             className={tabClass(on)}
             style={on ? { background: accent, borderColor: accent } : undefined}
             onClick={(e) => {
+              if (t.fillFamily) {
+                e.preventDefault();
+                void openFamilyChecklistFill(projectId, t.fillFamily, token);
+                return;
+              }
               if (inWin) return;
               e.preventDefault();
               const w = openModuleToolWindow(href, t.label);

@@ -78,3 +78,20 @@ export function fmtCubeDate(v?: string | null) {
   if (!v) return "";
   return new Date(v).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
+
+export function specimenPhase(c: CubeRow): "7D" | "28D" | "CUBE" {
+  const has7 = c.load7 != null || c.strength7 != null;
+  const has28 = c.load28 != null || c.strength28 != null;
+  if (has7 && !has28) return "7D";
+  if (has28 && !has7) return "28D";
+  return "CUBE";
+}
+
+/** Keep imported 6-row (3×7D + 3×28D) groups in age order; new date entries stay 3 cubes. */
+export function orderCubeSpecimens(rows: CubeRow[]): CubeRow[] {
+  const d7 = rows.filter((r) => specimenPhase(r) === "7D");
+  const d28 = rows.filter((r) => specimenPhase(r) === "28D");
+  const rest = rows.filter((r) => specimenPhase(r) === "CUBE");
+  if (d7.length || d28.length) return [...d7, ...d28, ...rest];
+  return rows;
+}

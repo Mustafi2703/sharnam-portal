@@ -2,12 +2,13 @@ import { useLocation } from "react-router-dom";
 import { DRAWINGS_MODULE_NAV, drawingsNavActive } from "../lib/drawingsModuleNav";
 import { formatUiText } from "../lib/formatUiText";
 import { useAuth } from "../auth";
+import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
 import { isToolWindow, openModuleToolWindow, withToolWindowParam } from "../lib/moduleToolWindow";
 
 /** Shared tab strip for all Drawings-module tools */
 export function DrawingsModuleNav({ projectId, accent = "#2563EB" }: { projectId: string; accent?: string }) {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const items = DRAWINGS_MODULE_NAV.filter(
     (item) => !item.roles || !user?.role || item.roles.includes(user.role)
   );
@@ -27,6 +28,11 @@ export function DrawingsModuleNav({ projectId, accent = "#2563EB" }: { projectId
             }`}
             style={active ? { background: accent, borderColor: accent } : undefined}
             onClick={(e) => {
+              if (item.fillFamily) {
+                e.preventDefault();
+                void openFamilyChecklistFill(projectId, item.fillFamily, token);
+                return;
+              }
               if (inWin || item.key === "hub") return;
               e.preventDefault();
               const w = openModuleToolWindow(href, item.label);

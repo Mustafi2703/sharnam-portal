@@ -593,21 +593,15 @@ checklistRouter.post(
           }
           const description = [assignment.template.name, location].filter(Boolean).join(" · ") || "Pour card cube group";
           const srNo = `PC-${assignment.id.slice(-4).toUpperCase()}`;
-          const created = await prisma.$transaction(
-            [0, 1, 2].map(() =>
-              prisma.cubeTest.create({
-                data: {
-                  projectId: assignment.projectId,
-                  srNo,
-                  castDate: new Date(),
-                  description,
-                  grade: "M25",
-                  result: "Pending",
-                  source,
-                },
-              })
-            )
-          );
+          const { createSpdcCubeGroup } = await import("../services/cubeRegisterImport.js");
+          const created = await createSpdcCubeGroup({
+            projectId: assignment.projectId,
+            srNo,
+            castDate: new Date(),
+            description,
+            grade: "M25",
+            source,
+          });
           cubeGroup = { created: created.length };
         }
       }
@@ -2271,27 +2265,20 @@ checklistRouter.post(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const b = req.body || {};
-    const description = String(b.description || "New cube group");
-    const grade = b.grade ? String(b.grade) : "M25";
-    const srNo = b.srNo ? String(b.srNo) : null;
-    const castDate = b.castDate ? new Date(b.castDate) : new Date();
-    const testAgency = b.testAgency ? String(b.testAgency) : null;
-    const created = await prisma.$transaction(
-      [0, 1, 2].map(() =>
-        prisma.cubeTest.create({
-          data: {
-            projectId: req.params.projectId,
-            srNo,
-            castDate,
-            description,
-            grade,
-            testAgency,
-            result: "Pending",
-            source: b.source ? String(b.source) : "portal",
-          },
-        })
-      )
-    );
+    const { createSpdcCubeGroup } = await import("../services/cubeRegisterImport.js");
+    const created = await createSpdcCubeGroup({
+      projectId: req.params.projectId,
+      srNo: b.srNo ? String(b.srNo) : null,
+      castDate: b.castDate ? new Date(b.castDate) : new Date(),
+      description: String(b.description || "New cube group"),
+      grade: b.grade ? String(b.grade) : "M25",
+      testAgency: b.testAgency ? String(b.testAgency) : null,
+      testDate7: b.testDate7 ? new Date(b.testDate7) : null,
+      testDate28: b.testDate28 ? new Date(b.testDate28) : null,
+      result: b.result ? String(b.result) : "Pending",
+      source: b.source ? String(b.source) : "portal",
+      specimens: Array.isArray(b.specimens) ? b.specimens : undefined,
+    });
     res.status(201).json({ created: created.length, specimens: created });
   }
 );
@@ -2323,19 +2310,19 @@ checklistRouter.patch(
     if (b.castDate !== undefined) data.castDate = b.castDate ? new Date(b.castDate) : null;
     if (b.testDate7 !== undefined) data.testDate7 = b.testDate7 ? new Date(b.testDate7) : null;
     if (b.testDate28 !== undefined) data.testDate28 = b.testDate28 ? new Date(b.testDate28) : null;
-    if (b.cubeWeight != null) data.cubeWeight = Number(b.cubeWeight);
-    if (b.load7 != null) data.load7 = Number(b.load7);
-    if (b.load28 != null) data.load28 = Number(b.load28);
+    if (b.cubeWeight !== undefined) data.cubeWeight = b.cubeWeight === null || b.cubeWeight === "" ? null : Number(b.cubeWeight);
+    if (b.load7 !== undefined) data.load7 = b.load7 === null || b.load7 === "" ? null : Number(b.load7);
+    if (b.load28 !== undefined) data.load28 = b.load28 === null || b.load28 === "" ? null : Number(b.load28);
     const existing = await prisma.cubeTest.findFirst({
       where: { id: req.params.cubeId, projectId: req.params.projectId },
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
     const { applyCubeFormula } = await import("@sharnam/shared");
     const computed = applyCubeFormula({
-      load7: (data.load7 as number | undefined) ?? existing.load7,
-      load28: (data.load28 as number | undefined) ?? existing.load28,
-      strength7: b.strength7 != null ? Number(b.strength7) : existing.strength7,
-      strength28: b.strength28 != null ? Number(b.strength28) : existing.strength28,
+      load7: ("load7" in data ? (data.load7 as number | null) : existing.load7),
+      load28: ("load28" in data ? (data.load28 as number | null) : existing.load28),
+      strength7: b.strength7 != null ? Number(b.strength7) : "load7" in data ? undefined : existing.strength7,
+      strength28: b.strength28 != null ? Number(b.strength28) : "load28" in data ? undefined : existing.strength28,
       avgStrength: b.avgStrength != null ? Number(b.avgStrength) : existing.avgStrength,
       grade: (data.grade as string | undefined) ?? existing.grade,
       result: b.result != null ? String(b.result) : existing.result,
@@ -2371,7 +2358,9 @@ checklistRouter.post(
     if (!req.file?.buffer) return res.status(400).json({ error: "Excel file required" });
     const { importQapWorkbook } = await import("../services/qapImportExport.js");
     const out = await importQapWorkbook(req.params.projectId, req.file.buffer);
-    res.json(out);
+    const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
+    const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id, out.weekLabel).catch(() => []);
+    res.json({ ...out, drive });
   }
 );
 
@@ -2385,7 +2374,9 @@ checklistRouter.post(
     if (!file) return res.status(404).json({ error: "Quality Assurance Plan Week 50.xlsx not found on server" });
     const fs = await import("fs");
     const out = await importQapWorkbook(req.params.projectId, fs.readFileSync(file), true);
-    res.json(out);
+    const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
+    const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id, out.weekLabel).catch(() => []);
+    res.json({ ...out, drive });
   }
 );
 
@@ -2412,12 +2403,10 @@ checklistRouter.get("/checklist-pack/inventory", requireAuth, async (_req, res) 
 checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) => {
   const week = req.query.week ? String(req.query.week) : undefined;
   const { exportQapWorkbook } = await import("../services/qapImportExport.js");
-  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
   const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
-  const stamped = await stampSpdcWorkbookLogo(buffer);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="QAP-${weekLabel.replace(/\s+/g, "-")}.xlsx"`);
-  res.send(stamped);
+  res.send(buffer);
 });
 
 checklistRouter.post(
@@ -2425,23 +2414,10 @@ checklistRouter.post(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const week = req.body?.week ? String(req.body.week) : req.query.week ? String(req.query.week) : undefined;
-    const { exportQapWorkbook } = await import("../services/qapImportExport.js");
-    const { publishRegisterWorkbook } = await import("../services/registerWorkbookPublish.js");
-    const project = await prisma.project.findUniqueOrThrow({ where: { id: req.params.projectId } });
-    const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
-    const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
-    const stamped = await stampSpdcWorkbookLogo(buffer);
-    const fileName = `QAP-${project.code}-${weekLabel.replace(/\s+/g, "-")}.xlsx`;
-    const published = await publishRegisterWorkbook({
-      projectId: req.params.projectId,
-      userId: req.user!.id,
-      moduleKey: "qap",
-      fileName,
-      buffer: stamped,
-      auditAction: "qap.published",
-      auditMeta: { weekLabel },
-    });
-    res.json({ ok: true, weekLabel, ...published });
+    const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
+    const published = await publishQualityPackToDrive(req.params.projectId, req.user!.id, week);
+    const qap = published.find((p) => /Assurance-Plan/i.test(p.fileName)) || published[0];
+    res.json({ ok: true, weekLabel: week || null, files: published, ...qap });
   }
 );
 

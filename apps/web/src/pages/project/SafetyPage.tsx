@@ -9,6 +9,7 @@ import { RegisterEmptyRow } from "../../components/RegisterSheetFrame";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { safetySheetFromParams } from "../../lib/safetySheetViews";
+import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { HiraRegisterTable } from "../../components/HiraRegisterTable";
@@ -205,10 +206,16 @@ export default function SafetyPage() {
           <ReportExportButtons projectId={id} kind="safety" compact />
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
+          <button
+            type="button"
+            className="text-brand font-semibold"
+            onClick={() => id && void openFamilyChecklistFill(id, "Safety", token)}
+          >
+            Fill safety checklist →
+          </button>
           <Link to={`/projects/${id}/safety/checklist-logs`}>Safety fill log →</Link>
           <Link to={`/projects/${id}/safety/checklist-master`}>Safety checklist master →</Link>
           <Link to={`/projects/${id}/inspection-register?tab=safety-ir`}>Safety IR register (F-01) →</Link>
-          <Link to={`/projects/${id}/rfis?kind=SafetyChecklist`}>Raise Safety RFI →</Link>
         </div>
       </div>
       </div>

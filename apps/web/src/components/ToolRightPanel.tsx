@@ -5,6 +5,7 @@ import { Button, Input, TextArea } from "./ui";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { formatUiText } from "../lib/formatUiText";
+import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
 import { openDrawingCheckWindow } from "../lib/drawingCheckWindow";
 
 export type RightPanelContext = {
@@ -172,8 +173,8 @@ export function ToolRightPanel({
               secondary: true,
             },
             {
-              label: "Request checklist fill",
-              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=DrawingChecklist`),
+              label: "Fill drawing checklist",
+              onClick: () => void openFamilyChecklistFill(ctx.projectId, "DrawingCheck", token),
               secondary: true,
             },
             {
@@ -215,10 +216,12 @@ export function ToolRightPanel({
             },
             { label: "Assign checklist type", onClick: () => navigate(`/projects/${ctx.projectId}/checklist/assign`), secondary: true },
             {
-              label: "Request checklist fill",
+              label: tool === "quality-inspections" ? "Fill quality checklist" : "Fill site checklist",
               onClick: () =>
-                navigate(
-                  `/projects/${ctx.projectId}/rfis?kind=${tool === "quality-inspections" ? "QualityInspection" : "SiteExecution"}&compose=1`
+                void openFamilyChecklistFill(
+                  ctx.projectId,
+                  tool === "quality-inspections" ? "QualityInspection" : "SiteExecution",
+                  token
                 ),
               secondary: true,
             },
@@ -232,8 +235,8 @@ export function ToolRightPanel({
             { label: "New Quality Inspection", to: "inspections", primary: true },
             { label: "Open Safety", to: "safety", secondary: true },
             {
-              label: "Request QI fill",
-              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
+              label: "Fill quality checklist",
+              onClick: () => void openFamilyChecklistFill(ctx.projectId, "QualityInspection", token),
               secondary: true,
             }
           );
@@ -244,13 +247,13 @@ export function ToolRightPanel({
           actions.push(
             { label: "Log safety observation", to: "safety", primary: true },
             {
-              label: "Safety checklists",
-              onClick: () => navigate(`/projects/${ctx.projectId}/safety/checklist-master`),
+              label: "Fill safety checklist",
+              onClick: () => void openFamilyChecklistFill(ctx.projectId, "Safety", token),
               secondary: true,
             },
             {
-              label: "Safety checklist RFI",
-              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=SafetyChecklist`),
+              label: "Safety checklist master",
+              onClick: () => navigate(`/projects/${ctx.projectId}/safety/checklist-master`),
               secondary: true,
             }
           );
@@ -296,8 +299,8 @@ export function ToolRightPanel({
             secondary: true,
           },
           {
-            label: "Request QI fill",
-            onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=QualityInspection`),
+            label: "Fill quality checklist",
+            onClick: () => void openFamilyChecklistFill(ctx.projectId, "QualityInspection", token),
             secondary: true,
           }
         );

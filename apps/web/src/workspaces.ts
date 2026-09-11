@@ -30,6 +30,8 @@ export type ModuleToolItem = {
   sheet?: string;
   /** live = seeded UI; ready = hub reserved, awaits client sheet drop */
   status?: "live" | "ready";
+  /** Open the standalone checklist fill popup instead of navigating. */
+  fillFamily?: "QualityInspection" | "Safety" | "SiteExecution" | "ActivityInspection" | "DrawingCheck";
 };
 
 /** Sub-tools for hub cards + horizontal strip (no left rail) — one card per sheet/tool */
@@ -74,11 +76,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Design coordination register",
     },
     {
-      to: "rfis",
-      label: "Request checklist fill",
-      query: "kind=DrawingChecklist&compose=1",
-      roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
-      blurb: "Ask matrix / contractor to fill a site checklist.",
+      to: "drawings/precheck",
+      label: "Fill drawing checklist",
+      fillFamily: "DrawingCheck",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the drawing check fill window — same popup as GFC upload.",
     },
     {
       to: "rfis",
@@ -228,16 +230,18 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Site checklist fills — branded export to SharePoint.",
     },
     {
-      to: "rfis",
-      label: "Request QI fill",
-      query: "kind=QualityInspection&compose=1",
-      blurb: "Notify assignee to complete a Quality IR checklist.",
+      to: "quality/checklist-master",
+      label: "Fill quality checklist",
+      fillFamily: "QualityInspection",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the Quality IR fill window — save in the popup, not on this page.",
     },
     {
-      to: "rfis",
-      label: "Request site fill",
-      query: "kind=SiteExecution&compose=1",
-      blurb: "Site execution checklist fill from Quality master.",
+      to: "quality/site-checklist-master",
+      label: "Fill site checklist",
+      fillFamily: "SiteExecution",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the site execution fill window — same popup as drawing check.",
     },
     {
       to: "inspection-register",
@@ -330,11 +334,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Safety checklist fills — branded download.",
     },
     {
-      to: "rfis",
-      label: "Safety checklist RFI",
-      query: "kind=SafetyChecklist",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Request safety checklist fill.",
+      to: "safety/checklist-master",
+      label: "Fill safety checklist",
+      fillFamily: "Safety",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the safety checklist fill window — same popup as drawing check.",
     },
     {
       to: "inspection-register",
@@ -387,6 +391,27 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Activity checklist master",
       blurb: "Create / upload Activity inspection checklists (F-02).",
       sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
+    },
+    {
+      to: "quality/checklist-master",
+      label: "Fill quality checklist",
+      fillFamily: "QualityInspection",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the Quality IR fill window.",
+    },
+    {
+      to: "safety/checklist-master",
+      label: "Fill safety checklist",
+      fillFamily: "Safety",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the safety checklist fill window.",
+    },
+    {
+      to: "inspection/checklist-master",
+      label: "Fill activity checklist",
+      fillFamily: "ActivityInspection",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the activity inspection fill window.",
     },
     {
       to: "quality/checklist-logs",
@@ -569,11 +594,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "diary", label: "Day log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Manpower and site notes — feeds DPR.", sheet: "Day log" },
     { to: "photos", label: "Photos", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Site photo albums.", sheet: "Photos" },
     {
-      to: "rfis",
-      label: "Site checklist RFI",
-      query: "kind=SiteExecution",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Request a site execution checklist fill.",
+      to: "checklist",
+      label: "Fill site checklist",
+      fillFamily: "SiteExecution",
+      roles: ["admin", "office", "site_employee", "employee", "vendor"],
+      blurb: "Open the site execution fill window — same popup as drawing check.",
     },
   ],
   auditKpi: [

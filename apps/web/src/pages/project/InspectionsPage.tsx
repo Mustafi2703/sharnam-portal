@@ -14,6 +14,7 @@ import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { openNcrFormWindow, ncrComplianceSummary } from "../../lib/ncrFormFields";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
+import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
@@ -205,9 +206,15 @@ export default function InspectionsPage() {
           </Link>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
+          <button
+            type="button"
+            className="text-brand font-semibold"
+            onClick={() => id && void openFamilyChecklistFill(id, "QualityInspection", token)}
+          >
+            Fill quality checklist →
+          </button>
           <Link to={`/projects/${id}/quality/checklist-master`}>Checklist master →</Link>
           <Link to={`/projects/${id}/quality/checklist-logs`}>QI fill log →</Link>
-          <Link to={`/projects/${id}/rfis?kind=QualityInspection`}>Raise quality RFI →</Link>
           <Link to={`/projects/${id}/qap`}>Quality Assurance Plan →</Link>
         </div>
       </div>

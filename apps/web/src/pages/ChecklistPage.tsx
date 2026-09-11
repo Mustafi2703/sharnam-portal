@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { moduleForChecklistFamily } from "../lib/rfiModuleScope";
-import { openChecklistFillWindow } from "../lib/checklistFillWindow";
+import { openChecklistFillWindow, openFamilyChecklistFill } from "../lib/checklistFillWindow";
 
 export type ChecklistFamily = "SiteExecution" | "QualityInspection";
 
@@ -159,12 +159,14 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                 {showAssign ? "Hide assign" : "Assign from master"}
               </Button>
             )}
-            {canManage && (
-              <Link to={`/projects/${id}/rfis?kind=${meta.rfiKind}&compose=1`}>
-                <Button type="button" variant="secondary" className="!text-xs">
-                  Request fill →
-                </Button>
-              </Link>
+            {canFill && (
+              <Button
+                type="button"
+                className="!text-xs"
+                onClick={() => id && void openFamilyChecklistFill(id, family, token)}
+              >
+                Fill checklist
+              </Button>
             )}
             <Badge tone="ok">{filtered.length} on project</Badge>
           </div>
@@ -300,14 +302,6 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
                           <Button type="button" className="!text-xs !py-1.5" onClick={() => openFill(a.id)}>
                             {draft ? "Continue fill" : "Fill form"}
                           </Button>
-                        )}
-                        {canManage && (
-                          <Link
-                            to={`/projects/${id}/rfis?kind=${meta.rfiKind}&compose=1`}
-                            className="text-xs font-semibold text-mark self-center px-1"
-                          >
-                            Request fill
-                          </Link>
                         )}
                         {canManage && (
                           <Button

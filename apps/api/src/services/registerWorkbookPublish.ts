@@ -17,7 +17,7 @@ export type PublishResult = {
 export async function publishRegisterWorkbook(opts: {
   projectId: string;
   userId: string;
-  moduleKey: "qap" | "cube";
+  moduleKey: keyof typeof MODULE_TO_ISO_FOLDER;
   fileName: string;
   buffer: Buffer;
   auditAction: string;
@@ -48,4 +48,68 @@ export async function publishRegisterWorkbook(opts: {
     sharePointUrl: saved.sharePointUrl,
     provider: saved.provider,
   };
+}
+
+/** Write QAP (Week 50 layout), cube register, and Quality Dashboard to the ISO folders. */
+export async function publishQualityPackToDrive(projectId: string, userId: string, weekLabel?: string) {
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  const published: PublishResult[] = [];
+
+  try {
+    const { exportQapWorkbook } = await import("./qapImportExport.js");
+    const { buffer, weekLabel: wl } = await exportQapWorkbook(projectId, weekLabel);
+    published.push(
+      await publishRegisterWorkbook({
+        projectId,
+        userId,
+        moduleKey: "qap",
+        fileName: `Quality-Assurance-Plan-${project.code}-${wl.replace(/\s+/g, "-")}.xlsx`,
+        buffer,
+        auditAction: "qap.published",
+        auditMeta: { weekLabel: wl, format: "Week 50" },
+      })
+    );
+  } catch (err) {
+    console.warn("[drive] QAP publish skipped:", err instanceof Error ? err.message : err);
+  }
+
+  try {
+    const { exportCubeWorkbook } = await import("./cubeRegisterImport.js");
+    const { buffer, rowCount } = await exportCubeWorkbook(projectId);
+    published.push(
+      await publishRegisterWorkbook({
+        projectId,
+        userId,
+        moduleKey: "cube",
+        fileName: `SPDC-Cube-Register-${project.code}.xlsx`,
+        buffer,
+        auditAction: "cube.published",
+        auditMeta: { rowCount },
+      })
+    );
+  } catch (err) {
+    console.warn("[drive] Cube publish skipped:", err instanceof Error ? err.message : err);
+  }
+
+  try {
+    const { findWorkbook } = await import("../lib/excelRoot.js");
+    const dash = findWorkbook(["Quality Dashboard (1).xlsx", "Quality Dashboard.xlsx"]);
+    if (dash) {
+      const fs = await import("fs");
+      published.push(
+        await publishRegisterWorkbook({
+          projectId,
+          userId,
+          moduleKey: "qap",
+          fileName: `Quality-Dashboard-${project.code}.xlsx`,
+          buffer: fs.readFileSync(dash),
+          auditAction: "quality.dashboard.published",
+        })
+      );
+    }
+  } catch (err) {
+    console.warn("[drive] Quality dashboard publish skipped:", err instanceof Error ? err.message : err);
+  }
+
+  return published;
 }

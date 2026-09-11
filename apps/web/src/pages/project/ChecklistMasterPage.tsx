@@ -8,6 +8,7 @@ import {
   CHECKLIST_CSV_HEADERS,
   downloadCsv,
 } from "../../lib/csvTemplates";
+import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
@@ -214,6 +215,14 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {id && (
+              <Button
+                type="button"
+                onClick={() => void openFamilyChecklistFill(id, family, token, { templateId: activeId })}
+              >
+                Fill checklist
+              </Button>
+            )}
             {(effectiveLock === "Safety" || !effectiveLock) && (user?.role === "admin" || user?.role === "office") && (
               <Button
                 type="button"
@@ -587,29 +596,39 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 </form>
               )}
 
-              {id && canEdit && (
+              {id && (
                 <div className="flex flex-wrap gap-3 items-center border-t border-line pt-3">
                   <Button
                     type="button"
-                    variant="secondary"
-                    onClick={async () => {
-                      try {
-                        await api(`/api/checklist/project/${id}/assign`, {
-                          method: "POST",
-                          token,
-                          body: JSON.stringify({ templateId: detail.id }),
-                        });
-                        setMsg("Assigned to this project — raise fill RFI or open assign page.");
-                      } catch (err) {
-                        setMsg(err instanceof Error ? err.message : "Assign failed");
-                      }
-                    }}
+                    onClick={() => void openFamilyChecklistFill(id, family, token, { templateId: detail.id })}
                   >
-                    Assign to this project
+                    Fill this checklist
                   </Button>
-                  <Link to={`/projects/${id}/checklist/assign`} className="text-sm font-semibold text-brand">
-                    Assign catalog →
-                  </Link>
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={async () => {
+                        try {
+                          await api(`/api/checklist/project/${id}/assign`, {
+                            method: "POST",
+                            token,
+                            body: JSON.stringify({ templateId: detail.id }),
+                          });
+                          setMsg("Assigned to this project — use Fill to open the popup window.");
+                        } catch (err) {
+                          setMsg(err instanceof Error ? err.message : "Assign failed");
+                        }
+                      }}
+                    >
+                      Assign to this project
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Link to={`/projects/${id}/checklist/assign`} className="text-sm font-semibold text-brand">
+                      Assign catalog →
+                    </Link>
+                  )}
                 </div>
               )}
             </>

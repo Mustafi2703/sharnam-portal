@@ -3,12 +3,13 @@ import { PageHeader } from "../../components/ui";
 import { MODULE_TOOLS, MODULE_META, type WorkspaceKey } from "../../workspaces";
 import { formatUiText } from "../../lib/formatUiText";
 import { useAuth } from "../../auth";
+import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { moduleToolHref, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
 
 /** Module hub — pick a tool; each card opens a dedicated edit window. */
 export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }) {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const meta = MODULE_META[moduleKey];
   const tools = (MODULE_TOOLS[moduleKey] || []).filter(
     (t) => !t.roles || !user?.role || t.roles.includes(user.role as any)
@@ -62,6 +63,10 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
               className="module-hub__card group block h-full"
               onClick={(e) => {
                 e.preventDefault();
+                if (t.fillFamily && id) {
+                  void openFamilyChecklistFill(id, t.fillFamily, token);
+                  return;
+                }
                 const w = openModuleToolWindow(href, t.label);
                 if (!w) window.location.assign(withToolWindowParam(href, true));
               }}

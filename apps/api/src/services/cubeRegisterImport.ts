@@ -116,6 +116,64 @@ export function parseCubeRegisterWorkbook(buffer: Buffer): ParsedCubeSpecimen[] 
   return parseCubeRegisterRows(rows);
 }
 
+export type CubeGroupSpecimenInput = {
+  phase?: "7d" | "28d";
+  cubeWeight?: number | null;
+  load7?: number | null;
+  load28?: number | null;
+};
+
+export async function createSpdcCubeGroup(opts: {
+  projectId: string;
+  srNo?: string | null;
+  castDate?: Date | null;
+  description: string;
+  grade?: string | null;
+  testAgency?: string | null;
+  testDate7?: Date | null;
+  testDate28?: Date | null;
+  result?: string | null;
+  source?: string | null;
+  specimens?: CubeGroupSpecimenInput[];
+}) {
+  const { applyCubeFormula } = await import("@sharnam/shared");
+  const slots: CubeGroupSpecimenInput[] =
+    opts.specimens && opts.specimens.length ? opts.specimens : [{}, {}, {}];
+  return prisma.$transaction(
+    slots.map((slot) => {
+      const load7 = slot.phase === "28d" ? null : slot.load7 ?? null;
+      const load28 = slot.phase === "7d" ? null : slot.load28 ?? null;
+      const computed = applyCubeFormula({
+        load7,
+        load28,
+        grade: opts.grade,
+        result: opts.result || "Pending",
+      });
+      return prisma.cubeTest.create({
+        data: {
+          projectId: opts.projectId,
+          srNo: opts.srNo || null,
+          castDate: opts.castDate || null,
+          description: opts.description,
+          grade: opts.grade || "M25",
+          testAgency: opts.testAgency || null,
+          testDate7: opts.testDate7 || null,
+          testDate28: opts.testDate28 || null,
+          cubeWeight: slot.cubeWeight ?? null,
+          load7,
+          load28,
+          strength7: computed.strength7,
+          strength28: computed.strength28,
+          strength: computed.strength,
+          avgStrength: computed.avgStrength,
+          result: computed.result,
+          source: opts.source || "portal",
+        },
+      });
+    })
+  );
+}
+
 export function resolveCubeRegisterPath(): string | null {
   const candidates = [
     process.env.SHARNAM_EXCEL_ROOT
@@ -138,7 +196,17 @@ export async function importCubeRegisterWorkbook(projectId: string, buffer: Buff
     if (replace) {
       await tx.cubeTest.deleteMany({ where: { projectId } });
     }
+    const { applyCubeFormula } = await import("@sharnam/shared");
     for (const row of parsed) {
+      const computed = applyCubeFormula({
+        load7: row.load7,
+        load28: row.load28,
+        strength7: row.strength7,
+        strength28: row.strength28,
+        avgStrength: row.avgStrength,
+        grade: row.grade,
+        result: row.result || "Pending",
+      });
       await tx.cubeTest.create({
         data: {
           projectId,
@@ -151,11 +219,11 @@ export async function importCubeRegisterWorkbook(projectId: string, buffer: Buff
           testDate28: row.testDate28,
           load7: row.load7,
           load28: row.load28,
-          strength7: row.strength7,
-          strength28: row.strength28,
-          strength: row.strength7 ?? row.strength28 ?? null,
-          avgStrength: row.avgStrength,
-          result: row.result || (row.avgStrength ? "PASS" : "Pending"),
+          strength7: computed.strength7,
+          strength28: computed.strength28,
+          strength: computed.strength,
+          avgStrength: computed.avgStrength ?? row.avgStrength,
+          result: computed.result,
           source: "SPDC CUBE REGISTER (1).xlsx",
         },
       });
@@ -174,6 +242,61 @@ export async function exportCubeWorkbook(projectId: string) {
   });
   if (!rows.length) throw new Error("No cube rows to export");
 
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const sr = String(r.srNo || "").replace(/-([23])$/, "") || "—";
+    const key = `${sr}|${r.castDate ? r.castDate.toISOString().slice(0, 10) : ""}|${r.description || ""}`;
+    const list = groups.get(key) || [];
+    list.push(r);
+    groups.set(key, list);
+  }
+
+  const templatePath = resolveCubeRegisterPath();
+  if (templatePath && fs.existsSync(templatePath)) {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(templatePath);
+    const ws = wb.worksheets[0];
+    if (ws) {
+      ws.getCell("E2").value = project.name;
+      ws.getCell("E3").value = project.clientName || "";
+      ws.getCell("E4").value = project.designConsultant || "";
+      ws.getCell("E5").value = project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)";
+      ws.getCell("E6").value = project.contractorName || "";
+      let excelRow = 11;
+      for (const group of groups.values()) {
+        const d7 = group.filter((r) => r.load7 || r.strength7 != null);
+        const d28 = group.filter((r) => r.load28 || r.strength28 != null);
+        const rest = group.filter((r) => !d7.includes(r) && !d28.includes(r));
+        const ordered = d7.length || d28.length ? [...d7, ...d28, ...rest] : group;
+        const avg7 = average(d7.map((r) => r.strength7 ?? r.strength));
+        const avg28 = average(d28.map((r) => r.strength28 ?? r.strength));
+        const head = ordered[0];
+        ordered.forEach((r, i) => {
+          const is7 = Boolean(r.load7 || r.strength7 != null) || (!r.load28 && i < 3);
+          ws.getCell(excelRow, 2).value = i === 0 ? Number(head.srNo) || head.srNo || "" : "";
+          ws.getCell(excelRow, 3).value = i === 0 && head.castDate ? head.castDate : "";
+          ws.getCell(excelRow, 4).value = i === 0 ? head.description : "";
+          ws.getCell(excelRow, 5).value = i === 0 ? head.grade || "" : "";
+          ws.getCell(excelRow, 6).value = r.cubeWeight ?? "";
+          ws.getCell(excelRow, 7).value = i === 0 && head.testDate7 ? head.testDate7 : "";
+          ws.getCell(excelRow, 8).value = i === 0 && head.testDate28 ? head.testDate28 : "";
+          ws.getCell(excelRow, 9).value = is7 ? r.load7 ?? "" : "";
+          ws.getCell(excelRow, 10).value = !is7 ? r.load28 ?? "" : "";
+          ws.getCell(excelRow, 11).value = (is7 ? r.strength7 : r.strength28) ?? r.strength ?? "";
+          const first7 = i === 0;
+          const first28 = is7 === false && ordered.findIndex((x) => x.load28 || x.strength28 != null) === i;
+          ws.getCell(excelRow, 12).value = first7 ? avg7 ?? "" : first28 ? avg28 ?? "" : "";
+          ws.getCell(excelRow, 13).value = first7 || first28 ? r.result || head.result || "" : "";
+          excelRow += 1;
+        });
+      }
+    }
+    const buf = await wb.xlsx.writeBuffer();
+    return { buffer: Buffer.from(buf), rowCount: rows.length };
+  }
+
+  const { workbookBuffer } = await import("./brandedExport.js");
   const header = [
     "Sr. No.",
     "Date of Casting",
@@ -187,76 +310,32 @@ export async function exportCubeWorkbook(projectId: string) {
     "Strength (MPa)",
     "Average Strength (MPa)",
     "Result",
-    "Test agency",
   ];
-
-  const fmtDay = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : "");
-
   const dataRows = rows.map((r) => [
     r.srNo || "",
-    fmtDay(r.castDate),
+    r.castDate ? r.castDate.toISOString().slice(0, 10) : "",
     r.description,
     r.grade || "",
     r.cubeWeight ?? "",
-    fmtDay(r.testDate7),
-    fmtDay(r.testDate28),
+    r.testDate7 ? r.testDate7.toISOString().slice(0, 10) : "",
+    r.testDate28 ? r.testDate28.toISOString().slice(0, 10) : "",
     r.load7 ?? "",
     r.load28 ?? "",
     r.strength7 ?? r.strength28 ?? r.strength ?? "",
     r.avgStrength ?? "",
     r.result || "Pending",
-    r.testAgency || "",
   ]);
-
-  const templatePath = resolveCubeRegisterPath();
-  if (templatePath && fs.existsSync(templatePath)) {
-    const wb = XLSX.read(fs.readFileSync(templatePath), { type: "buffer" });
-    const sheetName = wb.SheetNames.find((n) => /sheet1/i.test(n)) || wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    const metaRows: [string, string][] = [
-      ["Project", project.name],
-      ["Client", project.clientName || ""],
-      ["Design Consultant", project.designConsultant || ""],
-      ["PM Consultant", project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)"],
-      ["Contractor", project.contractorName || ""],
-    ];
-    for (let i = 0; i < metaRows.length; i++) {
-      const cellA = XLSX.utils.encode_cell({ r: i, c: 0 });
-      const cellB = XLSX.utils.encode_cell({ r: i, c: 1 });
-      if (!ws[cellA]) ws[cellA] = { t: "s", v: metaRows[i][0] };
-      else ws[cellA].v = metaRows[i][0];
-      if (!ws[cellB]) ws[cellB] = { t: "s", v: metaRows[i][1] };
-      else ws[cellB].v = metaRows[i][1];
-    }
-    const startRow = 10;
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = dataRows[i];
-      for (let c = 0; c < row.length; c++) {
-        const addr = XLSX.utils.encode_cell({ r: startRow + i, c });
-        const val = row[c];
-        ws[addr] = { t: typeof val === "number" ? "n" : "s", v: val ?? "" };
-      }
-    }
-    return {
-      buffer: Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" })),
-      rowCount: rows.length,
-    };
-  }
-
-  const { workbookBuffer } = await import("./brandedExport.js");
-  const coverRows: (string | number)[][] = [
-    ["SPDC Cube Register"],
-    ["Project", project.name],
-    ["Client", project.clientName || ""],
-    ["Design Consultant", project.designConsultant || ""],
-    ["PM Consultant", project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)"],
-    ["Contractor", project.contractorName || ""],
-    [],
-    header,
-    ...dataRows,
-  ];
   return {
-    buffer: workbookBuffer([{ name: "Sheet1", rows: coverRows }], { title: "Cube Register", projectCode: project.code }),
+    buffer: workbookBuffer([{ name: "Sheet1", rows: [["CUBE REGISTER"], [], header, ...dataRows] }], {
+      title: "Cube Register",
+      projectCode: project.code,
+    }),
     rowCount: rows.length,
   };
+}
+
+function average(vals: Array<number | null | undefined>): number | null {
+  const nums = vals.filter((n): n is number => n != null && Number.isFinite(n));
+  if (!nums.length) return null;
+  return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100;
 }

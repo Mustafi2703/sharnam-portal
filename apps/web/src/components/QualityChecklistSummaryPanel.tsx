@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
 import { BarChart, PieChart } from "./PieChart";
 import { Badge, Button, Card } from "./ui";
 
@@ -167,9 +168,13 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
             <Link className="text-brand" to={`/projects/${projectId}/quality/checklist-logs`}>
               QI fill log →
             </Link>
-            <Link className="text-brand" to={`/projects/${projectId}/rfis?kind=QualityInspection`}>
-              Request QI fill →
-            </Link>
+            <button
+              type="button"
+              className="text-brand text-left"
+              onClick={() => void openFamilyChecklistFill(projectId, "QualityInspection", token)}
+            >
+              Fill quality checklist →
+            </button>
           </div>
           {canManage && (
             <Button type="button" className="mt-4 w-full" disabled={busy} onClick={() => void sync(false)}>
@@ -218,6 +223,7 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
                 <th className="text-left">Lines</th>
                 <th className="text-left">Status</th>
                 <th className="text-left">Last fill</th>
+                <th className="text-left w-24">Fill</th>
               </tr>
             </thead>
             <tbody>
@@ -236,11 +242,25 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
                       ? `${new Date(r.lastFilledAt).toLocaleDateString("en-IN")} · ${r.lastStatus || ""}`
                       : "—"}
                   </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-brand underline"
+                      onClick={() =>
+                        void openFamilyChecklistFill(projectId, "QualityInspection", token, {
+                          assignmentId: r.assignmentId,
+                          templateId: r.templateId,
+                        })
+                      }
+                    >
+                      Fill →
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     No catalog rows — onboard Sheet1 types or re-seed Quality Dashboard.xlsx.
                   </td>
                 </tr>
