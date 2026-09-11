@@ -37,6 +37,45 @@ function storedUploadUrl(saved: { url: string; sharePointUrl?: string | null }) 
   return saved.url || saved.sharePointUrl || "";
 }
 
+async function persistChecklistUploads(opts: {
+  files: Express.Multer.File[];
+  submissionId: string;
+  projectCode: string;
+  commentsRaw?: unknown;
+}) {
+  if (!opts.files.length) return 0;
+  const { mockOneDrive } = await import("../services/mockOneDrive.js");
+  const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+  const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
+  let itemComments: Record<string, string> = {};
+  if (typeof opts.commentsRaw === "string" && opts.commentsRaw) {
+    try {
+      itemComments = JSON.parse(opts.commentsRaw);
+    } catch {
+      itemComments = {};
+    }
+  }
+  let itemAttachCount = 0;
+  for (const f of opts.files) {
+    const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
+    const itemId = scoped?.[1] || null;
+    const kind = checklistUploadKind(f, scoped?.[2]);
+    if (itemId) itemAttachCount += 1;
+    const saved = await mockOneDrive.upload(opts.projectCode, checklistFolder, f.originalname, f.buffer);
+    await prisma.checklistPhoto.create({
+      data: {
+        submissionId: opts.submissionId,
+        itemId,
+        kind,
+        fileUrl: storedUploadUrl(saved),
+        caption: f.originalname,
+        comment: itemId ? itemComments[itemId] || null : null,
+      },
+    });
+  }
+  return itemAttachCount;
+}
+
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 
@@ -1236,8 +1275,12 @@ checklistRouter.delete(
 checklistRouter.post(
   "/project/:projectId/drawing-precheck",
   requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  upload.any(),
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+
     let template = await prisma.checklistTemplate.findFirst({
       where: { checklistType: "DrawingCheck", isActive: true },
       include: { items: { orderBy: { sortOrder: "asc" } } },
@@ -1281,6 +1324,22 @@ checklistRouter.post(
       });
     }
 
+    const drawingId = typeof req.body?.drawingId === "string" && req.body.drawingId ? req.body.drawingId : null;
+    const revisionId = typeof req.body?.revisionId === "string" && req.body.revisionId ? req.body.revisionId : null;
+    const revisionNumber =
+      typeof req.body?.revisionNumber === "string" && req.body.revisionNumber ? req.body.revisionNumber : null;
+    if (drawingId) {
+      const found = await prisma.drawing.findFirst({
+        where: { id: drawingId, projectId },
+        include: { revisions: { select: { id: true } } },
+      });
+      if (!found) return res.status(400).json({ error: "Drawing not found on this project." });
+      if (revisionId && !found.revisions.some((r) => r.id === revisionId)) {
+        return res.status(400).json({ error: "Select a valid revision for this drawing." });
+      }
+    }
+
+    const files = (req.files as Express.Multer.File[]) || [];
     const unlockToken = `dwgchk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     const submission = await prisma.checklistSubmission.create({
       data: {
@@ -1291,14 +1350,24 @@ checklistRouter.post(
         remarks: req.body?.remarks || "Pre-upload drawing check",
         purpose: "PreUploadDrawing",
         unlockToken,
+        drawingId,
+        revisionId,
+        revisionNumber,
       },
+    });
+
+    const itemAttachCount = await persistChecklistUploads({
+      files,
+      submissionId: submission.id,
+      projectCode: project.code,
+      commentsRaw: req.body?.itemCommentsJson,
     });
 
     await audit("checklist.drawing_precheck", {
       userId: req.user!.id,
       entity: "ChecklistSubmission",
       entityId: submission.id,
-      meta: { projectId, unlockToken },
+      meta: { projectId, unlockToken, files: files.length, itemAttachments: itemAttachCount },
     });
 
     res.status(201).json({

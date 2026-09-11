@@ -5,6 +5,7 @@ import { Button, Input, TextArea } from "./ui";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { formatUiText } from "../lib/formatUiText";
+import { openDrawingCheckWindow } from "../lib/drawingCheckWindow";
 
 export type RightPanelContext = {
   projectId: string;
@@ -162,13 +163,7 @@ export function ToolRightPanel({
             {
               label: "Upload drawing",
               onClick: () =>
-                onUploadDrawing
-                  ? onUploadDrawing()
-                  : window.open(
-                      `/projects/${ctx.projectId}/drawings/precheck`,
-                      "sharnam-drawing-precheck",
-                      "noopener,noreferrer,width=1100,height=900"
-                    ),
+                onUploadDrawing ? onUploadDrawing() : openDrawingCheckWindow(ctx.projectId, "register"),
               primary: true,
             },
             {

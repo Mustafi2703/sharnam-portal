@@ -1,4 +1,4 @@
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -7,8 +7,8 @@ import { Badge, Button, Card, Input, PageHeader, Select } from "../../components
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
 import { DrawingUploadFilePicker } from "../../components/DrawingUploadFilePicker";
-import { DrawingCheckModal } from "../../components/DrawingCheckModal";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
+import { drawingUnlockStorageKey, isDrawingUnlockMessage, openDrawingCheckWindow } from "../../lib/drawingCheckWindow";
 import { DrawingIssueFields } from "../../components/DrawingIssueFields";
 import { RevisionIssueLogSummary } from "../../components/RevisionIssueLogSummary";
 import {
@@ -119,14 +119,43 @@ export default function DrawingsPage() {
     void load();
   }, [id, token]);
 
+  const precheckModeRef = useRef(precheckMode);
+  precheckModeRef.current = precheckMode;
+
+  function applyDrawingUnlock(tok: string) {
+    setPrecheckOpen(false);
+    setFormError("");
+    if (precheckModeRef.current === "revision") {
+      setRevUnlockToken(tok);
+      setMsg("Checklist unlocked — finish the revision upload.");
+    } else {
+      setUnlockToken(tok);
+      setShowRegister(true);
+      setMsg("Checklist unlocked — finish the upload form.");
+    }
+  }
+
+  function launchDrawingCheck(mode: "register" | "revision") {
+    if (!id) return false;
+    setPrecheckMode(mode);
+    precheckModeRef.current = mode;
+    const win = openDrawingCheckWindow(id, mode);
+    if (!win) {
+      setFormError("Allow pop-ups to open Drawing Check Master in a separate window.");
+      return false;
+    }
+    setPrecheckOpen(true);
+    return true;
+  }
+
   function startUploadFlow() {
     if (!id) return;
     setFormError("");
     setUnlockToken(null);
     setShowRegister(false);
-    setPrecheckMode("register");
-    setPrecheckOpen(true);
-    setMsg("Complete Drawing Check Master in the overlay — upload opens when it unlocks.");
+    setUploadForId(null);
+    if (!launchDrawingCheck("register")) return;
+    setMsg("Complete Drawing Check Master in the popup window — upload opens when it unlocks.");
   }
 
   useEffect(() => {
@@ -167,18 +196,24 @@ export default function DrawingsPage() {
     startUploadFlow();
   }, [id, canUpload, searchParams, setSearchParams, drawings, drawingsLoaded]);
 
-  function onPrecheckUnlocked(tok: string) {
-    setPrecheckOpen(false);
-    setFormError("");
-    if (precheckMode === "revision") {
-      setRevUnlockToken(tok);
-      setMsg("Checklist unlocked — finish the revision upload.");
-    } else {
-      setUnlockToken(tok);
-      setShowRegister(true);
-      setMsg("Checklist unlocked — finish the upload form.");
+  useEffect(() => {
+    if (!id) return;
+    function onMessage(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (!isDrawingUnlockMessage(e.data, id)) return;
+      applyDrawingUnlock(e.data.unlockToken);
     }
-  }
+    function onStorage(e: StorageEvent) {
+      if (e.key !== drawingUnlockStorageKey(id) || !e.newValue) return;
+      applyDrawingUnlock(e.newValue);
+    }
+    window.addEventListener("message", onMessage);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [id]);
 
   const disciplines = useMemo(
     () => [
@@ -462,9 +497,8 @@ export default function DrawingsPage() {
       revisionLabel: `${next} — ${new Date().toLocaleDateString()}`,
       publish: true,
     });
-    setPrecheckMode("revision");
-    setPrecheckOpen(true);
-    setMsg("Complete Drawing Check Master in the overlay — revision upload unlocks after.");
+    if (!launchDrawingCheck("revision")) return;
+    setMsg("Complete Drawing Check Master in the popup window — revision upload unlocks after.");
   }
 
   function openReplaceRevision(d: any, rev: any, role: "pdf" | "dwg" = "pdf") {
@@ -611,14 +645,14 @@ export default function DrawingsPage() {
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {canUpload && showRegister && !unlockToken && !precheckOpen && (
+      {canUpload && precheckOpen && !unlockToken && precheckMode === "register" && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">
           <div className="font-semibold text-ink">Waiting for Drawing Check Master</div>
           <p className="text-sm text-steel-muted mt-1">
-            Finish the checklist overlay, or open it again to continue.
+            Finish the checklist in the popup window, or open it again if you closed it.
           </p>
           <Button type="button" className="mt-3" onClick={() => startUploadFlow()}>
-            Re-open checklist
+            Re-open checklist window
           </Button>
         </Card>
       )}
@@ -667,26 +701,6 @@ export default function DrawingsPage() {
           </form>
           {formError && <p className="text-sm text-danger mt-2">{formError}</p>}
         </Card>
-      )}
-
-      {canUpload && id && (
-        <DrawingCheckModal
-          open={precheckOpen}
-          projectId={id}
-          mode={precheckMode}
-          contextLabel={
-            precheckMode === "revision" && uploadTarget
-              ? `${uploadTarget.drawingNumber} · next revision`
-              : "New drawing · GFC register"
-          }
-          onClose={() => {
-            setPrecheckOpen(false);
-            if (precheckMode === "revision" && !revUnlockToken) {
-              setUploadForId(null);
-            }
-          }}
-          onUnlocked={(tok) => onPrecheckUnlocked(tok)}
-        />
       )}
 
       {canUpload && (
@@ -1010,14 +1024,14 @@ export default function DrawingsPage() {
         </div>
       </Card>
 
-      {canUpload && uploadForId && uploadTarget && revUploadMode === "new" && !revUnlockToken && !precheckOpen && (
+      {canUpload && uploadForId && uploadTarget && revUploadMode === "new" && !revUnlockToken && (
         <Card className="border-brand/40 bg-brand-soft/40">
           <h3 className="font-semibold text-sm">Waiting for Drawing Check Master</h3>
           <p className="text-sm text-steel-muted mt-1">
-            Fill the checklist overlay for revision of {uploadTarget.drawingNumber}. When it unlocks, the upload form opens here.
+            Fill the checklist in the popup window for revision of {uploadTarget.drawingNumber}. When it unlocks, the upload form opens here.
           </p>
           <Button type="button" className="mt-3" onClick={() => openUploadRev(uploadTarget)}>
-            Re-open checklist
+            Re-open checklist window
           </Button>
           <Button
             type="button"

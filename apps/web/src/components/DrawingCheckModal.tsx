@@ -7,8 +7,8 @@ import { BRAND_EN, BRAND_HI } from "./Brand";
 type Item = { id: string; itemCode?: string; description: string; section?: string; instruction?: string };
 
 /**
- * Modal overlay — Drawing Check Master fill before upload/revision.
- * Stays on the Drawings page (no popup window).
+ * Legacy overlay — Drawings now opens Drawing Check Master in a separate window
+ * (`openDrawingCheckWindow` → DrawingPreCheckPage). Kept for reference.
  */
 export function DrawingCheckModal({
   open,

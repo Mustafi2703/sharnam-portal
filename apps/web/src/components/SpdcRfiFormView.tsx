@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, TextArea } from "./ui";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "./RfiProgressBar";
@@ -7,6 +6,8 @@ import { downloadAuthFile } from "../lib/downloadReport";
 import { rfiProgress } from "../lib/rfiProgress";
 import { buildSpdcRegisterRow, TEST_RFI_NOTIFY_EMAILS } from "../lib/rfiRegisterColumns";
 import { parseFormDataJson } from "../lib/inspectionRequestForms";
+import { openChecklistFillWindow } from "../lib/checklistFillWindow";
+import { checklistFamilyForRfiKind } from "../lib/rfiModuleScope";
 
 type ProjectLite = {
   name?: string;
@@ -20,7 +21,7 @@ type Props = {
   token: string | null;
   canRespond: boolean;
   canClose: boolean;
-  fillLink?: string;
+  projectId?: string;
   onReload: () => Promise<void>;
 };
 
@@ -44,7 +45,8 @@ function Section({ n, title, children }: { n: string; title: string; children: R
   );
 }
 
-export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, fillLink, onReload }: Props) {
+export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, projectId, onReload }: Props) {
+  const fillProjectId = projectId || rfi.projectId;
   const [answer, setAnswer] = useState("");
   const [emails, setEmails] = useState(TEST_RFI_NOTIFY_EMAILS);
   const [note, setNote] = useState("");
@@ -234,14 +236,22 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, fil
         </p>
       </Section>
 
-      {fillLink && (rfi.linkedAssignmentId || rfi.linkedChecklistItemId) && (
+      {fillProjectId && rfi.linkedAssignmentId && (
         <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-2">
           <div className="font-semibold text-xs uppercase tracking-wider text-brand">Linked checklist</div>
-          <Link to={fillLink}>
-            <Button type="button" className="!text-sm">
-              Fill checklist form →
-            </Button>
-          </Link>
+          <Button
+            type="button"
+            className="!text-sm"
+            onClick={() =>
+              openChecklistFillWindow(
+                fillProjectId,
+                rfi.linkedAssignmentId,
+                checklistFamilyForRfiKind(rfi.rfiKind)
+              )
+            }
+          >
+            Fill checklist form →
+          </Button>
         </div>
       )}
 
