@@ -12,6 +12,7 @@ Use this guide whenever the portal changes or you run a client UAT session.
 | **`01-MEETING-CHANGE-LOG.md`** | Dev backlog after meetings | After each client session (optional rollup) |
 | **`00-MASTER-INDEX.md`** | Route lookup | New tool tab or route added |
 | **`../client-share/12-Live-Client-UAT-Workbook.md`** | **Client Google Doc** | Client-facing steps + sign-off; mirror major module changes |
+| **`../client-share/13-Two-Week-Setup-DPR-WPR-WhatsApp.md`** | **PMO / site / IT Google Doc** | Live-project setup + 2-week first reports + WhatsApp parallel; update if setup desks, DPR cadence, or WhatsApp path change |
 | **`README.md`** | Onboarding | Test order or folder structure changes |
 
 ### What **not** to put in module pages

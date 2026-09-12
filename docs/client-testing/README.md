@@ -45,6 +45,7 @@ Page template: **[_PAGE-TEMPLATE.md](./_PAGE-TEMPLATE.md)** · Meeting stake sni
 
 ## Related docs
 
+- Two-week sit-with-them (setup + first real DPR/WPR + WhatsApp): [../client-share/13-Two-Week-Setup-DPR-WPR-WhatsApp.md](../client-share/13-Two-Week-Setup-DPR-WPR-WhatsApp.md)
 - Module test checklist (sign-off table): [../client-share/03-Module-Test-Plan.md](../client-share/03-Module-Test-Plan.md)
 - Live UAT workbook (client Doc): [../client-share/12-Live-Client-UAT-Workbook.md](../client-share/12-Live-Client-UAT-Workbook.md)
 - Vendor field spec: [../modules/MODULE_DIRECTORY_VENDORS.md](../modules/MODULE_DIRECTORY_VENDORS.md)

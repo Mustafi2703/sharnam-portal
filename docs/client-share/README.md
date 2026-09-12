@@ -22,6 +22,7 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | **18** | **[SPDC_TWO_WEEK_UAT_PLAN.md](./SPDC_TWO_WEEK_UAT_PLAN.md)** | **Everyone — Sep 8–19 calendar · soft launch · multi-user · security** |
 | **19** | **[SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md)** | **Testers — ~147 scenarios (HP/EC/NEG/MU/EXP/MOB) per module** |
 | **20** | **[WHATSAPP_OWNER_CLIENT_UPDATES.md](./WHATSAPP_OWNER_CLIENT_UPDATES.md)** | **Leadership / IT — WhatsApp options, MSG91 setup today, owner+client only (no broadcast)** |
+| **22** | **[13-Two-Week-Setup-DPR-WPR-WhatsApp.md](./13-Two-Week-Setup-DPR-WPR-WhatsApp.md)** | **PMO + site + IT — give this to Sharnam: live project setup, 2 weeks sit-with-them until real DPRs + first WPR, WhatsApp in parallel** |
 | **21** | **[WPR-Arvind-23-29-Jul-2026.pptx](./WPR-Arvind-23-29-Jul-2026.pptx)** | **Client WPR deck — 23–29 Jul 2026, sheet titles + charts** |
 | 2 | [02-Logins-and-Access.md](./02-Logins-and-Access.md) | All users — how to sign in |
 | 3 | [03-Module-Test-Plan.md](./03-Module-Test-Plan.md) | SPDC leads — test each module on your server |
@@ -30,6 +31,12 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | **12** | **[12-Live-Client-UAT-Workbook.md](./12-Live-Client-UAT-Workbook.md)** | **Everyone — upload to Google Docs; edit live during UAT** |
 
 ---
+
+## Two-week sit-with-them (first real reports)
+
+Upload **[13-Two-Week-Setup-DPR-WPR-WhatsApp.md](./13-Two-Week-Setup-DPR-WPR-WhatsApp.md)** to Google Drive and share as **Editor** with SPDC PMO, site lead, and IT. Fill the cover table (project name, dates, named people) on Day 1. Use it for daily stand-up and Friday WPR sign-off. WhatsApp steps run in the same two weeks; full MSG91 detail stays in doc **20**.
+
+This is **not** the Sep 8–19 module UAT calendar (doc **18**). Use **13** when you sit on **one live project** until proper DPRs and a client WPR exist.
 
 ## Live client testing (Google Docs)
 
