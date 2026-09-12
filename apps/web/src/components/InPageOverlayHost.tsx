@@ -30,6 +30,9 @@ function overlaySrc(o: InPageOverlay) {
     q.set("embed", "1");
     if (o.resumeDraft) q.set("resume", "1");
     if (o.submissionId) q.set("submission", o.submissionId);
+    if (o.drawingId) q.set("drawing", o.drawingId);
+    if (o.revisionId) q.set("revision", o.revisionId);
+    if (o.rfi) q.set("rfi", o.rfi);
     return `${checklistFillUrl(o.projectId, o.assignmentId, o.family).split("?")[0]}?${q.toString()}`;
   }
   if (o.kind === "checklist-log") {
@@ -37,7 +40,7 @@ function overlaySrc(o: InPageOverlay) {
     const tail = FAMILY_LOG[family] || "quality/checklist-logs";
     return `/projects/${o.projectId}/${tail}?embed=1`;
   }
-  const base = drawingCheckUrl(o.projectId, o.mode);
+  const base = drawingCheckUrl(o.projectId, o.mode, { drawingId: o.drawingId, revisionId: o.revisionId });
   return `${base}${base.includes("?") ? "&" : "?"}embed=1`;
 }
 

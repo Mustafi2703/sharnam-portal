@@ -271,7 +271,11 @@ export default function RfisPage() {
   function openFillForm() {
     if (!id) return;
     if (selected?.linkedAssignmentId) {
-      openChecklistFillWindow(id, selected.linkedAssignmentId, fillFamily, { resumeDraft: true });
+      openChecklistFillWindow(id, selected.linkedAssignmentId, fillFamily, {
+        resumeDraft: true,
+        drawingId: selected.linkedDrawingId || selected.drawing?.id || undefined,
+        rfi: selected.number,
+      });
       return;
     }
     void openFamilyChecklistFill(id, fillFamily || "SiteExecution", token, { preferAssignmentFill: true });
@@ -424,10 +428,13 @@ export default function RfisPage() {
                 }),
               });
               const paths = (created.sharePointExports || []).map((e) => e.path).filter(Boolean);
+              const fillNote = needsChecklist
+                ? " A draft is now on the checklist fill log for the assigned vendor / site person."
+                : "";
               setSyncNote(
-                paths.length
+                (paths.length
                   ? `Written to SharePoint (sheet + print/PDF): ${paths.join(" · ")}`
-                  : "RFI saved. SharePoint write will retry on the next raise or close."
+                  : "RFI saved. SharePoint write will retry on the next raise or close.") + fillNote
               );
               setForm({
                 ...form,
@@ -710,8 +717,8 @@ export default function RfisPage() {
                 <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
                   <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill this checklist</div>
                   <p className="text-steel-muted text-xs leading-relaxed">
-                    Same link is emailed when the RFI is raised. Answer Yes/No/N.A., add photos, Submit for review.
-                    Office opens Branded PDF/Excel on the fill log, then Approve + close RFI (or Reject).
+                    This request is already on the fill log for the assigned vendor / site person.
+                    Drawing-check fills are items only; Quality / Site / Safety fills still take photos.
                   </p>
                   <Button type="button" className="!text-sm" onClick={openFillForm}>
                     Fill checklist form →

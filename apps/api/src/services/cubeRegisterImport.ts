@@ -258,7 +258,7 @@ export async function exportCubeWorkbook(projectId: string) {
     await wb.xlsx.readFile(templatePath);
     const ws = wb.worksheets[0];
     if (ws) {
-      ws.getCell("E2").value = project.name;
+      ws.getCell("E2").value = [project.name, project.location].filter(Boolean).join(" — ");
       ws.getCell("E3").value = project.clientName || "";
       ws.getCell("E4").value = project.designConsultant || "";
       ws.getCell("E5").value = project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)";

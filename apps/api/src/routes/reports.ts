@@ -1057,7 +1057,11 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
 
 hrmRouter.get("/employees", hrmDesk, async (_req, res) => {
   const users = await prisma.user.findMany({
-    where: { role: { in: ["office", "site_employee", "employee", "admin", "vendor", "client"] } },
+    where: {
+      role: { in: ["office", "site_employee", "employee", "admin", "vendor", "client"] },
+      isActive: true,
+      NOT: { email: { startsWith: "deleted." } },
+    },
     select: {
       id: true,
       fullName: true,
@@ -1204,6 +1208,12 @@ hrmRouter.delete("/employees/:id", requireRoles("admin", "office"), async (req: 
 
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return res.status(404).json({ error: "User not found" });
+  const { isKeptPortalEmail } = await import("../services/keepPortalUsers.js");
+  if (isKeptPortalEmail(existing.email)) {
+    return res.status(403).json({
+      error: "This login is on the live SPDC / Twinoxis list and cannot be deleted.",
+    });
+  }
   if (existing.role === "admin" && req.user?.role !== "admin") {
     return res.status(403).json({ error: "Only admin can remove admin accounts" });
   }

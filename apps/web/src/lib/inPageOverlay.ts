@@ -12,6 +12,9 @@ export type InPageOverlay =
       family: string;
       resumeDraft?: boolean;
       submissionId?: string | null;
+      drawingId?: string;
+      revisionId?: string;
+      rfi?: string;
     }
   | {
       kind: "checklist-log";
@@ -22,6 +25,8 @@ export type InPageOverlay =
       kind: "drawing-check";
       projectId: string;
       mode?: "register" | "revision";
+      drawingId?: string;
+      revisionId?: string;
     };
 
 function postToParent(payload: Record<string, unknown>) {

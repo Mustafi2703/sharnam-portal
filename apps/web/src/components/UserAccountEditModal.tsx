@@ -170,10 +170,15 @@ export function UserAccountEditModal({ open, user, token, isAdmin, onClose, onSa
           </div>
         ) : null}
 
-        <div className="border-t border-line pt-3 flex justify-end">
-          <Button type="button" variant="secondary" className="!text-danger !border-danger/30" disabled={busy} onClick={() => void remove()}>
-            Delete user
-          </Button>
+        <div className="border-t border-line pt-3 space-y-2">
+          <p className="text-xs text-amber-800 font-semibold">
+            Only office and admin can delete a user. Live SPDC / Twinoxis logins cannot be removed.
+          </p>
+          <div className="flex justify-end">
+            <Button type="button" variant="secondary" className="!text-danger !border-danger/30" disabled={busy} onClick={() => void remove()}>
+              Delete user
+            </Button>
+          </div>
         </div>
       </div>
     </RegisterEntryModal>

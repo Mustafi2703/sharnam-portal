@@ -332,11 +332,13 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                     {s.submittedBy?.fullName || "—"}
                     <div className="text-[11px] text-steel-muted capitalize">{s.submittedBy?.role || "—"}</div>
                     <div className="text-[10px] font-mono text-steel-muted">{s.drawing?.drawingNumber || "No drawing"}</div>
+                    {s.rfiNumber ? <div className="text-[10px] font-semibold text-brand mt-0.5">{s.rfiNumber}</div> : null}
                   </td>
                   <td>
                     <Badge tone={s.status === "Submitted" || s.status === "Approved" ? "ok" : s.status === "Draft" ? "warn" : "neutral"}>
                       {s.status}
                     </Badge>
+                    {s.rfiNumber ? <div className="mt-1"><Badge tone="brand">Request</Badge></div> : null}
                   </td>
                   <td className="text-right">
                     {id && s.assignment?.id && canFill && (
@@ -348,7 +350,13 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                             id,
                             s.assignment.id,
                             s.assignment?.template?.checklistType || family || "SiteExecution",
-                            { resumeDraft: s.status === "Draft", submissionId: s.id }
+                            {
+                              resumeDraft: s.status === "Draft",
+                              submissionId: s.id,
+                              drawingId: s.drawingId || s.drawing?.id || undefined,
+                              revisionId: s.revisionId || s.revision?.id || undefined,
+                              rfi: s.rfiNumber || undefined,
+                            }
                           )
                         }
                       >

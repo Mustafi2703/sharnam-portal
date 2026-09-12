@@ -34,7 +34,7 @@ export type ChecklistDrawingOption = {
   title?: string;
   currentRev?: string;
   isPublished?: boolean;
-  revisions?: { id: string; revisionNumber?: string }[];
+  revisions?: { id: string; revisionNumber?: string; published?: boolean }[];
 };
 
 export const emptyChecklistLine = (): ChecklistFillLine => ({
@@ -100,6 +100,9 @@ type Props = {
   onRevisionId: (id: string) => void;
   requireDrawing?: boolean;
   showDrawingPicker?: boolean;
+  /** Hide SharePoint links, line photos, and overall photos (Drawing Check gate). */
+  showEvidence?: boolean;
+  lockedDrawingLabel?: string;
   overallPhotos: File[];
   onOverallPhotos: (files: File[]) => void;
   onSignature: (file: File | null) => void;
@@ -143,6 +146,8 @@ export function ChecklistFillForm({
   onRevisionId,
   requireDrawing = false,
   showDrawingPicker = true,
+  showEvidence,
+  lockedDrawingLabel,
   overallPhotos,
   onOverallPhotos,
   onSignature,
@@ -168,6 +173,15 @@ export function ChecklistFillForm({
   const answerPct = items.length ? Math.round((answered / items.length) * 100) : 0;
   const selectedDrawing = drawings.find((d) => d.id === drawingId);
   const revisions = selectedDrawing?.revisions || [];
+  const evidenceOn = showEvidence ?? family !== "DrawingCheck";
+  const pickerOn = showDrawingPicker && family !== "DrawingCheck";
+  const boundDrawing =
+    lockedDrawingLabel ||
+    (selectedDrawing
+      ? `${selectedDrawing.drawingNumber || selectedDrawing.id}${
+          selectedDrawing.title ? ` — ${selectedDrawing.title}` : ""
+        }${revisionId ? ` · ${revisions.find((r) => r.id === revisionId)?.revisionNumber || ""}` : ""}`
+      : "");
 
   return (
     <div className="standalone-form-page standalone-form-page--paper">
@@ -208,8 +222,10 @@ export function ChecklistFillForm({
             ) : null}
             <h1 className="font-display text-xl text-ink mt-0.5">{title}</h1>
             <p className="text-sm text-steel-muted mt-1">
-              Yes / No / N.A. on every line. Photos and files are optional unless the template requires them.
-              {minPhotos > 0 ? ` At least ${minPhotos} photos required (${photoTotal} attached).` : ""}
+              {family === "DrawingCheck"
+                ? "Yes / No / N.A. on every line. Items are managed in Drawing checklist master — no photos or links on this gate."
+                : "Yes / No / N.A. on every line. Photos and files are optional unless the template requires them."}
+              {evidenceOn && minPhotos > 0 ? ` At least ${minPhotos} photos required (${photoTotal} attached).` : ""}
             </p>
           </div>
           <div className="text-right space-y-1">
@@ -225,7 +241,7 @@ export function ChecklistFillForm({
 
         {msg ? <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p> : null}
 
-        {showDrawingPicker && (
+        {pickerOn && (
           <Card className="!p-5">
             <h3 className="font-semibold text-sm mb-1">1. Drawing & revision</h3>
             <p className="text-xs text-steel-muted mb-3">
@@ -279,6 +295,14 @@ export function ChecklistFillForm({
             )}
           </Card>
         )}
+
+        {!pickerOn && boundDrawing ? (
+          <Card className="!p-4">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Drawing & revision</p>
+            <p className="text-sm font-semibold text-ink mt-1">{boundDrawing}</p>
+            <p className="text-xs text-steel-muted mt-1">Picked automatically from this upload / request — no extra select.</p>
+          </Card>
+        ) : null}
 
         <Card className="!p-5">
           <h3 className="font-semibold text-sm mb-3">2. Sheet header (SPDC)</h3>
@@ -402,6 +426,7 @@ export function ChecklistFillForm({
                           disabled={!canFill}
                           onChange={(e) => onPatchLine(item.id, { remarks: e.target.value })}
                         />
+                        {evidenceOn && (
                         <div className="grid sm:grid-cols-2 gap-3 pt-1">
                           <label className="text-xs text-steel-muted block sm:col-span-2">
                             SharePoint / OneDrive evidence link (optional)
@@ -462,6 +487,7 @@ export function ChecklistFillForm({
                             />
                           </div>
                         </div>
+                        )}
                       </div>
                     );
                   })}
@@ -471,6 +497,7 @@ export function ChecklistFillForm({
 
           <div className="pt-4 border-t border-line space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
+              {evidenceOn && (
               <div className="space-y-2">
                 <p className="text-sm text-steel-muted">
                   Overall photos (optional)
@@ -505,6 +532,7 @@ export function ChecklistFillForm({
                   onRemove={(i) => onOverallPhotos(overallPhotos.filter((_, idx) => idx !== i))}
                 />
               </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 checklist-sign-grid">
                 <SignaturePad
                   onCapture={onSignature}

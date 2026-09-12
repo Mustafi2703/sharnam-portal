@@ -8,13 +8,25 @@ export function drawingUnlockStorageKey(projectId: string) {
   return `sharnam_drawing_unlock_${projectId}`;
 }
 
-export function drawingCheckUrl(projectId: string, mode?: "register" | "revision") {
-  const q = mode === "revision" ? "?mode=revision" : "";
-  return `/projects/${projectId}/drawings/precheck${q}`;
+export function drawingCheckUrl(
+  projectId: string,
+  mode?: "register" | "revision",
+  opts?: { drawingId?: string; revisionId?: string }
+) {
+  const q = new URLSearchParams();
+  if (mode === "revision") q.set("mode", "revision");
+  if (opts?.drawingId) q.set("drawing", opts.drawingId);
+  if (opts?.revisionId) q.set("revision", opts.revisionId);
+  const qs = q.toString();
+  return `/projects/${projectId}/drawings/precheck${qs ? `?${qs}` : ""}`;
 }
 
-export function openDrawingCheckWindow(projectId: string, mode?: "register" | "revision") {
-  openInPageOverlay({ kind: "drawing-check", projectId, mode });
+export function openDrawingCheckWindow(
+  projectId: string,
+  mode?: "register" | "revision",
+  opts?: { drawingId?: string; revisionId?: string }
+) {
+  openInPageOverlay({ kind: "drawing-check", projectId, mode, drawingId: opts?.drawingId, revisionId: opts?.revisionId });
   return window;
 }
 

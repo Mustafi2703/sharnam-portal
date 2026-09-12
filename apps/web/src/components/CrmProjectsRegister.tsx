@@ -17,6 +17,7 @@ export type CrmProjectRow = {
   clientGst?: string | null;
   designConsultant?: string | null;
   contractorName?: string | null;
+  pmcName?: string | null;
   location?: string | null;
 };
 
@@ -26,6 +27,7 @@ type Props = {
   projects: CrmProjectRow[];
   canWrite: boolean;
   onEdit?: (project: CrmProjectRow) => void;
+  onDelete?: (project: CrmProjectRow) => void;
   selectedId?: string | null;
   onSelect?: (project: CrmProjectRow) => void;
 };
@@ -43,6 +45,7 @@ function projectDetailLines(p: CrmProjectRow) {
     { label: "GST", value: p.clientGst || "—", mono: true },
     { label: "Site location", value: p.location || "—" },
     { label: "Design consultant", value: p.designConsultant || "—" },
+    { label: "PMC / SPDC", value: p.pmcName || "—" },
     { label: "Main contractor", value: p.contractorName || "—" },
   ];
 }
@@ -60,7 +63,7 @@ function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
   });
 }
 
-export function CrmProjectsRegister({ projects, canWrite, onEdit, selectedId: selectedIdProp, onSelect }: Props) {
+export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, selectedId: selectedIdProp, onSelect }: Props) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
@@ -206,6 +209,11 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, selectedId: se
                 {canWrite && onEdit && (
                   <button type="button" className="text-xs text-steel-muted hover:text-brand text-left" onClick={() => onEdit(selected)}>
                     Edit client card
+                  </button>
+                )}
+                {canWrite && onDelete && (
+                  <button type="button" className="text-xs text-danger hover:underline text-left" onClick={() => onDelete(selected)}>
+                    Delete project
                   </button>
                 )}
               </div>

@@ -92,10 +92,19 @@ export default function HrmsUsersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
           Create portal logins, assign people to projects, edit profiles, and manage active accounts. Role permissions stay in Office → Access.
+          <span className="block mt-1 font-semibold text-warn">
+            Only office and admin can add or delete users. Live SPDC / Twinoxis logins stay protected.
+          </span>
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => setModalOpen(true)}>+ Add user</Button>
-          <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
+          {canEdit ? (
+            <Button type="button" onClick={() => setModalOpen(true)}>+ Add user</Button>
+          ) : (
+            <span className="text-xs text-warn self-center">Ask office or admin to add a user.</span>
+          )}
+          {canEdit ? (
+            <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
+          ) : null}
           <Link to="/roles" className="text-sm font-semibold text-brand self-center px-2">Role matrix ↗</Link>
         </div>
       </div>
@@ -159,6 +168,13 @@ export default function HrmsUsersPage() {
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => setEditUser(e)}>
                           Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-danger underline"
+                          onClick={() => setEditUser(e)}
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>

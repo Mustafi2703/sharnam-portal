@@ -8,6 +8,11 @@ import { buildBrandedChecklistHtml } from "../services/brandedChecklistHtml.js";
 import { buildBrandedChecklistXlsxBuffer } from "../services/brandedChecklistXlsx.js";
 import { attachProgress, computeChecklistProgress, parseResponsesJson } from "../services/checklistProgress.js";
 import { isSignatureUploadName } from "../services/checklistSignoff.js";
+import {
+  ensureFillRequestDraft,
+  isChecklistFillRfiKind,
+  rfiMetaFromResponses,
+} from "../services/ensureFillRequestDraft.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -461,7 +466,8 @@ checklistRouter.post(
     const photoCount = files.filter(
       (f) => f.mimetype?.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(f.originalname)
     ).length;
-    const minPhotos = assignment.template.requirePhotosMin || 0;
+    const minPhotos =
+      assignment.template.checklistType === "DrawingCheck" ? 0 : assignment.template.requirePhotosMin || 0;
     const linkEvidence = Object.values(parseResponsesJson(responses)).reduce(
       (s, r) => s + (r.evidenceLinks?.filter((u) => String(u).trim()).length || 0),
       0
@@ -508,7 +514,11 @@ checklistRouter.post(
       });
       const canEditPrior =
         prior &&
-        (prior.submittedById === req.user!.id || req.user!.role === "admin" || req.user!.role === "office");
+        (prior.submittedById === req.user!.id ||
+          req.user!.role === "admin" ||
+          req.user!.role === "office" ||
+          (prior.status === "Draft" &&
+            ["employee", "site_employee", "vendor"].includes(req.user!.role || "")));
       if (canEditPrior) existingDraft = prior;
     }
 
@@ -593,13 +603,20 @@ checklistRouter.post(
       meta: { files: files.length, photos: photoCount, itemAttachments: itemAttachCount, fillVia: fillGate.via },
     });
 
+    const fillRfiMeta = rfiMetaFromResponses(typeof responses === "string" ? responses : JSON.stringify(responses || {}));
+    const linkedRfiWhere = {
+      projectId: assignment.projectId,
+      status: { in: ["Open", "Answered"] },
+      OR: [
+        { linkedAssignmentId: assignment.id },
+        { linkedChecklistItemId: assignment.templateId },
+        ...(fillRfiMeta.rfiId ? [{ id: fillRfiMeta.rfiId }] : []),
+        ...(fillRfiMeta.rfiNumber ? [{ number: fillRfiMeta.rfiNumber }] : []),
+      ],
+    };
     if (assignment.project.notifyOnChecklistSubmit) {
       const linkedRfis = await prisma.rfi.findMany({
-        where: {
-          projectId: assignment.projectId,
-          status: { in: ["Open", "Answered"] },
-          OR: [{ linkedAssignmentId: assignment.id }, { linkedChecklistItemId: assignment.templateId }],
-        },
+        where: linkedRfiWhere,
         select: { id: true, number: true },
       });
       // Hand to office for review — do NOT auto-close the RFI
@@ -649,11 +666,7 @@ checklistRouter.post(
     } else {
       // Still move linked RFIs to Answered / Office without closing
       await prisma.rfi.updateMany({
-        where: {
-          projectId: assignment.projectId,
-          status: { in: ["Open", "Answered"] },
-          OR: [{ linkedAssignmentId: assignment.id }, { linkedChecklistItemId: assignment.templateId }],
-        },
+        where: linkedRfiWhere,
         data: { status: "Answered", ballInCourt: "Office", closedAt: null },
       });
     }
@@ -779,9 +792,22 @@ checklistRouter.post(
       responses = JSON.stringify(responsesJson || {});
     }
 
-    const existingDraft = await prisma.checklistSubmission.findFirst({
+    const resumeId = String(req.body.submissionId || "").trim();
+    let existingDraft = await prisma.checklistSubmission.findFirst({
       where: { assignmentId: assignment.id, submittedById: req.user!.id, status: "Draft" },
     });
+    if (resumeId) {
+      const prior = await prisma.checklistSubmission.findFirst({
+        where: { id: resumeId, assignmentId: assignment.id, status: "Draft" },
+      });
+      if (
+        prior &&
+        (prior.submittedById === req.user!.id ||
+          ["admin", "office", "employee", "site_employee", "vendor"].includes(req.user!.role || ""))
+      ) {
+        existingDraft = prior;
+      }
+    }
 
     const submission = existingDraft
       ? await prisma.checklistSubmission.update({
@@ -954,6 +980,13 @@ checklistRouter.post(
       /* email optional */
     }
 
+    try {
+      const { refreshQualityPackAfterChange } = await import("../services/checklistWeekAdvance.js");
+      await refreshQualityPackAfterChange(existing.assignment.projectId, req.user!.id);
+    } catch (err) {
+      console.warn("[checklist] review pack refresh:", err instanceof Error ? err.message : err);
+    }
+
     res.json(submission);
   }
 );
@@ -1043,30 +1076,103 @@ checklistRouter.get("/submissions/:id/branded.xlsx", async (req, res) => {
   }
 });
 
-/** Export project checklist fills for site engineers (shared dual-fill audit) */
-checklistRouter.get("/project/:projectId/submissions", async (req, res) => {
-  const type = typeof req.query.type === "string" ? req.query.type : undefined;
-  const submissions = await prisma.checklistSubmission.findMany({
+const RFI_KINDS_FOR_TYPE: Record<string, string[]> = {
+  DrawingCheck: ["DrawingChecklist", "RequestForInformation"],
+  QualityInspection: ["QualityInspection", "QualityIR"],
+  Safety: ["SafetyChecklist", "SafetyIR"],
+  ActivityInspection: ["ActivityInspection"],
+  SiteExecution: ["SiteExecution"],
+};
+
+async function loadProjectSubmissions(projectId: string, type?: string) {
+  return prisma.checklistSubmission.findMany({
     where: {
       assignment: {
-        projectId: req.params.projectId,
+        projectId,
         ...(type ? { template: { checklistType: type } } : {}),
       },
     },
     include: {
       assignment: { include: { template: { include: { _count: { select: { items: true } } } } } },
       submittedBy: { select: { fullName: true, role: true, email: true } },
-      drawing: { select: { drawingNumber: true, title: true } },
-      revision: { select: { revisionNumber: true, createdAt: true } },
+      drawing: { select: { id: true, drawingNumber: true, title: true } },
+      revision: { select: { id: true, revisionNumber: true, createdAt: true } },
       photos: true,
     },
     orderBy: { createdAt: "desc" },
     take: 500,
   });
-  const rows = submissions.map((s) =>
-    attachProgress(s, s.assignment.template._count.items)
-  );
-  res.json(rows);
+}
+
+function decorateSubmission(s: Awaited<ReturnType<typeof loadProjectSubmissions>>[number]) {
+  const meta = rfiMetaFromResponses(s.responsesJson);
+  const remarkMatch = String(s.remarks || "").match(/Requested via\s+([A-Z0-9][A-Z0-9/_-]*)/i);
+  return {
+    ...attachProgress(s, s.assignment.template._count.items),
+    drawingId: s.drawingId,
+    revisionId: s.revisionId,
+    rfiId: meta.rfiId,
+    rfiNumber: meta.rfiNumber || remarkMatch?.[1] || null,
+  };
+}
+
+/** Export project checklist fills for site engineers (shared dual-fill audit) */
+checklistRouter.get("/project/:projectId/submissions", async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
+  const projectId = req.params.projectId;
+  let submissions = await loadProjectSubmissions(projectId, type);
+
+  const known = new Set<string>();
+  for (const s of submissions) {
+    const meta = rfiMetaFromResponses(s.responsesJson);
+    if (meta.rfiId) known.add(meta.rfiId);
+    if (meta.rfiNumber) known.add(meta.rfiNumber);
+    const remarkMatch = String(s.remarks || "").match(/Requested via\s+([A-Z0-9][A-Z0-9/_-]*)/i);
+    if (remarkMatch) known.add(remarkMatch[1]);
+  }
+
+  const rfiKinds = type
+    ? RFI_KINDS_FOR_TYPE[type] || []
+    : ["DrawingChecklist", "RequestForInformation", "QualityInspection", "QualityIR", "SafetyChecklist", "SafetyIR", "ActivityInspection", "SiteExecution"];
+
+  if (rfiKinds.length) {
+    const openRfis = await prisma.rfi.findMany({
+      where: {
+        projectId,
+        linkedAssignmentId: { not: null },
+        status: { notIn: ["Closed", "Cancelled"] },
+        rfiKind: { in: rfiKinds },
+      },
+      select: {
+        id: true,
+        number: true,
+        subject: true,
+        linkedAssignmentId: true,
+        assignedToId: true,
+        createdById: true,
+        linkedDrawingId: true,
+        rfiKind: true,
+      },
+    });
+    let created = false;
+    for (const rfi of openRfis) {
+      if (!isChecklistFillRfiKind(rfi.rfiKind) || !rfi.linkedAssignmentId) continue;
+      if (known.has(rfi.id) || known.has(rfi.number)) continue;
+      const draft = await ensureFillRequestDraft(prisma, {
+        rfiId: rfi.id,
+        rfiNumber: rfi.number,
+        subject: rfi.subject,
+        assignmentId: rfi.linkedAssignmentId,
+        createdById: rfi.createdById,
+        assignedToId: rfi.assignedToId,
+        drawingId: rfi.linkedDrawingId,
+      });
+      if (draft) created = true;
+    }
+    if (created) submissions = await loadProjectSubmissions(projectId, type);
+  }
+
+  res.json(submissions.map(decorateSubmission));
 });
 
 checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
@@ -1236,11 +1342,13 @@ checklistRouter.post(
     if (!name || !category) return res.status(400).json({ error: "name and category required" });
     const type = TEMPLATE_TYPES.includes(checklistType) ? checklistType : "SiteExecution";
     const photoMin =
-      typeof requirePhotosMin === "number"
-        ? requirePhotosMin
-        : type === "QualityInspection" || type === "Safety"
-          ? 3
-          : 0;
+      type === "DrawingCheck"
+        ? 0
+        : typeof requirePhotosMin === "number"
+          ? requirePhotosMin
+          : type === "QualityInspection" || type === "Safety"
+            ? 3
+            : 0;
     const lineItems: {
       itemCode?: string;
       description: string;
@@ -1257,7 +1365,7 @@ checklistRouter.post(
             instruction: i.instruction ? String(i.instruction) : undefined,
             section: i.section ? String(i.section) : undefined,
             sortOrder: Number(i.sortOrder ?? idx + 1),
-            requirePhoto: Boolean(i.requirePhoto),
+            requirePhoto: type === "DrawingCheck" ? false : Boolean(i.requirePhoto),
           }))
       : [];
     const template = await prisma.checklistTemplate.create({
@@ -1316,7 +1424,7 @@ checklistRouter.post(
           instruction: instruction || undefined,
           section: section || "General",
           sortOrder: idx + 1,
-          requirePhoto,
+          requirePhoto: type === "DrawingCheck" ? false : requirePhoto,
         };
       })
       .filter(Boolean) as {
@@ -1334,7 +1442,7 @@ checklistRouter.post(
       });
     }
 
-    const photoMin = type === "QualityInspection" || type === "Safety" ? 3 : 0;
+    const photoMin = type === "DrawingCheck" ? 0 : type === "QualityInspection" || type === "Safety" ? 3 : 0;
     const template = await prisma.checklistTemplate.create({
       data: {
         name,
@@ -1367,6 +1475,7 @@ checklistRouter.patch(
     if (body.category != null) data.category = String(body.category);
     if (body.instructions != null) data.instructions = String(body.instructions) || null;
     if (body.requirePhotosMin != null) data.requirePhotosMin = Number(body.requirePhotosMin) || 0;
+    if (body.checklistType === "DrawingCheck" || data.checklistType === "DrawingCheck") data.requirePhotosMin = 0;
     if (body.isActive != null) data.isActive = Boolean(body.isActive);
     if (body.checklistType && TEMPLATE_TYPES.includes(body.checklistType)) data.checklistType = body.checklistType;
     const template = await prisma.checklistTemplate.update({
@@ -1384,6 +1493,10 @@ checklistRouter.post(
   async (req: AuthedRequest, res) => {
     const { itemCode, description, instruction, section, requirePhoto } = req.body || {};
     if (!description) return res.status(400).json({ error: "description required" });
+    const parent = await prisma.checklistTemplate.findUnique({
+      where: { id: req.params.id },
+      select: { checklistType: true },
+    });
     const count = await prisma.checklistItem.count({ where: { templateId: req.params.id } });
     const item = await prisma.checklistItem.create({
       data: {
@@ -1393,7 +1506,7 @@ checklistRouter.post(
         instruction: instruction ? String(instruction) : null,
         section: section || null,
         sortOrder: count + 1,
-        requirePhoto: Boolean(requirePhoto),
+        requirePhoto: parent?.checklistType === "DrawingCheck" ? false : Boolean(requirePhoto),
       },
     });
     res.status(201).json(item);
@@ -1575,7 +1688,7 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req: Au
     });
   }
 
-  res.json({ ...template, assignmentId: assignment.id, myDraft });
+  res.json({ ...template, requirePhotosMin: 0, assignmentId: assignment.id, myDraft });
 });
 
 /** Quality + Safety module dashboards */
@@ -1583,19 +1696,21 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   const projectId = req.params.projectId;
   const { loadQualityDashboardWorkbook, buildLiveSorLog, buildLiveSorEntries } = await import("../services/qualityDashboardSheets.js");
   const { buildQualityCatalogStatus, fillBuckets } = await import("../services/qualityChecklistCatalog.js");
+  const FILL_TYPES = ["QualityInspection", "Safety", "SiteExecution", "DrawingCheck", "ActivityInspection"] as const;
+  const COUNTED = { in: ["Submitted", "Approved", "Reviewed"] };
   const [qiFills, allQiFills, siteFills, openQi, qap, openRfis, ncrs, cubes, siteRecords, workbook] = await Promise.all([
     prisma.checklistSubmission.findMany({
-      where: { assignment: { projectId, template: { checklistType: "QualityInspection" } } },
+      where: { assignment: { projectId, template: { checklistType: { in: [...FILL_TYPES] } } } },
       include: {
         assignment: { include: { template: { include: { _count: { select: { items: true } } } } } },
         submittedBy: { select: { fullName: true, role: true } },
         photos: { select: { id: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: 40,
     }),
     prisma.checklistSubmission.findMany({
-      where: { assignment: { projectId, template: { checklistType: { in: ["QualityInspection", "Safety"] } } } },
+      where: { assignment: { projectId, template: { checklistType: { in: [...FILL_TYPES] } } } },
       select: {
         createdAt: true,
         status: true,
@@ -1603,12 +1718,27 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       },
     }),
     prisma.checklistSubmission.count({
-      where: { assignment: { projectId, template: { checklistType: "SiteExecution" } } },
+      where: { assignment: { projectId, template: { checklistType: "SiteExecution" } }, status: COUNTED },
     }),
     prisma.qualityInspection.count({ where: { projectId, status: { in: ["Open", "Failed", "Rework"] } } }),
     prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }] }),
     prisma.rfi.count({
-      where: { projectId, status: "Open", rfiKind: { in: ["QualityInspection", "DrawingChecklist"] } },
+      where: {
+        projectId,
+        status: { in: ["Open", "Answered"] },
+        rfiKind: {
+          in: [
+            "QualityInspection",
+            "QualityIR",
+            "DrawingChecklist",
+            "RequestForInformation",
+            "SafetyChecklist",
+            "SafetyIR",
+            "ActivityInspection",
+            "SiteExecution",
+          ],
+        },
+      },
     }),
     prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
     prisma.cubeTest.findMany({ where: { projectId }, orderBy: [{ srNo: "asc" }, { castDate: "asc" }] }),
@@ -1632,9 +1762,30 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       return acc;
     }, {})
   ).map(([discipline, filled]) => ({ discipline, filled }));
+  const countedFills = allQiFills.filter((f) => ["Submitted", "Approved", "Reviewed"].includes(f.status));
+  const typeCount = (type: string) =>
+    countedFills.filter((f) => f.assignment.template.checklistType === type).length;
+  const latestQapWeek = qap[0]?.weekLabel || "";
+  const weekAgo = Date.now() - 7 * 86400000;
+  const liveSamples = cubes.filter((c) => c.castDate && new Date(c.castDate).getTime() >= weekAgo).length;
   const workbookOut = workbook
-    ? { ...workbook, sorLog: liveSorLog, checklistByDiscipline: liveDiscipline.length ? liveDiscipline : workbook.checklistByDiscipline }
-    : { sorLog: liveSorLog, checklistByDiscipline: liveDiscipline, checklistCatalog: [], source: "portal" };
+    ? {
+        ...workbook,
+        dashboard: {
+          ...(workbook.dashboard || {}),
+          weekLabel: latestQapWeek || workbook.dashboard?.weekLabel || "—",
+          samplesLastWeek: liveSamples || workbook.dashboard?.samplesLastWeek || 0,
+        },
+        sorLog: liveSorLog,
+        checklistByDiscipline: liveDiscipline.length ? liveDiscipline : workbook.checklistByDiscipline,
+      }
+    : {
+        dashboard: { weekLabel: latestQapWeek || "—", concretingM3: 0, samplesLastWeek: liveSamples },
+        sorLog: liveSorLog,
+        checklistByDiscipline: liveDiscipline,
+        checklistCatalog: [],
+        source: "portal",
+      };
   const byDay: Record<string, number> = {};
   for (const f of allQiFills) {
     const d = new Date(f.createdAt).toISOString().slice(0, 10);
@@ -1653,7 +1804,11 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     siteRecords,
     sorEntries,
     totals: {
-      fills: allQiFills.filter((f) => f.assignment.template.checklistType === "QualityInspection").length,
+      fills: typeCount("QualityInspection"),
+      safetyFills: typeCount("Safety"),
+      drawingCheckFills: typeCount("DrawingCheck"),
+      activityFills: typeCount("ActivityInspection"),
+      requestedFills: allQiFills.filter((f) => f.status === "Draft").length,
       siteExecutionFills: siteFills,
       openInspections: openQi,
       openFillRfis: openRfis,
@@ -1729,7 +1884,9 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
     prisma.checklistSubmission.count({
       where: { assignment: { projectId, template: { checklistType: "Safety" } } },
     }),
-    prisma.rfi.count({ where: { projectId, status: "Open", rfiKind: "SafetyChecklist" } }),
+    prisma.rfi.count({
+      where: { projectId, status: { in: ["Open", "Answered"] }, rfiKind: { in: ["SafetyChecklist", "SafetyIR"] } },
+    }),
     Promise.resolve(loadSafetyDashboardKpis()),
   ]);
   const isNcr = (r: { recordType: string; title: string }) => /ncr/i.test(r.recordType) || /ncr/i.test(r.title);

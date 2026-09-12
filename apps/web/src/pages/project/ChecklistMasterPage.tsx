@@ -204,7 +204,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         }
         subtitle={
           effectiveLock === "DrawingCheck"
-            ? "Pre-upload drawing review checklists only — complete before GFC upload. Quality and Safety templates live in their own modules."
+            ? "Yes/No/N.A. items only — no photos or links. Edit lines here; fills unlock GFC upload. Quality and Safety templates live in their own modules."
             : effectiveLock === "Safety"
             ? "Safety-only templates — separate from Quality QI checklists. Upload Excel, assign to project, raise Safety checklist RFIs."
             : effectiveLock === "QualityInspection"
@@ -476,7 +476,8 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 >
                   {t.name}{" "}
                   <span className="text-xs text-steel-muted">
-                    · {t._count?.items ?? "?"} lines · photos≥{t.requirePhotosMin ?? 0}
+                    · {t._count?.items ?? "?"} lines
+                    {family === "DrawingCheck" ? "" : ` · photos≥${t.requirePhotosMin ?? 0}`}
                   </span>
                 </button>
               </li>
@@ -494,6 +495,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 onChange={(e) => setForm({ ...form, instructions: e.target.value })}
                 rows={2}
               />
+              {family !== "DrawingCheck" && (
               <label className="text-xs text-steel-muted flex items-center gap-2">
                 Min photos
                 <Input
@@ -503,6 +505,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   onChange={(e) => setForm({ ...form, requirePhotosMin: Number(e.target.value) || 0 })}
                 />
               </label>
+              )}
               <Button type="submit" disabled={createBusy || !form.name.trim()}>
                 {createBusy ? "Creating…" : "Create checklist"}
               </Button>
@@ -584,6 +587,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                     onChange={(e) => setItemForm({ ...itemForm, instruction: e.target.value })}
                     rows={2}
                   />
+                  {family !== "DrawingCheck" && (
                   <label className="text-xs flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -592,6 +596,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                     />
                     Require photo on this line
                   </label>
+                  )}
                   <Button type="submit">Add line item</Button>
                 </form>
               )}

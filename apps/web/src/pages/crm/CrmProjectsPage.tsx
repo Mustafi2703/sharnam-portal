@@ -44,6 +44,8 @@ export default function CrmProjectsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [editProject, setEditProject] = useState<CrmProjectRow | null>(null);
+  const [deleteProject, setDeleteProject] = useState<CrmProjectRow | null>(null);
+  const [deleteCode, setDeleteCode] = useState("");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -95,6 +97,9 @@ export default function CrmProjectsPage() {
         <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
           Delivery projects and client cards. Select a row to continue setup or open an R2 bid for that project.
           Site modules (DPR, Quality, Drawings) live on the project desk, not here.
+          <span className="block mt-1 font-semibold text-amber-800">
+            Only office and admin can add, edit, or delete a project.
+          </span>
         </p>
       </div>
 
@@ -169,6 +174,10 @@ export default function CrmProjectsPage() {
         selectedId={selected?.id || null}
         onSelect={setSelected}
         onEdit={(p) => setEditProject({ ...p })}
+        onDelete={(p) => {
+          setDeleteProject(p);
+          setDeleteCode("");
+        }}
       />
 
       {editProject && token && (
@@ -198,6 +207,7 @@ export default function CrmProjectsPage() {
               <Input value={editProject.clientAddress || ""} onChange={(e) => setEditProject({ ...editProject, clientAddress: e.target.value })} placeholder="Address" />
               <Input value={editProject.location || ""} onChange={(e) => setEditProject({ ...editProject, location: e.target.value })} placeholder="Location" />
               <Input value={editProject.designConsultant || ""} onChange={(e) => setEditProject({ ...editProject, designConsultant: e.target.value })} placeholder="Design consultant" />
+              <Input value={editProject.pmcName || ""} onChange={(e) => setEditProject({ ...editProject, pmcName: e.target.value })} placeholder="PMC / SPDC" />
               <Input value={editProject.contractorName || ""} onChange={(e) => setEditProject({ ...editProject, contractorName: e.target.value })} placeholder="Contractor" />
               <div className="flex gap-2 pt-2">
                 <Button type="submit">Save</Button>
@@ -206,6 +216,52 @@ export default function CrmProjectsPage() {
                 </Button>
               </div>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {deleteProject && token && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md space-y-3">
+            <h3 className="font-display text-xl">Delete {deleteProject.code}?</h3>
+            <p className="text-sm text-steel-muted">
+              This removes the project, QAP, cube, drawings, fills, and logs. Type the project code to confirm.
+            </p>
+            <Input
+              value={deleteCode}
+              onChange={(e) => setDeleteCode(e.target.value)}
+              placeholder={deleteProject.code}
+            />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={deleteCode.trim().toUpperCase() !== deleteProject.code.toUpperCase() || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setMsg("");
+                  try {
+                    await api(`/api/projects/${deleteProject.id}`, {
+                      method: "DELETE",
+                      token,
+                      body: JSON.stringify({ confirmCode: deleteCode.trim() }),
+                    });
+                    setMsg(`Deleted ${deleteProject.code}.`);
+                    setDeleteProject(null);
+                    setSelected(null);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Delete failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Delete project
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setDeleteProject(null)}>
+                Cancel
+              </Button>
+            </div>
           </Card>
         </div>
       )}

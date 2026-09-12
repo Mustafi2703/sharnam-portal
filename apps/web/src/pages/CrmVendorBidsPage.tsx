@@ -524,7 +524,10 @@ export default function CrmVendorBidsPage() {
                       className="font-semibold text-brand"
                       onClick={() => {
                         if (r.linkedAssignmentId) {
-                          openChecklistFillWindow(r.projectId, r.linkedAssignmentId, r.rfiKind, { resumeDraft: true });
+                          openChecklistFillWindow(r.projectId, r.linkedAssignmentId, r.rfiKind, {
+                            resumeDraft: true,
+                            rfi: r.number,
+                          });
                           return;
                         }
                         void openFamilyChecklistFill(r.projectId, r.rfiKind, token, { preferAssignmentFill: true });

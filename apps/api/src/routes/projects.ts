@@ -764,6 +764,41 @@ projectsRouter.get("/:id", async (req, res) => {
   res.json(project);
 });
 
+projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const confirmCode = String(req.body?.confirmCode || req.query.confirmCode || "").trim();
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, code: true, name: true },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  if (!confirmCode || confirmCode.toUpperCase() !== project.code.toUpperCase()) {
+    return res.status(400).json({ error: `Type the project code ${project.code} to confirm delete.` });
+  }
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.lead.updateMany({ where: { projectId: project.id }, data: { projectId: null } });
+      await tx.deal.updateMany({ where: { projectId: project.id }, data: { projectId: null } });
+      await tx.dprSnapshot.deleteMany({ where: { projectId: project.id } });
+      await tx.wprSnapshot.deleteMany({ where: { projectId: project.id } });
+      await tx.customSheet.deleteMany({ where: { projectId: project.id } });
+      await tx.attendance.deleteMany({ where: { projectId: project.id } });
+      await tx.project.delete({ where: { id: project.id } });
+    });
+  } catch (err) {
+    console.warn("[project] delete:", err instanceof Error ? err.message : err);
+    return res.status(409).json({
+      error: err instanceof Error ? err.message : "Could not delete this project. Close linked records first.",
+    });
+  }
+  await audit("project.delete", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { code: project.code, name: project.name },
+  });
+  res.json({ ok: true, id: project.id, code: project.code });
+});
+
 projectsRouter.get("/:id/sheet-pack", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });

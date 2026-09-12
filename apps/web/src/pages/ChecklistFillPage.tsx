@@ -24,6 +24,9 @@ export default function ChecklistFillPage() {
   const [search] = useSearchParams();
   const family = search.get("family") || "SiteExecution";
   const resumeSubmissionId = search.get("submission") || "";
+  const queryDrawingId = search.get("drawing") || "";
+  const queryRevisionId = search.get("revision") || "";
+  const queryRfi = search.get("rfi") || "";
   const { token, user } = useAuth();
   const [editingSubmissionId, setEditingSubmissionId] = useState<string | null>(null);
   const [assignment, setAssignment] = useState<any>(null);
@@ -43,6 +46,7 @@ export default function ChecklistFillPage() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [rfiMeta, setRfiMeta] = useState<{ rfiId?: string; rfiNumber?: string }>({});
 
   const load = async () => {
     const [a, dwg] = await Promise.all([
@@ -78,7 +82,7 @@ export default function ChecklistFillPage() {
       } catch {
         saved = {};
       }
-      const metaRaw = saved._meta as Partial<ChecklistFillMeta> | undefined;
+      const metaRaw = saved._meta as (Partial<ChecklistFillMeta> & { rfiId?: string; rfiNumber?: string }) | undefined;
       if (metaRaw && typeof metaRaw === "object") {
         setFillMeta({
           reportNo: metaRaw.reportNo || "",
@@ -86,8 +90,13 @@ export default function ChecklistFillPage() {
           refDrawing: metaRaw.refDrawing || "",
           quantity: metaRaw.quantity || "",
         });
+        setRfiMeta({
+          rfiId: metaRaw.rfiId,
+          rfiNumber: metaRaw.rfiNumber || queryRfi || undefined,
+        });
       } else {
         setFillMeta(emptyChecklistMeta());
+        setRfiMeta(queryRfi ? { rfiNumber: queryRfi } : {});
       }
       Object.keys(init).forEach((itemId) => {
         const row = saved[itemId] || {};
@@ -102,6 +111,14 @@ export default function ChecklistFillPage() {
       setDraftId(null);
       setEditingSubmissionId(null);
       setFillMeta(emptyChecklistMeta());
+      setRfiMeta(queryRfi ? { rfiNumber: queryRfi } : {});
+    }
+    if (queryDrawingId) {
+      setDrawingId(queryDrawingId);
+      const dwgMatch = published.find((d) => d.id === queryDrawingId);
+      setRevisionId(
+        queryRevisionId || dwgMatch?.revisions?.find((r) => r.published)?.id || dwgMatch?.revisions?.[0]?.id || ""
+      );
     }
     setResponses(init);
   };
@@ -128,7 +145,7 @@ export default function ChecklistFillPage() {
       };
       if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
     });
-    payload._meta = { ...fillMeta };
+    payload._meta = { ...fillMeta, ...rfiMeta };
     return { payload, itemComments };
   }
 
@@ -200,15 +217,16 @@ export default function ChecklistFillPage() {
     }));
   }
 
-  const minPhotos = assignment?.template?.requirePhotosMin || 0;
+  const isDrawingCheck = family === "DrawingCheck";
+  const drawingLocked = Boolean(queryDrawingId);
+  const requireDrawing = !isDrawingCheck && !drawingLocked && drawings.length > 0;
+  const minPhotos = isDrawingCheck ? 0 : assignment?.template?.requirePhotosMin || 0;
   const photoTotal = useMemo(() => {
     const overall = photos.length;
     const linePhotos = Object.values(responses).reduce((s, r) => s + (r.photos?.length || 0), 0);
     const links = Object.values(responses).reduce((s, r) => s + (r.evidenceLinks?.filter(Boolean).length || 0), 0);
     return overall + linePhotos + links;
   }, [photos, responses]);
-
-  const requireDrawing = family !== "DrawingCheck" && drawings.length > 0;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -310,6 +328,15 @@ export default function ChecklistFillPage() {
       onDrawingId={setDrawingId}
       onRevisionId={setRevisionId}
       requireDrawing={requireDrawing}
+      showDrawingPicker={!isDrawingCheck && !drawingLocked}
+      showEvidence={!isDrawingCheck}
+      lockedDrawingLabel={
+        drawingId
+          ? `${drawings.find((d) => d.id === drawingId)?.drawingNumber || "Drawing"}${
+              selectedRevisionNumber() ? ` · ${selectedRevisionNumber()}` : ""
+            }${queryRfi ? ` · ${queryRfi}` : ""}`
+          : queryRfi || undefined
+      }
       overallPhotos={photos}
       onOverallPhotos={setPhotos}
       onSignature={setSignatureFile}

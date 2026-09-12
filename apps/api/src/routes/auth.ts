@@ -93,6 +93,7 @@ usersRouter.use(requireAuth);
 
 usersRouter.get("/", requireRoles("admin", "office"), async (_req, res) => {
   const users = await prisma.user.findMany({
+    where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
     select: { id: true, email: true, fullName: true, role: true, portal: true, phone: true, isActive: true },
     orderBy: { fullName: "asc" },
   });

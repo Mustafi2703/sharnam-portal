@@ -135,11 +135,16 @@ export default function DrawingsPage() {
     }
   }
 
-  function launchDrawingCheck(mode: "register" | "revision") {
+  function launchDrawingCheck(mode: "register" | "revision", drawing?: { id: string; revisions?: { id: string; published?: boolean }[] }) {
     if (!id) return false;
     setPrecheckMode(mode);
     precheckModeRef.current = mode;
-    openDrawingCheckWindow(id, mode);
+    const latest = drawing?.revisions?.find((r) => r.published) || drawing?.revisions?.[0];
+    openDrawingCheckWindow(
+      id,
+      mode,
+      mode === "revision" && drawing ? { drawingId: drawing.id, revisionId: latest?.id } : undefined
+    );
     setPrecheckOpen(true);
     return true;
   }
@@ -494,7 +499,7 @@ export default function DrawingsPage() {
       revisionLabel: `${next} — ${new Date().toLocaleDateString()}`,
       publish: true,
     });
-    if (!launchDrawingCheck("revision")) return;
+    if (!launchDrawingCheck("revision", d)) return;
     setMsg("Complete Drawing Check Master in the popup window — revision upload unlocks after.");
   }
 

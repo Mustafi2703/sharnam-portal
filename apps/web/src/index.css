@@ -889,44 +889,53 @@ html.is-standalone-form #root {
 }
 @media (min-width: 1024px) {
   .spdc-register-meta {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(12rem, 1fr));
   }
 }
 .spdc-register-meta__label {
   flex-shrink: 0;
-  min-width: 5.25rem;
-  padding: 0.45rem 0.55rem;
+  min-width: 6.5rem;
+  max-width: 8rem;
+  padding: 0.5rem 0.6rem;
   border-right: 1px solid var(--color-line);
   background: color-mix(in srgb, var(--color-sand) 72%, white);
   font-weight: 700;
   color: #0f172a;
+  line-height: 1.3;
+  white-space: normal;
 }
 .spdc-register-meta__cell {
   display: flex;
   min-width: 0;
+  min-height: 2.75rem;
   border-right: 1px solid var(--color-line);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 .spdc-register-meta__cell:last-child {
   border-right: 0;
 }
 .spdc-register-meta__value {
-  padding: 0.2rem 0.35rem;
+  padding: 0.4rem 0.55rem;
   color: var(--color-ink);
   overflow: visible;
   min-width: 0;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
 }
 .spdc-register-meta__cell .register-sheet-cell {
   width: 100%;
   min-width: 0;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
   border: 1px solid color-mix(in srgb, var(--color-line) 80%, transparent);
   border-radius: 0.25rem;
   background: #fff;
-  padding: 0.15rem 0.35rem;
+  padding: 0.25rem 0.45rem;
+  line-height: 1.35;
 }
 .spdc-register-meta__cell .register-sheet-cell:focus-within {
   border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-line));

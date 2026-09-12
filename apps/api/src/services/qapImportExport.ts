@@ -245,7 +245,7 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
     await wb.xlsx.readFile(templatePath);
     const ws = wb.worksheets.find((s) => /sheet1/i.test(s.name)) || wb.worksheets[0];
     if (ws) {
-      ws.getCell("C2").value = project.name;
+      ws.getCell("C2").value = [project.name, project.location].filter(Boolean).join(" — ");
       ws.getCell("C3").value = project.clientName || "";
       ws.getCell("C4").value = project.designConsultant || "";
       ws.getCell("C5").value = project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)";

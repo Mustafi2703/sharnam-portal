@@ -5,6 +5,7 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
+import { isChecklistFillRfiKind } from "../services/ensureFillRequestDraft.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -272,6 +273,22 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   } catch {
     /* email optional */
   }
+  if (isChecklistFillRfiKind(rfiKind) && rfi.linkedAssignmentId) {
+    try {
+      const { ensureFillRequestDraft } = await import("../services/ensureFillRequestDraft.js");
+      await ensureFillRequestDraft(prisma, {
+        rfiId: rfi.id,
+        rfiNumber: rfi.number,
+        subject: rfi.subject,
+        assignmentId: rfi.linkedAssignmentId,
+        createdById: req.user!.id,
+        assignedToId: rfi.assignedToId,
+        drawingId: rfi.linkedDrawingId,
+      });
+    } catch (err) {
+      console.warn("[RFI] fill-request draft:", err instanceof Error ? err.message : err);
+    }
+  }
   res.status(201).json({ ...rfi, sharePointExports });
 });
 
@@ -513,6 +530,12 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
           createdById: req.user!.id,
           ...rfiEmailContextFromRecord(closedRfi, project, assignment?.template?.name || null),
         });
+      }
+      try {
+        const { refreshQualityPackAfterChange } = await import("../services/checklistWeekAdvance.js");
+        await refreshQualityPackAfterChange(existing.projectId, req.user!.id);
+      } catch (err) {
+        console.warn("[RFI] quality pack refresh:", err instanceof Error ? err.message : err);
       }
     } else {
       const { notifyRfiStatus } = await import("../services/ncrNotify.js");

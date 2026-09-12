@@ -108,6 +108,18 @@ if (skipAllSeed) {
   } catch {
     console.warn("WARN: Arvind week pack skipped (non-fatal — run npm run db:walk-arvind-week)");
   }
+
+  try {
+    console.log("==> Keep Baibhab + Twinoxis test + SPDC live team; prune leftover demo logins…");
+    execSync("npx tsx seed/prune-demo-users.ts", {
+      stdio: "inherit",
+      env: seedEnv,
+      cwd: rootDir,
+      timeout: 120_000,
+    });
+  } catch {
+    console.warn("WARN: prune leftover users skipped (non-fatal)");
+  }
 }
 
 process.exit(0);

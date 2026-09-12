@@ -311,5 +311,15 @@ export async function seedSpdcLiveTeam(db: PrismaClient = prisma) {
     console.warn("Vendor portal links for UAT team:", e instanceof Error ? e.message : e);
   }
 
+  try {
+    const { pruneDemoUsers } = await import("./pruneDemoUsers.js");
+    const pruned = await pruneDemoUsers(db);
+    if (pruned.removed.length) {
+      console.log(`[live-team] pruned ${pruned.removed.length} leftover logins`);
+    }
+  } catch (e) {
+    console.warn("Prune leftover users:", e instanceof Error ? e.message : e);
+  }
+
   return { project, userIds, meeting, rfi, password: PASSWORD, notify: ALL_NOTIFY };
 }

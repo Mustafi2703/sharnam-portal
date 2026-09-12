@@ -89,3 +89,15 @@ export async function advanceProjectWeeksAfterFill(opts: {
     checklistType: opts.checklistType || null,
   };
 }
+
+/** Republish QAP + cube + quality dashboard after a fill, review, or RFI close — no extra week copy. */
+export async function refreshQualityPackAfterChange(projectId: string, userId: string) {
+  try {
+    const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
+    const published = await publishQualityPackToDrive(projectId, userId);
+    return published.length;
+  } catch (err) {
+    console.warn("[checklist] quality pack refresh:", err instanceof Error ? err.message : err);
+    return 0;
+  }
+}

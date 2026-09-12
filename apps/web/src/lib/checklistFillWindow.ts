@@ -14,7 +14,13 @@ export function openChecklistFillWindow(
   projectId: string,
   assignmentId: string,
   family: string,
-  opts?: { resumeDraft?: boolean; submissionId?: string | null }
+  opts?: {
+    resumeDraft?: boolean;
+    submissionId?: string | null;
+    drawingId?: string;
+    revisionId?: string;
+    rfi?: string;
+  }
 ) {
   openInPageOverlay({
     kind: "checklist-fill",
@@ -23,6 +29,9 @@ export function openChecklistFillWindow(
     family: normalizeFillFamily(family),
     resumeDraft: opts?.resumeDraft,
     submissionId: opts?.submissionId,
+    drawingId: opts?.drawingId,
+    revisionId: opts?.revisionId,
+    rfi: opts?.rfi,
   });
   return window;
 }
@@ -32,8 +41,9 @@ export function checklistFillUrl(projectId: string, assignmentId: string, family
 }
 
 export function normalizeFillFamily(family: string): string {
-  if (family === "SafetyChecklist") return "Safety";
+  if (family === "SafetyChecklist" || family === "SafetyIR") return "Safety";
   if (family === "QualityIR") return "QualityInspection";
+  if (family === "DrawingChecklist" || family === "RequestForInformation" || family === "Manual") return "DrawingCheck";
   return family;
 }
 

@@ -15,6 +15,8 @@ import { openNcrFormWindow, ncrComplianceSummary } from "../../lib/ncrFormFields
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistSummaryPanel";
 import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
+import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
+import { CHECKLIST_FILLED_MESSAGE } from "../../lib/inPageOverlay";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
@@ -121,6 +123,22 @@ export default function InspectionsPage() {
     void load();
   }, [id, token]);
 
+  useEffect(() => {
+    function reload() {
+      void load();
+    }
+    function onMsg(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === CHECKLIST_FILLED_MESSAGE && (!e.data.projectId || e.data.projectId === id)) reload();
+    }
+    window.addEventListener("message", onMsg);
+    window.addEventListener(CHECKLIST_FILLED_MESSAGE, reload);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      window.removeEventListener(CHECKLIST_FILLED_MESSAGE, reload);
+    };
+  }, [id, token]);
+
   const selected = data?.inspections?.find((i: any) => i.id === active);
   const canFillSelected =
     !!selected &&
@@ -224,6 +242,15 @@ export default function InspectionsPage() {
 
       {sheetKey === "" && dash && (
         <div className="space-y-4">
+          {project && (
+            <RegisterBrandHeader
+              title="Quality dashboard"
+              project={project}
+              token={token}
+              canEdit={canManage}
+              onProjectUpdated={() => void load()}
+            />
+          )}
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
@@ -246,6 +273,8 @@ export default function InspectionsPage() {
               ["Open fill RFIs", dash.totals.openFillRfis, null],
               ["QAP open / done", `${dash.totals.qapOpen} / ${dash.totals.qapDone}`, `/projects/${id}/qap`],
               ["Site execution fills", dash.totals.siteExecutionFills ?? 0, null],
+              ["Drawing-check fills", dash.totals.drawingCheckFills ?? 0, `/projects/${id}/drawings/checklist-logs`],
+              ["Requested fills", dash.totals.requestedFills ?? 0, `/projects/${id}/quality/checklist-logs`],
             ].map(([l, v, href]) =>
               href ? (
                 <Link key={l as string} to={href} className="block">

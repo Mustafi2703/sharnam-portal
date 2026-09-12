@@ -18,13 +18,15 @@ import { drawingUnlockStorageKey, notifyDrawingUnlock } from "../lib/drawingChec
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
 /**
- * Drawing Check Master popup — same fill chrome as QI / Safety / site / activity
- * (Yes/No/N.A., comments, optional photos & files). Submit unlocks GFC upload.
+ * Drawing Check Master popup — Yes/No/N.A. items only (no photos/links).
+ * Revision upload auto-binds the sheet. New register upload has no drawing yet.
  */
 export default function DrawingPreCheckPage() {
   const { id: projectId } = useParams();
   const [searchParams] = useSearchParams();
   const revisionMode = searchParams.get("mode") === "revision";
+  const lockedDrawingId = searchParams.get("drawing") || "";
+  const lockedRevisionId = searchParams.get("revision") || "";
   const { token, user } = useAuth();
   useStandaloneFormPage();
 
@@ -74,11 +76,18 @@ export default function DrawingPreCheckPage() {
           init[i.id] = emptyChecklistLine();
         });
         const draft = t.myDraft;
+        if (lockedDrawingId) {
+          setDrawingId(lockedDrawingId);
+          const dwgMatch = (dwg || []).find((d) => d.id === lockedDrawingId);
+          setRevisionId(
+            lockedRevisionId || dwgMatch?.revisions?.find((r) => r.published)?.id || dwgMatch?.revisions?.[0]?.id || ""
+          );
+        }
         if (draft) {
           setDraftId(draft.id);
           setRemarks(draft.remarks || "");
-          if (draft.drawingId) setDrawingId(draft.drawingId);
-          if (draft.revisionId) setRevisionId(draft.revisionId);
+          if (!lockedDrawingId && draft.drawingId) setDrawingId(draft.drawingId);
+          if (!lockedRevisionId && !lockedDrawingId && draft.revisionId) setRevisionId(draft.revisionId);
           let saved: Record<string, { answer?: string; remarks?: string; evidenceLinks?: string[] } & Partial<ChecklistFillMeta>> = {};
           try {
             saved = JSON.parse(draft.responsesJson || "{}");
@@ -107,7 +116,7 @@ export default function DrawingPreCheckPage() {
         setResponses(init);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load Drawing Check Master"));
-  }, [projectId, token]);
+  }, [projectId, token, lockedDrawingId, lockedRevisionId]);
 
   function patchLine(itemId: string, patch: Partial<ChecklistFillLine>) {
     setResponses((prev) => ({
@@ -267,7 +276,11 @@ export default function DrawingPreCheckPage() {
       family="DrawingCheck"
       eyebrow="Drawings · pre-upload gate"
       title={template?.name || "Drawing Check Master"}
-      subtitle={revisionMode ? "Fill before revision upload unlocks" : "Fill before GFC upload unlocks"}
+      subtitle={
+        revisionMode
+          ? "Items only — this sheet and revision are already selected. Unlock revision upload."
+          : "Items only — complete before a new GFC is added to the register."
+      }
       category="Drawing Check Master"
       items={items}
       sections={sections}
@@ -283,11 +296,20 @@ export default function DrawingPreCheckPage() {
       onDrawingId={setDrawingId}
       onRevisionId={setRevisionId}
       requireDrawing={false}
+      showDrawingPicker={false}
+      showEvidence={false}
+      lockedDrawingLabel={
+        drawingId
+          ? `${drawings.find((d) => d.id === drawingId)?.drawingNumber || "Drawing"}${
+              selectedRevisionNumber() ? ` · ${selectedRevisionNumber()}` : ""
+            }`
+          : undefined
+      }
       overallPhotos={photos}
       onOverallPhotos={setPhotos}
       onSignature={setSignatureFile}
       signerName={user?.fullName || user?.email || undefined}
-      minPhotos={template?.requirePhotosMin || 0}
+      minPhotos={0}
       photoTotal={photoTotal}
       answered={answered}
       canFill={canFill}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, PageHeader } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
@@ -13,6 +13,22 @@ type SetupSummary = {
   project: { id: string; code: string; name: string; clientName?: string | null; clientEmail?: string | null };
   members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string }[];
   vendors: { id: string; vendorId: string; name: string; partyType: string; email?: string | null }[];
+};
+
+type ProjectCard = {
+  id: string;
+  code: string;
+  name: string;
+  clientName?: string | null;
+  clientContactName?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  clientAddress?: string | null;
+  clientGst?: string | null;
+  location?: string | null;
+  designConsultant?: string | null;
+  contractorName?: string | null;
+  pmcName?: string | null;
 };
 
 type SetupStatus = { ready: boolean; checks: { key: string; ok: boolean; label: string; detail?: string }[] };
@@ -35,16 +51,19 @@ export default function LiveProjectSetupPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [accessSlip, setAccessSlip] = useState<{ email: string; tempPassword?: string }[]>([]);
+  const [card, setCard] = useState<ProjectCard | null>(null);
 
   const load = useCallback(async () => {
     if (!token || !projectId) return;
-    const [s, st, ov, u, v] = await Promise.all([
+    const [s, st, ov, u, v, proj] = await Promise.all([
       api<SetupSummary>(`/api/projects/${projectId}/setup-summary`, { token }),
       api<SetupStatus>(`/api/projects/${projectId}/setup-status`, { token }).catch(() => null),
       api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${projectId}/overview`, { token }).catch(() => null),
       api<UserRow[]>("/api/users", { token }).catch(() => []),
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
+      api<ProjectCard>(`/api/projects/${projectId}`, { token }).catch(() => null),
     ]);
+    if (proj) setCard(proj);
     setSummary(s);
     setStatus(st);
     setOverview(ov);
@@ -60,6 +79,36 @@ export default function LiveProjectSetupPage() {
 
   function rememberVendor(v: SetupVendor) {
     setVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, v]));
+  }
+
+  async function saveCard() {
+    if (!token || !projectId || !card) return;
+    setBusy(true);
+    try {
+      await api(`/api/projects/${projectId}/settings`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          name: card.name,
+          clientName: card.clientName,
+          clientContactName: card.clientContactName,
+          clientEmail: card.clientEmail,
+          clientPhone: card.clientPhone,
+          clientAddress: card.clientAddress,
+          clientGst: card.clientGst,
+          location: card.location,
+          designConsultant: card.designConsultant,
+          contractorName: card.contractorName,
+          pmcName: card.pmcName,
+        }),
+      });
+      setMsg("Project card saved — QAP, cube, and register headers will show these names.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Save project card failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveParties() {
@@ -125,7 +174,7 @@ export default function LiveProjectSetupPage() {
       <PageHeader
         eyebrow="Live project"
         title={summary ? `Set up ${summary.project.code}` : "Project setup"}
-        subtitle="Allocate SPDC people, add vendors (email required), fill the comms matrix, then complete setup and issue logins."
+        subtitle="Fill the project / design header first so QAP and cube sheets are readable, then allocate people, add vendors, fill the comms matrix, and launch."
       />
       {msg && <p className="text-sm text-ok">{msg}</p>}
       {status && (
@@ -137,6 +186,90 @@ export default function LiveProjectSetupPage() {
             </Badge>
           ))}
         </div>
+      )}
+
+      {card && (
+        <Card className="!p-4 space-y-3">
+          <div>
+            <h3 className="font-semibold text-sm">Project · design · PMC header</h3>
+            <p className="text-xs text-steel-muted mt-0.5">
+              These names print at the top of QAP, cube, and quality registers. Keep them short and complete.
+            </p>
+          </div>
+          <form
+            className="grid sm:grid-cols-2 gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveCard();
+            }}
+          >
+            <Input disabled value={card.code} placeholder="Project code" />
+            <Input
+              required
+              placeholder="Project name"
+              value={card.name || ""}
+              onChange={(e) => setCard({ ...card, name: e.target.value })}
+            />
+            <Input
+              placeholder="Client organisation"
+              value={card.clientName || ""}
+              onChange={(e) => setCard({ ...card, clientName: e.target.value })}
+            />
+            <Input
+              required
+              placeholder="Site / city"
+              value={card.location || ""}
+              onChange={(e) => setCard({ ...card, location: e.target.value })}
+            />
+            <Input
+              placeholder="PMC / SPDC"
+              value={card.pmcName || ""}
+              onChange={(e) => setCard({ ...card, pmcName: e.target.value })}
+            />
+            <Input
+              placeholder="Design consultant"
+              value={card.designConsultant || ""}
+              onChange={(e) => setCard({ ...card, designConsultant: e.target.value })}
+            />
+            <Input
+              placeholder="Main contractor"
+              value={card.contractorName || ""}
+              onChange={(e) => setCard({ ...card, contractorName: e.target.value })}
+            />
+            <Input
+              placeholder="Client GST"
+              value={card.clientGst || ""}
+              onChange={(e) => setCard({ ...card, clientGst: e.target.value })}
+            />
+            <Input
+              placeholder="Client contact"
+              value={card.clientContactName || ""}
+              onChange={(e) => setCard({ ...card, clientContactName: e.target.value })}
+            />
+            <Input
+              type="email"
+              placeholder="Client email"
+              value={card.clientEmail || ""}
+              onChange={(e) => setCard({ ...card, clientEmail: e.target.value })}
+            />
+            <Input
+              placeholder="Client phone"
+              value={card.clientPhone || ""}
+              onChange={(e) => setCard({ ...card, clientPhone: e.target.value })}
+            />
+            <Input
+              className="sm:col-span-2"
+              placeholder="Client office address"
+              value={card.clientAddress || ""}
+              onChange={(e) => setCard({ ...card, clientAddress: e.target.value })}
+            />
+            <div className="sm:col-span-2">
+              <Button type="submit" variant="secondary" disabled={busy}>
+                Save project card
+              </Button>
+            </div>
+          </form>
+        </Card>
       )}
 
       <div className="grid lg:grid-cols-2 gap-4">

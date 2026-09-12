@@ -28,6 +28,7 @@
     "db:seed-closure-drawings": "tsx seed/closureDrawingsDemo.ts",
     "db:seed-demo-screenshots": "tsx seed/demoScreenshotsPack.ts",
     "db:seed-live-team": "tsx seed/spdcLiveTeam.ts",
+    "db:prune-demo-users": "tsx seed/prune-demo-users.ts",
     "db:seed-uat-live": "tsx seed/uatLiveProject.ts",
     "db:seed-arvind": "tsx seed/runArvindSitePack.ts",
     "db:audit-arvind-sheets": "tsx scripts/audit-arvind-sheets.mts",
