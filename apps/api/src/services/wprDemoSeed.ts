@@ -72,6 +72,55 @@ export async function seedWprDemoWeek(
     },
   });
 
+  return publishExistingWpr(prisma, projectId, weekEnd, {
+    header,
+    sections,
+    snapshotId: snapshot.id,
+  });
+}
+
+/** Same files the WPR Maker Publish button writes — XLSX, client pack, PPTX. */
+export async function publishExistingWpr(
+  prisma: PrismaClient,
+  projectId: string,
+  weekEndRaw: Date,
+  opts?: {
+    header?: WprHeader;
+    sections?: Record<string, unknown>;
+    snapshotId?: string;
+  }
+) {
+  const weekEnd = snapWeekEnding(weekEndRaw);
+  const weekStart = new Date(weekEnd);
+  weekStart.setDate(weekEnd.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new Error(`Project ${projectId} not found`);
+
+  const snapshot = opts?.snapshotId
+    ? await prisma.wprSnapshot.findUnique({ where: { id: opts.snapshotId } })
+    : await prisma.wprSnapshot.findUnique({
+        where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
+      });
+  if (!snapshot) throw new Error(`No WPR draft for ${project.code} week ending ${weekEnd.toISOString().slice(0, 10)}`);
+
+  const sections = (opts?.sections || JSON.parse(snapshot.sectionsJson || "{}")) as Record<string, unknown>;
+  const header: WprHeader =
+    opts?.header ||
+    {
+      projectName: project.name,
+      projectCode: project.code,
+      reportNumber: snapshot.reportNumber || undefined,
+      weekStart: weekStart.toISOString(),
+      weekEnd: weekEnd.toISOString(),
+      clientName: project.clientName || "",
+      designConsultant: project.designConsultant || "",
+      contractorName: project.contractorName || "",
+      location: project.location || "",
+      pmc: "Sharnam Project Development Consultants & Co.",
+    };
+
   const dateStr = weekEnd.toISOString().slice(0, 10);
   const startStr = weekStart.toISOString().slice(0, 10);
   const spdcBuf = await buildWprWorkbook({ header, sections });
@@ -102,12 +151,24 @@ export async function seedWprDemoWeek(
     publishedPath = `${folder}/${spdcName}`;
   }
 
-  if (publishedPath !== snapshot.publishedPath || publishedUrl) {
-    await prisma.wprSnapshot.update({
-      where: { id: snapshot.id },
-      data: { publishedPath, publishedUrl },
-    });
-  }
+  await prisma.wprSnapshot.update({
+    where: { id: snapshot.id },
+    data: {
+      status: "Published",
+      publishedAt: new Date(),
+      publishedPath,
+      publishedUrl,
+    },
+  });
 
-  return { weekEnd, weekStart, reportNumber, publishedPath, publishedUrl, spdcName, clientName, pptxName };
+  return {
+    weekEnd,
+    weekStart,
+    reportNumber: snapshot.reportNumber,
+    publishedPath,
+    publishedUrl,
+    spdcName,
+    clientName,
+    pptxName,
+  };
 }

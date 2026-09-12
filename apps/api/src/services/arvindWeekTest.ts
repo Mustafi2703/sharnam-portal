@@ -73,12 +73,18 @@ async function jobReport(
     select: { logDate: true },
   });
   const dprDays = new Set(snaps.map((s) => s.logDate.toISOString().slice(0, 10))).size;
-  const wpr = await db.wprSnapshot.count({ where: { projectId: project.id } });
+  const wprRows = await db.wprSnapshot.findMany({
+    where: { projectId: project.id },
+    select: { status: true, publishedPath: true },
+  });
+  const wpr = wprRows.length;
+  const wprPublished = wprRows.filter((w) => w.status === "Published" && w.publishedPath).length;
   const fills = await countFills(db, project.id, weekStart, weekEnd);
   const pack = await verifyPackCompleteness(project.id, { logDate: weekStart });
 
   if (dprDays < 7) errors.push(`Expected 7 DPR days, got ${dprDays}`);
   if (wpr < 1) errors.push("No WPR snapshot");
+  if (wprPublished < 1) errors.push("WPR not published with download files");
   if (fills.total < 1) errors.push("No checklist fills in the week window");
   if (!pack.summary.readyForDpr) errors.push("Pack not readyForDpr");
   if (!pack.summary.readyForWpr) errors.push("Pack not readyForWpr");

@@ -17,7 +17,7 @@ import { syncDrawingRegisterToProject, syncDciArvindDrawings } from "./drawingRe
 import { upsertScurveRegisterPoints } from "./msProjectSchedule.js";
 import { seedDprDemoDay } from "./dprDemoDaySeed.js";
 import { overlayChecklistFillKpis, seedWprSections } from "./wprSeedSections.js";
-import { snapWeekEnding } from "./wprDemoSeed.js";
+import { publishExistingWpr, snapWeekEnding } from "./wprDemoSeed.js";
 import { buildJulyWprPack } from "./wprJulyWorkbook.js";
 import { importWprTrackerPack, importPrInvoiceFromWorkbook } from "./wprTrackerPackImport.js";
 import { seedChecklistFillsFromDashboard, checklistFillSummary } from "./qualityChecklistFills.js";
@@ -374,6 +374,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
   const ntxDprs = await seedWeekDprs(db, ntx.id, office.id, ntxWeekStart, 7);
   const ntxSections = await seedWprSections(db, ntx.id, ntxWeekStart, ntxWeekEnd);
   await saveWprSnapshot(db, ntx.id, office.id, ntxWeekEnd, ntxSections, 3);
+  const ntxWprFiles = await publishExistingWpr(db, ntx.id, ntxWeekEnd);
 
   const dormDprs = await seedWeekDprs(db, dorm.id, office.id, dormWeekStart, 7);
   const dormFillKpis = {
@@ -395,6 +396,15 @@ export async function seedArvindSitePack(db: PrismaClient) {
     console.warn("July WPR pack:", err instanceof Error ? err.message : err);
     const secs = await seedWprSections(db, dorm.id, dormWeekStart, new Date("2026-07-29T12:00:00"));
     await saveWprSnapshot(db, dorm.id, office.id, new Date("2026-07-29T12:00:00"), secs, 52);
+  }
+  const dormWprFiles = await publishExistingWpr(db, dorm.id, new Date("2026-07-29T12:00:00"));
+
+  try {
+    const { seedFinanceRaCopDemo } = await import("./financeRaCopDemoSeed.js");
+    await seedFinanceRaCopDemo(db, ntx.id, office.id);
+    await seedFinanceRaCopDemo(db, dorm.id, office.id);
+  } catch (err) {
+    console.warn("Arvind RA / COP demo:", err instanceof Error ? err.message : err);
   }
 
   const mpp = findWorkbook([
@@ -422,6 +432,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
       scurvePoints: ntxScurve,
       checklists: ntxFills,
       dprDays: ntxDprs,
+      wpr: { week: "1–7 Sep 2026", reportNumber: 3, files: ntxWprFiles },
     },
     dormitory: {
       id: dorm.id,
@@ -435,7 +446,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
       hse: dormHse,
       checklists: dormFills,
       dprDays: dormDprs,
-      wpr: { week: "23–29 Jul 2026", reportNumber: 52 },
+      wpr: { week: "23–29 Jul 2026", reportNumber: 52, files: dormWprFiles },
     },
     portalInvites,
     mpp: mpp ? path.basename(mpp) : null,
