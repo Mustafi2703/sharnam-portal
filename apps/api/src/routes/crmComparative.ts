@@ -293,6 +293,16 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
 
   await ensureVendorBoqTemplateSheets(prisma, pkg.id, vendorNames, selectedDisciplines, req.user!.id);
 
+  let seededBoqs: { uploaded: number; total: number } | null = null;
+  if (project) {
+    try {
+      const { seedBidPackageR2Boqs } = await import("../services/crmVendorBoqSeed.js");
+      seededBoqs = await seedBidPackageR2Boqs(prisma, pkg.id, req.user!.id, { force: false });
+    } catch (err) {
+      console.warn("[CRM] test BOQ seed on create failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
   await audit("crm.comparative.create", {
     userId: req.user!.id,
     entity: "CrmBidPackage",
@@ -309,6 +319,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     disciplines: selectedDisciplines,
     comparativeSheetId: masterSheet.id,
     summarySheetId: summarySheet.id,
+    seededBoqs,
     uploadProgress: {
       done: pkgWithSheets?.vendorBoqs.filter((b) => b.sheetId).length ?? 0,
       total: pkgWithSheets?.vendorBoqs.length ?? 0,
@@ -744,6 +755,18 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
   if (!pkg) return res.status(404).json({ error: "bid package not found" });
   if (!pkg.projectId) return res.status(400).json({ error: "Link a project before opening the bid" });
 
+  const filled = await prisma.crmVendorBoq.count({
+    where: { bidPackageId: pkg.id, OR: [{ uploadedAt: { not: null } }, { fileName: { not: null } }, { sheetId: { not: null } }] },
+  });
+  if (filled === 0) {
+    try {
+      const { seedBidPackageR2Boqs } = await import("../services/crmVendorBoqSeed.js");
+      await seedBidPackageR2Boqs(prisma, pkg.id, req.user!.id, { force: false });
+    } catch (err) {
+      console.warn("[CRM] test BOQ seed on open failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
   const dueDate = req.body.dueDate ? new Date(String(req.body.dueDate)) : pkg.dueDate;
 
   await prisma.crmBidPackage.update({
@@ -782,19 +805,37 @@ crmComparativeRouter.post("/bid-packages/:id/award", requireRoles("admin", "offi
     ? await prisma.vendor.findUnique({ where: { id: vendorIdIn }, select: { id: true, name: true } })
     : await prisma.vendor.findFirst({ where: { name: vendorLabel }, select: { id: true, name: true } });
 
-  const pkg = await prisma.crmBidPackage.update({
+  const existing = await prisma.crmBidPackage.findUnique({
     where: { id: req.params.id },
+    select: { id: true, projectId: true },
+  });
+  if (!existing) return res.status(404).json({ error: "bid package not found" });
+
+  const pkg = await prisma.crmBidPackage.update({
+    where: { id: existing.id },
     data: { status: "Awarded", awardedVendorId: vendor?.id ?? null },
   });
+
+  let access: { projectId: string; email?: string | null; created?: boolean; tempPassword?: string } | null = null;
+  if (existing.projectId && vendor?.id) {
+    const { openAwardedProjectForVendor } = await import("../services/crmVendorCredentials.js");
+    const opened = await openAwardedProjectForVendor({ projectId: existing.projectId, vendorId: vendor.id });
+    access = {
+      projectId: existing.projectId,
+      email: opened.email || opened.login?.email,
+      created: opened.login?.created,
+      tempPassword: opened.login?.tempPassword,
+    };
+  }
 
   await audit("crm.comparative.award", {
     userId: req.user!.id,
     entity: "CrmBidPackage",
     entityId: pkg.id,
-    meta: { vendorId: vendor?.id || vendorIdIn, vendorLabel: vendor?.name || vendorLabel },
+    meta: { vendorId: vendor?.id || vendorIdIn, vendorLabel: vendor?.name || vendorLabel, projectOpened: !!access },
   });
 
-  res.json(pkg);
+  res.json({ ...pkg, access });
 });
 
 /** Vendor / contractor — upload discipline BOQs for assigned bid slots. */

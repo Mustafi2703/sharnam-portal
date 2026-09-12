@@ -51,7 +51,7 @@ type BidPackage = {
   } | null;
 };
 
-const SHOW_DEV_BID_TOOLS = import.meta.env.DEV;
+const SHOW_DEV_BID_TOOLS = true;
 
 function formatINR(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
@@ -234,7 +234,7 @@ export default function CrmBidComparePage() {
         token,
         body: JSON.stringify({ force: true }),
       });
-      setMsg(`Simulated vendor BOQ uploads from R2 template: ${r.uploaded}/${r.total} disciplines filled.`);
+      setMsg(`Test BOQs loaded from the R2 comparative workbook: ${r.uploaded}/${r.total} disciplines filled. Refresh comparative to award.`);
       await loadDetail(selectedId);
       await load();
     } catch (err) {
@@ -396,7 +396,11 @@ export default function CrmBidComparePage() {
         }),
       });
       setMsg(
-        `Bid package created (Draft) — ${row.uploadProgress?.total || form.disciplineKeys.length * vendorNames.length} BOQ slots. Open the bid to email bidders.`,
+        `Bid package created — test BOQs loaded from the R2 comparative workbook${
+          (row as BidPackage & { seededBoqs?: { uploaded: number; total: number } }).seededBoqs
+            ? ` (${(row as BidPackage & { seededBoqs?: { uploaded: number; total: number } }).seededBoqs?.uploaded}/${(row as BidPackage & { seededBoqs?: { uploaded: number; total: number } }).seededBoqs?.total} slots)`
+            : ""
+        }. Refresh comparative, then award. Open the bid to email bidders.`,
       );
       setForm({
         title: "",
@@ -543,17 +547,23 @@ export default function CrmBidComparePage() {
 
   async function awardVendor(vendorLabel: string) {
     if (!selectedId) return;
-    if (!window.confirm(`Award "${vendorLabel}" as the successful bidder for "${detail?.title}"? The comparative is locked and the package status moves to "Awarded".`)) return;
+    if (!window.confirm(`Award "${vendorLabel}" as the successful bidder for "${detail?.title}"? The comparative locks and that vendor can open the project desk (checklists, RFIs) — no clock-in.`)) return;
     setBusy(true);
     setMsg("");
     try {
       const vendorId = vendors.find((v) => v.name === vendorLabel)?.id;
-      await api(`/api/crm/bid-packages/${selectedId}/award`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ vendorLabel, vendorId }),
-      });
-      setMsg(`Awarded to ${vendorLabel}. Package locked.`);
+      const out = await api<{ access?: { projectId?: string; email?: string; tempPassword?: string } }>(
+        `/api/crm/bid-packages/${selectedId}/award`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({ vendorLabel, vendorId }),
+        },
+      );
+      const slip = out.access?.email
+        ? ` Vendor login ${out.access.email}${out.access.tempPassword ? ` · ${out.access.tempPassword}` : ""}.`
+        : "";
+      setMsg(`Awarded to ${vendorLabel}. Project opened on their contractor desk.${slip}`);
       await loadDetail(selectedId);
       await load();
     } catch (err) {
@@ -1053,7 +1063,7 @@ export default function CrmBidComparePage() {
                     </Button>
                     {SHOW_DEV_BID_TOOLS && canManage && (
                       <Button type="button" variant="secondary" disabled={busy} onClick={() => void simulateR2Boqs()}>
-                        Simulate R2 BOQ uploads
+                        Load test BOQs from R2
                       </Button>
                     )}
                   </div>

@@ -22,7 +22,8 @@ export default function ProjectHomePage() {
   const [packMsg, setPackMsg] = useState("");
   const [projectCard, setProjectCard] = useState<ManageableProject | null>(null);
   const isClient = user?.role === "client";
-  const canUpload = user && user.role !== "client";
+  const isVendor = user?.role === "vendor";
+  const canUpload = user && user.role !== "client" && user.role !== "vendor";
   const canManageProject = user?.role === "admin" || user?.role === "office";
 
   useEffect(() => {
@@ -56,7 +57,18 @@ export default function ProjectHomePage() {
   const s = overview?.stats || {};
   const pt = progress?.totals || {};
 
-  const tools = isClient
+  const tools = isVendor
+    ? [
+        ["directory", "My sign-off", "Signature for checklist and report exports", "SIG", "#0B6A78"],
+        ["checklist", "Checklist fills", "Fill assigned quality / drawing-check sheets", "QA", "#2F6F4E"],
+        ["quality-inspections", "Quality inspections", "QI forms assigned to your company", "QI", "#2F6F4E"],
+        ["rfis", "RFIs + checklist requests", "Respond and fill linked checklists", "RFI", "#0B6A78"],
+        ["drawings/precheck", "Drawing check", "Fill the drawing-check gate", "DWG", "#E4632A"],
+        ["safety", "Safety fills", "Observations assigned to you", "SAF", "#1C4A5A"],
+        ["comms", "Meetings", "Agenda and MoM visibility", "MTG", "#C24D1A"],
+        ["photos", "Photos", "Upload field images for fills", "PIC", "#1C4A5A"],
+      ]
+    : isClient
     ? [
         ["directory", "My sign-off", "Upload signature for reports & checklists", "SIG", "#0B6A78"],
         ["drawings", "Drawings", "Published GFC sheets — view only", "DWG", "#E4632A"],
@@ -100,9 +112,9 @@ export default function ProjectHomePage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-brand mb-1">
-            {isClient ? "Client project desk" : "Project overview"}
+            {isVendor ? "Contractor project desk" : isClient ? "Client project desk" : "Project overview"}
           </p>
-          <h2 className="font-display text-2xl">{isClient ? "Project desk" : projectCard?.name || "Project overview"}</h2>
+          <h2 className="font-display text-2xl">{isClient || isVendor ? "Project desk" : projectCard?.name || "Project overview"}</h2>
           {projectCard?.code ? <p className="font-mono text-xs text-steel-muted mt-1">{projectCard.code}</p> : null}
         </div>
         {canUpload && (
@@ -138,11 +150,27 @@ export default function ProjectHomePage() {
             ) : null}
           </div>
         )}
+        {isVendor && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="!text-xs" onClick={() => navigate("/crm/vendor-bids")}>
+              Bid management
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/checklist`)}>
+              Checklists
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/rfis`)}>
+              RFIs
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/hub/quality`)}>
+              Quality
+            </Button>
+          </div>
+        )}
       </div>
 
       {id && token && <DirectoryMySignaturePanel projectId={id} token={token} compact />}
 
-      {!isClient && (
+      {!isClient && !isVendor && (
         <div className="space-y-2">
           <DailySheetWorkflow
             projectId={id!}

@@ -132,6 +132,11 @@ function VendorPackageCard({
           </p>
         )}
         <div className="flex flex-wrap gap-3 mt-1">
+          {summary?.isAwardedToYou && head?.projectId && (
+            <Link to={`/projects/${head.projectId}`} className="text-[11px] text-brand font-semibold">
+              Open awarded project desk →
+            </Link>
+          )}
           {head?.comparativeSharePointUrl && (
             <a
               href={head.comparativeSharePointUrl}
@@ -448,7 +453,9 @@ export default function CrmVendorBidsPage() {
       {desk === "projects" && (
         <Card className="!p-4 space-y-2">
           <h3 className="font-semibold text-sm">Jobs you can open</h3>
-          <p className="text-xs text-steel-muted">Opened when PMC completes setup or invites your company on a bid.</p>
+          <p className="text-xs text-steel-muted">
+            Opened when PMC invites your company on a bid or awards the comparative. No clock-in — fill checklists and RFIs on the project desk.
+          </p>
           {!myProjects.length && <p className="text-sm text-steel-muted">No project access yet — ask office to open a bid or assign your company.</p>}
           <ul className="divide-y divide-line">
             {myProjects.map((p) => (
@@ -466,6 +473,12 @@ export default function CrmVendorBidsPage() {
                   </Link>
                   <Link to={`/projects/${p.id}/hub/quality`} className="font-semibold text-brand">
                     Quality →
+                  </Link>
+                  <Link to={`/projects/${p.id}/checklist`} className="font-semibold text-brand">
+                    Checklists →
+                  </Link>
+                  <Link to="/crm/vendor-bids" className="font-semibold text-brand">
+                    Bids →
                   </Link>
                 </span>
               </li>

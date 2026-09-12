@@ -57,14 +57,14 @@ export const CRM_TOOLS = CRM_SECTIONS.flatMap((s) => s.tools);
 export const CRM_VENDOR_TOOLS = [
   {
     to: "vendor-bids",
-    label: "My bid uploads",
+    label: "Bid management",
     end: true,
-    subtitle: "Fill discipline BOQs online or upload Excel — comparative updates for PMC.",
+    subtitle: "Your BOQs, comparative totals, and award status — no clock-in.",
   },
   {
     to: "vendor-bids?desk=projects",
     label: "My projects",
-    subtitle: "Jobs opened to your company after bid invite or assignment.",
+    subtitle: "Jobs opened after bid invite or award — fill checklists and RFIs on the project desk.",
   },
   {
     to: "vendor-bids?desk=inbox",

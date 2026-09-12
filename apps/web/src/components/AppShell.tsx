@@ -84,7 +84,9 @@ const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
 
 /** Contractor portal — discipline BOQ uploads per project */
 const vendorContractorNav: { to: string; label: string; icon: ModuleIconKey }[] = [
-  { to: "/crm/vendor-bids", label: "My bid uploads", icon: "cost" },
+  { to: "/crm/vendor-bids", label: "Bid management", icon: "cost" },
+  { to: "/crm/vendor-bids?desk=projects", label: "My projects", icon: "modules" },
+  { to: "/crm/vendor-bids?desk=inbox", label: "Checklist inbox", icon: "quality" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -564,7 +566,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {isVendor && (
               <div className="hidden sm:flex items-center gap-1.5">
                 <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">
-                  My bids
+                  Bid management
                 </Link>
               </div>
             )}

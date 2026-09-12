@@ -321,7 +321,9 @@ export default function CrmPage() {
 
       setConvertLead(null);
       if (bidPackageId) {
-        setMsg(`Project ${res.project.code} created. Finish the saved project card, matrix, and launch in Project setup.`);
+        setMsg(
+          `Project ${res.project.code} created with a comparative bid and test BOQs from the R2 workbook. Open Bid management to award, then the winner can open the project desk.`,
+        );
         openCrmSetup(res.project.id);
       } else {
         setMsg(`Project ${res.project.code} created. Open Project setup to save parties and launch portals.`);
