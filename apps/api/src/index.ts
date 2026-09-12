@@ -61,11 +61,29 @@ app.get("/api/health", async (_req, res) => {
   let dbOk = false;
   let dbError: string | null = null;
   let userCount: number | null = null;
+  let momSchemaOk = false;
   try {
     userCount = await prisma.user.count();
     dbOk = true;
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
+  }
+  if (dbOk) {
+    try {
+      const momCols = await prisma.$queryRaw<{ Field: string }[]>`SHOW COLUMNS FROM Meeting LIKE 'momFileUrl'`;
+      momSchemaOk = Array.isArray(momCols) && momCols.length > 0;
+    } catch {
+      momSchemaOk = false;
+    }
+  }
+  let deployCommit =
+    process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.SOURCE_VERSION || "";
+  if (!deployCommit) {
+    try {
+      deployCommit = fs.readFileSync(path.resolve(process.cwd(), ".deploy-revision"), "utf8").trim();
+    } catch {
+      deployCommit = "local";
+    }
   }
   res.json({
     ok: true,
@@ -73,6 +91,7 @@ app.get("/api/health", async (_req, res) => {
     dbOk,
     dbError,
     userCount,
+    momSchemaOk,
     databaseUrlSet: Boolean(process.env.DATABASE_URL?.startsWith("mysql://")),
     mockOneDrive: process.env.MOCK_ONEDRIVE !== "false",
     graphConfigured,
@@ -86,7 +105,7 @@ app.get("/api/health", async (_req, res) => {
       process.env.GRAPH_MAIL_ENABLED !== "false",
     timezone: "Asia/Kolkata",
     time: new Date().toISOString(),
-    commit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local",
+    commit: deployCommit || "local",
     webDist,
     ui: "ui-2 Graphite Procore",
   });
