@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../components/ui";
 import { CommsMatrixPanel } from "../components/CommsMatrixPanel";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
+import { SearchableSelect } from "../components/SearchableSelect";
+import { UploadModal } from "../components/UploadModal";
 import { isToolWindow } from "../lib/moduleToolWindow";
 
 type Tab = "matrix" | "agenda" | "mom" | "followup" | "log";
@@ -35,8 +37,15 @@ export default function CommsPage() {
   const [activeMeeting, setActiveMeeting] = useState<string | null>(null);
   const [itemDesc, setItemDesc] = useState("");
   const [itemCategory, setItemCategory] = useState("Agenda");
+  const [itemOwnerId, setItemOwnerId] = useState("");
+  const [itemDue, setItemDue] = useState("");
+  const [people, setPeople] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [momOpen, setMomOpen] = useState(false);
+  const [momFile, setMomFile] = useState<File | null>(null);
+  const [momError, setMomError] = useState("");
+  const [agendaDraft, setAgendaDraft] = useState("");
   const [schedule, setSchedule] = useState({
     title: "Weekly Site Coordination",
     meetingDate: new Date().toISOString().slice(0, 16),
@@ -51,16 +60,18 @@ export default function CommsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
   const load = async () => {
-    const [l, meet, techContacts, commContacts, p] = await Promise.all([
+    const [l, meet, techContacts, commContacts, p, overview] = await Promise.all([
       api<any[]>(`/api/comms/logs/${id}`, { token }),
       api<any[]>(`/api/comms/meetings/${id}`, { token }),
       api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() => []),
       api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }).catch(() => []),
       api<any>(`/api/projects/${id}`, { token }).catch(() => null),
+      api<{ members?: any[] }>(`/api/directory/project/${id}/overview`, { token }).catch(() => null),
     ]);
     setLogs(l);
     setMeetings(meet);
     setProject(p);
+    setPeople((overview?.members || []).map((m: any) => m.user || m).filter((u: any) => u?.id));
 
     if (canEdit && techContacts.length === 0 && commContacts.length === 0) {
       try {
@@ -102,7 +113,9 @@ export default function CommsPage() {
       }
     }
 
-    if (!activeMeeting && meet[0]) setActiveMeeting(meet[0].id);
+    const want = searchParams.get("meeting");
+    if (want && meet.some((m: any) => m.id === want)) setActiveMeeting(want);
+    else if (!activeMeeting && meet[0]) setActiveMeeting(meet[0].id);
   };
 
   useEffect(() => {
@@ -132,6 +145,10 @@ export default function CommsPage() {
           durationMins: Number(schedule.durationMins) || 60,
           attendeeEmails: schedule.attendeeEmails.trim() || undefined,
           createTeams: schedule.createTeams,
+          agendaItems: agendaDraft
+            .split(/\n+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
         }),
       });
       setActiveMeeting(m.id);
@@ -158,8 +175,20 @@ export default function CommsPage() {
     setBusy(true);
     setMsg("");
     try {
-      await api(`/api/comms/meetings/${activeMeeting}/generate-agenda`, { method: "POST", token, body: "{}" });
-      setMsg("Agenda generated and emailed to communication matrix contacts.");
+      const lines = agendaDraft
+        .split(/\n+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      await api(`/api/comms/meetings/${activeMeeting}/generate-agenda`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ items: lines, agendaNotes: agendaDraft || undefined }),
+      });
+      setMsg(
+        lines.length
+          ? "Agenda published from your lines and emailed to communication matrix contacts."
+          : "Standard agenda published and emailed to communication matrix contacts."
+      );
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -208,6 +237,51 @@ export default function CommsPage() {
   const listForTab =
     tab === "agenda" ? agendaMeetings : tab === "mom" ? momMeetings : tab === "followup" ? followMeetings : meetings;
 
+  const personOptions = useMemo(
+    () =>
+      people.map((u: any) => ({
+        value: u.id,
+        label: u.fullName || u.email || u.id,
+        sublabel: [u.role, u.email].filter(Boolean).join(" · "),
+        keywords: `${u.email || ""} ${u.role || ""}`,
+      })),
+    [people]
+  );
+
+  async function uploadMom(e: FormEvent) {
+    e.preventDefault();
+    if (!activeMeeting || !momFile) return;
+    setBusy(true);
+    setMomError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", momFile);
+      const updated = await api<any>(`/api/comms/meetings/${activeMeeting}/mom-file`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setMomFile(null);
+      setMomOpen(false);
+      setTab("mom");
+      setActiveMeeting(updated.id);
+      setMsg(updated.momFileName ? `MoM file saved: ${updated.momFileName}. Add or follow up action points below.` : "MoM uploaded.");
+      await load();
+    } catch (err) {
+      setMomError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const commsTabs: { id: Tab; label: string }[] = [
+    { id: "matrix", label: "Matrix" },
+    { id: "agenda", label: "Agenda" },
+    { id: "mom", label: "MoM" },
+    { id: "followup", label: "Follow-up" },
+    { id: "log", label: "Log" },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -217,7 +291,7 @@ export default function CommsPage() {
         <PageHeader
           eyebrow="Communications"
           title="Meetings · MoM"
-          subtitle="Simple flow: set Matrix (who) → Create meeting → Agenda → MoM (minutes + actions) → Follow-up. Use Ask (PMC RFI) for questions — not inside MoM."
+          subtitle="Set who is on the matrix, schedule the meeting and agenda, upload and keep MoM after it is held, then close follow-up points. Use Ask (PMC RFI) for drawing questions — not inside MoM."
           actions={
             isToolWindow() ? undefined : (
             <div className="flex flex-wrap gap-2">
@@ -246,11 +320,26 @@ export default function CommsPage() {
         active={flowActive}
         steps={[
           { label: "Matrix", hint: "Who is involved" },
-          { label: "Create meeting", hint: "Then agenda" },
-          { label: "MoM", hint: "Minutes + actions" },
-          { label: "Follow-up", hint: "Open actions" },
+          { label: "Agenda", hint: "Schedule + set agenda" },
+          { label: "MoM", hint: "Upload minutes + actions" },
+          { label: "Follow-up", hint: "Close discussed points" },
         ]}
       />
+
+      <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 -mx-1 px-1">
+        {commsTabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`shrink-0 rounded-md px-3 py-2 text-sm font-semibold border min-h-10 ${
+              tab === t.id ? "bg-brand text-white border-brand" : "bg-paper border-line text-ink"
+            }`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
@@ -277,7 +366,7 @@ export default function CommsPage() {
           onAddRow={tab === "agenda" ? () => document.getElementById("add-meeting-form")?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined}
           addRowLabel="+ Add meeting"
         />
-        <div className="grid lg:grid-cols-[280px_1fr] gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-4">
           <Card padding={false} className="overflow-hidden h-fit">
             <div className="px-3 py-2.5 bg-procore-navy text-white text-sm font-semibold">
               {tab === "agenda" ? "Agenda meetings" : tab === "mom" ? "MoM meetings" : "Follow-ups"}
@@ -335,6 +424,12 @@ export default function CommsPage() {
                   />
                   Schedule Microsoft Teams via Graph
                 </label>
+                <TextArea
+                  rows={3}
+                  value={agendaDraft}
+                  onChange={(e) => setAgendaDraft(e.target.value)}
+                  placeholder="Agenda lines (one per row). Leave blank to use the standard site agenda."
+                />
                 <Button type="submit" disabled={busy} className="w-full !text-xs">
                   New meeting (Agenda)
                 </Button>
@@ -369,19 +464,45 @@ export default function CommsPage() {
                           Join Microsoft Teams →
                         </a>
                       )}
+                      {selected.momFileUrl && (
+                        <p className="text-xs mt-2">
+                          <a
+                            href={`${apiBase()}${selected.momFileUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-semibold text-brand hover:underline"
+                          >
+                            Current MoM file: {selected.momFileName || "Open"}
+                          </a>
+                          {selected.momUploadedAt ? (
+                            <span className="text-steel-muted">
+                              {" "}
+                              · {new Date(selected.momUploadedAt).toLocaleString()}
+                            </span>
+                          ) : null}
+                        </p>
+                      )}
                     </div>
                     {canEdit && (
                       <div className="flex flex-wrap gap-2">
                         {selected.status === "Agenda" || selected.status === "Scheduled" ? (
                           <>
                             <Button type="button" variant="secondary" disabled={busy} onClick={() => void generateAgenda()}>
-                              Generate agenda
+                              {selected.items?.some((it: any) => it.category === "Agenda") ? "Update agenda" : "Publish agenda"}
                             </Button>
                             <Button type="button" disabled={busy} onClick={() => void startMom()}>
                               Start MoM
                             </Button>
+                            <Button type="button" variant="secondary" disabled={busy} onClick={() => { setMomError(""); setMomOpen(true); }}>
+                              Upload MoM
+                            </Button>
                           </>
                         ) : null}
+                        {(selected.status === "MoM" || selected.status === "Follow-up") && (
+                          <Button type="button" variant="secondary" disabled={busy} onClick={() => { setMomError(""); setMomOpen(true); }}>
+                            {selected.momFileUrl ? "Replace MoM file" : "Upload MoM"}
+                          </Button>
+                        )}
                         {selected.status === "MoM" && (
                           <Button type="button" disabled={busy} onClick={() => void createFollowUp()}>
                             Create follow-up
@@ -463,6 +584,26 @@ export default function CommsPage() {
                   </div>
                 </Card>
 
+                {canEdit && (selected.status === "Agenda" || selected.status === "Scheduled") && (
+                  <Card>
+                    <p className="text-xs font-semibold mb-2">Set agenda</p>
+                    <TextArea
+                      rows={4}
+                      value={agendaDraft}
+                      onChange={(e) => setAgendaDraft(e.target.value)}
+                      placeholder="One agenda point per line. Publish to lock the list before the meeting. After the meeting, upload MoM and record actions."
+                    />
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <Button type="button" disabled={busy} onClick={() => void generateAgenda()}>
+                        Publish agenda
+                      </Button>
+                      <Button type="button" variant="secondary" disabled={busy} onClick={() => { setMomError(""); setMomOpen(true); }}>
+                        Upload MoM after meeting
+                      </Button>
+                    </div>
+                  </Card>
+                )}
+
                 <Card padding={false} className="overflow-hidden">
                   <div className="px-4 py-3 border-b bg-sand/50 flex justify-between items-center">
                     <span className="font-semibold text-sm">
@@ -473,13 +614,19 @@ export default function CommsPage() {
                   <ul className="divide-y divide-line">
                     {(selected.items || []).map((it: any) => (
                       <li key={it.id} className="px-4 py-3 flex flex-wrap justify-between gap-2 text-sm">
-                        <div>
+                        <div className="min-w-0">
                           <Badge tone="neutral">{it.category}</Badge>
                           <div className="mt-1 font-medium">{it.description}</div>
+                          <div className="text-[11px] text-steel-muted mt-1">
+                            {it.assignedTo?.fullName ? `Owner: ${it.assignedTo.fullName}` : "No owner"}
+                            {it.dueDate ? ` · Due ${new Date(it.dueDate).toLocaleDateString()}` : ""}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge tone={it.resolutionStatus === "Open" ? "warn" : "ok"}>{it.resolutionStatus}</Badge>
-                          {canEdit && it.resolutionStatus === "Open" && (
+                          <Badge tone={it.resolutionStatus === "Open" || it.resolutionStatus === "Carried Over" ? "warn" : "ok"}>
+                            {it.resolutionStatus}
+                          </Badge>
+                          {canEdit && (it.resolutionStatus === "Open" || it.resolutionStatus === "Carried Over") && (
                             <Button
                               type="button"
                               variant="ghost"
@@ -494,6 +641,23 @@ export default function CommsPage() {
                               }}
                             >
                               Close
+                            </Button>
+                          )}
+                          {canEdit && it.resolutionStatus === "Closed" && (tab === "followup" || tab === "mom") && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="!text-xs"
+                              onClick={async () => {
+                                await api(`/api/comms/meetings/items/${it.id}`, {
+                                  method: "PATCH",
+                                  token,
+                                  body: JSON.stringify({ resolutionStatus: "Open" }),
+                                });
+                                await load();
+                              }}
+                            >
+                              Reopen
                             </Button>
                           )}
                         </div>
@@ -520,9 +684,13 @@ export default function CommsPage() {
                             body: JSON.stringify({
                               description: itemDesc,
                               category: tab === "agenda" ? "Agenda" : tab === "followup" ? "Follow-up" : itemCategory,
+                              assignedToId: itemOwnerId || undefined,
+                              dueDate: itemDue || undefined,
                             }),
                           });
                           setItemDesc("");
+                          setItemOwnerId("");
+                          setItemDue("");
                           await load();
                         } catch (err) {
                           setMsg(err instanceof Error ? err.message : "Could not add item — check connection and retry.");
@@ -550,6 +718,24 @@ export default function CommsPage() {
                         value={itemDesc}
                         onChange={(e) => setItemDesc(e.target.value)}
                       />
+                      {(tab === "mom" || tab === "followup") && (
+                        <>
+                          <div className="w-full sm:w-56">
+                            <SearchableSelect
+                              options={personOptions}
+                              value={itemOwnerId}
+                              onChange={setItemOwnerId}
+                              searchPlaceholder="Owner from directory…"
+                            />
+                          </div>
+                          <Input
+                            type="date"
+                            className="w-full sm:w-40"
+                            value={itemDue}
+                            onChange={(e) => setItemDue(e.target.value)}
+                          />
+                        </>
+                      )}
                       <Button type="submit" disabled={busy || !itemDesc.trim()}>{busy ? "Adding…" : "Add"}</Button>
                     </form>
                   )}
@@ -560,6 +746,25 @@ export default function CommsPage() {
         </div>
         </div>
       )}
+
+      <UploadModal
+        open={momOpen}
+        title={selected?.momFileUrl ? "Replace MoM file" : "Upload minutes of meeting"}
+        context={selected ? `${selected.title} · ${new Date(selected.meetingDate).toLocaleString()}` : undefined}
+        file={momFile}
+        onFile={setMomFile}
+        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.xlsx"
+        fields={[]}
+        primaryLabel={selected?.status === "Agenda" || selected?.status === "Scheduled" ? "Upload & start MoM" : "Save MoM file"}
+        busy={busy}
+        error={momError}
+        onClose={() => {
+          setMomOpen(false);
+          setMomFile(null);
+          setMomError("");
+        }}
+        onSubmit={(e) => void uploadMom(e)}
+      />
 
       {tab === "log" && (
         <div className="space-y-4">

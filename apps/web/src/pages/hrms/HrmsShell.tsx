@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { IconClose, IconMenu, IconMoon, IconPanel, IconPanelRight, IconSun } from "../../components/icons";
 import { BRAND_EN } from "../../components/Brand";
@@ -48,6 +49,16 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
     }
   }, [hidden]);
 
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: landscape) and (min-width: 1024px)");
+    const closeOnDesktop = () => {
+      if (mq.matches) setDrawerOpen(false);
+    };
+    closeOnDesktop();
+    mq.addEventListener("change", closeOnDesktop);
+    return () => mq.removeEventListener("change", closeOnDesktop);
+  }, []);
+
   function onToggleTheme() {
     setColorMode(toggleColorMode());
   }
@@ -60,7 +71,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
       style={{ ["--wd-accent" as string]: HRMS_ACCENT }}
     >
       <aside
-        className={`side-nav hidden md:flex ${hidden ? "is-off" : ""}`}
+        className={`side-nav app-nav-desktop hidden lg:flex ${hidden ? "is-off" : ""}`}
         aria-label="HRMS navigation"
         aria-hidden={hidden}
       >
@@ -72,7 +83,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
           <div className="flex items-center gap-2.5 px-3 sm:px-4 h-[52px]">
             <button
               type="button"
-              className="app-topbar__menu-btn md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-paper text-ink"
+              className="app-topbar__menu-btn lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-paper text-ink"
               aria-label="Open HR menu"
               aria-expanded={drawerOpen}
               onClick={() => setDrawerOpen(true)}
@@ -81,7 +92,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
             </button>
             <button
               type="button"
-              className="hidden md:inline-flex app-topbar__nav-toggle h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
+              className="hidden lg:inline-flex app-topbar__nav-toggle h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
               aria-label={hidden ? "Show left navigation" : "Hide left navigation"}
               title={hidden ? "Show left navigation" : "Hide left navigation"}
               onClick={() => setHidden((h) => !h)}
@@ -124,8 +135,9 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
         </main>
       </div>
 
-      {drawerOpen && (
-        <div className="app-mobile-drawer md:hidden" role="dialog" aria-modal="true" aria-label="HRMS menu">
+      {drawerOpen &&
+        createPortal(
+        <div className="app-mobile-drawer" role="dialog" aria-modal="true" aria-label="HRMS menu">
           <button
             type="button"
             className="app-mobile-drawer__backdrop"
@@ -147,7 +159,8 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
               onToggleTheme={onToggleTheme}
             />
           </aside>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,7 +1,12 @@
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
+
+const momUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+const meetingItemInclude = { assignedTo: { select: { id: true, fullName: true, email: true, role: true } } };
 
 export const commsRouter = Router();
 commsRouter.use(requireAuth);
@@ -275,7 +280,7 @@ commsRouter.get("/logs/:projectId", async (req, res) => {
 commsRouter.get("/meetings/:projectId", async (req, res) => {
   const meetings = await prisma.meeting.findMany({
     where: { projectId: req.params.projectId },
-    include: { items: true },
+    include: { items: { include: meetingItemInclude, orderBy: { category: "asc" } } },
     orderBy: { meetingDate: "desc" },
   });
   res.json(meetings);
@@ -291,6 +296,10 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
   const durationMins = Math.max(15, Math.min(480, Number(req.body.durationMins) || 60));
   const meetingDate = new Date(req.body.meetingDate || Date.now());
 
+  const agendaFromBody = Array.isArray(req.body.agendaItems)
+    ? req.body.agendaItems.map(String).map((s: string) => s.trim()).filter(Boolean)
+    : [];
+
   const meeting = await prisma.meeting.create({
     data: {
       projectId: req.params.projectId,
@@ -299,6 +308,17 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
       location: req.body.location,
       status: req.body.status || "Agenda",
       durationMins,
+      agendaNotes: agendaFromBody.length ? agendaFromBody.join("\n") : req.body.agendaNotes || null,
+      items: agendaFromBody.length
+        ? {
+            create: agendaFromBody.map((description: string) => ({
+              category: "Agenda",
+              description,
+              priority: "Medium",
+              resolutionStatus: "Open",
+            })),
+          }
+        : undefined,
     },
   });
   await audit("meeting.schedule", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
@@ -309,10 +329,6 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
     typeof req.body.attendeeEmails === "string" ? req.body.attendeeEmails : undefined
   );
   const attendeeRaw = recipients.csv;
-
-  const agendaFromBody = Array.isArray(req.body.agendaItems)
-    ? req.body.agendaItems.map(String).filter(Boolean)
-    : undefined;
 
   let invite: Record<string, unknown> | null = null;
   try {
@@ -392,7 +408,7 @@ commsRouter.post("/logs/:projectId", requireRoles("admin", "office", "employee",
 
 commsRouter.patch(
   "/meetings/items/:itemId",
-  requireRoles("admin", "office", "site_employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const item = await prisma.meetingItem.update({
       where: { id: req.params.itemId },
@@ -400,7 +416,10 @@ commsRouter.patch(
         resolutionStatus: req.body.resolutionStatus,
         priority: req.body.priority,
         description: req.body.description,
+        assignedToId: req.body.assignedToId === undefined ? undefined : req.body.assignedToId || null,
+        dueDate: req.body.dueDate === undefined ? undefined : req.body.dueDate ? new Date(req.body.dueDate) : null,
       },
+      include: meetingItemInclude,
     });
     res.json(item);
   }
@@ -478,38 +497,64 @@ commsRouter.post(
   "/meetings/:id/generate-agenda",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
-    const meeting = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: req.params.id },
+      include: { items: { include: meetingItemInclude } },
+    });
     if (!meeting) return res.status(404).json({ error: "Not found" });
 
-    const defaults: string[] =
-      req.body.items ||
-      [
-        "Safety / toolbox talk",
-        "Drawing revisions & publish status",
-        "Checklist / QI progress",
-        "Open RFIs & concerns",
-        "Site progress vs programme",
-        "Vendor / material coordination",
-        "AOB",
-      ];
+    const custom: string[] = Array.isArray(req.body.items)
+      ? req.body.items.map(String).map((s: string) => s.trim()).filter(Boolean)
+      : typeof req.body.agendaNotes === "string"
+        ? String(req.body.agendaNotes)
+            .split(/\n+/)
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [];
 
-    const created = await prisma.$transaction(
-      defaults.map((description: string) =>
-        prisma.meetingItem.create({
-          data: {
-            meetingId: meeting.id,
-            category: "Agenda",
-            description,
-            priority: "Medium",
-            resolutionStatus: "Open",
-          },
-        })
-      )
-    );
+    const existingAgenda = meeting.items.filter((i) => i.category === "Agenda");
+    if (existingAgenda.length && !custom.length && !req.body.force) {
+      return res.json({ meetingId: meeting.id, items: existingAgenda, reused: true });
+    }
+
+    const defaults: string[] =
+      custom.length > 0
+        ? custom
+        : [
+            "Safety / toolbox talk",
+            "Drawing revisions & publish status",
+            "Checklist / QI progress",
+            "Open RFIs & concerns",
+            "Site progress vs programme",
+            "Vendor / material coordination",
+            "AOB",
+          ];
+
+    const already = new Set(existingAgenda.map((i) => i.description.trim().toLowerCase()));
+    const toCreate = defaults.filter((d) => !already.has(d.trim().toLowerCase()));
+
+    const created = toCreate.length
+      ? await prisma.$transaction(
+          toCreate.map((description: string) =>
+            prisma.meetingItem.create({
+              data: {
+                meetingId: meeting.id,
+                category: "Agenda",
+                description,
+                priority: "Medium",
+                resolutionStatus: "Open",
+              },
+            })
+          )
+        )
+      : [];
 
     await prisma.meeting.update({
       where: { id: meeting.id },
-      data: { status: "Agenda", agendaNotes: req.body.agendaNotes || meeting.agendaNotes },
+      data: {
+        status: meeting.status === "Scheduled" || meeting.status === "Agenda" ? "Agenda" : meeting.status,
+        agendaNotes: req.body.agendaNotes || meeting.agendaNotes,
+      },
     });
 
     await audit("meeting.agenda_generate", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
@@ -523,7 +568,7 @@ commsRouter.post(
       extraBody: "Agenda has been published for review before MoM.",
     });
 
-    res.status(201).json({ meetingId: meeting.id, items: created, notify });
+    res.status(201).json({ meetingId: meeting.id, items: [...existingAgenda, ...created], notify });
   }
 );
 
@@ -544,7 +589,7 @@ commsRouter.post(
     const updated = await prisma.meeting.update({
       where: { id: meeting.id },
       data: { status: "MoM" },
-      include: { items: true },
+      include: { items: { include: meetingItemInclude } },
     });
     await audit("meeting.start_mom", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
 
@@ -558,6 +603,67 @@ commsRouter.post(
     });
 
     res.json({ ...updated, notify });
+  }
+);
+
+/** Upload / replace signed or typed minutes after the meeting is scheduled. */
+commsRouter.post(
+  "/meetings/:id/mom-file",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  momUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer) return res.status(400).json({ error: "Attach a MoM file (PDF or image)." });
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: req.params.id },
+      include: { items: true, project: { select: { code: true } } },
+    });
+    if (!meeting) return res.status(404).json({ error: "Not found" });
+    if (meeting.status === "Agenda" || meeting.status === "Scheduled") {
+      const agendaCount = meeting.items.filter((i) => i.category === "Agenda").length;
+      if (agendaCount === 0) {
+        return res.status(400).json({ error: "Set agenda items before uploading MoM." });
+      }
+    }
+
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+    const saved = await mockOneDrive.upload(
+      meeting.project.code,
+      `${MODULE_TO_ISO_FOLDER.meetings}/MoM`,
+      req.file.originalname,
+      req.file.buffer,
+      req.file.mimetype || "application/octet-stream",
+      { replace: true }
+    );
+    const fileUrl = saved.url || saved.sharePointUrl || "";
+    const promote = meeting.status === "Agenda" || meeting.status === "Scheduled";
+    const updated = await prisma.meeting.update({
+      where: { id: meeting.id },
+      data: {
+        momFileUrl: fileUrl,
+        momFileName: req.file.originalname,
+        momUploadedAt: new Date(),
+        ...(promote ? { status: "MoM" } : {}),
+      },
+      include: { items: { include: meetingItemInclude } },
+    });
+    await audit("meeting.mom_upload", {
+      userId: req.user!.id,
+      entity: "Meeting",
+      entityId: meeting.id,
+      meta: { fileName: req.file.originalname, promoted: promote },
+    });
+    if (promote) {
+      const { notifyMeetingMatrixContacts } = await import("../services/meetingMatrixNotify.js");
+      await notifyMeetingMatrixContacts({
+        projectId: meeting.projectId,
+        meetingId: meeting.id,
+        stage: "mom",
+        createdById: req.user!.id,
+        extraBody: "MoM file uploaded — action items can now be recorded and followed up.",
+      });
+    }
+    res.json(updated);
   }
 );
 

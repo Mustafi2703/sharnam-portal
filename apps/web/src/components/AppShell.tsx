@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useEffect, useMemo, useState } from "react";
@@ -393,6 +394,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   useEffect(() => {
+    const mq = window.matchMedia("(orientation: landscape) and (min-width: 1024px)");
+    const closeOnDesktop = () => {
+      if (mq.matches) setDrawerOpen(false);
+    };
+    closeOnDesktop();
+    mq.addEventListener("change", closeOnDesktop);
+    return () => mq.removeEventListener("change", closeOnDesktop);
+  }, []);
+
+  useEffect(() => {
     if (!drawerOpen) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -494,7 +505,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={`app-frame ${hidden ? "is-hidden" : ""} ${toolWin ? "app-frame--tool-win" : ""}`}>
       {!toolWin && (
-      <aside className={`side-nav hidden md:flex ${hidden ? "is-off" : ""}`} aria-label="Primary" aria-hidden={hidden}>
+      <aside className={`side-nav app-nav-desktop hidden lg:flex ${hidden ? "is-off" : ""}`} aria-label="Primary" aria-hidden={hidden}>
         {!hidden && (
           <SideNavBody
             projectId={projectId}
@@ -512,7 +523,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className={`flex items-center gap-2.5 px-3 sm:px-4 ${inProject ? "h-11" : "h-[52px]"}`}>
             <button
               type="button"
-              className="app-topbar__menu-btn md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-paper text-ink"
+              className="app-topbar__menu-btn lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-paper text-ink"
               aria-label="Open menu"
               aria-expanded={drawerOpen}
               onClick={() => setDrawerOpen(true)}
@@ -521,7 +532,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
             <button
               type="button"
-              className="hidden md:inline-flex app-topbar__nav-toggle h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
+              className="hidden lg:inline-flex app-topbar__nav-toggle h-8 items-center gap-1.5 rounded-lg border border-line bg-paper px-2.5 text-ink hover:bg-brand-soft hover:border-brand/40"
               aria-label={hidden ? "Show left navigation" : "Hide left navigation"}
               title={hidden ? "Show left navigation" : "Hide left navigation"}
               onClick={() => setHidden((h) => !h)}
@@ -646,8 +657,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {drawerOpen && (
-        <div className="app-mobile-drawer md:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
+      {drawerOpen &&
+        createPortal(
+        <div className="app-mobile-drawer" role="dialog" aria-modal="true" aria-label="Navigation menu">
           <button
             type="button"
             className="app-mobile-drawer__backdrop"
@@ -672,7 +684,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               onToggleTheme={onToggleTheme}
             />
           </aside>
-        </div>
+        </div>,
+        document.body
       )}
       <InPageOverlayHost />
     </div>

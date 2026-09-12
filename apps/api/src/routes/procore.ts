@@ -238,6 +238,38 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       });
     }
   }
+  const fillNeedsTarget = [
+    "QualityInspection",
+    "SafetyChecklist",
+    "QualityIR",
+    "SafetyIR",
+    "DrawingChecklist",
+    "ActivityInspection",
+    "SiteExecution",
+  ].includes(rfiKind);
+  if (fillNeedsTarget && !isClient && !req.body.assignedToId && !req.body.responsibleVendorId) {
+    return res.status(400).json({
+      error: "Raise the fill request to a named person or a vendor from this project's directory.",
+    });
+  }
+  if (req.body.assignedToId) {
+    const onProject = await prisma.projectMember.findFirst({
+      where: { projectId: req.params.projectId, userId: String(req.body.assignedToId) },
+      select: { id: true },
+    });
+    if (!onProject) {
+      return res.status(400).json({ error: "Assignee must be a named person on this project's directory." });
+    }
+  }
+  if (req.body.responsibleVendorId) {
+    const assignedCompany = await prisma.projectVendor.findFirst({
+      where: { projectId: req.params.projectId, vendorId: String(req.body.responsibleVendorId) },
+      select: { id: true },
+    });
+    if (!assignedCompany) {
+      return res.status(400).json({ error: "Vendor must be assigned on this project's directory." });
+    }
+  }
   const slaDays = { CRITICAL: 3, HIGH: 7, NORMAL: 14, LOW: 21 } as Record<string, number>;
   const priority = String(formObj.priority || "NORMAL").toUpperCase();
   const number =

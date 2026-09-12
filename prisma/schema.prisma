@@ -561,6 +561,10 @@ model Meeting {
   /// Optional link to parent MoM when this is a follow-up
   parentMeetingId String?
   agendaNotes     String?
+  /// Uploaded signed / typed minutes (maintain after the meeting is scheduled)
+  momFileUrl      String?
+  momFileName     String?
+  momUploadedAt   DateTime?
   durationMins    Int      @default(60)
   /// Microsoft Teams join URL (Graph onlineMeeting or calendar event)
   teamsJoinUrl    String?

@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
 import { InspectionRequestReference } from "../../components/InspectionRequestReference";
 import { DrawingRfiRegisterTable } from "../../components/DrawingRfiRegisterTable";
@@ -35,9 +36,9 @@ export default function RfisPage() {
   const [search] = useSearchParams();
   const { token, user } = useAuth();
   const [rfis, setRfis] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [directoryMembers, setDirectoryMembers] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [kindFilter, setKindFilter] = useState<RfiKind>(() => {
@@ -102,9 +103,8 @@ export default function RfisPage() {
   const kindPills = rfiKindPillsForScope(moduleScope);
 
   const load = async () => {
-    const [rPayload, u, d, aSite, aDraw, aQi, aSaf, aAct, v] = await Promise.all([
+    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, v, overview] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
-      api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
         assignments: [],
@@ -122,18 +122,25 @@ export default function RfisPage() {
         assignments: [],
       })),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
+      api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${id}/overview`, { token }).catch(() => null),
     ]);
     const list = Array.isArray(rPayload) ? rPayload : rPayload.rfis || [];
     setRfis(list);
     setMatrixCanRespond(Array.isArray(rPayload) ? true : !!rPayload.canRespond);
-    setUsers(u);
     setDrawings(d);
     setSiteAssignments(aSite.assignments || []);
     setDrawingAssignments(aDraw.assignments || []);
     setQiAssignments(aQi.assignments || []);
     setSafetyAssignments(aSaf.assignments || []);
     setActivityAssignments(aAct.assignments || []);
-    setVendors(Array.isArray(v) ? v.map((row: any) => row.vendor || row) : []);
+    const dirVendors = (overview?.vendors || []).map((row: any) => row.vendor || row).filter((row: any) => row?.id);
+    const fromAssign = Array.isArray(v) ? v.map((row: any) => row.vendor || row) : [];
+    const byId = new Map<string, any>();
+    for (const row of [...dirVendors, ...fromAssign]) {
+      if (row?.id) byId.set(row.id, row);
+    }
+    setVendors([...byId.values()]);
+    setDirectoryMembers(overview?.members || []);
     if (!active && list[0]) setActive(list[0].id);
   };
 
@@ -265,6 +272,31 @@ export default function RfisPage() {
   const selectedProgress = selected ? rfiProgress(selected) : null;
   const composeProgress = rfiComposeProgress(form);
   const registerDashboard = useMemo(() => spdcRegisterDashboard(filtered), [filtered]);
+
+  const personOptions = useMemo(() => {
+    const fromDir = directoryMembers
+      .map((m: any) => m.user || m)
+      .filter((u: any) => u?.id)
+      .map((u: any) => ({
+        value: u.id,
+        label: u.fullName || u.email || u.id,
+        sublabel: [u.role, u.email].filter(Boolean).join(" · "),
+        keywords: `${u.email || ""} ${u.phone || ""} ${u.role || ""}`,
+      }));
+    if (fromDir.length) return fromDir;
+    return [];
+  }, [directoryMembers]);
+
+  const vendorOptions = useMemo(
+    () =>
+      vendors.map((v: any) => ({
+        value: v.id,
+        label: v.name,
+        sublabel: [v.partyType, v.trade, v.primaryContactName].filter(Boolean).join(" · "),
+        keywords: `${v.email || ""} ${v.trade || ""} ${v.city || ""} ${v.primaryContactName || ""}`,
+      })),
+    [vendors]
+  );
 
   const fillFamily = checklistFamilyForRfiKind(selected?.rfiKind);
 
@@ -398,6 +430,10 @@ export default function RfisPage() {
                 );
                 return;
               }
+              if (needsChecklist && !form.assignedToId && !form.responsibleVendorId) {
+                alert("Search the project directory and pick a named person or a vendor company to fill this.");
+                return;
+              }
               const assignment = checklistOptions.find((a) => a.id === form.linkedAssignmentId);
               const linkedDrawing = drawings.find((d) => d.id === form.linkedDrawingId);
               const formDataJson =
@@ -415,36 +451,42 @@ export default function RfisPage() {
                       queryRaised: form.question,
                     })
                   : undefined;
-              const created = await api<{ sharePointExports?: { kind: string; path: string }[] }>(`/api/rfis/project/${id}`, {
-                method: "POST",
-                token,
-                body: JSON.stringify({
+              try {
+                const created = await api<{ sharePointExports?: { kind: string; path: string }[] }>(`/api/rfis/project/${id}`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify({
+                    ...form,
+                    formDataJson,
+                    linkedChecklistItemId: assignment?.template?.id || form.linkedChecklistItemId || null,
+                    linkedAssignmentId: form.linkedAssignmentId || null,
+                    linkedDrawingId: rfiUsesDrawingLink(form.rfiKind) ? form.linkedDrawingId || null : null,
+                    rfiKind: isClient ? "ClientConcern" : form.rfiKind,
+                  }),
+                });
+                const paths = (created.sharePointExports || []).map((e) => e.path).filter(Boolean);
+                const fillNote = needsChecklist
+                  ? " A draft is now on the checklist fill log for the assigned vendor / site person."
+                  : "";
+                setSyncNote(
+                  (paths.length
+                    ? `Written to SharePoint (sheet + print/PDF): ${paths.join(" · ")}`
+                    : "Request saved and pinged. SharePoint write will retry on the next raise or close.") + fillNote
+                );
+                setForm({
                   ...form,
-                  formDataJson,
-                  linkedChecklistItemId: assignment?.template?.id || form.linkedChecklistItemId || null,
-                  linkedAssignmentId: form.linkedAssignmentId || null,
-                  linkedDrawingId: rfiUsesDrawingLink(form.rfiKind) ? form.linkedDrawingId || null : null,
-                  rfiKind: isClient ? "ClientConcern" : form.rfiKind,
-                }),
-              });
-              const paths = (created.sharePointExports || []).map((e) => e.path).filter(Boolean);
-              const fillNote = needsChecklist
-                ? " A draft is now on the checklist fill log for the assigned vendor / site person."
-                : "";
-              setSyncNote(
-                (paths.length
-                  ? `Written to SharePoint (sheet + print/PDF): ${paths.join(" · ")}`
-                  : "RFI saved. SharePoint write will retry on the next raise or close.") + fillNote
-              );
-              setForm({
-                ...form,
-                subject: "",
-                question: "",
-                linkedAssignmentId: "",
-                linkedChecklistItemId: "",
-                attachmentNote: "",
-              });
-              await load();
+                  subject: "",
+                  question: "",
+                  linkedAssignmentId: "",
+                  linkedChecklistItemId: "",
+                  assignedToId: "",
+                  responsibleVendorId: "",
+                  attachmentNote: "",
+                });
+                await load();
+              } catch (err) {
+                setSyncNote(err instanceof Error ? err.message : "Could not raise the fill request.");
+              }
             }}
           >
             {!isClient && !moduleScoped && (
@@ -541,23 +583,30 @@ export default function RfisPage() {
                   </Select>
                 )}
                 {needsChecklist && (
-                  <Select value={form.responsibleVendorId} onChange={(e) => setForm({ ...form, responsibleVendorId: e.target.value })}>
-                    <option value="">Responsible vendor (optional)</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <div>
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-1">
+                      Vendor from project directory
+                    </p>
+                    <SearchableSelect
+                      options={vendorOptions}
+                      value={form.responsibleVendorId}
+                      onChange={(responsibleVendorId) => setForm({ ...form, responsibleVendorId })}
+                      searchPlaceholder="Search vendor / contractor by name…"
+                    />
+                  </div>
                 )}
-                <Select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>
-                  <option value="">Assignee</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.fullName} · {u.role}
-                    </option>
-                  ))}
-                </Select>
+                <div>
+                  <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-1">
+                    Named person from project directory
+                  </p>
+                  <SearchableSelect
+                    options={personOptions}
+                    value={form.assignedToId}
+                    onChange={(assignedToId) => setForm({ ...form, assignedToId })}
+                    searchPlaceholder="Search person by name…"
+                    required={needsChecklist && !form.responsibleVendorId}
+                  />
+                </div>
                 {!isClient && rfiUsesDrawingLink(form.rfiKind) ? (
                   <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
                     <option value="">Linked drawing (optional)</option>
@@ -584,14 +633,14 @@ export default function RfisPage() {
             )}
             <p className="text-xs text-steel-muted">
               {form.rfiKind === "QualityInspection"
-                ? "Quality QI checklists only — assignee and office can fill. Drawing ref is text-only; use Ask (PMC RFI) to link a drawing file."
+                ? "Quality QI — send the fill to a named person or a vendor from this project's directory. They get the ping and the fill log."
                 : form.rfiKind === "DrawingChecklist"
                   ? "Drawing Check Master only — use Drawings → Checklist manager. Quality & Safety have separate masters."
                   : form.rfiKind === "SafetyChecklist"
-                    ? "Safety checklists only — use Safety → Checklist master. No drawing file attachment."
+                    ? "Safety fill — send to a named person or a vendor from this project's directory. No drawing file attachment."
                     : form.rfiKind === "RequestForInformation"
                       ? "PMC / drawing clarification — link drawing revision and attach one Drawing Check checklist per RFI."
-                      : "Fillers: Communication Matrix parties, assignee, and responsible vendor."}
+                      : "Pick a named directory person or an assigned vendor. The request is emailed and lands on their fill inbox."}
             </p>
             <Button type="submit">
               {isClient ? "Submit concern" : moduleScope === "quality" ? "Request QI fill" : moduleScope === "drawings" && form.rfiKind === "DrawingChecklist" ? "Request checklist fill" : "Open RFI"}

@@ -3649,7 +3649,7 @@ html.is-tool-window #root {
   overflow: hidden;
 }
 .side-nav.is-off,
-.app-frame.is-hidden .side-nav {
+.app-frame.is-hidden .side-nav:not(.side-nav--drawer) {
   width: 0 !important;
   border: 0;
   opacity: 0;
@@ -3663,6 +3663,7 @@ html.is-tool-window #root {
   max-height: 100%;
   position: relative;
   width: min(88vw, 300px) !important;
+  max-width: min(88vw, 300px) !important;
   opacity: 1 !important;
   pointer-events: auto !important;
   display: flex !important;
@@ -3670,10 +3671,20 @@ html.is-tool-window #root {
   z-index: 1;
 }
 
+.app-frame.is-hidden .side-nav--drawer,
+.app-frame .side-nav--drawer.is-off {
+  width: min(88vw, 300px) !important;
+  max-width: min(88vw, 300px) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  margin: 0;
+  border-right: 1px solid var(--side-border, #2e3642);
+}
+
 .app-mobile-drawer {
   position: fixed;
   inset: 0;
-  z-index: 160;
+  z-index: 240;
   display: flex;
 }
 
@@ -3817,7 +3828,13 @@ html.is-tool-window #root {
   }
 
   .app-topbar {
-    z-index: 90;
+    z-index: 180;
+    position: relative;
+    overflow: visible;
+  }
+
+  .app-topbar > div {
+    overflow: visible;
   }
 
   .app-topbar__menu-btn {
@@ -3826,6 +3843,118 @@ html.is-tool-window #root {
     flex-shrink: 0;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    position: relative;
+    z-index: 2;
+  }
+
+  .tool-strip {
+    padding-bottom: 0.35rem;
+  }
+
+  .tool-strip__tab {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* Portrait + compact width: hamburger + drawer for every role (phone, iPad, iPad Pro).
+   Tailwind lg is 1024px — iPad Pro 12.9" portrait is exactly 1024, so CSS must win. */
+@media (orientation: portrait), (max-width: 1023px) {
+  html:not(.is-auth-route):not(.is-standalone-form),
+  html:not(.is-auth-route):not(.is-standalone-form) body,
+  html:not(.is-auth-route):not(.is-standalone-form) #root {
+    height: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .app-frame,
+  .hrms-portal-shell.app-frame {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  aside.side-nav.app-nav-desktop,
+  aside.side-nav:not(.side-nav--drawer) {
+    display: none !important;
+  }
+
+  .app-topbar__nav-toggle {
+    display: none !important;
+  }
+
+  .app-topbar {
+    z-index: 180;
+    position: relative;
+    overflow: visible;
+    flex-shrink: 0;
+  }
+
+  .app-topbar__menu-btn {
+    display: inline-flex !important;
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events: auto;
+  }
+
+  .app-mobile-drawer {
+    display: flex !important;
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    z-index: 240;
+  }
+
+  .app-mobile-drawer .side-nav--drawer,
+  .app-frame.is-hidden .side-nav--drawer {
+    display: flex !important;
+    width: min(88vw, 300px) !important;
+    max-width: min(88vw, 300px) !important;
+    height: 100% !important;
+    max-height: 100dvh !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .app-frame__scroll--project {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tool-workspace,
+  .tool-shell,
+  .tool-shell > .tool-main,
+  .tool-main__outlet {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0;
+  }
+
+  .tool-workspace,
+  .tool-shell {
+    overflow: visible !important;
+  }
+
+  .tool-main__outlet {
+    flex: 1 1 auto !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .page-stack--register,
+  .register-page-fill {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 }
 
