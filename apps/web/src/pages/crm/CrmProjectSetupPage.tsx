@@ -7,6 +7,7 @@ import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
 import { ProjectVendorsSetupDesk } from "../../components/ProjectVendorsSetupDesk";
+import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
@@ -48,7 +49,16 @@ type SetupSummary = {
   };
   lead?: { id: string; title: string; stage: string } | null;
   members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string }[];
-  vendors: { id: string; vendorId: string; name: string; partyType: string; email?: string | null }[];
+  vendors: {
+    id: string;
+    vendorId: string;
+    name: string;
+    partyType: string;
+    email?: string | null;
+    trade?: string | null;
+    tradeRole?: string | null;
+    packages?: string[];
+  }[];
 };
 
 type SetupStatus = {
@@ -115,6 +125,7 @@ export default function CrmProjectSetupPage() {
   const [details, setDetails] = useState(EMPTY_PROJECT);
   const [consultantIds, setConsultantIds] = useState<string[]>([]);
   const [contractorIds, setContractorIds] = useState<string[]>([]);
+  const [projectPackages, setProjectPackages] = useState<string[]>([]);
 
   const setStep = (next: Step, id = projectId) => {
     const q = new URLSearchParams();
@@ -174,6 +185,16 @@ export default function CrmProjectSetupPage() {
     setContractorIds(
       s.vendors.filter((v) => ["Contractor", "Vendor"].includes(v.partyType)).map((v) => v.vendorId)
     );
+    void api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
+      .then((p) => {
+        try {
+          const parsed = p.workPackages ? JSON.parse(p.workPackages) : [];
+          setProjectPackages(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          setProjectPackages([]);
+        }
+      })
+      .catch(() => setProjectPackages([]));
   }, [token, projectId]);
 
   useEffect(() => {
@@ -367,15 +388,47 @@ export default function CrmProjectSetupPage() {
                   />
                 </div>
                 {projectId && token ? (
-                  <div className="sm:col-span-2">
-                    <ProjectVendorsSetupDesk
-                      projectId={projectId}
+                  <div className="sm:col-span-2 space-y-3">
+                    <WorkPackagesPanel
                       token={token}
-                      catalog={vendors}
-                      assigned={summary?.vendors || []}
-                      onMsg={setMsg}
-                      onChanged={() => void loadProject()}
+                      projectId={projectId}
+                      onSaved={(pkgs) => {
+                        setProjectPackages(pkgs);
+                        setMsg("Packages saved — pin them on client, consultants, and vendors.");
+                      }}
                     />
+                    <div className="grid lg:grid-cols-3 gap-3">
+                      <ProjectVendorsSetupDesk
+                        party="Client"
+                        projectId={projectId}
+                        token={token}
+                        catalog={vendors}
+                        assigned={summary?.vendors || []}
+                        projectPackages={projectPackages}
+                        onMsg={setMsg}
+                        onChanged={() => void loadProject()}
+                      />
+                      <ProjectVendorsSetupDesk
+                        party="Consultant"
+                        projectId={projectId}
+                        token={token}
+                        catalog={vendors}
+                        assigned={summary?.vendors || []}
+                        projectPackages={projectPackages}
+                        onMsg={setMsg}
+                        onChanged={() => void loadProject()}
+                      />
+                      <ProjectVendorsSetupDesk
+                        party="Contractor"
+                        projectId={projectId}
+                        token={token}
+                        catalog={vendors}
+                        assigned={summary?.vendors || []}
+                        projectPackages={projectPackages}
+                        onMsg={setMsg}
+                        onChanged={() => void loadProject()}
+                      />
+                    </div>
                   </div>
                 ) : null}
                 {token && (

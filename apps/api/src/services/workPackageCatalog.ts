@@ -48,6 +48,14 @@ export async function addWorkPackageCatalogEntry(name: string): Promise<string[]
   return getWorkPackageCatalog();
 }
 
+export async function removeWorkPackageCatalogEntry(name: string): Promise<string[]> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Package name required");
+  const extra = await readExtra();
+  await writeExtra(extra.filter((p) => p.toLowerCase() !== trimmed.toLowerCase()));
+  return getWorkPackageCatalog();
+}
+
 export function parseProjectWorkPackages(raw?: string | null): string[] {
   if (!raw) return ["Civil", "PEB"];
   try {

@@ -190,6 +190,12 @@ export class MockOneDriveService {
     return `/uploads/onedrive/${projectCode}/${relPath}`;
   }
 
+  readFile(projectCode: string, relPath: string): Buffer | null {
+    const full = path.join(this.projectRoot(projectCode), relPath);
+    if (!fs.existsSync(full) || fs.statSync(full).isDirectory()) return null;
+    return fs.readFileSync(full);
+  }
+
   async sync(projectId: string) {
     return this.ensureProjectTree(projectId);
   }

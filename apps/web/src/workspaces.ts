@@ -936,7 +936,7 @@ export const WORKSPACES: {
   const m = MODULE_META[key];
   let roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "drawings") roles = ["admin", "office", "site_employee", "employee", "client"];
-  if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "client"];
+  if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "inspection") roles = ["admin", "office", "site_employee", "employee"];
   if (key === "cost") roles = ["admin", "office", "employee"];
   if (key === "finance") roles = ["admin", "office", "employee"];

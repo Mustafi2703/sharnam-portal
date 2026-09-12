@@ -126,10 +126,15 @@ vendorsRouter.get("/project/:projectId", async (req, res) => {
 
 vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const { vendorId, tradeRole } = req.body;
+  const packages = Array.isArray(req.body.packages) ? req.body.packages.map((x: unknown) => String(x).trim()).filter(Boolean) : undefined;
+  const packagesJson = packages ? JSON.stringify([...new Set(packages)]) : undefined;
   const row = await prisma.projectVendor.upsert({
     where: { projectId_vendorId: { projectId: req.params.projectId, vendorId } },
-    create: { projectId: req.params.projectId, vendorId, tradeRole },
-    update: { tradeRole },
+    create: { projectId: req.params.projectId, vendorId, tradeRole, packagesJson },
+    update: {
+      ...(tradeRole !== undefined ? { tradeRole } : {}),
+      ...(packagesJson !== undefined ? { packagesJson } : {}),
+    },
     include: { vendor: true },
   });
   await audit("vendor.assign", { userId: req.user!.id, entity: "ProjectVendor", entityId: row.id });

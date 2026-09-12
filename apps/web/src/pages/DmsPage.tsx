@@ -16,6 +16,8 @@ type DriveItem = {
   modifiedAt?: string;
 };
 
+type AccessState = { status: string; token?: string | null; shareUrl?: string | null };
+
 type BrowseData = {
   projectCode: string;
   path: string;
@@ -23,7 +25,20 @@ type BrowseData = {
   children: DriveItem[];
   syncedAt?: string;
   provider?: string;
+  directOpen?: boolean;
+  access?: Record<string, AccessState>;
 };
+
+type AccessRequestRow = {
+  id: string;
+  fileName: string;
+  filePath: string;
+  status: string;
+  shareUrl?: string | null;
+  requestedBy?: { fullName: string; email: string; role: string };
+};
+
+type ShareTarget = { id: string; fullName: string; email: string; role: string };
 
 function formatBytes(n?: number) {
   if (!n && n !== 0) return "—";
@@ -130,6 +145,8 @@ export default function DmsPage({
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
+  const isOffice = user?.role === "admin" || user?.role === "office";
+  const needsRequestLink = user?.role === "vendor" || user?.role === "client";
   const isDrawings = mode === "drawings";
   const isModule = mode === "module" && !!moduleRoot;
   const rootPrefix = isModule ? moduleRoot! : isDrawings ? DRAWINGS_LIBRARY_ROOT : "";
@@ -147,6 +164,11 @@ export default function DmsPage({
   const [uploadErr, setUploadErr] = useState("");
   const [viewer, setViewer] = useState<DrawingPreview | null>(null);
   const [treeQuery, setTreeQuery] = useState("");
+  const [pending, setPending] = useState<AccessRequestRow[]>([]);
+  const [shareFor, setShareFor] = useState<DriveItem | null>(null);
+  const [shareTargets, setShareTargets] = useState<ShareTarget[]>([]);
+  const [shareUserId, setShareUserId] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("upload") !== "1" || !canUpload) return;
@@ -193,6 +215,16 @@ export default function DmsPage({
   useEffect(() => {
     void load(path);
   }, [load, path]);
+
+  const loadPending = useCallback(async () => {
+    if (!id || !isOffice || !token) return;
+    const rows = await api<AccessRequestRow[]>(`/api/dms/${id}/access-requests?status=Pending`, { token }).catch(() => []);
+    setPending(rows);
+  }, [id, isOffice, token]);
+
+  useEffect(() => {
+    void loadPending();
+  }, [loadPending]);
 
   const breadcrumbs = useMemo(() => {
     const rel = rootPrefix && path.startsWith(rootPrefix)
@@ -278,9 +310,85 @@ export default function DmsPage({
     }
   }
 
+  function fileAccess(item: DriveItem): AccessState | undefined {
+    return data?.access?.[item.path];
+  }
+
+  async function requestAccess(item: DriveItem) {
+    if (!id) return;
+    setMsg("");
+    try {
+      const row = await api<AccessRequestRow>(`/api/dms/${id}/access-requests`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ filePath: item.path, fileName: item.name }),
+      });
+      if (row.status === "Approved" && row.shareUrl) {
+        window.location.assign(row.shareUrl);
+        return;
+      }
+      setMsg(`Access requested for ${item.name}. Office will send a link when they approve.`);
+      await load(path);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Request failed");
+    }
+  }
+
+  async function approveRequest(row: AccessRequestRow) {
+    if (!id) return;
+    try {
+      const out = await api<AccessRequestRow>(`/api/dms/${id}/access-requests/${row.id}/approve`, { method: "POST", token });
+      if (out.shareUrl) {
+        await navigator.clipboard?.writeText(out.shareUrl).catch(() => null);
+        setMsg(`Approved — request link copied. Send to ${row.requestedBy?.fullName || "the requester"}.`);
+      }
+      await loadPending();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Approve failed");
+    }
+  }
+
+  async function openShare(item: DriveItem) {
+    if (!id) return;
+    setShareFor(item);
+    setShareUserId("");
+    const rows = await api<ShareTarget[]>(`/api/dms/${id}/share-targets`, { token }).catch(() => []);
+    setShareTargets(rows);
+  }
+
+  async function sendShare() {
+    if (!id || !shareFor || !shareUserId) return;
+    setShareBusy(true);
+    try {
+      const out = await api<AccessRequestRow>(`/api/dms/${id}/share`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ filePath: shareFor.path, fileName: shareFor.name, userId: shareUserId }),
+      });
+      if (out.shareUrl) {
+        await navigator.clipboard?.writeText(out.shareUrl).catch(() => null);
+        setMsg(`Share link copied — send it to the vendor or client. They sign in and open that request link.`);
+      }
+      setShareFor(null);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Share failed");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   function openItem(item: DriveItem) {
     if (item.type === "folder") {
       setPath(item.path);
+      return;
+    }
+    if (needsRequestLink) {
+      const acc = fileAccess(item);
+      if (acc?.status === "Approved" && acc.shareUrl) {
+        window.location.assign(acc.shareUrl);
+        return;
+      }
+      void requestAccess(item);
       return;
     }
     const url = fileUrl(data?.projectCode || "", item);
@@ -317,6 +425,30 @@ export default function DmsPage({
           <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
             GFC register →
           </Link>
+        </p>
+      )}
+
+      {pending.length > 0 && isOffice && (
+        <Card className="!p-3 border-amber-200 bg-amber-50/70 space-y-2">
+          <p className="text-sm font-semibold">Pending file access ({pending.length})</p>
+          <ul className="text-sm space-y-1.5">
+            {pending.slice(0, 8).map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <strong>{row.requestedBy?.fullName}</strong> · {row.fileName}
+                </span>
+                <Button type="button" className="!text-xs" onClick={() => void approveRequest(row)}>
+                  Approve & copy link
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {needsRequestLink && (
+        <p className="text-xs text-steel-muted">
+          Files stay in this project’s ISO drive. Open a file to request access — office sends you the request link.
         </p>
       )}
 
@@ -488,6 +620,7 @@ export default function DmsPage({
                 {files.map((c) => {
                   const previewable = canPreviewInApp && (isPdf(c.name) || isImage(c.name));
                   const url = fileUrl(data?.projectCode || "", c);
+                  const acc = fileAccess(c);
                   return (
                   <tr key={c.path} className="hover:bg-sand/50">
                     <td className="px-4 py-2.5 font-medium">📄 {c.name}</td>
@@ -496,20 +629,41 @@ export default function DmsPage({
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatDate(c.modifiedAt)}</td>
                     <td className="px-4 py-2.5 text-right">
                       <div className="dms-file-actions">
-                        {previewable ? (
-                          <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => openItem(c)}>
-                            Preview
-                          </Button>
-                        ) : null}
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="dms-file-actions__link"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {previewable ? "Open ↗" : "Open ↗"}
-                        </a>
+                        {needsRequestLink ? (
+                          acc?.status === "Approved" && acc.shareUrl ? (
+                            <a href={acc.shareUrl} className="dms-file-actions__link">
+                              Open link
+                            </a>
+                          ) : acc?.status === "Pending" ? (
+                            <span className="text-[11px] text-steel-muted">Requested</span>
+                          ) : (
+                            <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => void requestAccess(c)}>
+                              Request access
+                            </Button>
+                          )
+                        ) : (
+                          <>
+                            {previewable ? (
+                              <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => openItem(c)}>
+                                Preview
+                              </Button>
+                            ) : null}
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="dms-file-actions__link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Open ↗
+                            </a>
+                            {isOffice ? (
+                              <Button type="button" variant="ghost" className="!py-1 !text-xs" onClick={() => void openShare(c)}>
+                                Share link
+                              </Button>
+                            ) : null}
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -553,6 +707,42 @@ export default function DmsPage({
           variant="modal"
           onClose={() => setViewer(null)}
         />
+      )}
+
+      {shareFor && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => setShareFor(null)}>
+          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <Card className="space-y-3">
+              <h3 className="font-display text-xl">Share request link</h3>
+              <p className="text-sm text-steel-muted">
+                {shareFor.name} — vendor or client signs in and opens this link. They do not get the raw drive URL.
+              </p>
+              <select
+                className="w-full border border-line rounded-lg px-2 py-1.5 text-sm bg-white"
+                value={shareUserId}
+                onChange={(e) => setShareUserId(e.target.value)}
+              >
+                <option value="">Pick vendor or client login</option>
+                {shareTargets.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName} · {u.role} · {u.email}
+                  </option>
+                ))}
+              </select>
+              {!shareTargets.length ? (
+                <p className="text-xs text-steel-muted">No vendor/client logins on this project yet.</p>
+              ) : null}
+              <div className="flex gap-2">
+                <Button type="button" disabled={!shareUserId || shareBusy} onClick={() => void sendShare()}>
+                  Create & copy link
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setShareFor(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -135,6 +135,43 @@ async function publishRegisterWorkbooks(projectId: string, projectCode: string) 
     }
   }
 
+  const sheets = await prisma.customSheet.findMany({
+    where: { projectId },
+    select: { id: true, name: true, headersJson: true, rowsJson: true },
+  });
+  if (sheets.length) {
+    try {
+      const XLSX = (await import("../lib/xlsx.js")).default;
+      const { publishRegisterWorkbook } = await import("./registerWorkbookPublish.js");
+      for (const sheet of sheets) {
+        try {
+          const headers = JSON.parse(sheet.headersJson || "[]");
+          const rows = JSON.parse(sheet.rowsJson || "[]");
+          const aoa = [headers, ...rows.map((r: unknown) => (Array.isArray(r) ? r.map((c) => (c && typeof c === "object" && "raw" in c ? (c as { raw: unknown }).raw : c)) : []))];
+          const ws = XLSX.utils.aoa_to_sheet(aoa);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, String(sheet.name || "Sheet").slice(0, 31));
+          const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" }) as Buffer;
+          const fileName = `Sheet-${projectCode}-${String(sheet.name).replace(/[^\w.-]+/g, "_").slice(0, 40)}.xlsx`;
+          await publishRegisterWorkbook({
+            projectId,
+            userId: office.id,
+            moduleKey: "reportsMis",
+            fileName,
+            buffer,
+            auditAction: "customsheet.published.dump",
+            auditMeta: { sheetId: sheet.id, source: "dump-logs" },
+          });
+          published.push({ kind: "sheet", fileName, folder: MODULE_TO_ISO_FOLDER.reportsMis });
+        } catch (e) {
+          console.warn("dump-logs: custom sheet skipped:", e instanceof Error ? e.message : e);
+        }
+      }
+    } catch (e) {
+      console.warn("dump-logs: custom sheets skipped:", e instanceof Error ? e.message : e);
+    }
+  }
+
   const cubeCount = await prisma.cubeTest.count({ where: { projectId } });
   if (cubeCount > 0) {
     try {
@@ -727,4 +764,16 @@ export async function dumpAllProjectLogs(projectId: string) {
     registers: results,
     workbooks,
   };
+}
+
+const lastDumpAt = new Map<string, number>();
+
+/** Keep ISO folders current without blocking every folder click. */
+export function maybeDumpProjectRegisters(projectId: string) {
+  const prev = lastDumpAt.get(projectId) || 0;
+  if (Date.now() - prev < 5 * 60 * 1000) return;
+  lastDumpAt.set(projectId, Date.now());
+  void dumpAllProjectLogs(projectId).catch((err) => {
+    console.warn("[dms] register dump:", err instanceof Error ? err.message : err);
+  });
 }

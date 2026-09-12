@@ -5,7 +5,7 @@ import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableSelect } from "./SearchableSelect";
 import { VendorManageActions } from "./VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "./VendorQuickEditModal";
-import { formatPartyType, VENDOR_PARTY_TYPES, type VendorPartyType } from "../lib/vendorTypes";
+import { formatPartyType, isVendorOrContractor, VENDOR_PARTY_TYPES, type VendorPartyType } from "../lib/vendorTypes";
 
 export type SetupDeskVendor = {
   id: string;
@@ -26,7 +26,10 @@ export type AssignedSetupVendor = {
   email?: string | null;
   trade?: string | null;
   tradeRole?: string | null;
+  packages?: string[];
 };
+
+export type SetupPartyKind = "Contractor" | "Consultant" | "Client";
 
 type Props = {
   projectId: string;
@@ -35,30 +38,74 @@ type Props = {
   assigned: AssignedSetupVendor[];
   onMsg: (text: string) => void;
   onChanged: () => void | Promise<void>;
+  party?: SetupPartyKind;
+  projectPackages?: string[];
 };
 
-const EMPTY = {
-  name: "",
-  partyType: "Contractor" as VendorPartyType,
-  email: "",
-  primaryContactName: "",
-  businessPhone: "",
-  trade: "",
+const COPY: Record<SetupPartyKind, { title: string; blurb: string; add: string; create: string; empty: string; defaultType: VendorPartyType }> = {
+  Contractor: {
+    title: "Vendors / contractors",
+    blurb: "Same company type. Add, delete, and pin work packages — no bid required.",
+    add: "Add vendor / contractor",
+    create: "+ New vendor / contractor",
+    empty: "No vendors / contractors on this job yet.",
+    defaultType: "Contractor",
+  },
+  Consultant: {
+    title: "Consultants",
+    blurb: "Design, MEP, structural, PMC partners. Same add / delete / package pins as vendors.",
+    add: "Add consultant",
+    create: "+ New consultant",
+    empty: "No consultants on this job yet.",
+    defaultType: "Consultant",
+  },
+  Client: {
+    title: "Client",
+    blurb: "Put the owner organisation on this project so they get a portal login and a request-link seat.",
+    add: "Add client",
+    create: "+ New client company",
+    empty: "No client company on this job yet — add the owner here, not only the name on the card.",
+    defaultType: "Client",
+  },
 };
+
+function matchesParty(partyType: string | null | undefined, party: SetupPartyKind) {
+  if (party === "Contractor") return isVendorOrContractor(partyType);
+  if (party === "Client") return partyType === "Client";
+  return partyType === "Consultant" || partyType === "Designer" || partyType === "PMC";
+}
 
 /** Add / edit / remove companies on a project without opening a bid. */
-export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, onMsg, onChanged }: Props) {
+export function ProjectVendorsSetupDesk({
+  projectId,
+  token,
+  catalog,
+  assigned,
+  onMsg,
+  onChanged,
+  party = "Contractor",
+  projectPackages = [],
+}: Props) {
+  const copy = COPY[party];
   const [pickId, setPickId] = useState("");
   const [tradeRole, setTradeRole] = useState("");
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState({
+    name: "",
+    partyType: copy.defaultType,
+    email: "",
+    primaryContactName: "",
+    businessPhone: "",
+    trade: "",
+  });
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
 
+  const scopedAssigned = useMemo(() => assigned.filter((v) => matchesParty(v.partyType, party)), [assigned, party]);
   const unused = useMemo(() => {
     const onJob = new Set(assigned.map((v) => v.vendorId));
-    return catalog.filter((v) => !onJob.has(v.id));
-  }, [catalog, assigned]);
+    return catalog.filter((v) => !onJob.has(v.id) && matchesParty(v.partyType, party));
+  }, [catalog, assigned, party]);
 
   async function assignExisting(e: FormEvent) {
     e.preventDefault();
@@ -71,11 +118,11 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
       await api(`/api/vendors/project/${projectId}/assign`, {
         method: "POST",
         token,
-        body: JSON.stringify({ vendorId: pickId, tradeRole }),
+        body: JSON.stringify({ vendorId: pickId, tradeRole, packages: [] }),
       });
       setPickId("");
       setTradeRole("");
-      onMsg("Company added to this project. No bid required.");
+      onMsg(`${copy.add} — saved on this project.`);
       await onChanged();
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Could not add company");
@@ -107,9 +154,9 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
       await api(`/api/vendors/project/${projectId}/assign`, {
         method: "POST",
         token,
-        body: JSON.stringify({ vendorId: created.id, tradeRole: form.trade.trim() || form.partyType }),
+        body: JSON.stringify({ vendorId: created.id, tradeRole: form.trade.trim() || form.partyType, packages: [] }),
       });
-      setForm(EMPTY);
+      setForm({ name: "", partyType: copy.defaultType, email: "", primaryContactName: "", businessPhone: "", trade: "" });
       setShowCreate(false);
       onMsg(
         `${created.name} added to this project.${
@@ -124,22 +171,42 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
     }
   }
 
+  async function savePackages(vendorId: string, packages: string[]) {
+    setBusy(true);
+    try {
+      await api(`/api/vendors/project/${projectId}/assign`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ vendorId, packages }),
+      });
+      await onChanged();
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not save packages");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const typeOptions = VENDOR_PARTY_TYPES.filter((p) => {
+    if (party === "Contractor") return p.value === "Contractor";
+    if (party === "Client") return p.value === "Client";
+    return p.value === "Consultant" || p.value === "Designer" || p.value === "PMC";
+  });
+
   return (
     <Card className="!p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-semibold text-sm">Vendors / contractors on this project</h3>
-          <p className="text-xs text-steel-muted mt-0.5">
-            Vendor and contractor are the same company type. Add them here even if you never open a bid. Edit or delete whenever needed.
-          </p>
+          <h3 className="font-semibold text-sm">{copy.title}</h3>
+          <p className="text-xs text-steel-muted mt-0.5">{copy.blurb}</p>
         </div>
         <Link to="/crm/directory/vendors" className="text-xs font-semibold text-brand">
           Company directory →
         </Link>
       </div>
 
-      <ul className="divide-y divide-line max-h-64 overflow-y-auto text-sm">
-        {assigned.map((v) => (
+      <ul className="divide-y divide-line max-h-[22rem] overflow-y-auto text-sm">
+        {scopedAssigned.map((v) => (
           <li key={v.id} className="py-2.5 space-y-2">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -151,6 +218,29 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
               </div>
               <Badge tone="brand">{formatPartyType(v.partyType)}</Badge>
             </div>
+            {projectPackages.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {projectPackages.map((pkg) => {
+                  const on = (v.packages || []).includes(pkg);
+                  return (
+                    <button
+                      key={pkg}
+                      type="button"
+                      disabled={busy}
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                        on ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted"
+                      }`}
+                      onClick={() => {
+                        const next = on ? (v.packages || []).filter((p) => p !== pkg) : [...(v.packages || []), pkg];
+                        void savePackages(v.vendorId, next);
+                      }}
+                    >
+                      {pkg}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <VendorManageActions
               vendor={{ id: v.vendorId, name: v.name }}
               token={token}
@@ -168,9 +258,7 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
             />
           </li>
         ))}
-        {!assigned.length && (
-          <li className="py-4 text-sm text-steel-muted">No companies on this job yet — pick from the directory or add a new one.</li>
-        )}
+        {!scopedAssigned.length && <li className="py-4 text-sm text-steel-muted">{copy.empty}</li>}
       </ul>
 
       <form className="flex flex-wrap gap-2 items-end border-t border-line pt-3" onSubmit={assignExisting}>
@@ -186,21 +274,21 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
           placeholder="Add from directory…"
           searchPlaceholder="Search company…"
         />
-        <Input placeholder="Trade on this project" value={tradeRole} onChange={(e) => setTradeRole(e.target.value)} />
+        <Input placeholder="Role / trade on this project" value={tradeRole} onChange={(e) => setTradeRole(e.target.value)} />
         <Button type="submit" variant="secondary" disabled={busy}>
-          Add to project
+          {copy.add}
         </Button>
       </form>
 
       <div className="border-t border-line pt-3">
         <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => setShowCreate((v) => !v)}>
-          {showCreate ? "Cancel" : "+ New company on this project"}
+          {showCreate ? "Cancel" : copy.create}
         </Button>
         {showCreate && (
           <form className="grid sm:grid-cols-2 gap-2 mt-3" onSubmit={createAndAssign}>
             <Input required placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <Select value={form.partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
-              {VENDOR_PARTY_TYPES.map((p) => (
+              {typeOptions.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
                 </option>
@@ -209,7 +297,7 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
             <Input placeholder="Contact" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
             <Input type="email" placeholder="Email (optional — only if they need a login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-            <Input placeholder="Trade" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
+            <Input placeholder="Trade / discipline" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
             <Button type="submit" className="sm:col-span-2" disabled={busy}>
               {busy ? "Saving…" : "Create and add to project"}
             </Button>

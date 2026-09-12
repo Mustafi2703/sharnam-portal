@@ -427,6 +427,16 @@ projectsRouter.post("/work-package-catalog", requireRoles("admin", "office"), as
   }
 });
 
+projectsRouter.delete("/work-package-catalog", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { removeWorkPackageCatalogEntry } = await import("../services/workPackageCatalog.js");
+  try {
+    const packages = await removeWorkPackageCatalogEntry(String(req.body?.name || req.query.name || ""));
+    res.json({ packages });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not delete package" });
+  }
+});
+
 projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const {
     code,
@@ -624,15 +634,25 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
       phone: m.user.phone,
       portal: m.user.portal,
     })),
-    vendors: projectVendors.map((pv) => ({
-      id: pv.id,
-      vendorId: pv.vendorId,
-      tradeRole: pv.tradeRole,
-      name: pv.vendor.name,
-      partyType: pv.vendor.partyType,
-      email: pv.vendor.email,
-      trade: pv.vendor.trade,
-    })),
+    vendors: projectVendors.map((pv) => {
+      let packages: string[] = [];
+      try {
+        const parsed = JSON.parse(pv.packagesJson || "[]");
+        packages = Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch {
+        packages = [];
+      }
+      return {
+        id: pv.id,
+        vendorId: pv.vendorId,
+        tradeRole: pv.tradeRole,
+        packages,
+        name: pv.vendor.name,
+        partyType: pv.vendor.partyType,
+        email: pv.vendor.email,
+        trade: pv.vendor.trade,
+      };
+    }),
     bidPackages: bidPackages.map((bp) => ({
       id: bp.id,
       title: bp.title,
@@ -1007,7 +1027,49 @@ projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req:
 });
 
 export const dmsRouter = Router();
+
+function guessFileType(name: string) {
+  if (/\.pdf$/i.test(name)) return "application/pdf";
+  if (/\.xlsx$/i.test(name)) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (/\.xls$/i.test(name)) return "application/vnd.ms-excel";
+  if (/\.csv$/i.test(name)) return "text/csv";
+  if (/\.png$/i.test(name)) return "image/png";
+  if (/\.jpe?g$/i.test(name)) return "image/jpeg";
+  if (/\.webp$/i.test(name)) return "image/webp";
+  return "application/octet-stream";
+}
+
+/** Capability URL — token is the access key so the in-app viewer can load the file. */
+dmsRouter.get("/shared/:token/file", async (req, res) => {
+  const { readSharedFile } = await import("../services/driveFileAccess.js");
+  const opened = await readSharedFile(req.params.token);
+  if (!opened) return res.status(404).json({ error: "File not found or link expired" });
+  res.setHeader("Content-Type", guessFileType(opened.row.fileName));
+  res.setHeader("Content-Disposition", `inline; filename="${opened.row.fileName.replace(/"/g, "")}"`);
+  res.send(opened.buffer);
+});
+
 dmsRouter.use(requireAuth);
+
+dmsRouter.get("/shared/:token", async (req: AuthedRequest, res) => {
+  const { loadApprovedShare, shareLinkForToken } = await import("../services/driveFileAccess.js");
+  const row = await loadApprovedShare(req.params.token, req.user);
+  if (!row) return res.status(404).json({ error: "Link expired or not for this login" });
+  res.json({
+    id: row.id,
+    fileName: row.fileName,
+    filePath: row.filePath,
+    project: row.project,
+    expiresAt: row.expiresAt,
+    shareUrl: shareLinkForToken(req.params.token),
+    fileUrl: `/api/dms/shared/${req.params.token}/file`,
+  });
+});
+
+dmsRouter.get("/access-inbox", requireRoles("admin", "office"), async (_req, res) => {
+  const { listOfficeAccessInbox } = await import("../services/driveFileAccess.js");
+  res.json(await listOfficeAccessInbox());
+});
 
 dmsRouter.post("/:projectId/sync", async (req: AuthedRequest, res) => {
   const result = await mockOneDrive.sync(req.params.projectId);
@@ -1031,6 +1093,12 @@ dmsRouter.get("/:projectId/folders", async (req, res) => {
 dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
+  const { userCanBrowseProjectDrive, accessMapForUser, canOpenDriveDirectly } = await import("../services/driveFileAccess.js");
+  if (!(await userCanBrowseProjectDrive(req.user!, req.params.projectId))) {
+    return res.status(403).json({ error: "Not on this project" });
+  }
+  const { maybeDumpProjectRegisters } = await import("../services/logDump.js");
+  if (!String(req.query.path || "")) maybeDumpProjectRegisters(project.id);
   const folderPath = String(req.query.path || "");
   const syncOnOpen = String(req.query.sync || "0") === "1";
   let syncedAt: string | null = null;
@@ -1056,7 +1124,16 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     }
   }
   const folders = await prisma.documentFolder.findMany({ where: { projectId: project.id } });
-  const children = await mockOneDrive.listChildrenLive(project.code, folderPath);
+  let children = await mockOneDrive.listChildrenLive(project.code, folderPath);
+  const directOpen = canOpenDriveDirectly(req.user!.role);
+  if (!directOpen) {
+    children = children.map((c) =>
+      c.type === "file" && c.url?.includes("sharepoint.com")
+        ? { ...c, url: `/uploads/onedrive/${project.code}/${c.path}` }
+        : c
+    );
+  }
+  const access = await accessMapForUser(project.id, req.user!);
   res.json({
     projectCode: project.code,
     path: folderPath,
@@ -1065,8 +1142,70 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     folders,
     syncedAt,
     provider: resultProvider(children),
+    directOpen,
+    access,
     note: "Browse lists SharePoint live when configured. Run Sync library to create the full ISO folder tree.",
   });
+});
+
+dmsRouter.get("/:projectId/access-requests", requireRoles("admin", "office"), async (req, res) => {
+  const { listDriveAccessRequests } = await import("../services/driveFileAccess.js");
+  res.json(await listDriveAccessRequests(req.params.projectId, typeof req.query.status === "string" ? req.query.status : undefined));
+});
+
+dmsRouter.get("/:projectId/share-targets", requireRoles("admin", "office"), async (req, res) => {
+  const { shareTargets } = await import("../services/driveFileAccess.js");
+  res.json(await shareTargets(req.params.projectId));
+});
+
+dmsRouter.post("/:projectId/access-requests", async (req: AuthedRequest, res) => {
+  try {
+    const { requestDriveFileAccess } = await import("../services/driveFileAccess.js");
+    const row = await requestDriveFileAccess({
+      projectId: req.params.projectId,
+      filePath: String(req.body.filePath || ""),
+      fileName: String(req.body.fileName || ""),
+      user: req.user!,
+      note: req.body.note ? String(req.body.note) : undefined,
+    });
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Request failed" });
+  }
+});
+
+dmsRouter.post("/:projectId/share", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { shareDriveFile } = await import("../services/driveFileAccess.js");
+    const row = await shareDriveFile({
+      projectId: req.params.projectId,
+      filePath: String(req.body.filePath || ""),
+      fileName: String(req.body.fileName || ""),
+      userId: String(req.body.userId || ""),
+      officeUser: req.user!,
+    });
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Share failed" });
+  }
+});
+
+dmsRouter.post("/:projectId/access-requests/:requestId/approve", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { decideDriveAccess } = await import("../services/driveFileAccess.js");
+    res.json(await decideDriveAccess({ requestId: req.params.requestId, officeUser: req.user!, approve: true }));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Approve failed" });
+  }
+});
+
+dmsRouter.post("/:projectId/access-requests/:requestId/deny", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { decideDriveAccess } = await import("../services/driveFileAccess.js");
+    res.json(await decideDriveAccess({ requestId: req.params.requestId, officeUser: req.user!, approve: false }));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Deny failed" });
+  }
 });
 
 function resultProvider(children: { url?: string }[]) {

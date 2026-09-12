@@ -16,6 +16,7 @@ import CostPage from "./pages/CostPage";
 import FinancePage from "./pages/FinancePage";
 import DmsPage from "./pages/DmsPage";
 import OfficeDmsViewerPage from "./pages/OfficeDmsViewerPage";
+import DmsSharedOpenPage from "./pages/DmsSharedOpenPage";
 import DrawingsLibraryPage from "./pages/DrawingsLibraryPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
@@ -198,6 +199,7 @@ export default function App() {
                 <Route path="/master/vendors" element={<Navigate to="/master?tab=vendors" replace />} />
                 <Route path="/master/checklists" element={<ChecklistMasterPage />} />
                 <Route path="/master/dms" element={<OfficeDmsViewerPage />} />
+                <Route path="/dms/open/:token" element={<DmsSharedOpenPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />

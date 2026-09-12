@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { type SetupVendor } from "../../components/SetupPartyMultiPick";
 import { ProjectVendorsSetupDesk } from "../../components/ProjectVendorsSetupDesk";
+import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
@@ -14,7 +15,16 @@ import { ProjectManageActions } from "../../components/ProjectManageActions";
 type SetupSummary = {
   project: { id: string; code: string; name: string; clientName?: string | null; clientEmail?: string | null };
   members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string }[];
-  vendors: { id: string; vendorId: string; name: string; partyType: string; email?: string | null }[];
+  vendors: {
+    id: string;
+    vendorId: string;
+    name: string;
+    partyType: string;
+    email?: string | null;
+    trade?: string | null;
+    tradeRole?: string | null;
+    packages?: string[];
+  }[];
 };
 
 type ProjectCard = {
@@ -31,6 +41,7 @@ type ProjectCard = {
   designConsultant?: string | null;
   contractorName?: string | null;
   pmcName?: string | null;
+  workPackages?: string | null;
 };
 
 type SetupStatus = { ready: boolean; checks: { key: string; ok: boolean; label: string; detail?: string }[] };
@@ -52,6 +63,7 @@ export default function LiveProjectSetupPage() {
   const [busy, setBusy] = useState(false);
   const [accessSlip, setAccessSlip] = useState<{ email: string; tempPassword?: string }[]>([]);
   const [card, setCard] = useState<ProjectCard | null>(null);
+  const [projectPackages, setProjectPackages] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!token || !projectId) return;
@@ -63,7 +75,15 @@ export default function LiveProjectSetupPage() {
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
       api<ProjectCard>(`/api/projects/${projectId}`, { token }).catch(() => null),
     ]);
-    if (proj) setCard(proj);
+    if (proj) {
+      setCard(proj);
+      try {
+        const parsed = proj.workPackages ? JSON.parse(proj.workPackages) : [];
+        setProjectPackages(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setProjectPackages([]);
+      }
+    }
     setSummary(s);
     setStatus(st);
     setOverview(ov);
@@ -150,7 +170,7 @@ export default function LiveProjectSetupPage() {
       <PageHeader
         eyebrow="Live project"
         title={summary ? `Set up ${summary.project.code}` : "Project setup"}
-        subtitle="Fill the project / design header, add vendors here (no bid required), allocate people, then launch. Open a bid only if you want a comparative."
+        subtitle="Fill the header, add the client, consultants, and vendors, pin work packages on each, allocate people, then launch. A bid is optional."
       />
       {msg && <p className="text-sm text-ok">{msg}</p>}
       {status && (
@@ -251,25 +271,57 @@ export default function LiveProjectSetupPage() {
         </Card>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <ProjectTeamAllocatePanel
-          projectId={projectId}
-          token={token}
-          users={users}
-          members={summary?.members || []}
-          canEdit={canManage}
-          onMsg={setMsg}
-          onChanged={() => void load()}
-        />
+      <WorkPackagesPanel
+        token={token}
+        projectId={projectId}
+        onSaved={(pkgs) => {
+          setProjectPackages(pkgs);
+          setMsg("Packages saved — pin them on the client, consultants, and vendors.");
+        }}
+      />
+
+      <div className="grid lg:grid-cols-3 gap-4">
         <ProjectVendorsSetupDesk
+          party="Client"
           projectId={projectId}
           token={token}
           catalog={vendors}
           assigned={summary?.vendors || []}
+          projectPackages={projectPackages}
+          onMsg={setMsg}
+          onChanged={() => void load()}
+        />
+        <ProjectVendorsSetupDesk
+          party="Consultant"
+          projectId={projectId}
+          token={token}
+          catalog={vendors}
+          assigned={summary?.vendors || []}
+          projectPackages={projectPackages}
+          onMsg={setMsg}
+          onChanged={() => void load()}
+        />
+        <ProjectVendorsSetupDesk
+          party="Contractor"
+          projectId={projectId}
+          token={token}
+          catalog={vendors}
+          assigned={summary?.vendors || []}
+          projectPackages={projectPackages}
           onMsg={setMsg}
           onChanged={() => void load()}
         />
       </div>
+
+      <ProjectTeamAllocatePanel
+        projectId={projectId}
+        token={token}
+        users={users}
+        members={summary?.members || []}
+        canEdit={canManage}
+        onMsg={setMsg}
+        onChanged={() => void load()}
+      />
 
       <ProjectSetupMatrixDesk
         projectId={projectId}

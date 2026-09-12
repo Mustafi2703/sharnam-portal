@@ -42,39 +42,22 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
       .catch(() => setProjectPackages(["Civil", "PEB"]));
   }, [projectId, token]);
 
-  async function addToCatalog(e: FormEvent) {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const r = await api<{ packages: string[] }>("/api/projects/work-package-catalog", {
-        method: "POST",
-        token,
-        body: JSON.stringify({ name: newName.trim() }),
-      });
-      setCatalog(r.packages);
-      setNewName("");
-      setMsg(`Added ${newName.trim()}.`);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setBusy(false);
+  async function persist(next: string[]) {
+    if (!projectId) {
+      setProjectPackages(next);
+      return;
     }
-  }
-
-  async function saveProjectPackages() {
-    if (!projectId) return;
     setBusy(true);
     setMsg("");
     try {
       await api(`/api/progress/${projectId}/modules`, {
         method: "PATCH",
         token,
-        body: JSON.stringify({ workPackages: projectPackages }),
+        body: JSON.stringify({ workPackages: next }),
       });
-      setMsg("Saved.");
-      onSaved?.(projectPackages);
+      setProjectPackages(next);
+      setMsg("Packages saved on this project.");
+      onSaved?.(next);
       await loadCatalog();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
@@ -83,57 +66,138 @@ export function WorkPackagesPanel({ token, projectId, onSaved }: Props) {
     }
   }
 
-  function toggle(pkg: string) {
-    setProjectPackages((prev) =>
-      prev.includes(pkg) ? prev.filter((p) => p !== pkg) : [...prev, pkg].sort(),
-    );
+  async function addPackage(e: FormEvent) {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await api<{ packages: string[] }>("/api/projects/work-package-catalog", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ name }),
+      });
+      setCatalog(r.packages);
+      setNewName("");
+      const next = projectPackages.includes(name) ? projectPackages : [...projectPackages, name].sort();
+      if (projectId) await persist(next);
+      else {
+        setProjectPackages(next);
+        setMsg(`Added ${name} to the catalogue.`);
+      }
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteFromCatalog(name: string) {
+    if (!window.confirm(`Remove "${name}" from the package catalogue? Projects that still use it keep their copy until you remove it there.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await api<{ packages: string[] }>("/api/projects/work-package-catalog", {
+        method: "DELETE",
+        token,
+        body: JSON.stringify({ name }),
+      });
+      setCatalog(r.packages);
+      setMsg(`Removed ${name} from the catalogue.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addToProject(pkg: string) {
+    if (projectPackages.includes(pkg)) return;
+    void persist([...projectPackages, pkg].sort());
+  }
+
+  function removeFromProject(pkg: string) {
+    void persist(projectPackages.filter((p) => p !== pkg));
   }
 
   return (
     <Card className="!p-4 space-y-3">
-      <h2 className="font-semibold text-base">{formatUiText("Work packages")}</h2>
+      <div>
+        <h2 className="font-semibold text-base">{formatUiText("Package manager")}</h2>
+        <p className="text-xs text-steel-muted mt-0.5">
+          Add or delete work packages here, then pin them on vendors, consultants, and the client below.
+        </p>
+      </div>
 
       {msg && <p className="text-xs rounded px-2 py-1.5 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      <form className="flex flex-wrap gap-2 items-center" onSubmit={addToCatalog}>
+      <form className="flex flex-wrap gap-2 items-center" onSubmit={addPackage}>
         <Input
           className="min-w-[180px] flex-1"
-          placeholder="New package name"
+          placeholder="New package (Civil, MEP, PEB…)"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
-        <Button type="submit" variant="secondary" disabled={busy || !newName.trim()}>
-          Add
+        <Button type="submit" disabled={busy || !newName.trim()}>
+          Add package
         </Button>
       </form>
 
-      <div className="flex flex-wrap gap-2">
-        {catalog.map((p) => {
-          const on = projectId ? projectPackages.includes(p) : false;
-          return (
-            <button
-              key={p}
-              type="button"
-              disabled={!projectId}
-              onClick={() => toggle(p)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold border transition ${
-                on ? "bg-brand text-white border-brand" : "bg-paper border-line text-steel-muted hover:border-brand"
-              } ${!projectId ? "opacity-60 cursor-not-allowed" : ""}`}
-            >
-              {p}
-            </button>
-          );
-        })}
-      </div>
-
       {projectId && (
-        <div className="flex flex-wrap gap-2 items-center border-t border-line pt-2">
-          <Badge tone="brand">{projectPackages.length} selected</Badge>
-          <Button type="button" disabled={busy} onClick={() => void saveProjectPackages()}>
-            Save
-          </Button>
+        <div className="border border-line rounded-xl overflow-hidden">
+          <div className="px-3 py-2 bg-sand/50 text-xs font-semibold uppercase tracking-wide text-steel-muted">
+            On this project · {projectPackages.length}
+          </div>
+          <ul className="divide-y divide-line">
+            {projectPackages.map((p) => (
+              <li key={p} className="px-3 py-2 flex items-center justify-between gap-2 text-sm">
+                <span className="font-medium">{p}</span>
+                <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => removeFromProject(p)}>
+                  Delete
+                </Button>
+              </li>
+            ))}
+            {!projectPackages.length && (
+              <li className="px-3 py-6 text-sm text-steel-muted text-center">No packages yet — add one above or pick from the catalogue.</li>
+            )}
+          </ul>
         </div>
       )}
+
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted mb-2">Catalogue</p>
+        <div className="flex flex-wrap gap-2">
+          {catalog.map((p) => {
+            const on = projectId ? projectPackages.includes(p) : false;
+            return (
+              <span key={p} className="inline-flex items-center gap-1 rounded-full border border-line bg-paper pl-3 pr-1 py-0.5">
+                <button
+                  type="button"
+                  disabled={!projectId || busy || on}
+                  onClick={() => addToProject(p)}
+                  className={`text-xs font-semibold ${on ? "text-brand" : "text-ink hover:text-brand"}`}
+                >
+                  {p}
+                  {on ? " · on project" : " · add"}
+                </button>
+                <button
+                  type="button"
+                  className="text-[10px] text-steel-muted hover:text-danger px-1"
+                  disabled={busy}
+                  onClick={() => void deleteFromCatalog(p)}
+                  title="Remove from catalogue"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {!projectId && <Badge tone="neutral">Open a project to pin packages on that job</Badge>}
     </Card>
   );
 }
