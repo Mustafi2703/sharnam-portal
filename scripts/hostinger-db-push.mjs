@@ -96,6 +96,18 @@ if (skipAllSeed) {
   } catch {
     console.warn("WARN: BBS demo shapes skipped (non-fatal)");
   }
+
+  try {
+    console.log("==> Arvind week pack (NTX + Dorm fills, 7 DPRs, published WPR, RA/COP)…");
+    execSync("npx tsx scripts/seed-arvind-week-test.mts", {
+      stdio: "inherit",
+      env: seedEnv,
+      cwd: rootDir,
+      timeout: 900_000,
+    });
+  } catch {
+    console.warn("WARN: Arvind week pack skipped (non-fatal — run npm run db:walk-arvind-week)");
+  }
 }
 
 process.exit(0);

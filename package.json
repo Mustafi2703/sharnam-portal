@@ -33,6 +33,7 @@
     "db:audit-arvind-sheets": "tsx scripts/audit-arvind-sheets.mts",
     "db:seed-arvind-week-test": "tsx scripts/seed-arvind-week-test.mts",
     "db:walk-arvind-week": "tsx scripts/walk-arvind-week-app.mts",
+    "test:portal-live": "tsx scripts/test-portal-spdc-live.mts",
     "email:comms-uat-preview": "tsx apps/api/scripts/send-comms-flow-demo-pack.ts preview",
     "email:comms-uat-all": "tsx apps/api/scripts/send-comms-flow-demo-pack.ts all",
     "email:daily-digest": "tsx apps/api/scripts/send-daily-digest.ts preview",
