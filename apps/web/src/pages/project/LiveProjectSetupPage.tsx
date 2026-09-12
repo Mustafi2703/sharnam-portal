@@ -4,7 +4,8 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
-import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
+import { type SetupVendor } from "../../components/SetupPartyMultiPick";
+import { ProjectVendorsSetupDesk } from "../../components/ProjectVendorsSetupDesk";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
@@ -47,8 +48,6 @@ export default function LiveProjectSetupPage() {
   const [overview, setOverview] = useState<{ members?: any[]; vendors?: any[] } | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
-  const [consultantIds, setConsultantIds] = useState<string[]>([]);
-  const [contractorIds, setContractorIds] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [accessSlip, setAccessSlip] = useState<{ email: string; tempPassword?: string }[]>([]);
@@ -70,17 +69,11 @@ export default function LiveProjectSetupPage() {
     setOverview(ov);
     setUsers(u);
     setVendors(v);
-    setConsultantIds(s.vendors.filter((x) => ["Consultant", "Designer", "PMC"].includes(x.partyType)).map((x) => x.vendorId));
-    setContractorIds(s.vendors.filter((x) => ["Contractor", "Vendor"].includes(x.partyType)).map((x) => x.vendorId));
   }, [token, projectId]);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  function rememberVendor(v: SetupVendor) {
-    setVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, v]));
-  }
 
   async function saveCard() {
     if (!token || !projectId || !card) return;
@@ -107,24 +100,6 @@ export default function LiveProjectSetupPage() {
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save project card failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveParties() {
-    if (!token || !projectId) return;
-    setBusy(true);
-    try {
-      await api(`/api/projects/${projectId}/assign-parties`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ vendorIds: [...new Set([...consultantIds, ...contractorIds])] }),
-      });
-      setMsg("Consultants and contractors saved.");
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Save parties failed");
     } finally {
       setBusy(false);
     }
@@ -175,7 +150,7 @@ export default function LiveProjectSetupPage() {
       <PageHeader
         eyebrow="Live project"
         title={summary ? `Set up ${summary.project.code}` : "Project setup"}
-        subtitle="Fill the project / design header first so QAP and cube sheets are readable, then allocate people, add vendors, fill the comms matrix, and launch."
+        subtitle="Fill the project / design header, add vendors here (no bid required), allocate people, then launch. Open a bid only if you want a comparative."
       />
       {msg && <p className="text-sm text-ok">{msg}</p>}
       {status && (
@@ -286,35 +261,14 @@ export default function LiveProjectSetupPage() {
           onMsg={setMsg}
           onChanged={() => void load()}
         />
-        <Card className="!p-4 space-y-3">
-          <h3 className="font-semibold text-sm">Consultants and contractors</h3>
-          <p className="text-xs text-steel-muted">New companies need an email so we can issue a vendor login and bid invite.</p>
-          <SetupPartyMultiPick
-            token={token}
-            title="Consultants"
-            kind="Consultant"
-            vendors={vendors}
-            selectedIds={consultantIds}
-            onChange={setConsultantIds}
-            onCreated={rememberVendor}
-            onMsg={setMsg}
-            busy={busy}
-          />
-          <SetupPartyMultiPick
-            token={token}
-            title="Contractors"
-            kind="Contractor"
-            vendors={vendors}
-            selectedIds={contractorIds}
-            onChange={setContractorIds}
-            onCreated={rememberVendor}
-            onMsg={setMsg}
-            busy={busy}
-          />
-          <Button type="button" variant="secondary" disabled={busy} onClick={() => void saveParties()}>
-            Save parties
-          </Button>
-        </Card>
+        <ProjectVendorsSetupDesk
+          projectId={projectId}
+          token={token}
+          catalog={vendors}
+          assigned={summary?.vendors || []}
+          onMsg={setMsg}
+          onChanged={() => void load()}
+        />
       </div>
 
       <ProjectSetupMatrixDesk
@@ -346,7 +300,7 @@ export default function LiveProjectSetupPage() {
               Email portal credentials
             </Button>
             <Link to={`/crm/bids?projectId=${projectId}`} className="text-sm font-semibold text-brand self-center">
-              Open bids →
+              Optional · open a bid →
             </Link>
           </div>
         </div>

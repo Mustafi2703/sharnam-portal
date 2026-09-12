@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
+import { ProjectVendorsSetupDesk } from "../../components/ProjectVendorsSetupDesk";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
@@ -365,6 +366,18 @@ export default function CrmProjectSetupPage() {
                     busy={busy}
                   />
                 </div>
+                {projectId && token ? (
+                  <div className="sm:col-span-2">
+                    <ProjectVendorsSetupDesk
+                      projectId={projectId}
+                      token={token}
+                      catalog={vendors}
+                      assigned={summary?.vendors || []}
+                      onMsg={setMsg}
+                      onChanged={() => void loadProject()}
+                    />
+                  </div>
+                ) : null}
                 {token && (
                   <div className="sm:col-span-2">
                     <ProjectTeamAllocatePanel
@@ -586,6 +599,9 @@ export default function CrmProjectSetupPage() {
             </Link>
             <Link to={`/projects/${projectId}/dms`} className="font-semibold text-brand">
               Document library →
+            </Link>
+            <Link to={`/crm/bids?projectId=${projectId}`} className="font-semibold text-brand">
+              Optional · open a bid →
             </Link>
             <Link to={`/projects/${projectId}/dpr-maker`} className="font-semibold text-brand">
               DPR maker →
