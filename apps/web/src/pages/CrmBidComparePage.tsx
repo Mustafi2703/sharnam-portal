@@ -12,6 +12,7 @@ import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { CrmBidProjectSetupSection } from "../components/CrmBidProjectSetupSection";
 import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
+import { BidManageActions } from "../components/BidManageActions";
 
 type Discipline = { key: string; label: string; sheetName: string };
 
@@ -43,6 +44,8 @@ type BidPackage = {
   lead?: { id: string; title: string } | null;
   project?: { id: string; code: string; name: string } | null;
   notes?: string | null;
+  dueDate?: string | null;
+  awardedVendorId?: string | null;
   summary?: {
     vendorLabels: string[];
     sectionTotals: { section: string; title: string; totals: Record<string, number> }[];
@@ -1065,6 +1068,34 @@ export default function CrmBidComparePage() {
                       <Button type="button" variant="secondary" disabled={busy} onClick={() => void simulateR2Boqs()}>
                         Load test BOQs from R2
                       </Button>
+                    )}
+                    {canManage && token && (
+                      <BidManageActions
+                        bid={{
+                          id: detail.id,
+                          title: detail.title,
+                          status: detail.status,
+                          revisionLabel: detail.revisionLabel,
+                          notes: detail.notes,
+                          dueDate: detail.dueDate,
+                          projectId: detail.project?.id || detail.projectId,
+                          leadId: detail.lead?.id || detail.leadId,
+                          awardedVendorId: detail.awardedVendorId,
+                        }}
+                        token={token}
+                        projects={projects}
+                        leads={leads}
+                        onChanged={async () => {
+                          await loadDetail(detail.id);
+                          await load();
+                        }}
+                        onDeleted={() => {
+                          setSelectedId(null);
+                          setDetail(null);
+                          const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
+                          nav(`/crm/bids${q}`, { replace: true });
+                        }}
+                      />
                     )}
                   </div>
                 </div>

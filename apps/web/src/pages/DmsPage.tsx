@@ -112,6 +112,8 @@ export default function DmsPage({
   moduleEyebrow,
   moduleSubtitle,
   hubLink,
+  projectId: projectIdProp,
+  initialPath,
 }: {
   mode?: DmsPageMode;
   embedded?: boolean;
@@ -120,8 +122,11 @@ export default function DmsPage({
   moduleEyebrow?: string;
   moduleSubtitle?: string;
   hubLink?: string;
+  projectId?: string;
+  initialPath?: string;
 }) {
-  const { id } = useParams();
+  const { id: routeId } = useParams();
+  const id = projectIdProp || routeId;
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
@@ -129,7 +134,7 @@ export default function DmsPage({
   const isModule = mode === "module" && !!moduleRoot;
   const rootPrefix = isModule ? moduleRoot! : isDrawings ? DRAWINGS_LIBRARY_ROOT : "";
 
-  const [path, setPath] = useState(rootPrefix || "");
+  const [path, setPath] = useState(initialPath || rootPrefix || "");
   const [data, setData] = useState<BrowseData | null>(null);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [filter, setFilter] = useState("");

@@ -25,7 +25,7 @@ export async function publishRegisterWorkbook(opts: {
 }): Promise<PublishResult> {
   const project = await prisma.project.findUniqueOrThrow({ where: { id: opts.projectId } });
   const folder = MODULE_TO_ISO_FOLDER[opts.moduleKey];
-  const saved = await mockOneDrive.upload(project.code, folder, opts.fileName, opts.buffer);
+  const saved = await mockOneDrive.upload(project.code, folder, opts.fileName, opts.buffer, undefined, { replace: true });
 
   await audit(opts.auditAction, {
     userId: opts.userId,
@@ -112,6 +112,12 @@ export async function publishQualityPackToDrive(projectId: string, userId: strin
   }
 
   return published;
+}
+
+/** Ensure QAP / cube / quality dashboard workbooks exist in ISO 08 folders (idempotent). */
+export async function ensureQualityIsoLinked(projectId: string, userId: string, weekLabel?: string) {
+  await mockOneDrive.ensureProjectTree(projectId);
+  return publishQualityPackToDrive(projectId, userId, weekLabel);
 }
 
 /** Archive an uploaded client workbook to the ISO drive (source file, not a generated export). */

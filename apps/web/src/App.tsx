@@ -15,6 +15,7 @@ import CommsPage from "./pages/CommsPage";
 import CostPage from "./pages/CostPage";
 import FinancePage from "./pages/FinancePage";
 import DmsPage from "./pages/DmsPage";
+import OfficeDmsViewerPage from "./pages/OfficeDmsViewerPage";
 import DrawingsLibraryPage from "./pages/DrawingsLibraryPage";
 import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
@@ -196,6 +197,7 @@ export default function App() {
                 <Route path="/master" element={<MasterModulePage />} />
                 <Route path="/master/vendors" element={<Navigate to="/master?tab=vendors" replace />} />
                 <Route path="/master/checklists" element={<ChecklistMasterPage />} />
+                <Route path="/master/dms" element={<OfficeDmsViewerPage />} />
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />

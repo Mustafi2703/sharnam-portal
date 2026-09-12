@@ -213,11 +213,36 @@ export default function QapPage() {
                 Quality dashboard →
               </Button>
             </Link>
-            <Link to={`/projects/${id}/dms`}>
+            <Link to={`/projects/${id}/quality/files`}>
               <Button type="button" variant="secondary">
-                DMS files →
+                ISO 08.01 folder →
               </Button>
             </Link>
+            {canManage && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={async () => {
+                  if (!id) return;
+                  setBusy(true);
+                  try {
+                    await api(`/api/checklist/project/${id}/qap/publish`, {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ week: weekFilter || undefined }),
+                    });
+                    setMsg("QAP workbook written to ISO 08.01 — Quality Plans and Inspection Test Plans.");
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Publish to ISO failed");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Publish to ISO
+              </Button>
+            )}
           </div>
         }
       />

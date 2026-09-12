@@ -1028,7 +1028,7 @@ dmsRouter.get("/:projectId/folders", async (req, res) => {
   res.json({ projectCode: project.code, folders: PROJECT_LIBRARY_FOLDERS });
 });
 
-dmsRouter.get("/:projectId/browse", async (req, res) => {
+dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
   const folderPath = String(req.query.path || "");
@@ -1040,6 +1040,20 @@ dmsRouter.get("/:projectId/browse", async (req, res) => {
       await mockOneDrive.touchFolder(project.id, folderPath);
     }
     syncedAt = new Date().toISOString();
+  }
+  const qualityIso =
+    folderPath.includes("08_QUALITY") ||
+    folderPath.includes("08.01_") ||
+    folderPath.includes("08.02_") ||
+    folderPath.includes("08.03_") ||
+    folderPath.includes("08.06_");
+  if (qualityIso && req.user?.id) {
+    try {
+      const { ensureQualityIsoLinked } = await import("../services/registerWorkbookPublish.js");
+      await ensureQualityIsoLinked(project.id, req.user.id);
+    } catch (err) {
+      console.warn("[dms] quality ISO link:", err instanceof Error ? err.message : err);
+    }
   }
   const folders = await prisma.documentFolder.findMany({ where: { projectId: project.id } });
   const children = await mockOneDrive.listChildrenLive(project.code, folderPath);

@@ -42,6 +42,12 @@ function storedUploadUrl(saved: { url: string; sharePointUrl?: string | null }) 
   return saved.url || saved.sharePointUrl || "";
 }
 
+function republishQapIso(projectId: string, userId: string) {
+  void import("../services/checklistWeekAdvance.js")
+    .then(({ refreshQualityPackAfterChange }) => refreshQualityPackAfterChange(projectId, userId))
+    .catch((err) => console.warn("[qap] ISO republish:", err instanceof Error ? err.message : err));
+}
+
 async function persistChecklistUploads(opts: {
   files: Express.Multer.File[];
   submissionId: string;
@@ -1963,6 +1969,7 @@ checklistRouter.post(
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
       },
     });
+    republishQapIso(req.params.projectId, req.user!.id);
     res.status(201).json(row);
   }
 );
@@ -1997,6 +2004,7 @@ checklistRouter.post(
           status: "Open",
         },
       });
+      republishQapIso(projectId, req.user!.id);
       return res.status(201).json({ weekLabel, copied: 0, created: 1, ids: [row.id] });
     }
     const uniqueByKey = new Map<string, (typeof source)[number]>();
@@ -2030,6 +2038,7 @@ checklistRouter.post(
         status: "Open",
       })),
     });
+    republishQapIso(projectId, req.user!.id);
     res.status(201).json({ weekLabel, copied: rows.length, created: rows.length });
   }
 );
@@ -2049,6 +2058,7 @@ checklistRouter.post(
       entityId: req.params.projectId,
       meta: { weekLabel, deleted: result.count },
     });
+    republishQapIso(req.params.projectId, req.user!.id);
     res.json({ ok: true, weekLabel, deleted: result.count });
   }
 );
@@ -2062,6 +2072,7 @@ checklistRouter.delete(
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
     await prisma.qapActivity.delete({ where: { id: existing.id } });
+    republishQapIso(req.params.projectId, req.user!.id);
     res.json({ ok: true });
   }
 );
@@ -2136,6 +2147,7 @@ checklistRouter.patch(
       where: { id: existing.id },
       data,
     });
+    republishQapIso(req.params.projectId, req.user!.id);
     res.json(row);
   }
 );

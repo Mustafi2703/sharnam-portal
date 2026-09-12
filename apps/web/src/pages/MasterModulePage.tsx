@@ -136,6 +136,11 @@ export default function MasterModulePage() {
                 Bid management
               </Button>
             </Link>
+            <Link to="/master/dms">
+              <Button type="button" variant="secondary">
+                All-project DMS
+              </Button>
+            </Link>
             <Link to="/login/hr">
               <Button type="button" variant="secondary">
                 HR portal

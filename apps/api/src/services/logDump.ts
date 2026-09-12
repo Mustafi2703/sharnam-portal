@@ -44,6 +44,7 @@ type RegisterBucket =
   | "dpr"
   | "hindrance"
   | "progress"
+  | "qap"
   | "checklist"
   | "cube"
   | "ncr"
@@ -59,6 +60,7 @@ const REGISTER_BUCKETS: Record<RegisterBucket, string> = {
   dpr: "_Registers/Progress",
   hindrance: "_Registers/Progress",
   progress: "_Registers/Progress",
+  qap: "_Registers/Quality",
   checklist: "_Registers/Quality",
   cube: "_Registers/Quality",
   ncr: "_Registers/Quality",
@@ -79,6 +81,7 @@ const ISO_MIRROR: Partial<Record<RegisterBucket, string>> = {
   dpr: MODULE_TO_ISO_FOLDER.dpr,
   hindrance: MODULE_TO_ISO_FOLDER.hindrance,
   progress: MODULE_TO_ISO_FOLDER.progress,
+  qap: MODULE_TO_ISO_FOLDER.qap,
   checklist: MODULE_TO_ISO_FOLDER.qualityChecklist,
   cube: MODULE_TO_ISO_FOLDER.cube,
   ncr: MODULE_TO_ISO_FOLDER.ncr,
@@ -449,6 +452,35 @@ export async function dumpAllProjectLogs(projectId: string) {
       Array.from(wprMap.entries()).map(([week, v]) => ({ week, ...v }))
     )
   );
+
+  /* QAP register — portal rows into ISO 08.01 */
+  const qapRows = await prisma.qapActivity.findMany({
+    where: { projectId },
+    orderBy: [{ weekLabel: "asc" }, { srNo: "asc" }, { createdAt: "asc" }],
+  });
+  if (qapRows.length) {
+    results.push(
+      await dropRegister(
+        code,
+        "qap",
+        "QAP-Register",
+        qapRows.map((q) => ({
+          weekLabel: q.weekLabel,
+          srNo: q.srNo ?? "",
+          section: q.section ?? "",
+          activity: q.activity,
+          description: q.description ?? "",
+          frequency: q.frequency ?? "",
+          codeOfConformance: q.codeOfConformance ?? "",
+          testAgency: q.testAgency ?? "",
+          status: q.status,
+          contractorOk: q.contractorOk,
+          pmcOk: q.pmcOk,
+          clientOk: q.clientOk,
+        }))
+      )
+    );
+  }
 
   /* Quality Inspections */
   const qi = await prisma.qualityInspection.findMany({

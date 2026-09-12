@@ -113,7 +113,7 @@ export class MockOneDriveService {
         size?: number;
         lastModifiedDateTime?: string;
       }[];
-      return items.map((i) => ({
+      const live: DriveNode[] = items.map((i) => ({
         name: i.name,
         path: relPath ? `${relPath}/${i.name}` : i.name,
         type: i.folder ? ("folder" as const) : ("file" as const),
@@ -121,6 +121,13 @@ export class MockOneDriveService {
         size: i.size,
         modifiedAt: i.lastModifiedDateTime,
       }));
+      const local = this.listChildren(projectCode, relPath);
+      if (!local.length) return live;
+      const byName = new Map<string, DriveNode>(live.map((n) => [n.name, n]));
+      for (const n of local) {
+        if (!byName.has(n.name)) byName.set(n.name, n);
+      }
+      return [...byName.values()];
     } catch {
       return this.listChildren(projectCode, relPath);
     }

@@ -327,6 +327,89 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
   });
 });
 
+crmComparativeRouter.patch("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "bid package not found" });
+
+  const data: {
+    title?: string;
+    revisionLabel?: string;
+    notes?: string | null;
+    dueDate?: Date | null;
+    projectId?: string | null;
+    leadId?: string | null;
+  } = {};
+
+  if (req.body.title != null) {
+    const title = String(req.body.title).trim();
+    if (!title) return res.status(400).json({ error: "title required" });
+    data.title = title;
+  }
+  if (req.body.revisionLabel != null) data.revisionLabel = String(req.body.revisionLabel).trim() || existing.revisionLabel;
+  if (req.body.notes !== undefined) data.notes = req.body.notes ? String(req.body.notes) : null;
+  if (req.body.dueDate !== undefined) {
+    data.dueDate = req.body.dueDate ? new Date(String(req.body.dueDate)) : null;
+  }
+  if (req.body.projectId !== undefined || req.body.leadId !== undefined) {
+    const nextProjectId = req.body.projectId !== undefined ? (req.body.projectId ? String(req.body.projectId) : null) : existing.projectId;
+    const nextLeadId = req.body.leadId !== undefined ? (req.body.leadId ? String(req.body.leadId) : null) : existing.leadId;
+    const project = await resolveProjectForPackage(nextProjectId, nextLeadId);
+    if (req.body.projectId !== undefined) data.projectId = req.body.projectId ? project?.id ?? nextProjectId : null;
+    if (req.body.leadId !== undefined) data.leadId = nextLeadId;
+  }
+
+  const pkg = await prisma.crmBidPackage.update({
+    where: { id: existing.id },
+    data,
+    include: { project: { select: { id: true, code: true, name: true } }, lead: { select: { id: true, title: true } } },
+  });
+
+  await audit("crm.comparative.update", {
+    userId: req.user!.id,
+    entity: "CrmBidPackage",
+    entityId: pkg.id,
+    meta: { fields: Object.keys(data) },
+  });
+
+  const row = await loadBidPackage(pkg.id);
+  res.json({
+    ...row,
+    vendorNames: parseVendorNames(pkg.vendorNamesJson),
+    disciplines: packageDisciplines(row || pkg),
+  });
+});
+
+crmComparativeRouter.delete("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: req.params.id },
+    include: { vendorBoqs: { select: { sheetId: true } } },
+  });
+  if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+  const confirmTitle = String(req.body?.confirmTitle || "").trim();
+  if (!confirmTitle || confirmTitle.toLowerCase() !== pkg.title.trim().toLowerCase()) {
+    return res.status(400).json({ error: "Type the bid package title to confirm delete" });
+  }
+
+  const sheetIds = [pkg.comparativeSheetId, pkg.summarySheetId, ...pkg.vendorBoqs.map((b) => b.sheetId)].filter(
+    (id): id is string => !!id
+  );
+
+  await prisma.crmBidPackage.delete({ where: { id: pkg.id } });
+  if (sheetIds.length) {
+    await prisma.customSheet.deleteMany({ where: { id: { in: sheetIds } } });
+  }
+
+  await audit("crm.comparative.delete", {
+    userId: req.user!.id,
+    entity: "CrmBidPackage",
+    entityId: pkg.id,
+    meta: { title: pkg.title, status: pkg.status, sheetsRemoved: sheetIds.length },
+  });
+
+  res.json({ ok: true, id: pkg.id, title: pkg.title });
+});
+
 /** Add discipline BOQ slots to an existing bid package (all vendors get new upload rows). */
 crmComparativeRouter.post("/bid-packages/:id/disciplines", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const pkg = await prisma.crmBidPackage.findUnique({
