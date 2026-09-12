@@ -1825,24 +1825,52 @@ function canApproveVoucher(user?: { email?: string; role?: string } | null) {
   return user.role === "office";
 }
 
+function parseVoucherParticulars(raw: unknown): { particular: string; amount: number; date?: string; qty?: number; rate?: number; category?: string }[] {
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 hrmRouter.get("/vouchers", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const mine = !canApproveVoucher(req.user);
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const rows = await prisma.expenseVoucher.findMany({
-    where: mine ? { userId: req.user!.id } : undefined,
+    where: {
+      ...(mine ? { userId: req.user!.id } : {}),
+      ...(projectId ? { projectId } : {}),
+    },
     include: {
       user: { select: { fullName: true, email: true } },
       approver: { select: { fullName: true } },
-      project: { select: { code: true, name: true } },
+      project: { select: { id: true, code: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 200,
   });
-  res.json(rows);
+  res.json(
+    rows.map((row) => ({
+      ...row,
+      particulars: parseVoucherParticulars(row.particularsJson),
+    }))
+  );
 });
 
 hrmRouter.post("/vouchers", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
-  const amount = Number(req.body.amount);
+  const particulars = parseVoucherParticulars(req.body.particulars);
+  const lineSum = particulars.reduce((s, l) => s + Number(l.amount || 0), 0);
+  const amount = Number(req.body.amount || lineSum);
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Amount required" });
+  const description =
+    String(req.body.description || "").trim() ||
+    particulars
+      .map((l) => l.particular)
+      .filter(Boolean)
+      .join("; ");
+  if (!description) return res.status(400).json({ error: "Particulars required" });
   const count = await prisma.expenseVoucher.count({ where: { userId: req.user!.id } });
   const voucherNo = `VOU-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
   const row = await prisma.expenseVoucher.create({
@@ -1852,15 +1880,15 @@ hrmRouter.post("/vouchers", requireRoles("admin", "office", "employee", "site_em
       projectId: req.body.projectId || null,
       voucherDate: req.body.voucherDate ? new Date(req.body.voucherDate) : new Date(),
       category: String(req.body.category || "Site"),
-      description: String(req.body.description || ""),
+      description,
       amount,
       status: "Submitted",
-      particularsJson: req.body.particulars ? JSON.stringify(req.body.particulars) : null,
+      particularsJson: particulars.length ? JSON.stringify(particulars) : null,
     },
-    include: { user: { select: { fullName: true } } },
+    include: { user: { select: { fullName: true } }, project: { select: { id: true, code: true, name: true } } },
   });
   await audit("hrm.voucher.raise", { userId: req.user!.id, entity: "ExpenseVoucher", entityId: row.id });
-  res.status(201).json(row);
+  res.status(201).json({ ...row, particulars });
 });
 
 hrmRouter.patch("/vouchers/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

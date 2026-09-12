@@ -1065,13 +1065,22 @@ progressRouter.post(
       const counts = await importPlannedActualDashboard(project.id, file.buffer);
       const { syncAllCashflowSources } = await import("../modules/finance/cashflowBridge.js");
       const sync = await syncAllCashflowSources(project.id);
+      const { archiveUploadedWorkbook } = await import("../services/registerWorkbookPublish.js");
+      const drive = await archiveUploadedWorkbook({
+        projectId: project.id,
+        userId: req.user!.id,
+        moduleKey: "progress",
+        originalName: file.originalname,
+        buffer: file.buffer,
+        auditAction: "progress.plannedActual.archived",
+      });
       await audit("progress.plannedActual.import", {
         userId: req.user!.id,
         entity: "ProgressActivityLine",
         entityId: project.id,
-        meta: { file: file.originalname, ...counts, cashflowSync: sync },
+        meta: { file: file.originalname, ...counts, cashflowSync: sync, drive },
       });
-      res.json({ ok: true, ...counts, cashflowSync: sync });
+      res.json({ ok: true, ...counts, cashflowSync: sync, drive });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
     }

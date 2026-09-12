@@ -79,57 +79,11 @@ export default function CrmProjectsPage() {
     }
   }
 
-  const pipeline: HubCard[] = [
-    {
-      n: "01",
-      label: "Create project",
-      blurb: "New delivery project — code, client, location, consultant, contractor.",
-      href: "/crm/setup",
-    },
-    {
-      n: "02",
-      label: "Project setup",
-      blurb: "Parties, communication matrix, folders, client / contractor portals, first DPR / WPR.",
-      href: selected ? `/crm/setup?projectId=${selected.id}&step=project` : "/crm/setup",
-    },
-    {
-      n: "03",
-      label: "Convert lead",
-      blurb: "Spin a project from the CRM lead register.",
-      href: "/crm/leads",
-    },
-    {
-      n: "04",
-      label: "Comparative bids",
-      blurb: "R2 discipline BOQs, L1 award.",
-      href: selected ? `/crm/bids?projectId=${selected.id}` : "/crm/bids",
-    },
-    {
-      n: "05",
-      label: "Directories",
-      blurb: "Vendors, clients, consultants, portal people.",
-      href: "/crm/directory/vendors",
-    },
-    {
-      n: "06",
-      label: "Proposals",
-      blurb: "PMC quotation register.",
-      href: "/crm/proposals",
-    },
-  ];
-
   const projectTools: HubCard[] = selected
     ? [
-        { n: "01", label: "Project desk", blurb: "Overview and module shortcuts.", href: `/projects/${selected.id}` },
-        { n: "02", label: "DPR maker", blurb: "Daily progress from registers.", href: `/projects/${selected.id}/dpr-maker` },
-        { n: "03", label: "WPR maker", blurb: "Weekly pack, charts, sign-off.", href: `/projects/${selected.id}/wpr-maker` },
-        { n: "04", label: "Progress", blurb: "PvA, manpower, hindrance, cashflow.", href: `/projects/${selected.id}/hub/progress` },
-        { n: "05", label: "Quality", blurb: "QAP, NCR, cubes, checklists.", href: `/projects/${selected.id}/hub/quality` },
-        { n: "06", label: "Drawings", blurb: "GFC / DCI register and files.", href: `/projects/${selected.id}/hub/drawings` },
-        { n: "07", label: "Cost", blurb: "Budget, MB, BBS, cashflow.", href: `/projects/${selected.id}/hub/cost` },
-        { n: "08", label: "Comms", blurb: "Matrix and meeting desk.", href: `/projects/${selected.id}/comms` },
-        { n: "09", label: "Safety", blurb: "HSE records and permits.", href: `/projects/${selected.id}/hub/safety` },
-        { n: "10", label: "Setup this project", blurb: "Parties, matrix, portals.", href: `/crm/setup?projectId=${selected.id}&step=matrix` },
+        { n: "01", label: "Setup this project", blurb: "Card, parties, matrix, portals.", href: `/crm/setup?projectId=${selected.id}&step=project` },
+        { n: "02", label: "Live project setup", blurb: "Same launch on the job itself.", href: `/projects/${selected.id}/setup` },
+        { n: "03", label: "R2 bid for this project", blurb: "Add vendors, upload BOQs, comparative.", href: `/crm/bids?projectId=${selected.id}` },
       ]
     : [];
 
@@ -139,35 +93,12 @@ export default function CrmProjectsPage() {
         <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · projects</p>
         <h2 className="font-display text-lg text-ink">Projects</h2>
         <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
-          Every delivery project and its client card. Open a box like a project module — it launches in a tool window.
-          Select a row to unlock DPR, WPR, and the rest of the site desk.
+          Delivery projects and client cards. Select a row to continue setup or open an R2 bid for that project.
+          Site modules (DPR, Quality, Drawings) live on the project desk, not here.
         </p>
       </div>
 
       {msg && <p className="text-sm text-ok leading-relaxed">{msg}</p>}
-
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {pipeline.map((card) => (
-          <button
-            key={card.n + card.label}
-            type="button"
-            className="text-left h-full rounded-xl border border-line bg-paper p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand/50"
-            onClick={() => openBox(card.href, card.label)}
-          >
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <span
-                className="text-[11px] font-bold uppercase tracking-[0.12em] px-2 py-0.5 rounded-md"
-                style={{ background: CRM_SOFT, color: CRM_ACCENT }}
-              >
-                Tool {card.n}
-              </span>
-              <span className="text-xs text-steel-muted">Open →</span>
-            </div>
-            <h3 className="font-display text-base text-ink mb-1">{card.label}</h3>
-            <p className="text-xs text-steel-muted leading-relaxed">{card.blurb}</p>
-          </button>
-        ))}
-      </div>
 
       {showCreate && canManage && (
         <Card className="!p-4 space-y-3 border-brand/30">
@@ -207,7 +138,7 @@ export default function CrmProjectsPage() {
               {selected.clientName || "—"} · {selected.location || "no location"}
             </span>
           </div>
-          <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3 max-w-2xl">
             {projectTools.map((card) => (
               <button
                 key={card.n + card.label}

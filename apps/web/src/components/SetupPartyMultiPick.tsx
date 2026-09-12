@@ -50,6 +50,10 @@ export function SetupPartyMultiPick({
       onMsg("Company name required");
       return;
     }
+    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      onMsg("Email is required so we can issue a portal login and bid invite.");
+      return;
+    }
     setSaving(true);
     try {
       const created = await api<SetupVendor>("/api/vendors", {
@@ -106,7 +110,7 @@ export function SetupPartyMultiPick({
         <div className="grid sm:grid-cols-2 gap-2 border-t border-line pt-2">
           <Input placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input placeholder="Contact person" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
-          <Input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input type="email" required placeholder="Email (required for portal login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Input
             className="sm:col-span-2"

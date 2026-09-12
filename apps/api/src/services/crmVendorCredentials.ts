@@ -92,3 +92,25 @@ export async function ensureClientPortalLogin(party: { email?: string | null; na
     phone: party.businessPhone,
   });
 }
+
+/** Link vendor company + portal user to a live project so GET /api/projects lists the job. */
+export async function grantVendorProjectAccess(opts: {
+  projectId: string;
+  vendorId?: string | null;
+  userId?: string | null;
+}) {
+  if (opts.vendorId) {
+    await prisma.projectVendor.upsert({
+      where: { projectId_vendorId: { projectId: opts.projectId, vendorId: opts.vendorId } },
+      create: { projectId: opts.projectId, vendorId: opts.vendorId, assignedVia: "Bid open" },
+      update: {},
+    });
+  }
+  if (opts.userId) {
+    await prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId: opts.projectId, userId: opts.userId } },
+      create: { projectId: opts.projectId, userId: opts.userId, role: "member" },
+      update: {},
+    });
+  }
+}

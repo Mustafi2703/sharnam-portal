@@ -224,6 +224,93 @@ checklistRouter.get("/pack-inventory", requireRoles("admin", "office"), async (_
   res.json(loadChecklistPackInventory());
 });
 
+/** Vendor desk — assigned checklists + fill RFIs across jobs the contractor can see. */
+checklistRouter.get("/vendor-inbox", async (req: AuthedRequest, res) => {
+  const role = req.user!.role;
+  if (role !== "vendor" && role !== "admin" && role !== "office") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+  const vendor = role === "vendor" ? await resolveVendorForUser(req.user!) : null;
+  const projectIds = new Set<string>();
+  const members = await prisma.projectMember.findMany({
+    where: { userId: req.user!.id },
+    select: { projectId: true },
+  });
+  for (const m of members) projectIds.add(m.projectId);
+  if (vendor) {
+    const assigned = await prisma.projectVendor.findMany({
+      where: { vendorId: vendor.id },
+      select: { projectId: true },
+    });
+    for (const row of assigned) projectIds.add(row.projectId);
+    const slots = await prisma.crmVendorBoq.findMany({
+      where: {
+        OR: [{ vendorId: vendor.id }, { vendorLabel: vendor.name }],
+        bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } },
+      },
+      select: { bidPackage: { select: { projectId: true } } },
+    });
+    for (const slot of slots) {
+      if (slot.bidPackage.projectId) projectIds.add(slot.bidPackage.projectId);
+    }
+  }
+  const ids = [...projectIds];
+  if (!ids.length) return res.json({ projects: [], assignments: [], rfis: [] });
+
+  const projects = await prisma.project.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, code: true, name: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  const assignments = await prisma.checklistAssignment.findMany({
+    where: { projectId: { in: ids } },
+    include: {
+      template: { select: { id: true, name: true, checklistType: true } },
+      submissions: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { id: true, status: true, createdAt: true },
+      },
+    },
+    orderBy: { assignedAt: "desc" },
+    take: 80,
+  });
+  const rfis = await prisma.rfi.findMany({
+    where: {
+      projectId: { in: ids },
+      status: { in: ["Open", "Answered"] },
+      ...(vendor
+        ? {
+            OR: [{ responsibleVendorId: vendor.id }, { assignedToId: req.user!.id }],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      number: true,
+      subject: true,
+      rfiKind: true,
+      status: true,
+      projectId: true,
+      linkedAssignmentId: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 80,
+  });
+  res.json({
+    projects,
+    assignments: assignments.map((a) => ({
+      id: a.id,
+      projectId: a.projectId,
+      title: a.template.name,
+      checklistType: a.template.checklistType,
+      latestStatus: a.submissions[0]?.status || "Open",
+    })),
+    rfis,
+  });
+});
+
 checklistRouter.get("/project/:projectId", async (req, res) => {
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const assignments = await prisma.checklistAssignment.findMany({
@@ -2358,9 +2445,17 @@ checklistRouter.post(
     if (!req.file?.buffer) return res.status(400).json({ error: "Excel file required" });
     const { importQapWorkbook } = await import("../services/qapImportExport.js");
     const out = await importQapWorkbook(req.params.projectId, req.file.buffer);
-    const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
+    const { publishQualityPackToDrive, archiveUploadedWorkbook } = await import("../services/registerWorkbookPublish.js");
     const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id, out.weekLabel).catch(() => []);
-    res.json({ ...out, drive });
+    const archived = await archiveUploadedWorkbook({
+      projectId: req.params.projectId,
+      userId: req.user!.id,
+      moduleKey: "qap",
+      originalName: req.file.originalname,
+      buffer: req.file.buffer,
+      auditAction: "qap.workbook.archived",
+    });
+    res.json({ ...out, drive, archived });
   }
 );
 

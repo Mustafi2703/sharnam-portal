@@ -28,6 +28,10 @@ type ReferenceSheetToolbarProps = {
   generateLabel?: string;
   busy?: boolean;
   message?: string;
+  /** Sheet fill date shown at the top of cost / register toolbars. */
+  sheetDate?: string;
+  onSheetDateChange?: (value: string) => void;
+  sheetDateLabel?: string;
 };
 
 /** Compact register actions — upload, add row, load template. No overlay modal. */
@@ -53,6 +57,9 @@ export function ReferenceSheetToolbar({
   generateLabel = "Generate pack",
   busy,
   message,
+  sheetDate,
+  onSheetDateChange,
+  sheetDateLabel = "Fill date",
 }: ReferenceSheetToolbarProps) {
   const { user } = useAuth();
   const showDrive = canBrowseSharePoint(user?.role);
@@ -70,6 +77,17 @@ export function ReferenceSheetToolbar({
         )}
       </div>
       <div className="flex flex-wrap gap-2 items-center">
+        {onSheetDateChange && (
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel-muted">
+            {formatUiText(sheetDateLabel)}
+            <input
+              type="date"
+              value={sheetDate || ""}
+              onChange={(e) => onSheetDateChange(e.target.value)}
+              className="h-8 rounded border border-line bg-paper px-2 text-xs font-medium text-ink normal-case tracking-normal"
+            />
+          </label>
+        )}
         {onDownloadXlsx && (
           <Button type="button" variant="secondary" onClick={onDownloadXlsx} disabled={busy}>
             Download XLSX

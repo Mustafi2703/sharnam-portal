@@ -107,6 +107,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   home: [
     { to: "", label: "Overview", end: true, blurb: "Project desk and module shortcuts." },
+    {
+      to: "setup",
+      label: "Live project setup",
+      roles: ["admin", "office"],
+      blurb: "Allocate SPDC people, add vendors (email required), comms matrix, Complete setup, send invites.",
+    },
     { to: "directory", label: "Directory · Office", query: "party=PMC", blurb: "Sharnam Office / PMC people." },
     { to: "directory", label: "Directory · Site", query: "party=Site", blurb: "Site staff on this project." },
     { to: "directory", label: "Directory · Client", query: "party=Client", blurb: "Client contacts." },
@@ -130,6 +136,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       end: true,
       roles: ["vendor"],
       blurb: "Complete quality checklists and IR responses assigned to your company.",
+    },
+    {
+      to: "drawings/precheck",
+      label: "Fill drawing checklist",
+      fillFamily: "DrawingCheck",
+      roles: ["vendor"],
+      blurb: "Fill Drawing Check without opening the Drawings hub.",
     },
     {
       to: "inspections",
@@ -530,6 +543,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Answer PMC RFIs and submit checklist fills — logged to Sharnam office.",
     },
     {
+      to: "drawings/precheck",
+      label: "Fill drawing checklist",
+      fillFamily: "DrawingCheck",
+      roles: ["vendor"],
+      blurb: "Drawing Check fill on the comms desk — no Drawings hub required.",
+    },
+    {
       to: "comms",
       label: "Communication matrix",
       end: true,
@@ -592,6 +612,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Connect mailbox and outbox.",
     },
     { to: "diary", label: "Day log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Manpower and site notes — feeds DPR.", sheet: "Day log" },
+    {
+      to: "expense-vouchers",
+      label: "Daily expense voucher",
+      roles: ["admin", "office", "site_employee", "employee"],
+      blurb: "Daily site expense with line items — HR Head approves.",
+    },
     { to: "photos", label: "Photos", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Site photo albums.", sheet: "Photos" },
     {
       to: "checklist",

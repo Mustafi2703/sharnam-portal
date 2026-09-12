@@ -2624,6 +2624,11 @@ html.is-tool-window #root {
   --cost-col-pct-bg: #bbf7d0;
   --cost-col-ev-bg: #ede9fe;
 }
+.cost-line--fresh {
+  outline: 2px solid var(--cost-accent, var(--color-brand, #0b6a78));
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--cost-head-bg, #e6f4f6) 70%, white);
+}
 .cost-register-shell--mb {
   --cost-col-meta-bg: #fffbeb;
   --cost-col-dims-bg: #fef3c7;

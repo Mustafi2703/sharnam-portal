@@ -199,8 +199,11 @@ function VendorPackageCard({
 
 export default function CrmVendorBidsPage() {
   const { token, user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const focusPkgId = searchParams.get("pkg") || "";
+  const desk = (["bids", "projects", "inbox"].includes(searchParams.get("desk") || "")
+    ? searchParams.get("desk")
+    : "bids") as "bids" | "projects" | "inbox";
   const [slots, setSlots] = useState<BidSlot[]>([]);
   const [summaries, setSummaries] = useState<Record<string, PackageSummary>>({});
   const [msg, setMsg] = useState("");
@@ -208,7 +211,13 @@ export default function CrmVendorBidsPage() {
   const [uploadSlot, setUploadSlot] = useState<BidSlot | null>(null);
   const [uploadMode, setUploadMode] = useState<"online" | "excel" | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [scope, setScope] = useState<"open" | "all">("open");
+  const [scope, setScope] = useState<"open" | "all">("all");
+  const [myProjects, setMyProjects] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [inbox, setInbox] = useState<{
+    projects: { id: string; code: string; name: string }[];
+    assignments: { id: string; projectId: string; title: string; checklistType: string; latestStatus: string }[];
+    rfis: { id: string; number: string; subject: string; rfiKind: string; status: string; projectId: string; linkedAssignmentId?: string | null }[];
+  }>({ projects: [], assignments: [], rfis: [] });
 
   function openUpload(slot: BidSlot, mode: "online" | "excel") {
     setUploadSlot(slot);
@@ -246,6 +255,16 @@ export default function CrmVendorBidsPage() {
       if (loaded[i]) map[id] = loaded[i]!;
     });
     setSummaries(map);
+    const [projects, deskInbox] = await Promise.all([
+      api<{ id: string; code: string; name: string }[]>("/api/projects", { token }).catch(() => []),
+      api<typeof inbox>("/api/checklist/vendor-inbox", { token }).catch(() => ({
+        projects: [],
+        assignments: [],
+        rfis: [],
+      })),
+    ]);
+    setMyProjects(projects);
+    setInbox(deskInbox);
   }, [token]);
 
   useEffect(() => {
@@ -355,23 +374,63 @@ export default function CrmVendorBidsPage() {
     <div className="space-y-4 pb-4">
       <Card className="!p-4 bg-sand/40 border-brand/20">
         <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-1">Contractor bid desk</p>
-        <h2 className="font-display text-lg text-ink">Open packages & discipline BOQs</h2>
+        <h2 className="font-display text-lg text-ink">What you applied for</h2>
         <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-          Only <strong>open</strong> packages and the disciplines assigned to your company are listed. Upload one R2 Excel per open discipline, or fill the BOQ online — PMC sees it on the comparative.
+          Every R2 package assigned to your company — project, disciplines, and your uploaded BOQs. Fill or upload while the bid is open. Your totals stay on this desk after award.
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
-          <Badge tone="ok">{openPackageCount} open package{openPackageCount === 1 ? "" : "s"}</Badge>
-          <Badge tone={pendingUploads ? "warn" : "neutral"}>{pendingUploads} pending upload{pendingUploads === 1 ? "" : "s"}</Badge>
-          <Badge tone="neutral">{visibleSlots.length} open discipline{visibleSlots.length === 1 ? "" : "s"}</Badge>
-          <Button type="button" variant={scope === "open" ? "primary" : "secondary"} className="!text-xs !py-1" onClick={() => setScope("open")}>
-            Open for me
+          <Button
+            type="button"
+            variant={desk === "bids" ? "primary" : "secondary"}
+            className="!text-xs !py-1"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.set("desk", "bids");
+              setSearchParams(next);
+            }}
+          >
+            My bids
           </Button>
-          <Button type="button" variant={scope === "all" ? "primary" : "secondary"} className="!text-xs !py-1" onClick={() => setScope("all")}>
-            All assignments
+          <Button
+            type="button"
+            variant={desk === "projects" ? "primary" : "secondary"}
+            className="!text-xs !py-1"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.set("desk", "projects");
+              setSearchParams(next);
+            }}
+          >
+            My projects
           </Button>
+          <Button
+            type="button"
+            variant={desk === "inbox" ? "primary" : "secondary"}
+            className="!text-xs !py-1"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.set("desk", "inbox");
+              setSearchParams(next);
+            }}
+          >
+            Checklist / RFI inbox
+          </Button>
+          {desk === "bids" && (
+            <>
+              <Badge tone="ok">{openPackageCount} open package{openPackageCount === 1 ? "" : "s"}</Badge>
+              <Badge tone={pendingUploads ? "warn" : "neutral"}>{pendingUploads} pending upload{pendingUploads === 1 ? "" : "s"}</Badge>
+              <Button type="button" variant={scope === "open" ? "primary" : "secondary"} className="!text-xs !py-1" onClick={() => setScope("open")}>
+                Open for me
+              </Button>
+              <Button type="button" variant={scope === "all" ? "primary" : "secondary"} className="!text-xs !py-1" onClick={() => setScope("all")}>
+                All assignments
+              </Button>
+            </>
+          )}
         </div>
       </Card>
 
+      {desk === "bids" && (
       <div className="flex flex-wrap gap-2 shrink-0">
         <Button
           type="button"
@@ -381,8 +440,141 @@ export default function CrmVendorBidsPage() {
           Download R2 .xlsx
         </Button>
       </div>
+      )}
 
       {msg && <p className="text-sm text-ok">{msg}</p>}
+
+      {desk === "projects" && (
+        <Card className="!p-4 space-y-2">
+          <h3 className="font-semibold text-sm">Jobs you can open</h3>
+          <p className="text-xs text-steel-muted">Opened when PMC completes setup or invites your company on a bid.</p>
+          {!myProjects.length && <p className="text-sm text-steel-muted">No project access yet — ask office to open a bid or assign your company.</p>}
+          <ul className="divide-y divide-line">
+            {myProjects.map((p) => (
+              <li key={p.id} className="py-2 flex flex-wrap justify-between gap-2">
+                <span>
+                  <span className="font-mono text-xs">{p.code}</span>
+                  <span className="ml-2 font-medium text-sm">{p.name}</span>
+                </span>
+                <span className="flex flex-wrap gap-3 text-sm">
+                  <Link to={`/projects/${p.id}`} className="font-semibold text-brand">
+                    Project desk →
+                  </Link>
+                  <Link to={`/projects/${p.id}/rfis`} className="font-semibold text-brand">
+                    RFIs →
+                  </Link>
+                  <Link to={`/projects/${p.id}/hub/quality`} className="font-semibold text-brand">
+                    Quality →
+                  </Link>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {desk === "inbox" && (
+        <div className="space-y-3">
+          <Card className="!p-4 space-y-2">
+            <h3 className="font-semibold text-sm">Checklist inbox</h3>
+            {!inbox.assignments.length && <p className="text-sm text-steel-muted">No assigned checklists on your projects yet.</p>}
+            <ul className="divide-y divide-line text-sm">
+              {inbox.assignments.map((a) => {
+                const project = inbox.projects.find((p) => p.id === a.projectId);
+                return (
+                  <li key={a.id} className="py-2 flex flex-wrap justify-between gap-2">
+                    <span>
+                      <span className="font-medium">{a.title}</span>
+                      <span className="block text-xs text-steel-muted">
+                        {project?.code || a.projectId} · {a.checklistType} · {a.latestStatus}
+                      </span>
+                    </span>
+                    <Link
+                      to={`/projects/${a.projectId}/${a.checklistType === "DrawingCheck" ? "hub/comms" : "hub/quality"}`}
+                      className="font-semibold text-brand"
+                    >
+                      Open fill →
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+          <Card className="!p-4 space-y-2">
+            <h3 className="font-semibold text-sm">RFI inbox</h3>
+            {!inbox.rfis.length && <p className="text-sm text-steel-muted">No open RFIs assigned to your company.</p>}
+            <ul className="divide-y divide-line text-sm">
+              {inbox.rfis.map((r) => {
+                const project = inbox.projects.find((p) => p.id === r.projectId);
+                return (
+                  <li key={r.id} className="py-2 flex flex-wrap justify-between gap-2">
+                    <span>
+                      <span className="font-mono text-xs">{r.number}</span>
+                      <span className="ml-2 font-medium">{r.subject}</span>
+                      <span className="block text-xs text-steel-muted">
+                        {project?.code || r.projectId} · {r.rfiKind} · {r.status}
+                      </span>
+                    </span>
+                    <Link to={`/projects/${r.projectId}/rfis`} className="font-semibold text-brand">
+                      Respond →
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        </div>
+      )}
+
+      {desk !== "bids" ? null : (
+        <>
+
+      {slots.length > 0 && (
+        <Card padding={false} className="overflow-hidden">
+          <div className="px-4 py-3 border-b border-line">
+            <h3 className="font-semibold text-sm">Applications</h3>
+            <p className="text-xs text-steel-muted">Packages PMC assigned to your company and the BOQs you submitted.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[40rem]">
+              <thead>
+                <tr className="text-left bg-sand/50">
+                  <th className="p-2">Project</th>
+                  <th className="p-2">Package</th>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">Disciplines applied</th>
+                  <th className="p-2">Your BOQs</th>
+                  <th className="p-2">Your total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(
+                  slots.reduce<Record<string, BidSlot[]>>((acc, s) => {
+                    (acc[s.bidPackageId] ||= []).push(s);
+                    return acc;
+                  }, {})
+                ).map(([pkgId, pkgSlots]) => {
+                  const head = pkgSlots[0];
+                  const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
+                  const sum = summaries[pkgId];
+                  return (
+                    <tr key={pkgId} className="border-t border-line">
+                      <td className="p-2 font-mono">{head.projectCode || "—"}</td>
+                      <td className="p-2 font-medium">{head.bidPackageTitle}</td>
+                      <td className="p-2">{head.bidPackageStatus}</td>
+                      <td className="p-2">{pkgSlots.map((s) => s.disciplineLabel).join(", ")}</td>
+                      <td className="p-2 tabular-nums">
+                        {done}/{pkgSlots.length}
+                      </td>
+                      <td className="p-2 tabular-nums">{formatINR(sum?.myGrandTotal)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {scope === "open" && !visibleSlots.length && slots.length > 0 && (
         <Card>
@@ -444,6 +636,8 @@ export default function CrmVendorBidsPage() {
           ))}
         </div>
       ))}
+        </>
+      )}
 
       {uploadSlot &&
         uploadMode &&

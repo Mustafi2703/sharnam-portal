@@ -249,7 +249,8 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
             multiple={false}
             buttonSize="md"
             captureFacing="user"
-            hint="Tap Camera — front selfie opens on phone."
+            allowGallery={false}
+            hint="Tap Camera — live selfie only. Gallery is not allowed for attendance."
             onChange={setSelfie}
           />
         </div>

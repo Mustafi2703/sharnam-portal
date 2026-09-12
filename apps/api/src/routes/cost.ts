@@ -1790,7 +1790,24 @@ costRouter.post(
     } catch {
       /* reconcile optional if finance/progress not seeded */
     }
-    res.status(201).json({ ok: true, imported: parsed.length, monitoring: monRows.length, ratesMerged, replace, reconciled: true });
+    const { archiveUploadedWorkbook } = await import("../services/registerWorkbookPublish.js");
+    const drive = await archiveUploadedWorkbook({
+      projectId,
+      userId: req.user!.id,
+      moduleKey: "cashflow",
+      originalName: req.file.originalname,
+      buffer: req.file.buffer,
+      auditAction: "cost.cashflow.archived",
+    });
+    res.status(201).json({
+      ok: true,
+      imported: parsed.length,
+      monitoring: monRows.length,
+      ratesMerged,
+      replace,
+      reconciled: true,
+      drive,
+    });
   }
 );
 
@@ -1809,7 +1826,16 @@ costRouter.post(
     await prisma.costBudgetLine.createMany({
       data: parsed.map((p) => ({ ...p, projectId })),
     });
-    res.status(201).json({ ok: true, imported: parsed.length, replace });
+    const { archiveUploadedWorkbook } = await import("../services/registerWorkbookPublish.js");
+    const drive = await archiveUploadedWorkbook({
+      projectId,
+      userId: req.user!.id,
+      moduleKey: "budget",
+      originalName: req.file.originalname,
+      buffer: req.file.buffer,
+      auditAction: "cost.budget.archived",
+    });
+    res.status(201).json({ ok: true, imported: parsed.length, replace, drive });
   }
 );
 

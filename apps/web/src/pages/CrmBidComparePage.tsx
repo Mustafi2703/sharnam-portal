@@ -23,6 +23,7 @@ type VendorBoqSlot = {
   uploadedAt?: string | null;
   sharePointUrl?: string | null;
   sheetId?: string | null;
+  vendor?: { id?: string; name?: string; email?: string | null } | null;
 };
 
 type BidPackage = {
@@ -65,7 +66,7 @@ export default function CrmBidComparePage() {
   const canManage = user?.role === "admin" || user?.role === "office";
   const { id: routePkgId } = useParams();
   const nav = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const setupProjectId = searchParams.get("projectId") || "";
   const setupLeadId = searchParams.get("leadId") || "";
 
@@ -100,6 +101,7 @@ export default function CrmBidComparePage() {
   const [setupStep, setSetupStep] = useState(1);
   const [projectSearch, setProjectSearch] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
 
   const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
   const convertedProjectIds = useMemo(
@@ -111,13 +113,16 @@ export default function CrmBidComparePage() {
     [projects, convertedProjectIds],
   );
   const packagesForDesk = useMemo(() => {
-    if (deskFilter === "open") return packages.filter((p) => p.status === "Open" || p.status === "Draft");
-    if (deskFilter === "all") return packages;
-    return packages.filter((p) => {
+    const scoped = setupProjectId
+      ? packages.filter((p) => (p.project?.id || p.projectId) === setupProjectId)
+      : packages;
+    if (deskFilter === "open") return scoped.filter((p) => p.status === "Open" || p.status === "Draft");
+    if (deskFilter === "all") return scoped;
+    return scoped.filter((p) => {
       const pid = p.project?.id || p.projectId;
       return pid && convertedProjectIds.has(pid);
     });
-  }, [packages, deskFilter, convertedProjectIds]);
+  }, [packages, deskFilter, convertedProjectIds, setupProjectId]);
   const pendingBidSetup = useMemo(
     () =>
       convertedLeads.filter((l) => {
@@ -130,7 +135,7 @@ export default function CrmBidComparePage() {
   const load = useCallback(async () => {
     if (!canManage) return;
     const [pkgs, disc, l, p, v] = await Promise.all([
-      api<BidPackage[]>("/api/crm/bid-packages", { token }).catch(() => []),
+      api<BidPackage[]>(`/api/crm/bid-packages${setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : ""}`, { token }).catch(() => []),
       api<Discipline[]>("/api/crm/disciplines", { token }).catch(() => []),
       api<any[]>("/api/crm/leads", { token }).catch(() => []),
       api<{ id: string; code: string; name: string }[]>("/api/projects", { token }).catch(() => []),
@@ -141,7 +146,7 @@ export default function CrmBidComparePage() {
     setLeads(l);
     setProjects(p);
     setVendors(v);
-  }, [token, canManage]);
+  }, [token, canManage, setupProjectId]);
 
   const loadDetail = useCallback(
     async (id: string) => {
@@ -171,36 +176,31 @@ export default function CrmBidComparePage() {
     setSlotPanel(null);
     setUploadFile(null);
     setActiveDiscipline("all");
-    nav(`/crm/bids/${id}`, { replace: true });
+    const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
+    nav(`/crm/bids/${id}${q}`, { replace: true });
   }
-
-  useEffect(() => {
-    if (routePkgId || selectedId || !packages.length) return;
-    const demo =
-      packages.find((p) => p.title.includes("SPDC-DEMO-01")) ||
-      packages.find((p) => p.project?.code === "SPDC-DEMO-01");
-    if (demo) selectPackage(demo.id);
-  }, [packages, routePkgId, selectedId, nav]);
 
   function openNewBidSetup(prefill?: Partial<typeof form>) {
     setSelectedId(null);
     setDetail(null);
     setDeskView("setup");
-    setSetupStep(1);
+    const pid = prefill?.projectId || setupProjectId;
+    setSetupStep(pid ? 2 : 1);
     setSlotPanel(null);
     setUploadFile(null);
     setMsg("");
     setForm({
       title: "",
-      projectId: "",
       leadId: "",
       revisionLabel: "R2",
       vendorIds: [],
       disciplineKeys: disciplines.map((d) => d.key),
       customDisciplines: [],
       ...prefill,
+      projectId: pid || "",
     });
-    nav("/crm/bids", { replace: true });
+    const q = pid ? `?projectId=${encodeURIComponent(pid)}` : "";
+    nav(`/crm/bids${q}`, { replace: true });
   }
 
   function openSlotPanel(slot: VendorBoqSlot, tab: "edit" | "upload") {
@@ -327,16 +327,30 @@ export default function CrmBidComparePage() {
     setBusy(true);
     setMsg("");
     try {
-      const out = await api<{ package: BidPackage; notify: { notified: number; total: number } }>(
-        `/api/crm/bid-packages/${selectedId}/open`,
-        {
-          method: "POST",
-          token,
-          body: JSON.stringify({ dueDate: dueDate || undefined }),
-        },
-      );
+      const out = await api<{
+        package: BidPackage;
+        notify: {
+          notified: number;
+          total: number;
+          missingEmail?: string[];
+          accessSlips?: { vendor: string; email: string; tempPassword: string }[];
+        };
+      }>(`/api/crm/bid-packages/${selectedId}/open`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ dueDate: dueDate || undefined, createLogins: true }),
+      });
+      const missing = out.notify.missingEmail?.length
+        ? ` Missing email: ${out.notify.missingEmail.join(", ")}.`
+        : "";
+      const slips = (out.notify.accessSlips || [])
+        .map((s) => `${s.vendor} · ${s.email} · ${s.tempPassword}`)
+        .join(" | ");
+      setAccessSlip(out.notify.accessSlips || []);
       setMsg(
-        `Bid opened — emailed ${out.notify.notified}/${out.notify.total} bidder(s). They can upload BOQs at /crm/vendor-bids.`,
+        `Bid opened — emailed ${out.notify.notified}/${out.notify.total} bidder(s). They can upload BOQs at /crm/vendor-bids.${missing}${
+          slips ? ` Access slip: ${slips}` : ""
+        }`,
       );
       await loadDetail(selectedId);
       await load();
@@ -349,6 +363,10 @@ export default function CrmBidComparePage() {
 
   async function createPackage(e: FormEvent) {
     e.preventDefault();
+    if (!form.projectId) {
+      setMsg("Pick a project first — bids are stored on that project.");
+      return;
+    }
     if (form.vendorIds.length < 2) {
       setMsg("Select at least 2 bidders to compare.");
       return;
@@ -529,10 +547,11 @@ export default function CrmBidComparePage() {
     setBusy(true);
     setMsg("");
     try {
+      const vendorId = vendors.find((v) => v.name === vendorLabel)?.id;
       await api(`/api/crm/bid-packages/${selectedId}/award`, {
         method: "POST",
         token,
-        body: JSON.stringify({ vendorLabel }),
+        body: JSON.stringify({ vendorLabel, vendorId }),
       });
       setMsg(`Awarded to ${vendorLabel}. Package locked.`);
       await loadDetail(selectedId);
@@ -574,8 +593,65 @@ export default function CrmBidComparePage() {
     );
   }
 
+  const scopedProject = projects.find((p) => p.id === setupProjectId);
+
   return (
     <div className="crm-bid-page">
+      <div className="module-hub__workflow border border-line bg-sand/80 rounded-xl px-3 sm:px-5 py-2 mb-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
+        <span>
+          <strong className="text-ink font-semibold">1.</strong> Open a project
+        </span>
+        <span>
+          <strong className="text-ink font-semibold">2.</strong> Add vendors to the bid
+        </span>
+        <span>
+          <strong className="text-ink font-semibold">3.</strong> Upload BOQs (office or vendor)
+        </span>
+        <span>
+          <strong className="text-ink font-semibold">4.</strong> Comparative statement · award L1
+        </span>
+      </div>
+      <Card className="!p-3 mb-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs font-semibold text-steel-muted flex-1 min-w-[16rem]">
+            Project for this bid
+            <select
+              className="mt-1 w-full border border-line rounded-lg px-2 py-1.5 text-sm bg-white"
+              value={setupProjectId}
+              onChange={(e) => {
+                const id = e.target.value;
+                const q = new URLSearchParams(searchParams);
+                if (id) q.set("projectId", id);
+                else q.delete("projectId");
+                setSearchParams(q, { replace: true });
+                setSelectedId(null);
+                setDetail(null);
+                nav(id ? `/crm/bids?projectId=${encodeURIComponent(id)}` : "/crm/bids", { replace: true });
+              }}
+            >
+              <option value="">All projects — pick one to set up a bid</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} · {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            type="button"
+            disabled={!setupProjectId}
+            onClick={() => openNewBidSetup({ projectId: setupProjectId })}
+          >
+            New R2 bid for this project
+          </Button>
+        </div>
+        {scopedProject && (
+          <p className="text-xs text-steel-muted mt-2">
+            Packages below are only for <span className="font-mono text-ink">{scopedProject.code}</span>. Add vendors, then
+            fill or upload BOQs and open the comparative.
+          </p>
+        )}
+      </Card>
       {msg && <p className="text-sm text-ok shrink-0 px-0.5">{msg}</p>}
 
       {detail?.project?.code === "SPDC-DEMO-01" && packageVendorNames.length === 2 && (
@@ -828,7 +904,7 @@ export default function CrmBidComparePage() {
         <aside className="crm-bid-desk__rail">
           <div className="crm-bid-desk__rail-head space-y-2">
             <div className="flex flex-wrap gap-2">
-              <Button type="button" className="!text-xs flex-1" onClick={() => openNewBidSetup()}>
+              <Button type="button" className="!text-xs flex-1" onClick={() => openNewBidSetup({ projectId: setupProjectId })}>
                 + New bid
               </Button>
               <Button
@@ -982,6 +1058,35 @@ export default function CrmBidComparePage() {
                     )}
                   </div>
                 </div>
+                {(() => {
+                  const noEmail = [
+                    ...new Map(
+                      (detail.vendorBoqs || [])
+                        .filter((b) => !b.vendor?.email)
+                        .map((b) => [b.vendorLabel, b.vendorLabel])
+                    ).values(),
+                  ];
+                  if (!noEmail.length && !accessSlip.length) return null;
+                  return (
+                    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1">
+                      {noEmail.length > 0 && (
+                        <p>
+                          <strong>No email on file:</strong> {noEmail.join(", ")}. Add an email on the vendor card before they can receive a login.
+                        </p>
+                      )}
+                      {accessSlip.length > 0 && (
+                        <div>
+                          <p className="font-semibold uppercase tracking-wide text-steel-muted">Access slip — give these to vendors</p>
+                          {accessSlip.map((s) => (
+                            <p key={s.email} className="font-mono">
+                              {s.vendor} · {s.email} · {s.tempPassword}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Package progress meter — visible at a glance so PMC knows
                     what's still missing before the comparison can be locked. */}
@@ -1048,11 +1153,8 @@ export default function CrmBidComparePage() {
                   <p className="text-xs text-steel-muted mb-3 border-l-2 border-brand pl-2">{detail.notes}</p>
                 )}
 
-                <details className="mb-4 rounded-xl border border-dashed border-line">
-                  <summary className="cursor-pointer px-3 py-2 text-xs font-mono uppercase text-steel-muted">
-                    Manage package — add bidders or disciplines
-                  </summary>
-                  <div className="p-3 space-y-4 border-t border-line">
+                <div className="mb-4 rounded-xl border border-brand/30 bg-brand-soft/20 p-3 space-y-4">
+                  <p className="text-xs font-semibold text-ink">Add vendors and discipline sheets to this bid</p>
                     <div>
                       <p className="text-[11px] text-steel-muted mb-2">
                         Pick from{" "}
@@ -1120,8 +1222,7 @@ export default function CrmBidComparePage() {
                         Add selected disciplines
                       </Button>
                     </div>
-                  </div>
-                </details>
+                </div>
 
                 {vendorMatrix.length > 0 && (
                   <div className="mb-4 w-full min-w-0 overflow-x-auto">

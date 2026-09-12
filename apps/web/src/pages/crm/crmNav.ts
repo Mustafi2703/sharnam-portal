@@ -35,7 +35,7 @@ export const CRM_SECTIONS: CrmSection[] = [
       {
         to: "bids",
         label: "Comparative bids",
-        subtitle: "R2 discipline BOQs · open bid · L1 award · add bidders after deploy.",
+        subtitle: "Pick a project · add vendors · upload BOQs · comparative statement · vendors see what they applied for.",
       },
     ],
   },
@@ -60,5 +60,15 @@ export const CRM_VENDOR_TOOLS = [
     label: "My bid uploads",
     end: true,
     subtitle: "Fill discipline BOQs online or upload Excel — comparative updates for PMC.",
+  },
+  {
+    to: "vendor-bids?desk=projects",
+    label: "My projects",
+    subtitle: "Jobs opened to your company after bid invite or assignment.",
+  },
+  {
+    to: "vendor-bids?desk=inbox",
+    label: "Checklist / RFI inbox",
+    subtitle: "Fill assigned checklists and RFIs — including Drawing Check.",
   },
 ] as const;

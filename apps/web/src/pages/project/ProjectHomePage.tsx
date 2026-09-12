@@ -84,6 +84,9 @@ export default function ProjectHomePage() {
         ["photos", "Photos", "Albums · upload field images", "PIC", "#1C4A5A"],
         ["safety", "Safety", "Observations & incidents", "SAF", "#1C4A5A"],
         ["cost", "Cost / COP / bills", "Measurement + vendor bill tracker", "₹", "#2F6F4E"],
+        ...(canManageProject
+          ? ([["setup", "Project setup", "People, vendors, matrix, Complete setup, invites", "SET", "#0B6A78"]] as const)
+          : []),
         ["directory", "Directory", "Assign people to project", "DIR", "#3D4450"],
         ["vendors", "Vendors", "Trade partners on project", "VEN", "#C24D1A"],
         ["email", "Email settings", "Notification recipients", "EML", "#1C4A5A"],
@@ -115,6 +118,11 @@ export default function ProjectHomePage() {
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/comms`)}>
               Comms
             </Button>
+            {canManageProject && (
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/setup`)}>
+                Project setup
+              </Button>
+            )}
           </div>
         )}
       </div>

@@ -139,8 +139,10 @@ crmComparativeRouter.get("/disciplines", (_req, res) => {
   res.json(COMPARATIVE_DISCIPLINES);
 });
 
-crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async (_req, res) => {
+crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async (req, res) => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
   const rows = await prisma.crmBidPackage.findMany({
+    where: projectId ? { projectId } : undefined,
     orderBy: { updatedAt: "desc" },
     include: {
       lead: { select: { id: true, title: true } },
@@ -772,20 +774,24 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
 });
 
 crmComparativeRouter.post("/bid-packages/:id/award", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const vendorId = String(req.body.vendorId || "").trim();
+  const vendorIdIn = String(req.body.vendorId || "").trim();
   const vendorLabel = String(req.body.vendorLabel || "").trim();
-  if (!vendorId && !vendorLabel) return res.status(400).json({ error: "vendorId or vendorLabel required" });
+  if (!vendorIdIn && !vendorLabel) return res.status(400).json({ error: "vendorId or vendorLabel required" });
+
+  const vendor = vendorIdIn
+    ? await prisma.vendor.findUnique({ where: { id: vendorIdIn }, select: { id: true, name: true } })
+    : await prisma.vendor.findFirst({ where: { name: vendorLabel }, select: { id: true, name: true } });
 
   const pkg = await prisma.crmBidPackage.update({
     where: { id: req.params.id },
-    data: { status: "Awarded", awardedVendorId: vendorId || undefined },
+    data: { status: "Awarded", awardedVendorId: vendor?.id ?? null },
   });
 
   await audit("crm.comparative.award", {
     userId: req.user!.id,
     entity: "CrmBidPackage",
     entityId: pkg.id,
-    meta: { vendorId, vendorLabel },
+    meta: { vendorId: vendor?.id || vendorIdIn, vendorLabel: vendor?.name || vendorLabel },
   });
 
   res.json(pkg);

@@ -112,8 +112,16 @@ export async function notifyBidPackageOpened(opts: {
 
   const uploadBase = `${portalOrigin()}/crm/vendor-bids?pkg=${encodeURIComponent(pkg.id)}`;
   const loginUrl = `${portalOrigin()}/login/vendor`;
-  const results: { vendor: string; email: string | null; sent: boolean; loginCreated?: boolean; error?: string }[] = [];
-  const { ensureVendorPortalLogin } = await import("./crmVendorCredentials.js");
+  const results: {
+    vendor: string;
+    email: string | null;
+    sent: boolean;
+    loginCreated?: boolean;
+    tempPassword?: string;
+    projectAccess?: boolean;
+    error?: string;
+  }[] = [];
+  const { ensureVendorPortalLogin, grantVendorProjectAccess } = await import("./crmVendorCredentials.js");
 
   const vendorFilter = opts.vendorLabelsOnly?.length ? new Set(opts.vendorLabelsOnly) : null;
 
@@ -125,12 +133,26 @@ export async function notifyBidPackageOpened(opts: {
     let portalEmail = info.email;
 
     if (opts.createLogins !== false && info.email) {
-      const login = await ensureVendorPortalLogin({ email: info.email, name: vendorName }).catch(() => null);
+      const login = await ensureVendorPortalLogin({
+        email: info.email,
+        name: vendorName,
+        vendorId: info.vendorId,
+      }).catch(() => null);
       if (login) {
         portalEmail = login.email;
         loginCreated = login.created;
         tempPassword = login.tempPassword;
+        await grantVendorProjectAccess({
+          projectId: pkg.project.id,
+          vendorId: info.vendorId,
+          userId: login.userId,
+        }).catch(() => {});
       }
+    } else if (info.vendorId) {
+      await grantVendorProjectAccess({
+        projectId: pkg.project.id,
+        vendorId: info.vendorId,
+      }).catch(() => {});
     }
 
     const emails = parseEmails(portalEmail);
@@ -158,18 +180,34 @@ export async function notifyBidPackageOpened(opts: {
     if (emails.length) {
       try {
         await sendGraphHtmlMail({ to: emails, subject: `[${pkg.project.code}] ${subject}`, bodyHtml: html });
-        results.push({ vendor: vendorName, email: emails.join(", "), sent: true, loginCreated });
+        results.push({
+          vendor: vendorName,
+          email: emails.join(", "),
+          sent: true,
+          loginCreated,
+          tempPassword,
+          projectAccess: Boolean(info.vendorId || loginCreated),
+        });
       } catch (err) {
         results.push({
           vendor: vendorName,
           email: emails.join(", "),
           sent: false,
           loginCreated,
+          tempPassword,
+          projectAccess: Boolean(info.vendorId),
           error: err instanceof Error ? err.message : String(err),
         });
       }
     } else {
-      results.push({ vendor: vendorName, email: null, sent: false, loginCreated, error: "no_email" });
+      results.push({
+        vendor: vendorName,
+        email: null,
+        sent: false,
+        loginCreated,
+        projectAccess: Boolean(info.vendorId),
+        error: "no_email",
+      });
     }
   }
 
@@ -185,5 +223,15 @@ export async function notifyBidPackageOpened(opts: {
     }).catch(() => {});
   }
 
-  return { notified: results.filter((r) => r.sent).length, total: results.length, results };
+  const missingEmail = results.filter((r) => r.error === "no_email").map((r) => r.vendor);
+  const accessSlips = results
+    .filter((r) => r.email && r.tempPassword)
+    .map((r) => ({ vendor: r.vendor, email: r.email!, tempPassword: r.tempPassword! }));
+  return {
+    notified: results.filter((r) => r.sent).length,
+    total: results.length,
+    results,
+    missingEmail,
+    accessSlips,
+  };
 }

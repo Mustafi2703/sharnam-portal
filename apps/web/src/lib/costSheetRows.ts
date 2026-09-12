@@ -42,6 +42,35 @@ function hasMbMeasure(r: MbLike) {
   );
 }
 
+function hasBbsMeasure(r: BbsLike) {
+  return (
+    Math.abs(Number(r.diameterMm) || 0) >= 6 ||
+    Math.abs(Number(r.totalLength) || 0) > 0 ||
+    Math.abs(Number(r.nos) || 0) > 0 ||
+    Math.abs(Number(r.weightKg) || 0) > 0 ||
+    Math.abs(Number(r.shapeLenA) || 0) > 0
+  );
+}
+
+/** Blank imported spacer — hide these so Add row / section stays usable. */
+export function isMbSpacerRow(r: MbLike): boolean {
+  const desc = String(r.description ?? "").trim();
+  const sr = String(r.srNo ?? "").trim();
+  const kind = mbRowKind(r);
+  if (kind === "data") return !desc && !hasMbMeasure(r);
+  if (kind === "note") return !desc && !sr;
+  return false;
+}
+
+export function isBbsSpacerRow(r: BbsLike): boolean {
+  const mark = String(r.barMark ?? "").trim();
+  const loc = String(r.location ?? r.sectionMark ?? "").trim();
+  const kind = bbsRowKind(r);
+  if (kind === "data") return !mark && !loc && !hasBbsMeasure(r);
+  if (kind === "note") return !mark && !loc && !hasBbsMeasure(r);
+  return false;
+}
+
 function isMbTotal(desc: string) {
   return /total up to date|previous bill qty|this bill quantity/i.test(desc.trim());
 }
@@ -80,14 +109,7 @@ export function bbsRowKind(r: BbsLike): BbsRowKind {
   if (/^\s*(grand\s*)?total\b/i.test(loc) || /^\s*(grand\s*)?total\b/i.test(mark) || /^dia\s*\d+/i.test(loc)) {
     return "note";
   }
-  const hasData =
-    Math.abs(Number(r.diameterMm) || 0) >= 6 ||
-    Math.abs(Number(r.totalLength) || 0) > 0 ||
-    Math.abs(Number(r.nos) || 0) > 0 ||
-    Math.abs(Number(r.weightKg) || 0) > 0 ||
-    Math.abs(Number(r.shapeLenA) || 0) > 0;
-
-  if (hasData) return "data";
+  if (hasBbsMeasure(r)) return "data";
   if (!loc && !mark) return "note";
   if (/^(l|b|h|dia|spacing|d)$/i.test(loc) || /^(l|b|h|dia|spacing|d)$/i.test(mark)) return "subheader";
   if (mark && /^[A-Z]$/.test(mark)) return "section";

@@ -1,6 +1,6 @@
 /**
  * PhotoCapture — mobile-first photo capture.
- * Camera opens native lens on phone; Gallery opens picker. Large tap targets (44px+).
+ * Camera opens native lens on phone. Gallery is optional (off for attendance).
  */
 import { useRef, useState } from "react";
 
@@ -12,6 +12,8 @@ type Props = {
   buttonSize?: "sm" | "md";
   /** Rear camera on site (default). Use "user" for selfie / attendance. */
   captureFacing?: "user" | "environment";
+  /** Hide gallery picker — attendance must be a live camera selfie. */
+  allowGallery?: boolean;
 };
 
 export function PhotoCapture({
@@ -21,6 +23,7 @@ export function PhotoCapture({
   hint,
   buttonSize = "sm",
   captureFacing = "environment",
+  allowGallery = true,
 }: Props) {
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const galleryRef = useRef<HTMLInputElement | null>(null);
@@ -54,14 +57,16 @@ export function PhotoCapture({
           <span className="photo-capture__icon" aria-hidden>📷</span>
           <span>Camera</span>
         </button>
-        <button
-          type="button"
-          className={`photo-capture__btn photo-capture__btn--gallery ${sizeCls}`}
-          onClick={() => galleryRef.current?.click()}
-        >
-          <span className="photo-capture__icon" aria-hidden>🖼</span>
-          <span>Gallery</span>
-        </button>
+        {allowGallery && (
+          <button
+            type="button"
+            className={`photo-capture__btn photo-capture__btn--gallery ${sizeCls}`}
+            onClick={() => galleryRef.current?.click()}
+          >
+            <span className="photo-capture__icon" aria-hidden>🖼</span>
+            <span>Gallery</span>
+          </button>
+        )}
         {files.length > 0 && (
           <span className="photo-capture__count">{files.length} selected</span>
         )}
@@ -76,14 +81,16 @@ export function PhotoCapture({
         className="photo-capture__input"
         onChange={(e) => push(e.target.files, e.currentTarget)}
       />
-      <input
-        ref={galleryRef}
-        type="file"
-        accept={accept}
-        multiple={multiple}
-        className="photo-capture__input"
-        onChange={(e) => push(e.target.files, e.currentTarget)}
-      />
+      {allowGallery && (
+        <input
+          ref={galleryRef}
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          className="photo-capture__input"
+          onChange={(e) => push(e.target.files, e.currentTarget)}
+        />
+      )}
       {files.length > 0 && (
         <ul className="photo-capture__grid">
           {files.map((f, i) => {

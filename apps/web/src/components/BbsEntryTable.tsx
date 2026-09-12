@@ -1,17 +1,15 @@
 /**
  * BBS register — column order matches SPDC * BBS sheets (diagram in SHAPE OF BAR col).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, apiBase } from "../api";
 import { FilePickButton } from "./FilePickButton";
 import { Button, Select } from "./ui";
-import PdfMarkup from "./PdfMarkup";
-import ImageMarkup from "./ImageMarkup";
 import { formatQty } from "./BoqMonitoringEditor";
 import { CostRegisterShell } from "./CostRegisterShell";
 import { BBS_COLUMN_GROUPS, bbsColClass } from "../lib/costSheetColumns";
 import { bbsBandEmpty, BBS_DATA_COLS } from "../lib/costBandRows";
-import { bbsRowBandClass, bbsRowKind } from "../lib/costSheetRows";
+import { bbsRowBandClass, bbsRowKind, isBbsSpacerRow } from "../lib/costSheetRows";
 
 function CellInput({
   value,
@@ -80,6 +78,7 @@ type Props = {
   canFullEdit: boolean;
   canSiteEdit: boolean;
   onChanged: () => void;
+  highlightId?: string | null;
 };
 
 function fileHref(path?: string | null, shareUrl?: string | null) {
@@ -104,12 +103,20 @@ function fmtKg(v: number) {
   return Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload, canFullEdit, canSiteEdit, onChanged }: Props) {
+export function BbsEntryTable({
+  projectId,
+  token,
+  rows,
+  singlePackage,
+  canUpload,
+  canFullEdit,
+  canSiteEdit,
+  onChanged,
+  highlightId,
+}: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [markupRow, setMarkupRow] = useState<BbsRow | null>(null);
-  const [shapeDraft, setShapeDraft] = useState<File | null>(null);
-  const [shapePreview, setShapePreview] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const [showEmpty, setShowEmpty] = useState(false);
   const [shapeMasters, setShapeMasters] = useState<{ shapeCode: string; name?: string | null }[]>([]);
   const canEditDims = canFullEdit || canSiteEdit;
   const colSpan = BBS_DATA_COLS + 1;
@@ -160,9 +167,6 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
       fd.append("bbsLineId", row.id);
       if (row.barMark) fd.append("barMark", row.barMark);
       await api(`/api/cost/${projectId}/bbs/shape`, { method: "POST", token, body: fd });
-      setMarkupRow(null);
-      setShapeDraft(null);
-      setShapePreview(null);
       setMsg(`Shape saved for mark ${rowLabel(row)}`);
       onChanged();
     } catch (err) {
@@ -175,35 +179,26 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   function onPickForRow(row: BbsRow, files: File[]) {
     const file = files[0];
     if (!file) return;
-    setMarkupRow(row);
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      setShapeDraft(file);
-      setShapePreview(null);
-      return;
-    }
-    if (file.type.startsWith("image/")) {
-      setShapeDraft(file);
-      setShapePreview(URL.createObjectURL(file));
-      return;
-    }
     void uploadShapeForRow(row, file);
   }
 
-  function closeMarkup() {
-    setMarkupRow(null);
-    setShapeDraft(null);
-    if (shapePreview) URL.revokeObjectURL(shapePreview);
-    setShapePreview(null);
-  }
-
   const uploaded = rows.filter((r) => r.shapeDiagramPath || r.shapeDiagramUrl).length;
-  const visibleRows = rows.filter((r) => {
-    const loc = String(r.location || r.sectionMark || "");
-    const mark = String(r.barMark || "");
-    if (/^\s*(grand\s*)?total\b/i.test(loc) || /^\s*(grand\s*)?total\b/i.test(mark)) return false;
-    if (/^dia\s*\d+(\.\d+)?(\s*mm)?$/i.test(loc)) return false;
-    return true;
-  });
+  const visibleRows = useMemo(() => {
+    return rows.filter((r) => {
+      const loc = String(r.location || r.sectionMark || "");
+      const mark = String(r.barMark || "");
+      if (/^\s*(grand\s*)?total\b/i.test(loc) || /^\s*(grand\s*)?total\b/i.test(mark)) return false;
+      if (/^dia\s*\d+(\.\d+)?(\s*mm)?$/i.test(loc)) return false;
+      if (!showEmpty && isBbsSpacerRow(r)) return false;
+      return true;
+    });
+  }, [rows, showEmpty]);
+  const hiddenCount = rows.length - visibleRows.length;
+
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`cost-line-${highlightId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlightId, visibleRows]);
   const dataRows = visibleRows.filter((r) => bbsRowKind(r) === "data");
   const totalNos = dataRows.reduce((s, r) => s + (Number(r.nos) || 0), 0);
   const totalLen = dataRows.reduce((s, r) => s + (Number(r.totalLength) || 0), 0);
@@ -220,66 +215,6 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
   }
   const diaTotals = [...byDia.entries()].sort((a, b) => a[0] - b[0]);
 
-  async function addRow(kind: "section" | "subsection" | "subheader" | "data" | "note") {
-    const pkg =
-      singlePackage && singlePackage !== "All"
-        ? singlePackage
-        : rows[0]?.packageName || "Dormitory BBS";
-    const sectionN = rows.filter((r) => bbsRowKind(r) === "section").length;
-    const subN = rows.filter((r) => bbsRowKind(r) === "subsection").length;
-    const body =
-      kind === "section"
-        ? {
-            packageName: pkg,
-            rowKind: "section",
-            barMark: String.fromCharCode(65 + (sectionN % 26)),
-            location: "New section",
-          }
-        : kind === "subsection"
-          ? {
-              packageName: pkg,
-              rowKind: "subsection",
-              barMark: String(subN + 1),
-              location: "New subsection",
-            }
-          : kind === "subheader"
-            ? {
-                packageName: pkg,
-                rowKind: "subheader",
-                barMark: "",
-                location: "L",
-              }
-            : kind === "note"
-              ? {
-                  packageName: pkg,
-                  rowKind: "note",
-                  barMark: "",
-                  location: "Note",
-                }
-              : {
-                  packageName: pkg,
-                  rowKind: "data",
-                  barMark: "",
-                  location: "New bar",
-                  nos: 1,
-                };
-    setBusyId("new");
-    setMsg("");
-    try {
-      await api(`/api/cost/${projectId}/bbs`, { method: "POST", token, body: JSON.stringify(body) });
-      setMsg(
-        kind === "data"
-          ? "Bar entry added — fill dia, nos and lengths"
-          : `${kind === "subheader" ? "Subheader" : kind === "note" ? "Note" : kind} added — edit the label in the sheet`
-      );
-      onChanged();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Add failed");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   const canMutate = canFullEdit || canSiteEdit;
 
   function bandRow(b: BbsRow) {
@@ -290,7 +225,11 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
 
     if (kind === "subheader") {
       return (
-        <tr key={b.id} className={bbsRowBandClass(kind)}>
+        <tr
+          key={b.id}
+          id={`cost-line-${b.id}`}
+          className={`${bbsRowBandClass(kind)} ${highlightId === b.id ? "cost-line--fresh" : ""}`}
+        >
           {bbsBandEmpty(0, "p")}
           {bbsBandEmpty(1, "sr")}
           <td className={bbsColClass(2, { sticky: true, extra: "text-left uppercase tracking-wide text-[10px]" })}>
@@ -309,7 +248,11 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
     }
 
     return (
-      <tr key={b.id} className={bbsRowBandClass(kind)}>
+      <tr
+        key={b.id}
+        id={`cost-line-${b.id}`}
+        className={`${bbsRowBandClass(kind)} ${highlightId === b.id ? "cost-line--fresh" : ""}`}
+      >
         {bbsBandEmpty(0, "p")}
         <td className={bbsColClass(1, { extra: "text-left font-semibold font-mono" })}>
           {canMutate ? (
@@ -348,28 +291,14 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
     <CostRegisterShell
       sheetKind="bbs"
       title={`Bar Bending Schedule (BBS)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${visibleRows.length} lines · ${dataRows.length} bars · ${uploaded} shapes · total ${fmtKg(totalWt)} kg`}
+      subtitle={`${visibleRows.length} lines${hiddenCount ? ` · ${hiddenCount} empty hidden` : ""} · ${dataRows.length} bars · ${uploaded} shapes · total ${fmtKg(totalWt)} kg`}
       toolbar={
-        canMutate ? (
+        hiddenCount > 0 || showEmpty ? (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2">
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("section")}>
-              + Section
+            <Button type="button" variant="ghost" className="!text-xs" onClick={() => setShowEmpty((v) => !v)}>
+              {showEmpty ? "Hide empty lines" : `Show ${hiddenCount} empty lines`}
             </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subsection")}>
-              + Subsection
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subheader")}>
-              + Subheader
-            </Button>
-            <Button type="button" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("data")}>
-              + Bar entry
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("note")}>
-              + Note
-            </Button>
-            <span className="text-[11px] text-steel-muted">
-              Section / subsection / subheader / note are sheet bands. Bar entry is a measured line (dia · nos · A–E · weight).
-            </span>
+            {msg ? <span className="text-[11px] text-brand-dark">{msg}</span> : null}
           </div>
         ) : undefined
       }
@@ -445,7 +374,11 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
               const hasDiagram = Boolean(href);
               const isImage = hasDiagram && /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(href);
               return (
-                <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
+                <tr
+                  key={b.id}
+                  id={`cost-line-${b.id}`}
+                  className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""} ${highlightId === b.id ? "cost-line--fresh" : ""}`}
+                >
                   <td className={bbsColClass(0, { sticky: true, extra: "wrap text-left align-top" })}>
                     {canFullEdit ? (
                       <CellInput value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
@@ -545,7 +478,7 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
                             variant="ghost"
                             className="!text-xs !py-0.5 !px-1.5"
                           >
-                            {busyId === b.id ? "…" : hasDiagram ? "Replace" : "Upload + markup"}
+                            {busyId === b.id ? "…" : hasDiagram ? "Replace" : "Upload"}
                           </FilePickButton>
                         )}
                         {!canUpload && !hasDiagram && <span className="text-steel-muted text-xs">—</span>}
@@ -725,45 +658,6 @@ export function BbsEntryTable({ projectId, token, rows, singlePackage, canUpload
           )}
         </table>
     </CostRegisterShell>
-
-      {markupRow && shapeDraft && (
-        <div className="markup-modal" role="dialog" aria-modal="true" aria-label="BBS row shape markup">
-          <div className="markup-modal__backdrop" onClick={closeMarkup} />
-          <div className="markup-modal__panel max-w-4xl">
-            <div className="markup-modal__head">
-              <span>
-                Mark {rowLabel(markupRow)} · Shape of bar · {markupRow.location || markupRow.packageName}
-              </span>
-              <button type="button" className="markup-modal__close" onClick={closeMarkup}>
-                ×
-              </button>
-            </div>
-            <div className="markup-modal__body">
-              {shapeDraft.type === "application/pdf" || shapeDraft.name.toLowerCase().endsWith(".pdf") ? (
-                <PdfMarkup
-                  src={shapeDraft}
-                  saveLabel="Save diagram in Shape of bar column"
-                  onCancel={closeMarkup}
-                  onSave={async (markedPages) => {
-                    const file = markedPages[0]?.file || shapeDraft;
-                    await uploadShapeForRow(markupRow, file);
-                  }}
-                />
-              ) : (
-                <ImageMarkup
-                  src={shapePreview || shapeDraft}
-                  saveLabel="Save diagram in Shape of bar column"
-                  filename={`bbs-${rowLabel(markupRow)}`}
-                  onCancel={closeMarkup}
-                  onSave={async (file) => {
-                    await uploadShapeForRow(markupRow, file);
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

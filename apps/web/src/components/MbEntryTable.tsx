@@ -1,7 +1,7 @@
 /**
  * Measurement book — SPDC MB sheet (cube-style register, inline editable).
  */
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Button } from "./ui";
 import { formatQty } from "./BoqMonitoringEditor";
@@ -9,7 +9,7 @@ import { CostRegisterShell } from "./CostRegisterShell";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { MB_COLUMN_GROUPS, mbColClass } from "../lib/costSheetColumns";
 import { mbBandEmpty, MB_DATA_COLS } from "../lib/costBandRows";
-import { mbRowBandClass, mbRowKind, type MbRowKind } from "../lib/costSheetRows";
+import { isMbSpacerRow, mbRowBandClass, mbRowKind, type MbRowKind } from "../lib/costSheetRows";
 
 export type MbRow = {
   id: string;
@@ -37,6 +37,7 @@ type Props = {
   canFullEdit: boolean;
   canSiteEdit: boolean;
   onChanged: () => void;
+  highlightId?: string | null;
 };
 
 function mbDimEmpty(from: number, to: number) {
@@ -57,12 +58,32 @@ function bandLabel(kind: MbRowKind, b: MbRow) {
   );
 }
 
-export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdit, canSiteEdit, onChanged }: Props) {
+export function MbEntryTable({
+  projectId,
+  token,
+  rows,
+  singlePackage,
+  canFullEdit,
+  canSiteEdit,
+  onChanged,
+  highlightId,
+}: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const [showEmpty, setShowEmpty] = useState(false);
   const canEditDims = canFullEdit || canSiteEdit;
   const canMutate = canEditDims;
   const colSpan = MB_DATA_COLS + 1;
+  const visibleRows = useMemo(
+    () => (showEmpty ? rows : rows.filter((r) => !isMbSpacerRow(r))),
+    [rows, showEmpty]
+  );
+  const hiddenCount = rows.length - visibleRows.length;
+
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`cost-line-${highlightId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlightId, visibleRows]);
 
   function bandRow(b: MbRow) {
     const kind = mbRowKind(b);
@@ -70,7 +91,11 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
 
     if (kind === "total") {
       return (
-        <tr key={b.id} className={cls}>
+        <tr
+          key={b.id}
+          id={`cost-line-${b.id}`}
+          className={`${cls} ${highlightId === b.id ? "cost-line--fresh" : ""}`}
+        >
           {mbBandEmpty(0, "p")}
           {mbBandEmpty(1, "sr")}
           <td className={mbColClass(2, { sticky: true, extra: "text-left" })}>{bandLabel(kind, b)}</td>
@@ -92,7 +117,11 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
 
     const descExtra = kind === "subitem" ? "pl-5" : kind === "subsection" ? "pl-2" : "";
     return (
-      <tr key={b.id} className={cls}>
+      <tr
+        key={b.id}
+        id={`cost-line-${b.id}`}
+        className={`${cls} ${highlightId === b.id ? "cost-line--fresh" : ""}`}
+      >
         <td className={mbColClass(0, { extra: "text-left" })}>
           {canFullEdit ? (
             <RegisterSheetCell value={b.packageName} onCommit={(v) => void patchLine(b.id, { packageName: v })} />
@@ -155,39 +184,6 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
     }
   }
 
-  async function addRow(kind: MbRowKind) {
-    const pkg =
-      singlePackage && singlePackage !== "All"
-        ? singlePackage
-        : rows[0]?.packageName || "Dormitory Civil";
-    const itemN = rows.filter((r) => mbRowKind(r) === "item").length;
-    const body =
-      kind === "data"
-        ? { packageName: pkg, rowKind: "data", description: "New measurement", nos1: 1, nos2: 1 }
-        : kind === "item"
-          ? { packageName: pkg, rowKind: "item", srNo: String(itemN + 1), description: "New item" }
-          : kind === "subitem"
-            ? { packageName: pkg, rowKind: "subitem", srNo: "", description: "-do" }
-            : kind === "subsection"
-              ? { packageName: pkg, rowKind: "subsection", description: "New subsection" }
-              : kind === "description"
-                ? { packageName: pkg, rowKind: "description", description: "Item description" }
-                : kind === "total"
-                  ? { packageName: pkg, rowKind: "total", description: "TOTAL" }
-                  : { packageName: pkg, rowKind: "note", description: "Note" };
-    setBusyId("new");
-    setMsg("");
-    try {
-      await api(`/api/cost/${projectId}/mb`, { method: "POST", token, body: JSON.stringify(body) });
-      setMsg(kind === "data" ? "Measurement line added" : `${kind} heading added — edit the label in the sheet`);
-      onChanged();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Add failed");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   function cell(
     value: string | number | null | undefined,
     onSave: (v: string) => void,
@@ -213,34 +209,14 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
     <CostRegisterShell
       sheetKind="mb"
       title={`Measurement Book (MB)${singlePackage ? ` — ${singlePackage}` : ""}`}
-      subtitle={`${rows.length} lines · SPDC MB format — Sr · Description · Nos × L × W × H · Qty · UoM · RA-Bill · Remark`}
+      subtitle={`${visibleRows.length} lines${hiddenCount ? ` · ${hiddenCount} empty hidden` : ""} · SPDC MB — Sr · Description · Nos × L × W × H · Qty · UoM · RA-Bill · Remark`}
       toolbar={
-        canMutate ? (
+        hiddenCount > 0 || showEmpty ? (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2">
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("item")}>
-              + Item
+            <Button type="button" variant="ghost" className="!text-xs" onClick={() => setShowEmpty((v) => !v)}>
+              {showEmpty ? "Hide empty lines" : `Show ${hiddenCount} empty lines`}
             </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("description")}>
-              + Description
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subsection")}>
-              + Subsection
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("subitem")}>
-              + Sub-item
-            </Button>
-            <Button type="button" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("data")}>
-              + Measurement
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("note")}>
-              + Note
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" disabled={busyId === "new"} onClick={() => void addRow("total")}>
-              + Total
-            </Button>
-            <span className="text-[11px] text-steel-muted">
-              Item / subsection / description are sheet headings. Measurement is a qty line (Nos × L × W × H).
-            </span>
+            {msg ? <span className="text-[11px] text-brand-dark">{msg}</span> : null}
           </div>
         ) : undefined
       }
@@ -272,13 +248,17 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
           </tr>
         </thead>
         <tbody>
-          {rows.map((b) => {
+          {visibleRows.map((b) => {
             const kind = mbRowKind(b);
             if (kind !== "data") {
               return bandRow(b);
             }
             return (
-              <tr key={b.id} className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""}`}>
+              <tr
+                key={b.id}
+                id={`cost-line-${b.id}`}
+                className={`boq-line-row ${busyId === b.id ? "opacity-60" : ""} ${highlightId === b.id ? "cost-line--fresh" : ""}`}
+              >
                 <td className={mbColClass(0, { sticky: true, extra: "text-left align-top" })}>
                   {cell(b.packageName, (v) => void patchLine(b.id, { packageName: v }), { disabled: !canFullEdit })}
                 </td>
@@ -328,7 +308,7 @@ export function MbEntryTable({ projectId, token, rows, singlePackage, canFullEdi
               </tr>
             );
           })}
-          {!rows.length && (
+          {!visibleRows.length && (
             <tr>
               <td colSpan={colSpan} className="empty text-left p-6">
                 No MB rows — pick a package above, upload an MB sheet in setup, or add a row.

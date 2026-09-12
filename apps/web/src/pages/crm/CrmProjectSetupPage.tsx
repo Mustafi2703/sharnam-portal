@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
+import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 
@@ -357,6 +358,19 @@ export default function CrmProjectSetupPage() {
                     busy={busy}
                   />
                 </div>
+                {token && (
+                  <div className="sm:col-span-2">
+                    <ProjectTeamAllocatePanel
+                      projectId={projectId}
+                      token={token}
+                      users={users}
+                      members={summary?.members || []}
+                      canEdit={canManage}
+                      onMsg={setMsg}
+                      onChanged={() => void loadProject()}
+                    />
+                  </div>
+                )}
                 <div className="sm:col-span-2 flex flex-wrap gap-2">
                   <Button type="submit" variant="secondary" disabled={busy}>
                     Save project card

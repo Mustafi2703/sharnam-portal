@@ -113,3 +113,30 @@ export async function publishQualityPackToDrive(projectId: string, userId: strin
 
   return published;
 }
+
+/** Archive an uploaded client workbook to the ISO drive (source file, not a generated export). */
+export async function archiveUploadedWorkbook(opts: {
+  projectId: string;
+  userId: string;
+  moduleKey: keyof typeof MODULE_TO_ISO_FOLDER;
+  originalName: string;
+  buffer: Buffer;
+  auditAction: string;
+}): Promise<PublishResult | null> {
+  try {
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safe = opts.originalName.replace(/[^\w.\- ()]+/g, "_") || "workbook.xlsx";
+    return await publishRegisterWorkbook({
+      projectId: opts.projectId,
+      userId: opts.userId,
+      moduleKey: opts.moduleKey,
+      fileName: `${stamp}-${safe}`,
+      buffer: opts.buffer,
+      auditAction: opts.auditAction,
+      auditMeta: { originalName: opts.originalName, archived: true },
+    });
+  } catch (err) {
+    console.warn("[drive] archive skipped:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}

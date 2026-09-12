@@ -378,13 +378,38 @@ projectsRouter.get("/", async (req: AuthedRequest, res) => {
     });
     return res.json(projects);
   }
+  const include = { _count: { select: { drawings: true, members: true } } } as const;
+  const byId = new Map<string, unknown>();
   const memberships = await prisma.projectMember.findMany({
     where: { userId: req.user!.id },
-    include: {
-      project: { include: { _count: { select: { drawings: true, members: true } } } },
-    },
+    include: { project: { include } },
   });
-  res.json(memberships.map((m) => m.project));
+  for (const m of memberships) byId.set(m.project.id, m.project);
+
+  if (role === "vendor") {
+    const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+    const vendor = await resolveVendorForUser(req.user!);
+    if (vendor) {
+      const assigned = await prisma.projectVendor.findMany({
+        where: { vendorId: vendor.id },
+        include: { project: { include } },
+      });
+      for (const row of assigned) byId.set(row.project.id, row.project);
+      const bidSlots = await prisma.crmVendorBoq.findMany({
+        where: {
+          OR: [{ vendorId: vendor.id }, { vendorLabel: vendor.name }],
+          bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } },
+        },
+        include: { bidPackage: { include: { project: { include } } } },
+      });
+      for (const slot of bidSlots) {
+        const project = slot.bidPackage.project;
+        if (project) byId.set(project.id, project);
+      }
+    }
+  }
+
+  res.json([...byId.values()]);
 });
 
 projectsRouter.get("/work-package-catalog", async (_req, res) => {

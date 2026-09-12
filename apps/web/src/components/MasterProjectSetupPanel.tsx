@@ -6,6 +6,8 @@ import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableSelect } from "./SearchableSelect";
 import { DirectoryMySignaturePanel } from "./DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "./DirectorySignOffRegister";
+import { ProjectSetupMatrixDesk } from "./ProjectSetupMatrixDesk";
+import { SetupPartyMultiPick, type SetupVendor } from "./SetupPartyMultiPick";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; status: string; clientName?: string | null };
@@ -38,13 +40,13 @@ type SetupSummary = {
 };
 
 type UserRow = { id: string; fullName: string; email: string; role: string };
-type VendorRow = { id: string; name: string; partyType?: string; trade?: string };
+type VendorRow = SetupVendor & { partyType?: string };
 
 type Props = {
   projectId: string;
   token: string;
   allUsers: UserRow[];
-  allVendors: VendorRow[];
+  allVendors: SetupVendor[];
   onMsg: (text: string) => void;
 };
 
@@ -57,6 +59,10 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
   const [memberRole, setMemberRole] = useState("project_manager");
   const [assignVendorId, setAssignVendorId] = useState("");
   const [assignTrade, setAssignTrade] = useState("");
+  const [consultantIds, setConsultantIds] = useState<string[]>([]);
+  const [contractorIds, setContractorIds] = useState<string[]>([]);
+  const [catalogVendors, setCatalogVendors] = useState<VendorRow[]>([]);
+  const [accessSlip, setAccessSlip] = useState<{ email: string; tempPassword?: string }[]>([]);
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -77,7 +83,20 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
     ]);
     setSummary(s);
     setOverview(ov);
-  }, [projectId, token]);
+    setConsultantIds(s.vendors.filter((v) => ["Consultant", "Designer", "PMC"].includes(v.partyType)).map((v) => v.vendorId));
+    setContractorIds(s.vendors.filter((v) => ["Contractor", "Vendor"].includes(v.partyType)).map((v) => v.vendorId));
+    setCatalogVendors((prev) => {
+      const extra = s.vendors.map((v) => ({
+        id: v.vendorId,
+        name: v.name,
+        partyType: v.partyType,
+        trade: v.trade || undefined,
+        email: v.email,
+      }));
+      const merged = [...allVendors, ...prev, ...extra];
+      return merged.filter((v, i) => merged.findIndex((x) => x.id === v.id) === i);
+    });
+  }, [projectId, token, allVendors]);
 
   useEffect(() => {
     void load();
@@ -146,8 +165,8 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
             Lead: {summary.lead.title} ({summary.lead.stage}) →
           </Link>
         )}
-        <Link to={`/projects/${projectId}`} className="ml-auto text-sm font-semibold text-brand">
-          Open project tools →
+        <Link to={`/projects/${projectId}/setup`} className="ml-auto text-sm font-semibold text-brand">
+          Live project setup →
         </Link>
       </div>
 
@@ -289,8 +308,141 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               Add
             </Button>
           </form>
+          <div className="grid sm:grid-cols-2 gap-3 border-t border-line pt-3">
+            <SetupPartyMultiPick
+              token={token}
+              title="Add consultant (email required)"
+              kind="Consultant"
+              vendors={catalogVendors.length ? catalogVendors : allVendors}
+              selectedIds={consultantIds}
+              onChange={setConsultantIds}
+              onCreated={(v) =>
+                setCatalogVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, { ...v, trade: v.trade ?? undefined }]))
+              }
+              onMsg={onMsg}
+              busy={busy}
+            />
+            <SetupPartyMultiPick
+              token={token}
+              title="Add contractor (email required)"
+              kind="Contractor"
+              vendors={catalogVendors.length ? catalogVendors : allVendors}
+              selectedIds={contractorIds}
+              onChange={setContractorIds}
+              onCreated={(v) =>
+                setCatalogVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, { ...v, trade: v.trade ?? undefined }]))
+              }
+              onMsg={onMsg}
+              busy={busy}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await api(`/api/projects/${projectId}/assign-parties`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify({ vendorIds: [...new Set([...consultantIds, ...contractorIds])] }),
+                });
+                onMsg("Consultants and contractors saved.");
+                await load();
+              } catch (err) {
+                onMsg(err instanceof Error ? err.message : "Save parties failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Save parties
+          </Button>
         </Card>
       </div>
+
+      <ProjectSetupMatrixDesk
+        projectId={projectId}
+        token={token}
+        project={summary.project}
+        users={allUsers}
+        vendors={catalogVendors.length ? catalogVendors : allVendors}
+        canEdit
+        onMsg={onMsg}
+        onDirectoryChange={async () => {
+          await load();
+        }}
+      />
+
+      <Card className="!p-4 space-y-3">
+        <div className="flex flex-wrap justify-between gap-2 items-start">
+          <div>
+            <h3 className="font-semibold text-sm">Complete setup · invites</h3>
+            <p className="text-xs text-steel-muted mt-0.5">
+              Same launch as CRM: ISO folders, comms, client/vendor logins, first DPR / WPR drafts.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const out = await api<{
+                    clientPortals: { email: string; created: boolean; tempPassword?: string }[];
+                    contractorPortals: { email: string; created: boolean; tempPassword?: string }[];
+                  }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token, body: JSON.stringify({}) });
+                  setAccessSlip(
+                    [...(out.clientPortals || []), ...(out.contractorPortals || [])].filter((p) => p.email)
+                  );
+                  onMsg("Setup complete — folders, comms, portals, first DPR / WPR.");
+                  await load();
+                } catch (err) {
+                  onMsg(err instanceof Error ? err.message : "Complete setup failed");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Complete setup
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const out = await api<{ sent: { email: string }[]; sharePassword: string }>(
+                    `/api/projects/${projectId}/send-portal-invites`,
+                    { method: "POST", token, body: JSON.stringify({}) }
+                  );
+                  onMsg(`Invites emailed to ${out.sent.length} people. Shared password: ${out.sharePassword}.`);
+                } catch (err) {
+                  onMsg(err instanceof Error ? err.message : "Invite send failed");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Email portal credentials
+            </Button>
+          </div>
+        </div>
+        {accessSlip.length > 0 && (
+          <div className="rounded-lg border border-line bg-sand/40 p-3 text-sm space-y-1">
+            <p className="font-semibold text-[10px] uppercase tracking-wide text-steel-muted">Access slip</p>
+            {accessSlip.map((p) => (
+              <p key={p.email} className="font-mono text-xs">
+                {p.email}
+                {p.tempPassword ? ` · ${p.tempPassword}` : " · existing login"}
+              </p>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {(() => {
         const members = overview?.members || [];

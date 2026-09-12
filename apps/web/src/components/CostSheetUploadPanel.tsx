@@ -1,12 +1,10 @@
 /**
- * Cost sheet upload — BBS / MB Excel import + BBS shape diagrams with PDF/image markup.
+ * Cost sheet upload — BBS / MB Excel import + BBS shape diagrams (upload only).
  */
 import { FormEvent, useMemo, useState } from "react";
 import { api, apiBase } from "../api";
 import { Button, Card, FileField, Input, Select } from "./ui";
 import { FilePickButton } from "./FilePickButton";
-import PdfMarkup from "./PdfMarkup";
-import ImageMarkup from "./ImageMarkup";
 
 export type SheetFileRecord = {
   id: string;
@@ -61,8 +59,6 @@ export function CostSheetUploadPanel({
   const [msg, setMsg] = useState("");
   const [pkg, setPkg] = useState(packageName !== "All" ? packageName : packageOptions[0] || "Dormitory BBS");
   const [barMark, setBarMark] = useState("");
-  const [shapeDraft, setShapeDraft] = useState<File | null>(null);
-  const [shapePreview, setShapePreview] = useState<string | null>(null);
 
   const kindFiles = useMemo(
     () => files.filter((f) => f.kind === kind || (kind === "bbs" && f.kind === "bbs_shape")),
@@ -112,8 +108,6 @@ export function CostSheetUploadPanel({
         `/api/cost/${projectId}/bbs/shape`,
         { method: "POST", token, body: fd }
       );
-      setShapeDraft(null);
-      setShapePreview(null);
       setMsg(`Shape diagram uploaded${barMark ? ` for mark ${barMark}` : ""}`);
       onChanged();
       if (r.file?.sharePointUrl) window.open(r.file.sharePointUrl, "_blank", "noopener,noreferrer");
@@ -127,16 +121,6 @@ export function CostSheetUploadPanel({
   function onPickShape(files: File[]) {
     const file = files[0];
     if (!file) return;
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      setShapeDraft(file);
-      setShapePreview(null);
-      return;
-    }
-    if (file.type.startsWith("image/")) {
-      setShapeDraft(file);
-      setShapePreview(URL.createObjectURL(file));
-      return;
-    }
     void uploadShape(file);
   }
 
@@ -210,43 +194,6 @@ export function CostSheetUploadPanel({
               </div>
             </Card>
           )}
-        </div>
-      )}
-
-      {kind === "bbs" && shapeDraft && !hideBulkShapes && (
-        <div className="markup-modal" role="dialog" aria-modal="true" aria-label="BBS shape markup">
-          <div className="markup-modal__backdrop" onClick={() => { setShapeDraft(null); setShapePreview(null); }} />
-          <div className="markup-modal__panel max-w-4xl">
-            <div className="markup-modal__head">
-              <span>Annotate shape — {barMark || "general"}</span>
-              <button type="button" className="markup-modal__close" onClick={() => { setShapeDraft(null); setShapePreview(null); }}>
-                ×
-              </button>
-            </div>
-            <div className="markup-modal__body">
-              {shapeDraft.type === "application/pdf" || shapeDraft.name.toLowerCase().endsWith(".pdf") ? (
-                <PdfMarkup
-                  src={shapeDraft}
-                  saveLabel="Upload marked shape to SharePoint"
-                  onCancel={() => { setShapeDraft(null); setShapePreview(null); }}
-                  onSave={async (markedPages) => {
-                    const file = markedPages[0]?.file || shapeDraft;
-                    await uploadShape(file);
-                  }}
-                />
-              ) : (
-                <ImageMarkup
-                  src={shapePreview || shapeDraft}
-                  saveLabel="Upload marked shape to SharePoint"
-                  filename={`bbs-shape-${barMark || "general"}`}
-                  onCancel={() => { setShapeDraft(null); setShapePreview(null); }}
-                  onSave={async (file) => {
-                    await uploadShape(file);
-                  }}
-                />
-              )}
-            </div>
-          </div>
         </div>
       )}
 

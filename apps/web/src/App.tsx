@@ -31,6 +31,7 @@ import ModuleFilesPage from "./pages/project/ModuleFilesPage";
 import AuditKpiPage from "./pages/project/AuditKpiPage";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
 import ProjectHomePage from "./pages/project/ProjectHomePage";
+import LiveProjectSetupPage from "./pages/project/LiveProjectSetupPage";
 import VendorsPage from "./pages/project/VendorsPage";
 import RfisPage from "./pages/project/RfisPage";
 import InspectionsPage from "./pages/project/InspectionsPage";
@@ -60,6 +61,7 @@ import WprMakerPage from "./pages/WprMakerPage";
 import HrmsAttendancePage from "./pages/HrmsAttendancePage";
 import HrmsLeavePage from "./pages/HrmsLeavePage";
 import HrmsVouchersPage from "./pages/HrmsVouchersPage";
+import ExpenseVouchersPage from "./pages/ExpenseVouchersPage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
 import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
@@ -197,6 +199,7 @@ export default function App() {
                 <Route path="/projects" element={<ProjectsPage />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
+                  <Route path="setup" element={<LiveProjectSetupPage />} />
                   <Route path="hub/drawings" element={<ModuleHubPage moduleKey="drawings" />} />
                   <Route path="hub/dms" element={<ModuleHubPage moduleKey="dms" />} />
                   <Route path="hub/quality" element={<ModuleHubPage moduleKey="quality" />} />
@@ -226,6 +229,7 @@ export default function App() {
                   <Route path="comms/files" element={<ModuleFilesPage moduleKey="comms" />} />
                   <Route path="audit-kpi/files" element={<ModuleFilesPage moduleKey="auditKpi" />} />
                   <Route path="inspection/files" element={<ModuleFilesPage moduleKey="inspection" />} />
+                  <Route path="drawings/precheck" element={<DrawingPreCheckPage />} />
                   <Route path="drawings/coordination" element={<CoordinationPage />} />
                   <Route path="drawings/checklist-master" element={<ChecklistMasterPage lockedFamily="DrawingCheck" />} />
                   <Route path="drawings/checklist-logs" element={<ChecklistLogsPage lockedFamily="DrawingCheck" />} />
@@ -254,6 +258,7 @@ export default function App() {
                   <Route path="checklist-logs" element={<ChecklistLogsPage />} />
                   <Route path="rfis" element={<RfisPage />} />
                   <Route path="submittals" element={<SubmittalsPage />} />
+                  <Route path="expense-vouchers" element={<ExpenseVouchersPage />} />
                   <Route path="photos" element={<PhotosPage />} />
                   <Route path="diary" element={<DiaryPage />} />
                   <Route path="comms" element={<CommsPage />} />
@@ -297,6 +302,7 @@ export default function App() {
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
                 <Route path="/stakeholder" element={<StakeholderDeskPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />
+                <Route path="/vouchers" element={<ExpenseVouchersPage />} />
               </Routes>
             </AppShell>
             </SiteAttendanceGate>

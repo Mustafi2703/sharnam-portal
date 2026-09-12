@@ -66,11 +66,18 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
     icon: "reports",
     roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
   },
+  {
+    to: "/vouchers",
+    label: "Expense vouchers",
+    icon: "finance",
+    roles: ["admin", "office", "employee", "site_employee"],
+  },
 ];
 
 /** Site / field desk — attendance first */
 const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/attendance", label: "Attendance punch", icon: "field" },
+  { to: "/vouchers", label: "Expense voucher", icon: "finance" },
 ];
 
 /** Contractor portal — discipline BOQ uploads per project */
@@ -533,6 +540,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="hidden sm:flex items-center gap-1.5">
                 <Link to="/attendance" className="app-topbar__chip hover:border-brand">
                   Attendance
+                </Link>
+                <Link to="/vouchers" className="app-topbar__chip hover:border-brand">
+                  Expense
                 </Link>
               </div>
             )}

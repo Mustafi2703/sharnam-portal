@@ -174,16 +174,16 @@ export default function CrmLayout() {
         {onBids && !isVendor && (
           <div className="module-hub__workflow border-t border-line bg-sand/80 px-3 sm:px-5 py-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
             <span>
-              <strong className="text-ink font-semibold">1.</strong> Create package
+              <strong className="text-ink font-semibold">1.</strong> Open a project
             </span>
             <span>
-              <strong className="text-ink font-semibold">2.</strong> Open bid & notify
+              <strong className="text-ink font-semibold">2.</strong> Add vendors
             </span>
             <span>
-              <strong className="text-ink font-semibold">3.</strong> Fill discipline BOQs
+              <strong className="text-ink font-semibold">3.</strong> Upload BOQs
             </span>
             <span>
-              <strong className="text-ink font-semibold">4.</strong> Compare & award L1
+              <strong className="text-ink font-semibold">4.</strong> Comparative · award L1
             </span>
           </div>
         )}
