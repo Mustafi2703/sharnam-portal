@@ -8,6 +8,8 @@ import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
+import { VendorManageActions } from "../../components/VendorManageActions";
+import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
 
 const USER_TOOLS: {
   key: string;
@@ -46,6 +48,7 @@ export default function DirectoryPage() {
     city: "",
   });
   const [msg, setMsg] = useState("");
+  const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
   const canEdit = user?.role === "admin" || user?.role === "office";
   const [userForm, setUserForm] = useState({
     fullName: "",
@@ -248,9 +251,34 @@ export default function DirectoryPage() {
             </li>
           ))}
           {partiesForTab.map((r: any) => (
-            <li key={r.id} className="py-2 flex justify-between gap-2">
-              <span>{r.vendor?.name || r.name}</span>
-              <Badge tone="brand">{r.vendor?.partyType || r.partyType}</Badge>
+            <li key={r.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span>{r.vendor?.name || r.name}</span>
+                <div className="text-[10px] text-steel-muted">{r.vendor?.email || r.email || ""}</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="brand">{r.vendor?.partyType || r.partyType}</Badge>
+                {canEdit && (r.vendor || r.id) ? (
+                  <VendorManageActions
+                    vendor={{ id: r.vendor?.id || r.vendorId || r.id, name: r.vendor?.name || r.name }}
+                    token={token}
+                    projectId={id}
+                    onEdit={() =>
+                      setEditVendor({
+                        id: r.vendor?.id || r.vendorId || r.id,
+                        name: r.vendor?.name || r.name,
+                        partyType: r.vendor?.partyType || r.partyType,
+                        email: r.vendor?.email || r.email,
+                        businessPhone: r.vendor?.businessPhone,
+                        primaryContactName: r.vendor?.primaryContactName,
+                        city: r.vendor?.city,
+                        trade: r.tradeRole || r.vendor?.trade,
+                      })
+                    }
+                    onChanged={() => void load()}
+                  />
+                ) : null}
+              </div>
             </li>
           ))}
           {!staffForTab.length && !partiesForTab.length && (
@@ -429,6 +457,14 @@ export default function DirectoryPage() {
           </Card>
         </div>
       )}
+
+      <VendorQuickEditModal
+        open={!!editVendor}
+        vendor={editVendor}
+        token={token}
+        onClose={() => setEditVendor(null)}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

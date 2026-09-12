@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
+import { VendorManageActions } from "../../components/VendorManageActions";
 import { Button, Card, Input, Select, TextArea } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
@@ -148,9 +149,15 @@ export default function HrmsVendorsPage() {
                   <td className="px-4 py-2.5 text-steel-muted">{v.primaryContactName || v.email || "—"}</td>
                   <td className="px-4 py-2.5">{v._count?.projects ?? 0}</td>
                   <td className="px-4 py-2.5">
-                    <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => openEdit(v)}>
-                      Edit
-                    </button>
+                    <VendorManageActions
+                      vendor={v}
+                      token={token}
+                      onEdit={() => openEdit(v)}
+                      onChanged={async () => {
+                        setMsg("Directory updated.");
+                        await load();
+                      }}
+                    />
                   </td>
                 </tr>
               ))}

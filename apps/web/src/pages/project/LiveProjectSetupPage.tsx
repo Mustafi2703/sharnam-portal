@@ -8,6 +8,7 @@ import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPar
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
+import { ProjectManageActions } from "../../components/ProjectManageActions";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; clientName?: string | null; clientEmail?: string | null };
@@ -190,11 +191,14 @@ export default function LiveProjectSetupPage() {
 
       {card && (
         <Card className="!p-4 space-y-3">
-          <div>
-            <h3 className="font-semibold text-sm">Project · design · PMC header</h3>
-            <p className="text-xs text-steel-muted mt-0.5">
-              These names print at the top of QAP, cube, and quality registers. Keep them short and complete.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-sm">Project · design · PMC header</h3>
+              <p className="text-xs text-steel-muted mt-0.5">
+                These names print at the top of QAP, cube, and quality registers. Keep them short and complete.
+              </p>
+            </div>
+            <ProjectManageActions project={card} token={token} showEdit={false} onChanged={() => void load()} />
           </div>
           <form
             className="grid sm:grid-cols-2 gap-2"

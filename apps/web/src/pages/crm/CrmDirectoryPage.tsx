@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
+import { UserManageActions } from "../../components/UserManageActions";
+import { VendorManageActions } from "../../components/VendorManageActions";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
@@ -178,12 +180,11 @@ export function DirectoryCompaniesPanel({
         </div>
         <ul className="divide-y max-h-[420px] overflow-y-auto text-sm">
           {visibleRows.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                className={`w-full text-left px-4 py-3 hover:bg-brand-soft/30 ${selectedId === r.id ? "bg-brand-soft/50" : ""}`}
-                onClick={() => setSelectedId(r.id)}
-              >
+            <li
+              key={r.id}
+              className={`px-4 py-3 flex flex-wrap items-start justify-between gap-2 ${selectedId === r.id ? "bg-brand-soft/50" : ""}`}
+            >
+              <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => setSelectedId(r.id)}>
                 <div className="font-medium">{r.name}</div>
                 <div className="text-xs text-steel-muted mt-0.5">
                   {r.partyType}
@@ -191,6 +192,23 @@ export function DirectoryCompaniesPanel({
                   {r._count?.projects ? ` · ${r._count.projects} project(s)` : ""}
                 </div>
               </button>
+              {canEdit ? (
+                <VendorManageActions
+                  vendor={r}
+                  token={token}
+                  onEdit={() => {
+                    setSelectedId(r.id);
+                    requestAnimationFrame(() =>
+                      formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
+                    );
+                  }}
+                  onChanged={async () => {
+                    if (selectedId === r.id) setSelectedId(null);
+                    setMsg("Directory updated.");
+                    await load();
+                  }}
+                />
+              ) : null}
             </li>
           ))}
           {!visibleRows.length && <li className="px-4 py-8 text-center text-steel-muted">No records yet.</li>}
@@ -244,13 +262,25 @@ export function DirectoryCompaniesPanel({
           )}
           <TextArea placeholder="Notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           {canEdit && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="submit">Save</Button>
               {selected && (meta.loginRole || tab === "vendors" || tab === "clients" || tab === "stakeholders") && (
                 <Button type="button" variant="secondary" onClick={() => void createLogin()}>
                   Create portal login
                 </Button>
               )}
+              {selected ? (
+                <VendorManageActions
+                  vendor={selected}
+                  token={token}
+                  showEdit={false}
+                  onChanged={async () => {
+                    setSelectedId(null);
+                    setMsg("Company removed from directory.");
+                    await load();
+                  }}
+                />
+              ) : null}
             </div>
           )}
           {msg && <p className="text-xs text-brand-dark">{msg}</p>}
@@ -342,9 +372,15 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
               <div className="flex items-center gap-2">
                 <Badge tone={p.isActive === false ? "warn" : "ok"}>{p.role}</Badge>
                 {canEdit ? (
-                  <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => setEditUser(p)}>
-                    Edit
-                  </button>
+                  <UserManageActions
+                    user={p}
+                    token={token}
+                    onEdit={() => setEditUser(p)}
+                    onChanged={async () => {
+                      setMsg("User list updated.");
+                      await load();
+                    }}
+                  />
                 ) : null}
               </div>
             </li>
@@ -385,6 +421,7 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
         }}
         onDeleted={async () => {
           setMsg("User removed.");
+          await load();
         }}
       />
     </div>

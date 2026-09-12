@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
+import { UserManageActions } from "../../components/UserManageActions";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
@@ -165,18 +166,15 @@ export default function HrmsUsersPage() {
                   </td>
                   {canEdit ? (
                     <td className="px-4 py-2.5">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className="text-xs font-semibold text-brand underline" onClick={() => setEditUser(e)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-danger underline"
-                          onClick={() => setEditUser(e)}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <UserManageActions
+                        user={e}
+                        token={token}
+                        onEdit={() => setEditUser(e)}
+                        onChanged={async () => {
+                          setMsg("User list updated.");
+                          await load();
+                        }}
+                      />
                     </td>
                   ) : null}
                 </tr>
@@ -198,6 +196,7 @@ export default function HrmsUsersPage() {
         }}
         onDeleted={async () => {
           setMsg("User removed.");
+          await load();
         }}
       />
 

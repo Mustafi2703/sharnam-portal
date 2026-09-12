@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { UserAccountEditModal, type UserAccountRow } from "../components/UserAccountEditModal";
+import { UserManageActions } from "../components/UserManageActions";
 import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared";
 import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
 import { WORKSPACES } from "../workspaces";
@@ -213,9 +214,15 @@ export default function RolesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge tone={u.isActive !== false ? "ok" : "warn"}>{u.isActive !== false ? "Active" : "Off"}</Badge>
-                  <Button type="button" variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => setEditUser(u)}>
-                    Edit
-                  </Button>
+                  <UserManageActions
+                    user={u}
+                    token={token}
+                    onEdit={() => setEditUser(u)}
+                    onChanged={async () => {
+                      setMsg("User list updated.");
+                      await load();
+                    }}
+                  />
                 </div>
               </li>
             ))}

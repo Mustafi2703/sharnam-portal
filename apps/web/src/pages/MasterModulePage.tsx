@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, WorkflowStrip } from ".
 import { ModuleIcon } from "../components/icons";
 import { WorkPackagesPanel } from "../components/WorkPackagesPanel";
 import { MasterProjectSetupPanel } from "../components/MasterProjectSetupPanel";
+import { ProjectManageActions } from "../components/ProjectManageActions";
 import {
   DirectoryCompaniesPanel,
   DirectoryPeoplePanel,
@@ -25,6 +26,9 @@ type Project = {
   status: string;
   clientName?: string;
   location?: string;
+  designConsultant?: string;
+  contractorName?: string;
+  pmcName?: string;
   enabledModules?: string;
   _count?: { drawings: number; members: number };
 };
@@ -327,12 +331,15 @@ export default function MasterModulePage() {
                     </div>
                     <Badge tone="ok">{p.status}</Badge>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+                    {canManage && token ? (
+                      <ProjectManageActions project={p} token={token} onChanged={() => void load()} />
+                    ) : null}
                     <Link to={`/projects/${p.id}`} className="font-semibold text-brand">
-                      Open project →
+                      Open →
                     </Link>
                     <Link to={`/projects/${p.id}/directory`} className="font-semibold text-brand">
-                      Project directory →
+                      Directory →
                     </Link>
                   </div>
                   <div className="mt-3 font-mono text-[11px] text-steel-muted">

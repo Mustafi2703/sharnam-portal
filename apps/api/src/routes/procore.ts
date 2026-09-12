@@ -69,6 +69,41 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   res.json(v);
 });
 
+vendorsRouter.delete("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const vendorId = String(req.body?.vendorId || req.query.vendorId || "").trim();
+  if (!vendorId) return res.status(400).json({ error: "vendorId required" });
+  await prisma.projectVendor.deleteMany({
+    where: { projectId: req.params.projectId, vendorId },
+  });
+  await audit("vendor.unassign", {
+    userId: req.user!.id,
+    entity: "ProjectVendor",
+    entityId: vendorId,
+    meta: { projectId: req.params.projectId },
+  });
+  res.json({ ok: true });
+});
+
+vendorsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const confirmName = String(req.body?.confirmName || req.query.confirmName || "").trim();
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true },
+  });
+  if (!vendor) return res.status(404).json({ error: "Not found" });
+  if (!confirmName || confirmName.toLowerCase() !== vendor.name.toLowerCase()) {
+    return res.status(400).json({ error: `Type the company name ${vendor.name} to confirm delete.` });
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.projectVendor.deleteMany({ where: { vendorId: vendor.id } });
+    await tx.user.updateMany({ where: { vendorId: vendor.id }, data: { vendorId: null } });
+    await tx.rfi.updateMany({ where: { responsibleVendorId: vendor.id }, data: { responsibleVendorId: null } });
+    await tx.vendor.update({ where: { id: vendor.id }, data: { isActive: false } });
+  });
+  await audit("vendor.delete", { userId: req.user!.id, entity: "Vendor", entityId: vendor.id, meta: { name: vendor.name } });
+  res.json({ ok: true, id: vendor.id });
+});
+
 vendorsRouter.get("/project/:projectId", async (req, res) => {
   const rows = await prisma.projectVendor.findMany({
     where: { projectId: req.params.projectId },

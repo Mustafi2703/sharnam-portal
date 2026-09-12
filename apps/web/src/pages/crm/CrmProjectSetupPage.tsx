@@ -9,6 +9,7 @@ import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPar
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
+import { ProjectManageActions } from "../../components/ProjectManageActions";
 
 type ProjectRow = {
   id: string;
@@ -281,6 +282,12 @@ export default function CrmProjectSetupPage() {
             <Badge tone="brand">{summary.project.code}</Badge>
             <span className="text-sm font-medium">{summary.project.name}</span>
             {status?.ready ? <Badge tone="ok">Ready to launch</Badge> : <Badge tone="warn">Setup in progress</Badge>}
+            <ProjectManageActions
+              project={summary.project}
+              token={token}
+              showEdit={false}
+              onChanged={() => void loadLists()}
+            />
           </div>
         )}
       </div>

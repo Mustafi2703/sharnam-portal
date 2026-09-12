@@ -8,6 +8,8 @@ import { DirectoryMySignaturePanel } from "./DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "./DirectorySignOffRegister";
 import { ProjectSetupMatrixDesk } from "./ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "./SetupPartyMultiPick";
+import { VendorManageActions } from "./VendorManageActions";
+import { VendorQuickEditModal, type VendorQuickEditRow } from "./VendorQuickEditModal";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; status: string; clientName?: string | null };
@@ -63,6 +65,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
   const [contractorIds, setContractorIds] = useState<string[]>([]);
   const [catalogVendors, setCatalogVendors] = useState<VendorRow[]>([]);
   const [accessSlip, setAccessSlip] = useState<{ email: string; tempPassword?: string }[]>([]);
+  const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -258,13 +261,28 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
           </div>
           <ul className="text-sm divide-y divide-line max-h-40 overflow-y-auto">
             {summary.vendors.map((v) => (
-              <li key={v.id} className="py-2">
+              <li key={v.id} className="py-2 space-y-2">
                 <div className="flex justify-between gap-2">
                   <span className="font-medium">{v.name}</span>
                   <Badge tone="brand">{v.partyType}</Badge>
                 </div>
                 <div className="text-xs text-steel-muted">{v.trade || v.tradeRole || "—"}</div>
                 {v.email && <div className="text-xs font-mono">{v.email}</div>}
+                <VendorManageActions
+                  vendor={{ id: v.vendorId, name: v.name }}
+                  token={token}
+                  projectId={projectId}
+                  onEdit={() =>
+                    setEditVendor({
+                      id: v.vendorId,
+                      name: v.name,
+                      partyType: v.partyType,
+                      email: v.email,
+                      trade: v.trade || v.tradeRole,
+                    })
+                  }
+                  onChanged={() => void load()}
+                />
               </li>
             ))}
             {!summary.vendors.length && <li className="py-2 text-steel-muted text-xs">No vendors on this project yet.</li>}
@@ -525,6 +543,14 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
           ))}
         </ul>
       </Card>
+
+      <VendorQuickEditModal
+        open={!!editVendor}
+        vendor={editVendor}
+        token={token}
+        onClose={() => setEditVendor(null)}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

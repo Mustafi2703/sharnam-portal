@@ -8,6 +8,7 @@ import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { ToolLink } from "../../components/ToolLink";
+import { ProjectManageActions, type ManageableProject } from "../../components/ProjectManageActions";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -19,6 +20,7 @@ export default function ProjectHomePage() {
   const [pack, setPack] = useState<any>(null);
   const [packBusy, setPackBusy] = useState(false);
   const [packMsg, setPackMsg] = useState("");
+  const [projectCard, setProjectCard] = useState<ManageableProject | null>(null);
   const isClient = user?.role === "client";
   const canUpload = user && user.role !== "client";
   const canManageProject = user?.role === "admin" || user?.role === "office";
@@ -28,6 +30,7 @@ export default function ProjectHomePage() {
     api(`/api/progress/${id}/summary`, { token }).then(setProgress).catch(() => setProgress(null));
     api(`/api/checklist/project/${id}/safety-dashboard`, { token }).then(setSafety).catch(() => setSafety(null));
     api(`/api/projects/${id}/sheet-pack`, { token }).then(setPack).catch(() => setPack(null));
+    api<ManageableProject>(`/api/projects/${id}`, { token }).then(setProjectCard).catch(() => setProjectCard(null));
   }, [id, token]);
 
   async function provisionSheets() {
@@ -99,7 +102,8 @@ export default function ProjectHomePage() {
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-brand mb-1">
             {isClient ? "Client project desk" : "Project overview"}
           </p>
-          <h2 className="font-display text-2xl">{isClient ? "Project desk" : "Project overview"}</h2>
+          <h2 className="font-display text-2xl">{isClient ? "Project desk" : projectCard?.name || "Project overview"}</h2>
+          {projectCard?.code ? <p className="font-mono text-xs text-steel-muted mt-1">{projectCard.code}</p> : null}
         </div>
         {canUpload && (
           <div className="flex flex-wrap gap-2">
@@ -123,6 +127,15 @@ export default function ProjectHomePage() {
                 Project setup
               </Button>
             )}
+            {canManageProject && projectCard && token ? (
+              <ProjectManageActions
+                project={projectCard}
+                token={token}
+                onChanged={() =>
+                  api<ManageableProject>(`/api/projects/${id}`, { token }).then(setProjectCard).catch(() => null)
+                }
+              />
+            ) : null}
           </div>
         )}
       </div>

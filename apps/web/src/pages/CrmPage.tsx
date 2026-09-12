@@ -81,6 +81,9 @@ export default function CrmPage() {
   const [newCatalogPackage, setNewCatalogPackage] = useState("");
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [editProject, setEditProject] = useState<any | null>(null);
+  const [deleteProject, setDeleteProject] = useState<any | null>(null);
+  const [deleteCode, setDeleteCode] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [leadsView, setLeadsView] = useState<LeadsView>("register");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
@@ -722,8 +725,52 @@ export default function CrmPage() {
             projects={projects}
             canWrite={canManage}
             onEdit={(p) => setEditProject({ ...p })}
+            onDelete={(p) => {
+              setDeleteProject(p);
+              setDeleteCode("");
+            }}
           />
         </>
+      )}
+
+      {deleteProject && token && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md space-y-3">
+            <h3 className="font-display text-xl">Delete {deleteProject.code}?</h3>
+            <p className="text-sm text-steel-muted">
+              Type the project code to confirm. QAP, cube, drawings, and fills go with it.
+            </p>
+            <Input value={deleteCode} onChange={(e) => setDeleteCode(e.target.value)} placeholder={deleteProject.code} />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={deleteCode.trim().toUpperCase() !== String(deleteProject.code || "").toUpperCase() || deleteBusy}
+                onClick={async () => {
+                  setDeleteBusy(true);
+                  try {
+                    await api(`/api/projects/${deleteProject.id}`, {
+                      method: "DELETE",
+                      token,
+                      body: JSON.stringify({ confirmCode: deleteCode.trim() }),
+                    });
+                    setMsg(`Deleted ${deleteProject.code}.`);
+                    setDeleteProject(null);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Delete failed");
+                  } finally {
+                    setDeleteBusy(false);
+                  }
+                }}
+              >
+                Delete project
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setDeleteProject(null)}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
 
       {editProject && (

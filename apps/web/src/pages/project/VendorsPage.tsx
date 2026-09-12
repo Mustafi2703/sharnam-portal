@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
+import { VendorManageActions } from "../../components/VendorManageActions";
+import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
 import { EMPTY_VENDOR_FORM, VENDOR_PARTY_TYPES, type VendorPartyType } from "../../lib/vendorTypes";
 
 export default function VendorsPage() {
@@ -11,6 +13,7 @@ export default function VendorsPage() {
   const [directory, setDirectory] = useState<any[]>([]);
   const [assigned, setAssigned] = useState<any[]>([]);
   const [form, setForm] = useState({ ...EMPTY_VENDOR_FORM, tradeRole: "" });
+  const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
   const canEdit = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
@@ -96,15 +99,24 @@ export default function VendorsPage() {
           <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">On this project</div>
           <ul className="divide-y divide-line max-h-96 overflow-y-auto">
             {assigned.map((a) => (
-              <li key={a.id} className="px-4 py-3 text-sm">
+              <li key={a.id} className="px-4 py-3 text-sm space-y-2">
                 <div className="flex justify-between gap-2">
                   <span className="font-medium">{a.vendor.name}</span>
                   <Badge tone="neutral">{a.vendor.partyType}</Badge>
                 </div>
-                <div className="text-steel-muted text-xs mt-1">
+                <div className="text-steel-muted text-xs">
                   {a.tradeRole || a.vendor.trade || "—"} · {a.vendor.city || "—"}
                   {a.vendor.isPrequalified ? " · Prequalified" : ""}
                 </div>
+                {canEdit ? (
+                  <VendorManageActions
+                    vendor={a.vendor}
+                    token={token}
+                    projectId={id}
+                    onEdit={() => setEditVendor(a.vendor)}
+                    onChanged={() => void load()}
+                  />
+                ) : null}
               </li>
             ))}
             {!assigned.length && <li className="p-4 text-steel-muted text-sm">No vendors assigned yet.</li>}
@@ -115,33 +127,50 @@ export default function VendorsPage() {
           <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">Global company directory</div>
           <ul className="divide-y divide-line max-h-96 overflow-y-auto">
             {directory.map((v) => (
-              <li key={v.id} className="px-4 py-3 text-sm flex justify-between gap-2">
-                <div>
+              <li key={v.id} className="px-4 py-3 text-sm flex flex-wrap justify-between gap-2">
+                <div className="min-w-0">
                   <div className="font-medium">{v.name}</div>
                   <div className="text-xs text-steel-muted">
                     {v.partyType} · {v.trade || "General"} · {v.primaryContactName || "—"}
                   </div>
                 </div>
                 {canEdit && (
-                  <button
-                    className="text-xs text-brand font-medium shrink-0"
-                    onClick={async () => {
-                      await api(`/api/vendors/project/${id}/assign`, {
-                        method: "POST",
-                        token,
-                        body: JSON.stringify({ vendorId: v.id, tradeRole: v.trade }),
-                      });
-                      await load();
-                    }}
-                  >
-                    Assign
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-xs text-brand font-medium shrink-0"
+                      onClick={async () => {
+                        await api(`/api/vendors/project/${id}/assign`, {
+                          method: "POST",
+                          token,
+                          body: JSON.stringify({ vendorId: v.id, tradeRole: v.trade }),
+                        });
+                        await load();
+                      }}
+                    >
+                      Assign
+                    </button>
+                    <VendorManageActions
+                      vendor={v}
+                      token={token}
+                      onEdit={() => setEditVendor(v)}
+                      onChanged={() => void load()}
+                    />
+                  </div>
                 )}
               </li>
             ))}
           </ul>
         </Card>
       </div>
+
+      <VendorQuickEditModal
+        open={!!editVendor}
+        vendor={editVendor}
+        token={token}
+        onClose={() => setEditVendor(null)}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

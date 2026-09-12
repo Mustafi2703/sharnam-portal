@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
+import { VendorManageActions } from "../components/VendorManageActions";
 import {
   EMPTY_VENDOR_FORM,
   VENDOR_PARTY_TYPES,
@@ -202,22 +203,34 @@ export default function GlobalVendorsPage() {
           </div>
           <ul className="divide-y divide-line max-h-[32rem] overflow-y-auto">
             {filteredRows.map((v) => (
-              <button
+              <li
                 key={v.id}
-                type="button"
-                onClick={() => setSelectedId(v.id)}
-                className={`w-full text-left px-4 py-3 text-sm hover:bg-sand/30 ${selectedId === v.id ? "bg-brand-soft" : ""}`}
+                className={`px-4 py-3 text-sm flex flex-wrap items-start justify-between gap-2 ${selectedId === v.id ? "bg-brand-soft" : ""}`}
               >
-                <div className="flex justify-between gap-2">
-                  <span className="font-medium">{v.name}</span>
-                  <Badge tone="neutral">{v.partyType}</Badge>
-                </div>
-                <div className="text-xs text-steel-muted mt-1">
-                  {v.trade || "General — tag BOQ disciplines below"}
-                  {v.city ? ` · ${v.city}` : ""}
-                  {v._count?.projects ? ` · ${v._count.projects} project(s)` : ""}
-                </div>
-              </button>
+                <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => setSelectedId(v.id)}>
+                  <div className="flex justify-between gap-2">
+                    <span className="font-medium">{v.name}</span>
+                    <Badge tone="neutral">{v.partyType}</Badge>
+                  </div>
+                  <div className="text-xs text-steel-muted mt-1">
+                    {v.trade || "General — tag BOQ disciplines below"}
+                    {v.city ? ` · ${v.city}` : ""}
+                    {v._count?.projects ? ` · ${v._count.projects} project(s)` : ""}
+                  </div>
+                </button>
+                {canEdit ? (
+                  <VendorManageActions
+                    vendor={v}
+                    token={token}
+                    onEdit={() => setSelectedId(v.id)}
+                    onChanged={async () => {
+                      if (selectedId === v.id) setSelectedId(null);
+                      setMsg("Directory updated.");
+                      await load();
+                    }}
+                  />
+                ) : null}
+              </li>
             ))}
             {!filteredRows.length && <li className="p-4 text-sm text-steel-muted">No companies for this discipline filter.</li>}
           </ul>
@@ -308,7 +321,7 @@ export default function GlobalVendorsPage() {
                   </label>
                 ))}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="submit">{selectedId ? "Save changes" : "Add company"}</Button>
                 {selectedId && (
                   <Button
@@ -322,6 +335,18 @@ export default function GlobalVendorsPage() {
                     Cancel
                   </Button>
                 )}
+                {selected ? (
+                  <VendorManageActions
+                    vendor={selected}
+                    token={token}
+                    showEdit={false}
+                    onChanged={async () => {
+                      setSelectedId(null);
+                      setMsg("Company removed from directory.");
+                      await load();
+                    }}
+                  />
+                ) : null}
               </div>
             </form>
           )}

@@ -135,7 +135,7 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                 <th>Consultant</th>
                 <th>Contractor</th>
                 <th>Status</th>
-                <th />
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -168,14 +168,26 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                   <td>
                     <Badge>{p.status || "—"}</Badge>
                   </td>
-                  <td className="whitespace-nowrap">
-                    <Link
-                      to={`/crm/setup?projectId=${p.id}&step=matrix`}
-                      className="text-[10px] font-semibold text-brand"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Setup →
-                    </Link>
+                  <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canWrite && onEdit ? (
+                        <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => onEdit(p)}>
+                          Edit
+                        </Button>
+                      ) : null}
+                      {canWrite && onDelete ? (
+                        <Button
+                          type="button"
+                          className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"
+                          onClick={() => onDelete(p)}
+                        >
+                          Delete
+                        </Button>
+                      ) : null}
+                      <Link to={`/crm/setup?projectId=${p.id}&step=matrix`} className="text-[10px] font-semibold text-brand">
+                        Setup →
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -206,16 +218,24 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                 <Link to="/master" className="text-xs font-semibold text-brand">
                   Master setup (directory · modules) →
                 </Link>
-                {canWrite && onEdit && (
-                  <button type="button" className="text-xs text-steel-muted hover:text-brand text-left" onClick={() => onEdit(selected)}>
-                    Edit client card
-                  </button>
-                )}
-                {canWrite && onDelete && (
-                  <button type="button" className="text-xs text-danger hover:underline text-left" onClick={() => onDelete(selected)}>
-                    Delete project
-                  </button>
-                )}
+                {canWrite && (onEdit || onDelete) ? (
+                  <div className="flex flex-wrap gap-2">
+                    {onEdit ? (
+                      <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => onEdit(selected)}>
+                        Edit
+                      </Button>
+                    ) : null}
+                    {onDelete ? (
+                      <Button
+                        type="button"
+                        className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"
+                        onClick={() => onDelete(selected)}
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </>
           )}
