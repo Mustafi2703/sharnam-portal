@@ -10,6 +10,8 @@ export type ChecklistFillItem = {
   description: string;
   section?: string;
   instruction?: string;
+  instructionFileUrl?: string;
+  instructionFileName?: string;
   requirePhoto?: boolean;
 };
 
@@ -384,13 +386,23 @@ export function ChecklistFillForm({
                             {item.description}
                           </div>
                         </div>
-                        {item.instruction?.trim() && (
-                          <p className="text-sm text-steel-muted bg-sand/50 border border-line rounded-lg px-3 py-2 leading-relaxed">
-                            <span className="text-[10px] font-mono uppercase tracking-wider text-brand block mb-1">
+                        {(item.instruction?.trim() || item.instructionFileUrl) && (
+                          <div className="text-sm text-steel-muted bg-sand/50 border border-line rounded-lg px-3 py-2 leading-relaxed space-y-1">
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-brand block">
                               Instruction
                             </span>
-                            {item.instruction}
-                          </p>
+                            {item.instruction?.trim() ? <p>{item.instruction}</p> : null}
+                            {item.instructionFileUrl ? (
+                              <a
+                                href={item.instructionFileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs font-semibold text-brand"
+                              >
+                                {item.instructionFileName || "Open instruction file"}
+                              </a>
+                            ) : null}
+                          </div>
                         )}
                         {item.requirePhoto && (
                           <p className="text-[11px] font-semibold text-amber-800">Photo required for this line</p>

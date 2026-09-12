@@ -8,6 +8,7 @@ import {
   portalForRole,
   type RoleKey,
 } from "@sharnam/shared";
+import { isHrDeskOnly } from "../services/hrDesk.js";
 
 export const authRouter = Router();
 
@@ -26,6 +27,12 @@ authRouter.post("/login", async (req, res) => {
 
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+
+    if (isHrDeskOnly(user.email) && portal && portal !== "hr") {
+      return res.status(403).json({
+        error: "Anushka Jha signs in only at the HR portal (people management): https://portal.spdc.in/login/hr",
+      });
+    }
 
     if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
       return res.status(403).json({

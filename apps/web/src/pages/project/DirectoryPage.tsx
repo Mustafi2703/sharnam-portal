@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
-import { SearchableSelect } from "../../components/SearchableSelect";
+import { matchesSearch, SearchableSelect } from "../../components/SearchableSelect";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
@@ -49,6 +49,7 @@ export default function DirectoryPage() {
   });
   const [msg, setMsg] = useState("");
   const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
+  const [listQ, setListQ] = useState("");
   const canEdit = user?.role === "admin" || user?.role === "office";
   const [userForm, setUserForm] = useState({
     fullName: "",
@@ -240,8 +241,18 @@ export default function DirectoryPage() {
 
       <Card>
         <h3 className="font-semibold mb-3">{activeTool.label} on this project</h3>
+        <Input
+          className="mb-3"
+          placeholder="Search allocated people or companies by name…"
+          value={listQ}
+          onChange={(e) => setListQ(e.target.value)}
+        />
         <ul className="divide-y divide-line text-sm">
-          {staffForTab.map((m: any) => (
+          {staffForTab
+            .filter((m: any) =>
+              matchesSearch(`${m.user?.fullName || m.fullName || ""} ${m.user?.email || m.email || ""}`, listQ)
+            )
+            .map((m: any) => (
             <li key={m.id} className="py-2 flex justify-between gap-2">
               <div>
                 <span>{m.user?.fullName || m.fullName}</span>
@@ -250,7 +261,14 @@ export default function DirectoryPage() {
               <Badge tone="neutral">{m.user?.role || m.role}</Badge>
             </li>
           ))}
-          {partiesForTab.map((r: any) => (
+          {partiesForTab
+            .filter((r: any) =>
+              matchesSearch(
+                `${r.vendor?.name || r.name || ""} ${r.vendor?.email || r.email || ""} ${r.vendor?.primaryContactName || ""}`,
+                listQ
+              )
+            )
+            .map((r: any) => (
             <li key={r.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <span>{r.vendor?.name || r.name}</span>
@@ -368,11 +386,12 @@ export default function DirectoryPage() {
                     value: u.id,
                     label: u.fullName,
                     sublabel: `${u.role} · ${u.email}`,
+                    keywords: `${u.fullName} ${u.email} ${u.role} ${u.phone || ""}`,
                   }))}
                 value={userId}
                 onChange={setUserId}
                 placeholder="Select person"
-                searchPlaceholder="Search name or email…"
+                searchPlaceholder="Search employee by name or email…"
                 required
               />
               <Select value={role} onChange={(e) => setRole(e.target.value)}>
@@ -441,12 +460,15 @@ export default function DirectoryPage() {
                 options={linkableParties.map((v) => ({
                   value: v.id,
                   label: v.name,
-                  sublabel: `${v.partyType}${v.trade ? ` · ${v.trade}` : ""}`,
+                  sublabel: `${v.partyType}${v.trade ? ` · ${v.trade}` : ""}${v.email ? ` · ${v.email}` : ""}`,
+                  keywords: [v.name, v.email, v.trade, v.primaryContactName, v.businessPhone, v.city]
+                    .filter(Boolean)
+                    .join(" "),
                 }))}
                 value={vendorId}
                 onChange={setVendorId}
                 placeholder="Link from global directory…"
-                searchPlaceholder="Search company…"
+                searchPlaceholder="Search company by name, contact, or email…"
                 required
               />
               <Input placeholder="Trade on project" value={trade} onChange={(e) => setTrade(e.target.value)} />

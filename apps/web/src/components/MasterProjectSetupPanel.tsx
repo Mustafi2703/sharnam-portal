@@ -58,6 +58,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
   const [summary, setSummary] = useState<SetupSummary | null>(null);
   const [overview, setOverview] = useState<{ members?: any[]; vendors?: any[] } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [memberListQ, setMemberListQ] = useState("");
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState("project_manager");
   const [assignVendorId, setAssignVendorId] = useState("");
@@ -177,8 +178,15 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Directory · people (emails for comms)</h3>
+          <Input
+            placeholder="Search allocated employees by name…"
+            value={memberListQ}
+            onChange={(e) => setMemberListQ(e.target.value)}
+          />
           <ul className="text-sm divide-y divide-line max-h-48 overflow-y-auto">
-            {summary.members.map((m) => (
+            {summary.members
+              .filter((m) => !memberListQ.trim() || `${m.fullName} ${m.email}`.toLowerCase().includes(memberListQ.trim().toLowerCase()))
+              .map((m) => (
               <li key={m.id} className="py-2 flex justify-between gap-2">
                 <div>
                   <div className="font-medium">{m.fullName}</div>
@@ -215,12 +223,13 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               options={allUsers.map((u) => ({
                 value: u.id,
                 label: u.fullName,
-                sublabel: u.email,
+                sublabel: `${u.email} · ${u.role || ""}`,
+                keywords: `${u.fullName} ${u.email} ${u.role || ""}`,
               }))}
               value={memberUserId}
               onChange={setMemberUserId}
               placeholder="Existing login…"
-              searchPlaceholder="Search name or email…"
+              searchPlaceholder="Search employee by name or email…"
               required
             />
             <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
@@ -314,12 +323,13 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               options={allVendors.map((v) => ({
                 value: v.id,
                 label: v.name,
-                sublabel: [v.trade, v.partyType].filter(Boolean).join(" · "),
+                sublabel: [v.trade, v.partyType, v.email].filter(Boolean).join(" · "),
+                keywords: [v.name, v.email, v.trade, v.partyType, v.primaryContactName].filter(Boolean).join(" "),
               }))}
               value={assignVendorId}
               onChange={setAssignVendorId}
               placeholder="From global vendor directory…"
-              searchPlaceholder="Search contractor / vendor…"
+              searchPlaceholder="Search company by name or email…"
               required
             />
             <Input placeholder="Trade on project" value={assignTrade} onChange={(e) => setAssignTrade(e.target.value)} />

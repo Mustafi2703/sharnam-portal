@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
-import { SearchableSelect } from "./SearchableSelect";
+import { matchesSearch, SearchableSelect } from "./SearchableSelect";
 import { VendorManageActions } from "./VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "./VendorQuickEditModal";
 import { formatPartyType, isVendorOrContractor, VENDOR_PARTY_TYPES, type VendorPartyType } from "../lib/vendorTypes";
@@ -100,8 +100,16 @@ export function ProjectVendorsSetupDesk({
   const [showCreate, setShowCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
+  const [listQ, setListQ] = useState("");
 
   const scopedAssigned = useMemo(() => assigned.filter((v) => matchesParty(v.partyType, party)), [assigned, party]);
+  const shownAssigned = useMemo(
+    () =>
+      scopedAssigned.filter((v) =>
+        matchesSearch(`${v.name} ${v.email || ""} ${v.tradeRole || ""} ${v.trade || ""} ${v.partyType}`, listQ)
+      ),
+    [scopedAssigned, listQ]
+  );
   const unused = useMemo(() => {
     const onJob = new Set(assigned.map((v) => v.vendorId));
     return catalog.filter((v) => !onJob.has(v.id) && matchesParty(v.partyType, party));
@@ -205,8 +213,15 @@ export function ProjectVendorsSetupDesk({
         </Link>
       </div>
 
+      {scopedAssigned.length > 0 && (
+        <Input
+          placeholder={`Search ${copy.title.toLowerCase()} by name or email…`}
+          value={listQ}
+          onChange={(e) => setListQ(e.target.value)}
+        />
+      )}
       <ul className="divide-y divide-line max-h-[22rem] overflow-y-auto text-sm">
-        {scopedAssigned.map((v) => (
+        {shownAssigned.map((v) => (
           <li key={v.id} className="py-2.5 space-y-2">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -259,6 +274,9 @@ export function ProjectVendorsSetupDesk({
           </li>
         ))}
         {!scopedAssigned.length && <li className="py-4 text-sm text-steel-muted">{copy.empty}</li>}
+        {scopedAssigned.length > 0 && !shownAssigned.length && (
+          <li className="py-3 text-xs text-steel-muted">No company matches “{listQ}”.</li>
+        )}
       </ul>
 
       <form className="flex flex-wrap gap-2 items-end border-t border-line pt-3" onSubmit={assignExisting}>
@@ -267,12 +285,15 @@ export function ProjectVendorsSetupDesk({
           options={unused.map((v) => ({
             value: v.id,
             label: v.name,
-            sublabel: [v.partyType, v.trade, v.email].filter(Boolean).join(" · "),
+            sublabel: [v.partyType, v.trade, v.primaryContactName, v.email].filter(Boolean).join(" · "),
+            keywords: [v.name, v.email, v.trade, v.primaryContactName, v.businessPhone, v.city, v.partyType]
+              .filter(Boolean)
+              .join(" "),
           }))}
           value={pickId}
           onChange={setPickId}
           placeholder="Add from directory…"
-          searchPlaceholder="Search company…"
+          searchPlaceholder="Search company by name, contact, or email…"
         />
         <Input placeholder="Role / trade on this project" value={tradeRole} onChange={(e) => setTradeRole(e.target.value)} />
         <Button type="submit" variant="secondary" disabled={busy}>

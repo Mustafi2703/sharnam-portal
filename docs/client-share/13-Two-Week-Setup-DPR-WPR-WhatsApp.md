@@ -30,7 +30,11 @@ For **two weeks** we sit with your office and site on **one named project**. We 
 
 **In the same two weeks** (not after), IT starts WhatsApp Business approval. Meta can take a few days. If you start Day 1, owner/client alerts can switch on as soon as the first WPR is trusted — you do not wait another fortnight.
 
-This is **not** “test every module.” It is **get this project ready so reports are real.**
+**All live projects** get the same treatment. For these 14 days they keep today’s Excel / site workflow **and** enter the same day in the portal. After Week 2 Friday the portal is master.
+
+Send-this-week wording: [14-SPDC-Handover-Campaign.md](./14-SPDC-Handover-Campaign.md).
+
+This is **not** “test every module.” It is **get the live jobs ready so reports are real.**
 
 ---
 
@@ -179,9 +183,9 @@ Client and vendor only browse **their** assigned project. They **request access*
 
 1. Drawings → upload via the **upload modal** (not a bare file box).  
 2. Complete drawing-check if your process requires it.  
-3. **Publish** at least one sheet with a file.  
+3. **Publish** at least one sheet with a file if the job uses drawing-check / GFC.  
 
-Checklist submit and Quality Inspection **will block** if there is no published drawing. Client never uploads.
+Quality inspections do **not** wait for a published drawing — they use site observations and the instruction on each checklist line. Client never uploads drawings.
 
 ### 3.6 Load the two report engines
 

@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import type { PrismaClient } from "@prisma/client";
 import { portalForRole, type RoleKey } from "@sharnam/shared";
 import { prisma } from "../prisma.js";
+import { isHrDeskOnly } from "./hrDesk.js";
 
 const PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
 
@@ -58,7 +59,7 @@ async function ensureUsers(db: PrismaClient) {
 async function ensureProjectMembers(db: PrismaClient, projectId: string, userIds: Record<string, string>) {
   for (const t of LIVE_TEAM) {
     const userId = userIds[t.email];
-    if (!userId) continue;
+    if (!userId || isHrDeskOnly(t.email)) continue;
     const role =
       t.role === "admin" || t.role === "office"
         ? "project_manager"

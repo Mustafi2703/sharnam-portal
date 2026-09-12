@@ -75,7 +75,7 @@ export default function ChecklistAssignPage() {
       <PageHeader
         eyebrow="Quality · Procore-style"
         title="Assign checklist type"
-        subtitle="Add Final Index or QI forms to this project. Engineers open Fill vs drawing and pick sheet + revision."
+        subtitle="Add checklist types to this project. Quality fills use per-line instructions and site observations — they do not wait for a published drawing."
         actions={
           <Link to={`/projects/${id}/checklist`}>
             <Button type="button" variant="secondary">
@@ -86,12 +86,18 @@ export default function ChecklistAssignPage() {
       />
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Badge tone={gate.canSubmit ? "ok" : "warn"}>
-          {gate.canSubmit ? `${gate.publishedCount} published drawings` : "Gate locked — publish a drawing first"}
+        <Badge tone="ok">
+          {family === "QualityInspection" || family === "Safety"
+            ? "No drawing lock — fills use site observations and line instructions"
+            : family === "DrawingCheck"
+              ? "Drawing check is the pre-upload gate (not a published-drawing lock)"
+              : `${gate.publishedCount} published drawings on this project`}
         </Badge>
-        <Button type="button" variant="ghost" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings?upload=1`)}>
-          Upload drawing
-        </Button>
+        {family === "DrawingCheck" && (
+          <Button type="button" variant="ghost" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings?upload=1`)}>
+            Upload drawing
+          </Button>
+        )}
       </div>
 
       <Card className="!p-0 overflow-hidden">

@@ -4,6 +4,10 @@ export const SPDC_PORTAL_ROLES = ["admin", "office", "employee", "site_employee"
 
 export const HR_HEAD_EMAIL = "anushka.jha@spdc.in";
 
+export function isHrDeskOnly(email?: string | null): boolean {
+  return String(email || "").trim().toLowerCase() === HR_HEAD_EMAIL;
+}
+
 export function isSpdcEmployee(role?: string | null): boolean {
   return !!role && (SPDC_PORTAL_ROLES as readonly string[]).includes(role);
 }

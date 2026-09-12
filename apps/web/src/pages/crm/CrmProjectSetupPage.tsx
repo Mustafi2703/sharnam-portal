@@ -508,11 +508,16 @@ export default function CrmProjectSetupPage() {
           <Card className="!p-4 space-y-3">
             <label className="text-xs font-semibold text-steel-muted">Continue a stored project</label>
             <SearchableSelect
-              options={projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}`, sublabel: p.clientName || p.location || undefined }))}
+              options={projects.map((p) => ({
+                value: p.id,
+                label: `${p.code} · ${p.name}`,
+                sublabel: p.clientName || p.location || undefined,
+                keywords: `${p.code} ${p.name} ${p.clientName || ""} ${p.location || ""}`,
+              }))}
               value={projectId}
               onChange={(id) => setStep(id ? "project" : "project", id)}
               placeholder="Select a project…"
-              searchPlaceholder="Search code or client…"
+              searchPlaceholder="Search project or client by name…"
             />
             {summary?.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
             {summary && (

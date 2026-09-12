@@ -65,6 +65,7 @@ export function buildBrandedChecklistHtml(
           itemCode?: string | null;
           description?: string | null;
           instruction?: string | null;
+          instructionFileName?: string | null;
         }>;
       } | null;
     } | null;
@@ -102,7 +103,11 @@ export function buildBrandedChecklistHtml(
       return `<tr>
         <td class="sr">${i + 1}</td>
         <td><div class="item">${escapeHtml(it.description || it.itemCode || "")}</div>${
-          it.instruction ? `<div class="hint">${escapeHtml(it.instruction)}</div>` : ""
+          it.instruction || it.instructionFileName
+            ? `<div class="hint">${escapeHtml(it.instruction || "")}${
+                it.instructionFileName ? ` · File: ${escapeHtml(it.instructionFileName)}` : ""
+              }</div>`
+            : ""
         }</td>
         <td class="ans ${kind}">${escapeHtml(String(answer || "—"))}</td>
         <td>${escapeHtml(String(remark))}</td>

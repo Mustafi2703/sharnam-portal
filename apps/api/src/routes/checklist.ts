@@ -34,10 +34,6 @@ function checklistUploadKind(f: Express.Multer.File, scopedKind?: string) {
   return f.mimetype?.startsWith("image/") ? "photo" : "doc";
 }
 
-function requiresDrawingGateForFamily(checklistType: string) {
-  return checklistType === "QualityInspection" || checklistType === "DrawingCheck" || checklistType === "QualityIR";
-}
-
 function storedUploadUrl(saved: { url: string; sharePointUrl?: string | null }) {
   return saved.url || saved.sharePointUrl || "";
 }
@@ -397,11 +393,7 @@ checklistRouter.get("/project/:projectId", async (req, res) => {
       };
     })
   );
-  const userRole = (req as AuthedRequest).user?.role;
-  const requiresDrawingGate =
-    type === "QualityInspection" || type === "DrawingCheck" || type === "QualityIR";
-  const canSubmit =
-    userRole === "admin" || userRole === "office" || !requiresDrawingGate || published > 0;
+  const canSubmit = true;
 
   res.json({
     assignments: enriched,
@@ -499,14 +491,6 @@ checklistRouter.post(
         return res.status(400).json({
           error: `All checklist lines must be answered before submit (${answered}/${itemIds.length}).`,
         });
-      }
-      if (requiresDrawingGateForFamily(assignment.template.checklistType) && req.user!.role !== "admin" && req.user!.role !== "office") {
-        const pub = await prisma.drawing.count({
-          where: { projectId: assignment.projectId, isPublished: true },
-        });
-        if (pub === 0) {
-          return res.status(400).json({ error: "Publish at least one drawing before submitting this checklist." });
-        }
       }
     }
 
@@ -1510,6 +1494,8 @@ checklistRouter.post(
         itemCode: itemCode || String(count + 1),
         description: String(description),
         instruction: instruction ? String(instruction) : null,
+        instructionFileUrl: req.body?.instructionFileUrl ? String(req.body.instructionFileUrl) : null,
+        instructionFileName: req.body?.instructionFileName ? String(req.body.instructionFileName) : null,
         section: section || null,
         sortOrder: count + 1,
         requirePhoto: parent?.checklistType === "DrawingCheck" ? false : Boolean(requirePhoto),
@@ -1519,9 +1505,46 @@ checklistRouter.post(
   }
 );
 
+checklistRouter.post(
+  "/items/:id/instruction-file",
+  requireRoles("admin", "office", "employee", "client"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer) return res.status(400).json({ error: "Attach an instruction file." });
+    const item = await prisma.checklistItem.findUnique({
+      where: { id: req.params.id },
+      include: { template: { select: { name: true, checklistType: true } } },
+    });
+    if (!item) return res.status(404).json({ error: "Line item not found" });
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+    const saved = await mockOneDrive.upload(
+      "MASTER",
+      `${MODULE_TO_ISO_FOLDER.qualityChecklist}/Instructions`,
+      req.file.originalname,
+      req.file.buffer,
+      req.file.mimetype || "application/octet-stream",
+      { replace: true }
+    );
+    const updated = await prisma.checklistItem.update({
+      where: { id: item.id },
+      data: {
+        instructionFileUrl: storedUploadUrl(saved),
+        instructionFileName: req.file.originalname,
+      },
+    });
+    await audit("checklist.item.instruction", {
+      userId: req.user!.id,
+      entity: "ChecklistItem",
+      entityId: item.id,
+    });
+    res.json(updated);
+  }
+);
+
 checklistRouter.patch(
   "/items/:id",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "client"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const item = await prisma.checklistItem.update({
@@ -1529,6 +1552,8 @@ checklistRouter.patch(
       data: {
         ...(body.description != null ? { description: String(body.description) } : {}),
         ...(body.instruction != null ? { instruction: String(body.instruction) || null } : {}),
+        ...(body.instructionFileUrl != null ? { instructionFileUrl: String(body.instructionFileUrl) || null } : {}),
+        ...(body.instructionFileName != null ? { instructionFileName: String(body.instructionFileName) || null } : {}),
         ...(body.itemCode != null ? { itemCode: String(body.itemCode) } : {}),
         ...(body.section != null ? { section: String(body.section) || null } : {}),
         ...(body.requirePhoto != null ? { requirePhoto: Boolean(body.requirePhoto) } : {}),

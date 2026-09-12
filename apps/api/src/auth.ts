@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import type { AuthUser, RoleKey, PortalKey, ModuleKey, PermissionAction } from "@sharnam/shared";
 import { DEFAULT_ROLE_PERMISSIONS, can } from "@sharnam/shared";
+import { hrDeskApiAllowed, isHrDeskOnly } from "./services/hrDesk.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "sharnam-demo-jwt-secret";
 
@@ -24,6 +25,9 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   if (!raw) return res.status(401).json({ error: "Unauthorized" });
   try {
     req.user = jwt.verify(raw, JWT_SECRET) as AuthUser;
+    if (isHrDeskOnly(req.user.email) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
+      return res.status(403).json({ error: "This login is HR portal only — people management." });
+    }
     next();
   } catch {
     return res.status(401).json({ error: "Invalid token" });
@@ -64,5 +68,6 @@ export function toAuthUser(u: {
     role: u.role as RoleKey,
     portal: u.portal as PortalKey,
     vendorId: u.vendorId ?? null,
+    hrDeskOnly: isHrDeskOnly(u.email),
   };
 }

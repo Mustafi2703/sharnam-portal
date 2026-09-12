@@ -9,8 +9,8 @@ Portal roles: admin, office, site_employee, employee, vendor, client. Demo passw
 | # | Case | Expect |
 |---|------|--------|
 | 1 | Client opens drawings upload | Denied / no upload CTA |
-| 2 | Site submits checklist with 0 published drawings | 400 gate error |
-| 3 | Submit checklist without drawing/revision | Blocked in UI + API |
+| 2 | Site submits **Drawing Check** with 0 published drawings | Allowed (check is the pre-upload gate) |
+| 3 | Site submits **Quality** checklist with 0 published drawings | Allowed — instructions + observations, no drawing lock |
 | 4 | Double-click Assign checklist | One assignment row |
 | 5 | Publish same drawing twice | Remains published; no crash |
 | 6 | User A project data vs User B | No cross-project bleed |

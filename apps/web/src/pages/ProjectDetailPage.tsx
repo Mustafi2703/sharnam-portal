@@ -81,11 +81,7 @@ export default function ProjectDetailPage() {
         title={project.name}
         subtitle={`${project.clientName || "Client TBD"} · ${project.location || "Location TBD"} · ${project.status}`}
         actions={
-          <Badge tone={gate.canSubmitChecklist ? "ok" : "warn"}>
-            {gate.canSubmitChecklist
-              ? `Gate open · ${gate.publishedCount} published`
-              : "Gate locked · publish a drawing"}
-          </Badge>
+          <Badge tone="ok">{gate.publishedCount} published drawings</Badge>
         }
       />
 
@@ -94,7 +90,7 @@ export default function ProjectDetailPage() {
         steps={[
           { label: "Drawing set", hint: `${project.drawings.length} sheets in register` },
           { label: "Publish", hint: `${published} live for site` },
-          { label: "Checklist", hint: "Site fills forms against sheets" },
+          { label: "Checklist", hint: "Quality uses line instructions — drawing optional" },
           { label: "Client view", hint: "Approved trail only" },
         ]}
       />

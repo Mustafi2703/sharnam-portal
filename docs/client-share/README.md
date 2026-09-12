@@ -23,6 +23,7 @@ Share this folder with client stakeholders, IT, and module owners. Plain languag
 | **19** | **[SPDC_UAT_SCENARIO_BANK.md](./SPDC_UAT_SCENARIO_BANK.md)** | **Testers — ~147 scenarios (HP/EC/NEG/MU/EXP/MOB) per module** |
 | **20** | **[WHATSAPP_OWNER_CLIENT_UPDATES.md](./WHATSAPP_OWNER_CLIENT_UPDATES.md)** | **Leadership / IT — WhatsApp options, MSG91 setup today, owner+client only (no broadcast)** |
 | **22** | **[13-Two-Week-Setup-DPR-WPR-WhatsApp.md](./13-Two-Week-Setup-DPR-WPR-WhatsApp.md)** | **PMO + site + IT — give this to Sharnam: live project setup, 2 weeks sit-with-them until real DPRs + first WPR, WhatsApp in parallel** |
+| **23** | **[14-SPDC-Handover-Campaign.md](./14-SPDC-Handover-Campaign.md)** | **Send this — email + WhatsApp handover: 2 weeks parallel on all live projects, then portal is master; Anushka HR-only** |
 | **21** | **[WPR-Arvind-23-29-Jul-2026.pptx](./WPR-Arvind-23-29-Jul-2026.pptx)** | **Client WPR deck — 23–29 Jul 2026, sheet titles + charts** |
 | 2 | [02-Logins-and-Access.md](./02-Logins-and-Access.md) | All users — how to sign in |
 | 3 | [03-Module-Test-Plan.md](./03-Module-Test-Plan.md) | SPDC leads — test each module on your server |

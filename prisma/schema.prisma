@@ -365,6 +365,8 @@ model ChecklistItem {
   description  String
   /// Per-line quality / safety instruction
   instruction  String?
+  instructionFileUrl  String?
+  instructionFileName String?
   sortOrder    Int     @default(0)
   section      String?
   requirePhoto Boolean @default(false)

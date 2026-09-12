@@ -36,10 +36,9 @@ Reuse one `UploadModal` pattern across tools.
 ## Checklist fill (form)
 
 - Separate spacious window/route
-- Step 1: select published drawing from list
-- Step 2: select revision (latest default)
-- Step 3: Yes / No / N.A. form sections
-- Block submit until drawing + revision chosen
+- Quality / safety / site: drawing + revision are **optional**. Do not block submit.
+- Drawing Check: pre-upload gate — no published-drawing lock on fill.
+- Yes / No / N.A. form sections; show per-line instruction text + attached instruction file
 - Audit sidebar + CSV export (who / when / drawing / rev)
 - **Branded download:** `downloadBrandedChecklistPrint(id)` — fetches `/api/checklist/submissions/:id/branded.html`, saves file + opens print tab (not `window.open("")`)
 

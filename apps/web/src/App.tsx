@@ -89,8 +89,15 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function OfficeDeskGate({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.hrDeskOnly) return <Navigate to="/hrm" replace />;
+  return <>{children}</>;
+}
+
 function HomeRedirect() {
   const { user } = useAuth();
+  if (user?.hrDeskOnly) return <Navigate to="/hrm" replace />;
   if (user?.role === "site_employee") return <Navigate to="/attendance" replace />;
   return <Navigate to="/dashboard" replace />;
 }
@@ -188,6 +195,7 @@ export default function App() {
         path="/*"
         element={
           <Protected>
+            <OfficeDeskGate>
             <SiteAttendanceGate>
             <AppShell>
               <Routes>
@@ -310,6 +318,7 @@ export default function App() {
               </Routes>
             </AppShell>
             </SiteAttendanceGate>
+            </OfficeDeskGate>
           </Protected>
         }
       />

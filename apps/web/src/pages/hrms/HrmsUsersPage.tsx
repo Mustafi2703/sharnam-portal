@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -6,6 +6,7 @@ import { UserAccountEditModal, type UserAccountRow } from "../../components/User
 import { UserManageActions } from "../../components/UserManageActions";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 
 const LOGIN_ROLES = ["site_employee", "office", "employee", "vendor", "client"] as const;
@@ -22,6 +23,7 @@ export default function HrmsUsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
+  const [userQ, setUserQ] = useState("");
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -46,6 +48,16 @@ export default function HrmsUsersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const shownEmployees = useMemo(() => {
+    const needle = userQ.trim().toLowerCase();
+    if (!needle) return employees;
+    return employees.filter((e) =>
+      `${e.fullName} ${e.email} ${e.role} ${e.profile?.department || ""} ${e.profile?.empCode || ""}`
+        .toLowerCase()
+        .includes(needle)
+    );
+  }, [employees, userQ]);
 
   async function createUser() {
     setBusy(true);
@@ -114,8 +126,14 @@ export default function HrmsUsersPage() {
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold">Users ({employees.length})</span>
+          <span className="font-semibold">Users ({shownEmployees.length}{userQ.trim() ? ` / ${employees.length}` : ""})</span>
           <div className="flex flex-wrap gap-2">
+            <Input
+              className="!w-56"
+              placeholder="Search users by name…"
+              value={userQ}
+              onChange={(ev) => setUserQ(ev.target.value)}
+            />
             <Button type="button" variant="secondary" onClick={() => downloadCsv("users-empty.csv", [...USER_CSV_HEADERS], [])}>
               Empty CSV
             </Button>
@@ -142,7 +160,7 @@ export default function HrmsUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {employees.map((e) => (
+              {shownEmployees.map((e) => (
                 <tr key={e.id} className="border-b border-line/60 hover:bg-sand/20">
                   <td className="px-4 py-2.5 font-medium">{e.fullName}</td>
                   <td className="px-4 py-2.5 text-steel-muted">{e.email}</td>
@@ -234,18 +252,32 @@ export default function HrmsUsersPage() {
         size="lg"
       >
         <div className="space-y-3">
-          <Select required value={assign.userId} onChange={(ev) => setAssign({ ...assign, userId: ev.target.value })}>
-            <option value="">Employee</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>{emp.fullName} ({emp.role})</option>
-            ))}
-          </Select>
-          <Select required value={assign.projectId} onChange={(ev) => setAssign({ ...assign, projectId: ev.target.value })}>
-            <option value="">Project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-            ))}
-          </Select>
+          <SearchableSelect
+            required
+            options={employees.map((emp) => ({
+              value: emp.id,
+              label: emp.fullName,
+              sublabel: `${emp.email || ""} · ${emp.role}`,
+              keywords: `${emp.fullName} ${emp.email || ""} ${emp.role} ${emp.phone || ""} ${emp.profile?.empCode || ""}`,
+            }))}
+            value={assign.userId}
+            onChange={(userId) => setAssign({ ...assign, userId })}
+            placeholder="Employee"
+            searchPlaceholder="Search employee by name or email…"
+          />
+          <SearchableSelect
+            required
+            options={projects.map((p) => ({
+              value: p.id,
+              label: `${p.code} — ${p.name}`,
+              sublabel: p.clientName || undefined,
+              keywords: `${p.code} ${p.name} ${p.clientName || ""}`,
+            }))}
+            value={assign.projectId}
+            onChange={(projectId) => setAssign({ ...assign, projectId })}
+            placeholder="Project"
+            searchPlaceholder="Search project by name or code…"
+          />
           <Select value={assign.role} onChange={(ev) => setAssign({ ...assign, role: ev.target.value })}>
             {["site_employee", "office", "employee", "vendor", "project_manager"].map((r) => (
               <option key={r} value={r}>{r.replace("_", " ")}</option>

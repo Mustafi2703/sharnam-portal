@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
-import { SearchableSelect } from "./SearchableSelect";
+import { matchesSearch, SearchableSelect } from "./SearchableSelect";
 
 export type AllocateUser = { id: string; fullName: string; email: string; role: string };
 export type AllocateMember = {
@@ -28,6 +28,7 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
   const [busy, setBusy] = useState(false);
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState("site_engineer");
+  const [listQ, setListQ] = useState("");
   const [userForm, setUserForm] = useState({
     fullName: "",
     email: "",
@@ -35,6 +36,9 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
     phone: "",
     password: "Demo@1234",
   });
+  const shownMembers = members.filter((m) =>
+    matchesSearch(`${m.fullName} ${m.email} ${m.portalRole || ""} ${m.role}`, listQ)
+  );
 
   async function assignExisting(e: FormEvent) {
     e.preventDefault();
@@ -91,8 +95,15 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
       <p className="text-xs text-steel-muted">
         Assign the SPDC people already on the portal, or create a login. Email is required so they can sign in.
       </p>
-      <ul className="text-sm divide-y divide-line max-h-40 overflow-y-auto">
-        {members.map((m) => (
+      {members.length > 0 && (
+        <Input
+          placeholder="Search allocated people by name or email…"
+          value={listQ}
+          onChange={(e) => setListQ(e.target.value)}
+        />
+      )}
+      <ul className="text-sm divide-y divide-line max-h-48 overflow-y-auto">
+        {shownMembers.map((m) => (
           <li key={m.id} className="py-1.5 flex justify-between gap-2">
             <span>
               <span className="font-medium">{m.fullName}</span>
@@ -102,17 +113,25 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
           </li>
         ))}
         {!members.length && <li className="py-2 text-xs text-steel-muted">No people on this project yet.</li>}
+        {members.length > 0 && !shownMembers.length && (
+          <li className="py-2 text-xs text-steel-muted">No allocated person matches “{listQ}”.</li>
+        )}
       </ul>
       {canEdit && (
         <>
           <form className="flex flex-wrap gap-2 items-end border-t border-line pt-3" onSubmit={assignExisting}>
             <SearchableSelect
               className="min-w-[160px] flex-1"
-              options={users.map((u) => ({ value: u.id, label: u.fullName, sublabel: `${u.email} · ${u.role}` }))}
+              options={users.map((u) => ({
+                value: u.id,
+                label: u.fullName,
+                sublabel: `${u.email} · ${u.role}`,
+                keywords: `${u.fullName} ${u.email} ${u.role}`,
+              }))}
               value={memberUserId}
               onChange={setMemberUserId}
               placeholder="Existing login…"
-              searchPlaceholder="Search name or email…"
+              searchPlaceholder="Search employee by name or email…"
               required
             />
             <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>

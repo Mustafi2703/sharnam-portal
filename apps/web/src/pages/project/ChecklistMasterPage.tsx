@@ -10,6 +10,7 @@ import {
 } from "../../lib/csvTemplates";
 import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { projectRouteTail } from "../../lib/projectWorkspace";
+import { FilePickButton } from "../../components/FilePickButton";
 
 const FAMILIES = [
   { value: "DrawingCheck", label: "Drawing check · RFI (SPDC RFI form)" },
@@ -559,16 +560,31 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               </form>
 
               <div className="border-t border-line pt-3">
-                <h4 className="text-sm font-semibold mb-2">Line items</h4>
-                <ul className="space-y-2 max-h-56 overflow-y-auto text-sm">
+                <h4 className="text-sm font-semibold mb-1">Line items</h4>
+                <p className="text-xs text-steel-muted mb-2">
+                  Each line needs its own instruction (text and optional file). Site uses this on fill — quality is not locked to a drawing.
+                </p>
+                <ul className="space-y-3 max-h-[28rem] overflow-y-auto text-sm">
                   {(detail.items || []).map((i: any) => (
-                    <li key={i.id} className="border border-line p-2 rounded-sm">
-                      <div className="font-medium">
-                        {i.itemCode}. {i.description}
-                      </div>
-                      {i.instruction && <div className="text-xs text-steel-muted mt-1">QI: {i.instruction}</div>}
-                      {i.requirePhoto && <Badge tone="warn">photo required</Badge>}
-                    </li>
+                    <ChecklistLineEditor
+                      key={i.id}
+                      item={i}
+                      canEdit={canEdit}
+                      token={token}
+                      showPhoto={family !== "DrawingCheck"}
+                      onSaved={async (fresh) => {
+                        if (fresh) {
+                          setDetail((d: any) =>
+                            d
+                              ? { ...d, items: (d.items || []).map((row: any) => (row.id === fresh.id ? { ...row, ...fresh } : row)) }
+                              : d
+                          );
+                        } else if (detail?.id) {
+                          setDetail(await api(`/api/checklist/templates/${detail.id}`, { token }));
+                        }
+                      }}
+                      onMsg={setMsg}
+                    />
                   ))}
                 </ul>
               </div>
@@ -582,7 +598,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                     required
                   />
                   <TextArea
-                    placeholder="Quality / safety instruction for this line"
+                    placeholder="Instruction for this line (what the site must check / attach)"
                     value={itemForm.instruction}
                     onChange={(e) => setItemForm({ ...itemForm, instruction: e.target.value })}
                     rows={2}
@@ -641,5 +657,132 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         </Card>
       </div>
     </div>
+  );
+}
+
+function ChecklistLineEditor({
+  item,
+  canEdit,
+  token,
+  showPhoto,
+  onSaved,
+  onMsg,
+}: {
+  item: {
+    id: string;
+    itemCode?: string;
+    description: string;
+    instruction?: string | null;
+    instructionFileUrl?: string | null;
+    instructionFileName?: string | null;
+    requirePhoto?: boolean;
+    section?: string | null;
+  };
+  canEdit: boolean;
+  token: string | null;
+  showPhoto: boolean;
+  onSaved: (fresh?: any) => void | Promise<void>;
+  onMsg: (text: string) => void;
+}) {
+  const [description, setDescription] = useState(item.description || "");
+  const [instruction, setInstruction] = useState(item.instruction || "");
+  const [requirePhoto, setRequirePhoto] = useState(!!item.requirePhoto);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setDescription(item.description || "");
+    setInstruction(item.instruction || "");
+    setRequirePhoto(!!item.requirePhoto);
+  }, [item.id, item.description, item.instruction, item.requirePhoto]);
+
+  async function saveMeta() {
+    setBusy(true);
+    try {
+      const fresh = await api(`/api/checklist/items/${item.id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ description, instruction, requirePhoto }),
+      });
+      onMsg("Line instruction saved.");
+      await onSaved(fresh);
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not save line");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function attachFile(files: File[]) {
+    const file = files[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const fresh = await api(`/api/checklist/items/${item.id}/instruction-file`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      onMsg(`Instruction file attached: ${file.name}`);
+      await onSaved(fresh);
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not attach instruction file");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="border border-line p-3 rounded-sm space-y-2">
+      <div className="font-medium">
+        {item.itemCode ? `${item.itemCode}. ` : ""}
+        {canEdit ? (
+          <Input className="mt-1" value={description} onChange={(e) => setDescription(e.target.value)} />
+        ) : (
+          item.description
+        )}
+      </div>
+      {canEdit ? (
+        <TextArea
+          placeholder="Instruction for this check (method / observation / what to attach)"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          rows={2}
+        />
+      ) : (
+        item.instruction && <div className="text-xs text-steel-muted">Instruction: {item.instruction}</div>
+      )}
+      {(item.instructionFileUrl || item.instructionFileName) && (
+        <a
+          href={item.instructionFileUrl || "#"}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-semibold text-brand"
+        >
+          Instruction file: {item.instructionFileName || "Open"}
+        </a>
+      )}
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-2">
+          {showPhoto && (
+            <label className="text-xs flex items-center gap-2">
+              <input type="checkbox" checked={requirePhoto} onChange={(e) => setRequirePhoto(e.target.checked)} />
+              Photo required
+            </label>
+          )}
+          <FilePickButton
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
+            disabled={busy}
+            onPick={(files) => void attachFile(files)}
+          >
+            {item.instructionFileUrl ? "Replace instruction file" : "Attach instruction file"}
+          </FilePickButton>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void saveMeta()}>
+            {busy ? "Saving…" : "Save line"}
+          </Button>
+        </div>
+      )}
+    </li>
   );
 }

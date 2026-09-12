@@ -205,6 +205,8 @@ export type AuthUser = {
   role: RoleKey;
   portal: PortalKey;
   vendorId?: string | null;
+  /** HR Head — HRMS only, no project / CRM / DMS desk. */
+  hrDeskOnly?: boolean;
 };
 
 /** Indian Standard Time — used for site attendance punches and display. */

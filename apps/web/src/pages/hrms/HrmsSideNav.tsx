@@ -78,17 +78,19 @@ export default function HrmsSideNav({
       </div>
 
       <div className="side-nav__foot">
-        <Link to="/dashboard" className="side-nav__item" onClick={onNavigate}>
-          <ModuleIcon name="modules" size={18} />
-          <span>Office portal</span>
-        </Link>
+        {!user?.hrDeskOnly && (
+          <Link to="/dashboard" className="side-nav__item" onClick={onNavigate}>
+            <ModuleIcon name="modules" size={18} />
+            <span>Office portal</span>
+          </Link>
+        )}
         <button type="button" className="side-nav__item w-full" onClick={onToggleTheme}>
           {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
           <span>{dark ? "Light mode" : "Dark mode"}</span>
         </button>
         <div className="side-nav__user" title={user?.fullName}>
           {user?.fullName}
-          <span className="side-nav__user-role"> · Office</span>
+          <span className="side-nav__user-role">{user?.hrDeskOnly ? " · HR Head" : " · Office"}</span>
         </div>
         <button
           type="button"

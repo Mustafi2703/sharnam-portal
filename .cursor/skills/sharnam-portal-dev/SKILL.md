@@ -39,7 +39,7 @@ For cross-cutting features, run **Backend → Frontend → QA** in that order.
 
 1. **Project scope**: every query filters by `projectId` (or membership). Never leak cross-project rows.
 2. **Idempotency**: upserts / unique keys for assign, publish, submit where retries happen; no duplicate revisions on double-click.
-3. **Drawing gate**: checklist submit + QI create require ≥1 published drawing with file.
+3. **Drawing gate**: Drawing Check is the GFC pre-upload form. Quality / safety / site fills do **not** require a published drawing — they use per-line instructions and site observations.
 4. **Client role**: view / raise concerns only — no drawing upload.
 5. **Audit**: who / when / which drawing / which revision on fills and uploads.
 6. **Upload UX**: open a dedicated **modal** (not bare file input alone) for Procore-like uploads.

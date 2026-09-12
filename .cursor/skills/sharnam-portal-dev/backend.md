@@ -25,11 +25,11 @@ Use request keys (`Idempotency-Key` header) only when the user asks for payment-
 
 ## Checklist / drawing linkage
 
-On submit require:
+On submit:
 
-- `drawingId` in project + `isPublished`
-- `revisionId` belonging to that drawing
-- Persist `revisionNumber`, `submittedById`, timestamps for CSV audit
+- Quality / safety / site: drawing + revision are optional (persist when provided)
+- Persist `revisionNumber`, `submittedById`, timestamps for CSV audit when a drawing is linked
+- Per-line `instruction` + optional `instructionFileUrl` come from checklist master
 
 ## Upload / files
 

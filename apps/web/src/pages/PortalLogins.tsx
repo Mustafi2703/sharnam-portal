@@ -140,7 +140,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     key: "hr", title: "HR Team", shortLabel: "HR Team",
     headline: "HRMS desk",
     subtitle: "Recruitment, attendance, leave, payroll, and letters.",
-    demoEmail: "office@sharnam.demo",
+    demoEmail: "anushka.jha@spdc.in",
     allowedRoles: ["admin", "office"],
     points: ["Recruit to onboard", "Attendance & leave", "Payroll & letters"],
     cta: "Sign in", tone: "#0D9488", icon: "HR",
@@ -401,7 +401,10 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   const { user, loading } = useAuth();
   useAuthPageScroll();
   if (!cfg) return <Navigate to="/login" replace />;
-  if (!loading && user) return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
+  if (!loading && user) {
+    if (user.hrDeskOnly) return <Navigate to="/hrm" replace />;
+    return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
+  }
 
   return (
     <div

@@ -219,7 +219,8 @@ export default function ChecklistFillPage() {
 
   const isDrawingCheck = family === "DrawingCheck";
   const drawingLocked = Boolean(queryDrawingId);
-  const requireDrawing = !isDrawingCheck && !drawingLocked && drawings.length > 0;
+  /** Quality / safety / site: optional drawing link only — never a submit lock. */
+  const requireDrawing = false;
   const minPhotos = isDrawingCheck ? 0 : assignment?.template?.requirePhotosMin || 0;
   const photoTotal = useMemo(() => {
     const overall = photos.length;

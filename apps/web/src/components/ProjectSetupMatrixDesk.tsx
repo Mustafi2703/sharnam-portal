@@ -311,18 +311,28 @@ export function ProjectSetupMatrixDesk({
           {!editingId && (
             <div className="grid sm:grid-cols-2 gap-2">
               <SearchableSelect
-                options={users.map((u) => ({ value: u.id, label: u.fullName, sublabel: `${u.email} · ${u.role}` }))}
+                options={users.map((u) => ({
+                  value: u.id,
+                  label: u.fullName,
+                  sublabel: `${u.email} · ${u.role}`,
+                  keywords: `${u.fullName} ${u.email} ${u.role}`,
+                }))}
                 value={pickUserId}
                 onChange={applyUser}
                 placeholder="Prefill from People directory…"
-                searchPlaceholder="Search people…"
+                searchPlaceholder="Search people by name…"
               />
               <SearchableSelect
-                options={vendors.map((v) => ({ value: v.id, label: v.name, sublabel: [v.partyType, v.email].filter(Boolean).join(" · ") }))}
+                options={vendors.map((v) => ({
+                  value: v.id,
+                  label: v.name,
+                  sublabel: [v.partyType, v.email].filter(Boolean).join(" · "),
+                  keywords: [v.name, v.email, v.partyType, v.primaryContactName].filter(Boolean).join(" "),
+                }))}
                 value={pickVendorId}
                 onChange={applyVendor}
                 placeholder="Prefill from Clients / Vendors / Stakeholders…"
-                searchPlaceholder="Search companies…"
+                searchPlaceholder="Search companies by name…"
               />
             </div>
           )}
