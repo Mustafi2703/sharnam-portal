@@ -160,6 +160,7 @@ export type DprPhoto = {
   caption?: string;
   takenAt?: string | null;
   kind?: "photo" | "signature" | "pdf";
+  url?: string;
 };
 
 export type DprHeader = {

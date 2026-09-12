@@ -140,5 +140,54 @@ export async function seedChecklistFillsFromDashboard(
     });
   }
 
-  return { ...summary, created: total, byDiscipline: created, drawingLinked: Boolean(drawingId) };
+  const extraTypes: Array<{ type: "DrawingCheck" | "Safety"; count: number }> = [
+    { type: "DrawingCheck", count: 3 },
+    { type: "Safety", count: 3 },
+  ];
+  for (const extra of extraTypes) {
+    const pool = assignments.filter((a) => a.template.checklistType === extra.type);
+    if (!pool.length) continue;
+    const already = created
+      .filter((c) => new RegExp(extra.type === "Safety" ? "safety|workpermit" : "drawing", "i").test(c.discipline))
+      .reduce((n, c) => n + c.filled, 0);
+    const need = Math.max(0, extra.count - already);
+    const cache = new Map<string, string>();
+    for (let i = 0; i < need; i++) {
+      const assignment = pool[i % pool.length];
+      let responsesJson = cache.get(assignment.templateId);
+      if (!responsesJson) {
+        responsesJson = await responsesForTemplate(prisma, assignment.templateId);
+        cache.set(assignment.templateId, responsesJson);
+      }
+      const createdAt = dayInWeek(weekStart, fillIndex);
+      await prisma.checklistSubmission.create({
+        data: {
+          assignmentId: assignment.id,
+          submittedById,
+          status: extra.type === "Safety" ? "Submitted" : "Approved",
+          purpose: "Fill",
+          remarks: `${WEEK_DASHBOARD_FILL_REMARK}:${extra.type}`,
+          responsesJson,
+          drawingId: extra.type === "DrawingCheck" ? drawingId : drawingId,
+          revisionId: extra.type === "DrawingCheck" ? revisionId : revisionId,
+          revisionNumber: extra.type === "DrawingCheck" ? revisionNumber : revisionNumber,
+          createdAt,
+          reviewedAt: extra.type === "Safety" ? null : createdAt,
+        },
+      });
+      fillIndex += 1;
+      total += 1;
+    }
+    if (need) created.push({ discipline: extra.type, filled: need, templatesUsed: Math.min(pool.length, need) });
+  }
+
+  let weekAdvance: { nextWeek: string; qapCopied: number; driveFiles: number } | null = null;
+  try {
+    const { advanceProjectWeeksAfterFill } = await import("./checklistWeekAdvance.js");
+    weekAdvance = await advanceProjectWeeksAfterFill({ projectId, userId: submittedById });
+  } catch (err) {
+    console.warn("Week advance after fills:", err instanceof Error ? err.message : err);
+  }
+
+  return { ...summary, created: total, byDiscipline: created, drawingLinked: Boolean(drawingId), weekAdvance };
 }

@@ -21,6 +21,7 @@ import { requireAuth, type AuthedRequest } from "../auth.js";
 import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
+import { directorySignsAsWpr, reportSignaturesFromDirectory } from "../services/directorySignatures.js";
 import { audit } from "../services/audit.js";
 import {
   buildWprWorkbook,
@@ -116,7 +117,13 @@ async function buildWprExportPack(
   const sectionsRaw: WprSections =
     existingSections ||
     (existing ? JSON.parse(existing.sectionsJson || "{}") : await seedSections(projectId, weekStart, weekEnd));
-  const { sections, extras: packExtras } = stripPackExtras(sectionsRaw);
+  const loaded = stripPackExtras(sectionsRaw);
+  const sections = loaded.sections;
+  let packExtras = loaded.extras;
+  if (!packExtras?.signatures?.length) {
+    const dirSigns = directorySignsAsWpr(await reportSignaturesFromDirectory(prisma, projectId));
+    if (dirSigns.length) packExtras = { ...(packExtras || {}), signatures: dirSigns };
+  }
   const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
   const charts = mergeWprChartsForExport(
     sections,
@@ -206,7 +213,13 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
   const rawSections: WprSections = existing
     ? JSON.parse(existing.sectionsJson || "{}")
     : await seedSections(projectId, weekStart, weekEnd);
-  const { sections, extras: packExtras } = stripPackExtras(rawSections);
+  const stripped = stripPackExtras(rawSections);
+  const sections = stripped.sections;
+  let packExtras = stripped.extras;
+  if (!packExtras?.signatures?.length) {
+    const dirSigns = directorySignsAsWpr(await reportSignaturesFromDirectory(prisma, projectId));
+    if (dirSigns.length) packExtras = { ...(packExtras || {}), signatures: dirSigns };
+  }
 
   const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
   const charts = mergeWprChartsForExport(

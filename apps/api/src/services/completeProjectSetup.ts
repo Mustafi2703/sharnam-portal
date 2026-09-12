@@ -48,10 +48,14 @@ export async function completeProjectSetup(projectId: string, userId: string) {
   const contractorPortals: PortalLoginResult[] = [];
 
   async function assignMember(loginUserId: string, role: string) {
+    const existing = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: loginUserId } },
+    });
+    const keepAdmin = existing && (existing.role === "admin" || existing.role === "office");
     await prisma.projectMember.upsert({
       where: { projectId_userId: { projectId, userId: loginUserId } },
-      create: { projectId, userId: loginUserId, role },
-      update: { role },
+      create: { projectId, userId: loginUserId, role: keepAdmin ? existing.role : role },
+      update: keepAdmin ? {} : { role },
     });
   }
 
@@ -106,7 +110,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   const reports = await initializeProjectReports(projectId, userId);
 
-  const { emailPortalCredentials } = await import("./portalInvites.js");
+  const { emailPortalCredentials, emailProjectSetupBrief } = await import("./portalInvites.js");
   for (const portal of [...clientPortals, ...contractorPortals]) {
     if (!portal.tempPassword) continue;
     try {
@@ -121,6 +125,16 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     } catch (err) {
       console.warn("Portal invite email failed:", portal.email, err instanceof Error ? err.message : err);
     }
+  }
+
+  try {
+    await emailProjectSetupBrief({
+      projectId,
+      createdById: userId,
+      extraTo: ["baibhabmustafi@gmail.com"],
+    });
+  } catch (err) {
+    console.warn("Project setup brief failed:", err instanceof Error ? err.message : err);
   }
 
   return {

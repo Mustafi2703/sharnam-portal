@@ -574,7 +574,9 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
       />
       {vendorMode && (
         <Card className="!p-4 text-sm bg-brand-soft/40">
-          Upload your <strong>Submission</strong> workbook on linked RA rows below. PMC uploads Corrected and Certified stages; COP is created only after Certified is filed.
+          Upload your <strong>Submission</strong> RA bill — it files under{" "}
+          <code>09.01/RA-xx/Submission</code>. Office keeps separate <strong>Corrected</strong> and{" "}
+          <strong>Certified</strong> copies (tagged back to the original). After Certified, office generates the Viatrix COP.
         </Card>
       )}
       {!vendorMode && (

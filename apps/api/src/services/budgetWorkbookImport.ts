@@ -10,15 +10,30 @@ import { prisma } from "../prisma.js";
 import { findWorkbook } from "../lib/excelRoot.js";
 import { isFullSpdcWorkbook } from "./costSheetParser.js";
 
-export function resolveBudgetWorkbookPath(): string | null {
-  return (
-    findWorkbook(["SPDC_Budget_Arvind 52.xls", "SPDC_Budget_Arvind 49.xls"]) ||
-    null
-  );
+export function preferredBudgetFileName(projectCode?: string | null): string {
+  const code = String(projectCode || "").toUpperCase();
+  if (code.includes("ARVIND-01") || code.includes("DORM")) return "SPDC_Budget_Arvind 52.xls";
+  if (code.includes("ARVIND-NTX") || code.includes("NTX")) return "SPDC_Budget_Arvind 49.xls";
+  return "SPDC_Budget_Arvind 49.xls";
+}
+
+/** Pin NTX → 49, Dorm → 52. Generic jobs prefer 49 so Dorm 52 cannot leak. */
+export function resolveBudgetWorkbookPath(opts?: { projectCode?: string | null; fileName?: string | null }): string | null {
+  if (opts?.fileName) return findWorkbook([opts.fileName]);
+  const preferred = preferredBudgetFileName(opts?.projectCode);
+  if (preferred.includes("52")) {
+    return findWorkbook(["SPDC_Budget_Arvind 52.xls", "SPDC_Budget_Arvind 49.xls"]);
+  }
+  return findWorkbook(["SPDC_Budget_Arvind 49.xls", "SPDC_Budget_Arvind 52.xls"]);
 }
 
 async function loadSeedModule(): Promise<{
-  seedCostFromBudgetWorkbook: (prisma: typeof import("../prisma.js").prisma, projectId: string, excelRoot: string) => Promise<void>;
+  seedCostFromBudgetWorkbook: (
+    prisma: typeof import("../prisma.js").prisma,
+    projectId: string,
+    excelRoot: string,
+    opts?: { fileName?: string }
+  ) => Promise<void>;
 }> {
   const candidates = [
     path.join(process.cwd(), "seed", "costFromBudget.js"),
@@ -37,12 +52,17 @@ async function loadSeedModule(): Promise<{
   throw new Error("seed/costFromBudget.ts not found");
 }
 
-export async function syncBudgetWorkbookTemplate(projectId: string) {
-  const file = resolveBudgetWorkbookPath();
+export async function syncBudgetWorkbookTemplate(projectId: string, opts?: { projectCode?: string | null }) {
+  let code = opts?.projectCode;
+  if (!code) {
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+    code = project?.code;
+  }
+  const file = resolveBudgetWorkbookPath({ projectCode: code });
   if (!file) throw new Error("SPDC_Budget_Arvind 49.xls not found on server");
   const excelRoot = path.dirname(file);
   const { seedCostFromBudgetWorkbook } = await loadSeedModule();
-  await seedCostFromBudgetWorkbook(prisma, projectId, excelRoot);
+  await seedCostFromBudgetWorkbook(prisma, projectId, excelRoot, { fileName: path.basename(file) });
   const counts = await countCostRows(projectId, path.basename(file));
   const capex = await syncCapexFromCostBudget(projectId, new Date().toISOString().slice(0, 7));
   try {

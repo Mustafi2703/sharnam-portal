@@ -56,10 +56,16 @@ async function createManyChunks(
   }
 }
 
-export async function seedCostFromBudgetWorkbook(prisma: PrismaClient, projectId: string, excelRoot: string) {
-  const file = ["SPDC_Budget_Arvind 52.xls", "SPDC_Budget_Arvind 49.xls"]
-    .map((name) => path.join(excelRoot, name))
-    .find((p) => fs.existsSync(p));
+export async function seedCostFromBudgetWorkbook(
+  prisma: PrismaClient,
+  projectId: string,
+  excelRoot: string,
+  opts?: { fileName?: string }
+) {
+  const names = opts?.fileName
+    ? [opts.fileName]
+    : ["SPDC_Budget_Arvind 49.xls", "SPDC_Budget_Arvind 52.xls"];
+  const file = names.map((name) => path.join(excelRoot, name)).find((p) => fs.existsSync(p));
   if (!file) {
     console.warn("Missing budget workbook in", excelRoot);
     return;

@@ -19,6 +19,7 @@ type Revision = {
   fileUrl: string | null;
   sharePointUrl: string | null;
   uploadedAt: string;
+  notes?: string | null;
 };
 
 type Attachment = {
@@ -90,8 +91,8 @@ export function CopDocumentSlots({
     return trail?.copRevisions.find((r) => r.stage === stage);
   }
 
-  function latestRaStage(stage: string) {
-    return trail?.raRevisions.find((r) => r.stage === stage);
+  function raCopies(stage: string) {
+    return trail?.raRevisions.filter((r) => r.stage === stage) || [];
   }
 
   async function uploadStage(stage: (typeof COP_STAGES)[number]["key"], file: File) {
@@ -199,16 +200,27 @@ export function CopDocumentSlots({
           </div>
           <div className="ra-bill-files__stages">
             {RA_STAGES.map((stage) => {
-              const rev = latestRaStage(stage);
-              const url = rev?.sharePointUrl || rev?.fileUrl;
+              const copies = raCopies(stage);
               const label = stage === "Submitted" ? "Submission" : stage;
               return (
                 <div key={stage} className="ra-bill-files__slot">
                   <div className="ra-bill-files__slot-label">{label}</div>
-                  {url ? (
-                    <button type="button" className="ra-bill-files__open" title={rev?.fileName || label} onClick={() => openDoc(url)}>
-                      Open ↗
-                    </button>
+                  {copies.length ? (
+                    copies.map((rev) => {
+                      const url = rev.sharePointUrl || rev.fileUrl;
+                      if (!url) return null;
+                      return (
+                        <button
+                          key={rev.id}
+                          type="button"
+                          className="ra-bill-files__open"
+                          title={rev.notes || rev.fileName || label}
+                          onClick={() => openDoc(url)}
+                        >
+                          R{rev.revisionNo} · Open ↗
+                        </button>
+                      );
+                    })
                   ) : (
                     <span className="text-[10px] text-steel-muted">—</span>
                   )}

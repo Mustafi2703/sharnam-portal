@@ -9,9 +9,10 @@ const DEMO_SOURCE = "finance-demo-seed";
 const RA_ISO_ROOT = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
 const RA_STAGES = ["Submitted", "Corrected", "Certified"] as const;
 
-function raBillFolder(raNumber: string): string {
+function raBillFolder(raNumber: string, stage: string): string {
   const safe = `RA-${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  return `${RA_ISO_ROOT}/${safe}`;
+  const leaf = stage === "Submitted" ? "Submission" : stage === "Corrected" ? "Corrected" : "Certified";
+  return `${RA_ISO_ROOT}/${safe}/${leaf}`;
 }
 
 async function seedRaBillStageWorkbooks(
@@ -46,7 +47,7 @@ async function seedRaBillStageWorkbooks(
     );
     const saved = await mockOneDrive.upload(
       projectCode,
-      raBillFolder(raNumber),
+      raBillFolder(raNumber, stage),
       `${stage}-R1-${Date.now()}.xlsx`,
       buf
     );
@@ -62,6 +63,12 @@ async function seedRaBillStageWorkbooks(
         fileUrl,
         storagePath: saved.path,
         sharePointUrl: saved.url || null,
+        notes:
+          stage === "Corrected"
+            ? `Tagged to Submitted R1 (${raNumber}-Submitted-workbook.xlsx) · original copy kept`
+            : stage === "Certified"
+              ? `Tagged to Corrected R1 (${raNumber}-Corrected-workbook.xlsx) · original copy kept`
+              : "Vendor submission · original copy",
         uploadedById,
       },
     });

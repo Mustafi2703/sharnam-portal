@@ -4,7 +4,8 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../../lib/brandedChecklistPrint";
-import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
+import { ensureFamilyAssignment, openChecklistFillWindow } from "../../lib/checklistFillWindow";
+import { isEmbedView } from "../../lib/inPageOverlay";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 
 const FAMILIES = [
@@ -50,6 +51,20 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
   const [busy, setBusy] = useState(true);
   const [msg, setMsg] = useState("");
   const canReview = user?.role === "admin" || user?.role === "office";
+  const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
+  const embed = isEmbedView();
+
+  async function startNewFill() {
+    if (!id) return;
+    const familyKey = family || "SiteExecution";
+    setMsg("");
+    const assignmentId = await ensureFamilyAssignment(id, familyKey, token);
+    if (!assignmentId) {
+      setMsg("Assign a checklist type from master first, then use New fill.");
+      return;
+    }
+    openChecklistFillWindow(id, assignmentId, familyKey);
+  }
 
   async function reviewSubmission(submissionId: string, status: "Approved" | "Rejected", closeRfi: boolean) {
     try {
@@ -99,6 +114,15 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
   useEffect(() => {
     void load();
   }, [id, token, family]);
+
+  useEffect(() => {
+    function onMsg(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === "sharnam-checklist-filled" && e.data.projectId === id) void load();
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [id]);
 
   const title = useMemo(() => {
     const f = FAMILIES.find((x) => x.value === family);
@@ -156,13 +180,45 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
     }
   }
 
+  const fillActions = (
+    <div className="flex flex-wrap gap-2">
+      {canFill && id && (
+        <Button type="button" className={embed ? "" : "!bg-amber-500"} onClick={() => void startNewFill()}>
+          New fill
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant="secondary"
+        className={embed ? "" : "!bg-white/15 !text-white !border-white/30"}
+        onClick={() => void load()}
+      >
+        Refresh
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="space-y-5 min-w-0">
+    <div className={`space-y-5 min-w-0 ${embed ? "p-3" : ""}`}>
+      {embed ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="font-display text-lg font-semibold text-ink">{title}</h1>
+            <p className="text-xs text-steel-muted">Open a row to fill — assignees save in this popup.</p>
+          </div>
+          {fillActions}
+        </div>
+      ) : (
       <PageHero
         title={title}
-        subtitle="Every fill logged with line-level data. PMC and client can track % filled and SharePoint evidence links."
+        subtitle="Open any logged fill or start a new one — the popup saves the checklist, updates ISO drive, and rolls the next week on dashboards."
         actions={
           <div className="flex flex-wrap gap-2">
+            {canFill && id && (
+              <Button type="button" className="!bg-amber-500" onClick={() => void startNewFill()}>
+                New fill
+              </Button>
+            )}
             <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void load()}>
               Refresh
             </Button>
@@ -195,8 +251,9 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
           </div>
         }
       />
+      )}
 
-      <div className="flex flex-wrap gap-2 items-center">
+      <div className={`flex flex-wrap gap-2 items-center ${embed ? "hidden" : ""}`}>
         {showFamilyPicker &&
           FAMILIES.map((f) => (
             <button
@@ -282,20 +339,20 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                     </Badge>
                   </td>
                   <td className="text-right">
-                    {s.status === "Draft" && id && s.assignment?.id && (
+                    {id && s.assignment?.id && canFill && (
                       <Button
                         type="button"
-                        className="!text-xs !py-1.5"
+                        className="!text-xs !py-1.5 mr-1"
                         onClick={() =>
                           openChecklistFillWindow(
                             id,
                             s.assignment.id,
                             s.assignment?.template?.checklistType || family || "SiteExecution",
-                            { resumeDraft: true }
+                            { resumeDraft: s.status === "Draft", submissionId: s.id }
                           )
                         }
                       >
-                        Resume fill
+                        {s.status === "Draft" ? "Resume fill" : "Open fill"}
                       </Button>
                     )}
                     {s.status !== "Draft" && (
@@ -354,10 +411,12 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
         </div>
       </Card>
 
+      {!embed && (
       <p className="text-xs text-steel-muted">
         Tip: open <strong>Branded PDF / Excel</strong> to review the fill, then <strong>Approve + close RFI</strong> (office) —
         that emails the decision and closes linked RFIs. Reject sends a re-fill notice.
       </p>
+      )}
     </div>
   );
 }

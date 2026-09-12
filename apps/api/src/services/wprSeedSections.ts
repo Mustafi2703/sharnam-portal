@@ -49,6 +49,7 @@ export async function seedWprSections(
     prRequisitions,
     invoiceTrackers,
     sorStats,
+    checklistFills,
   ] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.projectMember.findMany({
@@ -147,7 +148,23 @@ export async function seedWprSections(
     prisma.progressPurchaseRequisition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
     prisma.progressInvoiceTracker.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
     prisma.progressSorStat.findMany({ where: { projectId }, take: 20 }),
+    prisma.checklistSubmission.findMany({
+      where: {
+        assignment: { projectId },
+        status: { in: ["Submitted", "Approved"] },
+        createdAt: { gte: weekStart, lte: weekEnd },
+      },
+      include: { assignment: { include: { template: { select: { checklistType: true } } } } },
+    }),
   ]);
+
+  const fillCounts = {
+    qi: checklistFills.filter((s) => s.assignment.template.checklistType === "QualityInspection").length,
+    safety: checklistFills.filter((s) => s.assignment.template.checklistType === "Safety").length,
+    drawing: checklistFills.filter((s) => s.assignment.template.checklistType === "DrawingCheck").length,
+    site: checklistFills.filter((s) => s.assignment.template.checklistType === "SiteExecution").length,
+  };
+  const fillNote = `Checklists this week: ${fillCounts.qi} QI · ${fillCounts.safety} Safety · ${fillCounts.drawing} Drawing · ${fillCounts.site} Site`;
 
   void submittals;
 
@@ -316,6 +333,7 @@ export async function seedWprSections(
 
   const drawingRegister: WprSection = {
     title: DEFAULT_WPR_TITLES.drawingRegister,
+    notes: fillCounts.drawing ? `${fillCounts.drawing} Drawing Check fill(s) this week.` : undefined,
     headers: ["Dwg No", "Title", "Discipline", "Type", "Rev", "Status", "Critical"],
     rows: (registerLines.length ? registerLines : drawings).map((d: any) => [
       (d.drawingNumber || "").replace(/\s·\s*\d+$/, ""),
@@ -494,7 +512,7 @@ export async function seedWprSections(
           q.clientOk ? "Yes" : "No",
           q.status || "",
         ]),
-    notes: sorStats.length ? "Quality statistics — Site Observation / NCR counts (WPR client format)." : "QAP weekly sign-off rows.",
+    notes: `${sorStats.length ? "Quality statistics — Site Observation / NCR counts (WPR client format)." : "QAP weekly sign-off rows."} ${fillNote}`,
   };
 
   const cubeGroups = new Map<string, typeof cubes>();
@@ -550,8 +568,11 @@ export async function seedWprSections(
       ["HSE Inductions", safetyPrevIndicators.inductions, safetyIndicators.inductions, safetyIndicators.inductions],
       ["Incidents / Accidents", safetyPrevIndicators.incidents, safetyIndicators.incidents, safetyIndicators.incidents],
       ["Total safety events", safetyPrevIndicators.other, safetyIndicators.other, safetyIndicators.other],
+      ["Safety checklists filled", 0, fillCounts.safety, fillCounts.safety],
     ],
-    notes: ncrs.length ? `${ncrs.length} NCR/CAR items open — please review.` : "No open NCRs recorded.",
+    notes: ncrs.length
+      ? `${ncrs.length} NCR/CAR items open — please review. ${fillNote}`
+      : `${fillNote}. No open NCRs recorded.`,
   };
 
   const pvaCashRows = plannedActual
@@ -735,6 +756,7 @@ export async function seedWprSections(
       ["QAP activities (project)", qap.length],
       ["Cube tests (window)", cubes.length],
       ["Safety events (window)", safety.length],
+      ["QI / Safety / Drawing fills (week)", `${fillCounts.qi} / ${fillCounts.safety} / ${fillCounts.drawing}`],
       ["Milestones on track", milestones.length ? `${onTrack} / ${milestones.length}` : "—"],
       ["Drawings in register", registerLines.length || drawings.length],
       ["COP certified (₹ payable)", certifiedCopTotal ? certifiedCopTotal.toLocaleString("en-IN") : `${cops.length} COP(s)`],
@@ -805,4 +827,30 @@ export async function seedWprSections(
       weekEnd,
     }
   );
+}
+
+export function overlayChecklistFillKpis(
+  sections: WprSections,
+  fills: { qi: number; safety: number; drawing: number; site?: number }
+): WprSections {
+  const note = `Checklists this week: ${fills.qi} QI · ${fills.safety} Safety · ${fills.drawing} Drawing${fills.site ? ` · ${fills.site} Site` : ""}`;
+  const dashboard = sections.projectDashboard
+    ? {
+        ...sections.projectDashboard,
+        rows: [
+          ...(sections.projectDashboard.rows || []),
+          ["QI / Safety / Drawing fills (week)", `${fills.qi} / ${fills.safety} / ${fills.drawing}`],
+        ],
+      }
+    : undefined;
+  const quality = sections.quality
+    ? { ...sections.quality, notes: [sections.quality.notes, note].filter(Boolean).join(" ") }
+    : undefined;
+  const safety = sections.safety
+    ? { ...sections.safety, notes: [sections.safety.notes, note].filter(Boolean).join(" ") }
+    : undefined;
+  const drawingRegister = sections.drawingRegister
+    ? { ...sections.drawingRegister, notes: [sections.drawingRegister.notes, fills.drawing ? `${fills.drawing} Drawing Check fill(s).` : ""].filter(Boolean).join(" ") }
+    : undefined;
+  return { ...sections, projectDashboard: dashboard, quality, safety, drawingRegister };
 }

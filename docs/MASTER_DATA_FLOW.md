@@ -201,6 +201,15 @@ Returns per-source counts vs minimums, `readyForDpr` / `readyForWpr`, and **oneL
 
 Demo: `npm run db:seed-dpr-demo`
 
+Arvind structured week (both jobs, real sheets, fills before 7 DPRs + WPR):
+
+```bash
+npm run db:audit-arvind-sheets      # no DB — importer / leftover map
+npm run db:seed-arvind-week-test    # NTX 1–7 Sep 2026 + Dorm 23–29 Jul 2026
+```
+
+Budget pin: NTX loads `SPDC_Budget_Arvind 49.xls`; Dorm loads `52.xls`. `Dash Bord For Budget 03.xlsx` is dashboard-only.
+
 ---
 
 ## 7. SharePoint log locations (sandbox)

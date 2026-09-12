@@ -39,6 +39,11 @@ export function moduleToolHref(projectId: string, to: string, query?: string): s
 }
 
 export function openModuleToolWindow(href: string, label: string): Window | null {
+  /** Phone: stay in this tab so the hamburger + left nav still work. */
+  if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+    window.location.assign(href);
+    return window;
+  }
   const next = withToolWindowParam(href, true);
   const abs = next.startsWith("http") ? next : `${window.location.origin}${next}`;
   const name = `sharnam-tool-${label.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 36) || "page"}`;

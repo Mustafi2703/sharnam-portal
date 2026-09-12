@@ -24,7 +24,7 @@ import {
   rfiPageCopy,
   type RfiKindFilter,
 } from "../../lib/rfiModuleScope";
-import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
+import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { getActiveWorkspace } from "../../workspaces";
 
 type RfiKind = RfiKindFilter;
@@ -140,6 +140,15 @@ export default function RfisPage() {
   useEffect(() => {
     void load();
   }, [id, token]);
+
+  useEffect(() => {
+    function onMsg(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === "sharnam-checklist-filled" && e.data.projectId === id) void load();
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [id]);
 
   useEffect(() => {
     if (search.get("view") === "register") {
@@ -260,8 +269,12 @@ export default function RfisPage() {
   const fillFamily = checklistFamilyForRfiKind(selected?.rfiKind);
 
   function openFillForm() {
-    if (!id || !selected?.linkedAssignmentId) return;
-    openChecklistFillWindow(id, selected.linkedAssignmentId, fillFamily);
+    if (!id) return;
+    if (selected?.linkedAssignmentId) {
+      openChecklistFillWindow(id, selected.linkedAssignmentId, fillFamily, { resumeDraft: true });
+      return;
+    }
+    void openFamilyChecklistFill(id, fillFamily || "SiteExecution", token, { preferAssignmentFill: true });
   }
 
   return (

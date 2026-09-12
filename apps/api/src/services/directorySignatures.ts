@@ -77,6 +77,47 @@ export type DirectorySignMap = {
   contractor?: { name: string; url?: string | null; updatedAt?: Date | null };
 };
 
+export type ReportSignature = {
+  path: string;
+  caption: string;
+  role: string;
+  url?: string;
+  takenAt?: string;
+  kind: "signature";
+};
+
+/** Directory PNG signs → DPR / WPR / preview strips. Stored under ISO 01.03. */
+export async function reportSignaturesFromDirectory(
+  prisma: PrismaClient,
+  projectId: string
+): Promise<ReportSignature[]> {
+  const rows = await listDirectorySignatures(prisma, projectId);
+  return rows
+    .filter((r) => r.signatureUrl || r.signatureStoragePath)
+    .map((r) => ({
+      path: r.signatureStoragePath || r.signatureUrl || "",
+      caption: r.signatoryTitle || r.role || r.name,
+      role: r.role || r.name,
+      url: r.signatureUrl || undefined,
+      takenAt: r.signatureUpdatedAt ? r.signatureUpdatedAt.toISOString() : new Date().toISOString(),
+      kind: "signature" as const,
+    }));
+}
+
+export function directorySignsAsDpr(signs: ReportSignature[]) {
+  return signs.map((s) => ({
+    path: s.path,
+    caption: s.caption,
+    takenAt: s.takenAt,
+    kind: "signature" as const,
+    url: s.url,
+  }));
+}
+
+export function directorySignsAsWpr(signs: ReportSignature[]) {
+  return signs.map((s) => ({ path: s.path, role: s.role || s.caption, url: s.url }));
+}
+
 export async function getDirectorySignMap(prisma: PrismaClient, projectId: string): Promise<DirectorySignMap> {
   const [members, vendors] = await Promise.all([
     prisma.projectMember.findMany({

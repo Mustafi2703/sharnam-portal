@@ -17,6 +17,7 @@ type Revision = {
   fileUrl: string | null;
   sharePointUrl: string | null;
   uploadedAt: string;
+  notes?: string | null;
 };
 
 type Attachment = {
@@ -75,8 +76,8 @@ export function RaBillWorkbookSlots({
     void reload();
   }, [reload]);
 
-  function latestForStage(stage: string) {
-    return revisions.find((r) => r.stage === stage);
+  function copiesForStage(stage: string) {
+    return revisions.filter((r) => r.stage === stage);
   }
 
   async function uploadStage(stage: (typeof STAGES)[number]["key"], file: File) {
@@ -121,22 +122,47 @@ export function RaBillWorkbookSlots({
     <div className={`ra-bill-files ${compact ? "ra-bill-files--compact" : ""}`}>
       <div className="ra-bill-files__stages">
         {STAGES.map((s) => {
-          const rev = latestForStage(s.key);
-          const url = rev ? portalUrl(rev) : "";
+          const copies = copiesForStage(s.key);
+          const rev = copies[0];
           const slotWritable = canWrite && !rev && (!vendorMode || s.key === "Submitted");
+          const folder = s.key === "Submitted" ? "Submission" : s.key;
           return (
             <div key={s.key} className="ra-bill-files__slot">
               <div className="ra-bill-files__slot-label">{s.label}</div>
-              {url ? (
-                <button
-                  type="button"
-                  className="ra-bill-files__open"
-                  title={rev?.fileName || "Preview workbook"}
-                  onClick={() => setPreview({ url, title: `${raNumber} · ${s.label}`, fileName: rev?.fileName || "file" })}
-                >
-                  Open sheet ↗
-                </button>
-              ) : slotWritable ? (
+              <div className="ra-bill-files__folder">09.01/{raNumber}/{folder}</div>
+              {copies.map((copy) => {
+                const url = portalUrl(copy);
+                if (!url) return null;
+                return (
+                  <div key={copy.id} className="ra-bill-files__copy">
+                    <button
+                      type="button"
+                      className="ra-bill-files__open"
+                      title={copy.fileName || "Preview workbook"}
+                      onClick={() =>
+                        setPreview({
+                          url,
+                          title: `${raNumber} · ${s.label} R${copy.revisionNo}`,
+                          fileName: copy.fileName || "file",
+                        })
+                      }
+                    >
+                      R{copy.revisionNo} · Open ↗
+                    </button>
+                    {copy.fileName && (
+                      <div className="ra-bill-files__fname" title={copy.fileName}>
+                        {copy.fileName}
+                      </div>
+                    )}
+                    {copy.notes && (
+                      <div className="ra-bill-files__tag" title={copy.notes}>
+                        {copy.notes}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {slotWritable ? (
                 <FilePickButton
                   accept=".xlsx,.xls,.xlsm,.pdf,.doc,.docx"
                   variant="secondary"
@@ -147,16 +173,13 @@ export function RaBillWorkbookSlots({
                     if (file) void uploadStage(s.key, file);
                   }}
                 >
-                  {busyStage === s.key ? "…" : "Upload"}
+                  {busyStage === s.key ? "…" : s.key === "Submitted" && vendorMode ? "Upload RA bill" : "Upload"}
                 </FilePickButton>
-              ) : (
-                <span className="text-[10px] text-steel-muted">—</span>
-              )}
-              {rev?.fileName && (
-                <div className="ra-bill-files__fname" title={rev.fileName}>
-                  {rev.fileName}
-                </div>
-              )}
+              ) : !copies.length ? (
+                <span className="text-[10px] text-steel-muted">
+                  {vendorMode && s.key !== "Submitted" ? "Office copy" : "—"}
+                </span>
+              ) : null}
             </div>
           );
         })}

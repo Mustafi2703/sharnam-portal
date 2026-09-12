@@ -14,6 +14,7 @@ export type EvidenceItem = {
   caption?: string;
   takenAt?: string | null;
   kind?: "photo" | "signature" | "pdf";
+  url?: string;
 };
 
 type Props = {
@@ -203,8 +204,11 @@ export function EvidencePanel({
         {signatures.length > 0 && (
           <ul className="mt-3 text-xs divide-y max-h-32 overflow-y-auto">
             {signatures.map((p, i) => (
-              <li key={i} className="py-2 flex justify-between gap-2">
-                <span className="font-mono truncate">{p.path}</span>
+              <li key={i} className="py-2 flex justify-between gap-2 items-center">
+                {p.url ? (
+                  <img src={p.url} alt={p.caption || "Signature"} className="h-10 w-24 object-contain bg-sand/20 border border-line" />
+                ) : null}
+                <span className="font-mono truncate">{p.caption || p.path}</span>
                 <button type="button" className="text-danger shrink-0 min-h-[44px] min-w-[44px]" onClick={() => onRemoveSignature(i)}>
                   ✕
                 </button>

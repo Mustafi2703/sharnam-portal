@@ -13,7 +13,8 @@ import {
   type ChecklistFillLine,
   type ChecklistFillMeta,
 } from "../components/ChecklistFillForm";
-import { DRAWING_UNLOCK_MESSAGE, drawingUnlockStorageKey } from "../lib/drawingCheckWindow";
+import { closeEmbedOrWindow } from "../lib/inPageOverlay";
+import { drawingUnlockStorageKey, notifyDrawingUnlock } from "../lib/drawingCheckWindow";
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
 /**
@@ -199,14 +200,7 @@ export default function DrawingPreCheckPage() {
       } catch {
         /* ignore */
       }
-      try {
-        window.opener?.postMessage(
-          { type: DRAWING_UNLOCK_MESSAGE, projectId, unlockToken: res.unlockToken },
-          window.location.origin
-        );
-      } catch {
-        /* ignore */
-      }
+      notifyDrawingUnlock(projectId, res.unlockToken);
       setDone({ unlockToken: res.unlockToken, name: res.template?.name || template.name });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checklist failed");
@@ -228,11 +222,11 @@ export default function DrawingPreCheckPage() {
             <Badge tone="ok">Unlocked</Badge>
             <h1 className="font-display text-2xl text-ink">Checklist complete</h1>
             <p className="text-steel-muted text-sm max-w-md mx-auto">
-              “{done.name}” is done. Return to the Drawings tab — the upload dialog should open. You can close this window.
+              “{done.name}” is done. Return to the Drawings register — the upload dialog should open.
             </p>
             <div className="flex flex-wrap gap-2 justify-center pt-2">
-              <Button type="button" onClick={() => window.close()}>
-                Close window
+              <Button type="button" onClick={() => closeEmbedOrWindow()}>
+                Close
               </Button>
               <Link to={`/projects/${projectId}/drawings`}>
                 <Button type="button" variant="secondary">

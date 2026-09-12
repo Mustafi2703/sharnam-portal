@@ -139,11 +139,7 @@ export default function DrawingsPage() {
     if (!id) return false;
     setPrecheckMode(mode);
     precheckModeRef.current = mode;
-    const win = openDrawingCheckWindow(id, mode);
-    if (!win) {
-      setFormError("Allow pop-ups to open Drawing Check Master in a separate window.");
-      return false;
-    }
+    openDrawingCheckWindow(id, mode);
     setPrecheckOpen(true);
     return true;
   }
@@ -155,7 +151,7 @@ export default function DrawingsPage() {
     setShowRegister(false);
     setUploadForId(null);
     if (!launchDrawingCheck("register")) return;
-    setMsg("Complete Drawing Check Master in the popup window — upload opens when it unlocks.");
+    setMsg("Complete Drawing Check Master in the popup — upload opens when it unlocks.");
   }
 
   useEffect(() => {

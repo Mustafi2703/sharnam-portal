@@ -152,7 +152,10 @@ checklistRouter.get("/assignments/:assignmentId", async (req: AuthedRequest, res
     if (draft) myDraft = attachProgress(draft, itemCount);
   }
 
-  res.json({ ...assignment, submissions, myDraft, itemCount });
+  const latestFill =
+    submissions.find((s) => s.submittedById === req.user?.id) || submissions[0] || null;
+
+  res.json({ ...assignment, submissions, myDraft, latestFill, itemCount });
 });
 
 checklistRouter.get("/templates", async (req, res) => {
@@ -495,9 +498,19 @@ checklistRouter.post(
       }
     }
 
-    const existingDraft = await prisma.checklistSubmission.findFirst({
+    const resumeId = String(req.body.submissionId || "").trim();
+    let existingDraft = await prisma.checklistSubmission.findFirst({
       where: { assignmentId: assignment.id, submittedById: req.user!.id, status: "Draft" },
     });
+    if (resumeId) {
+      const prior = await prisma.checklistSubmission.findFirst({
+        where: { id: resumeId, assignmentId: assignment.id },
+      });
+      const canEditPrior =
+        prior &&
+        (prior.submittedById === req.user!.id || req.user!.role === "admin" || req.user!.role === "office");
+      if (canEditPrior) existingDraft = prior;
+    }
 
     const submission = existingDraft
       ? await prisma.checklistSubmission.update({
@@ -696,10 +709,25 @@ checklistRouter.post(
       console.warn("[checklist] pour-card cube group:", err instanceof Error ? err.message : err);
     }
 
+    let week: { nextWeek: string; qapCopied: number; driveFiles: number } | null = null;
+    if (submitStatus === "Submitted") {
+      try {
+        const { advanceProjectWeeksAfterFill } = await import("../services/checklistWeekAdvance.js");
+        week = await advanceProjectWeeksAfterFill({
+          projectId: assignment.projectId,
+          userId: req.user!.id,
+          checklistType: assignment.template.checklistType,
+        });
+      } catch (err) {
+        console.warn("[checklist] week advance:", err instanceof Error ? err.message : err);
+      }
+    }
+
     res.status(existingDraft ? 200 : 201).json({
       ...attachProgress(withPhotos || submission, itemCount),
       sharePointExports: driveExports.exports,
       cubeGroup,
+      week,
     });
   }
 );

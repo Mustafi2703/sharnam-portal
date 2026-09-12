@@ -2,7 +2,9 @@
  * Pack completeness — verify a project has the sheet-backed registers
  * needed for a full DPR day and WPR week (single source of truth checks).
  */
+import path from "path";
 import { prisma } from "../prisma.js";
+import { preferredBudgetFileName, resolveBudgetWorkbookPath } from "./budgetWorkbookImport.js";
 
 export type PackCheck = {
   key: string;
@@ -63,6 +65,10 @@ export async function verifyPackCompleteness(projectId: string, opts?: { logDate
     dprSnaps,
     wprPacks,
     openRfi,
+    project,
+    qiFills,
+    safetyFills,
+    drawingFills,
   ] = await Promise.all([
     prisma.costMonitoringLine.count({ where: { projectId } }),
     prisma.costMbLine.count({ where: { projectId } }),
@@ -91,7 +97,34 @@ export async function verifyPackCompleteness(projectId: string, opts?: { logDate
     }),
     prisma.wprSnapshot.count({ where: { projectId } }),
     prisma.rfi.count({ where: { projectId, status: "Open" } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { code: true } }),
+    prisma.checklistSubmission.count({
+      where: {
+        status: { in: ["Submitted", "Approved"] },
+        createdAt: { gte: weekStart, lt: weekEnd },
+        assignment: { projectId, template: { checklistType: "QualityInspection" } },
+      },
+    }),
+    prisma.checklistSubmission.count({
+      where: {
+        status: { in: ["Submitted", "Approved"] },
+        createdAt: { gte: weekStart, lt: weekEnd },
+        assignment: { projectId, template: { checklistType: "Safety" } },
+      },
+    }),
+    prisma.checklistSubmission.count({
+      where: {
+        status: { in: ["Submitted", "Approved"] },
+        createdAt: { gte: weekStart, lt: weekEnd },
+        assignment: { projectId, template: { checklistType: "DrawingCheck" } },
+      },
+    }),
   ]);
+
+  const expectedBudget = preferredBudgetFileName(project?.code);
+  const resolvedBudget = resolveBudgetWorkbookPath({ projectCode: project?.code });
+  const budgetName = resolvedBudget ? path.basename(resolvedBudget) : "";
+  const budgetPinned = !expectedBudget || !budgetName || budgetName === expectedBudget;
 
   const checks: PackCheck[] = [
     check("boq", "cost", "BOQ / Monitoring lines", monitoring, 10, "SPDC_Budget_Arvind · Monitoring *", "DPR qty rows · Progress BOQ view"),
@@ -149,6 +182,19 @@ export async function verifyPackCompleteness(projectId: string, opts?: { logDate
     ),
     check("wpr-pack", "reports", "WPR snapshots saved", wprPacks, 0, "SPDC_Arvind Limited_WPR_50.pptx", "SharePoint 10.01"),
     check("open-rfi", "comms", "Open RFIs (info)", openRfi, 0, "SPDC_RFI_Form_and_Register", "DPR approvals pending"),
+    check(
+      "budget-file",
+      "cost",
+      "Budget workbook pinned",
+      budgetPinned ? 1 : 0,
+      1,
+      expectedBudget,
+      "Cost BOQ / MB / BBS",
+      budgetName ? `Resolved ${budgetName}` : "No budget workbook on disk"
+    ),
+    check("qi-fills", "quality", "QI checklists filled this week", qiFills, 0, "Quality Dashboard Sheet2", "Quality dashboard · DPR"),
+    check("safety-fills", "safety", "Safety checklists filled this week", safetyFills, 0, "Quality Dashboard / Safety pack", "Safety dashboard · DPR · WPR"),
+    check("drawing-fills", "quality", "Drawing Check fills this week", drawingFills, 0, "Drawing Check master", "WPR drawing · DPR quality"),
   ];
 
   const required = checks.filter((c) => c.min > 0);

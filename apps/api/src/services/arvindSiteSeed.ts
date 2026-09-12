@@ -16,7 +16,7 @@ import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncComm
 import { syncDrawingRegisterToProject, syncDciArvindDrawings } from "./drawingRegisterSheets.js";
 import { upsertScurveRegisterPoints } from "./msProjectSchedule.js";
 import { seedDprDemoDay } from "./dprDemoDaySeed.js";
-import { seedWprSections } from "./wprSeedSections.js";
+import { overlayChecklistFillKpis, seedWprSections } from "./wprSeedSections.js";
 import { snapWeekEnding } from "./wprDemoSeed.js";
 import { buildJulyWprPack } from "./wprJulyWorkbook.js";
 import { importWprTrackerPack, importPrInvoiceFromWorkbook } from "./wprTrackerPackImport.js";
@@ -227,8 +227,8 @@ export async function seedArvindSitePack(db: PrismaClient) {
       code: ARVIND_NTX_CODE,
       name: "Construction of New NTX Building — Arvind Limited",
       clientName: "Arvind Limited",
-      clientContactName: "Client PM",
-      clientEmail: "projects@arvind.demo",
+      clientContactName: "Baibhab Kumar Mustafi",
+      clientEmail: "baibhabmustafi@gmail.com",
       location: "Santej, Gujarat",
       clientAddress: "Santej, Gujarat",
       designConsultant: "AK Consultant",
@@ -237,7 +237,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
       status: "In Progress",
       startDate: new Date("2026-08-01T00:00:00"),
       enabledModules: ENABLED_MODULES,
-      notificationEmails: "office@sharnam.demo,projects@arvind.demo",
+      notificationEmails: "office@sharnam.demo,baibhabmustafi@gmail.com",
       emailEnabled: true,
       emailFromName: "शरणम् Portal",
     },
@@ -258,8 +258,8 @@ export async function seedArvindSitePack(db: PrismaClient) {
       code: ARVIND_DORM_CODE,
       name: "Construction of Worker Dormitory — Arvind Limited, Santej",
       clientName: "Arvind Limited",
-      clientContactName: "Client PM",
-      clientEmail: "projects@arvind.demo",
+      clientContactName: "Baibhab Kumar Mustafi",
+      clientEmail: "baibhabmustafi@gmail.com",
       location: "Santej, Gujarat",
       clientAddress: "Santej, Gujarat",
       designConsultant: "AK Consultant",
@@ -267,7 +267,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
       pmcName: "Sharnam Project Development Consultants & Co.",
       status: "In Progress",
       enabledModules: ENABLED_MODULES,
-      notificationEmails: "office@sharnam.demo,projects@arvind.demo",
+      notificationEmails: "office@sharnam.demo,baibhabmustafi@gmail.com",
       emailEnabled: true,
     },
     update: {
@@ -305,10 +305,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
     console.warn("NTX quality catalog:", err instanceof Error ? err.message : err);
   }
   const ntxWeekStart = new Date("2026-09-01T00:00:00");
-  const ntxDprs = await seedWeekDprs(db, ntx.id, office.id, ntxWeekStart, 7);
   const ntxWeekEnd = new Date("2026-09-07T12:00:00");
-  const ntxSections = await seedWprSections(db, ntx.id, ntxWeekStart, ntxWeekEnd);
-  await saveWprSnapshot(db, ntx.id, office.id, ntxWeekEnd, ntxSections, 3);
 
   const dormSetup = await completeProjectSetup(dorm.id, office.id);
   let dormTrackers = null as Awaited<ReturnType<typeof importWprTrackerPack>> | null;
@@ -321,7 +318,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
   }
   try {
     const { syncBudgetWorkbookTemplate } = await import("./budgetWorkbookImport.js");
-    await syncBudgetWorkbookTemplate(dorm.id);
+    await syncBudgetWorkbookTemplate(dorm.id, { projectCode: ARVIND_DORM_CODE });
   } catch (err) {
     console.warn("Dormitory budget 52:", err instanceof Error ? err.message : err);
   }
@@ -356,12 +353,6 @@ export async function seedArvindSitePack(db: PrismaClient) {
   const dormQuality = await seedJulyQualityRegisters(db, dorm.id, dormWeekStart);
   const dormHse = await seedJulyHseRegisters(db, dorm.id, office.id, dormWeekStart);
 
-  const dormFills = await seedChecklistFillsFromDashboard(db, dorm.id, office.id, dormWeekStart, {
-    drawingId: published?.id,
-    revisionId: published?.revisions[0]?.id,
-    revisionNumber: published?.revisions[0]?.revisionNumber,
-  });
-
   const ntxPublished = await db.drawing.findFirst({
     where: { projectId: ntx.id, isPublished: true },
     include: { revisions: { where: { published: true }, orderBy: { createdAt: "desc" }, take: 1 } },
@@ -371,11 +362,35 @@ export async function seedArvindSitePack(db: PrismaClient) {
     revisionId: ntxPublished?.revisions[0]?.id,
     revisionNumber: ntxPublished?.revisions[0]?.revisionNumber,
   });
+  const dormFills = await seedChecklistFillsFromDashboard(db, dorm.id, office.id, dormWeekStart, {
+    drawingId: published?.id,
+    revisionId: published?.revisions[0]?.id,
+    revisionNumber: published?.revisions[0]?.revisionNumber,
+  });
+
+  await signDemoQapWeek(db, ntx.id, ntxFills.weekAdvance?.nextWeek);
+  await signDemoQapWeek(db, dorm.id, dormFills.weekAdvance?.nextWeek);
+
+  const ntxDprs = await seedWeekDprs(db, ntx.id, office.id, ntxWeekStart, 7);
+  const ntxSections = await seedWprSections(db, ntx.id, ntxWeekStart, ntxWeekEnd);
+  await saveWprSnapshot(db, ntx.id, office.id, ntxWeekEnd, ntxSections, 3);
 
   const dormDprs = await seedWeekDprs(db, dorm.id, office.id, dormWeekStart, 7);
+  const dormFillKpis = {
+    qi: await countWeekFills(db, dorm.id, dormWeekStart, new Date("2026-07-29T23:59:59"), "QualityInspection"),
+    safety: await countWeekFills(db, dorm.id, dormWeekStart, new Date("2026-07-29T23:59:59"), "Safety"),
+    drawing: await countWeekFills(db, dorm.id, dormWeekStart, new Date("2026-07-29T23:59:59"), "DrawingCheck"),
+  };
   try {
     const pack = buildJulyWprPack();
-    await saveWprSnapshot(db, dorm.id, office.id, new Date("2026-07-29T12:00:00"), pack.sections, 52);
+    await saveWprSnapshot(
+      db,
+      dorm.id,
+      office.id,
+      new Date("2026-07-29T12:00:00"),
+      overlayChecklistFillKpis(pack.sections, dormFillKpis),
+      52
+    );
   } catch (err) {
     console.warn("July WPR pack:", err instanceof Error ? err.message : err);
     const secs = await seedWprSections(db, dorm.id, dormWeekStart, new Date("2026-07-29T12:00:00"));
@@ -428,6 +443,33 @@ export async function seedArvindSitePack(db: PrismaClient) {
       ? "MPP is on file — convert to MS Project XML later to replace the cashflow S-curve."
       : "S-curve currently from Cashflow Dashboard planned vs actual.",
   };
+}
+
+async function countWeekFills(
+  db: PrismaClient,
+  projectId: string,
+  weekStart: Date,
+  weekEnd: Date,
+  checklistType: string
+) {
+  return db.checklistSubmission.count({
+    where: {
+      status: { in: ["Submitted", "Approved"] },
+      createdAt: { gte: weekStart, lte: weekEnd },
+      assignment: { projectId, template: { checklistType } },
+    },
+  });
+}
+
+async function signDemoQapWeek(db: PrismaClient, projectId: string, skipWeek?: string | null) {
+  const out = await db.qapActivity.updateMany({
+    where: {
+      projectId,
+      ...(skipWeek ? { NOT: { weekLabel: skipWeek } } : {}),
+    },
+    data: { contractorOk: true, pmcOk: true, status: "Closed" },
+  });
+  return out.count;
 }
 
 async function seedJulyQualityRegisters(

@@ -117,7 +117,7 @@ type Safety = {
 type Delay = { cause: string; category?: string; from?: string; to?: string; hoursLost?: number; eot?: "Yes" | "No" | "Review" };
 type Approval = { refNo: string; description?: string; raisedOn?: string | null; pendingWith?: string };
 type Issue = { description: string; severity?: "Critical" | "High" | "Medium" | "Low"; owner?: string };
-type Photo = { path: string; caption?: string; takenAt?: string | null; kind?: "photo" | "signature" | "pdf" };
+type Photo = { path: string; caption?: string; takenAt?: string | null; kind?: "photo" | "signature" | "pdf"; url?: string };
 
 type ScurveEntry = { date: string; label?: string; planned: number; actual: number };
 

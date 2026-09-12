@@ -399,6 +399,12 @@ export async function buildDprAutoFill(
   const safetyChecklists = checklistFillsToday.filter(
     (s) => s.assignment.template.checklistType === "Safety"
   ).length;
+  const drawingChecklists = checklistFillsToday.filter(
+    (s) => s.assignment.template.checklistType === "DrawingCheck"
+  ).length;
+  const siteChecklists = checklistFillsToday.filter(
+    (s) => s.assignment.template.checklistType === "SiteExecution"
+  ).length;
 
   const cubeSummary = (specimens: typeof cubesToday, phase: "7" | "28") => {
     const hits = specimens.filter((c) => (phase === "7" ? c.load7 || c.strength7 : c.load28 || c.strength28));
@@ -477,8 +483,8 @@ export async function buildDprAutoFill(
       figure: testingAgencyLog,
     },
     {
-      parameter: "QI / Safety checklists filled today",
-      figure: `${qiChecklists} QI · ${safetyChecklists} Safety`,
+      parameter: "QI / Safety / Drawing checklists filled today",
+      figure: `${qiChecklists} QI · ${safetyChecklists} Safety · ${drawingChecklists} Drawing · ${siteChecklists} Site`,
     },
     { parameter: "7-day cube result", figure: cubeSummary(cubesToday, "7") },
     { parameter: "28-day cube result", figure: cubeSummary(cubesToday, "28") },

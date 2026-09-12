@@ -27,6 +27,7 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
+import { directorySignsAsDpr, reportSignaturesFromDirectory } from "../services/directorySignatures.js";
 import {
   buildDprWorkbook,
   type DprHeader,
@@ -189,6 +190,13 @@ async function seedNewDpr(projectId: string, logDate: Date, discipline: string) 
   return buildDprAutoFill(projectId, logDate, discipline);
 }
 
+async function attachDirectorySigns(projectId: string, extras: DprExtras): Promise<DprExtras> {
+  if (extras.signatures?.length) return extras;
+  const signs = directorySignsAsDpr(await reportSignaturesFromDirectory(prisma, projectId));
+  if (!signs.length) return extras;
+  return { ...extras, signatures: signs };
+}
+
 // ═══════════════════════════════ GET current ═══════════════════════════════
 
 dprMakerRouter.get("/:projectId", async (req, res) => {
@@ -253,6 +261,7 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
     };
   }
 
+  extras = await attachDirectorySigns(projectId, extras);
   const lines: DprLine[] = existing ? JSON.parse(existing.linesJson || "[]") : seededLines;
 
   const snapForCharts = {
@@ -527,6 +536,7 @@ async function loadFullSnapshot(project: { name: string; code: string; endDate?:
     };
     extras = {};
   }
+  extras = await attachDirectorySigns(projectId, extras);
   const lines: DprLine[] = existing
     ? JSON.parse(existing.linesJson || "[]")
     : (await seedNewDpr(projectId, logDate, discipline)).lines;
@@ -658,7 +668,9 @@ dprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
   });
   if (!existing) return res.status(404).json({ error: "save the DPR draft first" });
 
-  const { header, extras } = splitExtras(existing.headerJson);
+  const split = splitExtras(existing.headerJson);
+  const header = split.header;
+  const extras = await attachDirectorySigns(projectId, split.extras);
   const lines: DprLine[] = JSON.parse(existing.linesJson || "[]");
   const buf = await buildDprWorkbook(
     {

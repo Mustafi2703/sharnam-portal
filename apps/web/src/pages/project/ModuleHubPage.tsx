@@ -31,14 +31,14 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
               eyebrow={`${meta.title} module · Tool desk`}
               title={meta.title}
               subtitle={formatUiText(
-                `${meta.desc} Open a tool in a new window to add rows, edit, and save. Close that window or use Back to hub to return here.`
+                `${meta.desc} Open a tool to add rows, edit, and save. Checklist fills open in a popup on this page.`
               )}
             />
           </div>
         </div>
         <div className="module-hub__workflow border-t border-line bg-sand/80 px-5 sm:px-6 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
           <span>
-            <strong className="text-ink font-semibold">1.</strong> Open tool (new window)
+            <strong className="text-ink font-semibold">1.</strong> Open tool
           </span>
           <span>
             <strong className="text-ink font-semibold">2.</strong> Add row / section
@@ -102,9 +102,13 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
                     Sheet → {t.sheet}
                   </p>
                 )}
-                <p className="mt-2 text-[11px] text-steel-muted">Saves to this project only · add / edit / save in the tool window</p>
+                <p className="mt-2 text-[11px] text-steel-muted">
+                  {t.fillFamily
+                    ? "Saves to this project only · fill log opens here — assignees fill in the popup"
+                    : "Saves to this project only · add / edit / save in the tool"}
+                </p>
                 <div className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold text-brand flex items-center justify-between gap-2">
-                  <span>{ready ? "Open placeholder" : "Open in new window"}</span>
+                  <span>{ready ? "Open placeholder" : t.fillFamily ? "Open fill log" : "Open tool"}</span>
                   <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">↗</span>
                 </div>
               </div>

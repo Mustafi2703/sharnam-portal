@@ -10,6 +10,7 @@ import { buildDprChartPack, loadDprScurveHistory } from "./dprCharts.js";
 import { renderDprSnapshotHtml } from "./dprSnapshotExport.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
 import { mockOneDrive } from "./mockOneDrive.js";
+import { directorySignsAsDpr, reportSignaturesFromDirectory } from "./directorySignatures.js";
 import {
   buildDprWorkbook,
   type DprEquipment,
@@ -287,10 +288,14 @@ export async function seedDprDemoDay(
   const disciplines: DprDemoDayResult["disciplines"] = [];
   const relBase = MODULE_TO_ISO_FOLDER.dpr;
 
+  const directorySigns = directorySignsAsDpr(await reportSignaturesFromDirectory(prisma, project.id));
+
   for (const discipline of DPR_DEMO_DISCIPLINES) {
     const auto = await buildDprAutoFill(project.id, logDate, discipline);
     const lines = applyDemoQuantities(auto.lines, discipline);
-    const signatures = await demoSignatures(project.code, discipline, logDate);
+    const signatures = directorySigns.length
+      ? directorySigns
+      : await demoSignatures(project.code, discipline, logDate);
 
     const header: DprHeader = {
       projectName: project.name,

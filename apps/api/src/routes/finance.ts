@@ -94,8 +94,18 @@ function safeRaFolder(raNumber: string): string {
   return `RA-${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 }
 
-function raBillFolder(raNumber: string): string {
-  return `${RA_ISO_ROOT}/${safeRaFolder(raNumber)}`;
+const RA_STAGE_FOLDERS: Record<string, string> = {
+  Submitted: "Submission",
+  Corrected: "Corrected",
+  Certified: "Certified",
+};
+
+function raStageFolderName(stage?: string | null): string {
+  return (stage && RA_STAGE_FOLDERS[stage]) || "Submission";
+}
+
+function raBillFolder(raNumber: string, stage?: string | null): string {
+  return `${RA_ISO_ROOT}/${safeRaFolder(raNumber)}/${raStageFolderName(stage)}`;
 }
 
 function extOf(file: Express.Multer.File): string {
@@ -111,9 +121,10 @@ async function saveRaBillFile(
   projectCode: string,
   raNumber: string,
   fileName: string,
-  buffer: Buffer
+  buffer: Buffer,
+  stage?: string | null
 ) {
-  const saved = await mockOneDrive.upload(projectCode, raBillFolder(raNumber), fileName, buffer);
+  const saved = await mockOneDrive.upload(projectCode, raBillFolder(raNumber, stage), fileName, buffer);
   const fileUrl = saved.url || `/uploads/onedrive/${projectCode}/${saved.path}`;
   return { ...saved, fileUrl, fileName };
 }
@@ -563,7 +574,8 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fie
       project.code,
       raNumber,
       `${Date.now()}-${f.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
-      f.buffer
+      f.buffer,
+      "Submitted"
     );
     attachmentRows.push({
       fileName: f.originalname,
@@ -779,7 +791,8 @@ financeRouter.post(
         bill.project.code,
         bill.raNumber,
         `${Date.now()}-${f.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
-        f.buffer
+        f.buffer,
+        "Submitted"
       );
       const row = await prisma.raBillAttachment.create({
         data: {
@@ -842,6 +855,16 @@ financeRouter.post(
 
     const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
     const revisionNo = existing + 1;
+    const priorStage = stage === "Corrected" ? "Submitted" : stage === "Certified" ? "Corrected" : null;
+    const source = priorStage
+      ? await prisma.raBillRevision.findFirst({
+          where: { raBillId: bill.id, stage: priorStage },
+          orderBy: { uploadedAt: "desc" },
+        })
+      : null;
+    const sourceTag = source
+      ? `Tagged to ${priorStage} R${source.revisionNo} (${source.fileName || "workbook"}) · original copy kept`
+      : "";
 
     let fileName: string | undefined;
     let fileUrl: string | undefined;
@@ -852,7 +875,8 @@ financeRouter.post(
         bill.project.code,
         bill.raNumber,
         `${stage}-R${revisionNo}-${Date.now()}${extOf(req.file)}`,
-        req.file.buffer
+        req.file.buffer,
+        stage
       );
       fileName = req.file.originalname;
       storagePath = saved.path;
@@ -870,7 +894,7 @@ financeRouter.post(
         storagePath: storagePath || null,
         sharePointUrl: sharePointUrl || null,
         amountAtStage: req.body.amountAtStage != null && req.body.amountAtStage !== "" ? num(req.body.amountAtStage) : null,
-        notes: s(req.body.notes) || null,
+        notes: s(req.body.notes) || sourceTag || null,
         uploadedById: req.user!.id,
       },
     });

@@ -104,7 +104,11 @@ export function renderDprSnapshotHtml(opts: {
     sections.push({
       heading: "Sign-off",
       headers: ["Role", "Captured", "Path"],
-      rows: opts.signatures.map((s) => [s.caption || "Signer", fmtDate(s.takenAt), s.path]),
+      rows: opts.signatures.map((s) => [
+        s.caption || "Signer",
+        fmtDate(s.takenAt),
+        s.url ? `<img src="${s.url}" alt="${s.caption || "sign"}" style="height:36px;max-width:140px;object-fit:contain;" />` : s.path,
+      ]),
     });
   }
 

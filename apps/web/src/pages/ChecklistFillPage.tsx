@@ -15,6 +15,7 @@ import {
   type ChecklistFillMeta,
 } from "../components/ChecklistFillForm";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
+import { closeEmbedOrWindow, notifyChecklistFilled } from "../lib/inPageOverlay";
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
 /** Popup fill for Quality, Safety, site, activity, and drawing-check assignments. */
@@ -22,7 +23,9 @@ export default function ChecklistFillPage() {
   const { id: projectId, assignmentId } = useParams();
   const [search] = useSearchParams();
   const family = search.get("family") || "SiteExecution";
+  const resumeSubmissionId = search.get("submission") || "";
   const { token, user } = useAuth();
+  const [editingSubmissionId, setEditingSubmissionId] = useState<string | null>(null);
   const [assignment, setAssignment] = useState<any>(null);
   const [responses, setResponses] = useState<Record<string, ChecklistFillLine>>({});
   const [fillMeta, setFillMeta] = useState<ChecklistFillMeta>(emptyChecklistMeta);
@@ -54,9 +57,18 @@ export default function ChecklistFillPage() {
       init[i.id] = emptyChecklistLine();
     });
 
-    const draft = a.myDraft;
+    let prior =
+      (resumeSubmissionId && (a.submissions || []).find((s: { id: string }) => s.id === resumeSubmissionId)) ||
+      a.myDraft ||
+      a.latestFill ||
+      null;
+    if (resumeSubmissionId && (!prior || prior.id !== resumeSubmissionId)) {
+      prior = await api<any>(`/api/checklist/submissions/${resumeSubmissionId}`, { token }).catch(() => prior);
+    }
+    const draft = prior;
     if (draft) {
-      setDraftId(draft.id);
+      setDraftId(a.myDraft?.id || (draft.status === "Draft" ? draft.id : null));
+      setEditingSubmissionId(draft.id);
       setRemarks(draft.remarks || "");
       if (draft.drawingId) setDrawingId(draft.drawingId);
       if (draft.revisionId) setRevisionId(draft.revisionId);
@@ -88,6 +100,7 @@ export default function ChecklistFillPage() {
       });
     } else {
       setDraftId(null);
+      setEditingSubmissionId(null);
       setFillMeta(emptyChecklistMeta());
     }
     setResponses(init);
@@ -135,6 +148,7 @@ export default function ChecklistFillPage() {
     const revNo = selectedRevisionNumber();
     if (revNo) fd.append("revisionNumber", revNo);
     if (status === "Submitted") fd.append("status", "Submitted");
+    if (editingSubmissionId) fd.append("submissionId", editingSubmissionId);
     if (photos.length) photos.forEach((f) => fd.append("photos", f));
     if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
     if (pmcSignatureFile) fd.append("signaturePmc", pmcSignatureFile, pmcSignatureFile.name);
@@ -216,7 +230,11 @@ export default function ChecklistFillPage() {
         body: fd,
       });
       const spNote = saved.sharePointExports?.length > 0 ? " Branded forms saved to SharePoint." : "";
-      setMsg(`Submitted — ${answered}/${items.length} answered.${spNote}`);
+      const weekNote = saved.week?.nextWeek
+        ? ` Next week ${saved.week.nextWeek} is ready on Quality / QAP dashboards.`
+        : "";
+      setMsg(`Submitted — ${answered}/${items.length} answered.${spNote}${weekNote}`);
+      if (saved.id) setEditingSubmissionId(saved.id);
       const submissionId = saved?.id;
       if (submissionId) {
         try {
@@ -228,14 +246,7 @@ export default function ChecklistFillPage() {
       }
       setPhotos([]);
       setDraftId(null);
-      try {
-        window.opener?.postMessage(
-          { type: "sharnam-checklist-filled", projectId, assignmentId, family },
-          window.location.origin
-        );
-      } catch {
-        /* ignore */
-      }
+      notifyChecklistFilled({ projectId, assignmentId, family });
       setDone(true);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -255,11 +266,11 @@ export default function ChecklistFillPage() {
             <Badge tone="ok">Submitted</Badge>
             <h1 className="font-display text-2xl text-ink">Form complete</h1>
             <p className="text-steel-muted text-sm max-w-md mx-auto">
-              {assignment?.template?.name || familyLabel} is saved. You can close this window and return to the register.
+              {assignment?.template?.name || familyLabel} is saved on the fill log and ISO drive. Counts update on Quality, Safety, and Progress dashboards. The next week sheet is ready.
             </p>
             {msg ? <p className="text-sm text-brand-dark">{msg}</p> : null}
-            <Button type="button" onClick={() => window.close()}>
-              Close window
+            <Button type="button" onClick={() => closeEmbedOrWindow()}>
+              Close
             </Button>
           </Card>
         </main>

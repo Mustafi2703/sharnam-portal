@@ -24,6 +24,8 @@ import {
 } from "../workspaces";
 import { resolveProjectWorkspace, isProjectModuleActive } from "../lib/projectWorkspace";
 import { isToolWindow } from "../lib/moduleToolWindow";
+import { isEmbedView } from "../lib/inPageOverlay";
+import { InPageOverlayHost } from "./InPageOverlayHost";
 import { api } from "../api";
 import { downloadAuthFile, exportPaths, type ExportModule } from "../lib/downloadReport";
 import {
@@ -365,6 +367,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const deskFullBleed = inProject || inCrm;
   const deskWideCanvas = inMaster;
   const toolWin = isToolWindow(location.search);
+  const embed = isEmbedView(location.search);
   const [projects, setProjects] = useState<Proj[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [hidden, setHidden] = useState(() => {
@@ -473,6 +476,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }
 
+  if (embed) {
+    return (
+      <div className="app-frame app-frame--embed">
+        <div className="app-frame__main">
+          <main className="app-frame__scroll app-frame__scroll--project">
+            <div className="w-full max-w-none h-full min-h-0 flex flex-col">{children}</div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-frame ${hidden ? "is-hidden" : ""} ${toolWin ? "app-frame--tool-win" : ""}`}>
       {!toolWin && (
@@ -490,8 +505,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="app-frame__main">
-        {!toolWin && (
-        <header className={`app-topbar ${inProject ? "app-topbar--project" : ""}`}>
+        <header className={`app-topbar ${inProject ? "app-topbar--project" : ""} ${toolWin ? "md:hidden" : ""}`}>
           <div className={`flex items-center gap-2.5 px-3 sm:px-4 ${inProject ? "h-11" : "h-[52px]"}`}>
             <button
               type="button"
@@ -609,7 +623,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        )}
 
         <main
           className={`app-frame__scroll ${deskFullBleed ? "app-frame__scroll--project" : ""} ${
@@ -630,7 +643,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {drawerOpen && !toolWin && (
+      {drawerOpen && (
         <div className="app-mobile-drawer md:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
           <button
             type="button"
@@ -658,6 +671,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </aside>
         </div>
       )}
+      <InPageOverlayHost />
     </div>
   );
 }

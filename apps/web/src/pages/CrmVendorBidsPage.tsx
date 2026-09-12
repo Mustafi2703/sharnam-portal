@@ -9,6 +9,7 @@ import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { openChecklistFillWindow, openFamilyChecklistFill } from "../lib/checklistFillWindow";
 
 type BidSlot = {
   id: string;
@@ -489,12 +490,15 @@ export default function CrmVendorBidsPage() {
                         {project?.code || a.projectId} · {a.checklistType} · {a.latestStatus}
                       </span>
                     </span>
-                    <Link
-                      to={`/projects/${a.projectId}/${a.checklistType === "DrawingCheck" ? "hub/comms" : "hub/quality"}`}
+                    <button
+                      type="button"
                       className="font-semibold text-brand"
+                      onClick={() =>
+                        openChecklistFillWindow(a.projectId, a.id, a.checklistType || "SiteExecution", { resumeDraft: true })
+                      }
                     >
-                      Open fill →
-                    </Link>
+                      Open fill
+                    </button>
                   </li>
                 );
               })}
@@ -515,9 +519,19 @@ export default function CrmVendorBidsPage() {
                         {project?.code || r.projectId} · {r.rfiKind} · {r.status}
                       </span>
                     </span>
-                    <Link to={`/projects/${r.projectId}/rfis`} className="font-semibold text-brand">
-                      Respond →
-                    </Link>
+                    <button
+                      type="button"
+                      className="font-semibold text-brand"
+                      onClick={() => {
+                        if (r.linkedAssignmentId) {
+                          openChecklistFillWindow(r.projectId, r.linkedAssignmentId, r.rfiKind, { resumeDraft: true });
+                          return;
+                        }
+                        void openFamilyChecklistFill(r.projectId, r.rfiKind, token, { preferAssignmentFill: true });
+                      }}
+                    >
+                      Open fill
+                    </button>
                   </li>
                 );
               })}
