@@ -5,7 +5,7 @@ import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableSelect } from "./SearchableSelect";
 import { VendorManageActions } from "./VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "./VendorQuickEditModal";
-import { VENDOR_PARTY_TYPES, type VendorPartyType } from "../lib/vendorTypes";
+import { formatPartyType, VENDOR_PARTY_TYPES, type VendorPartyType } from "../lib/vendorTypes";
 
 export type SetupDeskVendor = {
   id: string;
@@ -128,9 +128,9 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
     <Card className="!p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-semibold text-sm">Vendors on this project</h3>
+          <h3 className="font-semibold text-sm">Vendors / contractors on this project</h3>
           <p className="text-xs text-steel-muted mt-0.5">
-            Add consultants and contractors here even if you never open a bid. Edit or delete whenever needed.
+            Vendor and contractor are the same company type. Add them here even if you never open a bid. Edit or delete whenever needed.
           </p>
         </div>
         <Link to="/crm/directory/vendors" className="text-xs font-semibold text-brand">
@@ -149,7 +149,7 @@ export function ProjectVendorsSetupDesk({ projectId, token, catalog, assigned, o
                   {v.email ? ` · ${v.email}` : " · no email yet"}
                 </div>
               </div>
-              <Badge tone="brand">{v.partyType}</Badge>
+              <Badge tone="brand">{formatPartyType(v.partyType)}</Badge>
             </div>
             <VendorManageActions
               vendor={{ id: v.vendorId, name: v.name }}

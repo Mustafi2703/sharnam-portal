@@ -14,10 +14,16 @@ vendorsRouter.use(requireAuth);
 
 vendorsRouter.get("/", async (req, res) => {
   const partyType = typeof req.query.partyType === "string" ? req.query.partyType : undefined;
+  const partyWhere =
+    partyType === "Contractor" || partyType === "Vendor"
+      ? { partyType: { in: ["Contractor", "Vendor"] } }
+      : partyType
+        ? { partyType }
+        : {};
   const vendors = await prisma.vendor.findMany({
     where: {
       isActive: true,
-      ...(partyType ? { partyType } : {}),
+      ...partyWhere,
     },
     include: { _count: { select: { projects: true } } },
     orderBy: [{ partyType: "asc" }, { name: "asc" }],
@@ -26,9 +32,12 @@ vendorsRouter.get("/", async (req, res) => {
 });
 
 vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const partyType = ["Contractor", "Vendor", "Client", "Consultant", "PMC", "Designer"].includes(req.body.partyType)
-    ? req.body.partyType
-    : "Vendor";
+  const rawParty = String(req.body.partyType || "");
+  const partyType = rawParty === "Vendor" || rawParty === "Contractor"
+    ? "Contractor"
+    : ["Client", "Consultant", "PMC", "Designer"].includes(rawParty)
+      ? rawParty
+      : "Contractor";
   const v = await prisma.vendor.create({
     data: {
       name: req.body.name,
@@ -65,7 +74,9 @@ vendorsRouter.post("/seed-bid-catalog", requireRoles("admin", "office"), async (
 });
 
 vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const v = await prisma.vendor.update({ where: { id: req.params.id }, data: req.body });
+  const data = { ...req.body };
+  if (data.partyType === "Vendor") data.partyType = "Contractor";
+  const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
   res.json(v);
 });
 

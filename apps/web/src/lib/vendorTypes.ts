@@ -1,7 +1,26 @@
+/** Vendor and contractor are the same party on SPDC jobs. */
+export const VENDOR_CONTRACTOR_TYPES = ["Contractor", "Vendor"] as const;
+
+export function isVendorOrContractor(partyType?: string | null) {
+  return !partyType || partyType === "Contractor" || partyType === "Vendor";
+}
+
+export function formatPartyType(partyType?: string | null) {
+  if (isVendorOrContractor(partyType)) return "Vendor / contractor";
+  if (partyType === "PMC") return "PMC / partner firm";
+  if (partyType === "Designer") return "Designer / architect";
+  return partyType || "Vendor / contractor";
+}
+
+/** Stored type for a new vendor/contractor row. */
+export function normalizeVendorPartyType(partyType?: string | null) {
+  if (partyType === "Vendor") return "Contractor";
+  return partyType || "Contractor";
+}
+
 /** Procore-style vendor / party types — company directory (global). */
 export const VENDOR_PARTY_TYPES = [
-  { value: "Contractor", label: "Contractor" },
-  { value: "Vendor", label: "Vendor / supplier" },
+  { value: "Contractor", label: "Vendor / contractor" },
   { value: "Client", label: "Client" },
   { value: "Consultant", label: "Consultant" },
   { value: "PMC", label: "PMC / partner firm" },
@@ -50,7 +69,7 @@ export type VendorFormState = {
 
 export const EMPTY_VENDOR_FORM: VendorFormState = {
   name: "",
-  partyType: "Vendor",
+  partyType: "Contractor",
   trade: "",
   primaryContactName: "",
   businessPhone: "",
@@ -71,9 +90,10 @@ export const EMPTY_VENDOR_FORM: VendorFormState = {
 };
 
 export function vendorToForm(v: Partial<VendorFormState> & { name?: string; partyType?: string }): VendorFormState {
-  const partyType = VENDOR_PARTY_TYPES.some((p) => p.value === v.partyType)
-    ? (v.partyType as VendorPartyType)
-    : "Vendor";
+  const raw = v.partyType === "Vendor" ? "Contractor" : v.partyType;
+  const partyType = VENDOR_PARTY_TYPES.some((p) => p.value === raw)
+    ? (raw as VendorPartyType)
+    : "Contractor";
   return {
     ...EMPTY_VENDOR_FORM,
     ...v,

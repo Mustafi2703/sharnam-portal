@@ -10,6 +10,7 @@ import {
   EMPTY_VENDOR_FORM,
   STAKEHOLDER_CONSULTANT_TRADES,
   VENDOR_PARTY_TYPES,
+  formatPartyType,
   vendorToForm,
   type VendorFormState,
   type VendorPartyType,
@@ -27,8 +28,8 @@ const TAB_META: Record<
   { title: string; subtitle: string; partyTypes: VendorPartyType[]; defaultParty: VendorPartyType; loginRole?: string }
 > = {
   vendors: {
-    title: "Vendor & contractor directory",
-    subtitle: "Tag R2 BOQ disciplines · assign to projects · issue contractor portal logins.",
+    title: "Vendor / contractor directory",
+    subtitle: "Same company type — tag R2 BOQ disciplines · assign to projects · issue portal logins.",
     partyTypes: ["Contractor", "Vendor"],
     defaultParty: "Contractor",
   },
@@ -187,7 +188,7 @@ export function DirectoryCompaniesPanel({
               <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => setSelectedId(r.id)}>
                 <div className="font-medium">{r.name}</div>
                 <div className="text-xs text-steel-muted mt-0.5">
-                  {r.partyType}
+                  {formatPartyType(r.partyType)}
                   {r.email ? ` · ${r.email}` : ""}
                   {r._count?.projects ? ` · ${r._count.projects} project(s)` : ""}
                 </div>

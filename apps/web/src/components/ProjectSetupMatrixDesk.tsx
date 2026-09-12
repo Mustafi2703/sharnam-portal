@@ -372,8 +372,7 @@ export function ProjectSetupMatrixDesk({
                     <option value="Client">Client</option>
                     <option value="Consultant">Consultant</option>
                     <option value="PMC">PMC</option>
-                    <option value="Contractor">Contractor</option>
-                    <option value="Vendor">Vendor / supplier</option>
+                    <option value="Contractor">Vendor / contractor</option>
                     <option value="Designer">Designer</option>
                   </Select>
                 )}

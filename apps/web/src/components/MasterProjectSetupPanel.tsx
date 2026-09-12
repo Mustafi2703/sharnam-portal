@@ -8,6 +8,7 @@ import { DirectoryMySignaturePanel } from "./DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "./DirectorySignOffRegister";
 import { ProjectSetupMatrixDesk } from "./ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "./SetupPartyMultiPick";
+import { formatPartyType } from "../lib/vendorTypes";
 import { VendorManageActions } from "./VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "./VendorQuickEditModal";
 
@@ -254,7 +255,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
 
         <Card className="!p-4 space-y-3">
           <div className="flex justify-between items-center gap-2">
-            <h3 className="font-semibold text-sm">Project vendors / contractors</h3>
+            <h3 className="font-semibold text-sm">Vendors / contractors</h3>
             <Link to="/master/vendors" className="text-xs font-semibold text-brand">
               Global directory →
             </Link>
@@ -264,7 +265,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               <li key={v.id} className="py-2 space-y-2">
                 <div className="flex justify-between gap-2">
                   <span className="font-medium">{v.name}</span>
-                  <Badge tone="brand">{v.partyType}</Badge>
+                  <Badge tone="brand">{formatPartyType(v.partyType)}</Badge>
                 </div>
                 <div className="text-xs text-steel-muted">{v.trade || v.tradeRole || "—"}</div>
                 {v.email && <div className="text-xs font-mono">{v.email}</div>}
@@ -342,7 +343,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
             />
             <SetupPartyMultiPick
               token={token}
-              title="Add contractor (email required)"
+              title="Add vendor / contractor"
               kind="Contractor"
               vendors={catalogVendors.length ? catalogVendors : allVendors}
               selectedIds={contractorIds}

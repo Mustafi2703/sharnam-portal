@@ -5,7 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { VendorManageActions } from "../../components/VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
-import { EMPTY_VENDOR_FORM, VENDOR_PARTY_TYPES, type VendorPartyType } from "../../lib/vendorTypes";
+import { EMPTY_VENDOR_FORM, formatPartyType, VENDOR_PARTY_TYPES, type VendorPartyType } from "../../lib/vendorTypes";
 
 export default function VendorsPage() {
   const { id } = useParams();
@@ -33,7 +33,7 @@ export default function VendorsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Project directory"
-        title="Vendors on this project"
+        title="Vendors / contractors on this project"
         subtitle="Assign companies from the global directory, or create a new company and assign a trade role here."
         actions={
           <Link to="/master/vendors" className="text-sm font-semibold text-brand">
@@ -102,7 +102,7 @@ export default function VendorsPage() {
               <li key={a.id} className="px-4 py-3 text-sm space-y-2">
                 <div className="flex justify-between gap-2">
                   <span className="font-medium">{a.vendor.name}</span>
-                  <Badge tone="neutral">{a.vendor.partyType}</Badge>
+                  <Badge tone="neutral">{formatPartyType(a.vendor.partyType)}</Badge>
                 </div>
                 <div className="text-steel-muted text-xs">
                   {a.tradeRole || a.vendor.trade || "—"} · {a.vendor.city || "—"}
@@ -131,7 +131,7 @@ export default function VendorsPage() {
                 <div className="min-w-0">
                   <div className="font-medium">{v.name}</div>
                   <div className="text-xs text-steel-muted">
-                    {v.partyType} · {v.trade || "General"} · {v.primaryContactName || "—"}
+                    {formatPartyType(v.partyType)} · {v.trade || "General"} · {v.primaryContactName || "—"}
                   </div>
                 </div>
                 {canEdit && (

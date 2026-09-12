@@ -72,7 +72,7 @@ export function SetupPartyMultiPick({
       onChange([...selectedIds, created.id]);
       setForm(EMPTY);
       setOpen(false);
-      onMsg(`${created.name} added to ${kind === "Consultant" ? "consultants" : "contractors"} and selected.`);
+      onMsg(`${created.name} added to ${kind === "Consultant" ? "consultants" : "vendors / contractors"} and selected.`);
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Could not add company");
     } finally {
@@ -95,15 +95,15 @@ export function SetupPartyMultiPick({
       <div className="flex items-center justify-between gap-2">
         <h4 className="font-semibold text-sm">{title}</h4>
         <Button type="button" variant="secondary" className="!text-xs" disabled={busy || saving} onClick={() => setOpen((v) => !v)}>
-          {open ? "Cancel" : `Add new ${kind === "Consultant" ? "consultant" : "contractor"}`}
+          {open ? "Cancel" : `Add new ${kind === "Consultant" ? "consultant" : "vendor / contractor"}`}
         </Button>
       </div>
       <SearchableCheckboxList
         items={items}
         selectedIds={selectedIds}
         onChange={onChange}
-        placeholder={`Search ${kind === "Consultant" ? "consultants" : "contractors"}…`}
-        emptyMessage={`No ${kind === "Consultant" ? "consultants" : "contractors"} in the directory yet — add one below.`}
+        placeholder={`Search ${kind === "Consultant" ? "consultants" : "vendors / contractors"}…`}
+        emptyMessage={`No ${kind === "Consultant" ? "consultants" : "vendors / contractors"} in the directory yet — add one below.`}
         maxHeightClass="max-h-40"
       />
       {open && (
@@ -119,7 +119,7 @@ export function SetupPartyMultiPick({
             onChange={(e) => setForm({ ...form, trade: e.target.value })}
           />
           <Button type="button" className="sm:col-span-2" disabled={saving || busy} onClick={() => void addNew()}>
-            {saving ? "Adding…" : `Add ${kind === "Consultant" ? "consultant" : "contractor"} to this project`}
+            {saving ? "Adding…" : `Add ${kind === "Consultant" ? "consultant" : "vendor / contractor"} to this project`}
           </Button>
         </div>
       )}

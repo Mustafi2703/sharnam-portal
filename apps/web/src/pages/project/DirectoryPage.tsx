@@ -7,7 +7,7 @@ import { SearchableSelect } from "../../components/SearchableSelect";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
-import { STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
+import { formatPartyType, STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
 
@@ -20,10 +20,10 @@ const USER_TOOLS: {
   { key: "Office", label: "Sharnam Office", party: "PMC", roles: ["admin", "office", "employee"] },
   { key: "Site", label: "Site", party: "Site", roles: ["site_employee"] },
   { key: "Client", label: "Client", party: "Client", roles: ["client"] },
-  { key: "Contractor", label: "Contractor", party: "Contractor", roles: [] },
+  { key: "Contractor", label: "Vendor / contractor", party: "Contractor", roles: [] },
 ];
 
-const PARTY_TYPES = ["PMC", "Contractor", "Client", "Consultant", "Designer", "Vendor"] as const;
+const PARTY_TYPES = ["PMC", "Contractor", "Client", "Consultant", "Designer"] as const;
 
 /** Project directory — four user tools: Office · Site · Client · Contractor */
 export default function DirectoryPage() {
@@ -169,7 +169,7 @@ export default function DirectoryPage() {
       <PageHeader
         eyebrow="Directory · Master tools"
         title="Four user kinds"
-        subtitle="Sharnam Office · Site · Client · Contractor — assign people and parties for matrix, RFIs, and fills."
+        subtitle="Sharnam Office · Site · Client · Vendor / contractor — assign people and parties for matrix, RFIs, and fills."
         actions={
           <div className="flex flex-wrap gap-3">
             <Link to="/master/vendors" className="text-sm font-semibold text-brand">
@@ -257,7 +257,7 @@ export default function DirectoryPage() {
                 <div className="text-[10px] text-steel-muted">{r.vendor?.email || r.email || ""}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="brand">{r.vendor?.partyType || r.partyType}</Badge>
+                <Badge tone="brand">{formatPartyType(r.vendor?.partyType || r.partyType)}</Badge>
                 {canEdit && (r.vendor || r.id) ? (
                   <VendorManageActions
                     vendor={{ id: r.vendor?.id || r.vendorId || r.id, name: r.vendor?.name || r.name }}
@@ -298,7 +298,7 @@ export default function DirectoryPage() {
               >
                 {PARTY_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {formatPartyType(t)}
                   </option>
                 ))}
               </Select>

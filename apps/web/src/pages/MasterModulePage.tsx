@@ -36,7 +36,7 @@ type Project = {
 const DIRECTORY_TABS = [
   { id: "people", label: "People & portal" },
   { id: "clients", label: "Clients" },
-  { id: "vendors", label: "Vendors & contractors" },
+  { id: "vendors", label: "Vendors / contractors" },
   { id: "stakeholders", label: "Stakeholders" },
   { id: "packages", label: "Work packages" },
   { id: "projects", label: "Projects" },

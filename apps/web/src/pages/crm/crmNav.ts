@@ -43,7 +43,7 @@ export const CRM_SECTIONS: CrmSection[] = [
     id: "directories",
     label: "Directories",
     tools: [
-      { to: "directory/vendors", label: "Vendors", subtitle: "Contractors & suppliers for comparative packages." },
+      { to: "directory/vendors", label: "Vendors / contractors", subtitle: "Same company type — assign to projects or comparative packages." },
       { to: "directory/clients", label: "Clients", subtitle: "Owner organisations · portal logins." },
       { to: "directory/stakeholders", label: "Stakeholders", subtitle: "Consultants, designers, and PMC partners." },
       { to: "directory/people", label: "People & access", subtitle: "Office, site, vendor, and client portal accounts." },
