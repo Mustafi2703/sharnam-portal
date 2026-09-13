@@ -44,6 +44,8 @@ export function CoordinationPage() {
   const docRef = useRef<HTMLInputElement>(null);
   const [markupFile, setMarkupFile] = useState<File | null>(null);
   const [markupOpen, setMarkupOpen] = useState(false);
+  const [markupRevisionId, setMarkupRevisionId] = useState<string | null>(null);
+  const [markupLabel, setMarkupLabel] = useState("");
   const canEdit =
     user?.role === "admin" ||
     user?.role === "office" ||
@@ -161,25 +163,48 @@ export function CoordinationPage() {
     }
   }
 
-  async function openCoordinationMarkup() {
-    if (!linkedRevision?.id) {
-      setMsg("Link a drawing with PDF first.");
+  function revisionHasPdf(rev: { pdfFileUrl?: string | null; fileUrl?: string | null; fileName?: string | null } | null) {
+    if (!rev) return false;
+    return !!(
+      rev.pdfFileUrl ||
+      (drawingFileKind(rev.fileName || rev.fileUrl) === "pdf" && rev.fileUrl)
+    );
+  }
+
+  async function openMarkupForDrawing(drawing: any) {
+    const rev = currentDrawingRevision(drawing);
+    if (!rev?.id) {
+      setMsg("Upload a GFC PDF on this sheet first.");
       return;
     }
     const pdfRef =
-      linkedRevision.pdfFileUrl ||
-      (drawingFileKind(linkedRevision.fileName || linkedRevision.fileUrl) === "pdf" ? linkedRevision.fileUrl : null);
+      rev.pdfFileUrl ||
+      (drawingFileKind(rev.fileName || rev.fileUrl) === "pdf" ? rev.fileUrl : null);
     if (!pdfRef) {
-      setMsg("No PDF on linked revision.");
+      setMsg("No PDF on this drawing revision — markup is for the coordination PDF.");
       return;
     }
-    const res = await fetch(resolveDrawingFileUrl(pdfRef), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error("Could not load PDF");
-    const blob = await res.blob();
-    setMarkupFile(new File([blob], linkedRevision.pdfFileName || "drawing.pdf", { type: blob.type || "application/pdf" }));
-    setMarkupOpen(true);
+    try {
+      const res = await fetch(resolveDrawingFileUrl(pdfRef), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Could not load PDF");
+      const blob = await res.blob();
+      setMarkupFile(new File([blob], rev.pdfFileName || "drawing.pdf", { type: blob.type || "application/pdf" }));
+      setMarkupRevisionId(rev.id);
+      setMarkupLabel(drawing.drawingNumber || "drawing");
+      setMarkupOpen(true);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open markup");
+    }
+  }
+
+  async function openCoordinationMarkup() {
+    if (!linkedDrawing) {
+      setMsg("Open a coordination issue that is linked to a GFC drawing first.");
+      return;
+    }
+    await openMarkupForDrawing(linkedDrawing);
   }
 
   async function uploadCoordDocument(issueId: string, file: File) {
@@ -195,7 +220,7 @@ export function CoordinationPage() {
       <PageHeader
         eyebrow="Drawings module"
         title="Design coordination"
-        subtitle="Every GFC sheet has its own coordination workspace — log clashes, mark up the PDF, follow up, then escalate to RFI."
+        subtitle="Every GFC sheet has its own coordination workspace — open the drawing on an issue, mark up the PDF, follow up, then escalate to RFI."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="warn">{openCount} open</Badge>
@@ -221,10 +246,17 @@ export function CoordinationPage() {
           )}
         </div>
         {focusDrawing && (
-          <p className="text-sm font-medium">
-            Working on {focusDrawing.drawingNumber} · {focusDrawing.title}
-            {sheetRows.length ? ` — ${sheetRows.length} issue(s)` : " — no issues yet, log the first below"}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">
+              Working on {focusDrawing.drawingNumber} · {focusDrawing.title}
+              {sheetRows.length ? ` — ${sheetRows.length} issue(s)` : " — no issues yet, log the first below"}
+            </p>
+            {canEdit && revisionHasPdf(currentDrawingRevision(focusDrawing)) && (
+              <Button type="button" onClick={() => void openMarkupForDrawing(focusDrawing)}>
+                Markup this PDF
+              </Button>
+            )}
+          </div>
         )}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
           {drawings.map((d) => {
@@ -247,6 +279,27 @@ export function CoordinationPage() {
                     ? `${open} open · ${issues.length} logged`
                     : "Needs coordination — log first issue"}
                 </div>
+                {canEdit && revisionHasPdf(currentDrawingRevision(d)) && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="mt-2 inline-flex rounded border border-brand/40 bg-paper px-2 py-0.5 text-[11px] font-semibold text-brand"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSearchParams({ drawingId: d.id });
+                      void openMarkupForDrawing(d);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSearchParams({ drawingId: d.id });
+                      void openMarkupForDrawing(d);
+                    }}
+                  >
+                    Markup
+                  </span>
+                )}
               </button>
             );
           })}
@@ -272,7 +325,11 @@ export function CoordinationPage() {
             </Link>{" "}
             ({drawingsWithFiles.length} of {drawings.length} drawings have a PDF/DWG).
           </li>
-          <li>Log an issue and pick <strong>Linked GFC drawing</strong> from the dropdown — that drives the PDF preview on the right.</li>
+          <li>Log an issue and pick <strong>Linked GFC drawing</strong> — that opens the PDF on the right for this clash.</li>
+          <li>
+            With the drawing open on the issue, tap <strong>Markup</strong> to cloud and note on that PDF. Markup is only here —
+            not on GFC upload.
+          </li>
           <li>Select an issue in the register → use <strong>Link / change drawing</strong> if you forgot to link when logging.</li>
           <li>
             <strong>Close</strong> when resolved on site, or <strong>Escalate to Ask RFI</strong> for formal consultant response.
@@ -458,6 +515,11 @@ export function CoordinationPage() {
                       Full-screen PDF
                     </Button>
                   )}
+                  {canEdit && revisionHasPdf(linkedRevision) && (
+                    <Button type="button" onClick={() => void openCoordinationMarkup()}>
+                      Markup
+                    </Button>
+                  )}
                   {canEdit && selected.status === "Open" && (
                     <>
                       <Button
@@ -481,11 +543,6 @@ export function CoordinationPage() {
                       <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
                         Open RFI compose
                       </Button>
-                      {linkedRevision?.id && (
-                        <Button type="button" variant="secondary" className="!text-xs" onClick={() => void openCoordinationMarkup()}>
-                          Mark up PDF
-                        </Button>
-                      )}
                       <Button type="button" variant="secondary" className="!text-xs" onClick={() => docRef.current?.click()}>
                         Attach DMS file
                       </Button>
@@ -576,13 +633,25 @@ export function CoordinationPage() {
           )}
 
           {revisionPreview?.pdf || revisionPreview?.dwg || drawingPreview ? (
-            <DrawingFileViewer
-              {...(revisionPreview?.pdf || revisionPreview?.dwg
-                ? { revision: revisionPreview }
-                : { preview: drawingPreview! })}
-              variant="inline"
-              className="flex-1 min-h-[360px]"
-            />
+            <div className="flex flex-col gap-2 flex-1 min-h-[360px]">
+              {canEdit && revisionHasPdf(linkedRevision) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand/30 bg-brand-soft/40 px-3 py-2">
+                  <p className="text-xs text-steel-muted">
+                    Mark clouds and notes on this issue's GFC PDF. Saved pages stay on the revision.
+                  </p>
+                  <Button type="button" onClick={() => void openCoordinationMarkup()}>
+                    Markup PDF
+                  </Button>
+                </div>
+              )}
+              <DrawingFileViewer
+                {...(revisionPreview?.pdf || revisionPreview?.dwg
+                  ? { revision: revisionPreview }
+                  : { preview: drawingPreview! })}
+                variant="inline"
+                className="flex-1 min-h-[360px]"
+              />
+            </div>
           ) : (
             <Card className="flex-1 grid place-items-center text-center p-8">
               <div className="text-sm text-steel-muted max-w-md space-y-3">
@@ -617,13 +686,13 @@ export function CoordinationPage() {
 
       {markupOpen &&
         markupFile &&
-        linkedRevision?.id &&
+        markupRevisionId &&
         createPortal(
           <div className="markup-modal" role="dialog" aria-modal="true">
             <div className="markup-modal__backdrop" onClick={() => setMarkupOpen(false)} />
             <div className="markup-modal__panel max-w-4xl">
               <div className="markup-modal__head">
-                <span>Design coordination markup — {linkedDrawing?.drawingNumber}</span>
+                <span>Design coordination markup — {markupLabel}</span>
                 <button type="button" className="markup-modal__close" onClick={() => setMarkupOpen(false)}>
                   ×
                 </button>
@@ -631,13 +700,14 @@ export function CoordinationPage() {
               <div className="markup-modal__body">
                 <PdfMarkup
                   src={markupFile}
-                  saveLabel="Save markup to linked revision"
+                  saveLabel="Save markup to this drawing"
                   onCancel={() => setMarkupOpen(false)}
                   onSave={async (pages: MarkupPageDraft[]) => {
-                    if (!linkedRevision?.id) return;
-                    await uploadDrawingMarkupPages(linkedRevision.id, pages, token, "Design coordination markup");
+                    if (!markupRevisionId) return;
+                    await uploadDrawingMarkupPages(markupRevisionId, pages, token, "Design coordination markup");
                     setMarkupOpen(false);
-                    setMsg(`${pages.length} markup page(s) saved on ${linkedDrawing?.drawingNumber}`);
+                    setMsg(`${pages.length} markup page(s) saved on ${markupLabel}`);
+                    await load();
                   }}
                 />
               </div>

@@ -58,10 +58,9 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Drawing & GFC Drawing Log",
     },
     {
-      to: "drawings",
-      query: "markup=1",
+      to: "drawings/coordination",
       label: "Markup",
-      blurb: "Open a sheet, then Markup on upload or a revision to draw clouds and notes.",
+      blurb: "Open a GFC sheet on a coordination issue, then Markup the PDF with clouds and notes.",
     },
     {
       to: "drawings/checklist-master",
