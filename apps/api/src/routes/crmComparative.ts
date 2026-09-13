@@ -44,6 +44,22 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 
 crmComparativeRouter.use(requireAuth);
 
+async function deleteBidPackageAndSheets(id: string) {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id },
+    include: { vendorBoqs: { select: { sheetId: true } } },
+  });
+  if (!pkg) return null;
+  const sheetIds = [pkg.comparativeSheetId, pkg.summarySheetId, ...pkg.vendorBoqs.map((b) => b.sheetId)].filter(
+    (sid): sid is string => !!sid
+  );
+  await prisma.crmBidPackage.delete({ where: { id } });
+  if (sheetIds.length) {
+    await prisma.customSheet.deleteMany({ where: { id: { in: sheetIds } } });
+  }
+  return pkg;
+}
+
 function parseVendorNames(json: string): string[] {
   try {
     const arr = JSON.parse(json || "[]");
@@ -294,16 +310,6 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
 
   await ensureVendorBoqTemplateSheets(prisma, pkg.id, vendorNames, selectedDisciplines, req.user!.id);
 
-  let seededBoqs: { uploaded: number; total: number } | null = null;
-  if (project) {
-    try {
-      const { seedBidPackageR2Boqs } = await import("../services/crmVendorBoqSeed.js");
-      seededBoqs = await seedBidPackageR2Boqs(prisma, pkg.id, req.user!.id, { force: false });
-    } catch (err) {
-      console.warn("[CRM] test BOQ seed on create failed:", err instanceof Error ? err.message : err);
-    }
-  }
-
   await audit("crm.comparative.create", {
     userId: req.user!.id,
     entity: "CrmBidPackage",
@@ -320,7 +326,6 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     disciplines: selectedDisciplines,
     comparativeSheetId: masterSheet.id,
     summarySheetId: summarySheet.id,
-    seededBoqs,
     uploadProgress: {
       done: pkgWithSheets?.vendorBoqs.filter((b) => b.sheetId).length ?? 0,
       total: pkgWithSheets?.vendorBoqs.length ?? 0,
@@ -386,11 +391,32 @@ crmComparativeRouter.patch("/bid-packages/:id", requireRoles("admin", "office"),
   });
 });
 
-crmComparativeRouter.delete("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const pkg = await prisma.crmBidPackage.findUnique({
-    where: { id: req.params.id },
-    include: { vendorBoqs: { select: { sheetId: true } } },
+crmComparativeRouter.post("/bid-packages/clear-existing", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const confirm = String(req.body?.confirm || "").trim();
+  if (confirm !== "DELETE ALL BIDS") {
+    return res.status(400).json({ error: 'Type DELETE ALL BIDS to clear existing packages. People and project data stay.' });
+  }
+  const projectId = req.body?.projectId ? String(req.body.projectId) : null;
+  const pkgs = await prisma.crmBidPackage.findMany({
+    where: projectId ? { projectId } : {},
+    select: { id: true, title: true },
   });
+  const removed: { id: string; title: string }[] = [];
+  for (const row of pkgs) {
+    const deleted = await deleteBidPackageAndSheets(row.id);
+    if (deleted) removed.push({ id: deleted.id, title: deleted.title });
+  }
+  await audit("crm.comparative.clear_existing", {
+    userId: req.user!.id,
+    entity: "CrmBidPackage",
+    entityId: projectId || "all",
+    meta: { count: removed.length, projectId },
+  });
+  res.json({ ok: true, removed: removed.length, titles: removed.map((r) => r.title) });
+});
+
+crmComparativeRouter.delete("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const pkg = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
   if (!pkg) return res.status(404).json({ error: "bid package not found" });
 
   const confirmTitle = String(req.body?.confirmTitle || "").trim();
@@ -398,20 +424,14 @@ crmComparativeRouter.delete("/bid-packages/:id", requireRoles("admin", "office")
     return res.status(400).json({ error: "Type the bid package title to confirm delete" });
   }
 
-  const sheetIds = [pkg.comparativeSheetId, pkg.summarySheetId, ...pkg.vendorBoqs.map((b) => b.sheetId)].filter(
-    (id): id is string => !!id
-  );
-
-  await prisma.crmBidPackage.delete({ where: { id: pkg.id } });
-  if (sheetIds.length) {
-    await prisma.customSheet.deleteMany({ where: { id: { in: sheetIds } } });
-  }
+  const deleted = await deleteBidPackageAndSheets(pkg.id);
+  if (!deleted) return res.status(404).json({ error: "bid package not found" });
 
   await audit("crm.comparative.delete", {
     userId: req.user!.id,
     entity: "CrmBidPackage",
     entityId: pkg.id,
-    meta: { title: pkg.title, status: pkg.status, sheetsRemoved: sheetIds.length },
+    meta: { title: pkg.title, status: pkg.status },
   });
 
   res.json({ ok: true, id: pkg.id, title: pkg.title });
@@ -545,7 +565,7 @@ crmComparativeRouter.post(
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "BOQ Excel file required" });
-
+    try {
     const pkg = await prisma.crmBidPackage.findUnique({
       where: { id: req.params.id },
       include: { project: { select: { id: true, code: true, name: true } } },
@@ -557,6 +577,11 @@ crmComparativeRouter.post(
 
     const isOffice = req.user!.role === "admin" || req.user!.role === "office";
     if (!isOffice && req.user!.role === "vendor") {
+      if (pkg.status !== "Open") {
+        return res.status(400).json({
+          error: `This bid is ${pkg.status}. Ask PMC to open the bid after selecting vendors — then you can upload your BOQ.`,
+        });
+      }
       const vendorUser = await resolveVendorForUser(req.user!);
       const ownsSlot =
         vendorUser &&
@@ -585,7 +610,11 @@ crmComparativeRouter.post(
 
     const wb = XLSX.read(req.file.buffer, { type: "buffer", cellFormula: true });
     const ws = pickDisciplineWorksheet(wb, slot.discipline, pkgDisciplines);
-    if (!ws) return res.status(400).json({ error: "Could not read BOQ sheet from file" });
+    if (!ws) {
+      return res.status(400).json({
+        error: `Could not find a ${disc?.label || slot.discipline} sheet in that Excel. Download Comparative Statement R2 and upload the matching discipline tab.`,
+      });
+    }
 
     const parsed = parseDisciplineBoqSheet(ws, slot.discipline, pkgDisciplines);
 
@@ -637,8 +666,13 @@ crmComparativeRouter.post(
       summary: recomputed.summary,
       uploadProgress: { done: recomputed.filledSlots, total: recomputed.totalSlots },
     });
+  } catch (err) {
+    console.error("Vendor BOQ upload failed:", err instanceof Error ? err.message : err);
+    if (!res.headersSent) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not upload BOQ" });
+    }
   }
-);
+});
 
 /** Clear a vendor BOQ upload so they can replace the file (slot stays assigned). */
 crmComparativeRouter.delete("/bid-packages/:id/vendor-boq/:slotId", async (req: AuthedRequest, res) => {
@@ -749,6 +783,11 @@ crmComparativeRouter.put(
     const pkg = await prisma.crmBidPackage.findUnique({ where: { id: req.params.id } });
     if (!pkg) return res.status(404).json({ error: "bid package not found" });
     if (pkg.status === "Awarded") return res.status(400).json({ error: "Bid package is awarded and locked" });
+    if (req.user!.role === "vendor" && pkg.status !== "Open") {
+      return res.status(400).json({
+        error: `This bid is ${pkg.status}. Ask PMC to open the bid after selecting vendors — then you can fill your BOQ.`,
+      });
+    }
 
     const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
     if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
@@ -838,23 +877,21 @@ crmComparativeRouter.post("/bid-packages/:id/seed-r2-boqs", requireRoles("admin"
 });
 
 crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: req.params.id },
     include: { project: { select: { id: true, code: true } } },
   });
   if (!pkg) return res.status(404).json({ error: "bid package not found" });
-  if (!pkg.projectId) return res.status(400).json({ error: "Link a project before opening the bid" });
-
-  const filled = await prisma.crmVendorBoq.count({
-    where: { bidPackageId: pkg.id, OR: [{ uploadedAt: { not: null } }, { fileName: { not: null } }, { sheetId: { not: null } }] },
+  if (!pkg.projectId) {
+    return res.status(400).json({ error: "Link a project before opening the bid. Pick the project, then Open bid & notify bidders." });
+  }
+  const vendorCount = await prisma.crmVendorBoq.groupBy({
+    by: ["vendorLabel"],
+    where: { bidPackageId: pkg.id },
   });
-  if (filled === 0) {
-    try {
-      const { seedBidPackageR2Boqs } = await import("../services/crmVendorBoqSeed.js");
-      await seedBidPackageR2Boqs(prisma, pkg.id, req.user!.id, { force: false });
-    } catch (err) {
-      console.warn("[CRM] test BOQ seed on open failed:", err instanceof Error ? err.message : err);
-    }
+  if (!vendorCount.length) {
+    return res.status(400).json({ error: "Select at least one vendor / contractor, then open the bid for them." });
   }
 
   const dueDate = req.body.dueDate ? new Date(String(req.body.dueDate)) : pkg.dueDate;
@@ -884,6 +921,12 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
 
   const updated = await loadBidPackage(pkg.id);
   res.json({ package: updated, notify });
+  } catch (err) {
+    console.error("Open bid failed:", err instanceof Error ? err.message : err);
+    if (!res.headersSent) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not open bid" });
+    }
+  }
 });
 
 crmComparativeRouter.post("/bid-packages/:id/award", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

@@ -40,7 +40,7 @@ export function vendorMatchesBidDisciplines(
   const tagged = parseVendorBidDisciplines(vendor.trade);
   if (tagged.length) return disciplineKeys.some((k) => tagged.includes(k));
   const trade = (vendor.trade || "").toLowerCase();
-  if (!trade) return vendor.partyType === "Contractor";
+  if (!trade) return vendor.partyType === "Contractor" || vendor.partyType === "Vendor" || !vendor.partyType;
   return disciplineKeys.some((key) => {
     const def = CRM_BID_DISCIPLINES.find((d) => d.key === key);
     if (!def) return false;

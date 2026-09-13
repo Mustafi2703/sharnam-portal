@@ -13,6 +13,8 @@ import { downloadAuthFile } from "../lib/downloadReport";
 import { CrmBidProjectSetupSection } from "../components/CrmBidProjectSetupSection";
 import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 import { BidManageActions } from "../components/BidManageActions";
+import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../components/ActionReasonDialog";
+import { isVendorOrContractor } from "../lib/vendorTypes";
 
 type Discipline = { key: string; label: string; sheetName: string };
 
@@ -105,6 +107,19 @@ export default function CrmBidComparePage() {
   const [projectSearch, setProjectSearch] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
+  const [actionError, setActionError] = useState<ActionReason | null>(null);
+  const [clearConfirm, setClearConfirm] = useState("");
+
+  function showActionError(title: string, err: unknown) {
+    const reason = actionReasonFromError(title, err);
+    setActionError(reason);
+    setMsg(reason.message);
+  }
+
+  function showActionNeed(title: string, message: string) {
+    setActionError({ title, message });
+    setMsg(message);
+  }
 
   const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
   const convertedProjectIds = useMemo(
@@ -221,7 +236,7 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Recompute failed");
+      showActionError("Comparative did not refresh", err);
     } finally {
       setBusy(false);
     }
@@ -241,7 +256,7 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Simulate failed");
+      showActionError("Test BOQs did not load", err);
     } finally {
       setBusy(false);
     }
@@ -312,7 +327,11 @@ export default function CrmBidComparePage() {
   }, [form.projectId, token, canManage]);
 
   const allBidders = useMemo(
-    () => vendors.filter((v) => vendorMatchesBidDisciplines(v, form.disciplineKeys)),
+    () =>
+      vendors.filter((v) => {
+        if (!isVendorOrContractor(v.partyType)) return false;
+        return vendorMatchesBidDisciplines(v, form.disciplineKeys);
+      }),
     [vendors, form.disciplineKeys],
   );
 
@@ -379,7 +398,7 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Open bid failed");
+      showActionError("Could not open this bid", err);
     } finally {
       setBusy(false);
     }
@@ -388,15 +407,18 @@ export default function CrmBidComparePage() {
   async function createPackage(e: FormEvent) {
     e.preventDefault();
     if (!form.projectId) {
-      setMsg("Pick a project first — bids are stored on that project.");
+      showActionNeed("Project required", "Pick a project first — bids are stored on that project.");
       return;
     }
     if (form.vendorIds.length < 1) {
-      setMsg("Select at least one bidder — they need an email to upload.");
+      showActionNeed(
+        "Select a vendor first",
+        "Tick at least one vendor / contractor. After you create the package, Open bid emails them so they can upload BOQs from /login/vendor.",
+      );
       return;
     }
     if (!form.disciplineKeys.length) {
-      setMsg("Select at least one discipline BOQ sheet.");
+      showActionNeed("Discipline required", "Select at least one discipline BOQ sheet.");
       return;
     }
     setBusy(true);
@@ -444,10 +466,11 @@ export default function CrmBidComparePage() {
         await loadDetail(row.id);
         await load();
       } catch (openErr) {
-        setMsg(
+        showActionError(
+          "Package saved — open bid failed",
           openErr instanceof Error
-            ? `Package saved. Open the bid to create logins: ${openErr.message}`
-            : "Package saved. Open the bid to email bidder logins.",
+            ? openErr
+            : new Error("Package saved. Use Open bid & notify bidders to email vendor logins."),
         );
       }
       setForm({
@@ -460,7 +483,7 @@ export default function CrmBidComparePage() {
         customDisciplines: [],
       });
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Create failed");
+      showActionError("Could not create the bid package", err);
     } finally {
       setBusy(false);
     }
@@ -483,7 +506,7 @@ export default function CrmBidComparePage() {
       });
       setMsg("Project default bid disciplines saved.");
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Save failed");
+      showActionError("Could not save project disciplines", err);
     } finally {
       setBusy(false);
     }
@@ -504,7 +527,14 @@ export default function CrmBidComparePage() {
   }
 
   async function addDisciplinesToPackage() {
-    if (!selectedId || !addDiscKeys.length) return;
+    if (!selectedId) {
+      showActionNeed("No bid selected", "Open a bid package first, then add discipline sheets.");
+      return;
+    }
+    if (!addDiscKeys.length) {
+      showActionNeed("Select a discipline first", "Tick the BOQ sheet you want to add for every vendor on this bid.");
+      return;
+    }
     setBusy(true);
     try {
       await api(`/api/crm/bid-packages/${selectedId}/disciplines`, {
@@ -517,7 +547,7 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Add disciplines failed");
+      showActionError("Could not add disciplines", err);
     } finally {
       setBusy(false);
     }
@@ -539,7 +569,14 @@ export default function CrmBidComparePage() {
   );
 
   async function addVendorsToPackage() {
-    if (!selectedId || !addVendorIds.length) return;
+    if (!selectedId) {
+      showActionNeed("No bid selected", "Open a bid package first, then add the vendor.");
+      return;
+    }
+    if (!addVendorIds.length) {
+      showActionNeed("Select a vendor first", "Tick the vendor / contractor you want on this bid, then add them.");
+      return;
+    }
     setBusy(true);
     setMsg("");
     try {
@@ -558,7 +595,7 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Add bidders failed");
+      showActionError("Could not add bidders", err);
     } finally {
       setBusy(false);
     }
@@ -585,7 +622,7 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Upload failed");
+      showActionError("BOQ upload failed", err);
     } finally {
       setBusy(false);
     }
@@ -613,7 +650,42 @@ export default function CrmBidComparePage() {
       await loadDetail(selectedId);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Award failed");
+      showActionError("Could not award this bid", err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearExistingBids() {
+    if (clearConfirm.trim() !== "DELETE ALL BIDS") {
+      showActionNeed(
+        "Confirm delete",
+        "Type DELETE ALL BIDS in the box, then click Clear existing bids. This removes bid packages and vendor BOQs only — projects, vendors, and logins stay.",
+      );
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ removed: number; titles: string[] }>("/api/crm/bid-packages/clear-existing", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          confirm: "DELETE ALL BIDS",
+          projectId: setupProjectId || undefined,
+        }),
+      });
+      setClearConfirm("");
+      setSelectedId(null);
+      setDetail(null);
+      setMsg(
+        setupProjectId
+          ? `Cleared ${out.removed} bid(s) on this project. Select vendors and create a new bid.`
+          : `Cleared ${out.removed} bid package(s). Select vendors and open a new bid.`,
+      );
+      await load();
+    } catch (err) {
+      showActionError("Could not delete existing bids", err);
     } finally {
       setBusy(false);
     }
@@ -695,8 +767,16 @@ export default function CrmBidComparePage() {
           </label>
           <Button
             type="button"
-            disabled={!setupProjectId}
-            onClick={() => openNewBidSetup({ projectId: setupProjectId })}
+            onClick={() => {
+              if (!setupProjectId) {
+                showActionNeed(
+                  "Pick a project first",
+                  "Choose the project in the dropdown, then open a new bid. After you select the vendor, Create & open package emails them to upload BOQs.",
+                );
+                return;
+              }
+              openNewBidSetup({ projectId: setupProjectId });
+            }}
           >
             New R2 bid for this project
           </Button>
@@ -708,7 +788,9 @@ export default function CrmBidComparePage() {
           </p>
         )}
       </Card>
-      {msg && <p className="text-sm text-ok shrink-0 px-0.5">{msg}</p>}
+      {msg && (
+        <p className={`text-sm shrink-0 px-0.5 ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>
+      )}
 
       {detail?.project?.code === "SPDC-DEMO-01" && packageVendorNames.length === 2 && (
         <Card className="!p-4 border-brand/40 bg-brand-soft/25 shrink-0 mb-3">
@@ -849,7 +931,20 @@ export default function CrmBidComparePage() {
                       onMsg={setMsg}
                     />
                   )}
-                  <Button type="button" onClick={() => setSetupStep(2)} disabled={!form.projectId || !form.title.trim()}>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!form.projectId) {
+                        showActionNeed("Pick a project first", "Select the delivery project this bid belongs to.");
+                        return;
+                      }
+                      if (!form.title.trim()) {
+                        showActionNeed("Title required", "Give the bid package a title, then continue to disciplines.");
+                        return;
+                      }
+                      setSetupStep(2);
+                    }}
+                  >
                     Next: disciplines →
                   </Button>
                 </>
@@ -888,7 +983,19 @@ export default function CrmBidComparePage() {
                     <Button type="button" variant="secondary" onClick={() => setSetupStep(1)}>
                       ← Back
                     </Button>
-                    <Button type="button" onClick={() => setSetupStep(3)} disabled={!form.disciplineKeys.length}>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (!form.disciplineKeys.length) {
+                          showActionNeed(
+                            "Select a discipline first",
+                            "Tick at least one BOQ sheet (for example Civil & Structural). Vendors upload against those sheets.",
+                          );
+                          return;
+                        }
+                        setSetupStep(3);
+                      }}
+                    >
                       Next: bidders →
                     </Button>
                   </div>
@@ -897,22 +1004,34 @@ export default function CrmBidComparePage() {
 
               {setupStep === 3 && (
                 <>
-                  <h3 className="font-semibold text-sm">3 · Select bidders (min 2)</h3>
+                  <h3 className="font-semibold text-sm">3 · Select vendor / contractor</h3>
                   <p className="text-[10px] text-steel-muted">
-                    Filtered by discipline tags — vendors upload BOQs at <strong>/login/vendor</strong> → My bids.
+                    One or more companies. After you open the bid they sign in at <strong>/login/vendor</strong> and upload their BOQs.
                   </p>
                   <SearchableCheckboxList
                     items={bidderItems}
                     selectedIds={form.vendorIds}
                     onChange={(vendorIds) => setForm({ ...form, vendorIds })}
-                    placeholder="Search contractor name, trade, discipline…"
-                    emptyMessage="No bidders match — tag disciplines in Master → Vendors or CRM directory."
+                    placeholder="Search vendor / contractor…"
+                    emptyMessage="No vendor / contractor on the directory yet — add them in Access users or the project directory first."
                   />
                   <div className="flex gap-2">
                     <Button type="button" variant="secondary" onClick={() => setSetupStep(2)}>
                       ← Back
                     </Button>
-                    <Button type="button" onClick={() => setSetupStep(4)} disabled={form.vendorIds.length < 2}>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (form.vendorIds.length < 1) {
+                          showActionNeed(
+                            "Select a vendor first",
+                            "Tick the vendor you want on this bid. Then you can open the bid so they can upload their BOQ.",
+                          );
+                          return;
+                        }
+                        setSetupStep(4);
+                      }}
+                    >
                       Next: review →
                     </Button>
                   </div>
@@ -941,13 +1060,13 @@ export default function CrmBidComparePage() {
                     </li>
                   </ul>
                   <p className="text-[11px] text-steel-muted">
-                    After create: open bid → notify vendors → they fill BOQs in portal or you simulate R2 uploads.
+                    Create opens the bid and emails selected vendors. They upload BOQs from the contractor login. Comparative fills as uploads land — tap Refresh comparative if totals look stale.
                   </p>
                   <div className="flex gap-2">
                     <Button type="button" variant="secondary" onClick={() => setSetupStep(3)}>
                       ← Back
                     </Button>
-                    <Button type="submit" disabled={busy || form.vendorIds.length < 2}>
+                    <Button type="submit" disabled={busy}>
                       {busy ? "Creating…" : "Create & open package"}
                     </Button>
                   </div>
@@ -1001,6 +1120,25 @@ export default function CrmBidComparePage() {
             <p className="text-[10px] text-steel-muted font-mono uppercase tracking-wide">
               {packagesForDesk.length} package(s)
             </p>
+            {packages.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <Input
+                  value={clearConfirm}
+                  onChange={(e) => setClearConfirm(e.target.value)}
+                  placeholder="Type DELETE ALL BIDS"
+                  className="!text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs w-full !bg-danger/10 !border-danger/40 !text-danger"
+                  disabled={busy}
+                  onClick={() => void clearExistingBids()}
+                >
+                  Clear existing bids
+                </Button>
+              </div>
+            )}
           </div>
           <ul className="crm-bid-desk__rail-list divide-y">
               {packagesForDesk.map((p) => {
@@ -1270,7 +1408,7 @@ export default function CrmBidComparePage() {
                         type="button"
                         variant="secondary"
                         className="!text-xs"
-                        disabled={!addVendorIds.length || busy}
+                        disabled={busy}
                         onClick={() => void addVendorsToPackage()}
                       >
                         Add selected bidders
@@ -1300,7 +1438,7 @@ export default function CrmBidComparePage() {
                         type="button"
                         variant="secondary"
                         className="!text-xs"
-                        disabled={!addDiscKeys.length || busy}
+                        disabled={busy}
                         onClick={() => void addDisciplinesToPackage()}
                       >
                         Add selected disciplines
@@ -1438,6 +1576,7 @@ export default function CrmBidComparePage() {
         </div>
       </div>
       )}
+      <ActionReasonDialog reason={actionError} onClose={() => setActionError(null)} />
     </div>
   );
 }

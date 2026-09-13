@@ -5,6 +5,7 @@ import { CostRegisterShell } from "./CostRegisterShell";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { RegisterEmptyRow } from "./RegisterSheetFrame";
 import { Button } from "./ui";
+import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "./ActionReasonDialog";
 
 type Props = {
   token: string;
@@ -45,6 +46,7 @@ export function CrmBidBoqRegister({
   const [rows, setRows] = useState<SheetCell[][]>([]);
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState<ActionReason | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,7 +63,9 @@ export function CrmBidBoqRegister({
       setHeaders(s.headers || []);
       setRows(parsed);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Could not load BOQ");
+      const reason = actionReasonFromError("Could not open this BOQ", err);
+      setActionError(reason);
+      setLoadError(reason.message);
       setHeaders([]);
       setRows([]);
     }
@@ -96,7 +100,9 @@ export function CrmBidBoqRegister({
       setMsg("Saved · comparative updated");
       onSaved?.();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Save failed");
+      const reason = actionReasonFromError("Could not save this BOQ", err);
+      setActionError(reason);
+      setMsg(reason.message);
     } finally {
       setBusy(false);
     }
@@ -122,25 +128,29 @@ export function CrmBidBoqRegister({
 
   if (loadError) {
     return (
-      <CostRegisterShell title={title} subtitle="BOQ load failed" sheetKind="monitoring">
-        <div className="p-4 space-y-3">
-          <p className="text-sm text-warn">{loadError}</p>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={() => void load()}>
-              Retry
-            </Button>
-            {onClose && (
-              <Button type="button" variant="secondary" onClick={onClose}>
-                Close
+      <>
+        <CostRegisterShell title={title} subtitle="BOQ load failed" sheetKind="monitoring">
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-warn">{loadError}</p>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => void load()}>
+                Retry
               </Button>
-            )}
+              {onClose && (
+                <Button type="button" variant="secondary" onClick={onClose}>
+                  Close
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      </CostRegisterShell>
+        </CostRegisterShell>
+        <ActionReasonDialog reason={actionError} onClose={() => setActionError(null)} />
+      </>
     );
   }
 
   return (
+    <>
     <CostRegisterShell
       title={title}
       subtitle={sheetLabel ? `${sheetLabel} · R2 discipline BOQ` : "R2 discipline BOQ · white cells editable"}
@@ -151,7 +161,7 @@ export function CrmBidBoqRegister({
             {rows.length} rows · {canEdit ? "Edit rates / qty / amount — saves on blur" : "Read-only"}
           </span>
           <div className="flex gap-2">
-            {msg && <span className="text-ok font-semibold">{msg}</span>}
+            {msg && <span className={`font-semibold ${actionError ? "text-danger" : "text-ok"}`}>{msg}</span>}
             {busy && <span className="text-steel-muted">Saving…</span>}
             {onClose && (
               <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={onClose}>
@@ -202,5 +212,7 @@ export function CrmBidBoqRegister({
         </tbody>
       </table>
     </CostRegisterShell>
+    <ActionReasonDialog reason={actionError} onClose={() => setActionError(null)} />
+    </>
   );
 }

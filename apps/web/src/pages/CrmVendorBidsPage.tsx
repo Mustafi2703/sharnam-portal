@@ -10,6 +10,7 @@ import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { openChecklistFillWindow, openFamilyChecklistFill } from "../lib/checklistFillWindow";
+import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../components/ActionReasonDialog";
 
 type BidSlot = {
   id: string;
@@ -213,6 +214,7 @@ export default function CrmVendorBidsPage() {
   const [slots, setSlots] = useState<BidSlot[]>([]);
   const [summaries, setSummaries] = useState<Record<string, PackageSummary>>({});
   const [msg, setMsg] = useState("");
+  const [actionError, setActionError] = useState<ActionReason | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploadSlot, setUploadSlot] = useState<BidSlot | null>(null);
   const [uploadMode, setUploadMode] = useState<"online" | "excel" | null>(null);
@@ -226,6 +228,13 @@ export default function CrmVendorBidsPage() {
   }>({ projects: [], assignments: [], rfis: [] });
 
   function openUpload(slot: BidSlot, mode: "online" | "excel") {
+    if (slot.bidPackageStatus !== "Open") {
+      setActionError({
+        title: "Bid is not open for uploads",
+        message: `This package is ${slot.bidPackageStatus}. Ask PMC to open the bid after selecting your company — then you can fill or upload the BOQ.`,
+      });
+      return;
+    }
     setUploadSlot(slot);
     setUploadMode(mode);
     setUploadFile(null);
@@ -326,7 +335,9 @@ export default function CrmVendorBidsPage() {
       setMsg(`Cleared ${slot.disciplineLabel}`);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Clear failed");
+      const reason = actionReasonFromError("Could not clear this BOQ", err);
+      setActionError(reason);
+      setMsg(reason.message);
     } finally {
       setBusy(false);
     }
@@ -349,7 +360,9 @@ export default function CrmVendorBidsPage() {
       closeUpload();
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Upload failed");
+      const reason = actionReasonFromError("BOQ upload failed", err);
+      setActionError(reason);
+      setMsg(reason.message);
     } finally {
       setBusy(false);
     }
@@ -448,7 +461,7 @@ export default function CrmVendorBidsPage() {
       </div>
       )}
 
-      {msg && <p className="text-sm text-ok">{msg}</p>}
+      {msg && <p className={`text-sm ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>}
 
       {desk === "projects" && (
         <Card className="!p-4 space-y-2">
@@ -739,6 +752,7 @@ export default function CrmVendorBidsPage() {
           </div>,
           document.body
         )}
+      <ActionReasonDialog reason={actionError} onClose={() => setActionError(null)} />
     </div>
   );
 }
