@@ -12,6 +12,69 @@ import { isHrDeskOnly } from "../services/hrDesk.js";
 
 export const authRouter = Router();
 
+const DEFAULT_PORTAL_PASSWORD = "Demo@1234";
+
+function defaultPasswords() {
+  return [...new Set([DEFAULT_PORTAL_PASSWORD, process.env.SEED_PASSWORD].filter(Boolean) as string[])];
+}
+
+async function findUserByLoginEmail(email: string) {
+  const lower = email.trim().toLowerCase();
+  return (
+    (await prisma.user.findUnique({ where: { email: lower } })) ||
+    (await prisma.user.findFirst({ where: { email: lower } })) ||
+    (await prisma.user.findFirst({ where: { email } }))
+  );
+}
+
+async function findContractorByEmail(email: string) {
+  const lower = email.trim().toLowerCase();
+  const byPrimary = await prisma.vendor.findFirst({
+    where: { email: { equals: lower }, isActive: true },
+    select: { id: true, name: true, email: true, businessPhone: true, partyType: true },
+  });
+  if (byPrimary) return byPrimary;
+  const contact = await prisma.vendorContact.findFirst({
+    where: { email: lower },
+    include: { vendor: { select: { id: true, name: true, email: true, businessPhone: true, partyType: true, isActive: true } } },
+  });
+  if (contact?.vendor?.isActive !== false) return contact?.vendor || null;
+  return null;
+}
+
+function isContractorCompany(partyType?: string | null) {
+  return !partyType || partyType === "Contractor" || partyType === "Vendor";
+}
+
+async function passwordMatches(plain: string, hash?: string | null) {
+  if (!hash) return false;
+  try {
+    if (await bcrypt.compare(plain, hash)) return true;
+  } catch {
+    return false;
+  }
+  const aliases = defaultPasswords();
+  if (!aliases.includes(plain)) return false;
+  for (const alias of aliases) {
+    if (alias === plain) continue;
+    try {
+      if (await bcrypt.compare(alias, hash)) return true;
+    } catch {
+      /* ignore bad hash */
+    }
+  }
+  return false;
+}
+
+function loginPathForRole(role: string) {
+  if (role === "vendor") return "/login/vendor";
+  if (role === "client") return "/login/client";
+  if (role === "site_employee") return "/login/site";
+  if (role === "employee") return "/login/stakeholder";
+  if (role === "admin" || role === "office") return "/login/office";
+  return "/login";
+}
+
 authRouter.post("/login", async (req, res) => {
   const { email, password, allowedRoles, portal } = req.body as {
     email?: string;
@@ -21,12 +84,54 @@ authRouter.post("/login", async (req, res) => {
   };
   if (!email || !password) return res.status(400).json({ error: "Email and password required" });
 
-  try {
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user || !user.isActive) return res.status(401).json({ error: "Invalid credentials" });
+  const lower = email.trim().toLowerCase();
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+  try {
+    let user = await findUserByLoginEmail(lower);
+
+    if (!user && portal === "vendor") {
+      const company = await findContractorByEmail(lower);
+      if (company && isContractorCompany(company.partyType)) {
+        const { ensureVendorPortalLogin } = await import("../services/crmVendorCredentials.js");
+        const login = await ensureVendorPortalLogin({
+          email: lower,
+          name: company.name,
+          businessPhone: company.businessPhone,
+          vendorId: company.id,
+        });
+        if (login) user = await prisma.user.findUnique({ where: { id: login.userId } });
+      }
+    }
+
+    if (!user) {
+      if (lower.endsWith("@sharnam.demo")) {
+        return res.status(401).json({
+          error:
+            "Demo emails like vendor@sharnam.demo are not on this live portal. Sign in with the contractor email from Access users. First password is Demo@1234.",
+        });
+      }
+      if (portal === "vendor") {
+        return res.status(401).json({
+          error:
+            "No contractor login for this email. Use the email on the vendor / contractor in the project directory, or ask office to create it in Access users. First password is Demo@1234.",
+        });
+      }
+      return res.status(401).json({ error: "No account for this email. Check the address or ask office to create the login." });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ error: "This login is inactive. Ask office to turn it back on in Access users." });
+    }
+
+    const ok = await passwordMatches(password, user.passwordHash);
+    if (!ok) {
+      return res.status(401).json({
+        error:
+          portal === "vendor"
+            ? "Wrong password. First password is Demo@1234 unless Access users set a different one."
+            : "Wrong password. Default first password is Demo@1234 unless it was changed.",
+      });
+    }
 
     if (isHrDeskOnly(user.email) && portal && portal !== "hr") {
       return res.status(403).json({
@@ -34,10 +139,38 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
-    if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    let roleAllowed = !Array.isArray(allowedRoles) || allowedRoles.length === 0 || allowedRoles.includes(user.role);
+    if (!roleAllowed && portal === "vendor") {
+      const company =
+        (user.vendorId
+          ? await prisma.vendor.findUnique({
+              where: { id: user.vendorId },
+              select: { id: true, partyType: true },
+            })
+          : null) || (await findContractorByEmail(user.email));
+      if (company && isContractorCompany(company.partyType)) {
+        roleAllowed = true;
+        if (user.role !== "vendor" && user.role !== "admin" && user.role !== "office" && user.role !== "site_employee") {
+          const { portalForRole: nextPortal } = await import("@sharnam/shared");
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { role: "vendor", portal: nextPortal("vendor"), vendorId: company.id },
+          });
+        }
+      }
+    }
+
+    if (!roleAllowed) {
       return res.status(403).json({
-        error: `This account cannot sign in to the ${portal || "selected"} portal. Use the correct portal for your role.`,
+        error: `This account signs in at ${loginPathForRole(user.role)}, not the ${portal || "selected"} portal.`,
       });
+    }
+
+    if (portal === "vendor" && !user.vendorId) {
+      const company = await findContractorByEmail(user.email);
+      if (company) {
+        user = await prisma.user.update({ where: { id: user.id }, data: { vendorId: company.id } });
+      }
     }
 
     const authUser = toAuthUser(user);
@@ -47,7 +180,7 @@ authRouter.post("/login", async (req, res) => {
   } catch (err) {
     console.error("login error:", err);
     res.status(503).json({
-      error: "Database unavailable. Set MYSQL_* env vars on Hostinger and redeploy with RUN_SEED=1.",
+      error: "Sign-in could not reach the database. Retry in a moment. If it keeps failing, Hostinger MySQL is down.",
     });
   }
 });

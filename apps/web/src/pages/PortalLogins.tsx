@@ -263,7 +263,8 @@ function AuthFuturisticBackdrop() {
 
 function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
-  const [email, setEmail] = useState(cfg.demoEmail);
+  const prefillDemo = cfg.key !== "vendor" && cfg.key !== "client" && cfg.key !== "stakeholder";
+  const [email, setEmail] = useState(prefillDemo ? cfg.demoEmail : "");
   const [password, setPassword] = useState("Demo@1234");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
@@ -271,7 +272,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const [capsLock, setCapsLock] = useState(false);
 
   useEffect(() => {
-    setEmail(cfg.demoEmail);
+    const fillDemo = cfg.key !== "vendor" && cfg.key !== "client" && cfg.key !== "stakeholder";
+    setEmail(fillDemo ? cfg.demoEmail : "");
     setPassword("Demo@1234");
     setError("");
   }, [cfg.key, cfg.demoEmail]);
@@ -334,7 +336,7 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
               required
-              placeholder="you@company.com"
+              placeholder={cfg.key === "vendor" ? "contractor@company.com" : "you@company.com"}
             />
           </label>
           <label className="auth-signin__field">
@@ -363,6 +365,12 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
               <span className="text-[10px] mt-1 text-amber-700">Caps Lock is on</span>
             )}
           </label>
+          {cfg.key === "vendor" && (
+            <p className="text-[11px] text-steel-muted leading-relaxed">
+              Use the email on your company in the project directory or Access users. First password is{" "}
+              <strong>Demo@1234</strong> — not vendor@sharnam.demo on the live portal.
+            </p>
+          )}
           {error && <p className="auth-signin__error" role="alert">{error}</p>}
           <button type="submit" className="auth-signin__submit" disabled={busy}>
             {busy ? "Signing in…" : cfg.cta}
