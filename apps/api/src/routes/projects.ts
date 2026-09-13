@@ -509,6 +509,15 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       update: {},
     });
     await mockOneDrive.ensureProjectTree(project.id);
+    if (project.clientEmail) {
+      const { provisionProjectClientEmail } = await import("../services/crmVendorCredentials.js");
+      await provisionProjectClientEmail({
+        projectId: project.id,
+        email: project.clientEmail,
+        name: project.clientContactName || project.clientName || project.name,
+        phone: project.clientPhone,
+      });
+    }
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
@@ -910,6 +919,19 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save project card" });
   }
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
+  if (project.clientEmail) {
+    try {
+      const { provisionProjectClientEmail } = await import("../services/crmVendorCredentials.js");
+      await provisionProjectClientEmail({
+        projectId: project.id,
+        email: project.clientEmail,
+        name: project.clientContactName || project.clientName || project.name,
+        phone: project.clientPhone,
+      });
+    } catch (err) {
+      console.warn("Client portal from project card failed:", err instanceof Error ? err.message : err);
+    }
+  }
   res.json(project);
 });
 

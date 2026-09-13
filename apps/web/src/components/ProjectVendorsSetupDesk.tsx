@@ -53,7 +53,7 @@ const COPY: Record<SetupPartyKind, { title: string; blurb: string; add: string; 
   },
   Consultant: {
     title: "Consultants",
-    blurb: "Design, MEP, structural, PMC partners. Same add / delete / package pins as vendors.",
+    blurb: "Design, MEP, structural, PMC partners. Email creates a stakeholder desk login at /login/stakeholder.",
     add: "Add consultant",
     create: "+ New consultant",
     empty: "No consultants on this job yet.",
@@ -159,7 +159,7 @@ export function ProjectVendorsSetupDesk({
           trade: form.trade.trim() || undefined,
         }),
       });
-      const assigned = await api<{ portal?: { email: string; created: boolean; tempPassword?: string } }>(
+      const assigned = await api<{ portal?: { email: string; created: boolean; tempPassword?: string; role?: string } }>(
         `/api/vendors/project/${projectId}/assign`,
         {
           method: "POST",
@@ -170,13 +170,15 @@ export function ProjectVendorsSetupDesk({
       setForm({ name: "", partyType: copy.defaultType, email: "", primaryContactName: "", businessPhone: "", trade: "" });
       setShowCreate(false);
       const slip = assigned.portal;
-      onMsg(
-        `${created.name} is on the company directory and this project.${
-          slip
-            ? ` Bid login: ${slip.email}${slip.tempPassword ? ` · ${slip.tempPassword}` : " (existing account)"}. Open a bid so they can upload.`
-            : " Add an email if they need a bid-upload login."
-        }`,
-      );
+      const portalHint =
+        slip?.role === "employee"
+          ? ` Stakeholder login: ${slip.email}${slip.tempPassword ? ` · ${slip.tempPassword}` : ""} — sign in at /login/stakeholder.`
+          : slip?.role === "client"
+            ? ` Client login: ${slip.email}${slip.tempPassword ? ` · ${slip.tempPassword}` : ""} — sign in at /login/client.`
+            : slip
+              ? ` Bid login: ${slip.email}${slip.tempPassword ? ` · ${slip.tempPassword}` : " (existing account)"}. Open a bid so they can upload.`
+              : " Add an email if they need a portal login.";
+      onMsg(`${created.name} is on the company directory and this project.${portalHint}`);
       await onChanged();
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Could not create company");
@@ -329,7 +331,12 @@ export function ProjectVendorsSetupDesk({
               ))}
             </Select>
             <Input placeholder="Contact" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-            <Input type="email" placeholder="Email — required for bid upload login" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Input
+              type="email"
+              placeholder={party === "Consultant" ? "Email — stakeholder portal login" : party === "Client" ? "Email — client portal login" : "Email — required for bid upload login"}
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
             <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
             <Input placeholder="Trade / discipline" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
             <Button type="submit" className="sm:col-span-2" disabled={busy}>

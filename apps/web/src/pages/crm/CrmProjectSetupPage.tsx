@@ -78,6 +78,7 @@ type CompleteOut = {
   folders: { count: number; provider: string };
   clientPortals: { email: string; created: boolean; tempPassword?: string }[];
   contractorPortals: { email: string; created: boolean; tempPassword?: string }[];
+  stakeholderPortals?: { email: string; created: boolean; tempPassword?: string }[];
   reports: {
     dpr: { created: boolean; logDate: string; status: string };
     wpr: { created: boolean; weekEnding: string; status: string };
@@ -277,7 +278,7 @@ export default function CrmProjectSetupPage() {
     setMsg("");
     try {
       const out = await api<CompleteOut & { status?: string }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token });
-      const passwords = [...out.clientPortals, ...out.contractorPortals]
+      const passwords = [...out.clientPortals, ...out.contractorPortals, ...(out.stakeholderPortals || [])]
         .filter((p) => p.created && p.tempPassword)
         .map((p) => `${p.email} → ${p.tempPassword}`);
       setMsg(
@@ -285,7 +286,7 @@ export default function CrmProjectSetupPage() {
           `Setup complete: ${out.folders.count} folders (${out.folders.provider}).`,
           `Comms +${out.comms.contacts.created} contacts.`,
           passwords.length ? `New portal passwords: ${passwords.join("; ")}` : "Existing portal logins reused.",
-          "DPR and WPR stay on the live desk when you start reporting.",
+          "Client signs in at /login/client. Design consultants and other consultants sign in at /login/stakeholder.",
         ].join(" ")
       );
       await loadProject();

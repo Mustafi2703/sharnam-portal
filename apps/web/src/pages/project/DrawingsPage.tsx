@@ -1,5 +1,8 @@
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import PdfMarkup from "../../components/PdfMarkup";
+import { uploadDrawingMarkupPages, type MarkupPageDraft } from "../../lib/drawingMarkup";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
@@ -97,6 +100,10 @@ export default function DrawingsPage() {
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [dumpBusy, setDumpBusy] = useState(false);
+  const [markupFile, setMarkupFile] = useState<File | null>(null);
+  const [markupOpen, setMarkupOpen] = useState(false);
+  const [markupRevisionId, setMarkupRevisionId] = useState<string | null>(null);
+  const [pendingMarkupPages, setPendingMarkupPages] = useState<MarkupPageDraft[]>([]);
   const [addRowOpen, setAddRowOpen] = useState(false);
   const [addRowForm, setAddRowForm] = useState({
     drawingNumber: "",
@@ -322,6 +329,53 @@ export default function DrawingsPage() {
     setViewer(previewFromRev(d, latest));
   }
 
+  function openUploadMarkup(file: File | null) {
+    if (!file) {
+      setMsg("Choose a PDF first, then tap Markup.");
+      return;
+    }
+    setMarkupRevisionId(null);
+    setMarkupFile(file);
+    setMarkupOpen(true);
+  }
+
+  async function openSavedPdfMarkup(d: any) {
+    const latest = gfcCurrentRevision(d);
+    const pdfRef =
+      latest?.pdfFileUrl ||
+      (drawingFileKind(latest?.fileName || latest?.fileUrl) === "pdf" ? latest?.fileUrl : null);
+    if (!latest?.id || !pdfRef) {
+      setMsg("Upload a PDF on this sheet first, then Markup.");
+      return;
+    }
+    try {
+      const res = await fetch(resolveDrawingFileUrl(pdfRef), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Could not load PDF");
+      const blob = await res.blob();
+      setMarkupRevisionId(latest.id);
+      setMarkupFile(new File([blob], latest.pdfFileName || `${d.drawingNumber}.pdf`, { type: blob.type || "application/pdf" }));
+      setMarkupOpen(true);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open PDF for markup");
+    }
+  }
+
+  function latestRevisionId(drawing: any): string | null {
+    const revs = drawing?.revisions || [];
+    if (!revs.length) return null;
+    const current = revs.find((r: any) => r.revisionNumber === drawing.currentRev);
+    return (current || revs[revs.length - 1])?.id || null;
+  }
+
+  async function savePendingMarkup(drawing: any) {
+    const revId = latestRevisionId(drawing);
+    if (!revId || !pendingMarkupPages.length) return;
+    await uploadDrawingMarkupPages(revId, pendingMarkupPages, token, "GFC register markup");
+    setPendingMarkupPages([]);
+  }
+
   async function patchRevisionPlanned(revId: string, plannedDate: string) {
     await api(`/api/drawings/revision/${revId}/dates`, {
       method: "PATCH",
@@ -353,7 +407,8 @@ export default function DrawingsPage() {
       if (registerPdf) fd.append("pdf", registerPdf);
       if (registerDwg) fd.append("dwg", registerDwg);
       appendIssueToFormData(fd, registerIssue);
-      await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
+      const created = await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
+      await savePendingMarkup(created);
       setForm({
         drawingNumber: "",
         title: "",
@@ -368,7 +423,8 @@ export default function DrawingsPage() {
       setRegisterIssue(emptyDrawingIssueDraft());
       setUnlockToken(null);
       setShowRegister(false);
-      setMsg("Drawing saved to GFC register (PDF + DWG).");
+      setPendingMarkupPages([]);
+      setMsg("Drawing saved to GFC register (PDF + DWG). Markup pages saved on the revision if you marked the PDF.");
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Upload failed");
@@ -396,6 +452,7 @@ export default function DrawingsPage() {
     setRevUploadMode("new");
     setRevReplaceRole("pdf");
     setFormError("");
+    setPendingMarkupPages([]);
   }
 
   async function uploadRevision(e: FormEvent) {
@@ -436,6 +493,10 @@ export default function DrawingsPage() {
           appendIssueToFormData(fd, revIssue);
           await api(`/api/drawings/revision/${replaceRevisionId}/file`, { method: "PATCH", token, body: fd });
         }
+        if (pendingMarkupPages.length) {
+          await uploadDrawingMarkupPages(replaceRevisionId, pendingMarkupPages, token, "GFC register markup");
+          setPendingMarkupPages([]);
+        }
         setExpandedId(uploadForId);
         setMsg(`${revForm.revisionNumber} updated — same revision row; register stays in sync.`);
       } else if (revUploadMode === "update" && replaceRevisionId && !revPdf && !revDwg && issueDraftHasData(revIssue)) {
@@ -463,7 +524,8 @@ export default function DrawingsPage() {
         const hadRev = (uploadTarget?.revisions || []).some(
           (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
         );
-        await api<any>(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
+        const updated = await api<any>(`/api/drawings/${uploadForId}/revisions`, { method: "POST", token, body: fd });
+        await savePendingMarkup(updated);
         setExpandedId(uploadForId);
         setMsg(
           hadRev
@@ -734,6 +796,8 @@ export default function DrawingsPage() {
               dwgFile={registerDwg}
               onPdfFile={setRegisterPdf}
               onDwgFile={setRegisterDwg}
+              onMarkupPdf={() => openUploadMarkup(registerPdf)}
+              markupPageCount={pendingMarkupPages.length}
             />
           }
           primaryLabel={form.publish ? "Upload & publish" : "Upload to register"}
@@ -925,6 +989,11 @@ export default function DrawingsPage() {
                           >
                             Coord
                           </Link>
+                          {canUpload && gfcCurrentRevision(d)?.pdfFileUrl && (
+                            <Button type="button" variant="secondary" className="!px-2 !py-1 !text-xs" onClick={() => void openSavedPdfMarkup(d)}>
+                              Markup
+                            </Button>
+                          )}
                           {canUpload && !d.isPublished && (
                             <Button
                               type="button"
@@ -1110,9 +1179,18 @@ export default function DrawingsPage() {
                 dwgFile={null}
                 onPdfFile={setRevPdf}
                 onDwgFile={() => undefined}
+                onMarkupPdf={() => openUploadMarkup(revPdf)}
+                markupPageCount={pendingMarkupPages.length}
               />
             ) : (
-              <DrawingUploadFilePicker pdfFile={revPdf} dwgFile={revDwg} onPdfFile={setRevPdf} onDwgFile={setRevDwg} />
+              <DrawingUploadFilePicker
+                pdfFile={revPdf}
+                dwgFile={revDwg}
+                onPdfFile={setRevPdf}
+                onDwgFile={setRevDwg}
+                onMarkupPdf={() => openUploadMarkup(revPdf)}
+                markupPageCount={pendingMarkupPages.length}
+              />
             )
           }
           primaryLabel={
@@ -1235,6 +1313,41 @@ export default function DrawingsPage() {
       )}
 
       {viewer && <DrawingFileViewer revision={viewer} variant="modal" onClose={() => setViewer(null)} />}
+
+      {markupOpen &&
+        markupFile &&
+        createPortal(
+          <div className="markup-modal" role="dialog" aria-modal="true">
+            <div className="markup-modal__backdrop" onClick={() => setMarkupOpen(false)} />
+            <div className="markup-modal__panel max-w-4xl">
+              <div className="markup-modal__head">
+                <span>GFC PDF markup</span>
+                <button type="button" className="markup-modal__close" onClick={() => setMarkupOpen(false)}>
+                  ×
+                </button>
+              </div>
+              <div className="markup-modal__body">
+                <PdfMarkup
+                  src={markupFile}
+                  saveLabel={markupRevisionId ? "Save markup on this revision" : "Keep markup for this upload"}
+                  onCancel={() => setMarkupOpen(false)}
+                  onSave={async (pages: MarkupPageDraft[]) => {
+                    if (markupRevisionId) {
+                      await uploadDrawingMarkupPages(markupRevisionId, pages, token, "GFC register markup");
+                      setMsg(`${pages.length} markup page(s) saved on the GFC revision.`);
+                    } else {
+                      setPendingMarkupPages(pages);
+                      setMsg(`${pages.length} marked page(s) will save when you upload this PDF.`);
+                    }
+                    setMarkupOpen(false);
+                    await load();
+                  }}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

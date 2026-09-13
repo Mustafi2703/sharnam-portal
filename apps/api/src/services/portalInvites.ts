@@ -13,6 +13,7 @@ function portalOrigin() {
 }
 
 function loginPath(role: string) {
+  if (role === "employee" || role === "stakeholder") return "/login/stakeholder";
   const portal = portalForRole((role as RoleKey) || "office");
   if (portal === "site") return "/login/site";
   if (portal === "client") return "/login/client";

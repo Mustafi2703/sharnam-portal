@@ -49,7 +49,7 @@ const TAB_META: Record<
   },
   people: {
     title: "People & portal access",
-    subtitle: "Create logins for office, site, vendor, and client roles — assign to projects from project directory.",
+    subtitle: "Every vendor, client, and consultant login created on setup appears here so they can sign in.",
     partyTypes: [],
     defaultParty: "Vendor",
   },
@@ -324,8 +324,13 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
   }, [people, peopleSearch]);
 
   const load = useCallback(async () => {
-    const rows = await api<UserAccountRow[]>("/api/hrm/employees", { token }).catch(() => []);
-    setPeople(rows);
+    const fromHrm = await api<UserAccountRow[]>("/api/hrm/employees", { token }).catch(() => []);
+    if (fromHrm.length) {
+      setPeople(fromHrm);
+      return;
+    }
+    const fromUsers = await api<UserAccountRow[]>("/api/users", { token }).catch(() => []);
+    setPeople(fromUsers);
   }, [token]);
 
   useEffect(() => {
@@ -371,7 +376,18 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={p.isActive === false ? "warn" : "ok"}>{p.role}</Badge>
+                <Badge tone={p.isActive === false ? "warn" : "ok"}>
+                  {p.role === "employee" ? "stakeholder" : p.role === "vendor" ? "vendor" : p.role}
+                </Badge>
+                <span className="text-[10px] text-steel-muted">
+                  {p.role === "vendor"
+                    ? "/login/vendor"
+                    : p.role === "client"
+                      ? "/login/client"
+                      : p.role === "employee"
+                        ? "/login/stakeholder"
+                        : "/login/office"}
+                </span>
                 {canEdit ? (
                   <UserManageActions
                     user={p}

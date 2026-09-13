@@ -146,27 +146,20 @@ vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office")
   });
   await audit("vendor.assign", { userId: req.user!.id, entity: "ProjectVendor", entityId: row.id });
 
-  let portal: { email: string; created: boolean; tempPassword?: string } | null = null;
+  let portal: { email: string; created: boolean; tempPassword?: string; role?: string } | null = null;
   if (row.vendor.email) {
     try {
-      const { ensureVendorPortalLogin, grantVendorProjectAccess } = await import("../services/crmVendorCredentials.js");
-      const login = await ensureVendorPortalLogin({
-        email: row.vendor.email,
-        name: row.vendor.name,
-        businessPhone: row.vendor.businessPhone,
-        vendorId: row.vendor.id,
+      const { provisionCompanyAccess } = await import("../services/crmVendorCredentials.js");
+      const login = await provisionCompanyAccess({
+        projectId: req.params.projectId,
+        vendor: row.vendor,
+        assignedVia: "Project setup",
       });
       if (login) {
-        await grantVendorProjectAccess({
-          projectId: req.params.projectId,
-          vendorId: row.vendor.id,
-          userId: login.userId,
-          assignedVia: "Project setup",
-        });
-        portal = { email: login.email, created: login.created, tempPassword: login.tempPassword };
+        portal = { email: login.email, created: login.created, tempPassword: login.tempPassword, role: login.role };
       }
     } catch (err) {
-      console.warn("Vendor portal login on assign failed:", err instanceof Error ? err.message : err);
+      console.warn("Company portal login on assign failed:", err instanceof Error ? err.message : err);
     }
   }
   res.status(201).json({ ...row, portal });

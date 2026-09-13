@@ -9,7 +9,11 @@ import { provisionProjectSheetPack } from "./projectSheetPack.js";
 import { seedArvindCommsMatrix, seedStandardCommsMatrix } from "./commsMatrixSeed.js";
 import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncCommsFromDirectory.js";
 import { initializeProjectReports, type InitReportsResult } from "./initializeProjectReports.js";
-import { ensureClientPortalLogin, ensureVendorPortalLogin, type PortalLoginResult } from "./crmVendorCredentials.js";
+import {
+  provisionCompanyAccess,
+  provisionProjectClientEmail,
+  type PortalLoginResult,
+} from "./crmVendorCredentials.js";
 
 export type SetupCheck = {
   key: string;
@@ -47,58 +51,31 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   const clientPortals: PortalLoginResult[] = [];
   const contractorPortals: PortalLoginResult[] = [];
-
-  async function assignMember(loginUserId: string, role: string) {
-    const existing = await prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId: loginUserId } },
-    });
-    const keepAdmin = existing && (existing.role === "admin" || existing.role === "office");
-    await prisma.projectMember.upsert({
-      where: { projectId_userId: { projectId, userId: loginUserId } },
-      create: { projectId, userId: loginUserId, role: keepAdmin ? existing.role : role },
-      update: keepAdmin ? {} : { role },
-    });
-  }
+  const stakeholderPortals: PortalLoginResult[] = [];
 
   if (project.clientEmail) {
-    const login = await ensureClientPortalLogin({
+    const login = await provisionProjectClientEmail({
+      projectId,
       email: project.clientEmail,
       name: project.clientContactName || project.clientName || project.name,
-      businessPhone: project.clientPhone,
+      phone: project.clientPhone,
     });
-    if (login) {
-      await assignMember(login.userId, "client");
-      clientPortals.push(login);
-    }
+    if (login) clientPortals.push(login);
   }
 
   for (const pv of project.vendors) {
     const v = pv.vendor;
     if (!v.email) continue;
-    if (v.partyType === "Client") {
-      const login = await ensureClientPortalLogin({
-        email: v.email,
-        name: v.primaryContactName || v.name,
-        businessPhone: v.businessPhone,
-      });
-      if (login) {
-        await assignMember(login.userId, "client");
-        clientPortals.push(login);
-      }
-      continue;
-    }
-    if (v.partyType === "Contractor" || v.partyType === "Vendor") {
-      const login = await ensureVendorPortalLogin({
-        email: v.email,
-        name: v.name,
-        businessPhone: v.businessPhone,
-        vendorId: v.id,
-      });
-      if (login) {
-        await assignMember(login.userId, "vendor");
-        contractorPortals.push(login);
-      }
-    }
+    const login = await provisionCompanyAccess({
+      projectId,
+      vendor: v,
+      assignedVia: "Complete setup",
+    });
+    if (!login) continue;
+    if (v.partyType === "Client") clientPortals.push(login);
+    else if (v.partyType === "Consultant" || v.partyType === "Designer" || v.partyType === "PMC") {
+      stakeholderPortals.push(login);
+    } else contractorPortals.push(login);
   }
 
   const firstContractor = project.vendors.find((pv) => pv.vendor.partyType === "Contractor")?.vendor;
@@ -127,7 +104,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
   }
 
   const { emailPortalCredentials, emailProjectSetupBrief } = await import("./portalInvites.js");
-  for (const portal of [...clientPortals, ...contractorPortals]) {
+  for (const portal of [...clientPortals, ...contractorPortals, ...stakeholderPortals]) {
     if (!portal.tempPassword) continue;
     try {
       await emailPortalCredentials({
@@ -163,6 +140,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     comms: { roleFlowsCreated: matrixCreated, contacts },
     clientPortals: clientPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
     contractorPortals: contractorPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
+    stakeholderPortals: stakeholderPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
     reports,
   };
 }
