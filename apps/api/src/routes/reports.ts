@@ -598,25 +598,30 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
   const name = String(req.body.name || lead.title).trim();
   if (!code || !name) return res.status(400).json({ error: "code and name required" });
 
-  const project = await prisma.project.create({
-    data: {
+  const { createOrReuseProject } = await import("../services/projectCreate.js");
+  let project;
+  try {
+    const out = await createOrReuseProject({
       code,
       name,
-      clientName: req.body.clientName || lead.contactName || undefined,
-      location: req.body.location || undefined,
+      clientName: req.body.clientName || lead.contactName || null,
+      location: req.body.location || null,
       status: "Planning",
-      clientContactName: req.body.clientContactName || lead.contactName || undefined,
-      clientEmail: req.body.clientEmail || lead.email || undefined,
-      clientPhone: req.body.clientPhone || lead.phone || undefined,
-      clientAddress: req.body.clientAddress || undefined,
-      clientGst: req.body.clientGst || undefined,
-      designConsultant: req.body.designConsultant || undefined,
-      contractorName: req.body.contractorName || undefined,
+      clientContactName: req.body.clientContactName || lead.contactName || null,
+      clientEmail: req.body.clientEmail || lead.email || null,
+      clientPhone: req.body.clientPhone || lead.phone || null,
+      clientAddress: req.body.clientAddress || null,
+      clientGst: req.body.clientGst || null,
+      designConsultant: req.body.designConsultant || null,
+      contractorName: req.body.contractorName || null,
       pmcName: req.body.pmcName || "SPDC",
       bidDisciplinesJson,
-      ...(workPackagesJson ? { workPackages: workPackagesJson } : {}),
-    },
-  });
+      workPackages: workPackagesJson,
+    });
+    project = out.project;
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Could not convert lead to project" });
+  }
 
   await prisma.lead.update({
     where: { id: lead.id },
@@ -889,17 +894,20 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
 
   let projectId = req.body.projectId as string | undefined;
   if (!projectId) {
-    const project = await prisma.project.create({
-      data: {
+    try {
+      const { createOrReuseProject } = await import("../services/projectCreate.js");
+      const { project } = await createOrReuseProject({
         code,
         name,
         clientName: qtn.clientName,
-        clientAddress: qtn.clientAddress || undefined,
-        clientGst: qtn.clientGst || undefined,
+        clientAddress: qtn.clientAddress || null,
+        clientGst: qtn.clientGst || null,
         status: "Planning",
-      },
-    });
-    projectId = project.id;
+      });
+      projectId = project.id;
+    } catch (err) {
+      return res.status(400).json({ error: err instanceof Error ? err.message : "Could not create project from award" });
+    }
     const { mockOneDrive } = await import("../services/mockOneDrive.js");
     await mockOneDrive.ensureProjectTree(projectId);
     try {

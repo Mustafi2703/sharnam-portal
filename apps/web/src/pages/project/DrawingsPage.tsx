@@ -586,6 +586,21 @@ export default function DrawingsPage() {
         }
       />
 
+      {searchParams.get("markup") === "1" && (
+        <Card className="!p-3 border-brand/40 bg-sand/30 space-y-2">
+          <p className="text-sm font-semibold">Markup</p>
+          <p className="text-xs text-steel-muted leading-relaxed">
+            Upload a GFC PDF or open a revision, then tap <span className="font-semibold text-ink">Markup</span> on the
+            file picker to draw clouds and notes before save.
+          </p>
+          {canUpload && (
+            <Button type="button" onClick={() => startUploadFlow()}>
+              Upload & Markup
+            </Button>
+          )}
+        </Card>
+      )}
+
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-3 -mt-1">
         <div
           className="flex gap-1 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-0.5 min-w-0"

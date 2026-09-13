@@ -55,7 +55,7 @@ export function DrawingUploadFilePicker({
             <div className="flex flex-wrap gap-2">
               {canMarkup && onMarkupPdf && (
                 <Button type="button" variant="secondary" className="!text-xs" onClick={onMarkupPdf}>
-                  {formatUiText("Mark up PDF")}
+                  {formatUiText("Markup")}
                 </Button>
               )}
               <Button type="button" variant="ghost" className="!text-xs" onClick={() => onPdfFile(null)}>

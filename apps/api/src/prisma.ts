@@ -32,8 +32,12 @@ export function isPrismaFatal(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const name = String((err as { name?: string }).name || "");
   const msg = String((err as { message?: string }).message || "");
+  const code = String((err as { code?: string }).code || "");
+  if (name === "PrismaClientKnownRequestError" || name === "PrismaClientValidationError") return false;
+  if (/^P20\d{2}$/.test(code)) return false;
   return (
-    name.includes("PrismaClient") ||
+    name.includes("RustPanic") ||
+    name.includes("PrismaClientInitializationError") ||
     msg.includes("PANIC:") ||
     msg.includes("timer has gone away")
   );

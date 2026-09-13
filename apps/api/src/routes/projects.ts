@@ -456,8 +456,11 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
     endDate,
   } = req.body;
   if (!code || !name) return res.status(400).json({ error: "code and name required" });
-  const project = await prisma.project.create({
-    data: {
+  let project;
+  let created = true;
+  try {
+    const { createOrReuseProject } = await import("../services/projectCreate.js");
+    const out = await createOrReuseProject({
       code: String(code).trim(),
       name: String(name).trim(),
       clientName: clientName ? String(clientName).trim() : null,
@@ -473,38 +476,43 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       pmcName: pmcName ? String(pmcName).trim() : "SPDC",
       startDate: startDate ? new Date(String(startDate)) : null,
       endDate: endDate ? new Date(String(endDate)) : null,
-    },
-  });
-  await audit("project.create", { userId: req.user!.id, entity: "Project", entityId: project.id });
-
-  const memberIds: string[] = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
-  for (const userId of memberIds) {
-    await prisma.projectMember.upsert({
-      where: { projectId_userId: { projectId: project.id, userId } },
-      create: { projectId: project.id, userId, role: "member" },
-      update: {},
     });
+    project = out.project;
+    created = out.created;
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save project card" });
   }
-  const vendorIds: string[] = Array.isArray(req.body.vendorIds) ? req.body.vendorIds : [];
-  for (const vendorId of vendorIds) {
-    await prisma.projectVendor.upsert({
-      where: { projectId_vendorId: { projectId: project.id, vendorId } },
-      create: { projectId: project.id, vendorId, assignedVia: "Project setup" },
-      update: {},
-    });
+  if (created) {
+    await audit("project.create", { userId: req.user!.id, entity: "Project", entityId: project.id });
   }
-  await prisma.projectMember.upsert({
-    where: { projectId_userId: { projectId: project.id, userId: req.user!.id } },
-    create: { projectId: project.id, userId: req.user!.id, role: "office" },
-    update: {},
-  });
 
   try {
+    const memberIds: string[] = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+    for (const userId of memberIds) {
+      await prisma.projectMember.upsert({
+        where: { projectId_userId: { projectId: project.id, userId } },
+        create: { projectId: project.id, userId, role: "member" },
+        update: {},
+      });
+    }
+    const vendorIds: string[] = Array.isArray(req.body.vendorIds) ? req.body.vendorIds : [];
+    for (const vendorId of vendorIds) {
+      await prisma.projectVendor.upsert({
+        where: { projectId_vendorId: { projectId: project.id, vendorId } },
+        create: { projectId: project.id, vendorId, assignedVia: "Project setup" },
+        update: {},
+      });
+    }
+    await prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId: project.id, userId: req.user!.id } },
+      create: { projectId: project.id, userId: req.user!.id, role: "office" },
+      update: {},
+    });
     await mockOneDrive.ensureProjectTree(project.id);
   } catch (err) {
-    console.error("Project folder tree failed:", err instanceof Error ? err.message : err);
+    console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
-  res.status(201).json(project);
+  res.status(created ? 201 : 200).json({ ...project, alreadyExists: !created });
 });
 
 /** Default bid disciplines configured for a project (CRM package setup). */
@@ -733,7 +741,12 @@ projectsRouter.post("/:id/complete-setup", requireRoles("admin", "office"), asyn
   const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
   const { completeProjectSetup } = await import("../services/completeProjectSetup.js");
-  const out = await completeProjectSetup(project.id, req.user!.id);
+  let out;
+  try {
+    out = await completeProjectSetup(project.id, req.user!.id);
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Complete setup failed" });
+  }
   await audit("project.complete_setup", {
     userId: req.user!.id,
     entity: "Project",
@@ -868,40 +881,45 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     startDate,
     endDate,
   } = req.body;
-  const project = await prisma.project.update({
-    where: { id: req.params.id },
-    data: {
-      notificationEmails: notificationEmails !== undefined ? String(notificationEmails) : undefined,
-      notificationWhatsApp: notificationWhatsApp !== undefined ? String(notificationWhatsApp) : undefined,
-      whatsAppEnabled: typeof whatsAppEnabled === "boolean" ? whatsAppEnabled : undefined,
-      emailFromName: emailFromName !== undefined ? String(emailFromName) : undefined,
-      emailEnabled: typeof emailEnabled === "boolean" ? emailEnabled : undefined,
-      notifyOnDrawingPublish: typeof notifyOnDrawingPublish === "boolean" ? notifyOnDrawingPublish : undefined,
-      notifyOnChecklistSubmit: typeof notifyOnChecklistSubmit === "boolean" ? notifyOnChecklistSubmit : undefined,
-      outlookMailbox: outlookMailbox !== undefined ? String(outlookMailbox || "") || null : undefined,
-      outlookConnected: typeof outlookConnected === "boolean" ? outlookConnected : undefined,
-      outlookConnectedAt:
-        typeof outlookConnected === "boolean"
-          ? outlookConnected
-            ? new Date()
-            : null
-          : undefined,
-      clientName: clientName !== undefined ? clientName : undefined,
-      location: location !== undefined ? location : undefined,
-      status: status !== undefined ? status : undefined,
-      name: name !== undefined ? name : undefined,
-      clientContactName: clientContactName !== undefined ? clientContactName : undefined,
-      clientEmail: clientEmail !== undefined ? clientEmail : undefined,
-      clientPhone: clientPhone !== undefined ? clientPhone : undefined,
-      clientAddress: clientAddress !== undefined ? clientAddress : undefined,
-      clientGst: clientGst !== undefined ? clientGst : undefined,
-      designConsultant: designConsultant !== undefined ? designConsultant : undefined,
-      contractorName: contractorName !== undefined ? contractorName : undefined,
-      pmcName: pmcName !== undefined ? pmcName : undefined,
-      startDate: startDate !== undefined ? (startDate ? new Date(String(startDate)) : null) : undefined,
-      endDate: endDate !== undefined ? (endDate ? new Date(String(endDate)) : null) : undefined,
-    },
-  });
+  let project;
+  try {
+    project = await prisma.project.update({
+      where: { id: req.params.id },
+      data: {
+        notificationEmails: notificationEmails !== undefined ? String(notificationEmails) : undefined,
+        notificationWhatsApp: notificationWhatsApp !== undefined ? String(notificationWhatsApp) : undefined,
+        whatsAppEnabled: typeof whatsAppEnabled === "boolean" ? whatsAppEnabled : undefined,
+        emailFromName: emailFromName !== undefined ? String(emailFromName) : undefined,
+        emailEnabled: typeof emailEnabled === "boolean" ? emailEnabled : undefined,
+        notifyOnDrawingPublish: typeof notifyOnDrawingPublish === "boolean" ? notifyOnDrawingPublish : undefined,
+        notifyOnChecklistSubmit: typeof notifyOnChecklistSubmit === "boolean" ? notifyOnChecklistSubmit : undefined,
+        outlookMailbox: outlookMailbox !== undefined ? String(outlookMailbox || "") || null : undefined,
+        outlookConnected: typeof outlookConnected === "boolean" ? outlookConnected : undefined,
+        outlookConnectedAt:
+          typeof outlookConnected === "boolean"
+            ? outlookConnected
+              ? new Date()
+              : null
+            : undefined,
+        clientName: clientName !== undefined ? clientName : undefined,
+        location: location !== undefined ? location : undefined,
+        status: status !== undefined ? status : undefined,
+        name: name !== undefined ? name : undefined,
+        clientContactName: clientContactName !== undefined ? clientContactName : undefined,
+        clientEmail: clientEmail !== undefined ? clientEmail : undefined,
+        clientPhone: clientPhone !== undefined ? clientPhone : undefined,
+        clientAddress: clientAddress !== undefined ? clientAddress : undefined,
+        clientGst: clientGst !== undefined ? clientGst : undefined,
+        designConsultant: designConsultant !== undefined ? designConsultant : undefined,
+        contractorName: contractorName !== undefined ? contractorName : undefined,
+        pmcName: pmcName !== undefined ? pmcName : undefined,
+        startDate: startDate !== undefined ? (startDate ? new Date(String(startDate)) : null) : undefined,
+        endDate: endDate !== undefined ? (endDate ? new Date(String(endDate)) : null) : undefined,
+      },
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save project card" });
+  }
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
   res.json(project);
 });

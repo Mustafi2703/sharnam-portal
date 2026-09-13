@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
@@ -52,6 +52,7 @@ type VendorRow = SetupVendor & { partyType?: string };
 /** Live-project setup — same launch as CRM, for jobs already in the portal. */
 export default function LiveProjectSetupPage() {
   const { id: projectId } = useParams();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const canManage = user?.role === "admin" || user?.role === "office";
   const [summary, setSummary] = useState<SetupSummary | null>(null);
@@ -135,8 +136,9 @@ export default function LiveProjectSetupPage() {
       }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token, body: JSON.stringify({}) });
       const slips = [...(out.clientPortals || []), ...(out.contractorPortals || [])].filter((p) => p.email);
       setAccessSlip(slips);
-      setMsg("Setup complete — folders, comms, portals, first DPR / WPR.");
+      setMsg("Setup complete — project is live. Opening the project desk.");
       await load();
+      if (projectId) navigate(`/projects/${projectId}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Complete setup failed");
     } finally {
@@ -193,7 +195,14 @@ export default function LiveProjectSetupPage() {
                 These names print at the top of QAP, cube, and quality registers. Keep them short and complete.
               </p>
             </div>
-            <ProjectManageActions project={card} token={token} showEdit={false} onChanged={() => void load()} />
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/projects/${projectId}`}>
+                <Button type="button" variant="secondary">
+                  Open project desk
+                </Button>
+              </Link>
+              <ProjectManageActions project={card} token={token} showEdit={false} onChanged={() => void load()} />
+            </div>
           </div>
           <form
             className="grid sm:grid-cols-2 gap-2"

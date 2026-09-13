@@ -73,7 +73,8 @@ export default function CrmProjectsPage() {
       setParams({}, { replace: true });
       await load();
       setSelected(created);
-      setMsg(`Project ${created.code} created. Open setup to add parties, comms, and portals.`);
+      setMsg(`Project ${created.code} saved. Opening the project card…`);
+      window.location.assign(`/crm/setup?projectId=${created.id}&step=project`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
     } finally {

@@ -15,7 +15,10 @@ process.on("uncaughtException", (err) => {
 function isPrismaFatal(err) {
   const name = err && typeof err === "object" && "name" in err ? String(err.name) : "";
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  return name.includes("PrismaClient") || msg.includes("PANIC:") || msg.includes("timer has gone away");
+  const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+  if (name === "PrismaClientKnownRequestError" || name === "PrismaClientValidationError") return false;
+  if (/^P20\d{2}$/.test(code)) return false;
+  return name.includes("RustPanic") || name.includes("PrismaClientInitializationError") || msg.includes("PANIC:") || msg.includes("timer has gone away");
 }
 
 process.on("unhandledRejection", (err) => {

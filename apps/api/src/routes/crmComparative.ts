@@ -197,6 +197,7 @@ crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), a
 });
 
 crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
   const title = String(req.body.title || "").trim();
   const vendorNames: string[] = Array.isArray(req.body.vendorNames)
     ? req.body.vendorNames.map((x: unknown) => String(x)).filter(Boolean)
@@ -325,6 +326,12 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
       total: pkgWithSheets?.vendorBoqs.length ?? 0,
     },
   });
+  } catch (err) {
+    console.error("Bid package create failed:", err instanceof Error ? err.message : err);
+    if (!res.headersSent) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not create bid package" });
+    }
+  }
 });
 
 crmComparativeRouter.patch("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

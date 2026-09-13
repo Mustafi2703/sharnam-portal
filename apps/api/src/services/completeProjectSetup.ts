@@ -110,6 +110,12 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   const reports = await initializeProjectReports(projectId, userId);
 
+  const nextStatus =
+    !project.status || project.status === "Planning" || project.status === "Draft" ? "Active" : project.status;
+  if (nextStatus !== project.status) {
+    await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus } });
+  }
+
   const { emailPortalCredentials, emailProjectSetupBrief } = await import("./portalInvites.js");
   for (const portal of [...clientPortals, ...contractorPortals]) {
     if (!portal.tempPassword) continue;
@@ -139,6 +145,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   return {
     projectId,
+    status: nextStatus,
     folders: { root: folders.root, count: folders.folders.length, provider: folders.provider },
     sheets: sheets
       ? { ok: sheets.steps.every((s) => s.ok), steps: sheets.steps.map((s) => ({ key: s.key, ok: s.ok, skipped: s.skipped })) }

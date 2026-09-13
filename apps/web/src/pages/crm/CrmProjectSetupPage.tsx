@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
@@ -21,6 +21,7 @@ type ProjectRow = {
   clientName?: string | null;
   clientEmail?: string | null;
   location?: string | null;
+  alreadyExists?: boolean;
 };
 
 type UserRow = { id: string; fullName: string; email: string; role: string; phone?: string | null };
@@ -108,6 +109,7 @@ const STEPS: { id: Step; n: string; label: string }[] = [
 
 export default function CrmProjectSetupPage() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const projectId = params.get("projectId") || "";
   const step = (["project", "matrix", "launch"].includes(params.get("step") || "") ? params.get("step") : projectId ? "matrix" : "project") as Step;
@@ -225,7 +227,11 @@ export default function CrmProjectSetupPage() {
       setCreateForm(EMPTY_PROJECT);
       await loadLists();
       setStep("project", created.id);
-      setMsg(`Project ${created.code} saved. Card, client, and parties are stored. Continue the matrix, then launch.`);
+      setMsg(
+        created.alreadyExists
+          ? `Project ${created.code} already exists — opened the saved card. Update details below, then continue.`
+          : `Project ${created.code} saved. The card is open below. Continue the matrix, then launch to go live.`
+      );
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -248,8 +254,9 @@ export default function CrmProjectSetupPage() {
         token,
         body: JSON.stringify({ vendorIds: [...consultantIds, ...contractorIds] }),
       });
-      setMsg("Project card, client location, consultants and contractors saved.");
+      setMsg("Project card saved. Details stay on this project — continue matrix, or launch to go live.");
       await loadProject();
+      setStep("project", projectId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -262,7 +269,7 @@ export default function CrmProjectSetupPage() {
     setBusy(true);
     setMsg("");
     try {
-      const out = await api<CompleteOut>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token });
+      const out = await api<CompleteOut & { status?: string }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token });
       const passwords = [...out.clientPortals, ...out.contractorPortals]
         .filter((p) => p.created && p.tempPassword)
         .map((p) => `${p.email} → ${p.tempPassword}`);
@@ -276,6 +283,7 @@ export default function CrmProjectSetupPage() {
         ].join(" ")
       );
       await loadProject();
+      navigate(`/projects/${projectId}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Complete setup failed");
     } finally {
@@ -310,6 +318,11 @@ export default function CrmProjectSetupPage() {
               showEdit={false}
               onChanged={() => void loadLists()}
             />
+            <Link to={`/projects/${summary.project.id}`}>
+              <Button type="button" variant="secondary">
+                Open project desk
+              </Button>
+            </Link>
           </div>
         )}
       </div>
