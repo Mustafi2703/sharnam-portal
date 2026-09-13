@@ -38,32 +38,39 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
     : ["Client", "Consultant", "PMC", "Designer"].includes(rawParty)
       ? rawParty
       : "Contractor";
-  const v = await prisma.vendor.create({
-    data: {
-      name: req.body.name,
-      partyType,
-      trade: req.body.trade,
-      address: req.body.address,
-      city: req.body.city,
-      state: req.body.state,
-      country: req.body.country || "India",
-      businessPhone: req.body.businessPhone,
-      email: req.body.email,
-      website: req.body.website,
-      primaryContactName: req.body.primaryContactName,
-      licenseNumber: req.body.licenseNumber,
-      gstNumber: req.body.gstNumber,
-      isUnionMember: !!req.body.isUnionMember,
-      isPrequalified: !!req.body.isPrequalified,
-      isMinorityOwned: !!req.body.isMinorityOwned,
-      isWomenOwned: !!req.body.isWomenOwned,
-      insuranceVerified: !!req.body.insuranceVerified,
-      notes: req.body.notes,
-      createdVia: "Manual",
-    },
-  });
-  await audit("vendor.create", { userId: req.user!.id, entity: "Vendor", entityId: v.id });
-  res.status(201).json(v);
+  const name = String(req.body.name || "").trim();
+  if (!name) return res.status(400).json({ error: "Company name required" });
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : "";
+  const data = {
+    name,
+    partyType,
+    trade: req.body.trade,
+    address: req.body.address,
+    city: req.body.city,
+    state: req.body.state,
+    country: req.body.country || "India",
+    businessPhone: req.body.businessPhone,
+    email: email || req.body.email || null,
+    website: req.body.website,
+    primaryContactName: req.body.primaryContactName,
+    licenseNumber: req.body.licenseNumber,
+    gstNumber: req.body.gstNumber,
+    isUnionMember: !!req.body.isUnionMember,
+    isPrequalified: !!req.body.isPrequalified,
+    isMinorityOwned: !!req.body.isMinorityOwned,
+    isWomenOwned: !!req.body.isWomenOwned,
+    insuranceVerified: !!req.body.insuranceVerified,
+    notes: req.body.notes,
+    isActive: true,
+  };
+  const existing = email
+    ? await prisma.vendor.findFirst({ where: { email } })
+    : await prisma.vendor.findFirst({ where: { name, partyType } });
+  const v = existing
+    ? await prisma.vendor.update({ where: { id: existing.id }, data })
+    : await prisma.vendor.create({ data: { ...data, createdVia: "Manual" } });
+  await audit(existing ? "vendor.update" : "vendor.create", { userId: req.user!.id, entity: "Vendor", entityId: v.id });
+  res.status(existing ? 200 : 201).json(v);
 });
 
 /** Seed global bidder catalog — one vendor per R2 BOQ discipline package (idempotent). */
@@ -138,7 +145,31 @@ vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office")
     include: { vendor: true },
   });
   await audit("vendor.assign", { userId: req.user!.id, entity: "ProjectVendor", entityId: row.id });
-  res.status(201).json(row);
+
+  let portal: { email: string; created: boolean; tempPassword?: string } | null = null;
+  if (row.vendor.email) {
+    try {
+      const { ensureVendorPortalLogin, grantVendorProjectAccess } = await import("../services/crmVendorCredentials.js");
+      const login = await ensureVendorPortalLogin({
+        email: row.vendor.email,
+        name: row.vendor.name,
+        businessPhone: row.vendor.businessPhone,
+        vendorId: row.vendor.id,
+      });
+      if (login) {
+        await grantVendorProjectAccess({
+          projectId: req.params.projectId,
+          vendorId: row.vendor.id,
+          userId: login.userId,
+          assignedVia: "Project setup",
+        });
+        portal = { email: login.email, created: login.created, tempPassword: login.tempPassword };
+      }
+    } catch (err) {
+      console.warn("Vendor portal login on assign failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  res.status(201).json({ ...row, portal });
 });
 
 export const rfiRouter = Router();

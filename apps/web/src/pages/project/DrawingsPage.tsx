@@ -919,6 +919,12 @@ export default function DrawingsPage() {
                               Upload rev
                             </Button>
                           )}
+                          <Link
+                            to={`/projects/${id}/drawings/coordination?drawingId=${d.id}`}
+                            className="inline-flex items-center rounded-lg border border-line bg-paper px-2 py-1 text-xs font-semibold text-brand hover:bg-sand/60"
+                          >
+                            Coord
+                          </Link>
                           {canUpload && !d.isPublished && (
                             <Button
                               type="button"

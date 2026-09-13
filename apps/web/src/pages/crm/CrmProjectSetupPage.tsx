@@ -425,7 +425,10 @@ export default function CrmProjectSetupPage() {
                         assigned={summary?.vendors || []}
                         projectPackages={projectPackages}
                         onMsg={setMsg}
-                        onChanged={() => void loadProject()}
+                        onChanged={async () => {
+                          await loadProject();
+                          await loadLists();
+                        }}
                       />
                       <ProjectVendorsSetupDesk
                         party="Consultant"
@@ -435,7 +438,10 @@ export default function CrmProjectSetupPage() {
                         assigned={summary?.vendors || []}
                         projectPackages={projectPackages}
                         onMsg={setMsg}
-                        onChanged={() => void loadProject()}
+                        onChanged={async () => {
+                          await loadProject();
+                          await loadLists();
+                        }}
                       />
                       <ProjectVendorsSetupDesk
                         party="Contractor"
@@ -445,7 +451,10 @@ export default function CrmProjectSetupPage() {
                         assigned={summary?.vendors || []}
                         projectPackages={projectPackages}
                         onMsg={setMsg}
-                        onChanged={() => void loadProject()}
+                        onChanged={async () => {
+                          await loadProject();
+                          await loadLists();
+                        }}
                       />
                     </div>
                   </div>

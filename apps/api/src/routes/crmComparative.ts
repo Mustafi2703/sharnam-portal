@@ -203,7 +203,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     ? req.body.vendorNames.map((x: unknown) => String(x)).filter(Boolean)
     : [];
   if (!title) return res.status(400).json({ error: "title required" });
-  if (vendorNames.length < 2) return res.status(400).json({ error: "At least 2 vendors required for comparison" });
+  if (vendorNames.length < 1) return res.status(400).json({ error: "Select at least one bidder" });
 
   const vendors = await prisma.vendor.findMany({
     where: { name: { in: vendorNames } },

@@ -690,7 +690,6 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
   const vendorIds: string[] = Array.isArray(req.body?.vendorIds) ? req.body.vendorIds.map(String) : [];
-  const replaceKinds = new Set(["Consultant", "Contractor", "Designer", "Vendor"]);
 
   for (const vendorId of vendorIds) {
     await prisma.projectVendor.upsert({
@@ -698,16 +697,6 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
       create: { projectId, vendorId, assignedVia: "Project setup" },
       update: {},
     });
-  }
-
-  const assigned = await prisma.projectVendor.findMany({
-    where: { projectId },
-    include: { vendor: { select: { id: true, partyType: true } } },
-  });
-  const selected = new Set(vendorIds);
-  const toDrop = assigned.filter((pv) => replaceKinds.has(pv.vendor.partyType) && !selected.has(pv.vendorId));
-  if (toDrop.length) {
-    await prisma.projectVendor.deleteMany({ where: { id: { in: toDrop.map((p) => p.id) } } });
   }
 
   const firstConsultant = await prisma.projectVendor.findFirst({
@@ -732,9 +721,9 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
     userId: req.user!.id,
     entity: "Project",
     entityId: projectId,
-    meta: { vendorIds, dropped: toDrop.length },
+    meta: { vendorIds },
   });
-  res.json({ ok: true, assigned: vendorIds.length, dropped: toDrop.length });
+  res.json({ ok: true, assigned: vendorIds.length });
 });
 
 projectsRouter.post("/:id/complete-setup", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

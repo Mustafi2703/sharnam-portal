@@ -45,7 +45,7 @@ type Props = {
 const COPY: Record<SetupPartyKind, { title: string; blurb: string; add: string; create: string; empty: string; defaultType: VendorPartyType }> = {
   Contractor: {
     title: "Vendors / contractors",
-    blurb: "Same company type. Add, delete, and pin work packages — no bid required.",
+    blurb: "Same company type. Add them here to put the company on the directory and this project. Email creates bid-upload access.",
     add: "Add vendor / contractor",
     create: "+ New vendor / contractor",
     empty: "No vendors / contractors on this job yet.",
@@ -159,16 +159,22 @@ export function ProjectVendorsSetupDesk({
           trade: form.trade.trim() || undefined,
         }),
       });
-      await api(`/api/vendors/project/${projectId}/assign`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ vendorId: created.id, tradeRole: form.trade.trim() || form.partyType, packages: [] }),
-      });
+      const assigned = await api<{ portal?: { email: string; created: boolean; tempPassword?: string } }>(
+        `/api/vendors/project/${projectId}/assign`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({ vendorId: created.id, tradeRole: form.trade.trim() || form.partyType, packages: [] }),
+        }
+      );
       setForm({ name: "", partyType: copy.defaultType, email: "", primaryContactName: "", businessPhone: "", trade: "" });
       setShowCreate(false);
+      const slip = assigned.portal;
       onMsg(
-        `${created.name} added to this project.${
-          created.email ? " Portal login can be issued from Complete setup." : " Add an email later if they need a login."
+        `${created.name} is on the company directory and this project.${
+          slip
+            ? ` Bid login: ${slip.email}${slip.tempPassword ? ` · ${slip.tempPassword}` : " (existing account)"}. Open a bid so they can upload.`
+            : " Add an email if they need a bid-upload login."
         }`,
       );
       await onChanged();
@@ -208,9 +214,16 @@ export function ProjectVendorsSetupDesk({
           <h3 className="font-semibold text-sm">{copy.title}</h3>
           <p className="text-xs text-steel-muted mt-0.5">{copy.blurb}</p>
         </div>
-        <Link to="/crm/directory/vendors" className="text-xs font-semibold text-brand">
-          Company directory →
-        </Link>
+        <div className="flex flex-col items-end gap-1">
+          <Link to="/crm/directory/vendors" className="text-xs font-semibold text-brand">
+            Company directory →
+          </Link>
+          {party === "Contractor" && (
+            <Link to={`/crm/bids?projectId=${projectId}`} className="text-xs font-semibold text-brand">
+              Open bid for these vendors →
+            </Link>
+          )}
+        </div>
       </div>
 
       {scopedAssigned.length > 0 && (
@@ -316,7 +329,7 @@ export function ProjectVendorsSetupDesk({
               ))}
             </Select>
             <Input placeholder="Contact" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-            <Input type="email" placeholder="Email (optional — only if they need a login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Input type="email" placeholder="Email — required for bid upload login" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
             <Input placeholder="Trade / discipline" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
             <Button type="submit" className="sm:col-span-2" disabled={busy}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -19,6 +19,8 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../
 export function CoordinationPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusDrawingId = searchParams.get("drawingId") || "";
   const { token, user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
@@ -61,8 +63,10 @@ export function CoordinationPage() {
     void load();
   }, [id, token]);
 
-  const filtered = rows.filter((r) => filter === "All" || r.status === filter);
-  const openCount = rows.filter((r) => r.status === "Open").length;
+  const sheetRows = focusDrawingId ? rows.filter((r) => r.linkedDrawingId === focusDrawingId) : rows;
+  const filtered = sheetRows.filter((r) => filter === "All" || r.status === filter);
+  const openCount = sheetRows.filter((r) => r.status === "Open").length;
+  const focusDrawing = focusDrawingId ? drawings.find((d) => d.id === focusDrawingId) : null;
 
   useEffect(() => {
     if (!filtered.length) {
@@ -89,6 +93,11 @@ export function CoordinationPage() {
   useEffect(() => {
     setLinkDrawingId(selected?.linkedDrawingId || "");
   }, [selected?.id, selected?.linkedDrawingId]);
+
+  useEffect(() => {
+    if (!focusDrawingId) return;
+    setForm((f) => (f.linkedDrawingId === focusDrawingId ? f : { ...f, linkedDrawingId: focusDrawingId }));
+  }, [focusDrawingId]);
 
   async function patchIssue(id: string, body: Record<string, unknown>) {
     await api(`/api/directory/coordination/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
@@ -186,7 +195,7 @@ export function CoordinationPage() {
       <PageHeader
         eyebrow="Drawings module"
         title="Design coordination"
-        subtitle="Log clash / design conflicts, mark up linked GFC PDFs here, attach DMS files, and email follow-ups (max 5) before auto-RFI escalation."
+        subtitle="Every GFC sheet has its own coordination workspace — log clashes, mark up the PDF, follow up, then escalate to RFI."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="warn">{openCount} open</Badge>
@@ -196,6 +205,62 @@ export function CoordinationPage() {
       />
 
       {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+
+      <Card className="!p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-sm">Coordination by drawing</h3>
+            <p className="text-xs text-steel-muted mt-0.5">
+              Open a sheet to log issues against that GFC. Unlinked issues stay under All drawings.
+            </p>
+          </div>
+          {focusDrawingId && (
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setSearchParams({})}>
+              All drawings
+            </Button>
+          )}
+        </div>
+        {focusDrawing && (
+          <p className="text-sm font-medium">
+            Working on {focusDrawing.drawingNumber} · {focusDrawing.title}
+            {sheetRows.length ? ` — ${sheetRows.length} issue(s)` : " — no issues yet, log the first below"}
+          </p>
+        )}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+          {drawings.map((d) => {
+            const issues = rows.filter((r) => r.linkedDrawingId === d.id);
+            const open = issues.filter((r) => r.status === "Open").length;
+            const on = focusDrawingId === d.id;
+            return (
+              <button
+                key={d.id}
+                type="button"
+                className={`text-left rounded-lg border px-3 py-2 ${
+                  on ? "border-brand bg-brand-soft/40" : "border-line bg-paper hover:bg-sand/40"
+                }`}
+                onClick={() => setSearchParams({ drawingId: d.id })}
+              >
+                <div className="font-mono text-xs font-semibold text-brand">{d.drawingNumber}</div>
+                <div className="text-xs text-ink truncate">{d.title}</div>
+                <div className="text-[11px] text-steel-muted mt-1">
+                  {issues.length
+                    ? `${open} open · ${issues.length} logged`
+                    : "Needs coordination — log first issue"}
+                </div>
+              </button>
+            );
+          })}
+          {!drawings.length && (
+            <p className="text-xs text-steel-muted sm:col-span-3">
+              Add GFC rows first on the{" "}
+              <Link to={`/projects/${id}/drawings`} className="font-semibold text-brand">
+                GFC register
+              </Link>
+              .
+            </p>
+          )}
+        </div>
+      </Card>
 
       <Card className="border-brand/20 bg-gradient-to-r from-brand-soft/40 to-paper">
         <h3 className="text-sm font-semibold mb-2">How to use this page</h3>
@@ -286,25 +351,15 @@ export function CoordinationPage() {
                 Linked GFC drawing (for PDF preview)
               </span>
               <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-                <option value="">— Select drawing with uploaded file —</option>
-                {drawingsWithFiles.length > 0 && (
-                  <optgroup label="Ready for preview">
-                    {drawingsWithFiles.map((d) => (
+                <option value="">— Link a GFC drawing —</option>
+                {drawings.length > 0 && (
+                  <optgroup label="All GFC sheets">
+                    {drawings.map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
+                        {drawingHasPreviewFile(d) ? "" : " (no PDF yet)"}
                       </option>
                     ))}
-                  </optgroup>
-                )}
-                {drawings.filter((d) => !drawingHasPreviewFile(d)).length > 0 && (
-                  <optgroup label="No file yet — upload on GFC register first">
-                    {drawings
-                      .filter((d) => !drawingHasPreviewFile(d))
-                      .map((d) => (
-                        <option key={d.id} value={d.id} disabled>
-                          {d.drawingNumber} — {d.title} (no PDF/DWG)
-                        </option>
-                      ))}
                   </optgroup>
                 )}
               </Select>

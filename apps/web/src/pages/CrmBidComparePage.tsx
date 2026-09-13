@@ -269,6 +269,27 @@ export default function CrmBidComparePage() {
     }
   }, [setupProjectId, setupLeadId, projects, routePkgId]);
 
+  useEffect(() => {
+    const pid = form.projectId || setupProjectId;
+    if (!pid || !token) return;
+    void api<{ vendorId?: string; vendor?: { id?: string; partyType?: string; email?: string | null } }[]>(
+      `/api/vendors/project/${pid}`,
+      { token }
+    )
+      .then((rows) => {
+        const ids = rows
+          .filter((r) => {
+            const party = r.vendor?.partyType || "";
+            return party === "Contractor" || party === "Vendor";
+          })
+          .map((r) => r.vendorId || r.vendor?.id || "")
+          .filter(Boolean);
+        if (!ids.length) return;
+        setForm((f) => (f.vendorIds.length ? f : { ...f, vendorIds: ids }));
+      })
+      .catch(() => {});
+  }, [form.projectId, setupProjectId, token]);
+
   const filteredProjects = useMemo(() => {
     const needle = projectSearch.trim().toLowerCase();
     const pool =
@@ -370,8 +391,8 @@ export default function CrmBidComparePage() {
       setMsg("Pick a project first — bids are stored on that project.");
       return;
     }
-    if (form.vendorIds.length < 2) {
-      setMsg("Select at least 2 bidders to compare.");
+    if (form.vendorIds.length < 1) {
+      setMsg("Select at least one bidder — they need an email to upload.");
       return;
     }
     if (!form.disciplineKeys.length) {
@@ -398,24 +419,46 @@ export default function CrmBidComparePage() {
           customDisciplines: form.customDisciplines,
         }),
       });
-      setMsg(
-        `Bid package created — test BOQs loaded from the R2 comparative workbook${
-          (row as BidPackage & { seededBoqs?: { uploaded: number; total: number } }).seededBoqs
-            ? ` (${(row as BidPackage & { seededBoqs?: { uploaded: number; total: number } }).seededBoqs?.uploaded}/${(row as BidPackage & { seededBoqs?: { uploaded: number; total: number } }).seededBoqs?.total} slots)`
-            : ""
-        }. Refresh comparative, then award. Open the bid to email bidders.`,
-      );
+      await load();
+      selectPackage(row.id);
+      try {
+        const opened = await api<{
+          notify: {
+            notified: number;
+            total: number;
+            missingEmail?: string[];
+            accessSlips?: { vendor: string; email: string; tempPassword: string }[];
+          };
+        }>(`/api/crm/bid-packages/${row.id}/open`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ dueDate: dueDate || undefined, createLogins: true }),
+        });
+        setAccessSlip(opened.notify.accessSlips || []);
+        const missing = opened.notify.missingEmail?.length
+          ? ` Missing email: ${opened.notify.missingEmail.join(", ")}.`
+          : "";
+        setMsg(
+          `Bid opened — emailed ${opened.notify.notified}/${opened.notify.total} bidder(s). They sign in and upload at /crm/vendor-bids.${missing}`,
+        );
+        await loadDetail(row.id);
+        await load();
+      } catch (openErr) {
+        setMsg(
+          openErr instanceof Error
+            ? `Package saved. Open the bid to create logins: ${openErr.message}`
+            : "Package saved. Open the bid to email bidder logins.",
+        );
+      }
       setForm({
         title: "",
-        projectId: "",
-        leadId: "",
+        projectId: form.projectId,
+        leadId: form.leadId,
         revisionLabel: "R2",
         vendorIds: [],
         disciplineKeys: disciplines.map((d) => d.key),
         customDisciplines: [],
       });
-      await load();
-      selectPackage(row.id);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
     } finally {
