@@ -44,7 +44,10 @@ type ProjectCard = {
   workPackages?: string | null;
 };
 
-type SetupStatus = { ready: boolean; checks: { key: string; ok: boolean; label: string; detail?: string }[] };
+type SetupStatus = {
+  ready: boolean;
+  checks: { key: string; ok: boolean; label: string; detail?: string; optional?: boolean }[];
+};
 
 type UserRow = { id: string; fullName: string; email: string; role: string };
 type VendorRow = SetupVendor & { partyType?: string };
@@ -178,9 +181,9 @@ export default function LiveProjectSetupPage() {
       {status && (
         <div className="flex flex-wrap gap-2">
           {status.ready ? <Badge tone="ok">Ready</Badge> : <Badge tone="warn">Setup in progress</Badge>}
-          {(status.checks || []).slice(0, 6).map((c) => (
-            <Badge key={c.key} tone={c.ok ? "ok" : "neutral"}>
-              {c.label}
+          {(status.checks || []).map((c) => (
+            <Badge key={c.key} tone={c.optional || c.ok ? "ok" : "neutral"}>
+              {c.optional ? `${c.label}` : c.label}
             </Badge>
           ))}
         </div>

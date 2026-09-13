@@ -62,10 +62,17 @@ type SetupSummary = {
   }[];
 };
 
+type SetupCheck = { key: string; ok: boolean; label: string; detail?: string; optional?: boolean };
 type SetupStatus = {
   ready: boolean;
-  checks: { key: string; ok: boolean; label: string; detail?: string }[];
+  checks: SetupCheck[];
 };
+
+function setupCheckBadge(c: SetupCheck): { tone: "ok" | "neutral"; label: string } {
+  if (c.optional && !c.ok) return { tone: "neutral", label: "Optional" };
+  if (c.optional) return { tone: "ok", label: "Optional" };
+  return c.ok ? { tone: "ok", label: "Ready" } : { tone: "neutral", label: "Pending" };
+}
 
 type CompleteOut = {
   folders: { count: number; provider: string };
@@ -277,9 +284,8 @@ export default function CrmProjectSetupPage() {
         [
           `Setup complete: ${out.folders.count} folders (${out.folders.provider}).`,
           `Comms +${out.comms.contacts.created} contacts.`,
-          `DPR ${out.reports.dpr.status} for ${out.reports.dpr.logDate}.`,
-          `WPR ${out.reports.wpr.status} week ending ${out.reports.wpr.weekEnding}.`,
           passwords.length ? `New portal passwords: ${passwords.join("; ")}` : "Existing portal logins reused.",
+          "DPR and WPR stay on the live desk when you start reporting.",
         ].join(" ")
       );
       await loadProject();
@@ -542,7 +548,7 @@ export default function CrmProjectSetupPage() {
             <ul className="space-y-1.5">
               {(status?.checks || []).map((c) => (
                 <li key={c.key} className="flex items-start gap-2 text-xs">
-                  <Badge tone={c.ok ? "ok" : "neutral"}>{c.ok ? "Saved" : "Open"}</Badge>
+                  <Badge tone={setupCheckBadge(c).tone}>{c.optional ? "Optional" : c.ok ? "Saved" : "Open"}</Badge>
                   <span>
                     <span className="font-medium">{c.label}</span>
                     {c.detail && <span className="block text-steel-muted">{c.detail}</span>}
@@ -599,8 +605,8 @@ export default function CrmProjectSetupPage() {
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
               <p className="text-xs text-steel-muted mt-0.5">
-                Writes the matrix into Comms, issues client and contractor portal logins, creates the ISO folder tree, and
-                seeds the first DPR and WPR from live data.
+                Writes the matrix into Comms, issues client and contractor portal logins, and creates the ISO folder tree.
+                DPR, WPR, and signatures are later — not required to finish setup.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -637,7 +643,7 @@ export default function CrmProjectSetupPage() {
             {(status?.checks || []).map((c) => (
               <li key={c.key} className="border border-line rounded-lg px-3 py-2 text-sm">
                 <div className="flex items-center gap-2">
-                  <Badge tone={c.ok ? "ok" : "neutral"}>{c.ok ? "Ready" : "Pending"}</Badge>
+                  <Badge tone={setupCheckBadge(c).tone}>{setupCheckBadge(c).label}</Badge>
                   <span className="font-medium">{c.label}</span>
                 </div>
                 {c.detail && <p className="text-xs text-steel-muted mt-1">{c.detail}</p>}
@@ -646,9 +652,9 @@ export default function CrmProjectSetupPage() {
           </ul>
           <div className="border border-amber-200 bg-amber-50/70 rounded-xl p-3 space-y-3">
             <div>
-              <h4 className="font-semibold text-sm">Signatures (if missing)</h4>
+              <h4 className="font-semibold text-sm">Signatures (optional)</h4>
               <p className="text-xs text-steel-muted mt-0.5">
-                PMC, client, and contractor sign-offs must live on this project before checklists and the WPR deck export.
+                Add PMC, client, or contractor sign-offs later if you need signed checklists or a WPR deck export. Not required to launch.
               </p>
             </div>
             <DirectoryMySignaturePanel projectId={projectId} token={token} compact />

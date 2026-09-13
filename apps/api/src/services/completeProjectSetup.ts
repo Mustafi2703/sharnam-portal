@@ -8,7 +8,7 @@ import { PROJECT_LIBRARY_FOLDERS } from "./graph.js";
 import { provisionProjectSheetPack } from "./projectSheetPack.js";
 import { seedArvindCommsMatrix, seedStandardCommsMatrix } from "./commsMatrixSeed.js";
 import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncCommsFromDirectory.js";
-import { initializeProjectReports } from "./initializeProjectReports.js";
+import { initializeProjectReports, type InitReportsResult } from "./initializeProjectReports.js";
 import { ensureClientPortalLogin, ensureVendorPortalLogin, type PortalLoginResult } from "./crmVendorCredentials.js";
 
 export type SetupCheck = {
@@ -16,6 +16,7 @@ export type SetupCheck = {
   ok: boolean;
   label: string;
   detail?: string;
+  optional?: boolean;
 };
 
 export async function completeProjectSetup(projectId: string, userId: string) {
@@ -108,7 +109,16 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     });
   }
 
-  const reports = await initializeProjectReports(projectId, userId);
+  let reports: InitReportsResult;
+  try {
+    reports = await initializeProjectReports(projectId, userId);
+  } catch (err) {
+    console.warn("First DPR/WPR seed skipped:", err instanceof Error ? err.message : err);
+    reports = {
+      dpr: { created: false, id: "", logDate: "", discipline: "", status: "skipped" },
+      wpr: { created: false, id: "", weekEnding: "", status: "skipped" },
+    };
+  }
 
   const nextStatus =
     !project.status || project.status === "Planning" || project.status === "Draft" ? "Active" : project.status;
@@ -175,13 +185,6 @@ export async function getProjectSetupStatus(projectId: string) {
   });
   if (!project) return null;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekEnd = new Date();
-  weekEnd.setHours(23, 59, 59, 999);
-  const day = weekEnd.getDay();
-  if (day !== 0) weekEnd.setDate(weekEnd.getDate() + (7 - day));
-
   const [
     folderCount,
     memberCount,
@@ -190,8 +193,6 @@ export async function getProjectSetupStatus(projectId: string) {
     contactCount,
     clientMembers,
     vendorMembers,
-    dpr,
-    wpr,
     projectVendors,
     signedMembers,
     signedVendors,
@@ -208,16 +209,6 @@ export async function getProjectSetupStatus(projectId: string) {
     prisma.projectMember.findMany({
       where: { projectId, user: { role: "vendor" } },
       include: { user: { select: { email: true, fullName: true } } },
-    }),
-    prisma.dprSnapshot.findFirst({
-      where: { projectId },
-      orderBy: { logDate: "desc" },
-      select: { id: true, logDate: true, discipline: true, status: true },
-    }),
-    prisma.wprSnapshot.findFirst({
-      where: { projectId },
-      orderBy: { weekEnding: "desc" },
-      select: { id: true, weekEnding: true, status: true },
     }),
     prisma.projectVendor.findMany({
       where: { projectId },
@@ -255,6 +246,7 @@ export async function getProjectSetupStatus(projectId: string) {
     {
       key: "comms",
       ok: true,
+      optional: true,
       label: "Communication matrix (optional)",
       detail: contactCount
         ? `${matrixCount} role flows · ${contactCount} BPCL contacts — editable in setup and Comms`
@@ -281,34 +273,21 @@ export async function getProjectSetupStatus(projectId: string) {
           : "No contractor assigned yet",
     },
     {
-      key: "dpr",
-      ok: Boolean(dpr),
-      label: "DPR pack",
-      detail: dpr
-        ? `${dpr.discipline} ${dpr.logDate.toISOString().slice(0, 10)} · ${dpr.status}`
-        : "Not generated yet",
-    },
-    {
-      key: "wpr",
-      ok: Boolean(wpr),
-      label: "WPR pack",
-      detail: wpr ? `Week ending ${wpr.weekEnding.toISOString().slice(0, 10)} · ${wpr.status}` : "Not generated yet",
-    },
-    {
       key: "signatures",
-      ok: signedMembers + signedVendors > 0,
-      label: "Directory signatures",
+      ok: true,
+      optional: true,
+      label: "Directory signatures (optional)",
       detail:
         signedMembers + signedVendors > 0
           ? `${signedMembers} people · ${signedVendors} companies signed`
-          : "Missing — add PMC / client / contractor signatures on project admin before checklists and WPR export",
+          : "Optional — add PMC / client / contractor signatures later if you need signed checklists or WPR export",
     },
   ];
 
   return {
     project,
     checks,
-    ready: checks.filter((c) => c.key !== "signatures").every((c) => c.ok),
+    ready: checks.filter((c) => !c.optional).every((c) => c.ok),
     counts: { folders: folderCount, members: memberCount, vendors: vendorCount, matrix: matrixCount, contacts: contactCount },
   };
 }
