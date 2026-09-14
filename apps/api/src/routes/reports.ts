@@ -70,13 +70,15 @@ import {
   writeQuotationFiles,
 } from "../services/quotationExport.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
+import { syncProposalSummaryFile } from "../services/crmSharePoint.js";
 import {
-  CRM_OFFICE_LIBRARY,
-  createClientProposalFile,
-  createProjectProposalFile,
-  syncProposalDocx,
-  syncProposalSummaryFile,
-} from "../services/crmSharePoint.js";
+  createVersionedProposal,
+  ensureProposalRevisionTrail,
+  markCurrentProposalSent,
+  quotationInclude,
+  resolveProposalDiskPath,
+  startNextProposalRevision,
+} from "../services/proposalRevisions.js";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
@@ -696,19 +698,11 @@ async function quotationStatusLog(entityId: string) {
   });
 }
 
-function resolveStoredProposalPath(attachmentUrl: string | null | undefined) {
-  if (!attachmentUrl) return null;
-  const marker = `/uploads/onedrive/${CRM_OFFICE_LIBRARY}/`;
-  const idx = attachmentUrl.indexOf(marker);
-  if (idx < 0) return null;
-  const rel = attachmentUrl.slice(idx + marker.length);
-  const abs = path.join(mockOneDrive.projectRoot(CRM_OFFICE_LIBRARY), rel);
-  return fs.existsSync(abs) ? abs : null;
-}
+const proposalUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 crmRouter.get("/quotations", async (_req, res) => {
   const rows = await prisma.quotation.findMany({
-    include: { lead: true, project: { select: { id: true, code: true, name: true } } },
+    include: quotationInclude(),
     orderBy: { createdAt: "desc" },
   });
   res.json(rows);
@@ -724,38 +718,24 @@ crmRouter.get("/quotations/template.docx", async (_req, res) => {
 });
 
 crmRouter.get("/quotations/:id", async (req, res) => {
-  const row = await prisma.quotation.findUnique({
-    where: { id: req.params.id },
-    include: { lead: true, project: true },
-  });
+  const row = await ensureProposalRevisionTrail(req.params.id);
   if (!row) return res.status(404).json({ error: "not found" });
   const log = await quotationStatusLog(row.id);
   res.json({ ...row, log });
 });
 
 crmRouter.get("/quotations/:id/download.docx", async (req, res) => {
-  const row = await prisma.quotation.findUnique({
-    where: { id: req.params.id },
-    include: { project: { select: { id: true, code: true } } },
-  });
+  const row = await ensureProposalRevisionTrail(req.params.id);
   if (!row) return res.status(404).json({ error: "not found" });
   try {
-    const stored = resolveStoredProposalPath(row.attachmentUrl);
+    const revNo = req.query.rev != null ? Number(req.query.rev) : row.currentRevisionNo;
+    const rev = row.revisions.find((r) => r.revisionNo === revNo) || row.revisions[0];
+    const stored = resolveProposalDiskPath(rev?.fileUrl || row.attachmentUrl);
     const src = stored || resolveProposalDocxPath();
-    const name = proposalDocxFilename(row.quotationNo, row.clientName);
-    if (row.project?.code) {
-      await mockOneDrive.ensureProjectTree(row.project.id);
-      const sp = await syncProposalDocx(row.project.code, row.quotationNo, row.clientName);
-      if (sp.sharePointUrl && sp.sharePointUrl !== row.attachmentSharePointUrl) {
-        await prisma.quotation.update({
-          where: { id: row.id },
-          data: { attachmentSharePointUrl: sp.sharePointUrl },
-        });
-      }
-    }
+    const name = rev?.fileName || proposalDocxFilename(row.quotationNo, row.clientName, row.currentRevisionNo);
     res.download(src, name);
   } catch (e) {
-    res.status(404).json({ error: e instanceof Error ? e.message : "Template not found" });
+    res.status(404).json({ error: e instanceof Error ? e.message : "Proposal file not found" });
   }
 });
 
@@ -822,41 +802,88 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
   if (!project) return res.status(404).json({ error: "Project not found" });
 
   const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
-  let file: Awaited<ReturnType<typeof createProjectProposalFile>> | null = null;
+  let row;
   try {
-    await mockOneDrive.ensureProjectTree(project.id);
-    file = await createProjectProposalFile(project.code, clientName, quotationNo);
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Could not create proposal file" });
-  }
-  const row = await prisma.quotation.create({
-    data: {
-      quotationNo,
+    row = await createVersionedProposal({
+      projectId: project.id,
+      projectCode: project.code,
       clientName,
+      quotationNo,
+      userId: req.user!.id,
       clientAddress: req.body.clientAddress || null,
       clientGst: req.body.clientGst || null,
       scopeSummary: req.body.scopeSummary || `PMC proposal for ${clientName}`,
       totalValue: Number(req.body.totalValue || 0),
       currency: req.body.currency || "INR",
-      status: "Draft",
       validityDays: Number(req.body.validityDays || 30),
       quotationDate: req.body.quotationDate ? new Date(req.body.quotationDate) : new Date(),
       leadId: leadId || null,
-      projectId: project.id,
-      attachmentUrl: file.url,
-      attachmentSharePointUrl: file.sharePointUrl || file.url,
-      createdById: req.user!.id,
-    },
-  });
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Could not create proposal file" });
+  }
   await audit("quotation.create", {
     userId: req.user!.id,
     entity: "Quotation",
     entityId: row.id,
-    meta: { clientName, quotationNo, status: "Draft", file: file.sharePointUrl || file.url },
+    meta: {
+      clientName,
+      quotationNo,
+      status: "Draft",
+      revision: 0,
+      file: row.attachmentSharePointUrl || row.attachmentUrl,
+    },
   });
   const log = await quotationStatusLog(row.id);
   res.status(201).json({ ...row, log });
 });
+
+crmRouter.post("/quotations/:id/revise", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const row = await startNextProposalRevision({
+      quotationId: req.params.id,
+      userId: req.user!.id,
+      note: req.body?.note ? String(req.body.note) : undefined,
+    });
+    await audit("quotation.revise", {
+      userId: req.user!.id,
+      entity: "Quotation",
+      entityId: row.id,
+      meta: { revision: row.currentRevisionNo, file: row.attachmentSharePointUrl || row.attachmentUrl },
+    });
+    const log = await quotationStatusLog(row.id);
+    res.json({ ...row, log });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not start the next revision" });
+  }
+});
+
+crmRouter.post(
+  "/quotations/:id/revisions",
+  requireRoles("admin", "office"),
+  proposalUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer) return res.status(400).json({ error: "Upload a .docx to store as the next version." });
+    try {
+      const row = await startNextProposalRevision({
+        quotationId: req.params.id,
+        userId: req.user!.id,
+        note: req.body?.note ? String(req.body.note) : "Uploaded sent copy",
+        buffer: req.file.buffer,
+      });
+      await audit("quotation.revise", {
+        userId: req.user!.id,
+        entity: "Quotation",
+        entityId: row.id,
+        meta: { revision: row.currentRevisionNo, uploaded: req.file.originalname },
+      });
+      const log = await quotationStatusLog(row.id);
+      res.status(201).json({ ...row, log });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not store revision" });
+    }
+  }
+);
 
 crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.quotation.findUnique({ where: { id: req.params.id } });
@@ -877,7 +904,15 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
       totalValue: req.body.totalValue != null ? Number(req.body.totalValue) : before.totalValue,
       validityDays: req.body.validityDays != null ? Number(req.body.validityDays) : before.validityDays,
     },
+    include: quotationInclude(),
   });
+  if (nextStatus === "Sent to client" && before.status !== "Sent to client") {
+    await markCurrentProposalSent({
+      quotationId: row.id,
+      userId: req.user!.id,
+      note: req.body.note ? String(req.body.note) : undefined,
+    });
+  }
   if (nextStatus !== before.status || req.body.note) {
     await audit("quotation.status", {
       userId: req.user!.id,
@@ -888,11 +923,13 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
         to: nextStatus,
         note: req.body.note || null,
         clientName: row.clientName,
+        revision: row.currentRevisionNo,
       },
     });
   }
+  const fresh = await ensureProposalRevisionTrail(row.id);
   const log = await quotationStatusLog(row.id);
-  res.json({ ...row, log });
+  res.json({ ...(fresh || row), log });
 });
 
 /** Award the quotation → create a project (or link existing) */

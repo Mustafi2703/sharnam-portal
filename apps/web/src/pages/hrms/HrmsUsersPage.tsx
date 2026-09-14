@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -11,6 +11,75 @@ import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "..
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 
 const LOGIN_ROLES = ["site_employee", "office", "employee"] as const;
+
+const EMPTY_USER_FORM = {
+  fullName: "",
+  email: "",
+  role: "site_employee",
+  phone: "",
+  empCode: "",
+  department: "Site",
+  designation: "",
+  password: "Demo@1234",
+};
+
+function AddUserModal({
+  open,
+  token,
+  onClose,
+  onCreated,
+  onError,
+}: {
+  open: boolean;
+  token: string | null;
+  onClose: () => void;
+  onCreated: (email: string) => Promise<void>;
+  onError: (reason: ActionReason) => void;
+}) {
+  const [form, setForm] = useState(EMPTY_USER_FORM);
+  const [busy, setBusy] = useState(false);
+
+  async function createUser() {
+    setBusy(true);
+    try {
+      await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(form) });
+      const email = form.email;
+      setForm(EMPTY_USER_FORM);
+      await onCreated(email);
+    } catch (err) {
+      onError(actionReasonFromError("Could not create login", err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) return null;
+  return (
+    <RegisterEntryModal
+      open={open}
+      title="Add user with login"
+      onClose={onClose}
+      onSave={() => void createUser()}
+      saving={busy}
+      saveLabel="Create login"
+    >
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Input required placeholder="Full name" value={form.fullName} onChange={(ev) => setForm({ ...form, fullName: ev.target.value })} />
+        <Input required type="email" placeholder="Login email" value={form.email} onChange={(ev) => setForm({ ...form, email: ev.target.value })} />
+        <Select value={form.role} onChange={(ev) => setForm({ ...form, role: ev.target.value })}>
+          {LOGIN_ROLES.map((r) => (
+            <option key={r} value={r}>{r.replace("_", " ")}</option>
+          ))}
+        </Select>
+        <Input placeholder="Password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} />
+        <Input placeholder="Phone" value={form.phone} onChange={(ev) => setForm({ ...form, phone: ev.target.value })} />
+        <Input placeholder="Emp code" value={form.empCode} onChange={(ev) => setForm({ ...form, empCode: ev.target.value })} />
+        <Input placeholder="Department" value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value })} />
+        <Input placeholder="Designation" value={form.designation} onChange={(ev) => setForm({ ...form, designation: ev.target.value })} />
+      </div>
+    </RegisterEntryModal>
+  );
+}
 
 /** HRMS user management — office admin only. */
 export default function HrmsUsersPage() {
@@ -27,17 +96,8 @@ export default function HrmsUsersPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
   const [userQ, setUserQ] = useState("");
-  const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    role: "site_employee",
-    phone: "",
-    empCode: "",
-    department: "Site",
-    designation: "",
-    password: "Demo@1234",
-  });
   const [assign, setAssign] = useState({ userId: "", projectId: "", role: "site_employee" });
+  const deferredUserQ = useDeferredValue(userQ);
 
   const load = useCallback(async () => {
     const [e, p] = await Promise.all([
@@ -57,43 +117,35 @@ export default function HrmsUsersPage() {
   }, [load]);
 
   const shownEmployees = useMemo(() => {
-    const needle = userQ.trim().toLowerCase();
+    const needle = deferredUserQ.trim().toLowerCase();
     if (!needle) return employees;
     return employees.filter((e) =>
       `${e.fullName} ${e.email} ${e.role} ${e.profile?.department || ""} ${e.profile?.empCode || ""}`
         .toLowerCase()
         .includes(needle)
     );
-  }, [employees, userQ]);
+  }, [employees, deferredUserQ]);
 
-  async function createUser() {
-    setBusy(true);
-    setMsg("");
-    try {
-      await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(form) });
-      setMsgTone("ok");
-      setMsg(`Login created for ${form.email}`);
-      setForm({
-        fullName: "",
-        email: "",
-        role: "site_employee",
-        phone: "",
-        empCode: "",
-        department: "Site",
-        designation: "",
-        password: "Demo@1234",
-      });
-      setModalOpen(false);
-      await load();
-    } catch (err) {
-      const reason = actionReasonFromError("Could not create login", err);
-      setActionError(reason);
-      setMsgTone("err");
-      setMsg(reason.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const employeeOptions = useMemo(
+    () =>
+      employees.map((emp) => ({
+        value: emp.id,
+        label: emp.fullName,
+        sublabel: `${emp.email || ""} · ${emp.role}`,
+        keywords: `${emp.fullName} ${emp.email || ""} ${emp.role} ${emp.phone || ""} ${emp.profile?.empCode || ""}`,
+      })),
+    [employees]
+  );
+  const projectOptions = useMemo(
+    () =>
+      projects.map((p) => ({
+        value: p.id,
+        label: `${p.code} — ${p.name}`,
+        sublabel: p.clientName || undefined,
+        keywords: `${p.code} ${p.name} ${p.clientName || ""}`,
+      })),
+    [projects]
+  );
 
   async function assignProject() {
     setBusy(true);
@@ -248,29 +300,22 @@ export default function HrmsUsersPage() {
         }}
       />
 
-      <RegisterEntryModal
+      <AddUserModal
         open={modalOpen}
-        title="Add user with login"
+        token={token}
         onClose={() => setModalOpen(false)}
-        onSave={() => void createUser()}
-        saving={busy}
-        saveLabel="Create login"
-      >
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Input required placeholder="Full name" value={form.fullName} onChange={(ev) => setForm({ ...form, fullName: ev.target.value })} />
-          <Input required type="email" placeholder="Login email" value={form.email} onChange={(ev) => setForm({ ...form, email: ev.target.value })} />
-          <Select value={form.role} onChange={(ev) => setForm({ ...form, role: ev.target.value })}>
-            {LOGIN_ROLES.map((r) => (
-              <option key={r} value={r}>{r.replace("_", " ")}</option>
-            ))}
-          </Select>
-          <Input placeholder="Password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} />
-          <Input placeholder="Phone" value={form.phone} onChange={(ev) => setForm({ ...form, phone: ev.target.value })} />
-          <Input placeholder="Emp code" value={form.empCode} onChange={(ev) => setForm({ ...form, empCode: ev.target.value })} />
-          <Input placeholder="Department" value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value })} />
-          <Input placeholder="Designation" value={form.designation} onChange={(ev) => setForm({ ...form, designation: ev.target.value })} />
-        </div>
-      </RegisterEntryModal>
+        onCreated={async (email) => {
+          setMsgTone("ok");
+          setMsg(`Login created for ${email}`);
+          setModalOpen(false);
+          await load();
+        }}
+        onError={(reason) => {
+          setActionError(reason);
+          setMsgTone("err");
+          setMsg(reason.message);
+        }}
+      />
 
       <RegisterEntryModal
         open={assignOpen}
@@ -284,12 +329,7 @@ export default function HrmsUsersPage() {
         <div className="space-y-3">
           <SearchableSelect
             required
-            options={employees.map((emp) => ({
-              value: emp.id,
-              label: emp.fullName,
-              sublabel: `${emp.email || ""} · ${emp.role}`,
-              keywords: `${emp.fullName} ${emp.email || ""} ${emp.role} ${emp.phone || ""} ${emp.profile?.empCode || ""}`,
-            }))}
+            options={employeeOptions}
             value={assign.userId}
             onChange={(userId) => setAssign({ ...assign, userId })}
             placeholder="Employee"
@@ -297,12 +337,7 @@ export default function HrmsUsersPage() {
           />
           <SearchableSelect
             required
-            options={projects.map((p) => ({
-              value: p.id,
-              label: `${p.code} — ${p.name}`,
-              sublabel: p.clientName || undefined,
-              keywords: `${p.code} ${p.name} ${p.clientName || ""}`,
-            }))}
+            options={projectOptions}
             value={assign.projectId}
             onChange={(projectId) => setAssign({ ...assign, projectId })}
             placeholder="Project"

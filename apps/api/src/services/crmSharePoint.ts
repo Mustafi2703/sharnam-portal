@@ -42,23 +42,34 @@ export async function syncComparativeWorkbook(projectCode: string, revisionLabel
   return syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.comparative, fileName, buffer);
 }
 
-export async function syncProposalDocx(projectCode: string, quotationNo: string, clientName?: string) {
+export async function syncProposalDocx(
+  projectCode: string,
+  quotationNo: string,
+  clientName?: string,
+  revisionNo = 0
+) {
   const buffer = fs.readFileSync(resolveProposalDocxPath());
   return syncBufferToProjectSharePoint(
     projectCode,
     CRM_SHAREPOINT.pmcProposals,
-    proposalDocxFilename(quotationNo, clientName),
+    proposalDocxFilename(quotationNo, clientName, revisionNo),
     buffer
   );
 }
 
-export async function createProjectProposalFile(projectCode: string, clientName: string, quotationNo?: string) {
-  const buffer = fs.readFileSync(resolveProposalDocxPath());
+export async function createProjectProposalFile(
+  projectCode: string,
+  clientName: string,
+  quotationNo?: string,
+  revisionNo = 0,
+  buffer?: Buffer
+) {
+  const bytes = buffer ?? fs.readFileSync(resolveProposalDocxPath());
   return syncBufferToProjectSharePoint(
     projectCode,
     CRM_SHAREPOINT.pmcProposals,
-    proposalDocxFilename(quotationNo, clientName),
-    buffer
+    proposalDocxFilename(quotationNo, clientName, revisionNo),
+    bytes
   );
 }
 

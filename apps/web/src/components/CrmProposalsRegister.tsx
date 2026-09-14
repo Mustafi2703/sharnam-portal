@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -41,7 +41,8 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
     [quotations],
   );
 
-  const filtered = useMemo(() => filterQuotations(quotations, { q, status }), [quotations, q, status]);
+  const deferredQ = useDeferredValue(q);
+  const filtered = useMemo(() => filterQuotations(quotations, { q: deferredQ, status }), [quotations, deferredQ, status]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
@@ -113,6 +114,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                 <th>Quotation no</th>
                 <th>Client</th>
                 <th>Status</th>
+                <th>Ver</th>
                 <th>Value</th>
                 <th>Date</th>
                 <th>Linked lead</th>
@@ -121,7 +123,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
               </tr>
             </thead>
             <tbody>
-              {!pageRows.length && <RegisterEmptyRow colSpan={8} message="No proposals match filters." />}
+              {!pageRows.length && <RegisterEmptyRow colSpan={9} message="No proposals match filters." />}
               {pageRows.map((row) => (
                 <tr
                   key={row.id}
@@ -136,6 +138,10 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${proposalStatusTone(row.status)}`}>
                       {row.status}
                     </span>
+                  </td>
+                  <td className="font-mono text-[10px] whitespace-nowrap">
+                    R{row.currentRevisionNo ?? 0}
+                    {row.revisions?.length ? ` · ${row.revisions.length}` : ""}
                   </td>
                   <td className="text-xs font-mono whitespace-nowrap">
                     {row.totalValue != null && row.totalValue > 0
@@ -200,9 +206,19 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                 <Link to={`/crm/proposals/${selected.id}`} className="text-sm font-semibold text-brand">
                   Full status log →
                 </Link>
-                  <Link to={`/crm/proposals/new?leadId=${selected.id}`} className="text-sm font-semibold text-brand">
-                    Create PMC proposal (Word in SharePoint) →
+                {(detail?.revisions || selected.revisions || []).length > 0 && (
+                  <CrmTextLineList
+                    title="SharePoint versions"
+                    items={(detail?.revisions || selected.revisions || []).map(
+                      (rev) => `R${rev.revisionNo} · ${rev.stage}${rev.fileName ? ` · ${rev.fileName}` : ""}`
+                    )}
+                  />
+                )}
+                {canWrite && selected.leadId && (
+                  <Link to={`/crm/proposals/new?leadId=${selected.leadId}`} className="text-sm font-semibold text-brand">
+                    Another proposal on this lead →
                   </Link>
+                )}
               </div>
             </>
           )}

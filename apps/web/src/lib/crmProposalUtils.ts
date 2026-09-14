@@ -15,12 +15,25 @@ export type CrmQuotation = {
   awardedAt?: string | null;
   attachmentUrl?: string | null;
   attachmentSharePointUrl?: string | null;
+  currentRevisionNo?: number | null;
+  revisions?: CrmProposalRevision[];
   leadId?: string | null;
   projectId?: string | null;
   lead?: CrmLead | null;
   project?: { id: string; code: string; name: string } | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+};
+
+export type CrmProposalRevision = {
+  id: string;
+  revisionNo: number;
+  stage: string;
+  fileName?: string | null;
+  fileUrl?: string | null;
+  sharePointUrl?: string | null;
+  note?: string | null;
+  uploadedAt?: string | null;
 };
 
 export type QuotationLogEntry = {
@@ -59,6 +72,8 @@ export function proposalDetailLines(q: CrmQuotation) {
     { label: "Client address", value: q.clientAddress || "—" },
     { label: "Client GST", value: q.clientGst || "—", mono: true },
     { label: "Linked lead", value: q.lead?.title || "—" },
+    { label: "Current version", value: `R${q.currentRevisionNo ?? 0}`, mono: true },
+    { label: "Versions kept", value: String(q.revisions?.length || 0) },
     { label: "Linked project", value: q.project ? `${q.project.code} — ${q.project.name}` : "—", mono: true },
     { label: "Created", value: fmtProposalDate(q.createdAt) },
     { label: "Updated", value: fmtProposalDate(q.updatedAt) },

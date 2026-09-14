@@ -2535,12 +2535,40 @@ model Quotation {
   sectionsJson            String?   @db.Text
   attachmentUrl           String?
   attachmentSharePointUrl String?
+  /// Latest revision number on disk (R0, R1, …). Older files stay in SharePoint.
+  currentRevisionNo       Int       @default(0)
   createdById             String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  lead    Lead?    @relation(fields: [leadId], references: [id])
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lead      Lead?                @relation(fields: [leadId], references: [id])
+  revisions QuotationRevision[]
+}
+
+/**
+ * One sent or draft PMC proposal file. Each send keeps the previous .docx in
+ * the project SharePoint folder (05.03 / PMC_Proposals) as R0, R1, R2…
+ */
+model QuotationRevision {
+  id            String   @id @default(cuid())
+  quotationId   String
+  revisionNo    Int
+  /// Draft | Sent to client | Superseded
+  stage         String   @default("Draft")
+  fileName      String?
+  fileUrl       String?
+  sharePointUrl String?
+  note          String?  @db.Text
+  uploadedById  String?
+  uploadedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@unique([quotationId, revisionNo])
+  @@index([quotationId])
 }
 
 /**

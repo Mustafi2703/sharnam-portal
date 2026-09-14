@@ -8350,6 +8350,9 @@ body {
   .auth-ticker__list {
     animation: none !important;
   }
+  .auth-fx__orb {
+    animation: none !important;
+  }
 }
 
 /* End of auth surface */
@@ -10146,9 +10149,10 @@ body {
 .auth-fx__orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.55;
-  animation: auth-orb-drift 18s ease-in-out infinite alternate;
+  filter: none;
+  opacity: 0.22;
+  animation: none;
+  pointer-events: none;
 }
 
 .auth-fx__orb--a {
@@ -10197,8 +10201,9 @@ body {
 }
 
 .auth-layout__brand--futura {
-  background: rgba(6, 8, 10, 0.82);
-  backdrop-filter: blur(22px) saturate(1.25);
+  background: #0c0e12;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 4px 0 0 var(--portal-accent, #0b6a78);
   overflow: hidden;
@@ -10261,8 +10266,10 @@ body {
 
 .auth-signin--futura {
   max-width: min(480px, 94vw);
-  background: rgba(12, 14, 18, 0.55);
-  backdrop-filter: blur(28px) saturate(1.25);
+  background: #101418;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  contain: layout style paint;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 0 0 1px rgba(11, 106, 120, 0.15),
@@ -10363,8 +10370,9 @@ body {
 }
 
 .auth-hub__header--futura {
-  background: rgba(12, 14, 18, 0.65);
-  backdrop-filter: blur(20px);
+  background: #101418;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
 }
@@ -10378,8 +10386,9 @@ body {
 }
 
 .auth-hub-card--futura {
-  background: rgba(12, 14, 18, 0.55);
-  backdrop-filter: blur(16px);
+  background: #101418;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;

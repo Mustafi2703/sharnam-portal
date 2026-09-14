@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "./ui";
 
 export type SearchableOption = {
@@ -41,14 +41,15 @@ export function SearchableSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
 
+  const deferredQ = useDeferredValue(q);
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const needle = deferredQ.trim().toLowerCase();
     if (!needle) return options;
     return options.filter((o) => {
       const hay = `${o.label} ${o.sublabel || ""} ${o.keywords || ""}`;
       return hay.toLowerCase().includes(needle);
     });
-  }, [options, q]);
+  }, [options, deferredQ]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {

@@ -273,6 +273,7 @@ export const PROJECT_LIBRARY_FOLDERS = [
   "05_PROCUREMENT_AND_CONTRACTS/05.01_Procurement_Strategy_and_Packages",
   "05_PROCUREMENT_AND_CONTRACTS/05.02_Prequalification_Vendor_Database",
   "05_PROCUREMENT_AND_CONTRACTS/05.03_Tender_Documents_Issue",
+  "05_PROCUREMENT_AND_CONTRACTS/05.03_Tender_Documents_Issue/PMC_Proposals",
   "05_PROCUREMENT_AND_CONTRACTS/05.04_PreBid_Queries_Addenda",
   "05_PROCUREMENT_AND_CONTRACTS/05.05_Bid_Receipt_Opening",
   "05_PROCUREMENT_AND_CONTRACTS/05.05_Bid_Receipt_Opening/Vendor_BOQs",

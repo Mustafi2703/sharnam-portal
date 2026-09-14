@@ -15,15 +15,28 @@ type LogRow = {
   user?: { fullName?: string | null; email?: string | null } | null;
 };
 
+type Revision = {
+  id: string;
+  revisionNo: number;
+  stage: string;
+  fileName?: string | null;
+  fileUrl?: string | null;
+  sharePointUrl?: string | null;
+  note?: string | null;
+  uploadedAt?: string | null;
+};
+
 type Quotation = {
   id: string;
   quotationNo: string;
   clientName: string;
   status: string;
   projectId?: string | null;
+  currentRevisionNo?: number | null;
   attachmentUrl?: string | null;
   attachmentSharePointUrl?: string | null;
   updatedAt?: string;
+  revisions?: Revision[];
   log?: LogRow[];
 };
 
@@ -48,6 +61,7 @@ function logLabel(row: LogRow) {
     /* ignore */
   }
   if (row.action === "quotation.create") return `Created proposal file for ${meta.clientName || "client"}`;
+  if (row.action === "quotation.revise") return "Opened a new version in the project SharePoint folder";
   if (row.action === "quotation.status") {
     const move = meta.from && meta.to ? `${meta.from} → ${meta.to}` : meta.to || "Status updated";
     return meta.note ? `${move} — ${meta.note}` : move;
@@ -141,9 +155,54 @@ export default function QuotationMakerPage() {
       });
       setSaved(r);
       setNote("");
-      setMsg("Status log updated.");
+      setMsg(status === "Sent to client" ? `R${r.currentRevisionNo ?? 0} marked sent — file kept in SharePoint.` : "Status log updated.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function newVersion() {
+    if (!saved) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const r = await api<Quotation>(`/api/crm/quotations/${saved.id}/revise`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ note: note.trim() || undefined }),
+      });
+      setSaved(r);
+      setStatus("Editing");
+      setNote("");
+      setMsg(`Opened R${r.currentRevisionNo ?? 0} in 05.03 / PMC_Proposals. Previous versions stay.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open the next version");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadVersion(file: File) {
+    if (!saved) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (note.trim()) fd.append("note", note.trim());
+      const r = await api<Quotation>(`/api/crm/quotations/${saved.id}/revisions`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setSaved(r);
+      setStatus("Editing");
+      setNote("");
+      setMsg(`Stored ${file.name} as R${r.currentRevisionNo ?? 0} in the project SharePoint folder.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setSaving(false);
     }
@@ -161,7 +220,7 @@ export default function QuotationMakerPage() {
       <PageHeader
         eyebrow="CRM · Proposal"
         title={isEditing ? saved?.clientName || "Proposal" : "New proposal"}
-        subtitle="Convert lead → SPDC project first. Proposal .docx saves to ISO 05.03 PMC_Proposals on the project library."
+        subtitle="Each send keeps its own R0 / R1 / R2 file in the project SharePoint folder (05.03 / PMC_Proposals). Older versions stay."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -174,7 +233,13 @@ export default function QuotationMakerPage() {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void downloadAuthFile(`/api/crm/quotations/${saved.id}/download.docx`, token, `${saved.clientName}-PMC-Proposal.docx`)}
+            onClick={() =>
+              void downloadAuthFile(
+                `/api/crm/quotations/${saved.id}/download.docx`,
+                token,
+                `${saved.clientName}-PMC-Proposal-R${saved.currentRevisionNo ?? 0}.docx`
+              )
+            }
           >
             Download .docx
           </Button>
@@ -199,7 +264,7 @@ export default function QuotationMakerPage() {
         <Card>
           <h3 className="font-semibold text-sm mb-1">Client name</h3>
           <p className="text-xs text-steel-muted mb-4">
-            Creates <code className="font-mono">{clientName.trim() || "Client"}-PMC-Proposal.docx</code> in{" "}
+            Creates <code className="font-mono">{clientName.trim() || "Client"}-PMC-Proposal-R0.docx</code> in{" "}
             <code className="font-mono">05.03 Tender Documents / PMC_Proposals</code> on the linked SPDC project.
           </p>
           {leadPrefill?.projectId && (
@@ -236,7 +301,8 @@ export default function QuotationMakerPage() {
             </div>
             <div className="p-5 space-y-4">
               <p className="text-sm text-steel-muted">
-                Open the <strong>.docx</strong> in SharePoint, fill client details and scope inside Word, then mark status here when sent or finalised.
+                Open the current <strong>R{saved.currentRevisionNo ?? 0}</strong> .docx in SharePoint, edit in Word, then mark{" "}
+                <strong>Sent to client</strong>. That version stays. Use <strong>New version</strong> for the next send so R0 is never overwritten.
               </p>
               {href ? (
                 <a href={href} target="_blank" rel="noopener noreferrer" className="block">
@@ -274,9 +340,53 @@ export default function QuotationMakerPage() {
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
-                  <Button type="button" disabled={saving} onClick={() => void saveStatus()}>
-                    {saving ? "Saving…" : "Save to status log"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" disabled={saving} onClick={() => void saveStatus()}>
+                      {saving ? "Saving…" : "Save to status log"}
+                    </Button>
+                    <Button type="button" variant="secondary" disabled={saving} onClick={() => void newVersion()}>
+                      New version (R{(saved.currentRevisionNo ?? 0) + 1})
+                    </Button>
+                  </div>
+                  <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block">
+                    Or upload the sent copy
+                    <Input
+                      className="mt-1"
+                      type="file"
+                      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      disabled={saving}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void uploadVersion(file);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {(saved.revisions || []).length > 0 && (
+                <div className="border-t border-line pt-4 space-y-2">
+                  <h3 className="text-sm font-semibold">Versions in SharePoint</h3>
+                  <ul className="space-y-2">
+                    {(saved.revisions || []).map((rev) => {
+                      const href = rev.sharePointUrl || rev.fileUrl;
+                      return (
+                        <li key={rev.id} className="rounded-lg border border-line px-3 py-2 text-sm flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-mono text-xs font-semibold">R{rev.revisionNo} · {rev.stage}</div>
+                            <div className="text-xs text-steel-muted">{rev.fileName || "PMC proposal"}</div>
+                            {rev.note ? <div className="text-xs text-steel-muted mt-0.5">{rev.note}</div> : null}
+                          </div>
+                          {href ? (
+                            <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-brand shrink-0">
+                              Open →
+                            </a>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               )}
             </div>

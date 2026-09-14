@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api } from "../api";
@@ -264,8 +264,8 @@ function AuthFuturisticBackdrop() {
 function SignInCard({ cfg }: { cfg: PortalConfig }) {
   const { loginWithToken } = useAuth();
   const prefillDemo = cfg.key !== "vendor" && cfg.key !== "client" && cfg.key !== "stakeholder";
-  const [email, setEmail] = useState(prefillDemo ? cfg.demoEmail : "");
-  const [password, setPassword] = useState("Demo@1234");
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -273,8 +273,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 
   useEffect(() => {
     const fillDemo = cfg.key !== "vendor" && cfg.key !== "client" && cfg.key !== "stakeholder";
-    setEmail(fillDemo ? cfg.demoEmail : "");
-    setPassword("Demo@1234");
+    if (emailRef.current) emailRef.current.value = fillDemo ? cfg.demoEmail : "";
+    if (passwordRef.current) passwordRef.current.value = "Demo@1234";
     setError("");
   }, [cfg.key, cfg.demoEmail]);
 
@@ -287,8 +287,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
       const data = await api<{ token: string; user: AuthUser }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          email: email.trim(),
-          password,
+          email: (emailRef.current?.value || "").trim(),
+          password: passwordRef.current?.value || "",
           allowedRoles: cfg.allowedRoles,
           portal: cfg.key,
         }),
@@ -331,9 +331,9 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
           <label className="auth-signin__field">
             <span>Email</span>
             <input
+              ref={emailRef}
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              defaultValue={prefillDemo ? cfg.demoEmail : ""}
               autoComplete="username"
               required
               placeholder={cfg.key === "vendor" ? "contractor@company.com" : "you@company.com"}
@@ -353,9 +353,9 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
               </button>
             </span>
             <input
+              ref={passwordRef}
               type={showPwd ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              defaultValue="Demo@1234"
               onKeyUp={(e) => setCapsLock(e.getModifierState && e.getModifierState("CapsLock"))}
               autoComplete="current-password"
               required
