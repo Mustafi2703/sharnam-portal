@@ -170,7 +170,10 @@ vendorsRouter.post("/seed-bid-catalog", requireRoles("admin", "office"), async (
 vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const current = await prisma.vendor.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ error: "Company not found" });
+  const password = req.body.password ? String(req.body.password) : null;
   const data = { ...req.body };
+  delete data.password;
+  delete data.createLogin;
   if (data.partyType === "Vendor") data.partyType = "Contractor";
   if (data.partyType && vendorDesk(String(current.partyType)) !== vendorDesk(String(data.partyType))) {
     return res.status(409).json({
@@ -178,7 +181,15 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
     });
   }
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
-  res.json(v);
+  let login = null;
+  if (v.email || password) {
+    const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
+    login = await syncDirectoryPortalLogin({
+      vendor: v,
+      password,
+    });
+  }
+  res.json({ ...v, login });
 });
 
 vendorsRouter.delete("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { UserAccountEditModal, type UserAccountRow } from "../components/UserAccountEditModal";
@@ -7,7 +7,6 @@ import { UserManageActions } from "../components/UserManageActions";
 import {
   accountKindLabel,
   badgeToneForKind,
-  homePathForUser,
   kindForAccount,
   loginPathForAccount,
   type PortalAccountKind,
@@ -26,9 +25,7 @@ const ACTIONS: PermissionAction[] = ["view", "create", "edit", "approve"];
 
 /** Office / Admin — users with login + role access matrix */
 export default function RolesPage() {
-  const { token, user, impersonate } = useAuth();
-  const navigate = useNavigate();
-  const [switching, setSwitching] = useState("");
+  const { token, user } = useAuth();
   const [roles, setRoles] = useState<any[]>([]);
   const [users, setUsers] = useState<UserAccountRow[]>([]);
   const [selected, setSelected] = useState<string>("admin");
@@ -40,23 +37,8 @@ export default function RolesPage() {
   const { types: consultantTypes } = useConsultantTypes(token);
 
   const canManage = user?.role === "admin" || user?.role === "office";
-  /** Admins can open any desk as that user; an active test session can hop straight on. */
-  const canImpersonate = user?.role === "admin" || Boolean(user?.impersonatedBy);
   const isAdmin = user?.role === "admin";
   const [showDemoLogins, setShowDemoLogins] = useState(false);
-
-  async function signInAs(row: UserAccountRow) {
-    setSwitching(row.id);
-    setMsg("");
-    try {
-      const res = await impersonate(row.id);
-      navigate(homePathForUser(res.user), { replace: true });
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not open that desk");
-    } finally {
-      setSwitching("");
-    }
-  }
 
   const load = async () => {
     const demoQ = showDemoLogins && isAdmin ? "&includeDemo=1" : "";
@@ -294,16 +276,6 @@ export default function RolesPage() {
                   <Badge tone={u.isActive === false ? "warn" : badgeToneForKind(kind)}>
                     {u.isActive === false ? "Off" : accountKindLabel(kind)}
                   </Badge>
-                  {canImpersonate && u.id !== user?.id && u.isActive !== false ? (
-                    <button
-                      type="button"
-                      disabled={!!switching}
-                      className="text-[11px] font-semibold text-brand whitespace-nowrap disabled:opacity-50"
-                      onClick={() => void signInAs(u)}
-                    >
-                      {switching === u.id ? "Opening…" : "Sign in as"}
-                    </button>
-                  ) : null}
                   <UserManageActions
                     user={u}
                     token={token}

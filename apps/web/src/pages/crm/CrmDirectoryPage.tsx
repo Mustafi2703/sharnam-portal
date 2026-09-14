@@ -121,8 +121,13 @@ export function DirectoryCompaniesPanel({
   }, [rows, listSearch, tab, typeFilter]);
 
   useEffect(() => {
-    if (selected) setForm(vendorToForm(selected));
-    else if (!selectedId) setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
+    if (selected) {
+      setForm(vendorToForm(selected));
+      setLoginPassword("");
+    } else if (!selectedId) {
+      setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
+      setLoginPassword("Demo@1234");
+    }
   }, [selected, selectedId, meta.defaultParty]);
 
   function startNewCompany() {
@@ -147,8 +152,25 @@ export function DirectoryCompaniesPanel({
           setMsg(`This company is not on ${vendorDeskLabel(meta.defaultParty)}. Open the matching CRM list to edit it.`);
           return;
         }
-        await api(`/api/vendors/${selectedId}`, { method: "PATCH", token, body: JSON.stringify(payload) });
-        setMsg("Updated");
+        const updated = await api<VendorRow & { login?: { passwordUpdated?: boolean; created?: boolean } }>(
+          `/api/vendors/${selectedId}`,
+          {
+            method: "PATCH",
+            token,
+            body: JSON.stringify({
+              ...payload,
+              ...(loginPassword.trim() ? { password: loginPassword.trim() } : {}),
+            }),
+          }
+        );
+        setLoginPassword("");
+        setMsg(
+          updated.login?.passwordUpdated
+            ? "Updated — portal password changed."
+            : updated.login?.created
+              ? "Updated — portal login created."
+              : "Updated"
+        );
       } else {
         const created = await api<VendorRow & { login?: { email: string; created: boolean; tempPassword?: string } }>(
           "/api/vendors",
@@ -196,6 +218,7 @@ export function DirectoryCompaniesPanel({
           department: tab === "stakeholders" ? selected.trade || undefined : undefined,
           vendorId: selected.id,
           desk: "crm",
+          password: loginPassword.trim() || undefined,
         }),
       });
       setLoginMsg(
@@ -318,11 +341,15 @@ export function DirectoryCompaniesPanel({
           <Input required placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
           <Input required placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input required placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-          {!selected ? (
+          {canEdit ? (
             <Input
               type="password"
               autoComplete="new-password"
-              placeholder="Portal password (default Demo@1234)"
+              placeholder={
+                selected
+                  ? "New portal password (leave blank to keep current)"
+                  : "Portal password (default Demo@1234)"
+              }
               value={loginPassword}
               onChange={(e) => setLoginPassword(e.target.value)}
             />

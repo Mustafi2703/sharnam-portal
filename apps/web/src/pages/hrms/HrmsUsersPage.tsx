@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
@@ -9,7 +9,7 @@ import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
-import { canManageHrms, homePathForUser } from "../../lib/portalAccounts";
+import { canManageHrms } from "../../lib/portalAccounts";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -120,11 +120,8 @@ function AddUserModal({
 
 /** HRMS user management — office admin only. */
 export default function HrmsUsersPage() {
-  const { token, user, impersonate } = useAuth();
-  const navigate = useNavigate();
+  const { token, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  /** An admin already testing as someone else can hop straight to the next login. */
-  const canImpersonate = isAdmin || Boolean(user?.impersonatedBy);
   const canEdit = canManageHrms(user);
   const [employees, setEmployees] = useState<UserAccountRow[]>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
@@ -235,21 +232,6 @@ export default function HrmsUsersPage() {
       await load();
     } catch (err) {
       const reason = actionReasonFromError("Could not clear assignments", err);
-      setActionError(reason);
-      setMsgTone("err");
-      setMsg(reason.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function signInAs(row: UserAccountRow) {
-    setBusy(true);
-    try {
-      const res = await impersonate(row.id);
-      navigate(homePathForUser(res.user), { replace: true });
-    } catch (err) {
-      const reason = actionReasonFromError("Could not open that desk", err);
       setActionError(reason);
       setMsgTone("err");
       setMsg(reason.message);
@@ -432,16 +414,6 @@ export default function HrmsUsersPage() {
                           await load();
                         }}
                       />
-                      {canImpersonate && e.id !== user?.id && e.isActive !== false ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          className="block text-[10px] font-semibold text-brand mt-1 disabled:opacity-50"
-                          onClick={() => void signInAs(e)}
-                        >
-                          Sign in as
-                        </button>
-                      ) : null}
                     </td>
                   ) : null}
                 </tr>

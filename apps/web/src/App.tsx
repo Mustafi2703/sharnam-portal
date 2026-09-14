@@ -1,7 +1,6 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
-import { ImpersonationBar } from "./components/ImpersonationBar";
 import MasterModulePage from "./pages/MasterModulePage";
 import { LoginHubPage, PortalLoginPage, DynamicPortalLoginRoute } from "./pages/PortalLogins";
 import StakeholderDeskPage from "./pages/StakeholderDeskPage";
@@ -128,7 +127,6 @@ function RedirectDrawingsCoordination() {
 export default function App() {
   return (
     <>
-      <ImpersonationBar />
       <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/options" element={<Navigate to="/login" replace />} />

@@ -113,6 +113,88 @@ export async function ensureClientPortalLogin(party: { email?: string | null; na
   });
 }
 
+/** Update or create the portal login tied to a CRM directory company. */
+export async function syncDirectoryPortalLogin(opts: {
+  vendor: {
+    id: string;
+    name: string;
+    email?: string | null;
+    businessPhone?: string | null;
+    partyType?: string | null;
+    primaryContactName?: string | null;
+    trade?: string | null;
+  };
+  password?: string | null;
+}): Promise<(PortalLoginResult & { passwordUpdated?: boolean }) | null> {
+  const email = String(opts.vendor.email || "")
+    .trim()
+    .toLowerCase();
+  if (!email) return null;
+
+  const role = portalRoleForPartyType(opts.vendor.partyType);
+  const fullName = String(opts.vendor.primaryContactName || opts.vendor.name || email).trim();
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ vendorId: opts.vendor.id }, { email }] },
+  });
+
+  if (!user) {
+    return ensurePortalLogin({
+      email,
+      fullName,
+      role,
+      phone: opts.vendor.businessPhone,
+      password: opts.password,
+      vendorId: opts.vendor.id,
+      designation: opts.vendor.name,
+      department: role === "employee" ? opts.vendor.trade || null : null,
+    });
+  }
+
+  const bcrypt = await import("bcryptjs");
+  const { portalForRole } = await import("@sharnam/shared");
+  const data: {
+    fullName: string;
+    phone: string | null;
+    vendorId: string;
+    email?: string;
+    passwordHash?: string;
+    role?: RoleKey;
+    portal?: string;
+  } = {
+    fullName,
+    phone: opts.vendor.businessPhone ? String(opts.vendor.businessPhone) : null,
+    vendorId: opts.vendor.id,
+  };
+
+  if (email !== user.email) {
+    const clash = await prisma.user.findUnique({ where: { email } });
+    if (clash && clash.id !== user.id) {
+      throw new Error("That email is already used by another portal login.");
+    }
+    data.email = email;
+  }
+
+  const password = String(opts.password || "").trim();
+  if (password) {
+    data.passwordHash = await bcrypt.hash(password, 10);
+  }
+
+  if (user.role !== role && !LOCKED_ROLES.has(user.role)) {
+    data.role = role;
+    data.portal = portalForRole(role);
+  }
+
+  const updated = await prisma.user.update({ where: { id: user.id }, data });
+  await alignUserRole(updated.id, role);
+  return {
+    userId: updated.id,
+    email: updated.email,
+    created: false,
+    role: updated.role as RoleKey,
+    passwordUpdated: Boolean(password),
+  };
+}
+
 export async function ensureStakeholderPortalLogin(party: {
   email?: string | null;
   name: string;
