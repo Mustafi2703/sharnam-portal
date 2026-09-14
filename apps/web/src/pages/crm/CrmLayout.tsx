@@ -1,8 +1,9 @@
 import { Fragment, type CSSProperties, type MouseEvent } from "react";
-import { NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth";
 import { Button } from "../../components/ui";
 import { closeToolWindowOrGo, isToolWindow, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
+import { homePathForUser } from "../../lib/portalAccounts";
 import { CRM_ACCENT, CRM_SOFT, CRM_SECTIONS, CRM_TOOLS, CRM_VENDOR_TOOLS } from "./crmNav";
 
 const tabClass = (on: boolean) =>
@@ -26,8 +27,10 @@ function openCrmTool(e: MouseEvent, href: string, label: string, inWin: boolean)
 /** CRM module shell — Procore-style chrome matching project tool workspaces. */
 export default function CrmLayout() {
   const loc = useLocation();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const { user } = useAuth();
+  const portalHome = homePathForUser(user);
   const isVendor = user?.role === "vendor";
   const tools = isVendor ? CRM_VENDOR_TOOLS : CRM_TOOLS;
   const inWin = isToolWindow(loc.search);
@@ -106,7 +109,14 @@ export default function CrmLayout() {
                 </Button>
               </>
             ) : (
-              <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
+              <>
+                {!inWin && (
+                  <Button type="button" variant="secondary" className="!text-sm" onClick={() => navigate(portalHome)}>
+                    Back to main portal
+                  </Button>
+                )}
+                <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
+              </>
             )}
           </div>
         </div>

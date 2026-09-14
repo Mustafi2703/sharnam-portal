@@ -14,6 +14,20 @@ function parseEmails(raw: string | null | undefined): string[] {
     .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_timeout`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function portalOrigin() {
   return (process.env.WEB_ORIGIN || process.env.APP_URL || "http://localhost:5173").replace(/\/$/, "");
 }
@@ -179,7 +193,11 @@ export async function notifyBidPackageOpened(opts: {
 
     if (emails.length && portalMailLive() && pkg.project.emailEnabled) {
       try {
-        await sendGraphHtmlMail({ to: emails, subject: `[${pkg.project.code}] ${subject}`, bodyHtml: html });
+        await withTimeout(
+          sendGraphHtmlMail({ to: emails, subject: `[${pkg.project.code}] ${subject}`, bodyHtml: html }),
+          8000,
+          "bid_invite_mail",
+        );
         results.push({
           vendor: vendorName,
           email: emails.join(", "),

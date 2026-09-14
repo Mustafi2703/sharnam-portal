@@ -20,11 +20,7 @@ import {
   type VendorFormState,
   type VendorPartyType,
 } from "../../lib/vendorTypes";
-import {
-  CRM_BID_DISCIPLINES,
-  formatVendorBidDisciplines,
-  parseVendorBidDisciplines,
-} from "../../lib/crmBidDisciplines";
+import { trimField } from "../../lib/stringUtils";
 
 function directoryVendorsQuery(tab: string) {
   if (tab === "vendors") return "?partyType=Contractor";
@@ -159,7 +155,7 @@ export function DirectoryCompaniesPanel({
     e.preventDefault();
     if (!canEdit) return;
     setMsg("");
-    const trimmedName = form.name.trim();
+    const trimmedName = trimField(form.name);
     if (!trimmedName) {
       setMsg("Company name is required.");
       return;
@@ -168,12 +164,14 @@ export function DirectoryCompaniesPanel({
       ...form,
       name: trimmedName,
       partyType,
-      primaryContactName: form.primaryContactName.trim(),
-      businessPhone: form.businessPhone.trim(),
-      email: form.email.trim().toLowerCase(),
-      address: form.address.trim(),
-      city: form.city.trim(),
-      gstNumber: form.gstNumber.trim(),
+      primaryContactName: trimField(form.primaryContactName),
+      businessPhone: trimField(form.businessPhone),
+      email: trimField(form.email).toLowerCase(),
+      address: trimField(form.address),
+      city: trimField(form.city),
+      gstNumber: trimField(form.gstNumber),
+      trade: trimField(form.trade),
+      notes: trimField(form.notes),
     };
     try {
       if (selectedId) {
@@ -188,7 +186,7 @@ export function DirectoryCompaniesPanel({
           token,
           body: JSON.stringify({
             ...payload,
-            ...(loginPassword.trim() ? { password: loginPassword.trim() } : {}),
+            ...(trimField(loginPassword) ? { password: trimField(loginPassword) } : {}),
           }),
         });
         setLoginPassword("");
@@ -251,7 +249,7 @@ export function DirectoryCompaniesPanel({
           body: JSON.stringify({
             email: selected.email,
             primaryContactName: selected.primaryContactName || selected.name,
-            ...(loginPassword.trim() ? { password: loginPassword.trim() } : {}),
+            ...(trimField(loginPassword) ? { password: trimField(loginPassword) } : {}),
           }),
         }
       );
@@ -272,12 +270,6 @@ export function DirectoryCompaniesPanel({
     } catch (err) {
       setLoginMsg(err instanceof Error ? err.message : "Could not create login");
     }
-  }
-
-  function toggleBidDiscipline(key: string) {
-    const current = parseVendorBidDisciplines(form.trade);
-    const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
-    setForm({ ...form, trade: formatVendorBidDisciplines(next) });
   }
 
   return (
@@ -413,7 +405,7 @@ export function DirectoryCompaniesPanel({
           </p>
         ) : null}
         <form className="space-y-3" onSubmit={save}>
-          <Input disabled={!canEdit} placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Company name" value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
             {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
               <option key={p.value} value={p.value}>
@@ -421,9 +413,9 @@ export function DirectoryCompaniesPanel({
               </option>
             ))}
           </Select>
-          <Input disabled={!canEdit} placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-          <Input disabled={!canEdit} placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input disabled={!canEdit} placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Primary contact (login name)" autoComplete="name" value={form.primaryContactName ?? ""} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Email (portal login)" type="email" autoComplete="username" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Phone" type="tel" autoComplete="tel" value={form.businessPhone ?? ""} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
           {canEdit ? (
             <Input
               type="password"
@@ -433,37 +425,26 @@ export function DirectoryCompaniesPanel({
                   ? "New portal password (leave blank to keep current)"
                   : "Portal password (default Demo@1234)"
               }
-              value={loginPassword}
+              value={loginPassword ?? ""}
               onChange={(e) => setLoginPassword(e.target.value)}
             />
           ) : null}
           {tab === "stakeholders" ? (
-            <ConsultantTypeSelect value={form.trade} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
+            <ConsultantTypeSelect value={form.trade ?? ""} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
           ) : null}
-          <Input disabled={!canEdit} placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="City" value={form.city ?? ""} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           {tab === "clients" ? (
-            <Input disabled={!canEdit} placeholder="Office address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            <Input disabled={!canEdit} placeholder="Office address" value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           ) : null}
-          {(tab === "vendors" || meta.partyTypes.includes("Contractor")) && (
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-semibold uppercase text-steel-muted mb-1">R2 bid packages (Comparative Statement BOQ sheets)</p>
-                <p className="text-[10px] text-steel-muted mb-2">
-                  Tag which BOQ sheets this contractor can bid — CCV, Electrical Lab, Admin, etc. Used when picking bidders on CRM convert.
-                  Not the same as project work packages (Civil, PEB, MEP).
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {CRM_BID_DISCIPLINES.map((d) => (
-                    <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
-                      <input type="checkbox" checked={parseVendorBidDisciplines(form.trade).includes(d.key)} onChange={() => toggleBidDiscipline(d.key)} />
-                      {d.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-          <TextArea disabled={!canEdit} placeholder="Notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          {tab === "vendors" ? (
+            <Input
+              disabled={!canEdit}
+              placeholder="Trade / specialty (optional — e.g. Civil, MEP)"
+              value={form.trade ?? ""}
+              onChange={(e) => setForm({ ...form, trade: e.target.value })}
+            />
+          ) : null}
+          <TextArea disabled={!canEdit} placeholder="Notes" rows={2} value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           {canEdit && (
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit">Save</Button>

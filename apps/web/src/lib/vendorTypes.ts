@@ -104,6 +104,10 @@ export const EMPTY_VENDOR_FORM: VendorFormState = {
   notes: "",
 };
 
+function vendorStr(v: unknown) {
+  return v == null ? "" : String(v);
+}
+
 export function vendorToForm(v: Partial<VendorFormState> & { name?: string; partyType?: string }): VendorFormState {
   const raw = String(v.partyType || "") === "Vendor" ? "Contractor" : v.partyType;
   const partyType = VENDOR_PARTY_TYPES.some((p) => p.value === raw)
@@ -111,8 +115,24 @@ export function vendorToForm(v: Partial<VendorFormState> & { name?: string; part
     : "Contractor";
   return {
     ...EMPTY_VENDOR_FORM,
-    ...v,
     partyType,
-    name: v.name || "",
+    name: vendorStr(v.name),
+    trade: vendorStr(v.trade),
+    primaryContactName: vendorStr(v.primaryContactName),
+    businessPhone: vendorStr(v.businessPhone),
+    email: vendorStr(v.email),
+    website: vendorStr(v.website),
+    address: vendorStr(v.address),
+    city: vendorStr(v.city),
+    state: vendorStr(v.state),
+    country: vendorStr(v.country) || "India",
+    gstNumber: vendorStr(v.gstNumber),
+    licenseNumber: vendorStr(v.licenseNumber),
+    notes: vendorStr(v.notes),
+    isPrequalified: !!v.isPrequalified,
+    insuranceVerified: !!v.insuranceVerified,
+    isUnionMember: !!v.isUnionMember,
+    isMinorityOwned: !!v.isMinorityOwned,
+    isWomenOwned: !!v.isWomenOwned,
   };
 }

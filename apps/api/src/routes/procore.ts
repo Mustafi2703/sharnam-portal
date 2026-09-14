@@ -33,6 +33,20 @@ function partyTypeWhere(partyType?: string) {
 }
 
 export const vendorsRouter = Router();
+
+/** Public read — consultant type labels for directory dropdowns (no auth needed). */
+vendorsRouter.get("/consultant-types", async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const { getConsultantTypes, DEFAULT_CONSULTANT_TYPES } = await import("../services/consultantTypeCatalog.js");
+    const types = await getConsultantTypes();
+    res.json({ types: types.length ? types : [...DEFAULT_CONSULTANT_TYPES] });
+  } catch {
+    const { DEFAULT_CONSULTANT_TYPES } = await import("../services/consultantTypeCatalog.js");
+    res.json({ types: [...DEFAULT_CONSULTANT_TYPES] });
+  }
+});
+
 vendorsRouter.use(requireAuth);
 
 vendorsRouter.get("/", async (req: AuthedRequest, res) => {
@@ -53,18 +67,6 @@ vendorsRouter.get("/", async (req: AuthedRequest, res) => {
     orderBy: [{ partyType: "asc" }, { name: "asc" }],
   });
   res.json(vendors);
-});
-
-vendorsRouter.get("/consultant-types", async (_req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-  try {
-    const { getConsultantTypes, DEFAULT_CONSULTANT_TYPES } = await import("../services/consultantTypeCatalog.js");
-    const types = await getConsultantTypes();
-    res.json({ types: types.length ? types : [...DEFAULT_CONSULTANT_TYPES] });
-  } catch {
-    const { DEFAULT_CONSULTANT_TYPES } = await import("../services/consultantTypeCatalog.js");
-    res.json({ types: [...DEFAULT_CONSULTANT_TYPES] });
-  }
 });
 
 vendorsRouter.post("/consultant-types", requireRoles("admin", "office"), async (req, res) => {

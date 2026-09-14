@@ -9,7 +9,7 @@ import {
   CrmTextLineList,
 } from "./crm/CrmDetailPanel";
 import { RegisterEmptyRow, RegisterSheetFrame } from "./RegisterSheetFrame";
-import { Button, Input, Select } from "./ui";
+import { Button, Card, Input, Select } from "./ui";
 import {
   type CrmQuotation,
   type QuotationLogEntry,
@@ -39,6 +39,12 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
   const [detail, setDetail] = useState<(CrmQuotation & { log?: QuotationLogEntry[] }) | null>(null);
   const [awardBusy, setAwardBusy] = useState(false);
   const [awardMsg, setAwardMsg] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createLeadId, setCreateLeadId] = useState("");
+  const [createClient, setCreateClient] = useState("");
+  const [createQuotationNo, setCreateQuotationNo] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createMsg, setCreateMsg] = useState("");
 
   const statusOptions = useMemo(
     () => [...new Set(quotations.map((r) => r.status).filter(Boolean))].sort() as string[],
@@ -70,6 +76,55 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
   const awardedProjectId = detail?.awardedProjectId || detail?.projectId || selected?.awardedProjectId || selected?.projectId;
   const isAwarded = (detail?.status || selected?.status || "").toLowerCase() === "awarded";
   const isLost = (detail?.status || selected?.status || "").toLowerCase() === "lost";
+
+  async function openCreateModal(leadId = "", clientName = "") {
+    setCreateLeadId(leadId);
+    setCreateClient(clientName);
+    setCreateMsg("");
+    setCreateOpen(true);
+    if (token) {
+      try {
+        const next = await api<{ quotationNo: string }>("/api/crm/quotations/next-number", { token });
+        setCreateQuotationNo(next.quotationNo);
+      } catch {
+        setCreateQuotationNo("");
+      }
+    }
+  }
+
+  async function createProposal() {
+    if (!token) return;
+    const clientName = createClient.trim();
+    const quotationNo = createQuotationNo.trim();
+    if (!clientName) {
+      setCreateMsg("Client name is required.");
+      return;
+    }
+    if (!quotationNo) {
+      setCreateMsg("Quotation number is required.");
+      return;
+    }
+    setCreateBusy(true);
+    setCreateMsg("");
+    try {
+      const row = await api<CrmQuotation>("/api/crm/quotations", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          clientName,
+          quotationNo,
+          leadId: createLeadId || undefined,
+        }),
+      });
+      setCreateOpen(false);
+      onRefresh?.();
+      navigate(`/crm/proposals/${row.id}`);
+    } catch (err) {
+      setCreateMsg(err instanceof Error ? err.message : "Could not create proposal");
+    } finally {
+      setCreateBusy(false);
+    }
+  }
 
   async function awardSelected() {
     if (!selectedId || !token) return;
@@ -125,11 +180,9 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
         </div>
         <div className="flex items-center gap-2">
           {canWrite && (
-            <Link to="/crm/proposals/new">
-              <Button type="button" variant="secondary" className="!py-1.5 !text-xs">
-                + New proposal
-              </Button>
-            </Link>
+            <Button type="button" variant="secondary" className="!py-1.5 !text-xs" onClick={() => void openCreateModal()}>
+              + New proposal
+            </Button>
           )}
           <span className="text-xs text-steel-muted font-mono whitespace-nowrap">
             {pageRows.length} of {filtered.length} · {quotations.length} total
@@ -267,9 +320,15 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                   </>
                 )}
                 {canWrite && selected.leadId && !isAwarded && (
-                  <Link to={`/crm/proposals/new?leadId=${selected.leadId}`} className="text-sm font-semibold text-brand">
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-brand text-left"
+                    onClick={() =>
+                      void openCreateModal(selected.leadId || "", selected.clientName || selected.lead?.title || "")
+                    }
+                  >
                     Another proposal on this lead →
-                  </Link>
+                  </button>
                 )}
               </div>
             </>
@@ -293,6 +352,55 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
           >
             Next
           </Button>
+        </div>
+      )}
+
+      {createOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-display text-xl">New PMC proposal</h3>
+                <p className="text-xs text-steel-muted mt-1">
+                  Creates the SharePoint Word file in 05.03 / PMC_Proposals. Edit and add revisions on the proposal page.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" className="!text-xs" onClick={() => setCreateOpen(false)}>
+                Close
+              </Button>
+            </div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              Quotation no
+              <Input
+                className="mt-1 font-mono"
+                value={createQuotationNo}
+                onChange={(e) => setCreateQuotationNo(e.target.value)}
+                placeholder="SPDC/26-27/INQ/79"
+              />
+            </label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              Client name
+              <Input
+                className="mt-1"
+                value={createClient}
+                onChange={(e) => setCreateClient(e.target.value)}
+                placeholder="e.g. Arvind Limited"
+                autoFocus
+              />
+            </label>
+            {createLeadId ? (
+              <p className="text-[11px] text-steel-muted">Linked to lead — award later puts the job on Projects as Planning.</p>
+            ) : null}
+            {createMsg ? <p className="text-xs text-danger">{createMsg}</p> : null}
+            <div className="flex gap-2 pt-1">
+              <Button type="button" disabled={createBusy} onClick={() => void createProposal()}>
+                {createBusy ? "Creating…" : "Create proposal file"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>

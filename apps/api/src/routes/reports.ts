@@ -67,6 +67,7 @@ import {
 } from "../services/quotationExport.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
 import { syncProposalSummaryFile } from "../services/crmSharePoint.js";
+import { nextSpdcQuotationNo } from "../services/crmQuotationNumbers.js";
 import {
   createVersionedProposal,
   ensureProposalRevisionTrail,
@@ -609,7 +610,7 @@ crmRouter.post("/leads/:id/to-proposal", requireRoles("admin", "office"), async 
   }
 
   const clientName = String(req.body.clientName || lead.contactName || lead.title).trim();
-  const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
+  const quotationNo = String(req.body.quotationNo || "").trim() || (await nextSpdcQuotationNo());
   const project = lead.projectId ? await prisma.project.findUnique({ where: { id: lead.projectId } }) : null;
   const row = await createVersionedProposal({
     projectId: project?.id || null,
@@ -797,6 +798,11 @@ crmRouter.get("/quotations", async (req, res) => {
   res.json(rows);
 });
 
+crmRouter.get("/quotations/next-number", requireRoles("admin", "office"), async (_req, res) => {
+  const quotationNo = await nextSpdcQuotationNo();
+  res.json({ quotationNo });
+});
+
 crmRouter.get("/quotations/template.docx", async (_req, res) => {
   try {
     const src = resolveProposalDocxPath();
@@ -878,7 +884,7 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
   }
   const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
 
-  const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
+  const quotationNo = String(req.body.quotationNo || "").trim() || (await nextSpdcQuotationNo());
   let row;
   try {
     row = await createVersionedProposal({

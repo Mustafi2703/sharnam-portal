@@ -10,6 +10,7 @@ import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
+import { trimField } from "../../lib/stringUtils";
 
 type ProjectRow = {
   id: string;
@@ -383,18 +384,18 @@ export default function CrmProjectSetupPage() {
     card: Pick<typeof EMPTY_PROJECT, "clientName" | "clientContactName" | "clientEmail" | "clientPhone" | "clientAddress" | "clientGst">,
   ) {
     if (!token || !id) return;
-    const name = card.clientName.trim();
+    const name = trimField(card.clientName);
     if (!name) throw new Error("Client company name is required");
     await api(`/api/vendors/${id}`, {
       method: "PATCH",
       token,
       body: JSON.stringify({
         name,
-        primaryContactName: card.clientContactName.trim() || null,
-        email: card.clientEmail.trim().toLowerCase() || null,
-        businessPhone: card.clientPhone.trim() || null,
-        address: card.clientAddress.trim() || null,
-        gstNumber: card.clientGst.trim() || null,
+        primaryContactName: trimField(card.clientContactName) || null,
+        email: trimField(card.clientEmail).toLowerCase() || null,
+        businessPhone: trimField(card.clientPhone) || null,
+        address: trimField(card.clientAddress) || null,
+        gstNumber: trimField(card.clientGst) || null,
         partyType: "Client",
       }),
     });

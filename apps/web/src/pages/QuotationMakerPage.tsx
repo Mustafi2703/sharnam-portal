@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
+import { Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
 import { downloadAuthFile } from "../lib/downloadReport";
 
 const STATUSES = ["Draft", "Editing", "Sent to client", "Done"] as const;
@@ -41,14 +41,6 @@ type Quotation = {
   log?: LogRow[];
 };
 
-type LeadPrefill = {
-  id: string;
-  title?: string;
-  clientName?: string;
-  projectId?: string | null;
-  project?: { id: string; code: string; name: string } | null;
-};
-
 function driveHref(q: Quotation | null) {
   if (!q) return null;
   return q.attachmentSharePointUrl || q.attachmentUrl || null;
@@ -75,71 +67,29 @@ export default function QuotationMakerPage() {
   const { id } = useParams<{ id?: string }>();
   const isEditing = !!id;
   const nav = useNavigate();
-  const [searchParams] = useSearchParams();
-  const leadIdFromUrl = searchParams.get("leadId") || "";
   const { token, user } = useAuth();
   const canWrite = ["admin", "office"].includes(user?.role || "");
 
-  const [clientName, setClientName] = useState("");
   const [status, setStatus] = useState<string>("Draft");
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState<Quotation | null>(null);
-  const [leadPrefill, setLeadPrefill] = useState<LeadPrefill | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    if (isEditing || !leadIdFromUrl) return;
-    (async () => {
-      try {
-        const lead = await api<LeadPrefill>(`/api/crm/leads/${leadIdFromUrl}`, { token });
-        setLeadPrefill(lead);
-        const name = (lead.clientName || lead.title || "").trim();
-        if (name) setClientName(name);
-      } catch {
-        /* optional prefill */
-      }
-    })();
-  }, [isEditing, leadIdFromUrl, token]);
+    if (!isEditing) nav("/crm/proposals", { replace: true });
+  }, [isEditing, nav]);
 
   useEffect(() => {
-    if (!isEditing) return;
+    if (!isEditing || !id) return;
     (async () => {
       const q = await api<Quotation>(`/api/crm/quotations/${id}`, { token });
       setSaved(q);
-      setClientName(q.clientName);
       setStatus(q.status);
     })().catch((err) => setMsg(err instanceof Error ? err.message : "Load failed"));
   }, [id, token, isEditing]);
 
-  async function createProposal(e: FormEvent) {
-    e.preventDefault();
-    const name = clientName.trim();
-    if (!name) {
-      setMsg("Enter the client name to create a proposal file.");
-      return;
-    }
-    setSaving(true);
-    setMsg("");
-    try {
-      const r = await api<Quotation>("/api/crm/quotations", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          clientName: name,
-          leadId: leadIdFromUrl || undefined,
-          projectId: leadPrefill?.projectId || undefined,
-        }),
-      });
-      setSaved(r);
-      setMsg(`Proposal file created in SharePoint for ${name}. Edit the client format, then Award when the job is won.`);
-      nav(`/crm/proposals/${r.id}`, { replace: true });
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not create proposal");
-    } finally {
-      setSaving(false);
-    }
-  }
+  if (!isEditing) return null;
 
   async function saveStatus() {
     if (!saved) return;
@@ -248,7 +198,7 @@ export default function QuotationMakerPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="CRM · Proposal"
-        title={isEditing ? saved?.clientName || "Proposal" : "New proposal"}
+        title={saved?.clientName || "Proposal"}
         subtitle="SharePoint PMC format — edit in Word, mark sent, Award to Planning on Projects."
       />
 
@@ -282,39 +232,7 @@ export default function QuotationMakerPage() {
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
 
-      {!isEditing && (
-        <Card>
-          <h3 className="font-semibold text-sm mb-1">Client name</h3>
-          <p className="text-xs text-steel-muted mb-4">
-            Creates <code className="font-mono">{clientName.trim() || "Client"}-PMC-Proposal-R0.docx</code> in{" "}
-            <code className="font-mono">05.03 Tender Documents / PMC_Proposals</code>
-            {leadPrefill?.projectId ? " on the linked project." : " in the office SharePoint library. Award later copies it onto the project."}
-          </p>
-          {leadPrefill && (
-            <Badge tone="ok" className="mb-3">
-              {leadPrefill.projectId ? "Lead already awarded — file will land on the project" : "Linked to lead — convert stays on the proposal register until Award"}
-            </Badge>
-          )}
-          <form className="flex flex-wrap gap-3 items-end" onSubmit={(e) => void createProposal(e)}>
-            <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted min-w-[16rem] flex-1">
-              Client
-              <Input
-                className="mt-1"
-                placeholder="e.g. Arvind Limited"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                required
-                disabled={!canWrite || saving}
-              />
-            </label>
-            <Button type="submit" disabled={!canWrite || saving}>
-              {saving ? "Creating file…" : "Create proposal file"}
-            </Button>
-          </form>
-        </Card>
-      )}
-
-      {isEditing && saved && (
+      {saved && (
         <div className="grid lg:grid-cols-[1fr_340px] gap-4">
           <Card className="!p-0 overflow-hidden border-brand/30">
             <div className="px-5 py-4 bg-brand/5 border-b border-line">

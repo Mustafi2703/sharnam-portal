@@ -6,7 +6,6 @@ import { PieChart } from "../../components/PieChart";
 import { Badge, Button, Card, Stat } from "../../components/ui";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
-import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { ToolLink } from "../../components/ToolLink";
 import { ProjectManageActions, type ManageableProject } from "../../components/ProjectManageActions";
 
@@ -59,7 +58,6 @@ export default function ProjectHomePage() {
 
   const tools = isVendor
     ? [
-        ["directory", "My sign-off", "Signature for checklist and report exports", "SIG", "#0B6A78"],
         ["checklist", "Checklist fills", "Fill assigned quality / drawing-check sheets", "QA", "#2F6F4E"],
         ["quality-inspections", "Quality inspections", "QI forms assigned to your company", "QI", "#2F6F4E"],
         ["rfis", "RFIs + checklist requests", "Respond and fill linked checklists", "RFI", "#0B6A78"],
@@ -70,7 +68,6 @@ export default function ProjectHomePage() {
       ]
     : isClient
     ? [
-        ["directory", "My sign-off", "Upload signature for reports & checklists", "SIG", "#0B6A78"],
         ["drawings", "Drawings", "Published GFC sheets — view only", "DWG", "#E4632A"],
         ["drawings/coordination", "Design coordination", "View clash / design issues", "DC", "#2563EB"],
         ["rfis", "Concerns / RFIs", "Raise questions without upload control", "RFI", "#0B6A78"],
@@ -80,9 +77,6 @@ export default function ProjectHomePage() {
         ["safety", "Safety", "Observations shared with client", "SAF", "#1C4A5A"],
       ]
     : [
-        // Report makers pulled up first — this is where daily / weekly work
-        // gets recorded and pushed to the SharePoint MIS.
-        ["directory", "My sign-off", "Personal + company signature for exports", "SIG", "#0B6A78"],
         ["dpr-maker", "DPR maker", "Fill INPUT → publish SPDC template XLSX", "DPR", "#E4632A"],
         ["wpr-maker", "WPR maker", "24-section weekly pack with photos", "WPR", "#C45C26"],
         ["drawings", "Drawings", "Upload, revise, publish sheets", "DWG", "#E4632A"],
@@ -171,8 +165,6 @@ export default function ProjectHomePage() {
           </div>
         )}
       </div>
-
-      {id && token && <DirectoryMySignaturePanel projectId={id} token={token} compact />}
 
       {!isClient && !isVendor && (
         <div className="space-y-2">

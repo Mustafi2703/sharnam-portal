@@ -19,6 +19,7 @@ import { isToolActive } from "../../lib/moduleToolNav";
 import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
 import { closeToolWindowOrGo, isToolWindow, searchWithToolWindow } from "../../lib/moduleToolWindow";
+import { homePathForUser } from "../../lib/portalAccounts";
 import { ToolLink } from "../../components/ToolLink";
 
 const TOP_MODULES = (
@@ -150,6 +151,7 @@ export default function ProjectToolsLayout() {
 
   const toolWin = isToolWindow(location.search);
   const hubHref = activeMod === "home" ? `/projects/${id}` : `/projects/${id}/hub/${activeMod}`;
+  const portalHome = homePathForUser(user);
 
   useEffect(() => {
     if (!toolWin || !id) return;
@@ -225,6 +227,9 @@ export default function ProjectToolsLayout() {
               <>
                 <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo(hubHref)}>
                   Back to {moduleLabel} hub
+                </Button>
+                <Button type="button" variant="ghost" className="!text-sm" onClick={() => navigate(portalHome)}>
+                  Back to main portal
                 </Button>
                 <Button type="button" variant="ghost" className="!text-sm" onClick={() => window.close()}>
                   Close window

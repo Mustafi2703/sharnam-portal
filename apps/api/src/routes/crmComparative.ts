@@ -43,6 +43,20 @@ import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
 export const crmComparativeRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_timeout`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 crmComparativeRouter.use(requireAuth);
 
 async function deleteBidPackageAndSheets(id: string) {
@@ -175,16 +189,8 @@ crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async
 });
 
 crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  let row = await loadBidPackage(req.params.id);
+  const row = await loadBidPackage(req.params.id);
   if (!row) return res.status(404).json({ error: "not found" });
-
-  const missingSheets = row.vendorBoqs.some((b) => !b.sheetId);
-  if (missingSheets) {
-    const vendorNames = parseVendorNames(row.vendorNamesJson);
-    const disciplines = packageDisciplines(row);
-    await ensureVendorBoqTemplateSheets(prisma, row.id, vendorNames, disciplines, req.user?.id);
-    row = (await loadBidPackage(req.params.id))!;
-  }
 
   let summary = null;
   if (row.summarySheetId) {
@@ -915,12 +921,28 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
     },
   });
 
-  const notify = await notifyBidPackageOpened({
-    bidPackageId: pkg.id,
-    openedByUserId: req.user!.id,
-    dueDate,
-    createLogins: req.body.createLogins !== false,
-  });
+  let notify: Awaited<ReturnType<typeof notifyBidPackageOpened>>;
+  try {
+    notify = await withTimeout(
+      notifyBidPackageOpened({
+        bidPackageId: pkg.id,
+        openedByUserId: req.user!.id,
+        dueDate,
+        createLogins: req.body.createLogins !== false,
+      }),
+      25000,
+      "bid_open_notify",
+    );
+  } catch (err) {
+    console.warn("[CRM] bid open notify slow/failed:", err instanceof Error ? err.message : err);
+    notify = {
+      notified: 0,
+      total: vendorCount.length,
+      results: [],
+      missingEmail: [],
+      accessSlips: [],
+    };
+  }
 
   await audit("crm.comparative.open", {
     userId: req.user!.id,
