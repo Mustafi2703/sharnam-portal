@@ -7,9 +7,10 @@ import { UserManageActions } from "../../components/UserManageActions";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
+import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 
-const LOGIN_ROLES = ["site_employee", "office", "employee", "vendor", "client"] as const;
+const LOGIN_ROLES = ["site_employee", "office", "employee"] as const;
 
 /** HRMS user management — office admin only. */
 export default function HrmsUsersPage() {
@@ -19,6 +20,8 @@ export default function HrmsUsersPage() {
   const [employees, setEmployees] = useState<UserAccountRow[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [msgTone, setMsgTone] = useState<"ok" | "err">("ok");
+  const [actionError, setActionError] = useState<ActionReason | null>(null);
   const [busy, setBusy] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -38,7 +41,11 @@ export default function HrmsUsersPage() {
 
   const load = useCallback(async () => {
     const [e, p] = await Promise.all([
-      api<UserAccountRow[]>("/api/hrm/employees", { token }).catch(() => []),
+      api<UserAccountRow[]>("/api/hrm/employees", { token }).catch((err) => {
+        setMsgTone("err");
+        setMsg(err instanceof Error ? err.message : "Could not load staff");
+        return [];
+      }),
       api<any[]>("/api/projects", { token }).catch(() => []),
     ]);
     setEmployees(e);
@@ -64,6 +71,7 @@ export default function HrmsUsersPage() {
     setMsg("");
     try {
       await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(form) });
+      setMsgTone("ok");
       setMsg(`Login created for ${form.email}`);
       setForm({
         fullName: "",
@@ -78,7 +86,10 @@ export default function HrmsUsersPage() {
       setModalOpen(false);
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Create failed");
+      const reason = actionReasonFromError("Could not create login", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
     } finally {
       setBusy(false);
     }
@@ -89,12 +100,16 @@ export default function HrmsUsersPage() {
     setMsg("");
     try {
       await api("/api/hrm/assign", { method: "POST", token, body: JSON.stringify(assign) });
+      setMsgTone("ok");
       setMsg("Employee added to project directory.");
       setAssignOpen(false);
       setAssign({ userId: "", projectId: "", role: "site_employee" });
       await load();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Assign failed");
+      const reason = actionReasonFromError("Could not assign to project", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
     } finally {
       setBusy(false);
     }
@@ -104,7 +119,7 @@ export default function HrmsUsersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          Create portal logins, assign people to projects, edit profiles, and manage active accounts. Role permissions stay in Office → Access.
+          Staff logins only — office, site, and employees. Vendor and client accounts stay in CRM directory / Access. Role permissions stay in Office → Access.
           <span className="block mt-1 font-semibold text-warn">
             Only office and admin can add or delete users. Live SPDC / Twinoxis logins stay protected.
           </span>
@@ -122,7 +137,18 @@ export default function HrmsUsersPage() {
         </div>
       </div>
 
-      {msg && <p className="text-sm text-ok bg-brand-soft/40 border border-brand/20 px-3 py-2 rounded-lg">{msg}</p>}
+      {msg ? (
+        <p
+          className={
+            msgTone === "err"
+              ? "text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]"
+              : "text-sm text-ok bg-brand-soft/40 border border-brand/20 px-3 py-2 rounded-lg"
+          }
+        >
+          {msg}
+        </p>
+      ) : null}
+      <ActionReasonDialog reason={actionError} onClose={() => setActionError(null)} />
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 flex flex-wrap items-center justify-between gap-2">
@@ -189,6 +215,7 @@ export default function HrmsUsersPage() {
                         token={token}
                         onEdit={() => setEditUser(e)}
                         onChanged={async () => {
+                          setMsgTone("ok");
                           setMsg("User list updated.");
                           await load();
                         }}
@@ -207,12 +234,15 @@ export default function HrmsUsersPage() {
         user={editUser}
         token={token}
         isAdmin={!!isAdmin}
+        forceKind="staff"
         onClose={() => setEditUser(null)}
         onSaved={async () => {
+          setMsgTone("ok");
           setMsg("User updated.");
           await load();
         }}
         onDeleted={async () => {
+          setMsgTone("ok");
           setMsg("User removed.");
           await load();
         }}

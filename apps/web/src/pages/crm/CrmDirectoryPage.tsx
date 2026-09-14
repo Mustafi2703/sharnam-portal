@@ -2,13 +2,25 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { PortalAccountFields } from "../../components/PortalAccountFields";
 import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
 import { UserManageActions } from "../../components/UserManageActions";
+import {
+  EMPTY_PORTAL_ACCOUNT_FORM,
+  accountKindLabel,
+  badgeToneForKind,
+  loginPathForAccount,
+  portalAccountKind,
+  roleFromAccountKind,
+  type PortalAccountForm,
+  type PortalAccountKind,
+} from "../../lib/portalAccounts";
+import { ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
+import { useConsultantTypes } from "../../lib/consultantTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
-  STAKEHOLDER_CONSULTANT_TRADES,
   VENDOR_PARTY_TYPES,
   formatPartyType,
   vendorToForm,
@@ -28,30 +40,30 @@ const TAB_META: Record<
   { title: string; subtitle: string; partyTypes: VendorPartyType[]; defaultParty: VendorPartyType; loginRole?: string }
 > = {
   vendors: {
-    title: "Vendor / contractor directory",
-    subtitle: "Same company type — tag R2 BOQ disciplines · assign to projects · issue portal logins.",
-    partyTypes: ["Contractor", "Vendor"],
+    title: "Vendors / contractors master",
+    subtitle: "Add the company, contact, email, and phone here. Portal login at /login/vendor is created with the record. Pick these companies later in Bid management — not in project setup.",
+    partyTypes: ["Contractor", "Vendor"] as VendorPartyType[],
     defaultParty: "Contractor",
   },
   clients: {
     title: "Client directory",
-    subtitle: "Owner organisations linked to leads and projects · client portal access.",
+    subtitle: "Ask for company, contact, email, and phone here. Client portal at /login/client is ready as soon as you save.",
     partyTypes: ["Client"],
     defaultParty: "Client",
     loginRole: "client",
   },
   stakeholders: {
-    title: "Stakeholders & consultants",
-    subtitle: "Structural, MEP, architectural, PMC partners — assign to projects and issue stakeholder desk logins.",
+    title: "Consultants",
+    subtitle: "Separate list from vendors. Add consultant type and contact — stakeholder login at /login/stakeholder is created on save.",
     partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",
     loginRole: "employee",
   },
   people: {
-    title: "People & portal access",
-    subtitle: "Every vendor, client, and consultant login created on setup appears here so they can sign in.",
+    title: "External logins",
+    subtitle: "Client, consultant, and vendor accounts only. Manage SPDC employees in HRMS → Users.",
     partyTypes: [],
-    defaultParty: "Vendor",
+    defaultParty: "Contractor",
   },
 };
 
@@ -72,13 +84,16 @@ export function DirectoryCompaniesPanel({
   const [form, setForm] = useState<VendorFormState>({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
   const [msg, setMsg] = useState("");
   const [loginMsg, setLoginMsg] = useState("");
+  const [loginPassword, setLoginPassword] = useState("Demo@1234");
   const [listSearch, setListSearch] = useState("");
   const formPanelRef = useRef<HTMLDivElement>(null);
+  const { types: consultantTypes } = useConsultantTypes(token);
 
   const load = useCallback(async () => {
-    const list = await api<VendorRow[]>("/api/vendors", { token });
-    setRows(list.filter((r) => meta.partyTypes.includes(r.partyType as VendorPartyType)));
-  }, [token, meta.partyTypes]);
+    const qs = tab === "vendors" ? "?partyType=Contractor" : tab === "clients" ? "?partyType=Client" : "";
+    const list = await api<VendorRow[]>(`/api/vendors${qs}`, { token });
+    setRows(list.filter((r) => !meta.partyTypes.length || meta.partyTypes.includes(r.partyType as VendorPartyType)));
+  }, [token, meta.partyTypes, tab]);
 
   useEffect(() => {
     void load();
@@ -104,6 +119,7 @@ export function DirectoryCompaniesPanel({
     setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
     setMsg("");
     setLoginMsg("");
+    setLoginPassword("Demo@1234");
     requestAnimationFrame(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
@@ -116,9 +132,24 @@ export function DirectoryCompaniesPanel({
         await api(`/api/vendors/${selectedId}`, { method: "PATCH", token, body: JSON.stringify(form) });
         setMsg("Updated");
       } else {
-        const created = await api<VendorRow>("/api/vendors", { method: "POST", token, body: JSON.stringify(form) });
+        const created = await api<VendorRow & { login?: { email: string; created: boolean; tempPassword?: string } }>(
+          "/api/vendors",
+          {
+            method: "POST",
+            token,
+            body: JSON.stringify({ ...form, createLogin: true, password: loginPassword }),
+          }
+        );
         setSelectedId(created.id);
-        setMsg("Added to directory");
+        const path =
+          tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
+        if (created.login?.created) {
+          setMsg(`Saved. Portal ready — ${created.login.email} signs in at ${path}. Password: ${created.login.tempPassword || loginPassword}`);
+        } else if (created.login) {
+          setMsg(`Saved. Login already existed for ${created.login.email} · ${path}`);
+        } else {
+          setMsg("Added to directory. Add an email to issue a portal login.");
+        }
       }
       await load();
     } catch (err) {
@@ -134,6 +165,7 @@ export function DirectoryCompaniesPanel({
     setLoginMsg("");
     try {
       const role = meta.loginRole || (tab === "vendors" ? "vendor" : tab === "stakeholders" ? "employee" : "client");
+      const kind = portalAccountKind(role, { department: tab === "stakeholders" ? selected.trade : null });
       await api("/api/hrm/employees", {
         method: "POST",
         token,
@@ -142,12 +174,12 @@ export function DirectoryCompaniesPanel({
           fullName: selected.primaryContactName || selected.name,
           role,
           phone: selected.businessPhone,
+          designation: selected.name,
+          department: tab === "stakeholders" ? selected.trade || undefined : undefined,
         }),
       });
       setLoginMsg(
-        `Portal login created for ${selected.email} (${role}). Default password: Demo@1234${
-          tab === "stakeholders" ? " · Sign in at /login/stakeholder" : ""
-        }`
+        `Portal login created for ${selected.email} (${accountKindLabel(kind)}). Default password: Demo@1234 · Sign in at ${loginPathForAccount(role, kind)}`
       );
     } catch (err) {
       setLoginMsg(err instanceof Error ? err.message : "Could not create login");
@@ -161,6 +193,8 @@ export function DirectoryCompaniesPanel({
   }
 
   return (
+    <div className="space-y-4">
+    {tab === "stakeholders" ? <ConsultantTypesPanel token={token} /> : null}
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 space-y-2">
@@ -218,7 +252,13 @@ export function DirectoryCompaniesPanel({
 
       <div ref={formPanelRef}>
       <Card>
-        <h3 className="font-semibold text-sm mb-3">{selected ? "Edit company" : "Add company"}</h3>
+        <h3 className="font-semibold text-sm mb-1">{selected ? "Edit company" : "Add company + portal login"}</h3>
+        {!selected ? (
+          <p className="text-[11px] text-steel-muted mb-3">
+            Company, contact, email, and phone are collected here. Saving creates the{" "}
+            {tab === "clients" ? "client" : tab === "stakeholders" ? "consultant / stakeholder" : "vendor"} login.
+          </p>
+        ) : null}
         <form className="space-y-3" onSubmit={save}>
           <Input required placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select value={form.partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
@@ -228,18 +268,18 @@ export function DirectoryCompaniesPanel({
               </option>
             ))}
           </Select>
-          <Input placeholder="Primary contact" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-          <Input placeholder="Email (for portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+          <Input required placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
+          <Input required placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input required placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+          {!selected ? (
+            <Input
+              placeholder="Portal password (default Demo@1234)"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+            />
+          ) : null}
           {tab === "stakeholders" ? (
-            <Select value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })}>
-              <option value="">Consultant type…</option>
-              {STAKEHOLDER_CONSULTANT_TRADES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
+            <ConsultantTypeSelect value={form.trade} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
           ) : null}
           <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           {(tab === "vendors" || meta.partyTypes.includes("Contractor")) && (
@@ -288,18 +328,31 @@ export function DirectoryCompaniesPanel({
           {loginMsg && <p className="text-xs text-steel-muted">{loginMsg}</p>}
         </form>
         <p className="text-[11px] text-steel-muted mt-4 border-t border-line pt-3">
-          Assign to a delivery project from{" "}
-          <Link to="/projects" className="text-brand font-semibold">
-            Projects → Directory
-          </Link>
-          . Open comparative bids from{" "}
-          <Link to="/crm/bids" className="text-brand font-semibold">
-            Bid management
-          </Link>
-          .
+          {tab === "vendors" ? (
+            <>
+              Open a bid from{" "}
+              <Link to="/crm/bids" className="text-brand font-semibold">
+                Bid management
+              </Link>{" "}
+              and pick companies from this list.
+            </>
+          ) : (
+            <>
+              Attach this company on{" "}
+              <Link to="/crm/setup" className="text-brand font-semibold">
+                Project setup
+              </Link>
+              . SPDC staff stay in{" "}
+              <Link to="/hrm/users" className="text-brand font-semibold">
+                HRMS → Users
+              </Link>
+              .
+            </>
+          )}
         </p>
       </Card>
       </div>
+    </div>
     </div>
   );
 }
@@ -307,24 +360,29 @@ export function DirectoryCompaniesPanel({
 export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdit: boolean }) {
   const [people, setPeople] = useState<UserAccountRow[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
-  const [form, setForm] = useState({ fullName: "", email: "", role: "vendor", phone: "" });
+  const [kindFilter, setKindFilter] = useState<"all" | PortalAccountKind>("all");
+  const [form, setForm] = useState<PortalAccountForm>({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "client" });
+  const [kind, setKind] = useState<PortalAccountKind>("client");
   const [msg, setMsg] = useState("");
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
 
   const visiblePeople = useMemo(() => {
     const needle = peopleSearch.trim().toLowerCase();
-    if (!needle) return people;
-    return people.filter((p) =>
-      [p.fullName, p.email, p.role, ...(p.memberships?.map((m) => m.project.code) || [])]
+    return people.filter((p) => {
+      const pKind = portalAccountKind(p.role, p.profile);
+      if (pKind === "staff") return false;
+      if (kindFilter !== "all" && pKind !== kindFilter) return false;
+      if (!needle) return true;
+      return [p.fullName, p.email, p.role, accountKindLabel(pKind), ...(p.memberships?.map((m) => m.project.code) || [])]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(needle)
-    );
-  }, [people, peopleSearch]);
+        .includes(needle);
+    });
+  }, [people, peopleSearch, kindFilter]);
 
   const load = useCallback(async () => {
-    const fromHrm = await api<UserAccountRow[]>("/api/hrm/employees", { token }).catch(() => []);
+    const fromHrm = await api<UserAccountRow[]>("/api/hrm/employees?scope=all", { token }).catch(() => []);
     if (fromHrm.length) {
       setPeople(fromHrm);
       return;
@@ -342,9 +400,24 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
     if (!canEdit) return;
     setMsg("");
     try {
-      await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(form) });
-      setForm({ fullName: "", email: "", role: "vendor", phone: "" });
-      setMsg(`Login created for ${form.email}. Default password: Demo@1234`);
+      const role = roleFromAccountKind(kind, form.role);
+      await api("/api/hrm/employees", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          fullName: form.fullName,
+          email: form.email,
+          role,
+          phone: form.phone,
+          designation: form.designation,
+          department: kind === "staff" || kind === "stakeholder" ? form.department : undefined,
+          empCode: kind === "staff" ? form.empCode : undefined,
+          password: form.password,
+        }),
+      });
+      setForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "client" });
+      setKind("client");
+      setMsg(`Login created for ${form.email} as ${accountKindLabel(kind)}. Sign in at ${loginPathForAccount(role, kind)}. Default password: ${form.password || "Demo@1234"}`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
@@ -355,9 +428,28 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
     <div className="grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4">
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 space-y-2">
-          <div className="font-semibold text-sm">{visiblePeople.length} portal accounts</div>
+          <div className="font-semibold text-sm flex flex-wrap items-center justify-between gap-2">
+            <span>{visiblePeople.length} external logins</span>
+            <Link to="/hrm/users" className="text-[11px] font-semibold text-brand">
+              SPDC staff → HRMS
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {(["all", "client", "stakeholder", "vendor"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${
+                  kindFilter === k ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
+                }`}
+                onClick={() => setKindFilter(k)}
+              >
+                {k === "all" ? "All" : accountKindLabel(k)}
+              </button>
+            ))}
+          </div>
           <Input
-            placeholder="Search name, email, role…"
+            placeholder="Search name, email, client…"
             value={peopleSearch}
             onChange={(e) => setPeopleSearch(e.target.value)}
             className="!text-sm"
@@ -368,7 +460,10 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
             <li key={p.id} className="px-4 py-3 flex flex-wrap justify-between gap-2">
               <div>
                 <div className="font-medium">{p.fullName}</div>
-                <div className="text-xs text-steel-muted">{p.email}</div>
+                <div className="text-xs text-steel-muted">{p.email}{p.phone ? ` · ${p.phone}` : ""}</div>
+                {p.profile?.designation ? (
+                  <div className="text-[11px] text-ink mt-0.5">{p.profile.designation}</div>
+                ) : null}
                 {p.memberships?.length ? (
                   <div className="text-[10px] text-steel-muted mt-1">
                     {p.memberships.map((m) => m.project.code).join(", ")}
@@ -376,17 +471,11 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={p.isActive === false ? "warn" : "ok"}>
-                  {p.role === "employee" ? "stakeholder" : p.role === "vendor" ? "vendor" : p.role}
+                <Badge tone={p.isActive === false ? "warn" : badgeToneForKind(portalAccountKind(p.role, p.profile))}>
+                  {accountKindLabel(portalAccountKind(p.role, p.profile))}
                 </Badge>
-                <span className="text-[10px] text-steel-muted">
-                  {p.role === "vendor"
-                    ? "/login/vendor"
-                    : p.role === "client"
-                      ? "/login/client"
-                      : p.role === "employee"
-                        ? "/login/stakeholder"
-                        : "/login/office"}
+                <span className="text-[10px] font-mono text-steel-muted">
+                  {loginPathForAccount(p.role, portalAccountKind(p.role, p.profile))}
                 </span>
                 {canEdit ? (
                   <UserManageActions
@@ -407,17 +496,15 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
       <Card>
         <h3 className="font-semibold text-sm mb-3">Create portal login</h3>
         <form className="space-y-3" onSubmit={create}>
-          <Input required placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-          <Input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            <option value="admin">Admin (office portal)</option>
-            <option value="office">Office team</option>
-            <option value="employee">Stakeholder / partner PMC</option>
-            <option value="site_employee">Site employee</option>
-            <option value="vendor">Vendor / contractor</option>
-            <option value="client">Client</option>
-          </Select>
-          <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <PortalAccountFields
+            form={form}
+            onChange={setForm}
+            kind={kind}
+            onKindChange={setKind}
+            allowAdminRole={false}
+            token={token}
+            externalOnly
+          />
           {canEdit && <Button type="submit">Create login</Button>}
           {msg && <p className="text-xs text-steel-muted">{msg}</p>}
         </form>

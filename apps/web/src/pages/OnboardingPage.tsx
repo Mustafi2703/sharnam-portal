@@ -17,16 +17,28 @@ export default function OnboardingPage() {
 function OnboardingList() {
   const { token } = useAuth();
   const [offers, setOffers] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     (async () => {
-      const list = await api<any[]>("/api/hrm/offers", { token });
-      setOffers(list.filter((o) => ["Accepted", "Joined"].includes(o.status)));
+      try {
+        const list = await api<any[]>("/api/hrm/offers", { token });
+        setOffers(list.filter((o) => ["Accepted", "Joined"].includes(o.status)));
+        setLoadError("");
+      } catch (err) {
+        setOffers([]);
+        setLoadError(err instanceof Error ? err.message : "Could not load onboarding");
+      }
     })();
   }, [token]);
 
   return (
     <div className="space-y-4">
+      {loadError ? (
+        <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
+          {loadError}
+        </p>
+      ) : null}
       <Card padding={false}>
         <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">
           Accepted / joined ({offers.length})
@@ -162,7 +174,30 @@ function OfferOnboardingPage() {
             </p>
           )}
         </div>
-        <Link to="/hrm/onboarding"><Button variant="secondary">Back to list</Button></Link>
+        <div className="flex flex-wrap gap-2">
+          {canWrite && offerId ? (
+            <Button
+              type="button"
+              onClick={async () => {
+                try {
+                  const letter = await api<any>(`/api/hrm/offers/${offerId}/appointment-letter`, { method: "POST", token });
+                  setMsg(`Appointment ${letter.refNo} generated and filed on Drive.`);
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Letter generate failed");
+                }
+              }}
+            >
+              Generate appointment letter
+            </Button>
+          ) : null}
+          {offer?.onboard?.userId ? (
+            <Link to="/hrm/files">
+              <Button variant="secondary">Employee files</Button>
+            </Link>
+          ) : null}
+          <Link to="/hrm/onboarding"><Button variant="secondary">Back to list</Button></Link>
+        </div>
       </div>
       {msg && <p className="text-sm text-brand-dark">{msg}</p>}
 
@@ -192,6 +227,11 @@ function OfferOnboardingPage() {
                         disabled={!canWrite}
                         className="max-w-xs"
                       />
+                      {item.key === "appointmentLetterUrl" && preJoin.appointmentLetterUrl ? (
+                        <a href={preJoin.appointmentLetterUrl} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
+                          Open
+                        </a>
+                      ) : null}
                     </>
                   ) : "picker" in item && item.picker ? (
                     <>

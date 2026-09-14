@@ -5,6 +5,7 @@ import path from "path";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
+import { errorDetail, listRuntimeLogs, pushRuntimeLog } from "../services/runtimeLog.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
   buildDprPack,
@@ -330,12 +331,22 @@ auditRouter.use(requireRoles("admin", "office"));
 
 auditRouter.get("/", async (req, res) => {
   const take = Math.min(Number(req.query.take || 100), 500);
-  const events = await prisma.auditEvent.findMany({
-    take,
-    orderBy: { createdAt: "desc" },
-    include: { user: { select: { fullName: true, email: true, role: true } } },
-  });
-  res.json(events);
+  try {
+    const events = await prisma.auditEvent.findMany({
+      take,
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { fullName: true, email: true, role: true } } },
+    });
+    res.json(events);
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "audit.list",
+      message: "Could not read audit trail",
+      detail: errorDetail(err),
+    });
+    res.json([]);
+  }
 });
 
 export const crmRouter = Router();
@@ -1022,6 +1033,22 @@ hrmRouter.use(requireAuth);
 const hrmDesk = requireRoles("admin", "office");
 /** Field staff may punch and view roster; vendors/clients must not. */
 const hrmStaff = requireRoles("admin", "office", "site_employee", "employee");
+const HRMS_STAFF_ROLES = ["admin", "office", "employee", "site_employee"] as const;
+const HRMS_ALL_LOGIN_ROLES = [...HRMS_STAFF_ROLES, "vendor", "client"] as const;
+
+async function safeCount(label: string, fn: () => Promise<number>): Promise<number> {
+  try {
+    return await fn();
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.dashboard",
+      message: `${label} failed — showing 0`,
+      detail: errorDetail(err),
+    });
+    return 0;
+  }
+}
 
 hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
   const today = new Date();
@@ -1039,16 +1066,30 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
     onboardedUsers,
     onboardingInProgress,
   ] = await Promise.all([
-    prisma.user.count({ where: { role: { not: "admin" } } }),
-    prisma.offer.count({ where: { status: { in: ["Draft", "Approved", "Sent"] } } }),
-    prisma.leaveRequest.count({ where: { status: "Pending" } }),
-    prisma.attendance.count({
-      where: { date: { gte: today, lt: tomorrow }, checkIn: { not: null } },
-    }),
-    prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "PendingHR", "Approved"] } } }),
-    prisma.candidate.count({ where: { status: { in: ["New", "Screened", "Shortlisted", "Interview", "Selected"] } } }),
-    prisma.offer.count({ where: { status: "Joined" } }),
-    prisma.onboardingChecklist.count({ where: { userId: { not: null } } }),
+    safeCount("headcount", () =>
+      prisma.user.count({
+        where: {
+          role: { in: [...HRMS_STAFF_ROLES] },
+          isActive: true,
+          NOT: { email: { startsWith: "deleted." } },
+        },
+      })
+    ),
+    safeCount("openOffers", () => prisma.offer.count({ where: { status: { in: ["Draft", "Approved", "Sent"] } } })),
+    safeCount("pendingLeave", () => prisma.leaveRequest.count({ where: { status: "Pending" } })),
+    safeCount("punchesToday", () =>
+      prisma.attendance.count({
+        where: { date: { gte: today, lt: tomorrow }, checkIn: { not: null } },
+      })
+    ),
+    safeCount("openReqs", () =>
+      prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "PendingHR", "Approved"] } } })
+    ),
+    safeCount("activeCandidates", () =>
+      prisma.candidate.count({ where: { status: { in: ["New", "Screened", "Shortlisted", "Interview", "Selected"] } } })
+    ),
+    safeCount("onboardedUsers", () => prisma.offer.count({ where: { status: "Joined" } })),
+    safeCount("onboardingInProgress", () => prisma.onboardingChecklist.count({ where: { userId: { not: null } } })),
   ]);
 
   res.json({
@@ -1063,29 +1104,71 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
   });
 });
 
-hrmRouter.get("/employees", hrmDesk, async (_req, res) => {
-  const users = await prisma.user.findMany({
-    where: {
-      role: { in: ["office", "site_employee", "employee", "admin", "vendor", "client"] },
-      isActive: true,
-      NOT: { email: { startsWith: "deleted." } },
-    },
-    select: {
-      id: true,
-      fullName: true,
-      email: true,
-      role: true,
-      portal: true,
-      phone: true,
-      isActive: true,
-      memberships: { include: { project: { select: { id: true, code: true, name: true } } } },
-    },
-  });
-  const profiles = await prisma.employeeProfile.findMany();
-  res.json(users.map((u) => ({ ...u, profile: profiles.find((p) => p.userId === u.id) || null })));
+/** HR desk activity — audit rows + in-memory API errors (Anushka cannot open /audit). */
+hrmRouter.get("/activity", hrmDesk, async (req, res) => {
+  const take = Math.min(Number(req.query.take || 150), 400);
+  let events: unknown[] = [];
+  try {
+    events = await prisma.auditEvent.findMany({
+      where: {
+        OR: [
+          { action: { startsWith: "hrm." } },
+          { action: { startsWith: "hrms." } },
+          { action: { startsWith: "runtime." } },
+        ],
+      },
+      take,
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { fullName: true, email: true, role: true } } },
+    });
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.activity",
+      message: "Could not read HRMS audit events",
+      detail: errorDetail(err),
+    });
+  }
+  res.json({ events, runtime: listRuntimeLogs(120) });
 });
 
-hrmRouter.post("/employees", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.get("/employees", hrmDesk, async (req, res) => {
+  const scope = String(req.query.scope || "staff");
+  const roles = scope === "all" ? [...HRMS_ALL_LOGIN_ROLES] : [...HRMS_STAFF_ROLES];
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        role: { in: roles },
+        ...(scope === "all" ? {} : { isActive: true }),
+        NOT: { email: { startsWith: "deleted." } },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        portal: true,
+        phone: true,
+        isActive: true,
+        createdAt: true,
+        memberships: { include: { project: { select: { id: true, code: true, name: true } } } },
+      },
+    });
+    const profiles = await prisma.employeeProfile.findMany();
+    res.json(users.map((u) => ({ ...u, profile: profiles.find((p) => p.userId === u.id) || null })));
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees",
+      message: "Could not list employees",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not list employees" });
+  }
+});
+
+hrmRouter.post("/employees", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const bcrypt = await import("bcryptjs");
   const { portalForRole } = await import("@sharnam/shared");
   const { email, fullName, role, phone, empCode, department, designation, password } = req.body;
@@ -1104,7 +1187,21 @@ hrmRouter.post("/employees", requireRoles("admin", "office"), async (req, res) =
       passwordHash: hash,
     },
   });
-  if (role !== "client" && role !== "vendor") {
+  const org = designation ? String(designation).trim() : "";
+  if (role === "client" || role === "vendor") {
+    if (org || department) {
+      const prefix = role === "client" ? "CLT" : "VND";
+      await prisma.employeeProfile.create({
+        data: {
+          userId: user.id,
+          empCode: `${prefix}-${Date.now().toString().slice(-6)}`,
+          department: department ? String(department).trim() : null,
+          designation: org || null,
+          joinDate: new Date(),
+        },
+      });
+    }
+  } else {
     await prisma.employeeProfile.create({
       data: {
         userId: user.id,
@@ -1115,16 +1212,28 @@ hrmRouter.post("/employees", requireRoles("admin", "office"), async (req, res) =
       },
     });
   }
+  await audit("hrm.employee.create", {
+    userId: req.user?.id,
+    entity: "User",
+    entityId: user.id,
+    meta: { email: user.email, role: user.role, fullName: user.fullName },
+  });
   res.status(201).json(user);
 });
 
-hrmRouter.post("/assign", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.post("/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const { projectId, userId, role } = req.body;
   if (!projectId || !userId) return res.status(400).json({ error: "projectId and userId required" });
   const member = await prisma.projectMember.upsert({
     where: { projectId_userId: { projectId, userId } },
     create: { projectId, userId, role: role || "member" },
     update: { role: role || "member" },
+  });
+  await audit("hrm.assign", {
+    userId: req.user?.id,
+    entity: "ProjectMember",
+    entityId: member.id,
+    meta: { projectId, assignedUserId: userId, role: role || "member" },
   });
   res.json(member);
 });
@@ -1144,7 +1253,6 @@ hrmRouter.delete("/assign", requireRoles("admin", "office"), async (req, res) =>
 hrmRouter.patch("/employees/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const userId = req.params.id;
   const { email, fullName, role, phone, empCode, department, designation, password, isActive } = req.body;
-  const isOffice = req.user?.role === "office";
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return res.status(404).json({ error: "User not found" });
   if (existing.role === "admin" && req.user?.role !== "admin") {
@@ -1160,13 +1268,21 @@ hrmRouter.patch("/employees/:id", requireRoles("admin", "office"), async (req: A
     if (clash && clash.id !== userId) return res.status(409).json({ error: "Email already in use" });
     data.email = nextEmail;
   }
-  if (role && !isOffice) {
+  if (role) {
     const { portalForRole } = await import("@sharnam/shared");
     const roleKey = role as import("@sharnam/shared").RoleKey;
+    if ((roleKey === "admin" || existing.role === "admin") && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Only admin can change admin accounts" });
+    }
     data.role = roleKey;
     data.portal = portalForRole(roleKey);
   }
-  if (typeof isActive === "boolean" && !isOffice) data.isActive = isActive;
+  if (typeof isActive === "boolean") {
+    if (existing.role === "admin" && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Only admin can deactivate admin accounts" });
+    }
+    data.isActive = isActive;
+  }
   if (password && String(password).length >= 6) {
     const bcrypt = await import("bcryptjs");
     data.passwordHash = await bcrypt.hash(String(password), 10);
@@ -1181,24 +1297,26 @@ hrmRouter.patch("/employees/:id", requireRoles("admin", "office"), async (req: A
       : existing;
 
   const effectiveRole = (data.role as string | undefined) || existing.role;
-  if (effectiveRole !== "client" && effectiveRole !== "vendor") {
-    const profilePatch: Record<string, unknown> = {};
-    if (empCode !== undefined) profilePatch.empCode = empCode || `EMP-${Date.now().toString().slice(-6)}`;
-    if (department !== undefined) profilePatch.department = department || null;
-    if (designation !== undefined) profilePatch.designation = designation || null;
-    if (Object.keys(profilePatch).length) {
-      await prisma.employeeProfile.upsert({
-        where: { userId },
-        create: {
-          userId,
-          empCode: (profilePatch.empCode as string) || `EMP-${Date.now().toString().slice(-6)}`,
-          department: (profilePatch.department as string | null) ?? null,
-          designation: (profilePatch.designation as string | null) ?? null,
-          joinDate: new Date(),
-        },
-        update: profilePatch,
-      });
-    }
+  const external = effectiveRole === "client" || effectiveRole === "vendor";
+  const profilePatch: Record<string, unknown> = {};
+  if (!external && empCode !== undefined) {
+    profilePatch.empCode = empCode || `EMP-${Date.now().toString().slice(-6)}`;
+  }
+  if (department !== undefined) profilePatch.department = department || null;
+  if (designation !== undefined) profilePatch.designation = designation || null;
+  if (Object.keys(profilePatch).length) {
+    const prefix = effectiveRole === "client" ? "CLT" : effectiveRole === "vendor" ? "VND" : "EMP";
+    await prisma.employeeProfile.upsert({
+      where: { userId },
+      create: {
+        userId,
+        empCode: (profilePatch.empCode as string) || `${prefix}-${Date.now().toString().slice(-6)}`,
+        department: (profilePatch.department as string | null) ?? null,
+        designation: (profilePatch.designation as string | null) ?? null,
+        joinDate: new Date(),
+      },
+      update: profilePatch,
+    });
   }
 
   const profile = await prisma.employeeProfile.findUnique({ where: { userId } });
@@ -1609,6 +1727,69 @@ hrmRouter.post("/documents", requireRoles("admin", "office"), async (req, res) =
   res.status(201).json(row);
 });
 
+const HRMS_FILE_FOLDER = "06_HR_AND_ADMIN/06.02_Employee_Files";
+
+hrmRouter.get("/employee-files", hrmDesk, async (req, res) => {
+  const userId = String(req.query.userId || "");
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  const rows = await prisma.employeeDocument.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
+  res.json(rows);
+});
+
+hrmRouter.post(
+  "/employee-files",
+  requireRoles("admin", "office"),
+  hrmUpload.array("files", 12),
+  async (req: AuthedRequest, res) => {
+    const userId = String(req.body.userId || "");
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: "employee not found" });
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    if (!files.length) return res.status(400).json({ error: "Upload at least one file" });
+    const category = String(req.body.category || "General");
+    const titleBase = String(req.body.title || "").trim();
+    const profile = await prisma.employeeProfile.findFirst({ where: { userId } });
+    const folderName = (profile?.empCode || user.fullName).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48);
+    const created = [];
+    for (const file of files) {
+      const ext = /\.([a-zA-Z0-9]{2,5})$/.exec(file.originalname || "")?.[0] || "";
+      const saved = await mockOneDrive.upload(
+        "_HR",
+        `${HRMS_FILE_FOLDER}/${folderName}`,
+        `${category}-${Date.now()}-${file.originalname || "file"}${ext ? "" : ""}`.replace(/[^a-zA-Z0-9._-]/g, "_"),
+        file.buffer
+      );
+      const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+      created.push(
+        await prisma.employeeDocument.create({
+          data: {
+            userId,
+            category,
+            title: titleBase || file.originalname || category,
+            fileUrl: url,
+            storagePath: saved.sharePointPath || saved.path,
+            issuedOn: req.body.issuedOn ? new Date(req.body.issuedOn) : new Date(),
+          },
+        })
+      );
+    }
+    await audit("hrm.files.upload", {
+      userId: req.user!.id,
+      entity: "EmployeeDocument",
+      entityId: userId,
+      meta: { count: created.length, category },
+    });
+    res.status(201).json(created);
+  }
+);
+
+hrmRouter.delete("/employee-files/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.employeeDocument.delete({ where: { id: req.params.id } });
+  await audit("hrm.files.delete", { userId: req.user!.id, entity: "EmployeeDocument", entityId: req.params.id });
+  res.json({ ok: true });
+});
+
 /* ─────────────────── HRMS Documents (Appointment / Relieving / Exit / Asset / Offer) ───────────────────
  * Two ways to add:
  *   1. Fill the form -> we build a .docx from the template stored in apps/api/formats/hrms/<kind>.docx
@@ -1712,7 +1893,12 @@ hrmRouter.post("/hrms-documents/:id/generate", requireRoles("admin", "office"), 
   if (!row) return res.status(404).json({ error: "not found" });
 
   const { generateHrmsLetter } = await import("../services/hrmsLetter.js");
-  const gen = await generateHrmsLetter(row);
+  let gen: Awaited<ReturnType<typeof generateHrmsLetter>>;
+  try {
+    gen = await generateHrmsLetter(row);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Letter generate failed" });
+  }
 
   const updated = await prisma.hrmsDocument.update({
     where: { id: row.id },

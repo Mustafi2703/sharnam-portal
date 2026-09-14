@@ -5,6 +5,8 @@ import { Badge, Button, Card, Input, Select } from "./ui";
 import { matchesSearch, SearchableSelect } from "./SearchableSelect";
 import { VendorManageActions } from "./VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "./VendorQuickEditModal";
+import { useConsultantTypes } from "../lib/consultantTypes";
+import { ConsultantTypeSelect } from "./ConsultantTypesPanel";
 import { formatPartyType, isVendorOrContractor, VENDOR_PARTY_TYPES, type VendorPartyType } from "../lib/vendorTypes";
 
 export type SetupDeskVendor = {
@@ -101,6 +103,7 @@ export function ProjectVendorsSetupDesk({
   const [busy, setBusy] = useState(false);
   const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
   const [listQ, setListQ] = useState("");
+  const { types: consultantTypes } = useConsultantTypes(token);
 
   const scopedAssigned = useMemo(() => assigned.filter((v) => matchesParty(v.partyType, party)), [assigned, party]);
   const shownAssigned = useMemo(
@@ -217,8 +220,11 @@ export function ProjectVendorsSetupDesk({
           <p className="text-xs text-steel-muted mt-0.5">{copy.blurb}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <Link to="/crm/directory/vendors" className="text-xs font-semibold text-brand">
-            Company directory →
+          <Link
+            to={party === "Contractor" ? "/crm/directory/vendors" : party === "Client" ? "/crm/directory/clients" : "/crm/directory/stakeholders"}
+            className="text-xs font-semibold text-brand"
+          >
+            {party === "Contractor" ? "Vendors / contractors master →" : party === "Client" ? "Client directory →" : "Consultant types & directory →"}
           </Link>
           {party === "Contractor" && (
             <Link to={`/crm/bids?projectId=${projectId}`} className="text-xs font-semibold text-brand">
@@ -310,7 +316,11 @@ export function ProjectVendorsSetupDesk({
           placeholder="Add from directory…"
           searchPlaceholder="Search company by name, contact, or email…"
         />
-        <Input placeholder="Role / trade on this project" value={tradeRole} onChange={(e) => setTradeRole(e.target.value)} />
+        {party === "Consultant" ? (
+          <ConsultantTypeSelect value={tradeRole} onChange={setTradeRole} types={consultantTypes} className="!w-56" />
+        ) : (
+          <Input placeholder="Role / trade on this project" value={tradeRole} onChange={(e) => setTradeRole(e.target.value)} />
+        )}
         <Button type="submit" variant="secondary" disabled={busy}>
           {copy.add}
         </Button>
@@ -337,8 +347,12 @@ export function ProjectVendorsSetupDesk({
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
-            <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-            <Input placeholder="Trade / discipline" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
+            <Input placeholder="Phone (contact — optional)" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+            {party === "Consultant" ? (
+              <ConsultantTypeSelect value={form.trade} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
+            ) : (
+              <Input placeholder="Trade / discipline" value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })} />
+            )}
             <Button type="submit" className="sm:col-span-2" disabled={busy}>
               {busy ? "Saving…" : "Create and add to project"}
             </Button>

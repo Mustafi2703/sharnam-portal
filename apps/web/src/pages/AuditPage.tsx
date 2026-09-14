@@ -6,16 +6,30 @@ import { Navigate } from "react-router-dom";
 export default function AuditPage() {
   const { token, user } = useAuth();
   const [events, setEvents] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState("");
   if (user?.role !== "admin" && user?.role !== "office") return <Navigate to="/" replace />;
 
   useEffect(() => {
-    api<any[]>("/api/audit", { token }).then(setEvents).catch(console.error);
+    api<any[]>("/api/audit", { token })
+      .then((rows) => {
+        setEvents(rows);
+        setLoadError("");
+      })
+      .catch((err) => {
+        setEvents([]);
+        setLoadError(err instanceof Error ? err.message : "Could not load audit trail");
+      });
   }, [token]);
 
   return (
     <div className="space-y-6">
       <h1 className="font-display text-4xl">Audit trail</h1>
-      <p className="text-steel-muted">Logins, checklist submits, drawing uploads, cost imports.</p>
+      <p className="text-steel-muted">Logins, checklist submits, drawing uploads, cost imports, and HRMS staff actions.</p>
+      {loadError ? (
+        <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
+          {loadError}
+        </p>
+      ) : null}
       <div className="overflow-x-auto rounded-2xl border border-black/5 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-sand/50 text-left">
@@ -27,6 +41,13 @@ export default function AuditPage() {
             </tr>
           </thead>
           <tbody>
+            {events.length === 0 && !loadError ? (
+              <tr>
+                <td className="p-4 text-steel-muted" colSpan={4}>
+                  No audit events yet.
+                </td>
+              </tr>
+            ) : null}
             {events.map((e) => (
               <tr key={e.id} className="border-t border-black/5">
                 <td className="p-3 whitespace-nowrap">{new Date(e.createdAt).toLocaleString()}</td>

@@ -83,7 +83,13 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         to: "documents",
         label: "Letters",
         icon: "dms",
-        subtitle: "Appointment, Relieving, Exit, Asset return, Warning — branded HTML + .xlsx.",
+        subtitle: "Appointment, Relieving, Exit — form fills the SPDC letter and files it on Drive.",
+      },
+      {
+        to: "files",
+        label: "Employee files",
+        icon: "dms",
+        subtitle: "PAN, Aadhaar, letters, payslips — multiple uploads per employee on SharePoint.",
       },
       {
         to: "masters",
@@ -98,17 +104,16 @@ export const HRMS_SECTIONS: HrmsSection[] = [
     label: "Administration",
     tools: [
       {
+        to: "activity",
+        label: "Activity",
+        icon: "reports",
+        subtitle: "HRMS actions and runtime errors — who created whom, and why a screen failed.",
+      },
+      {
         to: "users",
         label: "Users",
         icon: "master",
-        subtitle: "Create logins, activate accounts, and assign employees to projects.",
-        adminOnly: true,
-      },
-      {
-        to: "vendors",
-        label: "Vendors",
-        icon: "cost",
-        subtitle: "Office vendor directory for CRM bids and project assignment.",
+        subtitle: "Create staff logins, activate accounts, and assign employees to projects.",
         adminOnly: true,
       },
     ],

@@ -10,7 +10,6 @@ import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
-import { CrmBidProjectSetupSection } from "../components/CrmBidProjectSetupSection";
 import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 import { BidManageActions } from "../components/BidManageActions";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../components/ActionReasonDialog";
@@ -825,7 +824,7 @@ export default function CrmBidComparePage() {
                     setMsg(`Step 1 — confirm project for ${l.title}, then pick disciplines and bidders.`);
                   }}
                 >
-                  Setup bids →
+                    Open bid →
                 </button>
               </li>
             ))}
@@ -863,8 +862,10 @@ export default function CrmBidComparePage() {
           <form className="space-y-3" onSubmit={createPackage}>
               {setupStep === 1 && (
                 <>
-                  <h3 className="font-semibold text-sm">1 · Select delivery project</h3>
-                  <p className="text-xs text-steel-muted">After CRM convert — link comparative R2 package to this project.</p>
+                  <h3 className="font-semibold text-sm">1 · Project for this bid</h3>
+                  <p className="text-xs text-steel-muted">
+                    Bid management is separate from project setup. Pick the project code, then vendors. They see the open bid on /login/vendor.
+                  </p>
                   <Input
                     placeholder="Search project code or name…"
                     value={projectSearch}
@@ -924,13 +925,6 @@ export default function CrmBidComparePage() {
                     />
                     <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                   </div>
-                  {form.projectId && token && (
-                    <CrmBidProjectSetupSection
-                      projectId={form.projectId}
-                      token={token}
-                      onMsg={setMsg}
-                    />
-                  )}
                   <Button
                     type="button"
                     onClick={() => {
@@ -1013,7 +1007,7 @@ export default function CrmBidComparePage() {
                     selectedIds={form.vendorIds}
                     onChange={(vendorIds) => setForm({ ...form, vendorIds })}
                     placeholder="Search vendor / contractor…"
-                    emptyMessage="No vendor / contractor on the directory yet — add them in Access users or the project directory first."
+                    emptyMessage="No vendors on the master list yet — add them in CRM → Vendors / contractors, then come back."
                   />
                   <div className="flex gap-2">
                     <Button type="button" variant="secondary" onClick={() => setSetupStep(2)}>
@@ -1181,7 +1175,7 @@ export default function CrmBidComparePage() {
                   <div className="text-4xl">📊</div>
                   <p className="font-semibold text-ink">No bid packages yet.</p>
                   <Button type="button" onClick={() => openNewBidSetup()}>
-                    Start new bid setup →
+                    Open a bid →
                   </Button>
                 </li>
               )}

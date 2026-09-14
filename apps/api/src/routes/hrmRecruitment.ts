@@ -7,6 +7,8 @@ import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
+import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
+import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
   computeCtcBreakdown,
@@ -36,14 +38,30 @@ function extOf(f: Express.Multer.File): string {
   return m ? `.${m[1].toLowerCase()}` : "";
 }
 
+async function safeHrmList<T>(label: string, fn: () => Promise<T[]>, res: import("express").Response) {
+  try {
+    res.json(await fn());
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.list",
+      message: `${label} failed`,
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: `Could not load ${label}` });
+  }
+}
+
 /* ═════════════════════════════════════  MANPOWER REQUISITION  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
-  const rows = await prisma.manpowerRequisition.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { postings: { select: { id: true, title: true, status: true } } },
-  });
-  res.json(rows);
+  await safeHrmList("requisitions", () =>
+    prisma.manpowerRequisition.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { postings: { select: { id: true, title: true, status: true } } },
+    }),
+    res
+  );
 });
 
 hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -93,11 +111,13 @@ hrmRecruitmentRouter.patch("/requisitions/:id", requireRoles("admin", "office"),
 /* ═════════════════════════════════════  JOB POSTING  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/postings", async (_req, res) => {
-  const rows = await prisma.jobPosting.findMany({
-    include: { requisition: { select: { requisitionNo: true, status: true } }, _count: { select: { candidates: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(rows);
+  await safeHrmList("job postings", () =>
+    prisma.jobPosting.findMany({
+      include: { requisition: { select: { requisitionNo: true, status: true } }, _count: { select: { candidates: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    res
+  );
 });
 
 hrmRecruitmentRouter.post("/postings", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -146,29 +166,31 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   const status = req.query.status ? String(req.query.status) : undefined;
   const postingId = req.query.postingId ? String(req.query.postingId) : undefined;
   const search = req.query.q ? String(req.query.q).toLowerCase() : undefined;
-  const rows = await prisma.candidate.findMany({
-    where: {
-      ...(status ? { status } : {}),
-      ...(postingId ? { postingId } : {}),
-      ...(search
-        ? {
-            OR: [
-              { fullName: { contains: search } },
-              { email: { contains: search } },
-              { phone: { contains: search } },
-              { skills: { contains: search } },
-            ],
-          }
-        : {}),
-    },
-    include: {
-      posting: { select: { title: true, department: true } },
-      interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true } },
-      offers: { select: { id: true, offerNo: true, status: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(rows);
+  await safeHrmList("candidates", () =>
+    prisma.candidate.findMany({
+      where: {
+        ...(status ? { status } : {}),
+        ...(postingId ? { postingId } : {}),
+        ...(search
+          ? {
+              OR: [
+                { fullName: { contains: search } },
+                { email: { contains: search } },
+                { phone: { contains: search } },
+                { skills: { contains: search } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        posting: { select: { title: true, department: true } },
+        interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true } },
+        offers: { select: { id: true, offerNo: true, status: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    res
+  );
 });
 
 hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office"), upload.single("resume"), async (req: AuthedRequest, res) => {
@@ -241,14 +263,34 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   const priorRounds = await prisma.interviewRound.count({ where: { candidateId: candidate.id } });
   const panel = Array.isArray(req.body.panel) ? req.body.panel : req.body.panel ? [req.body.panel] : [];
   const scheduledAt = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
-  const mode = s(req.body.mode) || "Teams";
+  const mode = "Teams";
+  const durationMins = Number(req.body.durationMins) || 60;
 
-  // Teams meeting link: use provided one, or generate a deep-link stub (real link comes from Graph once Mail.Send + Calendars.ReadWrite are granted).
   let meetingLink = s(req.body.meetingLink);
   let meetingId = s(req.body.meetingId);
-  if (!meetingLink && mode === "Teams" && scheduledAt) {
-    meetingId = `sharnam-${candidate.id.slice(0, 8)}-r${priorRounds + 1}-${scheduledAt.getTime()}`;
-    meetingLink = `https://teams.microsoft.com/l/meetup-join/19%3ameeting_${meetingId}%40thread.v2/0`;
+  let teamsNote: string | null = null;
+  if (!meetingLink && scheduledAt) {
+    try {
+      const end = new Date(scheduledAt.getTime() + durationMins * 60_000);
+      const sch = await createTeamsSchedule({
+        subject: `HR interview · ${candidate.fullName} · ${s(req.body.roundType) || "Technical"}`,
+        start: scheduledAt,
+        end,
+        location: "Microsoft Teams",
+        bodyHtml: `<p>Interview scheduled from Sharnam HRMS for <strong>${candidate.fullName}</strong>.</p>`,
+      });
+      meetingLink = sch.teamsJoinUrl;
+      meetingId = sch.graphEventId;
+      teamsNote = sch.note;
+    } catch (err) {
+      teamsNote = err instanceof Error ? err.message : "Teams schedule failed";
+      pushRuntimeLog({
+        level: "error",
+        source: "hrm.interview",
+        message: "Teams meeting create failed",
+        detail: errorDetail(err),
+      });
+    }
   }
 
   const row = await prisma.interviewRound.create({
@@ -258,7 +300,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
       roundType: s(req.body.roundType) || "Technical",
       panelJson: JSON.stringify(panel),
       scheduledAt,
-      durationMins: Number(req.body.durationMins) || 60,
+      durationMins,
       mode,
       meetingLink,
       meetingId,
@@ -267,7 +309,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   });
   await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Interview" } });
   await audit("hrms.interview.schedule", { userId: req.user!.id, entity: "InterviewRound", entityId: row.id, meta: { candidateId: candidate.id, roundNumber: row.roundNumber, mode } });
-  res.status(201).json(row);
+  res.status(201).json({ ...row, teamsNote });
 });
 
 hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -302,11 +344,13 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office"), a
 /* ═════════════════════════════════════  OFFER LETTER  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/offers", async (_req, res) => {
-  const rows = await prisma.offer.findMany({
-    include: { candidate: { select: { fullName: true, email: true, phone: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(rows);
+  await safeHrmList("offers", () =>
+    prisma.offer.findMany({
+      include: { candidate: { select: { fullName: true, email: true, phone: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    res
+  );
 });
 
 hrmRecruitmentRouter.get("/offers/:id", async (req, res) => {
@@ -316,6 +360,71 @@ hrmRecruitmentRouter.get("/offers/:id", async (req, res) => {
   });
   if (!row) return res.status(404).json({ error: "not found" });
   res.json(row);
+});
+
+/** Fill the SPDC appointment letter from the accepted offer and file it on Drive. */
+hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const offer = await prisma.offer.findUnique({
+    where: { id: req.params.id },
+    include: { candidate: true, preJoin: true, onboard: true },
+  });
+  if (!offer) return res.status(404).json({ error: "offer not found" });
+  const employeeName = offer.candidate.fullName;
+  const refNo = `SPDC/HR/OL/${String(new Date().getFullYear()).slice(-2)}-${String(Date.now()).slice(-4)}`;
+  const letter = await prisma.hrmsDocument.create({
+    data: {
+      kind: "Appointment",
+      refNo,
+      employeeUserId: offer.onboard?.userId || null,
+      employeeName,
+      candidateEmail: offer.candidate.email,
+      designation: offer.designation,
+      department: offer.department,
+      effectiveDate: offer.joiningDate,
+      status: "Draft",
+      createdById: req.user!.id,
+      dataJson: JSON.stringify({
+        candidateName: employeeName,
+        joinDate: offer.joiningDate,
+        fixedCtcAnnual: offer.ctcAnnual,
+        ctcAnnual: offer.ctcAnnual,
+        location: offer.location || "SPDC Corporate Office, Vadodara",
+        reportingManager: offer.reportingManager || "",
+        probationMonths: offer.probationMonths || 6,
+        empCode: offer.preJoin?.empCodeGenerated || "",
+      }),
+    },
+  });
+  const { generateHrmsLetter } = await import("../services/hrmsLetter.js");
+  let gen: Awaited<ReturnType<typeof generateHrmsLetter>>;
+  try {
+    gen = await generateHrmsLetter(letter);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Letter generate failed", letterId: letter.id });
+  }
+  const updated = await prisma.hrmsDocument.update({
+    where: { id: letter.id },
+    data: {
+      generatedDocxUrl: gen.docxUrl,
+      generatedPdfUrl: gen.pdfUrl,
+      storagePath: gen.storagePath,
+      sharePointUrl: gen.sharePointUrl,
+      status: "Generated",
+    },
+  });
+  if (offer.preJoin) {
+    await prisma.preJoiningChecklist.update({
+      where: { id: offer.preJoin.id },
+      data: { appointmentLetterUrl: updated.sharePointUrl || updated.generatedPdfUrl },
+    });
+  }
+  await audit("hrm.docs.generate", {
+    userId: req.user!.id,
+    entity: "HrmsDocument",
+    entityId: updated.id,
+    meta: { kind: "Appointment", offerId: offer.id, refNo },
+  });
+  res.status(201).json(updated);
 });
 
 hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office"), upload.single("letter"), async (req: AuthedRequest, res) => {
@@ -620,11 +729,13 @@ hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office
 
 hrmRecruitmentRouter.get("/pay-hikes", async (req, res) => {
   const userId = req.query.userId ? String(req.query.userId) : undefined;
-  const rows = await prisma.payHike.findMany({
-    where: userId ? { userId } : {},
-    orderBy: { effectiveDate: "desc" },
-  });
-  res.json(rows);
+  await safeHrmList("pay hikes", () =>
+    prisma.payHike.findMany({
+      where: userId ? { userId } : {},
+      orderBy: { effectiveDate: "desc" },
+    }),
+    res
+  );
 });
 
 hrmRecruitmentRouter.post("/pay-hikes", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -698,32 +809,37 @@ hrmRecruitmentRouter.get("/payslips", async (req: AuthedRequest, res) => {
  * Simple compute: monthly earnings from profile; deductions computed from statutory %.
  * Client can override any value on the returned draft before finalising.
  */
-hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const userId = String(req.body.userId);
-  const year = Number(req.body.year);
-  const month = Number(req.body.month);
-  const workingDays = Number(req.body.workingDays || 30);
-  const lopDays = Number(req.body.lopDays || 0);
+async function computeAndUpsertPayslip(
+  reqUserId: string,
+  userId: string,
+  year: number,
+  month: number,
+  workingDays: number,
+  lopDays: number,
+  incomeTax: number,
+  overrides?: Record<string, number>
+) {
+  const profile = await prisma.employeeProfile.findFirst({ where: { userId } });
+  if (!profile) throw new Error("employee profile not found");
   const paidDays = Math.max(0, workingDays - lopDays);
   const factor = workingDays > 0 ? paidDays / workingDays : 1;
-
-  const profile = await prisma.employeeProfile.findFirst({ where: { userId } });
-  if (!profile) return res.status(404).json({ error: "employee profile not found" });
-
-  const basic = (profile.basicMonthly || (profile.ctcAnnual ? profile.ctcAnnual * 0.5 / 12 : 0)) * factor;
-  const hra = (profile.hraMonthly || basic * 0.5) * factor;
-  const conveyance = 1600 * factor;
-  const medicalAllow = 1250 * factor;
-  const specialAllow = Math.max(0, (profile.ctcAnnual ? profile.ctcAnnual / 12 : 0) * factor - basic - hra - conveyance - medicalAllow);
-  const gross = basic + hra + conveyance + medicalAllow + specialAllow;
-  const pfEmployee = Math.min(basic, 15000) * 0.12;
-  const esicEmployee = gross <= 21000 ? gross * 0.0075 : 0;
-  const professionalTax = 200;
-  const incomeTax = Number(req.body.incomeTax || 0);
-  const totalDeductions = pfEmployee + esicEmployee + professionalTax + incomeTax;
+  const basic = overrides?.basic ?? (profile.basicMonthly || (profile.ctcAnnual ? (profile.ctcAnnual * 0.5) / 12 : 0)) * factor;
+  const hra = overrides?.hra ?? (profile.hraMonthly || basic * 0.4) * factor;
+  const conveyance = overrides?.conveyance ?? 1600 * factor;
+  const medicalAllow = overrides?.medicalAllow ?? 1250 * factor;
+  const specialAllow =
+    overrides?.specialAllow ??
+    Math.max(0, (profile.ctcAnnual ? profile.ctcAnnual / 12 : 0) * factor - basic - hra - conveyance - medicalAllow);
+  const otherEarnings = overrides?.otherEarnings ?? 0;
+  const gross = basic + hra + conveyance + medicalAllow + specialAllow + otherEarnings;
+  const pfEmployee = overrides?.pfEmployee ?? Math.min(basic, 15000) * 0.12;
+  const esicEmployee = overrides?.esicEmployee ?? (gross <= 21000 ? gross * 0.0075 : 0);
+  const professionalTax = overrides?.professionalTax ?? 200;
+  const otherDeduction = overrides?.otherDeduction ?? 0;
+  const tds = overrides?.incomeTax ?? incomeTax;
+  const totalDeductions = pfEmployee + esicEmployee + professionalTax + tds + otherDeduction;
   const netPay = gross - totalDeductions;
-
-  const row = await prisma.payslip.upsert({
+  return prisma.payslip.upsert({
     where: { userId_year_month: { userId, year, month } },
     create: {
       userId,
@@ -737,15 +853,17 @@ hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"),
       conveyance,
       medicalAllow,
       specialAllow,
+      otherEarnings,
       grossEarnings: gross,
       pfEmployee,
       esicEmployee,
       professionalTax,
-      incomeTax,
+      incomeTax: tds,
+      otherDeduction,
       totalDeductions,
       netPay,
       status: "Generated",
-      generatedById: req.user!.id,
+      generatedById: reqUserId,
     },
     update: {
       workingDays,
@@ -756,20 +874,115 @@ hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"),
       conveyance,
       medicalAllow,
       specialAllow,
+      otherEarnings,
       grossEarnings: gross,
       pfEmployee,
       esicEmployee,
       professionalTax,
-      incomeTax,
+      incomeTax: tds,
+      otherDeduction,
       totalDeductions,
       netPay,
       status: "Generated",
-      generatedById: req.user!.id,
+      generatedById: reqUserId,
       generatedAt: new Date(),
     },
   });
-  await audit("hrms.payslip.generate", { userId: req.user!.id, entity: "Payslip", entityId: row.id, meta: { userId, year, month, netPay: row.netPay } });
-  res.status(201).json(row);
+}
+
+async function filePayslipToDrive(row: { id: string; userId: string; year: number; month: number }) {
+  const full = await prisma.payslip.findUniqueOrThrow({ where: { id: row.id } });
+  const user = await prisma.user.findUnique({ where: { id: row.userId } });
+  if (!user) return full;
+  const profile = await prisma.employeeProfile.findFirst({ where: { userId: row.userId } });
+  const { buildPayslipHtml } = await import("../services/payslipPdf.js");
+  const html = buildPayslipHtml({ payslip: full, user, profile });
+  const emp = (profile?.empCode || user.fullName).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
+  const ym = `${row.year}-${String(row.month).padStart(2, "0")}`;
+  const saved = await mockOneDrive.upload(
+    "_HR",
+    `06_HR_AND_ADMIN/06.03_Payslips/${ym}`,
+    `${emp}-${ym}.html`,
+    Buffer.from(html, "utf8"),
+    "text/html; charset=utf-8"
+  );
+  return prisma.payslip.update({
+    where: { id: row.id },
+    data: { fileUrl: saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}` },
+  });
+}
+
+hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const userId = String(req.body.userId || "");
+  const year = Number(req.body.year);
+  const month = Number(req.body.month);
+  if (!userId || !year || !month) return res.status(400).json({ error: "userId, year, month required" });
+  try {
+    const overrides: Record<string, number> = {};
+    for (const key of ["basic", "hra", "conveyance", "medicalAllow", "specialAllow", "otherEarnings", "pfEmployee", "esicEmployee", "professionalTax", "incomeTax", "otherDeduction"] as const) {
+      if (req.body[key] !== undefined && req.body[key] !== "") overrides[key] = Number(req.body[key]);
+    }
+    const row = await computeAndUpsertPayslip(
+      req.user!.id,
+      userId,
+      year,
+      month,
+      Number(req.body.workingDays || 30),
+      Number(req.body.lopDays || 0),
+      Number(req.body.incomeTax || 0),
+      overrides
+    );
+    let filed = row;
+    try {
+      filed = await filePayslipToDrive(row);
+    } catch (err) {
+      pushRuntimeLog({
+        level: "warn",
+        source: "hrm.payslip",
+        message: "Payslip generated but Drive file failed",
+        detail: errorDetail(err),
+      });
+    }
+    await audit("hrms.payslip.generate", { userId: req.user!.id, entity: "Payslip", entityId: filed.id, meta: { userId, year, month, netPay: filed.netPay } });
+    res.status(201).json(filed);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Payslip generate failed" });
+  }
+});
+
+hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const year = Number(req.body.year);
+  const month = Number(req.body.month);
+  if (!year || !month) return res.status(400).json({ error: "year and month required" });
+  const workingDays = Number(req.body.workingDays || 30);
+  const lopDays = Number(req.body.lopDays || 0);
+  const incomeTax = Number(req.body.incomeTax || 0);
+  const profiles = await prisma.employeeProfile.findMany();
+  const created: unknown[] = [];
+  const skipped: { userId: string; reason: string }[] = [];
+  for (const profile of profiles) {
+    const user = await prisma.user.findUnique({ where: { id: profile.userId } });
+    if (!user || !user.isActive || ["vendor", "client"].includes(user.role)) {
+      skipped.push({ userId: profile.userId, reason: "not active staff" });
+      continue;
+    }
+    if (!profile.ctcAnnual && !profile.basicMonthly) {
+      skipped.push({ userId: profile.userId, reason: "no CTC on profile — set CTC then generate" });
+      continue;
+    }
+    try {
+      const row = await computeAndUpsertPayslip(req.user!.id, profile.userId, year, month, workingDays, lopDays, incomeTax);
+      created.push(await filePayslipToDrive(row));
+    } catch (err) {
+      skipped.push({ userId: profile.userId, reason: err instanceof Error ? err.message : "failed" });
+    }
+  }
+  await audit("hrms.payslip.generate-month", {
+    userId: req.user!.id,
+    entity: "Payslip",
+    meta: { year, month, count: created.length, skipped: skipped.length },
+  });
+  res.status(201).json({ created, skipped });
 });
 
 hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
@@ -807,8 +1020,14 @@ hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office"), asy
       status: s(req.body.status) || before.status,
     },
   });
+  let filed = row;
+  try {
+    filed = await filePayslipToDrive(row);
+  } catch {
+    /* keep numbers even if Drive write fails */
+  }
   await audit("hrms.payslip.update", { userId: req.user!.id, entity: "Payslip", entityId: row.id });
-  res.json(row);
+  res.json(filed);
 });
 
 /* ═════════════════════════════════════  EMPLOYEE AUDIT LOG  ═════════════════════════════════════ */
@@ -818,20 +1037,25 @@ hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office"), asy
  */
 hrmRecruitmentRouter.get("/employees/:userId/timeline", async (req, res) => {
   const userId = req.params.userId;
-  const [own, related] = await Promise.all([
-    prisma.auditEvent.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    }),
-    prisma.auditEvent.findMany({
-      where: { entity: "User", entityId: userId },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    }),
-  ]);
-  const merged = [...own, ...related]
-    .filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  res.json(merged);
+  try {
+    const [own, related] = await Promise.all([
+      prisma.auditEvent.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      }),
+      prisma.auditEvent.findMany({
+        where: { entity: "User", entityId: userId },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      }),
+    ]);
+    const merged = [...own, ...related]
+      .filter((r, i, arr) => arr.findIndex((x) => x.id === r.id) === i)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    res.json(merged);
+  } catch (err) {
+    console.error("[hrm.timeline]", err instanceof Error ? err.message : err);
+    res.json([]);
+  }
 });

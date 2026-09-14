@@ -12,7 +12,14 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 export const vendorsRouter = Router();
 vendorsRouter.use(requireAuth);
 
-vendorsRouter.get("/", async (req, res) => {
+vendorsRouter.get("/", async (req: AuthedRequest, res) => {
+  const role = req.user?.role;
+  if (role === "client") return res.json([]);
+  if (role === "vendor") {
+    const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+    const mine = await resolveVendorForUser(req.user!);
+    return res.json(mine ? [mine] : []);
+  }
   const partyType = typeof req.query.partyType === "string" ? req.query.partyType : undefined;
   const partyWhere =
     partyType === "Contractor" || partyType === "Vendor"
@@ -29,6 +36,40 @@ vendorsRouter.get("/", async (req, res) => {
     orderBy: [{ partyType: "asc" }, { name: "asc" }],
   });
   res.json(vendors);
+});
+
+vendorsRouter.get("/consultant-types", async (_req, res) => {
+  const { getConsultantTypes } = await import("../services/consultantTypeCatalog.js");
+  res.json({ types: await getConsultantTypes() });
+});
+
+vendorsRouter.post("/consultant-types", requireRoles("admin", "office"), async (req, res) => {
+  const { addConsultantType } = await import("../services/consultantTypeCatalog.js");
+  try {
+    res.status(201).json({ types: await addConsultantType(String(req.body?.name || req.body?.type || "")) });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not add type" });
+  }
+});
+
+vendorsRouter.patch("/consultant-types", requireRoles("admin", "office"), async (req, res) => {
+  const { renameConsultantType } = await import("../services/consultantTypeCatalog.js");
+  try {
+    res.json({
+      types: await renameConsultantType(String(req.body?.from || ""), String(req.body?.to || req.body?.name || "")),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not rename type" });
+  }
+});
+
+vendorsRouter.delete("/consultant-types", requireRoles("admin", "office"), async (req, res) => {
+  const { removeConsultantType } = await import("../services/consultantTypeCatalog.js");
+  try {
+    res.json({ types: await removeConsultantType(String(req.body?.name || req.query.name || "")) });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not delete type" });
+  }
 });
 
 vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -70,7 +111,24 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
     ? await prisma.vendor.update({ where: { id: existing.id }, data })
     : await prisma.vendor.create({ data: { ...data, createdVia: "Manual" } });
   await audit(existing ? "vendor.update" : "vendor.create", { userId: req.user!.id, entity: "Vendor", entityId: v.id });
-  res.status(existing ? 200 : 201).json(v);
+
+  let login = null;
+  if (req.body.createLogin !== false && email) {
+    const { ensurePortalLogin } = await import("../services/crmVendorCredentials.js");
+    const role =
+      partyType === "Client" ? "client" : partyType === "Contractor" ? "vendor" : "employee";
+    login = await ensurePortalLogin({
+      email,
+      fullName: String(data.primaryContactName || name),
+      role,
+      phone: data.businessPhone ? String(data.businessPhone) : null,
+      password: req.body.password ? String(req.body.password) : null,
+      vendorId: v.id,
+      designation: name,
+      department: partyType === "Consultant" || partyType === "Designer" || partyType === "PMC" ? data.trade || null : null,
+    });
+  }
+  res.status(existing ? 200 : 201).json({ ...v, login });
 });
 
 /** Seed global bidder catalog — one vendor per R2 BOQ discipline package (idempotent). */
@@ -901,8 +959,9 @@ inspectionsRouter.post("/:id/complete", requireRoles("admin", "office", "site_em
 export const directoryRouter = Router();
 directoryRouter.use(requireAuth);
 
-directoryRouter.get("/project/:projectId/overview", async (req, res) => {
+directoryRouter.get("/project/:projectId/overview", async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
+  const role = req.user?.role;
   const [members, vendors, drawings, rfis, inspections, submittals, photos, coordination] = await Promise.all([
     prisma.projectMember.findMany({
       where: { projectId },
@@ -919,15 +978,23 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
       include: { documents: { orderBy: { createdAt: "desc" } } },
     }),
   ]);
+  let visibleVendors = vendors;
+  if (role === "client") {
+    visibleVendors = vendors.filter((v) => v.vendor.partyType === "Client");
+  } else if (role === "vendor") {
+    const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+    const mine = await resolveVendorForUser(req.user!);
+    visibleVendors = mine ? vendors.filter((v) => v.vendorId === mine.id) : [];
+  }
   res.json({
     members,
-    vendors,
+    vendors: visibleVendors,
     parties: {
-      contractors: vendors.filter((v) => v.vendor.partyType === "Contractor"),
-      vendorsOnly: vendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType),
-      clients: vendors.filter((v) => v.vendor.partyType === "Client"),
-      consultants: vendors.filter((v) => v.vendor.partyType === "Consultant"),
-      pmc: vendors.filter((v) => v.vendor.partyType === "PMC"),
+      contractors: visibleVendors.filter((v) => v.vendor.partyType === "Contractor"),
+      vendorsOnly: visibleVendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType),
+      clients: visibleVendors.filter((v) => v.vendor.partyType === "Client"),
+      consultants: visibleVendors.filter((v) => v.vendor.partyType === "Consultant"),
+      pmc: visibleVendors.filter((v) => v.vendor.partyType === "PMC"),
     },
     stats: {
       drawings: drawings.length,
@@ -937,9 +1004,9 @@ directoryRouter.get("/project/:projectId/overview", async (req, res) => {
       submittals: submittals.length,
       photos: photos.length,
       coordinationOpen: coordination.filter((c) => c.status === "Open").length,
-      contractors: vendors.filter((v) => v.vendor.partyType === "Contractor").length,
-      vendorCompanies: vendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType).length,
-      clients: vendors.filter((v) => v.vendor.partyType === "Client").length,
+      contractors: visibleVendors.filter((v) => v.vendor.partyType === "Contractor").length,
+      vendorCompanies: visibleVendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType).length,
+      clients: visibleVendors.filter((v) => v.vendor.partyType === "Client").length,
     },
     photos,
     submittals,

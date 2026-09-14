@@ -190,13 +190,13 @@ export default function CrmLayout() {
         {onSetup && !isVendor && (
           <div className="module-hub__workflow border-t border-line bg-sand/80 px-3 sm:px-5 py-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
             <span>
-              <strong className="text-ink font-semibold">1.</strong> Save project card · client · consultants & contractors
+              <strong className="text-ink font-semibold">1.</strong> Code · name · pick parties from CRM lists
             </span>
             <span>
-              <strong className="text-ink font-semibold">2.</strong> Communication matrix (stored in Comms)
+              <strong className="text-ink font-semibold">2.</strong> Communication matrix
             </span>
             <span>
-              <strong className="text-ink font-semibold">3.</strong> Launch portals, folders, DPR, WPR
+              <strong className="text-ink font-semibold">3.</strong> Launch folders
             </span>
           </div>
         )}

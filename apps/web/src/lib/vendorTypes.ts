@@ -90,7 +90,7 @@ export const EMPTY_VENDOR_FORM: VendorFormState = {
 };
 
 export function vendorToForm(v: Partial<VendorFormState> & { name?: string; partyType?: string }): VendorFormState {
-  const raw = v.partyType === "Vendor" ? "Contractor" : v.partyType;
+  const raw = String(v.partyType || "") === "Vendor" ? "Contractor" : v.partyType;
   const partyType = VENDOR_PARTY_TYPES.some((p) => p.value === raw)
     ? (raw as VendorPartyType)
     : "Contractor";

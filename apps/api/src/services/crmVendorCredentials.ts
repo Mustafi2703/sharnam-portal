@@ -21,6 +21,10 @@ export async function ensurePortalLogin(opts: {
   fullName: string;
   role: RoleKey;
   phone?: string | null;
+  password?: string | null;
+  vendorId?: string | null;
+  designation?: string | null;
+  department?: string | null;
 }): Promise<PortalLoginResult | null> {
   const email = String(opts.email || "")
     .trim()
@@ -29,12 +33,15 @@ export async function ensurePortalLogin(opts: {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
+    if (opts.vendorId && !existing.vendorId) {
+      await prisma.user.update({ where: { id: existing.id }, data: { vendorId: opts.vendorId } }).catch(() => {});
+    }
     return { userId: existing.id, email, created: false, role: existing.role as RoleKey };
   }
 
   const bcrypt = await import("bcryptjs");
   const { portalForRole } = await import("@sharnam/shared");
-  const tempPassword = defaultTempPassword();
+  const tempPassword = String(opts.password || "").trim() || defaultTempPassword();
   const hash = await bcrypt.hash(tempPassword, 10);
   const user = await prisma.user.create({
     data: {
@@ -44,6 +51,7 @@ export async function ensurePortalLogin(opts: {
       portal: portalForRole(opts.role),
       phone: opts.phone || null,
       passwordHash: hash,
+      vendorId: opts.vendorId || null,
     },
   });
 
@@ -52,9 +60,21 @@ export async function ensurePortalLogin(opts: {
       data: {
         userId: user.id,
         empCode: `EMP-${Date.now().toString().slice(-6)}`,
+        designation: opts.designation || null,
+        department: opts.department || null,
         joinDate: new Date(),
       },
     });
+  } else if (opts.designation) {
+    const prefix = opts.role === "client" ? "CLT" : "VND";
+    await prisma.employeeProfile.create({
+      data: {
+        userId: user.id,
+        empCode: `${prefix}-${Date.now().toString().slice(-6)}`,
+        designation: opts.designation,
+        joinDate: new Date(),
+      },
+    }).catch(() => {});
   }
 
   return { userId: user.id, email, created: true, tempPassword, role: opts.role };

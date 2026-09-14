@@ -39,18 +39,24 @@ export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const reload = async () => {
-    const [r, p, c, o] = await Promise.all([
-      api<any[]>("/api/hrm/requisitions", { token }),
-      api<any[]>("/api/hrm/postings", { token }),
-      api<any[]>("/api/hrm/candidates", { token }),
-      api<any[]>("/api/hrm/offers", { token }),
-    ]);
-    setReqs(r);
-    setPostings(p);
-    setCandidates(c);
-    setOffers(o);
+    try {
+      const [r, p, c, o] = await Promise.all([
+        api<any[]>("/api/hrm/requisitions", { token }),
+        api<any[]>("/api/hrm/postings", { token }),
+        api<any[]>("/api/hrm/candidates", { token }),
+        api<any[]>("/api/hrm/offers", { token }),
+      ]);
+      setReqs(r);
+      setPostings(p);
+      setCandidates(c);
+      setOffers(o);
+      setLoadError("");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load recruitment");
+    }
   };
   useEffect(() => {
     void reload();
@@ -73,6 +79,11 @@ export default function RecruitmentPage() {
         ))}
       </div>
 
+      {loadError ? (
+        <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
+          {loadError}
+        </p>
+      ) : null}
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
       {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
@@ -365,7 +376,7 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
   const preselected = sp.get("candidateId") || "";
   const [candidateId, setCandidateId] = useState(preselected);
   const [rounds, setRounds] = useState<any[]>([]);
-  const [form, setForm] = useState({ roundType: "Technical", panel: "", scheduledAt: "", durationMins: 60, mode: "Teams", meetingLink: "" });
+  const [form, setForm] = useState({ roundType: "Technical", panel: "", scheduledAt: "", durationMins: 60, meetingLink: "" });
 
   useEffect(() => {
     if (!candidateId) {
@@ -380,10 +391,16 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
     if (!candidateId) return;
     try {
       const body = { ...form, panel: form.panel.split(",").map((s) => s.trim()).filter(Boolean) };
-      const r = await api<any>(`/api/hrm/candidates/${candidateId}/interviews`, { method: "POST", token, body: JSON.stringify(body) });
+      const r = await api<any>(`/api/hrm/candidates/${candidateId}/interviews`, { method: "POST", token, body: JSON.stringify({ ...body, mode: "Teams" }) });
       setRounds((prev) => [...prev, r]);
-      setForm({ roundType: "Technical", panel: "", scheduledAt: "", durationMins: 60, mode: "Teams", meetingLink: "" });
-      setMsg(`Interview scheduled${r.meetingLink ? " · Teams link ready" : ""}.`);
+      setForm({ roundType: "Technical", panel: "", scheduledAt: "", durationMins: 60, meetingLink: "" });
+      setMsg(
+        r.meetingLink
+          ? "Interview scheduled · Teams join link ready."
+          : r.teamsNote
+            ? `Interview saved. Teams: ${r.teamsNote}`
+            : "Interview scheduled. Add a Teams link if Graph is not connected."
+      );
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -418,13 +435,10 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
             <Input placeholder="Panel members (comma-separated)" value={form.panel} onChange={(e) => setForm({ ...form, panel: e.target.value })} />
             <Input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} />
             <Input placeholder="Duration (mins)" type="number" value={form.durationMins} onChange={(e) => setForm({ ...form, durationMins: Number(e.target.value) })} />
-            <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
-              {["Teams", "Zoom", "Google Meet", "In-person"].map((v) => <option key={v}>{v}</option>)}
-            </Select>
-            <Input placeholder="Meeting link (optional)" value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} className="md:col-span-2" />
-            <Button type="submit">Schedule round</Button>
+            <Input placeholder="Paste Teams link only if Graph is down" value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} className="md:col-span-2" />
+            <Button type="submit">Schedule Teams round</Button>
           </form>
-          <p className="text-[10px] text-steel-muted mt-2">If mode is Teams and no link is provided, a Teams meeting URL is generated automatically for the panel.</p>
+          <p className="text-[10px] text-steel-muted mt-2">Interviews are Microsoft Teams only. The portal creates the meeting on the SPDC mailbox when Graph is connected.</p>
         </Card>
       )}
 

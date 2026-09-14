@@ -62,14 +62,17 @@ export default function HrmsDocumentsPage() {
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
 
+  const [staff, setStaff] = useState<Array<{ id: string; fullName: string; email: string; profile?: any }>>([]);
   const [form, setForm] = useState({
     kind: "Appointment" as DocKind,
+    employeeUserId: "",
     employeeName: "",
     designation: "",
     department: "",
     candidateEmail: "",
     effectiveDate: "",
     ctcAnnual: "",
+    reportingManager: "",
     location: "SPDC Corporate Office, Vadodara",
     reason: "",
     assets: "",
@@ -78,8 +81,12 @@ export default function HrmsDocumentsPage() {
 
   const load = useCallback(async () => {
     try {
-      const list = await api<DocRow[]>("/api/hrm/hrms-documents", { token });
+      const [list, people] = await Promise.all([
+        api<DocRow[]>("/api/hrm/hrms-documents", { token }),
+        api<Array<{ id: string; fullName: string; email: string; profile?: any }>>("/api/hrm/employees", { token }).catch(() => []),
+      ]);
       setRows(list);
+      setStaff(people);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Load failed");
     }
@@ -97,14 +104,19 @@ export default function HrmsDocumentsPage() {
     try {
       const body = {
         kind: form.kind,
+        employeeUserId: form.employeeUserId || null,
         employeeName: form.employeeName,
         designation: form.designation,
         department: form.department,
         candidateEmail: form.candidateEmail,
         effectiveDate: form.effectiveDate || null,
         data: {
+          candidateName: form.employeeName,
+          joinDate: form.effectiveDate,
+          fixedCtcAnnual: form.ctcAnnual,
           ctcAnnual: form.ctcAnnual,
           location: form.location,
+          reportingManager: form.reportingManager,
           reason: form.reason,
           assets: form.assets,
           serials: form.serials,
@@ -117,7 +129,7 @@ export default function HrmsDocumentsPage() {
       });
       await api(`/api/hrm/hrms-documents/${created.id}/generate`, { method: "POST", token });
       setMsg(`${created.kind} · ${created.refNo} generated and filed under 06.01 Letters.`);
-      setForm({ ...form, employeeName: "", candidateEmail: "", effectiveDate: "", reason: "", assets: "", serials: "" });
+      setForm({ ...form, employeeUserId: "", employeeName: "", candidateEmail: "", effectiveDate: "", reason: "", assets: "", serials: "" });
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
@@ -166,10 +178,9 @@ export default function HrmsDocumentsPage() {
           <div>
             <h2 className="font-semibold text-sm">HRMS letters &amp; document management</h2>
             <p className="text-[11px] text-steel-muted">
-              Fill the form → we generate a Sharnam-branded HTML letter (print → Save as PDF) plus an
-              editable .xlsx companion. Every artefact is filed under 06.01 Letters and surfaces on
-              SharePoint. Format files live in <code>apps/api/formats/hrms/&lt;Kind&gt;.html</code>; drop
-              your real letterhead there any time and the next generation will use it.
+              Pick the employee (or type a name). Name, joining date, CTC and reporting manager fill the
+              SPDC appointment letter. The letter plus CTC Annexure I are filed under Drive
+              06.01 Letters / employee name.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -202,7 +213,35 @@ export default function HrmsDocumentsPage() {
               </Select>
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Employee / candidate</span>
+              <span className="text-[11px] text-steel-muted uppercase font-mono">Staff (fills the form)</span>
+              <Select
+                value={form.employeeUserId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const emp = staff.find((s) => s.id === id);
+                  setForm({
+                    ...form,
+                    employeeUserId: id,
+                    employeeName: emp?.fullName || form.employeeName,
+                    candidateEmail: emp?.email || form.candidateEmail,
+                    designation: emp?.profile?.designation || form.designation,
+                    department: emp?.profile?.department || form.department,
+                    ctcAnnual: emp?.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.ctcAnnual,
+                    effectiveDate: emp?.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : form.effectiveDate,
+                  });
+                }}
+              >
+                <option value="">Type name below, or pick staff</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}
+                    {s.profile?.empCode ? ` · ${s.profile.empCode}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] text-steel-muted uppercase font-mono">Employee / candidate name</span>
               <Input required value={form.employeeName} onChange={(e) => setForm({ ...form, employeeName: e.target.value })} />
             </label>
             <label className="space-y-1">
@@ -229,7 +268,11 @@ export default function HrmsDocumentsPage() {
                   <span className="text-[11px] text-steel-muted uppercase font-mono">Fixed CTC (INR p.a.)</span>
                   <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
                 </label>
-                <label className="space-y-1 md:col-span-2">
+                <label className="space-y-1">
+                  <span className="text-[11px] text-steel-muted uppercase font-mono">Reporting manager</span>
+                  <Input value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
+                </label>
+                <label className="space-y-1">
                   <span className="text-[11px] text-steel-muted uppercase font-mono">Base location</span>
                   <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
                 </label>
@@ -306,6 +349,11 @@ export default function HrmsDocumentsPage() {
                     {r.generatedDocxUrl && (
                       <a href={r.generatedDocxUrl} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
                         Editable annexure (.xlsx)
+                      </a>
+                    )}
+                    {r.sharePointUrl && r.sharePointUrl !== r.generatedPdfUrl && (
+                      <a href={r.sharePointUrl} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
+                        Drive copy
                       </a>
                     )}
                     {r.uploadedFileUrl && (

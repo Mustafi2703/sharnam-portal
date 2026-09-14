@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
+import { useConsultantTypes } from "../lib/consultantTypes";
+import { ConsultantTypeSelect } from "./ConsultantTypesPanel";
 import { Button, Input } from "./ui";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
 
@@ -43,6 +45,7 @@ export function SetupPartyMultiPick({
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+  const { types } = useConsultantTypes(token);
 
   async function addNew() {
     if (!token) return;
@@ -111,13 +114,19 @@ export function SetupPartyMultiPick({
           <Input placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input placeholder="Contact person" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
           <Input type="email" placeholder="Email (optional — only if they need a login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input
-            className="sm:col-span-2"
-            placeholder={kind === "Consultant" ? "Trade — structural, MEP, architect…" : "Trade — civil, PEB, electrical…"}
-            value={form.trade}
-            onChange={(e) => setForm({ ...form, trade: e.target.value })}
-          />
+          <Input placeholder="Phone (contact — optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          {kind === "Consultant" ? (
+            <div className="sm:col-span-2">
+              <ConsultantTypeSelect value={form.trade} onChange={(trade) => setForm({ ...form, trade })} types={types} />
+            </div>
+          ) : (
+            <Input
+              className="sm:col-span-2"
+              placeholder="Trade — civil, PEB, electrical…"
+              value={form.trade}
+              onChange={(e) => setForm({ ...form, trade: e.target.value })}
+            />
+          )}
           <Button type="button" className="sm:col-span-2" disabled={saving || busy} onClick={() => void addNew()}>
             {saving ? "Adding…" : `Add ${kind === "Consultant" ? "consultant" : "vendor / contractor"} to this project`}
           </Button>

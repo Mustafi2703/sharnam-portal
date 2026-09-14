@@ -143,9 +143,13 @@ export default function ProjectHomePage() {
               <ProjectManageActions
                 project={projectCard}
                 token={token}
-                onChanged={() =>
-                  api<ManageableProject>(`/api/projects/${id}`, { token }).then(setProjectCard).catch(() => null)
-                }
+                onChanged={async () => {
+                  try {
+                    setProjectCard(await api<ManageableProject>(`/api/projects/${id}`, { token }));
+                  } catch {
+                    /* keep current card */
+                  }
+                }}
               />
             ) : null}
           </div>

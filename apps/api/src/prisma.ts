@@ -25,7 +25,23 @@ export const prisma = new Proxy({} as PrismaClient, {
 });
 
 export async function ensureDbConnected() {
-  await getPrisma().$connect();
+  let last: unknown;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      await getPrisma().$connect();
+      await getPrisma().$queryRaw`SELECT 1`;
+      return;
+    } catch (err) {
+      last = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[db] connect attempt ${attempt} failed: ${msg}`);
+      if (msg.includes("PANIC") || msg.includes("timer has gone away")) {
+        await resetPrismaClient().catch(() => undefined);
+      }
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
+  throw last;
 }
 
 export function isPrismaFatal(err: unknown): boolean {

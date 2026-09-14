@@ -49,19 +49,28 @@ export function buildPayslipHtml(input: PayslipRenderInput): string {
   const { payslip: p, user, profile } = input;
   const company = input.companyName || "Sharnam Project Development Consultants & Co.";
   const logo = sharnamLogoDataUri();
+  const stored =
+    (p.basic || 0) +
+    (p.hra || 0) +
+    (p.grossEarnings || 0) +
+    (p.netPay || 0);
   const factor = p.workingDays > 0 ? p.paidDays / p.workingDays : 1;
-  const fromProfile = earningsFromProfile(profile, factor);
+  const fromProfile = stored > 0 ? null : earningsFromProfile(profile, factor);
 
-  const basic = fromProfile?.basic ?? p.basic;
-  const hra = fromProfile?.hra ?? p.hra;
-  const conveyance = fromProfile?.conveyance ?? p.conveyance;
-  const medicalAllow = fromProfile?.medicalAllow ?? p.medicalAllow;
-  const specialAllow = fromProfile?.specialAllow ?? p.specialAllow;
-  const gross = fromProfile?.gross ?? p.grossEarnings;
-  const pfEmployee = fromProfile?.pfEmployee ?? p.pfEmployee;
-  const esicEmployee = fromProfile?.esicEmployee ?? p.esicEmployee;
-  const professionalTax = fromProfile?.professionalTax ?? p.professionalTax;
-  const netPay = gross - pfEmployee - esicEmployee - professionalTax - (p.incomeTax || 0);
+  const basic = p.basic || fromProfile?.basic || 0;
+  const hra = p.hra || fromProfile?.hra || 0;
+  const conveyance = p.conveyance || fromProfile?.conveyance || 0;
+  const medicalAllow = p.medicalAllow || fromProfile?.medicalAllow || 0;
+  const specialAllow = p.specialAllow || fromProfile?.specialAllow || 0;
+  const otherEarnings = p.otherEarnings || 0;
+  const gross = p.grossEarnings || fromProfile?.gross || basic + hra + conveyance + medicalAllow + specialAllow + otherEarnings;
+  const pfEmployee = p.pfEmployee || fromProfile?.pfEmployee || 0;
+  const esicEmployee = p.esicEmployee || fromProfile?.esicEmployee || 0;
+  const professionalTax = p.professionalTax || fromProfile?.professionalTax || 0;
+  const incomeTax = p.incomeTax || 0;
+  const otherDeduction = p.otherDeduction || 0;
+  const totalDeductions = p.totalDeductions || pfEmployee + esicEmployee + professionalTax + incomeTax + otherDeduction;
+  const netPay = p.netPay || gross - totalDeductions;
 
   const empCode = profile?.empCode || user.email.split("@")[0].toUpperCase();
   const designation = profile?.designation || "—";
@@ -123,8 +132,9 @@ export function buildPayslipHtml(input: PayslipRenderInput): string {
       <tr><td>HRA</td><td class="num">${inr(hra)}</td><td>ESIC</td><td class="num">${inr(esicEmployee)}</td></tr>
       <tr><td>Conveyance</td><td class="num">${inr(conveyance)}</td><td>Professional Tax</td><td class="num">${inr(professionalTax)}</td></tr>
       <tr><td>Medical / Children Edu.</td><td class="num">${inr(medicalAllow)}</td><td>Income Tax (TDS)</td><td class="num">${inr(p.incomeTax || 0)}</td></tr>
-      <tr><td>Special Allowance</td><td class="num">${inr(specialAllow)}</td><td></td><td class="num"></td></tr>
-      <tr><td><strong>Gross earnings</strong></td><td class="num"><strong>${inr(gross)}</strong></td><td><strong>Total deductions</strong></td><td class="num"><strong>${inr(pfEmployee + esicEmployee + professionalTax + (p.incomeTax || 0))}</strong></td></tr>
+      <tr><td>Special Allowance</td><td class="num">${inr(specialAllow)}</td><td>Other deduction</td><td class="num">${inr(otherDeduction)}</td></tr>
+      ${otherEarnings ? `<tr><td>Other earnings</td><td class="num">${inr(otherEarnings)}</td><td></td><td class="num"></td></tr>` : ""}
+      <tr><td><strong>Gross earnings</strong></td><td class="num"><strong>${inr(gross)}</strong></td><td><strong>Total deductions</strong></td><td class="num"><strong>${inr(totalDeductions)}</strong></td></tr>
     </tbody>
   </table>
   <table>

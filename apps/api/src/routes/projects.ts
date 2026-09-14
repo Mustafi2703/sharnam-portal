@@ -6,6 +6,7 @@ import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER, PROJECT_LIBRARY_FOLDERS } from "../services/graph.js";
 import { consumeDrawingUnlockToken } from "../services/drawingUnlock.js";
 import { audit } from "../services/audit.js";
+import { purgeProjectChildren } from "../services/purgeProject.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const drawingUpload = upload.fields([
@@ -370,6 +371,7 @@ export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
 projectsRouter.get("/", async (req: AuthedRequest, res) => {
+  const { projectPayloadForRole } = await import("../services/projectVisibility.js");
   const role = req.user!.role;
   if (role === "admin" || role === "office") {
     const projects = await prisma.project.findMany({
@@ -409,7 +411,7 @@ projectsRouter.get("/", async (req: AuthedRequest, res) => {
     }
   }
 
-  res.json([...byId.values()]);
+  res.json([...byId.values()].map((p) => projectPayloadForRole(p as Record<string, unknown>, role)));
 });
 
 projectsRouter.get("/work-package-catalog", async (_req, res) => {
@@ -782,7 +784,7 @@ projectsRouter.post("/:id/send-portal-invites", requireRoles("admin", "office"),
   res.json(out);
 });
 
-projectsRouter.get("/:id", async (req, res) => {
+projectsRouter.get("/:id", async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({
     where: { id: req.params.id },
     include: {
@@ -792,7 +794,11 @@ projectsRouter.get("/:id", async (req, res) => {
     },
   });
   if (!project) return res.status(404).json({ error: "Not found" });
-  res.json(project);
+  const { viewerCanSeeProject, projectPayloadForRole } = await import("../services/projectVisibility.js");
+  if (!(await viewerCanSeeProject(req.user!, project.id))) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  res.json(projectPayloadForRole(project as unknown as Record<string, unknown>, req.user!.role));
 });
 
 projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -807,14 +813,8 @@ projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: Authe
   }
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.lead.updateMany({ where: { projectId: project.id }, data: { projectId: null } });
-      await tx.deal.updateMany({ where: { projectId: project.id }, data: { projectId: null } });
-      await tx.dprSnapshot.deleteMany({ where: { projectId: project.id } });
-      await tx.wprSnapshot.deleteMany({ where: { projectId: project.id } });
-      await tx.customSheet.deleteMany({ where: { projectId: project.id } });
-      await tx.attendance.deleteMany({ where: { projectId: project.id } });
-      await tx.project.delete({ where: { id: project.id } });
-    });
+      await purgeProjectChildren(tx, project.id);
+    }, { timeout: 60_000, maxWait: 10_000 });
   } catch (err) {
     console.warn("[project] delete:", err instanceof Error ? err.message : err);
     return res.status(409).json({

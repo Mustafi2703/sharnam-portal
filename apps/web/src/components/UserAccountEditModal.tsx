@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import {
+  portalAccountKind,
+  roleFromAccountKind,
+  type PortalAccountForm,
+  type PortalAccountKind,
+} from "../lib/portalAccounts";
+import { PortalAccountFields } from "./PortalAccountFields";
 import { RegisterEntryModal } from "./RegisterEntryModal";
-import { Button, Input, Select } from "./ui";
+import { Button } from "./ui";
 
 export type UserAccountRow = {
   id: string;
@@ -15,65 +22,76 @@ export type UserAccountRow = {
   memberships?: { id: string; project: { id: string; code: string; name: string }; role?: string }[];
 };
 
-const LOGIN_ROLES = ["site_employee", "office", "employee", "vendor", "client", "admin"] as const;
-
 type Props = {
   open: boolean;
   user: UserAccountRow | null;
   token: string | null;
   isAdmin: boolean;
+  /** HRMS staff desk — keep the staff form even when role is employee. */
+  forceKind?: PortalAccountKind;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
   onDeleted?: () => void | Promise<void>;
 };
 
-export function UserAccountEditModal({ open, user, token, isAdmin, onClose, onSaved, onDeleted }: Props) {
-  const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    role: "site_employee",
-    phone: "",
-    empCode: "",
-    department: "",
-    designation: "",
+function formFromUser(user: UserAccountRow): PortalAccountForm {
+  return {
+    fullName: user.fullName || "",
+    email: user.email || "",
+    role: user.role || "site_employee",
+    phone: user.phone || "",
+    empCode: user.profile?.empCode || "",
+    department: user.profile?.department || "",
+    designation: user.profile?.designation || "",
     password: "",
-    isActive: true,
-  });
+    isActive: user.isActive !== false,
+  };
+}
+
+export function UserAccountEditModal({
+  open,
+  user,
+  token,
+  isAdmin,
+  forceKind,
+  onClose,
+  onSaved,
+  onDeleted,
+}: Props) {
+  const [form, setForm] = useState<PortalAccountForm>(formFromUser(user || ({} as UserAccountRow)));
+  const [kind, setKind] = useState<PortalAccountKind>("staff");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     if (!user) return;
-    setForm({
-      fullName: user.fullName || "",
-      email: user.email || "",
-      role: user.role || "site_employee",
-      phone: user.phone || "",
-      empCode: user.profile?.empCode || "",
-      department: user.profile?.department || "",
-      designation: user.profile?.designation || "",
-      password: "",
-      isActive: user.isActive !== false,
-    });
+    const nextKind = forceKind || portalAccountKind(user.role, user.profile);
+    setKind(nextKind);
+    setForm(formFromUser(user));
     setErr("");
-  }, [user]);
+  }, [user, forceKind]);
 
   async function save() {
     if (!user || !token) return;
     setBusy(true);
     setErr("");
     try {
+      const role = roleFromAccountKind(kind, form.role);
       const body: Record<string, unknown> = {
         fullName: form.fullName,
         email: form.email,
-        role: form.role,
+        role,
         phone: form.phone,
-        empCode: form.empCode,
-        department: form.department,
         designation: form.designation,
       };
+      if (kind === "staff") {
+        body.empCode = form.empCode;
+        body.department = form.department;
+      } else if (kind === "stakeholder") {
+        body.department = form.department;
+      }
       if (form.password.trim()) body.password = form.password;
-      if (isAdmin) body.isActive = form.isActive;
+      body.isActive = form.isActive;
       await api(`/api/hrm/employees/${user.id}`, { method: "PATCH", token, body: JSON.stringify(body) });
       await onSaved();
       onClose();
@@ -121,10 +139,19 @@ export function UserAccountEditModal({ open, user, token, isAdmin, onClose, onSa
 
   if (!user) return null;
 
+  const titleKind =
+    kind === "client"
+      ? "Edit client"
+      : kind === "vendor"
+        ? "Edit vendor / contractor"
+        : kind === "stakeholder"
+          ? "Edit consultant / stakeholder"
+          : "Edit staff";
+
   return (
     <RegisterEntryModal
       open={open}
-      title={`Edit — ${user.fullName}`}
+      title={`${titleKind} — ${user.fullName}`}
       onClose={onClose}
       onSave={() => void save()}
       saving={busy}
@@ -133,26 +160,17 @@ export function UserAccountEditModal({ open, user, token, isAdmin, onClose, onSa
     >
       <div className="space-y-4">
         {err ? <p className="text-sm text-danger">{err}</p> : null}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Input required value={form.fullName} onChange={(ev) => setForm({ ...form, fullName: ev.target.value })} placeholder="Full name" />
-          <Input required type="email" value={form.email} onChange={(ev) => setForm({ ...form, email: ev.target.value })} placeholder="Login email" />
-          <Select value={form.role} onChange={(ev) => setForm({ ...form, role: ev.target.value })}>
-            {LOGIN_ROLES.map((r) => (
-              <option key={r} value={r}>{r.replace("_", " ")}</option>
-            ))}
-          </Select>
-          <Input value={form.phone} onChange={(ev) => setForm({ ...form, phone: ev.target.value })} placeholder="Phone" />
-          <Input value={form.empCode} onChange={(ev) => setForm({ ...form, empCode: ev.target.value })} placeholder="Emp code" />
-          <Input value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value })} placeholder="Department" />
-          <Input value={form.designation} onChange={(ev) => setForm({ ...form, designation: ev.target.value })} placeholder="Designation" />
-          <Input type="password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} placeholder="New password (optional)" />
-          {isAdmin ? (
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={form.isActive} onChange={(ev) => setForm({ ...form, isActive: ev.target.checked })} />
-              Active login
-            </label>
-          ) : null}
-        </div>
+        <PortalAccountFields
+          form={form}
+          onChange={setForm}
+          kind={kind}
+          onKindChange={setKind}
+          allowKindSwitch={!forceKind}
+          allowAdminRole={isAdmin}
+          showActive
+          passwordOptional
+          token={token}
+        />
 
         {user.memberships?.length ? (
           <div className="border-t border-line pt-3">
@@ -160,7 +178,9 @@ export function UserAccountEditModal({ open, user, token, isAdmin, onClose, onSa
             <ul className="space-y-2 text-sm">
               {user.memberships.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-2">
-                  <span>{m.project.code} — {m.project.name}</span>
+                  <span>
+                    {m.project.code} — {m.project.name}
+                  </span>
                   <Button type="button" variant="ghost" className="!px-2 !py-1 text-xs" disabled={busy} onClick={() => void removeMembership(m.project.id)}>
                     Remove
                   </Button>
@@ -168,7 +188,11 @@ export function UserAccountEditModal({ open, user, token, isAdmin, onClose, onSa
               ))}
             </ul>
           </div>
-        ) : null}
+        ) : (
+          <p className="text-xs text-steel-muted border-t border-line pt-3">
+            No project yet — assign from Projects → Directory so this login can open the job.
+          </p>
+        )}
 
         <div className="border-t border-line pt-3 space-y-2">
           <p className="text-xs text-amber-800 font-semibold">

@@ -30,6 +30,8 @@ import { closureRouter } from "./routes/closure.js";
 import { auditKpiRouter } from "./routes/auditKpi.js";
 import { siteIndexRouter } from "./routes/siteIndex.js";
 import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
+import { errorDetail, pushRuntimeLog } from "./services/runtimeLog.js";
+import { audit } from "./services/audit.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -51,6 +53,38 @@ app.use(
 );
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api")) return next();
+  res.on("finish", () => {
+    const status = res.statusCode;
+    const pathOnly = String(req.originalUrl || req.path).split("?")[0];
+    if (pathOnly === "/api/health" || pathOnly === "/api/health/sharepoint") return;
+    const isHrm = pathOnly.startsWith("/api/hrm");
+    const shouldLog = status >= 500 || (isHrm && status >= 400);
+    if (!shouldLog) return;
+    const authed = req as express.Request & { user?: { id?: string; email?: string } };
+    pushRuntimeLog({
+      level: status >= 500 ? "error" : "warn",
+      source: isHrm ? "hrm.http" : "http",
+      message: `${req.method} ${pathOnly} → ${status}`,
+      status,
+      method: req.method,
+      path: pathOnly,
+      userId: authed.user?.id,
+      userEmail: authed.user?.email,
+    });
+    if (status >= 500) {
+      void audit("runtime.error", {
+        userId: authed.user?.id,
+        entity: "Http",
+        entityId: pathOnly.slice(0, 80),
+        meta: { method: req.method, status, path: pathOnly, email: authed.user?.email },
+      });
+    }
+  });
+  next();
+});
 
 app.get("/api/health", async (_req, res) => {
   const graphConfigured = Boolean(
@@ -168,8 +202,20 @@ if (webDist) {
   console.warn("Web dist not found. Looked in:", webDistCandidates.join(", "));
 }
 
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
+  const authed = req as express.Request & { user?: { id?: string; email?: string } };
+  pushRuntimeLog({
+    level: "error",
+    source: "express",
+    message: err.message || "Server error",
+    status: 500,
+    method: req.method,
+    path: String(req.originalUrl || req.path).split("?")[0],
+    userId: authed.user?.id,
+    userEmail: authed.user?.email,
+    detail: errorDetail(err),
+  });
   if (isPrismaFatal(err)) {
     if (!res.headersSent) {
       res.status(503).json({ error: "Database temporarily unavailable — please retry in a few seconds." });

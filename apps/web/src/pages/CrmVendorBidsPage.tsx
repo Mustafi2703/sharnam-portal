@@ -475,7 +475,6 @@ export default function CrmVendorBidsPage() {
               <li key={p.id} className="py-2 flex flex-wrap justify-between gap-2">
                 <span>
                   <span className="font-mono text-xs">{p.code}</span>
-                  <span className="ml-2 font-medium text-sm">{p.name}</span>
                 </span>
                 <span className="flex flex-wrap gap-3 text-sm">
                   <Link to={`/projects/${p.id}`} className="font-semibold text-brand">
@@ -655,10 +654,9 @@ export default function CrmVendorBidsPage() {
       {byProject.map((project) => (
         <div key={project.key} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h2 className="font-semibold text-base">
+            <h2 className="font-semibold text-base font-mono">
               {project.projectCode ? `${project.projectCode}` : "Unlinked project"}
             </h2>
-            {project.projectName && <span className="text-sm text-steel-muted">{project.projectName}</span>}
           </div>
 
           {Object.entries(project.packages).map(([pkgId, pkgSlots]) => (

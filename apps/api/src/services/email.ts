@@ -16,9 +16,10 @@ function graphMailEnabled() {
 }
 
 function threadHeaders(opts: { messageId: string; inReplyTo?: string | null; references?: string | null }) {
-  const headers: { name: string; value: string }[] = [{ name: "Message-ID", value: opts.messageId }];
-  if (opts.inReplyTo) headers.push({ name: "In-Reply-To", value: opts.inReplyTo });
-  if (opts.references) headers.push({ name: "References", value: opts.references });
+  // Graph only accepts custom headers that start with x- / X-.
+  const headers: { name: string; value: string }[] = [{ name: "X-Portal-Message-ID", value: opts.messageId }];
+  if (opts.inReplyTo) headers.push({ name: "X-Portal-In-Reply-To", value: opts.inReplyTo });
+  if (opts.references) headers.push({ name: "X-Portal-References", value: opts.references });
   return headers;
 }
 

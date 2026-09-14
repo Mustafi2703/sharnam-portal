@@ -1004,7 +1004,7 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
           summarySheetId: true,
           comparativeSheetId: true,
           awardedVendorId: true,
-          project: { select: { id: true, code: true, name: true } },
+          project: { select: { id: true, code: true } },
         },
       },
       vendor: { select: { id: true, name: true } },
@@ -1037,12 +1037,15 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
         projectNote: s.bidPackage.notes,
         projectId: s.bidPackage.project?.id || null,
         projectCode: s.bidPackage.project?.code || null,
-        projectName: s.bidPackage.project?.name || null,
+        projectName: null,
         comparativeSharePointUrl: s.bidPackage.comparativeSharePointUrl,
         summarySheetId: s.bidPackage.summarySheetId,
         comparativeSheetId: s.bidPackage.comparativeSheetId,
         awardedVendorId: s.bidPackage.awardedVendorId,
-        awardedVendorLabel: awardedLabel,
+        awardedVendorLabel:
+          role === "vendor" && vendorId && s.bidPackage.awardedVendorId && s.bidPackage.awardedVendorId !== vendorId
+            ? null
+            : awardedLabel,
         isAwardedToYou: !!(vendorId && s.bidPackage.awardedVendorId === vendorId),
         vendorLabel: s.vendorLabel,
         discipline: s.discipline,
@@ -1078,7 +1081,7 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: req.params.id },
     include: {
-      project: { select: { id: true, code: true, name: true } },
+      project: { select: { id: true, code: true } },
       vendorBoqs:
         vendorId && vendorName
           ? {
@@ -1121,22 +1124,40 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
     ? Math.min(...Object.values(summary.grandTotals).filter((n) => Number.isFinite(n)))
     : undefined;
 
+  const vendorSafeSummary =
+    role === "vendor" && summary && vendorName
+      ? {
+          vendorLabels: [vendorName],
+          sectionTotals: (summary.sectionTotals || []).map((row) => ({
+            ...row,
+            totals: { [vendorName]: row.totals?.[vendorName] ?? 0 },
+          })),
+          grandTotals: { [vendorName]: summary.grandTotals?.[vendorName] ?? 0 },
+          lowestVendor: summary.lowestVendor === vendorName ? vendorName : undefined,
+        }
+      : role === "vendor"
+        ? null
+        : summary;
+
   res.json({
     id: pkg.id,
     title: pkg.title,
     revisionLabel: pkg.revisionLabel,
     status: pkg.status,
-    project: pkg.project,
+    project: pkg.project ? { id: pkg.project.id, code: pkg.project.code } : null,
     comparativeSharePointUrl: pkg.comparativeSharePointUrl,
     summarySheetId: pkg.summarySheetId,
     comparativeSheetId: pkg.comparativeSheetId,
-    summary,
+    summary: vendorSafeSummary,
     awardedVendorId: pkg.awardedVendorId,
-    awardedVendorLabel: awardedVendor?.name || null,
+    awardedVendorLabel:
+      role === "vendor" && vendorId && pkg.awardedVendorId && pkg.awardedVendorId !== vendorId
+        ? null
+        : awardedVendor?.name || null,
     isAwardedToYou: !!(vendorId && pkg.awardedVendorId === vendorId),
     isLowestBidder: !!(vendorName && summary?.lowestVendor === vendorName),
     myGrandTotal,
-    lowestGrandTotal: Number.isFinite(lowestTotal) ? lowestTotal : null,
+    lowestGrandTotal: role === "vendor" ? null : Number.isFinite(lowestTotal) ? lowestTotal : null,
     myVendorLabel: role === "vendor" ? vendorName : null,
     mySlots: mySlots.map((s) => ({
       ...s,

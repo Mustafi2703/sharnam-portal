@@ -18,7 +18,7 @@ const EMPTY_FORM = {
   mailRole: "CC",
   officeAddress: "",
   bothMatrices: true,
-  createDirectory: "both" as "none" | "user" | "vendor" | "both",
+  createDirectory: "none" as "none" | "user" | "vendor" | "both",
   userRole: "site_employee",
   vendorPartyType: "Client",
 };
@@ -188,6 +188,7 @@ export function ProjectSetupMatrixDesk({
             ...form,
             matrixKind,
             bothMatrices: form.bothMatrices,
+            createDirectory: "none",
           }),
         });
         const extra = [
@@ -278,9 +279,8 @@ export function ProjectSetupMatrixDesk({
         <div>
           <h3 className="font-semibold text-sm">Communication matrix</h3>
           <p className="text-xs text-steel-muted mt-0.5 max-w-2xl">
-            Same BPCL fields as the Excel (Name, Designation, Company, SPOC, Mobile, E-mail, TO/CC, Office). None are
-            required to launch. You can keep editing this matrix in project Comms. Adding a row with a directory option also
-            creates the user or vendor and assigns them to this project.
+            Same fields as the Excel (Name, Designation, Company, SPOC, Mobile, E-mail, TO/CC). Prefill from the CRM
+            client / consultant / vendor lists. This only writes the matrix — do not create logins here.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -319,7 +319,7 @@ export function ProjectSetupMatrixDesk({
                 }))}
                 value={pickUserId}
                 onChange={applyUser}
-                placeholder="Prefill from People directory…"
+                placeholder="Prefill from a portal login…"
                 searchPlaceholder="Search people by name…"
               />
               <SearchableSelect
@@ -357,36 +357,10 @@ export function ProjectSetupMatrixDesk({
             </Select>
             <Input className="sm:col-span-2" placeholder="Office address" value={form.officeAddress} onChange={(e) => setForm({ ...form, officeAddress: e.target.value })} />
             {!editingId && (
-              <>
-                <label className="flex items-center gap-2 text-xs text-steel-muted sm:col-span-2 lg:col-span-3">
-                  <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
-                  Add to both Technical and Commercial
-                </label>
-                <Select value={form.createDirectory} onChange={(e) => setForm({ ...form, createDirectory: e.target.value as typeof form.createDirectory })}>
-                  <option value="none">Matrix only — do not create login</option>
-                  <option value="user">Also create / assign portal user</option>
-                  <option value="vendor">Also create / assign company in directory</option>
-                  <option value="both">User + company in directory</option>
-                </Select>
-                {(form.createDirectory === "user" || form.createDirectory === "both") && (
-                  <Select value={form.userRole} onChange={(e) => setForm({ ...form, userRole: e.target.value })}>
-                    <option value="client">Client portal</option>
-                    <option value="vendor">Contractor portal</option>
-                    <option value="site_employee">Site engineer</option>
-                    <option value="office">Office</option>
-                    <option value="employee">Employee / consultant</option>
-                  </Select>
-                )}
-                {(form.createDirectory === "vendor" || form.createDirectory === "both") && (
-                  <Select value={form.vendorPartyType} onChange={(e) => setForm({ ...form, vendorPartyType: e.target.value })}>
-                    <option value="Client">Client</option>
-                    <option value="Consultant">Consultant</option>
-                    <option value="PMC">PMC</option>
-                    <option value="Contractor">Vendor / contractor</option>
-                    <option value="Designer">Designer</option>
-                  </Select>
-                )}
-              </>
+              <label className="flex items-center gap-2 text-xs text-steel-muted sm:col-span-2 lg:col-span-3">
+                <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
+                Add to both Technical and Commercial
+              </label>
             )}
             <Button type="submit" className="sm:col-span-2 lg:col-span-3" disabled={busy}>
               {editingId ? "Save row" : "Add to communication matrix"}

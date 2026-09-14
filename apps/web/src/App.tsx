@@ -66,8 +66,9 @@ import HrmsVouchersPage from "./pages/HrmsVouchersPage";
 import ExpenseVouchersPage from "./pages/ExpenseVouchersPage";
 import HrmsMastersPage from "./pages/HrmsMastersPage";
 import HrmsDocumentsPage from "./pages/hrms/HrmsDocumentsPage";
+import HrmsFilesPage from "./pages/hrms/HrmsFilesPage";
 import HrmsUsersPage from "./pages/hrms/HrmsUsersPage";
-import HrmsVendorsPage from "./pages/hrms/HrmsVendorsPage";
+import HrmsActivityPage from "./pages/hrms/HrmsActivityPage";
 import CrmDirectoryPage from "./pages/crm/CrmDirectoryPage";
 import CrmHubPage from "./pages/crm/CrmHubPage";
 import CrmProjectSetupPage from "./pages/crm/CrmProjectSetupPage";
@@ -185,9 +186,11 @@ export default function App() {
           <Route path="leave" element={<HrmsLeavePage />} />
           <Route path="vouchers" element={<HrmsVouchersPage />} />
           <Route path="documents" element={<HrmsDocumentsPage />} />
+          <Route path="files" element={<HrmsFilesPage />} />
           <Route path="masters" element={<HrmsMastersPage />} />
+          <Route path="activity" element={<HrmsActivityPage />} />
           <Route path="users" element={<HrmsUsersPage />} />
-          <Route path="vendors" element={<HrmsVendorsPage />} />
+          <Route path="vendors" element={<Navigate to="/crm/directory/vendors" replace />} />
         </Route>
       </Route>
 

@@ -7,9 +7,23 @@ import { matchesSearch, SearchableSelect } from "../../components/SearchableSele
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
-import { formatPartyType, STAKEHOLDER_CONSULTANT_TRADES } from "../../lib/vendorTypes";
+import { ConsultantTypeSelect } from "../../components/ConsultantTypesPanel";
+import { useConsultantTypes } from "../../lib/consultantTypes";
+import { formatPartyType } from "../../lib/vendorTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
 import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
+import { PortalAccountFields } from "../../components/PortalAccountFields";
+import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
+import { UserManageActions } from "../../components/UserManageActions";
+import {
+  EMPTY_PORTAL_ACCOUNT_FORM,
+  accountKindLabel,
+  loginPathForAccount,
+  portalAccountKind,
+  roleFromAccountKind,
+  type PortalAccountForm,
+  type PortalAccountKind,
+} from "../../lib/portalAccounts";
 
 const USER_TOOLS: {
   key: string;
@@ -51,15 +65,14 @@ export default function DirectoryPage() {
   const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
   const [listQ, setListQ] = useState("");
   const canEdit = user?.role === "admin" || user?.role === "office";
-  const [userForm, setUserForm] = useState({
-    fullName: "",
-    email: "",
-    role: "site_employee",
-    phone: "",
-    department: "Site",
-    designation: "",
-    password: "Demo@1234",
+  const [userForm, setUserForm] = useState<PortalAccountForm>({
+    ...EMPTY_PORTAL_ACCOUNT_FORM,
+    role: "office",
+    department: "Office",
   });
+  const [userKind, setUserKind] = useState<PortalAccountKind>("staff");
+  const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
+  const { types: consultantTypes } = useConsultantTypes(token);
 
   const activeTool = USER_TOOLS.find((t) => t.party === partyTab) || USER_TOOLS[0];
 
@@ -68,6 +81,19 @@ export default function DirectoryPage() {
       ...f,
       partyType: (activeTool.party === "Site" ? "Contractor" : activeTool.party) as (typeof PARTY_TYPES)[number],
     }));
+    if (activeTool.party === "Client") {
+      setUserKind("client");
+      setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "client" });
+    } else if (activeTool.party === "Contractor") {
+      setUserKind("vendor");
+      setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "vendor" });
+    } else if (activeTool.party === "Site") {
+      setUserKind("staff");
+      setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "site_employee", department: "Site" });
+    } else {
+      setUserKind("staff");
+      setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "office", department: "Office" });
+    }
   }, [activeTool.party]);
 
   const load = async () => {
@@ -258,7 +284,38 @@ export default function DirectoryPage() {
                 <span>{m.user?.fullName || m.fullName}</span>
                 {m.user?.email && <div className="text-[10px] font-mono text-steel-muted">{m.user.email}</div>}
               </div>
-              <Badge tone="neutral">{m.user?.role || m.role}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone="neutral">
+                  {accountKindLabel(portalAccountKind(m.user?.role || m.role, m.user?.profile))}
+                </Badge>
+                {canEdit && m.user?.id ? (
+                  <UserManageActions
+                    user={{
+                      id: m.user.id,
+                      fullName: m.user.fullName,
+                      email: m.user.email,
+                      role: m.user.role,
+                      phone: m.user.phone,
+                      profile: m.user.profile,
+                    }}
+                    token={token}
+                    onEdit={() =>
+                      setEditUser({
+                        id: m.user.id,
+                        fullName: m.user.fullName,
+                        email: m.user.email,
+                        role: m.user.role,
+                        phone: m.user.phone,
+                        profile: m.user.profile,
+                        memberships: id
+                          ? [{ id: m.id, project: { id, code: overview?.project?.code || "", name: overview?.project?.name || "" } }]
+                          : [],
+                      })
+                    }
+                    onChanged={() => void load()}
+                  />
+                ) : null}
+              </div>
             </li>
           ))}
           {partiesForTab
@@ -327,14 +384,11 @@ export default function DirectoryPage() {
                 required
               />
               {partyForm.partyType === "Consultant" || partyForm.partyType === "Designer" ? (
-                <Select value={partyForm.trade} onChange={(e) => setPartyForm({ ...partyForm, trade: e.target.value })}>
-                  <option value="">Consultant type…</option>
-                  {STAKEHOLDER_CONSULTANT_TRADES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </Select>
+                <ConsultantTypeSelect
+                  value={partyForm.trade}
+                  onChange={(trade) => setPartyForm({ ...partyForm, trade })}
+                  types={consultantTypes}
+                />
               ) : (
                 <Input
                   placeholder="Trade / role"
@@ -353,7 +407,7 @@ export default function DirectoryPage() {
                 onChange={(e) => setPartyForm({ ...partyForm, email: e.target.value })}
               />
               <Input
-                placeholder="Phone"
+                placeholder="Phone (contact — optional)"
                 value={partyForm.businessPhone}
                 onChange={(e) => setPartyForm({ ...partyForm, businessPhone: e.target.value })}
               />
@@ -410,43 +464,47 @@ export default function DirectoryPage() {
                 e.preventDefault();
                 setMsg("");
                 try {
+                  const role = roleFromAccountKind(userKind, userForm.role);
                   const user = await api<{ id: string }>("/api/hrm/employees", {
                     method: "POST",
                     token,
-                    body: JSON.stringify(userForm),
+                    body: JSON.stringify({
+                      fullName: userForm.fullName,
+                      email: userForm.email,
+                      role,
+                      phone: userForm.phone,
+                      password: userForm.password,
+                      designation: userForm.designation,
+                      department: userKind === "staff" || userKind === "stakeholder" ? userForm.department : undefined,
+                      empCode: userKind === "staff" ? userForm.empCode : undefined,
+                    }),
                   });
                   await api("/api/hrm/assign", {
                     method: "POST",
                     token,
-                    body: JSON.stringify({ projectId: id, userId: user.id, role: userForm.role }),
+                    body: JSON.stringify({ projectId: id, userId: user.id, role }),
                   });
-                  setUserForm({
-                    fullName: "",
-                    email: "",
-                    role: activeTool.party === "Site" ? "site_employee" : activeTool.party === "Client" ? "client" : "office",
-                    phone: "",
-                    department: activeTool.label,
-                    designation: "",
-                    password: "Demo@1234",
-                  });
-                  setMsg("Login created and assigned to this project.");
+                  setMsg(`Login created as ${accountKindLabel(userKind)} · ${loginPathForAccount(role, userKind)} and assigned to this project.`);
                   await load();
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Create failed");
                 }
               }}
             >
-              <p className="sm:col-span-2 text-[10px] font-mono uppercase text-steel-muted">Create portal login (HR)</p>
-              <Input placeholder="Full name" value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} required />
-              <Input placeholder="Email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
-              <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-                {(activeTool.roles.length ? activeTool.roles : ["office", "site_employee", "employee", "client", "vendor"]).map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </Select>
-              <Input placeholder="Phone" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
+              <p className="sm:col-span-2 text-[10px] font-mono uppercase text-steel-muted">
+                Create {accountKindLabel(userKind)} login
+              </p>
+              <div className="sm:col-span-2">
+                <PortalAccountFields
+                  form={userForm}
+                  onChange={setUserForm}
+                  kind={userKind}
+                  onKindChange={setUserKind}
+                  allowKindSwitch={activeTool.party === "PMC"}
+                  allowAdminRole={user?.role === "admin"}
+                  token={token}
+                />
+              </div>
               <Button type="submit" className="sm:col-span-2" variant="secondary">
                 Create user + assign
               </Button>
@@ -486,6 +544,15 @@ export default function DirectoryPage() {
         token={token}
         onClose={() => setEditVendor(null)}
         onSaved={() => void load()}
+      />
+      <UserAccountEditModal
+        open={!!editUser}
+        user={editUser}
+        token={token}
+        isAdmin={user?.role === "admin"}
+        onClose={() => setEditUser(null)}
+        onSaved={() => void load()}
+        onDeleted={() => void load()}
       />
     </div>
   );

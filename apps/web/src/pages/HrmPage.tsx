@@ -91,15 +91,19 @@ export default function HrmPage() {
           <span className="hrms-quick-card__tag">Masters</span>
           <span className="hrms-quick-card__title">Leave types + holidays</span>
         </Link>
+        <Link to="/hrm/files" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Files</span>
+          <span className="hrms-quick-card__title">Employee documents on Drive</span>
+        </Link>
+        <Link to="/hrm/activity" className="hrms-quick-card">
+          <span className="hrms-quick-card__tag">Activity</span>
+          <span className="hrms-quick-card__title">HR actions + runtime errors</span>
+        </Link>
         {canManage ? (
           <>
             <Link to="/hrm/users" className="hrms-quick-card">
               <span className="hrms-quick-card__tag">Users</span>
-              <span className="hrms-quick-card__title">Logins + project assign</span>
-            </Link>
-            <Link to="/hrm/vendors" className="hrms-quick-card">
-              <span className="hrms-quick-card__tag">Vendors</span>
-              <span className="hrms-quick-card__title">Contractor directory</span>
+              <span className="hrms-quick-card__title">Staff logins + project assign</span>
             </Link>
           </>
         ) : null}
@@ -107,12 +111,15 @@ export default function HrmPage() {
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 font-semibold flex items-center justify-between">
-          <span>Recent employees ({employees.length})</span>
+          <span>Recent staff ({employees.length})</span>
           {canManage ? (
             <Link to="/hrm/users" className="text-sm font-semibold text-brand">Manage users →</Link>
           ) : null}
         </div>
         <ul className="divide-y max-h-[360px] overflow-y-auto">
+          {employees.length === 0 ? (
+            <li className="px-4 py-6 text-sm text-steel-muted">No staff logins yet. Vendor and client accounts stay out of this list.</li>
+          ) : null}
           {employees.slice(0, 12).map((e) => (
             <li key={e.id} className="px-4 py-2.5 text-sm flex items-center justify-between gap-3">
               <div className="min-w-0">

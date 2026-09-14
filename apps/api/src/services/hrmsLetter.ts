@@ -62,8 +62,56 @@ function escapeHtml(s: unknown): string {
 function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return "____________";
   const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return "____________";
+  if (Number.isNaN(dt.getTime())) return String(d).trim() || "____________";
   return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+function formatInr(v: unknown): string {
+  const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return String(v || "____________");
+  return `₹ ${n.toLocaleString("en-IN")}`;
+}
+
+function numOrNull(v: unknown): number | null {
+  const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Map form + row into every placeholder the SPDC templates use. */
+export function letterMergeContext(row: HrmsDocument, data: Record<string, unknown>): Record<string, unknown> {
+  const name = String(row.employeeName || data.candidateName || data.employeeName || "").trim();
+  const designation = String(row.designation || data.designation || "").trim();
+  const department = String(row.department || data.department || "").trim();
+  const location = String(data.location || data.placeOfPosting || "SPDC Corporate Office, Vadodara");
+  const joinRaw = row.effectiveDate || data.joinDate || data.joiningDate || data.effectiveDate;
+  const join = fmtDate(joinRaw as Date | string | null);
+  const ctcRaw = data.fixedCtcAnnual ?? data.ctcAnnual ?? data.ctc ?? "";
+  const ctcInr = formatInr(ctcRaw);
+  const issue = fmtDate(row.issueDate);
+  return {
+    ...data,
+    employeeName: name,
+    candidateName: name,
+    designation,
+    department,
+    location,
+    placeOfPosting: location,
+    effectiveDate: join,
+    joinDate: join,
+    joiningDate: join,
+    ctcAnnual: ctcInr,
+    fixedCtcAnnual: ctcInr,
+    ctc: ctcInr,
+    reportingManager: String(data.reportingManager || data.reportingTo || "—"),
+    reportingTo: String(data.reportingManager || data.reportingTo || "—"),
+    empCode: String(data.empCode || "—"),
+    address: String(data.address || "—"),
+    probationMonths: String(data.probationMonths || "6"),
+    refNo: row.refNo,
+    kind: row.kind,
+    issueDate: issue,
+    candidateEmail: String(row.candidateEmail || data.candidateEmail || ""),
+  };
 }
 
 /** Merge {{token}} placeholders with the row + form data. */
@@ -330,39 +378,66 @@ export async function generateHrmsLetter(row: HrmsDocument) {
   } catch {
     ctx = {};
   }
-  const merged: Record<string, unknown> = {
-    ...ctx,
-    employeeName: row.employeeName,
-    designation: row.designation,
-    department: row.department,
-    effectiveDate: row.effectiveDate,
-    refNo: row.refNo,
-    kind: row.kind,
-    issueDate: row.issueDate,
-  };
+  const merged = letterMergeContext(row, ctx);
+  const personFolder = String(merged.employeeName || "Unknown")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .slice(0, 48);
+  const folder = `${HRMS_LETTERS_FOLDER}/${personFolder || "Unfiled"}`;
 
   const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
   const html = assembleHtml(row, merged);
   const htmlSaved = await mockOneDrive.upload(
     "_HR",
-    HRMS_LETTERS_FOLDER,
+    folder,
     `${row.kind}-${safeRef}.html`,
     Buffer.from(html, "utf8"),
     "text/html; charset=utf-8"
   );
-  const xlsxBuf = await buildAnnexureXlsx(row, merged);
+
+  const ctcNum = numOrNull(ctx.fixedCtcAnnual ?? ctx.ctcAnnual ?? ctx.ctc);
+  let xlsxBuf: Buffer;
+  if ((row.kind === "Appointment" || row.kind === "Offer") && ctcNum) {
+    const { computeCtcBreakdown, buildAnnexureXlsx: buildCtcXlsx } = await import("./ctcAnnexure.js");
+    const breakdown = computeCtcBreakdown({
+      candidateName: String(merged.candidateName || ""),
+      designation: String(merged.designation || ""),
+      fixedCtcAnnual: ctcNum,
+      basicPctOfGross: 0.5,
+      hraPctOfBasic: 0.4,
+      restrictPfCeiling: false,
+      gratuityPctOfBasic: 0.0481,
+      ltaPctOfBasic: 0.0833,
+      conveyanceAnnual: 19200,
+      childrenEducationAnnual: 2400,
+      mediclaimAnnual: 12000,
+      performancePayPct: 0.1,
+      professionalTaxAnnual: 2400,
+    });
+    xlsxBuf = await buildCtcXlsx(breakdown);
+    const annexHtml = (await import("./ctcAnnexure.js")).buildAnnexureHtml(breakdown);
+    await mockOneDrive.upload(
+      "_HR",
+      folder,
+      `${row.kind}-${safeRef}-Annexure-I.html`,
+      Buffer.from(annexHtml, "utf8"),
+      "text/html; charset=utf-8"
+    );
+  } else {
+    xlsxBuf = await buildAnnexureXlsx(row, merged);
+  }
+
   const xlsxSaved = await mockOneDrive.upload(
     "_HR",
-    HRMS_LETTERS_FOLDER,
+    folder,
     `${row.kind}-${safeRef}.xlsx`,
     xlsxBuf,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );
 
   return {
-    docxUrl: xlsxSaved.url || `/uploads/onedrive/_HR/${xlsxSaved.path}`,
-    pdfUrl: htmlSaved.url || `/uploads/onedrive/_HR/${htmlSaved.path}`,
-    storagePath: htmlSaved.path,
+    docxUrl: xlsxSaved.sharePointUrl || xlsxSaved.url || `/uploads/onedrive/_HR/${xlsxSaved.path}`,
+    pdfUrl: htmlSaved.sharePointUrl || htmlSaved.url || `/uploads/onedrive/_HR/${htmlSaved.path}`,
+    storagePath: htmlSaved.sharePointPath || htmlSaved.path,
     sharePointUrl: htmlSaved.sharePointUrl || htmlSaved.url || null,
   };
 }

@@ -2,10 +2,20 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { PortalAccountFields } from "../components/PortalAccountFields";
 import { UserAccountEditModal, type UserAccountRow } from "../components/UserAccountEditModal";
 import { UserManageActions } from "../components/UserManageActions";
+import {
+  EMPTY_PORTAL_ACCOUNT_FORM,
+  accountKindLabel,
+  loginPathForAccount,
+  portalAccountKind,
+  roleFromAccountKind,
+  type PortalAccountForm,
+  type PortalAccountKind,
+} from "../lib/portalAccounts";
 import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared";
-import { Badge, Button, Card, Input, PageHero, Select } from "../components/ui";
+import { Badge, Button, Card, PageHero } from "../components/ui";
 import { WORKSPACES } from "../workspaces";
 import {
   downloadCsv,
@@ -14,7 +24,6 @@ import {
 } from "../lib/csvTemplates";
 
 const ACTIONS: PermissionAction[] = ["view", "create", "edit", "approve"];
-const LOGIN_ROLES = ["office", "site_employee", "employee", "vendor", "client", "admin"] as const;
 
 /** Office / Admin — users with login + role access matrix */
 export default function RolesPage() {
@@ -24,16 +33,12 @@ export default function RolesPage() {
   const [selected, setSelected] = useState<string>("admin");
   const [msg, setMsg] = useState("");
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
-  const [userForm, setUserForm] = useState({
-    fullName: "",
-    email: "",
+  const [userForm, setUserForm] = useState<PortalAccountForm>({
+    ...EMPTY_PORTAL_ACCOUNT_FORM,
     role: "site_employee",
-    phone: "",
-    password: "Demo@1234",
-    empCode: "",
-    department: "",
-    designation: "",
+    department: "Site",
   });
+  const [userKind, setUserKind] = useState<PortalAccountKind>("staff");
   const [busy, setBusy] = useState(false);
 
   const canManage = user?.role === "admin" || user?.role === "office";
@@ -42,7 +47,7 @@ export default function RolesPage() {
   const load = async () => {
     const [r, u] = await Promise.all([
       api<any[]>("/api/roles", { token }),
-      api<UserAccountRow[]>("/api/hrm/employees", { token }),
+      api<UserAccountRow[]>("/api/hrm/employees?scope=all", { token }),
     ]);
     setRoles(r);
     setUsers(u);
@@ -75,22 +80,24 @@ export default function RolesPage() {
     setBusy(true);
     setMsg("");
     try {
+      const role = roleFromAccountKind(userKind, userForm.role);
       await api("/api/hrm/employees", {
         method: "POST",
         token,
-        body: JSON.stringify(userForm),
+        body: JSON.stringify({
+          fullName: userForm.fullName,
+          email: userForm.email,
+          role,
+          phone: userForm.phone,
+          password: userForm.password,
+          designation: userForm.designation,
+          department: userKind === "staff" || userKind === "stakeholder" ? userForm.department : undefined,
+          empCode: userKind === "staff" ? userForm.empCode : undefined,
+        }),
       });
-      setMsg(`Login created for ${userForm.email} · portal role ${userForm.role}`);
-      setUserForm({
-        fullName: "",
-        email: "",
-        role: "site_employee",
-        phone: "",
-        password: "Demo@1234",
-        empCode: "",
-        department: "",
-        designation: "",
-      });
+      setMsg(`Login created for ${userForm.email} as ${accountKindLabel(userKind)} · ${loginPathForAccount(role, userKind)}`);
+      setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "site_employee", department: "Site" });
+      setUserKind("staff");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not create user");
@@ -129,54 +136,16 @@ export default function RolesPage() {
           <p className="text-sm text-steel-muted">
             Creates an account that can sign in on the matching portal. Default password can be changed below.
           </p>
-          <form className="grid sm:grid-cols-2 gap-2" onSubmit={createLoginUser}>
-            <Input
-              required
-              placeholder="Full name"
-              value={userForm.fullName}
-              onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+          <form className="space-y-3" onSubmit={createLoginUser}>
+            <PortalAccountFields
+              form={userForm}
+              onChange={setUserForm}
+              kind={userKind}
+              onKindChange={setUserKind}
+              allowAdminRole={user?.role === "admin"}
+              token={token}
             />
-            <Input
-              required
-              type="email"
-              placeholder="Login email"
-              value={userForm.email}
-              onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-            />
-            <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-              {LOGIN_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </Select>
-            <Input
-              type="text"
-              placeholder="Password"
-              value={userForm.password}
-              onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-            />
-            <Input
-              placeholder="Phone"
-              value={userForm.phone}
-              onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
-            />
-            <Input
-              placeholder="Emp code"
-              value={userForm.empCode}
-              onChange={(e) => setUserForm({ ...userForm, empCode: e.target.value })}
-            />
-            <Input
-              placeholder="Department"
-              value={userForm.department}
-              onChange={(e) => setUserForm({ ...userForm, department: e.target.value })}
-            />
-            <Input
-              placeholder="Designation"
-              value={userForm.designation}
-              onChange={(e) => setUserForm({ ...userForm, designation: e.target.value })}
-            />
-            <Button type="submit" className="sm:col-span-2" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {busy ? "Creating…" : "Create user & login"}
             </Button>
           </form>
@@ -209,7 +178,7 @@ export default function RolesPage() {
                 <div className="min-w-0">
                   <div className="font-semibold text-ink truncate">{u.fullName}</div>
                   <div className="text-xs text-steel-muted truncate">
-                    {u.email} · {u.role} · portal {u.portal || "—"}
+                    {u.email} · {accountKindLabel(portalAccountKind(u.role, u.profile))} · {loginPathForAccount(u.role, portalAccountKind(u.role, u.profile))}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

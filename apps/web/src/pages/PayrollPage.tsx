@@ -31,13 +31,17 @@ export default function PayrollPage() {
 
   useEffect(() => {
     void (async () => {
-      const [emps, hs] = await Promise.all([
-        api<any[]>("/api/hrm/employees", { token }),
-        api<any[]>("/api/hrm/pay-hikes", { token }),
-      ]);
-      setEmployees(emps);
-      setHikes(hs);
-      await loadPayslips();
+      try {
+        const [emps, hs] = await Promise.all([
+          api<any[]>("/api/hrm/employees", { token }),
+          api<any[]>("/api/hrm/pay-hikes", { token }),
+        ]);
+        setEmployees(emps);
+        setHikes(hs);
+        await loadPayslips();
+      } catch (err) {
+        setMsg(err instanceof Error ? err.message : "Could not load payroll");
+      }
     })();
   }, [token]);
 
@@ -103,16 +107,60 @@ export default function PayrollPage() {
 }
 
 function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, setMonth, setScopeUserId, canWrite, setMsg, reload, token }: any) {
-  const [form, setForm] = useState({ userId: "", workingDays: 30, lopDays: 0, incomeTax: 0 });
+  const [form, setForm] = useState({
+    userId: "",
+    workingDays: 30,
+    lopDays: 0,
+    incomeTax: 0,
+    basic: "",
+    hra: "",
+    conveyance: "",
+    medicalAllow: "",
+    specialAllow: "",
+    otherEarnings: "",
+    pfEmployee: "",
+    professionalTax: "",
+  });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [edit, setEdit] = useState({ basic: "", hra: "", specialAllow: "", incomeTax: "", pfEmployee: "" });
+
   async function generate(e: FormEvent) {
     e.preventDefault();
     try {
-      await api("/api/hrm/payslips/generate", { method: "POST", token, body: JSON.stringify({ ...form, year, month }) });
-      setMsg("Payslip generated.");
+      const body: Record<string, unknown> = { userId: form.userId, year, month, workingDays: form.workingDays, lopDays: form.lopDays, incomeTax: form.incomeTax };
+      for (const key of ["basic", "hra", "conveyance", "medicalAllow", "specialAllow", "otherEarnings", "pfEmployee", "professionalTax"] as const) {
+        if (form[key] !== "") body[key] = Number(form[key]);
+      }
+      await api("/api/hrm/payslips/generate", { method: "POST", token, body: JSON.stringify(body) });
+      setMsg("Payslip generated and filed under 06.03 Payslips.");
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
     }
+  }
+
+  async function generateAll() {
+    try {
+      const out = await api<{ created: any[]; skipped: any[] }>("/api/hrm/payslips/generate-month", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ year, month, workingDays: form.workingDays, lopDays: form.lopDays, incomeTax: form.incomeTax }),
+      });
+      setMsg(`Generated ${out.created.length} slip(s). Skipped ${out.skipped.length} (no CTC or not staff).`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Month generate failed");
+    }
+  }
+
+  async function saveEdit(id: string) {
+    const body: Record<string, number> = {};
+    for (const [k, v] of Object.entries(edit)) {
+      if (v !== "") body[k] = Number(v);
+    }
+    await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
+    setEditId(null);
+    await reload();
   }
   async function transition(id: string, status: string) {
     await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify({ status }) });
@@ -161,8 +209,17 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
             <Input placeholder="Working days" type="number" value={form.workingDays} onChange={(e) => setForm({ ...form, workingDays: Number(e.target.value) })} />
             <Input placeholder="LOP days" type="number" value={form.lopDays} onChange={(e) => setForm({ ...form, lopDays: Number(e.target.value) })} />
             <Input placeholder="TDS / Income tax (₹)" type="number" value={form.incomeTax} onChange={(e) => setForm({ ...form, incomeTax: Number(e.target.value) })} />
-            <Button type="submit">Generate</Button>
+            <Input placeholder="Basic override (₹)" type="number" value={form.basic} onChange={(e) => setForm({ ...form, basic: e.target.value })} />
+            <Input placeholder="HRA override (₹)" type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: e.target.value })} />
+            <Input placeholder="Special allow (₹)" type="number" value={form.specialAllow} onChange={(e) => setForm({ ...form, specialAllow: e.target.value })} />
+            <Button type="submit">Generate one</Button>
+            <Button type="button" variant="secondary" onClick={() => void generateAll()}>
+              Generate all staff this month
+            </Button>
           </form>
+          <p className="text-[11px] text-steel-muted mt-2">
+            Blank overrides use the SPDC CTC split on the employee profile. Generated HTML is filed on Drive under 06.03 Payslips / YYYY-MM. Click a number to edit after generate.
+          </p>
         </Card>
       )}
 
@@ -197,14 +254,32 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                   <tr key={p.id} className="border-t border-line">
                     <td className="p-2">{emp?.fullName || p.userId.slice(0, 8)}</td>
                     <td>{p.paidDays}/{p.workingDays}{p.lopDays ? ` (LOP ${p.lopDays})` : ""}</td>
-                    <td className="text-right">{money(p.basic)}</td>
-                    <td className="text-right">{money(p.hra)}</td>
+                    <td className="text-right">
+                      {editId === p.id ? (
+                        <input className="w-20 border border-line rounded px-1 text-right" value={edit.basic} onChange={(e) => setEdit({ ...edit, basic: e.target.value })} />
+                      ) : (
+                        money(p.basic)
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {editId === p.id ? (
+                        <input className="w-20 border border-line rounded px-1 text-right" value={edit.hra} onChange={(e) => setEdit({ ...edit, hra: e.target.value })} />
+                      ) : (
+                        money(p.hra)
+                      )}
+                    </td>
                     <td className="text-right">{money(p.conveyance + p.medicalAllow + p.specialAllow + p.otherEarnings)}</td>
                     <td className="text-right font-medium">{money(p.grossEarnings)}</td>
                     <td className="text-right">{money(p.pfEmployee)}</td>
                     <td className="text-right">{money(p.esicEmployee)}</td>
                     <td className="text-right">{money(p.professionalTax)}</td>
-                    <td className="text-right">{money(p.incomeTax)}</td>
+                    <td className="text-right">
+                      {editId === p.id ? (
+                        <input className="w-20 border border-line rounded px-1 text-right" value={edit.incomeTax} onChange={(e) => setEdit({ ...edit, incomeTax: e.target.value })} />
+                      ) : (
+                        money(p.incomeTax)
+                      )}
+                    </td>
                     <td className="text-right">{money(p.totalDeductions)}</td>
                     <td className="text-right font-semibold">{money(p.netPay)}</td>
                     <td>
@@ -220,9 +295,38 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                         View slip
                       </button>
                       {canWrite ? (
-                        <Select value={p.status} onChange={(e) => transition(p.id, e.target.value)} className="!py-1">
-                          {["Generated", "Approved", "Released", "Paid"].map((s) => <option key={s}>{s}</option>)}
-                        </Select>
+                        <>
+                          {editId === p.id ? (
+                            <button type="button" className="text-xs font-semibold text-ok underline mr-2" onClick={() => void saveEdit(p.id)}>
+                              Save
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-steel-muted underline mr-2"
+                              onClick={() => {
+                                setEditId(p.id);
+                                setEdit({
+                                  basic: String(p.basic ?? ""),
+                                  hra: String(p.hra ?? ""),
+                                  specialAllow: String(p.specialAllow ?? ""),
+                                  incomeTax: String(p.incomeTax ?? ""),
+                                  pfEmployee: String(p.pfEmployee ?? ""),
+                                });
+                              }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {p.fileUrl ? (
+                            <a href={p.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-brand underline mr-2">
+                              Drive
+                            </a>
+                          ) : null}
+                          <Select value={p.status} onChange={(e) => transition(p.id, e.target.value)} className="!py-1">
+                            {["Generated", "Approved", "Released", "Paid"].map((s) => <option key={s}>{s}</option>)}
+                          </Select>
+                        </>
                       ) : (
                         <Badge tone={p.status === "Paid" ? "ok" : "brand"}>{p.status}</Badge>
                       )}
