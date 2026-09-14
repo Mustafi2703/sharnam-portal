@@ -1,10 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../../api";
+import { api, apiBase, mediaUrl } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
 
 /**
- * HRMS letter desk — Appointment / Relieving / Exit / Asset Return / Offer / Confirmation.
+ * HRMS letter desk — Appointment / Promotion / Relieving / Exit / Offer / Confirmation.
  * Two ways to add a document:
  *   1. Fill the form and click "Generate" — the system builds a Sharnam-branded HTML letter
  *      (print → Save as PDF) plus an editable .xlsx annexure. Both land under
@@ -21,6 +21,7 @@ type DocKind =
   | "Exit"
   | "AssetReturn"
   | "Confirmation"
+  | "Promotion"
   | "Warning"
   | "Experience";
 
@@ -49,6 +50,7 @@ const KIND_OPTIONS: { key: DocKind; label: string; hint: string }[] = [
   { key: "Exit", label: "Exit letter", hint: "Formal separation intimation & exit checklist trigger" },
   { key: "AssetReturn", label: "Asset submission letter", hint: "IT + admin asset return acknowledgement" },
   { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services" },
+  { key: "Promotion", label: "Letter of promotion", hint: "SPDC branded promotion with name, previous/new role, and revised CTC" },
   { key: "Warning", label: "Warning / concern letter", hint: "Notice of concern with corrective actions" },
   { key: "Experience", label: "Experience certificate", hint: "Tenure and role certificate on request" },
 ];
@@ -63,6 +65,9 @@ export default function HrmsDocumentsPage() {
   const [uploadForId, setUploadForId] = useState<string | null>(null);
 
   const [staff, setStaff] = useState<Array<{ id: string; fullName: string; email: string; profile?: any }>>([]);
+  const [offers, setOffers] = useState<Array<{ id: string; designation: string; department?: string; ctcAnnual?: number; joiningDate?: string; location?: string; reportingManager?: string; candidate?: { fullName: string; email?: string } }>>([]);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewTitle, setPreviewTitle] = useState("");
   const [form, setForm] = useState({
     kind: "Appointment" as DocKind,
     employeeUserId: "",
@@ -74,6 +79,8 @@ export default function HrmsDocumentsPage() {
     ctcAnnual: "",
     reportingManager: "",
     location: "SPDC Corporate Office, Vadodara",
+    previousDesignation: "",
+    previousCtc: "",
     reason: "",
     assets: "",
     serials: "",
@@ -81,12 +88,14 @@ export default function HrmsDocumentsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [list, people] = await Promise.all([
+      const [list, people, offersList] = await Promise.all([
         api<DocRow[]>("/api/hrm/hrms-documents", { token }),
         api<Array<{ id: string; fullName: string; email: string; profile?: any }>>("/api/hrm/employees", { token }).catch(() => []),
+        api<Array<{ id: string; designation: string; department?: string; ctcAnnual?: number; joiningDate?: string; location?: string; reportingManager?: string; candidate?: { fullName: string; email?: string } }>>("/api/hrm/offers", { token }).catch(() => []),
       ]);
       setRows(list);
       setStaff(people);
+      setOffers(offersList);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Load failed");
     }
@@ -117,6 +126,10 @@ export default function HrmsDocumentsPage() {
           ctcAnnual: form.ctcAnnual,
           location: form.location,
           reportingManager: form.reportingManager,
+          previousDesignation: form.previousDesignation,
+          previousCtc: form.previousCtc,
+          newDesignation: form.designation,
+          newCtc: form.ctcAnnual,
           reason: form.reason,
           assets: form.assets,
           serials: form.serials,
@@ -128,11 +141,26 @@ export default function HrmsDocumentsPage() {
         body: JSON.stringify(body),
       });
       await api(`/api/hrm/hrms-documents/${created.id}/generate`, { method: "POST", token });
-      setMsg(`${created.kind} · ${created.refNo} generated and filed under 06.01 Letters.`);
+      setMsg(`${created.kind} · ${created.refNo} generated and filed under 06.02 Employee Files / ${form.employeeName}.`);
       setForm({ ...form, employeeUserId: "", employeeName: "", candidateEmail: "", effectiveDate: "", reason: "", assets: "", serials: "" });
       await load();
+      await openPreview(created.id, `${created.kind} · ${created.refNo}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
+    }
+  }
+
+  async function openPreview(id: string, title: string) {
+    setMsg("");
+    try {
+      const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${id}/preview`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) throw new Error("Preview failed");
+      setPreviewHtml(await res.text());
+      setPreviewTitle(title);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Preview failed");
     }
   }
 
@@ -180,7 +208,7 @@ export default function HrmsDocumentsPage() {
             <p className="text-[11px] text-steel-muted">
               Pick the employee (or type a name). Name, joining date, CTC and reporting manager fill the
               SPDC appointment letter. The letter plus CTC Annexure I are filed under Drive
-              06.01 Letters / employee name.
+              06.02 Employee Files / candidate name / Letters (copy also in 06.01 Letters).
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -213,6 +241,35 @@ export default function HrmsDocumentsPage() {
               </Select>
             </label>
             <label className="space-y-1">
+              <span className="text-[11px] text-steel-muted uppercase font-mono">From accepted offer</span>
+              <Select
+                value=""
+                onChange={(e) => {
+                  const o = offers.find((x) => x.id === e.target.value);
+                  if (!o) return;
+                  setForm({
+                    ...form,
+                    kind: form.kind === "Offer" ? "Offer" : "Appointment",
+                    employeeName: o.candidate?.fullName || form.employeeName,
+                    candidateEmail: o.candidate?.email || form.candidateEmail,
+                    designation: o.designation || form.designation,
+                    department: o.department || form.department,
+                    ctcAnnual: o.ctcAnnual ? String(o.ctcAnnual) : form.ctcAnnual,
+                    effectiveDate: o.joiningDate ? String(o.joiningDate).slice(0, 10) : form.effectiveDate,
+                    location: o.location || form.location,
+                    reportingManager: o.reportingManager || form.reportingManager,
+                  });
+                }}
+              >
+                <option value="">Pick candidate offer to fill name, CTC, joining…</option>
+                {offers.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.candidate?.fullName || o.id} · {o.designation}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="space-y-1">
               <span className="text-[11px] text-steel-muted uppercase font-mono">Staff (fills the form)</span>
               <Select
                 value={form.employeeUserId}
@@ -225,8 +282,10 @@ export default function HrmsDocumentsPage() {
                     employeeName: emp?.fullName || form.employeeName,
                     candidateEmail: emp?.email || form.candidateEmail,
                     designation: emp?.profile?.designation || form.designation,
+                    previousDesignation: emp?.profile?.designation || form.previousDesignation,
                     department: emp?.profile?.department || form.department,
                     ctcAnnual: emp?.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.ctcAnnual,
+                    previousCtc: emp?.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.previousCtc,
                     effectiveDate: emp?.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : form.effectiveDate,
                   });
                 }}
@@ -249,7 +308,9 @@ export default function HrmsDocumentsPage() {
               <Input type="email" value={form.candidateEmail} onChange={(e) => setForm({ ...form, candidateEmail: e.target.value })} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Designation</span>
+              <span className="text-[11px] text-steel-muted uppercase font-mono">
+                {form.kind === "Promotion" ? "New designation" : "Designation"}
+              </span>
               <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
             </label>
             <label className="space-y-1">
@@ -262,10 +323,24 @@ export default function HrmsDocumentsPage() {
               </span>
               <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
             </label>
-            {(form.kind === "Appointment" || form.kind === "Offer") && (
+            {(form.kind === "Appointment" || form.kind === "Offer" || form.kind === "Promotion") && (
               <>
+                {form.kind === "Promotion" && (
+                  <>
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation</span>
+                      <Input value={form.previousDesignation} onChange={(e) => setForm({ ...form, previousDesignation: e.target.value })} />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
+                      <Input value={form.previousCtc} onChange={(e) => setForm({ ...form, previousCtc: e.target.value })} />
+                    </label>
+                  </>
+                )}
                 <label className="space-y-1">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Fixed CTC (INR p.a.)</span>
+                  <span className="text-[11px] text-steel-muted uppercase font-mono">
+                    {form.kind === "Promotion" ? "Revised CTC (INR p.a.)" : "Fixed CTC (INR p.a.)"}
+                  </span>
                   <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
                 </label>
                 <label className="space-y-1">
@@ -342,22 +417,22 @@ export default function HrmsDocumentsPage() {
                   </td>
                   <td className="space-y-1">
                     {r.generatedPdfUrl && (
-                      <a href={r.generatedPdfUrl} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
+                      <a href={mediaUrl(r.generatedPdfUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
                         Letter (HTML → PDF)
                       </a>
                     )}
                     {r.generatedDocxUrl && (
-                      <a href={r.generatedDocxUrl} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
+                      <a href={mediaUrl(r.generatedDocxUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
                         Editable annexure (.xlsx)
                       </a>
                     )}
                     {r.sharePointUrl && r.sharePointUrl !== r.generatedPdfUrl && (
-                      <a href={r.sharePointUrl} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
+                      <a href={mediaUrl(r.sharePointUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
                         Drive copy
                       </a>
                     )}
                     {r.uploadedFileUrl && (
-                      <a href={r.uploadedFileUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline block text-[11px]">
+                      <a href={mediaUrl(r.uploadedFileUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
                         Signed copy
                       </a>
                     )}
@@ -366,6 +441,13 @@ export default function HrmsDocumentsPage() {
                   <td className="space-y-1">
                     {canManage && (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => void openPreview(r.id, `${r.kind} · ${r.employeeName}`)}
+                          className="text-[11px] px-2 py-0.5 rounded border border-line text-ink hover:bg-sand"
+                        >
+                          Preview
+                        </button>
                         <button
                           type="button"
                           onClick={() => void regenerate(r.id)}
@@ -396,6 +478,20 @@ export default function HrmsDocumentsPage() {
           </table>
         </div>
       </Card>
+
+      {previewHtml ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
+          <div className="bg-paper rounded-xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col min-h-0">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
+              <div className="font-semibold text-sm">{previewTitle || "Letter preview"}</div>
+              <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewHtml("")}>
+                Close
+              </Button>
+            </div>
+            <iframe title="Letter preview" srcDoc={previewHtml} className="flex-1 w-full border-0 bg-white rounded-b-xl" />
+          </div>
+        </div>
+      ) : null}
 
       <input ref={uploadRef} type="file" accept=".pdf,.doc,.docx,image/*" hidden onChange={onUploadFile} />
     </div>

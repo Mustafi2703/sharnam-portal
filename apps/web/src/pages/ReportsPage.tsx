@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHeader, Stat } from "../components/ui";
-import { ReportExportButtons } from "../components/ReportExportButtons";
-import { downloadAuthFile } from "../lib/downloadReport";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-/** DPR / WPR dashboard with branded Excel + PDF (HTML print) client packs */
+/** Field KPI dashboard — official DPR / WPR files are exported only from the makers. */
 export default function ReportsPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -15,9 +13,6 @@ export default function ReportsPage() {
   const tab = searchParams.get("kind") === "wpr" ? "wpr" : "dpr";
   const [dpr, setDpr] = useState<any>(null);
   const [wpr, setWpr] = useState<any>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -44,57 +39,23 @@ export default function ReportsPage() {
           ← Project
         </Link>
         <PageHeader
-          eyebrow="Client packs · Sharnam PMC"
+          eyebrow="Field KPIs · Sharnam PMC"
           title="DPR / WPR dashboard"
-          subtitle="Live field data with Sharnam-branded Excel workbooks and Print→PDF HTML packs for client sharing."
+          subtitle="Live field counts. Official DPR and WPR files are filled and exported only in DPR Maker and WPR Maker — not from this screen."
           actions={
             <div className="flex flex-wrap gap-2 items-start">
-              <ReportExportButtons projectId={id} kind="dpr" label="DPR" />
-              <ReportExportButtons projectId={id} kind="wpr" label="WPR" />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !id}
-                onClick={async () => {
-                  if (!id) return;
-                  setBusy(true);
-                  setMsg("");
-                  try {
-                    await downloadAuthFile(
-                      `/api/reports/analytics/${id}/download.xlsx`,
-                      token,
-                      `Sharnam-Analytics-${project?.code || "pack"}.xlsx`
-                    );
-                    setMsg("Full analytics Excel downloaded.");
-                  } catch (e) {
-                    setMsg(e instanceof Error ? e.message : "Failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Full analytics Excel
-              </Button>
+              <Link to={`/projects/${id}/dpr-maker`}>
+                <Button type="button">Open DPR maker</Button>
+              </Link>
+              <Link to={`/projects/${id}/wpr-maker`}>
+                <Button type="button" variant="secondary">
+                  Open WPR maker
+                </Button>
+              </Link>
             </div>
           }
         />
       </div>
-
-      {msg && <p className="text-sm text-brand bg-brand-soft/50 px-3 py-2 rounded-lg">{msg}</p>}
-
-      {previewHtml && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
-          <div className="bg-paper rounded-xl shadow-xl w-full max-w-5xl h-[90vh] flex flex-col min-h-0">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
-              <div className="font-semibold text-sm">DPR preview</div>
-              <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewHtml(null)}>
-                Close
-              </Button>
-            </div>
-            <iframe title="DPR preview" srcDoc={previewHtml} className="flex-1 w-full border-0 bg-white rounded-b-xl" />
-          </div>
-        </div>
-      )}
 
       {project && (
         <Card className="border-brand/30 bg-brand-soft/20">
@@ -102,38 +63,14 @@ export default function ReportsPage() {
             <div>
               <h3 className="font-semibold text-sm">Report makers — fill & publish SPDC formats</h3>
               <p className="text-xs text-steel-muted mt-1 max-w-xl">
-                Use <strong>DPR maker</strong> to fill the official SPDC dashboard INPUT sheet (all 7 disciplines).
-                Use <strong>WPR maker</strong> for the weekly pack with photos and sign-off.
-                This dashboard below shows live KPIs from field data.
+                Use <strong>DPR maker</strong> to fill and export the official SPDC dashboard. Use{" "}
+                <strong>WPR maker</strong> for the weekly pack. This screen only shows live field KPIs.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
               <Link to={`/projects/${id}/dpr-maker`}>
                 <Button type="button">Open DPR maker</Button>
               </Link>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !id}
-                onClick={async () => {
-                  if (!id) return;
-                  setBusy(true);
-                  setMsg("");
-                  try {
-                    const res = await fetch(`${API_BASE}/api/reports/dpr/${id}/download.html`, {
-                      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                    });
-                    if (!res.ok) throw new Error(`Preview failed (${res.status})`);
-                    setPreviewHtml(await res.text());
-                  } catch (e) {
-                    setMsg(e instanceof Error ? e.message : "Preview failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Preview
-              </Button>
               <Link to={`/projects/${id}/wpr-maker`}>
                 <Button type="button" variant="secondary">Open WPR maker</Button>
               </Link>
@@ -297,7 +234,7 @@ export default function ReportsPage() {
                   </strong>
                 </div>
                 <p className="text-xs text-steel-muted pt-2">
-                  Download WPR for budget WBS, cashflow, drawings, submittals, and safety (mobile-fitted HTML).
+                  Fill and export the official WPR pack from WPR Maker — this screen only shows live counts.
                 </p>
               </div>
             </Card>

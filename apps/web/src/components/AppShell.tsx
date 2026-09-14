@@ -599,10 +599,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             {inProject && routeProjectId && (
               <div className="hidden lg:flex items-center gap-1 flex-wrap min-w-0 max-w-[min(46vw,520px)]">
+                <Link
+                  to={`/projects/${routeProjectId}/dpr-maker`}
+                  className="app-topbar__chip !text-[10px] !py-1 !px-2 whitespace-nowrap hover:border-brand"
+                >
+                  DPR maker
+                </Link>
+                <Link
+                  to={`/projects/${routeProjectId}/wpr-maker`}
+                  className="app-topbar__chip !text-[10px] !py-1 !px-2 whitespace-nowrap hover:border-brand"
+                >
+                  WPR maker
+                </Link>
                 {(
                   [
-                    ["dpr", "DPR PDF"],
-                    ["wpr", "WPR PDF"],
                     ["rfis", "RFI log"],
                     ["quality", "Quality PDF"],
                     ["progress", "Progress PDF"],

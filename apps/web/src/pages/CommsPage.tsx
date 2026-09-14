@@ -352,6 +352,7 @@ export default function CommsPage() {
           onMatrixKindChange={setMatrixKind}
           contacts={contacts}
           canEdit={canEdit}
+          allowCreateCompany={user?.role === "admin" || user?.role === "office"}
           onReload={load}
           onMsg={setMsg}
         />

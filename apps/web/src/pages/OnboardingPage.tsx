@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, apiBase, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
 
@@ -75,6 +75,9 @@ function OfferOnboardingPage() {
   const [onboard, setOnboard] = useState<any | null>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
+  const [letterHtml, setLetterHtml] = useState("");
+  const [policyHtml, setPolicyHtml] = useState("");
+  const [policyUrl, setPolicyUrl] = useState("");
 
   const load = async () => {
     if (!offerId) return;
@@ -86,10 +89,30 @@ function OfferOnboardingPage() {
       setPreJoin(null);
     }
     try {
-      setOnboard(await api<any>(`/api/hrm/onboarding/${offerId}`, { token }));
+      const onboardRow = await api<any>(`/api/hrm/onboarding/${offerId}`, { token });
+      setOnboard(onboardRow);
+      if (onboardRow?.itemsCompletedAt?._hrPolicyUrl) setPolicyUrl(onboardRow.itemsCompletedAt._hrPolicyUrl);
     } catch {
       setOnboard(null);
     }
+    if (o?.candidate) {
+      const docs = await api<any[]>(`/api/hrm/hrms-documents?kind=Appointment`, { token }).catch(() => []);
+      const mine = docs.find(
+        (d) =>
+          (o.candidate.email && d.candidateEmail === o.candidate.email) ||
+          d.employeeName === o.candidate.fullName,
+      );
+      if (mine?.id) {
+        const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${mine.id}/preview`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (res.ok) setLetterHtml(await res.text());
+      }
+    }
+    const policyRes = await fetch(`${apiBase()}/api/hrm/onboarding/${offerId}/hr-policy`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (policyRes.ok) setPolicyHtml(await policyRes.text());
     // Timeline: audit events tied to the candidate + offer + user (if joined)
     if (o?.candidate?.id) {
       const events = await api<any[]>(`/api/hrm/employees/${o.candidate.id}/timeline`, { token }).catch(() => []);
@@ -111,8 +134,31 @@ function OfferOnboardingPage() {
     if (!offerId) return;
     const r = await api<any>(`/api/hrm/onboarding/${offerId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
     setOnboard(r);
+    if (r?.hrPolicyUrl) setPolicyUrl(r.hrPolicyUrl);
+    else if (r?.itemsCompletedAt?._hrPolicyUrl) setPolicyUrl(r.itemsCompletedAt._hrPolicyUrl);
     setMsg("Onboarding updated.");
     await load();
+  }
+
+  async function fileHrPolicy() {
+    if (!offerId) return;
+    try {
+      const r = await api<{ url?: string; folder?: string; employeeName?: string }>(`/api/hrm/onboarding/${offerId}/hr-policy`, {
+        method: "POST",
+        token,
+      });
+      if (r.url) setPolicyUrl(r.url);
+      setMsg(
+        `HR policy acknowledgement filed under 06.02 Employee Files / ${r.employeeName || offer?.candidate?.fullName} / Onboarding.`,
+      );
+      const policyRes = await fetch(`${apiBase()}/api/hrm/onboarding/${offerId}/hr-policy`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (policyRes.ok) setPolicyHtml(await policyRes.text());
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not file HR policy");
+    }
   }
 
   const preJoinItems = useMemo(() => {
@@ -181,7 +227,11 @@ function OfferOnboardingPage() {
               onClick={async () => {
                 try {
                   const letter = await api<any>(`/api/hrm/offers/${offerId}/appointment-letter`, { method: "POST", token });
-                  setMsg(`Appointment ${letter.refNo} generated and filed on Drive.`);
+                  setMsg(`Appointment ${letter.refNo} generated and filed under 06.02 Employee Files / ${offer?.candidate?.fullName}.`);
+                  const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${letter.id}/preview`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                  });
+                  if (res.ok) setLetterHtml(await res.text());
                   await load();
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Letter generate failed");
@@ -201,6 +251,62 @@ function OfferOnboardingPage() {
       </div>
       {msg && <p className="text-sm text-brand-dark">{msg}</p>}
 
+      {letterHtml ? (
+        <Card className="!p-0 overflow-hidden">
+          <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="font-semibold text-sm">Appointment letter · {offer?.candidate?.fullName}</div>
+              <p className="text-[11px] text-steel-muted">
+                Candidate name, designation, CTC and joining date are merged into the SPDC letter. Filed under 06.02
+                Employee Files / {offer?.candidate?.fullName} / Letters.
+              </p>
+            </div>
+            {preJoin?.appointmentLetterUrl ? (
+              <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
+                Open filed copy
+              </a>
+            ) : null}
+          </div>
+          <iframe title="Appointment letter" srcDoc={letterHtml} className="w-full h-[520px] border-0 bg-white" />
+        </Card>
+      ) : (
+        <Card>
+          <p className="text-sm text-steel-muted">
+            Generate the appointment letter to preview {offer?.candidate?.fullName || "the candidate"}&apos;s name, designation, CTC and
+            joining date on the SPDC letterhead.
+          </p>
+        </Card>
+      )}
+
+      <Card className="!p-0 overflow-hidden">
+        <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold text-sm">HR policy acknowledgement · {offer?.candidate?.fullName}</div>
+            <p className="text-[11px] text-steel-muted">
+              Renders with this candidate&apos;s name. Filing saves it to SharePoint 06.02 Employee Files /{" "}
+              {offer?.candidate?.fullName} / Onboarding.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {policyUrl ? (
+              <a href={mediaUrl(policyUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
+                Open filed copy
+              </a>
+            ) : null}
+            {canWrite ? (
+              <Button type="button" variant="secondary" onClick={() => void fileHrPolicy()}>
+                File acknowledgement
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        {policyHtml ? (
+          <iframe title="HR policy acknowledgement" srcDoc={policyHtml} className="w-full h-[420px] border-0 bg-white" />
+        ) : (
+          <p className="px-4 py-6 text-sm text-steel-muted">Loading policy…</p>
+        )}
+      </Card>
+
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-1">
           <h3 className="font-semibold text-sm mb-3">Progress</h3>
@@ -212,7 +318,7 @@ function OfferOnboardingPage() {
 
         <Card className="lg:col-span-2">
           <h3 className="font-semibold text-sm mb-3">Pre-joining checklist</h3>
-          {!preJoin && <p className="text-sm text-steel-muted">Pre-joining record initialises after the offer is Accepted.</p>}
+          {!preJoin && <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>}
           {preJoin && (
             <ul className="space-y-2 text-sm">
               {preJoinItems.map((item) => (
@@ -228,7 +334,7 @@ function OfferOnboardingPage() {
                         className="max-w-xs"
                       />
                       {item.key === "appointmentLetterUrl" && preJoin.appointmentLetterUrl ? (
-                        <a href={preJoin.appointmentLetterUrl} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
+                        <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
                           Open
                         </a>
                       ) : null}
@@ -265,7 +371,7 @@ function OfferOnboardingPage() {
 
       <Card>
         <h3 className="font-semibold text-sm mb-3">Employee onboarding checklist</h3>
-        {!onboard && <p className="text-sm text-steel-muted">Onboarding record initialises when the offer moves to Joined.</p>}
+        {!onboard && <p className="text-sm text-steel-muted">Loading onboarding checklist…</p>}
         {onboard && (
           <ul className="grid md:grid-cols-2 gap-2 text-sm">
             {onboardItems.map((item) => (
@@ -273,12 +379,23 @@ function OfferOnboardingPage() {
                 <input
                   type="checkbox"
                   checked={!!onboard[item.key]}
-                  onChange={(e) => updateOnboard({ [item.key]: e.target.checked })}
+                  onChange={(e) => {
+                    if (item.key === "hrPolicyAcknowledged" && e.target.checked) {
+                      void fileHrPolicy();
+                      return;
+                    }
+                    void updateOnboard({ [item.key]: e.target.checked });
+                  }}
                   disabled={!canWrite}
                   className="mt-1"
                 />
                 <div className="flex-1">
                   <div>{item.label}</div>
+                  {item.key === "hrPolicyAcknowledged" && (
+                    <div className="text-[10px] text-steel-muted mt-0.5">
+                      Opens the policy with {offer?.candidate?.fullName}&apos;s name and files it in their HR folder.
+                    </div>
+                  )}
                   {onboard.itemsCompletedAt?.[item.key] && (
                     <div className="text-[10px] text-steel-muted mt-0.5">
                       Completed {new Date(onboard.itemsCompletedAt[item.key]).toLocaleString("en-IN")}

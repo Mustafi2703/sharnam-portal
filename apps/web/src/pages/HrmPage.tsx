@@ -85,7 +85,7 @@ export default function HrmPage() {
         </Link>
         <Link to="/hrm/documents" className="hrms-quick-card">
           <span className="hrms-quick-card__tag">Letters</span>
-          <span className="hrms-quick-card__title">Appointment · Relieving · Exit</span>
+          <span className="hrms-quick-card__title">Appointment · Promotion · Relieving</span>
         </Link>
         <Link to="/hrm/masters" className="hrms-quick-card">
           <span className="hrms-quick-card__tag">Masters</span>

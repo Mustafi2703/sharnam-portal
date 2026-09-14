@@ -143,13 +143,19 @@ export default function CrmLayout() {
                     {section.tools.map((t) => {
                       const to = `/crm/${t.to}`;
                       const active =
-                        toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup") ||
-                        (t.to === "proposals" && loc.pathname.startsWith("/crm/proposals"));
+                        toolActive(
+                          loc.pathname,
+                          t.to,
+                          t.to === "leads" ||
+                            t.to === "projects" ||
+                            t.to === "setup" ||
+                            t.to.startsWith("directory/"),
+                        ) || (t.to === "proposals" && loc.pathname.startsWith("/crm/proposals"));
                       return (
                         <NavLink
                           key={t.to}
                           to={inWin ? withToolWindowParam(to, true) : to}
-                          end={t.to === "leads" || t.to === "projects" || t.to === "setup"}
+                          end={t.to === "leads" || t.to === "projects" || t.to === "setup" || t.to.startsWith("directory/")}
                           className={() => tabClass(active)}
                           style={active ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined}
                           onClick={(e) => openCrmTool(e, to, t.label, inWin)}

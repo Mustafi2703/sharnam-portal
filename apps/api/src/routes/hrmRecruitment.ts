@@ -332,7 +332,7 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office"), a
 
   // Auto-advance candidate to "Selected" if the last decision advance
   if (row.decision === "Advance") {
-    await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Shortlisted" } });
+    await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Interviewed" } });
   } else if (row.decision === "Reject") {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Rejected" } });
   }
@@ -388,10 +388,12 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
         joinDate: offer.joiningDate,
         fixedCtcAnnual: offer.ctcAnnual,
         ctcAnnual: offer.ctcAnnual,
-        location: offer.location || "SPDC Corporate Office, Vadodara",
+        location: offer.location || offer.candidate.location || "SPDC Corporate Office, Vadodara",
         reportingManager: offer.reportingManager || "",
         probationMonths: offer.probationMonths || 6,
         empCode: offer.preJoin?.empCodeGenerated || "",
+        candidateEmail: offer.candidate.email || "",
+        phone: offer.candidate.phone || "",
       }),
     },
   });
@@ -417,6 +419,29 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
       where: { id: offer.preJoin.id },
       data: { appointmentLetterUrl: updated.sharePointUrl || updated.generatedPdfUrl },
     });
+  }
+  if (offer.onboard?.userId) {
+    const fileUrl = updated.sharePointUrl || updated.generatedPdfUrl || "";
+    const existing = await prisma.employeeDocument.findFirst({
+      where: { userId: offer.onboard.userId, category: "Appointment", title: { contains: refNo } },
+    });
+    if (existing) {
+      await prisma.employeeDocument.update({
+        where: { id: existing.id },
+        data: { fileUrl, storagePath: updated.storagePath, issuedOn: new Date() },
+      });
+    } else {
+      await prisma.employeeDocument.create({
+        data: {
+          userId: offer.onboard.userId,
+          category: "Appointment",
+          title: `Appointment letter · ${employeeName} · ${refNo}`,
+          fileUrl,
+          storagePath: updated.storagePath,
+          issuedOn: new Date(),
+        },
+      });
+    }
   }
   await audit("hrm.docs.generate", {
     userId: req.user!.id,
@@ -613,9 +638,17 @@ hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office"), async
     },
   });
 
-  if (nextStatus === "Accepted") {
+  if (nextStatus === "Sent") {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Offered" } });
+  }
+  if (nextStatus === "Accepted") {
+    await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Accepted" } });
     await prisma.preJoiningChecklist.upsert({
+      where: { offerId: row.id },
+      create: { offerId: row.id },
+      update: {},
+    });
+    await prisma.onboardingChecklist.upsert({
       where: { offerId: row.id },
       create: { offerId: row.id },
       update: {},
@@ -637,11 +670,14 @@ hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office"), async
 /* ═════════════════════════════════════  PRE-JOINING  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req, res) => {
-  const row = await prisma.preJoiningChecklist.findUnique({
+  const offer = await prisma.offer.findUnique({ where: { id: req.params.offerId } });
+  if (!offer) return res.status(404).json({ error: "not found" });
+  const row = await prisma.preJoiningChecklist.upsert({
     where: { offerId: req.params.offerId },
+    create: { offerId: req.params.offerId },
+    update: {},
     include: { offer: { include: { candidate: true } } },
   });
-  if (!row) return res.status(404).json({ error: "not found" });
   res.json(row);
 });
 
@@ -681,12 +717,86 @@ hrmRecruitmentRouter.patch("/pre-joining/:offerId", requireRoles("admin", "offic
 
 /* ═════════════════════════════════════  ONBOARDING  ═════════════════════════════════════ */
 
+async function fileHrPolicyAcknowledgement(offerId: string, actorUserId: string) {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    include: { candidate: true, onboard: true },
+  });
+  if (!offer) return null;
+  const onboard = await prisma.onboardingChecklist.upsert({
+    where: { offerId: offer.id },
+    create: { offerId: offer.id, hrPolicyAcknowledged: true },
+    update: { hrPolicyAcknowledged: true },
+  });
+  const stamps = JSON.parse(onboard.itemsCompletedAtJson || "{}") as Record<string, string>;
+  stamps.hrPolicyAcknowledged = stamps.hrPolicyAcknowledged || new Date().toISOString();
+  const { renderHrPolicyAcknowledgement, hrPersonFolder } = await import("../services/hrmsLetter.js");
+  const ackDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+  const html = renderHrPolicyAcknowledgement({
+    employeeName: offer.candidate.fullName,
+    designation: offer.designation || "",
+    department: offer.department || "",
+    joinDate: offer.joiningDate
+      ? offer.joiningDate.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })
+      : "",
+    acknowledgedAt: ackDate,
+  });
+  const folder = `06_HR_AND_ADMIN/06.02_Employee_Files/${hrPersonFolder(offer.candidate.fullName)}/Onboarding`;
+  const saved = await mockOneDrive.upload(
+    "_HR",
+    folder,
+    `HR-Policy-Acknowledgement.html`,
+    Buffer.from(html, "utf8"),
+    "text/html; charset=utf-8",
+    { replace: true },
+  );
+  const url = saved.sharePointUrl || saved.url;
+  stamps._hrPolicyUrl = url;
+  stamps._hrPolicyFolder = folder;
+  await prisma.onboardingChecklist.update({
+    where: { id: onboard.id },
+    data: { hrPolicyAcknowledged: true, itemsCompletedAtJson: JSON.stringify(stamps) },
+  });
+  if (onboard.userId) {
+    const existing = await prisma.employeeDocument.findFirst({
+      where: { userId: onboard.userId, title: "HR Policy Acknowledgement" },
+    });
+    const doc = {
+      fileUrl: url,
+      storagePath: saved.sharePointPath || saved.path,
+      issuedOn: new Date(),
+    };
+    if (existing) {
+      await prisma.employeeDocument.update({ where: { id: existing.id }, data: doc });
+    } else {
+      await prisma.employeeDocument.create({
+        data: {
+          userId: onboard.userId,
+          category: "Other",
+          title: "HR Policy Acknowledgement",
+          ...doc,
+        },
+      });
+    }
+  }
+  await audit("hrms.onboarding.hr_policy", {
+    userId: actorUserId,
+    entity: "OnboardingChecklist",
+    entityId: onboard.id,
+    meta: { offerId: offer.id, path: saved.path, name: offer.candidate.fullName },
+  });
+  return { ok: true as const, acknowledged: true as const, url, folder, employeeName: offer.candidate.fullName, html };
+}
+
 hrmRecruitmentRouter.get("/onboarding/:offerId", async (req, res) => {
-  const row = await prisma.onboardingChecklist.findUnique({
+  const offer = await prisma.offer.findUnique({ where: { id: req.params.offerId } });
+  if (!offer) return res.status(404).json({ error: "not found" });
+  const row = await prisma.onboardingChecklist.upsert({
     where: { offerId: req.params.offerId },
+    create: { offerId: req.params.offerId },
+    update: {},
     include: { offer: { include: { candidate: true } } },
   });
-  if (!row) return res.status(404).json({ error: "not found" });
   res.json({ ...row, itemsCompletedAt: JSON.parse(row.itemsCompletedAtJson || "{}") });
 });
 
@@ -722,7 +832,49 @@ hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office
   patch.itemsCompletedAtJson = JSON.stringify(stamps);
   const row = await prisma.onboardingChecklist.update({ where: { id: existing.id }, data: patch });
   await audit("hrms.onboarding.update", { userId: req.user!.id, entity: "OnboardingChecklist", entityId: row.id });
+  if (patch.hrPolicyAcknowledged === true) {
+    const filed = await fileHrPolicyAcknowledgement(req.params.offerId, req.user!.id);
+    if (filed) {
+      return res.json({
+        ...row,
+        hrPolicyAcknowledged: true,
+        itemsCompletedAt: { ...stamps, _hrPolicyUrl: filed.url, _hrPolicyFolder: filed.folder },
+        hrPolicyUrl: filed.url,
+        folder: filed.folder,
+      });
+    }
+  }
   res.json({ ...row, itemsCompletedAt: stamps });
+});
+
+hrmRecruitmentRouter.get("/onboarding/:offerId/hr-policy", async (req, res) => {
+  const offer = await prisma.offer.findUnique({
+    where: { id: req.params.offerId },
+    include: { candidate: true, onboard: true },
+  });
+  if (!offer) return res.status(404).json({ error: "not found" });
+  const { renderHrPolicyAcknowledgement } = await import("../services/hrmsLetter.js");
+  const html = renderHrPolicyAcknowledgement({
+    employeeName: offer.candidate.fullName,
+    designation: offer.designation || "",
+    department: offer.department || "",
+    joinDate: offer.joiningDate ? offer.joiningDate.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "",
+    acknowledgedAt: offer.onboard?.hrPolicyAcknowledged ? new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }) : "",
+  });
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
+hrmRecruitmentRouter.post("/onboarding/:offerId/hr-policy", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const filed = await fileHrPolicyAcknowledgement(req.params.offerId, req.user!.id);
+  if (!filed) return res.status(404).json({ error: "not found" });
+  res.json({
+    ok: filed.ok,
+    acknowledged: filed.acknowledged,
+    url: filed.url,
+    folder: filed.folder,
+    employeeName: filed.employeeName,
+  });
 });
 
 /* ═════════════════════════════════════  PAY HIKE  ═════════════════════════════════════ */

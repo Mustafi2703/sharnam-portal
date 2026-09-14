@@ -1,65 +1,41 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import { Badge, Button, Card, Input, Select } from "./ui";
-import { SearchableSelect } from "./SearchableSelect";
+import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import type { MatrixContact } from "./CommsMatrixPanel";
+import {
+  EMPTY_MATRIX_FORM,
+  MatrixPartyFields,
+  partyForSection,
+  roleForSection,
+  type MatrixFormState,
+  type MatrixUser,
+  type MatrixVendor,
+} from "./MatrixPartyFields";
 
-const ORG_SECTIONS = ["Client", "PMC", "Consultant", "Contractor", "Other"] as const;
-const EMPTY_FORM = {
-  orgSection: "Client",
-  orgName: "",
-  personName: "",
-  designation: "",
-  company: "",
-  spoc: "",
-  mobile: "",
-  email: "",
-  mailRole: "CC",
-  officeAddress: "",
-  bothMatrices: true,
-  createDirectory: "none" as "none" | "user" | "vendor" | "both",
-  userRole: "site_employee",
-  vendorPartyType: "Client",
-};
-
-type UserRow = { id: string; fullName: string; email: string; role: string; phone?: string | null };
-type VendorRow = {
-  id: string;
-  name: string;
-  partyType?: string;
-  trade?: string | null;
-  email?: string | null;
-  primaryContactName?: string | null;
-  businessPhone?: string | null;
-  address?: string | null;
-};
+type AssignedVendor = { vendorId: string; partyType?: string; name?: string };
 
 type Props = {
   projectId: string;
   token: string;
-  project?: { name?: string; clientName?: string | null; designConsultant?: string | null; pmcName?: string | null } | null;
-  users: UserRow[];
-  vendors: VendorRow[];
+  project?: {
+    name?: string;
+    clientName?: string | null;
+    clientEmail?: string | null;
+    clientContactName?: string | null;
+    clientPhone?: string | null;
+    clientAddress?: string | null;
+    designConsultant?: string | null;
+    contractorName?: string | null;
+    pmcName?: string | null;
+  } | null;
+  users: MatrixUser[];
+  vendors: MatrixVendor[];
+  assignedVendors?: AssignedVendor[];
   canEdit: boolean;
   onMsg: (msg: string) => void;
   onDirectoryChange?: () => Promise<void>;
 };
-
-function partyForSection(section: string) {
-  if (section === "Client") return "Client";
-  if (section === "PMC") return "PMC";
-  if (section === "Consultant") return "Consultant";
-  if (section === "Contractor") return "Contractor";
-  return "Vendor";
-}
-
-function roleForSection(section: string) {
-  if (section === "Client") return "client";
-  if (section === "Contractor") return "vendor";
-  if (section === "Consultant") return "employee";
-  return "site_employee";
-}
 
 export function ProjectSetupMatrixDesk({
   projectId,
@@ -67,6 +43,7 @@ export function ProjectSetupMatrixDesk({
   project,
   users,
   vendors,
+  assignedVendors,
   canEdit,
   onMsg,
   onDirectoryChange,
@@ -74,10 +51,8 @@ export function ProjectSetupMatrixDesk({
   const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");
   const [contacts, setContacts] = useState<MatrixContact[]>([]);
   const [counts, setCounts] = useState({ technical: 0, commercial: 0 });
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<MatrixFormState>(EMPTY_MATRIX_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [pickUserId, setPickUserId] = useState("");
-  const [pickVendorId, setPickVendorId] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -103,56 +78,6 @@ export function ProjectSetupMatrixDesk({
     void load();
   }, [load]);
 
-  useEffect(() => {
-    setForm((f) => ({
-      ...f,
-      vendorPartyType: partyForSection(f.orgSection),
-      userRole: roleForSection(f.orgSection),
-    }));
-  }, [form.orgSection]);
-
-  function applyUser(id: string) {
-    setPickUserId(id);
-    const u = users.find((x) => x.id === id);
-    if (!u) return;
-    const section = u.role === "client" ? "Client" : u.role === "vendor" ? "Contractor" : "PMC";
-    setForm((f) => ({
-      ...f,
-      orgSection: section,
-      orgName: section === "PMC" ? "Sharnam Project Development Consultants & Co." : f.orgName || u.fullName,
-      personName: u.fullName,
-      email: u.email,
-      mobile: u.phone || "",
-      company: section === "PMC" ? "Sharnam PDC" : f.company,
-      designation: u.role.replace(/_/g, " "),
-      spoc: u.fullName,
-      createDirectory: "user",
-      userRole: u.role === "client" || u.role === "vendor" || u.role === "office" || u.role === "employee" ? u.role : "site_employee",
-    }));
-  }
-
-  function applyVendor(id: string) {
-    setPickVendorId(id);
-    const v = vendors.find((x) => x.id === id);
-    if (!v) return;
-    const section =
-      v.partyType === "Client" ? "Client" : v.partyType === "Consultant" || v.partyType === "Designer" || v.partyType === "PMC" ? (v.partyType === "PMC" ? "PMC" : "Consultant") : "Contractor";
-    setForm((f) => ({
-      ...f,
-      orgSection: section,
-      orgName: v.name,
-      company: v.name,
-      personName: v.primaryContactName || v.name,
-      email: v.email || "",
-      mobile: v.businessPhone || "",
-      designation: v.trade || v.partyType || "",
-      officeAddress: v.address || "",
-      spoc: v.primaryContactName || v.name,
-      createDirectory: "vendor",
-      vendorPartyType: v.partyType || partyForSection(section),
-    }));
-  }
-
   async function submitRow(e: FormEvent) {
     e.preventDefault();
     if (!canEdit) return;
@@ -164,7 +89,7 @@ export function ProjectSetupMatrixDesk({
           token,
           body: JSON.stringify({
             orgSection: form.orgSection,
-            orgName: form.orgName,
+            orgName: form.orgName || form.company,
             personName: form.personName,
             designation: form.designation,
             company: form.company,
@@ -189,28 +114,26 @@ export function ProjectSetupMatrixDesk({
             matrixKind,
             bothMatrices: form.bothMatrices,
             createDirectory: "none",
+            orgName: form.orgName || form.company,
           }),
         });
         const extra = [
-          r.directory?.user?.created ? `portal ${r.directory.user.email}${r.directory.user.tempPassword ? ` / ${r.directory.user.tempPassword}` : ""}` : "",
+          r.directory?.user?.created ? `portal ${r.directory.user.email}` : "",
           r.directory?.vendor?.created ? `directory ${r.directory.vendor.name}` : "",
         ]
           .filter(Boolean)
           .join(" · ");
-        onMsg(extra ? `Added to comms matrix and ${extra}.` : "Added to communication matrix (in-project Comms).");
+        onMsg(extra ? `Added to comms matrix and ${extra}.` : `Added to ${matrixKind === "COMMERCIAL" ? "commercial" : "technical"} matrix.`);
         await onDirectoryChange?.();
       }
       setForm({
-        ...EMPTY_FORM,
+        ...EMPTY_MATRIX_FORM,
         orgSection: form.orgSection,
-        orgName: form.orgName,
         bothMatrices: form.bothMatrices,
-        createDirectory: form.createDirectory,
         vendorPartyType: partyForSection(form.orgSection),
         userRole: roleForSection(form.orgSection),
+        mailRole: form.orgSection === "Client" ? "TO" : "CC",
       });
-      setPickUserId("");
-      setPickVendorId("");
       await load();
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Save failed");
@@ -222,7 +145,7 @@ export function ProjectSetupMatrixDesk({
   function startEdit(row: MatrixContact) {
     setEditingId(row.id);
     setForm({
-      ...EMPTY_FORM,
+      ...EMPTY_MATRIX_FORM,
       orgSection: row.orgSection || "Other",
       orgName: row.orgName || "",
       personName: row.personName || "",
@@ -279,8 +202,8 @@ export function ProjectSetupMatrixDesk({
         <div>
           <h3 className="font-semibold text-sm">Communication matrix</h3>
           <p className="text-xs text-steel-muted mt-0.5 max-w-2xl">
-            Same fields as the Excel (Name, Designation, Company, SPOC, Mobile, E-mail, TO/CC). Prefill from the CRM
-            client / consultant / vendor lists. This only writes the matrix — do not create logins here.
+            Technical and commercial sheets. Company and people lists follow the party you pick — search, auto-fill, then
+            edit. Add a missing client / consultant / vendor here without leaving setup.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -303,66 +226,41 @@ export function ProjectSetupMatrixDesk({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="font-semibold text-sm">{editingId ? "Edit matrix row" : "Add person to matrix"}</h4>
             {editingId && (
-              <Button type="button" variant="secondary" onClick={() => { setEditingId(null); setForm(EMPTY_FORM); }}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm(EMPTY_MATRIX_FORM);
+                }}
+              >
                 Cancel edit
               </Button>
             )}
           </div>
-          {!editingId && (
-            <div className="grid sm:grid-cols-2 gap-2">
-              <SearchableSelect
-                options={users.map((u) => ({
-                  value: u.id,
-                  label: u.fullName,
-                  sublabel: `${u.email} · ${u.role}`,
-                  keywords: `${u.fullName} ${u.email} ${u.role}`,
-                }))}
-                value={pickUserId}
-                onChange={applyUser}
-                placeholder="Prefill from a portal login…"
-                searchPlaceholder="Search people by name…"
-              />
-              <SearchableSelect
-                options={vendors.map((v) => ({
-                  value: v.id,
-                  label: v.name,
-                  sublabel: [v.partyType, v.email].filter(Boolean).join(" · "),
-                  keywords: [v.name, v.email, v.partyType, v.primaryContactName].filter(Boolean).join(" "),
-                }))}
-                value={pickVendorId}
-                onChange={applyVendor}
-                placeholder="Prefill from Clients / Vendors / Stakeholders…"
-                searchPlaceholder="Search companies by name…"
-              />
-            </div>
-          )}
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={(e) => void submitRow(e)}>
-            <Select value={form.orgSection} onChange={(e) => setForm({ ...form, orgSection: e.target.value })}>
-              {ORG_SECTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </Select>
-            <Input placeholder="Organisation (optional)" value={form.orgName} onChange={(e) => setForm({ ...form, orgName: e.target.value })} />
-            <Input placeholder="Name (optional)" value={form.personName} onChange={(e) => setForm({ ...form, personName: e.target.value })} />
-            <Input placeholder="Designation" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
-            <Input placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
-            <Input placeholder="SPOC" value={form.spoc} onChange={(e) => setForm({ ...form, spoc: e.target.value })} />
-            <Input placeholder="Mobile" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-            <Input type="email" placeholder="E-mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <Select value={form.mailRole} onChange={(e) => setForm({ ...form, mailRole: e.target.value })}>
-              <option value="TO">TO</option>
-              <option value="CC">CC</option>
-            </Select>
-            <Input className="sm:col-span-2" placeholder="Office address" value={form.officeAddress} onChange={(e) => setForm({ ...form, officeAddress: e.target.value })} />
+          <form className="space-y-3" onSubmit={(e) => void submitRow(e)}>
+            <MatrixPartyFields
+              key={editingId || "new"}
+              form={form}
+              onChange={setForm}
+              users={users}
+              vendors={vendors}
+              assignedVendors={assignedVendors}
+              project={project}
+              projectId={projectId}
+              token={token}
+              editing={Boolean(editingId)}
+              onMsg={onMsg}
+              onDirectoryChange={onDirectoryChange}
+              allowCreateCompany
+            />
             {!editingId && (
-              <label className="flex items-center gap-2 text-xs text-steel-muted sm:col-span-2 lg:col-span-3">
+              <label className="flex items-center gap-2 text-xs text-steel-muted">
                 <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
                 Add to both Technical and Commercial
               </label>
             )}
-            <Button type="submit" className="sm:col-span-2 lg:col-span-3" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {editingId ? "Save row" : "Add to communication matrix"}
             </Button>
           </form>

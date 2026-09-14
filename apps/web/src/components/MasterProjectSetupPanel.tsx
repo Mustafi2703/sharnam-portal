@@ -397,6 +397,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
         project={summary.project}
         users={allUsers}
         vendors={catalogVendors.length ? catalogVendors : allVendors}
+        assignedVendors={(summary.vendors || []).map((v) => ({ vendorId: v.vendorId, partyType: v.partyType, name: v.name }))}
         canEdit
         onMsg={onMsg}
         onDirectoryChange={async () => {

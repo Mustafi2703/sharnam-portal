@@ -10,6 +10,7 @@ One file per document kind. Match the `kind` field exactly:
 
 - `Appointment.html`  ← SPDC_Letter_of_Appointment.docx → convert to HTML
 - `Offer.html`
+- `Promotion.html`    ← letter of promotion (name, previous/new role, revised CTC)
 - `Relieving.html`
 - `Exit.html`
 - `AssetReturn.html`
@@ -24,7 +25,8 @@ document record and the JSON blob supplied on create:
 
 - `{{employeeName}}`, `{{designation}}`, `{{department}}`, `{{candidateEmail}}`
 - `{{refNo}}`, `{{issueDate}}`, `{{effectiveDate}}`
-- `{{ctcAnnual}}` (Appointment / Offer)
+- `{{ctcAnnual}}` (Appointment / Offer / Promotion)
+- `{{newCtc}}`, `{{previousDesignation}}`, `{{newDesignation}}` (Promotion)
 - `{{location}}` (Appointment / Offer)
 - `{{assets}}`, `{{serials}}`, `{{condition}}`, `{{notes}}` (AssetReturn)
 - `{{reason}}` (Exit / Warning)

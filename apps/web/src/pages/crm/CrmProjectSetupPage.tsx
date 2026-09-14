@@ -144,7 +144,7 @@ export default function CrmProjectSetupPage() {
     if (!token || !canManage) return;
     const [p, u, v] = await Promise.all([
       api<ProjectRow[]>("/api/projects", { token }),
-      api<UserRow[]>("/api/users?kind=staff", { token }).catch(() => []),
+      api<UserRow[]>("/api/users", { token }).catch(() => []),
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
     ]);
     setProjects(p);
@@ -614,8 +614,8 @@ export default function CrmProjectSetupPage() {
         <div className="space-y-4">
           {summary && (
             <p className="text-xs text-steel-muted">
-              Assigned so far: {summary.members.length} people · {summary.vendors.length} companies. Add contacts to the
-              matrix only — create logins in Client / Consultant / Vendor directories, not here.
+              Assigned so far: {summary.members.length} people · {summary.vendors.length} companies. Search and auto-fill
+              from those lists. Add a missing consultant or vendor on the matrix — no need to leave this step.
             </p>
           )}
           <ProjectSetupMatrixDesk
@@ -624,6 +624,7 @@ export default function CrmProjectSetupPage() {
             project={summary?.project}
             users={users}
             vendors={vendors}
+            assignedVendors={(summary?.vendors || []).map((v) => ({ vendorId: v.vendorId, partyType: v.partyType, name: v.name }))}
             canEdit={canManage}
             onMsg={setMsg}
             onDirectoryChange={async () => {

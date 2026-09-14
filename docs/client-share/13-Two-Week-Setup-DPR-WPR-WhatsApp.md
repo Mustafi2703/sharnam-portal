@@ -186,7 +186,471 @@ Client and vendor only browse **their** assigned project. They **request access*
 3. **Publish** at least one sheet with a file if the job uses drawing-check / GFC.  
 
 Quality inspections do **not** wait for a published drawing — they use site observations and the instruction on each checklist line. Client never uploads drawings.
-
+SEP 13,13:56:04.766
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:04.767
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:04.767
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:05.076
+==> Sharnam portal boot
+SEP 13,13:56:05.077
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:05.077
+PORT: 4000
+SEP 13,13:56:05.077
+NODE: v22.18.0
+SEP 13,13:56:05.077
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:05.077
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:05.877
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:05.933
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:06.316
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:06.317
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:06.317
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:06.629
+==> Sharnam portal boot
+SEP 13,13:56:06.630
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:06.630
+PORT: 4000
+SEP 13,13:56:06.630
+NODE: v22.18.0
+SEP 13,13:56:06.631
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:06.631
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:07.295
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:07.348
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:07.366
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:07.366
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:07.367
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:07.649
+==> Sharnam portal boot
+SEP 13,13:56:07.650
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:07.650
+PORT: 4000
+SEP 13,13:56:07.650
+NODE: v22.18.0
+SEP 13,13:56:07.650
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:07.650
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:08.370
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:08.437
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:18.381
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:18.382
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:18.382
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:18.671
+==> Sharnam portal boot
+SEP 13,13:56:18.672
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:18.672
+PORT: 4000
+SEP 13,13:56:18.672
+NODE: v22.18.0
+SEP 13,13:56:18.672
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:18.672
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:19.360
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:19.414
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:19.565
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:19.566
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:19.566
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:19.888
+==> Sharnam portal boot
+SEP 13,13:56:19.889
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:19.889
+PORT: 4000
+SEP 13,13:56:19.889
+NODE: v22.18.0
+SEP 13,13:56:19.889
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:19.889
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:20.591
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:20.642
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:20.660
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:20.661
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:20.661
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:20.959
+==> Sharnam portal boot
+SEP 13,13:56:20.959
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:20.959
+PORT: 4000
+SEP 13,13:56:20.959
+NODE: v22.18.0
+SEP 13,13:56:20.959
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:20.959
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:21.656
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:21.712
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:35.636
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:35.636
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:35.637
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:35.913
+==> Sharnam portal boot
+SEP 13,13:56:35.914
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:35.914
+PORT: 4000
+SEP 13,13:56:35.914
+NODE: v22.18.0
+SEP 13,13:56:35.914
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:35.914
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:36.518
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:36.566
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:56:39.201
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:56:39.202
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:56:39.202
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:56:39.483
+==> Sharnam portal boot
+SEP 13,13:56:39.484
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:56:39.484
+PORT: 4000
+SEP 13,13:56:39.484
+NODE: v22.18.0
+SEP 13,13:56:39.484
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:56:39.484
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:56:40.063
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:56:40.111
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:57:12.569
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:57:12.570
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:57:12.570
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:57:12.861
+==> Sharnam portal boot
+SEP 13,13:57:12.862
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:57:12.862
+PORT: 4000
+SEP 13,13:57:12.862
+NODE: v22.18.0
+SEP 13,13:57:12.862
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:57:12.862
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:57:13.504
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:57:13.552
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:57:13.714
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:57:13.716
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:57:13.716
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:57:14.028
+==> Sharnam portal boot
+SEP 13,13:57:14.029
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:57:14.029
+PORT: 4000
+SEP 13,13:57:14.029
+NODE: v22.18.0
+SEP 13,13:57:14.029
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:57:14.029
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:57:14.686
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:57:14.736
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:57:14.761
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:57:14.762
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:57:14.762
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:58:13.815
+==> Sharnam portal boot
+SEP 13,13:58:13.816
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:58:13.816
+PORT: 4000
+SEP 13,13:58:13.816
+NODE: v22.18.0
+SEP 13,13:58:13.816
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:58:13.816
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:58:14.445
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:58:14.496
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:58:14.514
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:58:14.515
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:58:14.515
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:58:14.805
+==> Sharnam portal boot
+SEP 13,13:58:14.806
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:58:14.806
+PORT: 4000
+SEP 13,13:58:14.806
+NODE: v22.18.0
+SEP 13,13:58:14.806
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:58:14.806
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:58:15.440
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:58:15.495
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:58:31.183
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:58:31.185
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:58:31.185
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:58:31.483
+==> Sharnam portal boot
+SEP 13,13:58:31.484
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:58:31.484
+PORT: 4000
+SEP 13,13:58:31.484
+NODE: v22.18.0
+SEP 13,13:58:31.484
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:58:31.484
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:58:32.147
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:58:32.199
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:58:32.676
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:58:32.677
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:58:32.677
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:58:32.976
+==> Sharnam portal boot
+SEP 13,13:58:32.977
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:58:32.977
+PORT: 4000
+SEP 13,13:58:32.977
+NODE: v22.18.0
+SEP 13,13:58:32.977
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:58:32.977
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:58:33.651
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:58:33.701
+शरणम् API listening on http://0.0.0.0:4000
+SEP 13,13:58:33.719
+prisma:error
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+SEP 13,13:58:33.720
+ERROR unhandledRejection: PrismaClientKnownRequestError:
+Invalid `prisma.project.create()` invocation:
+Unique constraint failed on the constraint: `Project_code_key`
+at ei.handleRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:7268)
+at ei.handleAndLogRequestError (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6593)
+at ei.request (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:121:6300)
+at async a (/home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/node_modules/@prisma/client/runtime/library.js:130:9551)
+at async file:///home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/api/dist/routes/projects.js:351:21
+SEP 13,13:58:33.720
+FATAL: Prisma engine panic — exiting for clean Hostinger restart
+SEP 13,13:58:48.846
+==> Sharnam portal boot
+SEP 13,13:58:48.847
+cwd: /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs
+SEP 13,13:58:48.847
+PORT: 4000
+SEP 13,13:58:48.847
+NODE: v22.18.0
+SEP 13,13:58:48.847
+DATABASE: mysql://u252873650_sharnam_qryx:***@127.0.0.1:3306/u252873650_sharnam_portal?connection_limit=5&pool_timeout=20
+SEP 13,13:58:48.847
+MYSQL_USER: u252873650_sharnam_qryx
+SEP 13,13:58:49.463
+Serving web UI from /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a09807-cda1-7082-9309-f359fbc9a5d0/nodejs/apps/web/dist
+SEP 13,13:58:49.512
+शरणम् API listening on http://0.0.0.0:4000
 ### 3.6 Load the two report engines
 
 | Order | Module | Action | Why |

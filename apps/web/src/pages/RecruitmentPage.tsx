@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
+import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone } from "@sharnam/shared";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -19,7 +20,6 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-const CANDIDATE_STAGES = ["New", "Screened", "Shortlisted", "Interview", "Selected", "Offered", "Joined", "Rejected", "Withdrawn"] as const;
 const OFFER_STAGES = ["Draft", "Approved", "Sent", "Accepted", "Declined", "Withdrawn", "Joined"] as const;
 const INTERVIEW_STAGES = ["Scheduled", "Completed", "No-Show", "Cancelled"] as const;
 
@@ -327,9 +327,32 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
         <Input placeholder="Search name / email / skill" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
         <Select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="max-w-xs">
           <option value="">All stages</option>
-          {CANDIDATE_STAGES.map((s) => <option key={s}>{s}</option>)}
+          {CANDIDATE_STAGES.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
         </Select>
         <span className="text-xs text-steel-muted">{filtered.length} / {candidates.length}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {CANDIDATE_STAGES.map((s) => {
+          const n = candidates.filter((c: any) => c.status === s.id).length;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setFilterStage(filterStage === s.id ? "" : s.id)}
+              className={`text-[11px] rounded-full border px-2.5 py-1 ${
+                filterStage === s.id ? "border-ink bg-ink text-white" : "border-line bg-paper text-steel-muted hover:border-ink"
+              }`}
+            >
+              {s.label}
+              <span className="ml-1 font-mono tabular-nums">{n}</span>
+            </button>
+          );
+        })}
       </div>
 
       <Card padding={false}>
@@ -341,7 +364,12 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
             <tbody>
               {filtered.map((c: any) => (
                 <tr key={c.id} className="border-t border-line">
-                  <td className="p-2 font-medium">{c.fullName}</td>
+                  <td className="p-2">
+                    <div className="font-medium">{c.fullName}</div>
+                    <Badge tone={candidateStageTone(c.status)} className="mt-1">
+                      {candidateStageLabel(c.status)}
+                    </Badge>
+                  </td>
                   <td>{c.email}<br/>{c.phone}</td>
                   <td>{c.currentCompany || "—"}<br/><span className="text-steel-muted">{c.currentDesign || ""}</span></td>
                   <td className="text-right">{c.experienceYears || "—"}</td>
@@ -349,10 +377,14 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
                   <td className="text-right">{money(c.currentCtc)}</td>
                   <td className="text-right">{money(c.expectedCtc)}</td>
                   <td>{c.sourceChannel || "—"}</td>
-                  <td>{c.resumeUrl ? <a href={c.resumeUrl} target="_blank" rel="noreferrer" className="text-brand">↗ Open</a> : "—"}</td>
+                  <td>{c.resumeUrl ? <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className="text-brand">↗ Open</a> : "—"}</td>
                   <td>
                     <Select value={c.status} onChange={(e) => transition(c.id, e.target.value)} disabled={!canManage} className="!py-1">
-                      {CANDIDATE_STAGES.map((s) => <option key={s}>{s}</option>)}
+                      {CANDIDATE_STAGES.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}
+                        </option>
+                      ))}
                     </Select>
                   </td>
                   <td>
@@ -421,7 +453,7 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
         <h3 className="font-semibold text-sm mb-2">Pick candidate</h3>
         <Select value={candidateId} onChange={(e) => setCandidateId(e.target.value)} className="max-w-md">
           <option value="">— select —</option>
-          {candidates.map((c: any) => <option key={c.id} value={c.id}>{c.fullName} · {c.status}{c.currentCompany ? ` · ${c.currentCompany}` : ""}</option>)}
+          {candidates.map((c: any) => <option key={c.id} value={c.id}>{c.fullName} · {candidateStageLabel(c.status)}{c.currentCompany ? ` · ${c.currentCompany}` : ""}</option>)}
         </Select>
       </Card>
 
@@ -598,7 +630,9 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
     await reload();
   }
 
-  const shortlisted = candidates.filter((c: any) => ["Shortlisted", "Selected", "Interview"].includes(c.status));
+  const shortlisted = candidates.filter((c: any) =>
+    ["Shortlisted", "Interview", "Interviewed", "Selected", "SalaryDiscussion"].includes(c.status)
+  );
 
   return (
     <div className="space-y-3">

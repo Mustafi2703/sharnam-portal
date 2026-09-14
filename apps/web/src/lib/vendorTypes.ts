@@ -12,6 +12,21 @@ export function formatPartyType(partyType?: string | null) {
   return partyType || "Vendor / contractor";
 }
 
+/** CRM desks must not share company rows or form state. */
+export type VendorDesk = "client" | "consultant" | "vendor";
+
+export function vendorDesk(partyType?: string | null): VendorDesk {
+  if (partyType === "Client") return "client";
+  if (partyType === "Consultant" || partyType === "PMC" || partyType === "Designer") return "consultant";
+  return "vendor";
+}
+
+export function vendorDeskLabel(desk: VendorDesk | string | null | undefined) {
+  if (desk === "client" || desk === "Client") return "Clients";
+  if (desk === "consultant" || desk === "Consultant" || desk === "PMC" || desk === "Designer") return "Consultants";
+  return "Vendors / contractors";
+}
+
 /** Stored type for a new vendor/contractor row. */
 export function normalizeVendorPartyType(partyType?: string | null) {
   if (partyType === "Vendor") return "Contractor";

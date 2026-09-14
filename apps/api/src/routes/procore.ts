@@ -9,6 +9,29 @@ import { isChecklistFillRfiKind } from "../services/ensureFillRequestDraft.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
+const CONSULTANT_PARTY_TYPES = ["Consultant", "PMC", "Designer"] as const;
+
+function vendorDesk(partyType: string) {
+  if (partyType === "Client") return "client";
+  if ((CONSULTANT_PARTY_TYPES as readonly string[]).includes(partyType)) return "consultant";
+  return "vendor";
+}
+
+function vendorDeskLabel(partyType: string) {
+  if (vendorDesk(partyType) === "client") return "Clients";
+  if (vendorDesk(partyType) === "consultant") return "Consultants";
+  return "Vendors / contractors";
+}
+
+function partyTypeWhere(partyType?: string) {
+  if (!partyType) return {};
+  const requested = partyType.split(",").map((s) => s.trim()).filter(Boolean);
+  const expanded = requested.flatMap((t) => (t === "Contractor" || t === "Vendor" ? ["Contractor", "Vendor"] : [t]));
+  const unique = [...new Set(expanded)];
+  if (!unique.length) return {};
+  return { partyType: unique.length === 1 ? unique[0] : { in: unique } };
+}
+
 export const vendorsRouter = Router();
 vendorsRouter.use(requireAuth);
 
@@ -21,16 +44,10 @@ vendorsRouter.get("/", async (req: AuthedRequest, res) => {
     return res.json(mine ? [mine] : []);
   }
   const partyType = typeof req.query.partyType === "string" ? req.query.partyType : undefined;
-  const partyWhere =
-    partyType === "Contractor" || partyType === "Vendor"
-      ? { partyType: { in: ["Contractor", "Vendor"] } }
-      : partyType
-        ? { partyType }
-        : {};
   const vendors = await prisma.vendor.findMany({
     where: {
       isActive: true,
-      ...partyWhere,
+      ...partyTypeWhere(partyType),
     },
     include: { _count: { select: { projects: true } } },
     orderBy: [{ partyType: "asc" }, { name: "asc" }],
@@ -107,6 +124,11 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
   const existing = email
     ? await prisma.vendor.findFirst({ where: { email } })
     : await prisma.vendor.findFirst({ where: { name, partyType } });
+  if (existing && vendorDesk(existing.partyType) !== vendorDesk(partyType)) {
+    return res.status(409).json({
+      error: `${existing.name} is already on CRM → ${vendorDeskLabel(existing.partyType)}. Open that list to edit — this desk is only for ${vendorDeskLabel(partyType)}.`,
+    });
+  }
   const v = existing
     ? await prisma.vendor.update({ where: { id: existing.id }, data })
     : await prisma.vendor.create({ data: { ...data, createdVia: "Manual" } });
@@ -139,8 +161,15 @@ vendorsRouter.post("/seed-bid-catalog", requireRoles("admin", "office"), async (
 });
 
 vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const current = await prisma.vendor.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ error: "Company not found" });
   const data = { ...req.body };
   if (data.partyType === "Vendor") data.partyType = "Contractor";
+  if (data.partyType && vendorDesk(String(current.partyType)) !== vendorDesk(String(data.partyType))) {
+    return res.status(409).json({
+      error: `${current.name} is on CRM → ${vendorDeskLabel(current.partyType)}. Open that list to edit — party type cannot jump desks.`,
+    });
+  }
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
   res.json(v);
 });

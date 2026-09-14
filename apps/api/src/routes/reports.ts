@@ -10,10 +10,8 @@ import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
   buildDprPack,
   buildWprPack,
-  renderDprHtml,
-  renderWprHtml,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, istStartOfDay, IST_TIMEZONE } from "@sharnam/shared";
+import { formatIstTimeHHMM, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
 
 /** Auto clock-out at 18:00 IST for open punches (same day after EOD, or any prior day). */
 const EOD_CLOCK_OUT = "18:00";
@@ -57,9 +55,7 @@ import {
   analyticsToSheets,
   buildAnalyticsPack,
   buildModuleExport,
-  dprToSheets,
   workbookBuffer,
-  wprToSheets,
   sendStampedXlsx,
   type ModuleExportKey,
 } from "../services/brandedExport.js";
@@ -139,35 +135,31 @@ reportsRouter.get("/wpr/:projectId/pack", async (req, res) => {
 });
 
 reportsRouter.get("/dpr/:projectId/download.html", async (req, res) => {
-  const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
-  const html = renderDprHtml(pack);
-  const fname = `DPR-${pack.project.code}-${new Date(pack.date).toISOString().slice(0, 10)}.html`;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(html);
+  return res.status(409).json({
+    error: "Official DPR Excel / PDF is exported only from DPR Maker — not from this dashboard.",
+    maker: `/projects/${req.params.projectId}/dpr-maker`,
+  });
 });
 
 reportsRouter.get("/wpr/:projectId/download.html", async (req, res) => {
-  const pack = await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined);
-  const html = renderWprHtml(pack);
-  const fname = `WPR-${pack.project.code}-${new Date(pack.end).toISOString().slice(0, 10)}.html`;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.send(html);
+  return res.status(409).json({
+    error: "Official WPR pack is exported only from WPR Maker — not from this dashboard.",
+    maker: `/projects/${req.params.projectId}/wpr-maker`,
+  });
 });
 
 reportsRouter.get("/dpr/:projectId/download.xlsx", async (req, res) => {
-  const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
-  const buf = workbookBuffer(dprToSheets(pack), { title: "Daily Progress Report (DPR)", projectCode: pack.project.code });
-  const fname = `DPR-${pack.project.code}-${new Date(pack.date).toISOString().slice(0, 10)}.xlsx`;
-  await sendStampedXlsx(res, buf, fname);
+  return res.status(409).json({
+    error: "Official DPR Excel is exported only from DPR Maker — not from this dashboard.",
+    maker: `/projects/${req.params.projectId}/dpr-maker`,
+  });
 });
 
 reportsRouter.get("/wpr/:projectId/download.xlsx", async (req, res) => {
-  const pack = await buildWprPack(req.params.projectId, req.query.end ? String(req.query.end) : undefined);
-  const buf = workbookBuffer(wprToSheets(pack), { title: "Weekly Progress Report (WPR)", projectCode: pack.project.code });
-  const fname = `WPR-${pack.project.code}-${new Date(pack.end).toISOString().slice(0, 10)}.xlsx`;
-  await sendStampedXlsx(res, buf, fname);
+  return res.status(409).json({
+    error: "Official WPR Excel is exported only from WPR Maker — not from this dashboard.",
+    maker: `/projects/${req.params.projectId}/wpr-maker`,
+  });
 });
 
 /** Workday-style analytics dashboard pack */
@@ -1125,7 +1117,7 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
       prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "PendingHR", "Approved"] } } })
     ),
     safeCount("activeCandidates", () =>
-      prisma.candidate.count({ where: { status: { in: ["New", "Screened", "Shortlisted", "Interview", "Selected"] } } })
+      prisma.candidate.count({ where: { status: { in: [...ACTIVE_CANDIDATE_STAGES] } } })
     ),
     safeCount("onboardedUsers", () => prisma.offer.count({ where: { status: "Joined" } })),
     safeCount("onboardingInProgress", () => prisma.onboardingChecklist.count({ where: { userId: { not: null } } })),
@@ -1843,6 +1835,7 @@ const HRMS_DOC_KINDS = [
   "AssetReturn",
   "Offer",
   "Confirmation",
+  "Promotion",
   "Warning",
   "Experience",
 ] as const;
@@ -1862,6 +1855,7 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
     Exit: "EX",
     AssetReturn: "AR",
     Confirmation: "CF",
+    Promotion: "PR",
     Warning: "WR",
     Experience: "EC",
   };
@@ -1949,8 +1943,39 @@ hrmRouter.post("/hrms-documents/:id/generate", requireRoles("admin", "office"), 
       status: "Generated",
     },
   });
+  if (updated.employeeUserId && (updated.kind === "Appointment" || updated.kind === "Offer" || updated.kind === "Promotion")) {
+    const fileUrl = updated.sharePointUrl || updated.generatedPdfUrl || "";
+    const existing = await prisma.employeeDocument.findFirst({
+      where: { userId: updated.employeeUserId, category: updated.kind, title: { contains: updated.refNo } },
+    });
+    const doc = {
+      fileUrl,
+      storagePath: updated.storagePath,
+      issuedOn: new Date(),
+    };
+    if (existing) {
+      await prisma.employeeDocument.update({ where: { id: existing.id }, data: doc });
+    } else {
+      await prisma.employeeDocument.create({
+        data: {
+          userId: updated.employeeUserId,
+          category: updated.kind,
+          title: `${updated.kind} letter · ${updated.employeeName} · ${updated.refNo}`,
+          ...doc,
+        },
+      });
+    }
+  }
   await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
   res.json(updated);
+});
+
+hrmRouter.get("/hrms-documents/:id/preview", hrmDesk, async (req, res) => {
+  const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const { renderHrmsLetterHtml } = await import("../services/hrmsLetter.js");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(renderHrmsLetterHtml(row));
 });
 
 /** Upload the signed / scanned copy back and attach to the same record. */

@@ -326,6 +326,7 @@ export default function LiveProjectSetupPage() {
         project={summary?.project}
         users={users}
         vendors={vendors}
+        assignedVendors={(summary?.vendors || []).map((v) => ({ vendorId: v.vendorId, partyType: v.partyType, name: v.name }))}
         canEdit={canManage}
         onMsg={setMsg}
         onDirectoryChange={async () => {

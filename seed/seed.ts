@@ -2122,6 +2122,14 @@ async function main() {
     console.warn("seedArvindSitePack failed:", e instanceof Error ? e.message : e);
   }
 
+  try {
+    const { seedHrmsFlowDemo } = await import("./hrmsFlowDemo.ts");
+    const hrms = await seedHrmsFlowDemo(prisma);
+    console.log("HRMS flow demo:", hrms.user.email, hrms.appointmentRef, hrms.promotionRef);
+  } catch (e) {
+    console.warn("seedHrmsFlowDemo failed:", e instanceof Error ? e.message : e);
+  }
+
   console.log("Done.");
   console.log("Password for all demo users:", SEED_PASSWORD);
   console.log(

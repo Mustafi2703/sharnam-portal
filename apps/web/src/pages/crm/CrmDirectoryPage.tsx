@@ -23,10 +23,19 @@ import {
   EMPTY_VENDOR_FORM,
   VENDOR_PARTY_TYPES,
   formatPartyType,
+  vendorDesk,
+  vendorDeskLabel,
   vendorToForm,
   type VendorFormState,
   type VendorPartyType,
 } from "../../lib/vendorTypes";
+
+function directoryVendorsQuery(tab: string) {
+  if (tab === "vendors") return "?partyType=Contractor";
+  if (tab === "clients") return "?partyType=Client";
+  if (tab === "stakeholders") return "?partyType=Consultant,PMC,Designer";
+  return "";
+}
 import {
   CRM_BID_DISCIPLINES,
   formatVendorBidDisciplines,
@@ -90,8 +99,7 @@ export function DirectoryCompaniesPanel({
   const { types: consultantTypes } = useConsultantTypes(token);
 
   const load = useCallback(async () => {
-    const qs = tab === "vendors" ? "?partyType=Contractor" : tab === "clients" ? "?partyType=Client" : "";
-    const list = await api<VendorRow[]>(`/api/vendors${qs}`, { token });
+    const list = await api<VendorRow[]>(`/api/vendors${directoryVendorsQuery(tab)}`, { token });
     setRows(list.filter((r) => !meta.partyTypes.length || meta.partyTypes.includes(r.partyType as VendorPartyType)));
   }, [token, meta.partyTypes, tab]);
 
@@ -99,7 +107,21 @@ export function DirectoryCompaniesPanel({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setRows([]);
+    setSelectedId(null);
+    setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
+    setMsg("");
+    setLoginMsg("");
+    setLoginPassword("Demo@1234");
+    setListSearch("");
+  }, [tab, meta.defaultParty]);
+
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
+
+  useEffect(() => {
+    if (selectedId && !rows.some((r) => r.id === selectedId)) setSelectedId(null);
+  }, [rows, selectedId]);
 
   const visibleRows = useMemo(() => {
     const needle = listSearch.trim().toLowerCase();
@@ -123,13 +145,20 @@ export function DirectoryCompaniesPanel({
     requestAnimationFrame(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
+  const partyType = meta.partyTypes.includes(form.partyType) ? form.partyType : meta.defaultParty;
+
   async function save(e: FormEvent) {
     e.preventDefault();
     if (!canEdit) return;
     setMsg("");
+    const payload = { ...form, partyType };
     try {
       if (selectedId) {
-        await api(`/api/vendors/${selectedId}`, { method: "PATCH", token, body: JSON.stringify(form) });
+        if (!selected || vendorDesk(selected.partyType) !== vendorDesk(meta.defaultParty)) {
+          setMsg(`This company is not on ${vendorDeskLabel(meta.defaultParty)}. Open the matching CRM list to edit it.`);
+          return;
+        }
+        await api(`/api/vendors/${selectedId}`, { method: "PATCH", token, body: JSON.stringify(payload) });
         setMsg("Updated");
       } else {
         const created = await api<VendorRow & { login?: { email: string; created: boolean; tempPassword?: string } }>(
@@ -137,7 +166,7 @@ export function DirectoryCompaniesPanel({
           {
             method: "POST",
             token,
-            body: JSON.stringify({ ...form, createLogin: true, password: loginPassword }),
+            body: JSON.stringify({ ...payload, createLogin: true, password: loginPassword }),
           }
         );
         setSelectedId(created.id);
@@ -261,7 +290,7 @@ export function DirectoryCompaniesPanel({
         ) : null}
         <form className="space-y-3" onSubmit={save}>
           <Input required placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Select value={form.partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
+          <Select value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
             {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
@@ -534,18 +563,19 @@ export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null;
 
 /** CRM directories — vendors, clients, stakeholders, people. */
 export default function CrmDirectoryPage() {
-  const { tab = "vendors" } = useParams();
+  const { tab: rawTab = "vendors" } = useParams();
+  const tab = (rawTab && rawTab in TAB_META ? rawTab : "vendors") as keyof typeof TAB_META;
   const { token, user } = useAuth();
   const canEdit = user?.role === "admin" || user?.role === "office";
-  const meta = TAB_META[tab] || TAB_META.vendors;
+  const meta = TAB_META[tab];
 
   return (
     <div className="space-y-4">
       <PageHeader dense title={meta.title} subtitle={meta.subtitle} />
       {tab === "people" ? (
-        <DirectoryPeoplePanel token={token} canEdit={canEdit} />
+        <DirectoryPeoplePanel key="people" token={token} canEdit={canEdit} />
       ) : (
-        <DirectoryCompaniesPanel tab={tab as keyof typeof TAB_META} token={token} canEdit={canEdit} />
+        <DirectoryCompaniesPanel key={tab} tab={tab} token={token} canEdit={canEdit} />
       )}
     </div>
   );

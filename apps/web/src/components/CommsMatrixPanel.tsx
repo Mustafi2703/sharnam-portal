@@ -1,7 +1,16 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import { Badge, Button, Card, Input, Select } from "./ui";
+import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
+import {
+  EMPTY_MATRIX_FORM,
+  MatrixPartyFields,
+  partyForSection,
+  roleForSection,
+  type MatrixFormState,
+  type MatrixUser,
+  type MatrixVendor,
+} from "./MatrixPartyFields";
 
 export type MatrixContact = {
   id: string;
@@ -18,29 +27,27 @@ export type MatrixContact = {
   officeAddress?: string | null;
 };
 
-const ORG_SECTIONS = ["Client", "PMC", "Consultant", "Contractor", "Other"];
-
-const EMPTY_FORM = {
-  orgSection: "Client",
-  orgName: "",
-  personName: "",
-  designation: "",
-  company: "",
-  spoc: "",
-  mobile: "",
-  email: "",
-  mailRole: "CC",
-  officeAddress: "",
-};
+type AssignedVendor = { vendorId: string; partyType?: string; name?: string };
 
 type Props = {
   projectId: string;
   token: string;
-  project?: { name?: string; clientName?: string; designConsultant?: string; pmcName?: string } | null;
+  project?: {
+    name?: string;
+    clientName?: string;
+    clientEmail?: string | null;
+    clientContactName?: string | null;
+    clientPhone?: string | null;
+    clientAddress?: string | null;
+    designConsultant?: string;
+    contractorName?: string | null;
+    pmcName?: string;
+  } | null;
   matrixKind: "TECHNICAL" | "COMMERCIAL";
   onMatrixKindChange: (k: "TECHNICAL" | "COMMERCIAL") => void;
   contacts: MatrixContact[];
   canEdit: boolean;
+  allowCreateCompany?: boolean;
   onReload: () => Promise<void>;
   onMsg: (msg: string) => void;
 };
@@ -53,13 +60,40 @@ export function CommsMatrixPanel({
   onMatrixKindChange,
   contacts,
   canEdit,
+  allowCreateCompany = true,
   onReload,
   onMsg,
 }: Props) {
-  const [contactForm, setContactForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<MatrixFormState>({ ...EMPTY_MATRIX_FORM, bothMatrices: false });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
+  const [users, setUsers] = useState<MatrixUser[]>([]);
+  const [vendors, setVendors] = useState<MatrixVendor[]>([]);
+  const [assignedVendors, setAssignedVendors] = useState<AssignedVendor[]>([]);
+
+  const loadDirectory = useCallback(async () => {
+    const [u, v, overview] = await Promise.all([
+      api<MatrixUser[]>("/api/users", { token }).catch(() => []),
+      api<MatrixVendor[]>("/api/vendors", { token }).catch(() => []),
+      api<{ vendors?: { vendorId?: string; vendor?: { id: string; partyType?: string; name?: string }; partyType?: string; name?: string }[] }>(
+        `/api/directory/project/${projectId}/overview`,
+        { token },
+      ).catch(() => null),
+    ]);
+    setUsers(u);
+    setVendors(v);
+    setAssignedVendors(
+      (overview?.vendors || []).map((row) => ({
+        vendorId: row.vendorId || row.vendor?.id || "",
+        partyType: row.partyType || row.vendor?.partyType,
+        name: row.name || row.vendor?.name,
+      })).filter((row) => row.vendorId),
+    );
+  }, [token, projectId]);
+
+  useEffect(() => {
+    void loadDirectory();
+  }, [loadDirectory]);
 
   async function seedBpcl(force: boolean) {
     setBusy(true);
@@ -81,13 +115,29 @@ export function CommsMatrixPanel({
     e.preventDefault();
     setBusy(true);
     try {
-      await api(`/api/comms/contacts/${projectId}`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ ...contactForm, matrixKind, company: contactForm.company || contactForm.orgName }),
-      });
-      setContactForm({ ...EMPTY_FORM, orgSection: contactForm.orgSection, orgName: contactForm.orgName });
+      try {
+        await api(`/api/comms/contacts/${projectId}/from-setup`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({
+            ...form,
+            matrixKind,
+            bothMatrices: form.bothMatrices,
+            createDirectory: "none",
+            orgName: form.orgName || form.company,
+          }),
+        });
+      } catch {
+        await api(`/api/comms/contacts/${projectId}`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ ...form, matrixKind, company: form.company || form.orgName }),
+        });
+      }
+      setForm({ ...EMPTY_MATRIX_FORM, orgSection: form.orgSection, bothMatrices: false, vendorPartyType: partyForSection(form.orgSection), userRole: roleForSection(form.orgSection) });
       await onReload();
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not add row");
     } finally {
       setBusy(false);
     }
@@ -95,7 +145,8 @@ export function CommsMatrixPanel({
 
   function startEdit(row: MatrixContact) {
     setEditingId(row.id);
-    setEditForm({
+    setForm({
+      ...EMPTY_MATRIX_FORM,
       orgSection: row.orgSection || "Other",
       orgName: row.orgName || "",
       personName: row.personName || "",
@@ -106,6 +157,10 @@ export function CommsMatrixPanel({
       email: row.email || "",
       mailRole: row.mailRole || "CC",
       officeAddress: row.officeAddress || "",
+      bothMatrices: false,
+      createDirectory: "none",
+      vendorPartyType: partyForSection(row.orgSection || "Other"),
+      userRole: roleForSection(row.orgSection || "Other"),
     });
   }
 
@@ -117,7 +172,18 @@ export function CommsMatrixPanel({
       await api(`/api/comms/contacts/${editingId}`, {
         method: "PATCH",
         token,
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          orgSection: form.orgSection,
+          orgName: form.orgName || form.company,
+          personName: form.personName,
+          designation: form.designation,
+          company: form.company,
+          spoc: form.spoc,
+          mobile: form.mobile,
+          email: form.email,
+          mailRole: form.mailRole,
+          officeAddress: form.officeAddress,
+        }),
       });
       setEditingId(null);
       await onReload();
@@ -143,6 +209,24 @@ export function CommsMatrixPanel({
       setBusy(false);
     }
   }
+
+  const fields = (
+    <MatrixPartyFields
+      key={editingId || "new"}
+      form={form}
+      onChange={setForm}
+      users={users}
+      vendors={vendors}
+      assignedVendors={assignedVendors}
+      project={project}
+      projectId={projectId}
+      token={token}
+      editing={Boolean(editingId)}
+      onMsg={onMsg}
+      onDirectoryChange={allowCreateCompany ? loadDirectory : undefined}
+      allowCreateCompany={allowCreateCompany}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -177,25 +261,9 @@ export function CommsMatrixPanel({
       {editingId && canEdit && (
         <Card>
           <h3 className="font-semibold text-sm mb-3">Edit contact</h3>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={(e) => void saveEdit(e)}>
-            <Select value={editForm.orgSection} onChange={(e) => setEditForm({ ...editForm, orgSection: e.target.value })}>
-              {ORG_SECTIONS.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </Select>
-            <Input placeholder="Organisation" value={editForm.orgName} onChange={(e) => setEditForm({ ...editForm, orgName: e.target.value })} required />
-            <Input placeholder="Name" value={editForm.personName} onChange={(e) => setEditForm({ ...editForm, personName: e.target.value })} required />
-            <Input placeholder="Designation" value={editForm.designation} onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })} />
-            <Input placeholder="Company" value={editForm.company} onChange={(e) => setEditForm({ ...editForm, company: e.target.value })} />
-            <Input placeholder="SPOC" value={editForm.spoc} onChange={(e) => setEditForm({ ...editForm, spoc: e.target.value })} />
-            <Input placeholder="Mobile" value={editForm.mobile} onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })} />
-            <Input placeholder="E-mail" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-            <Select value={editForm.mailRole} onChange={(e) => setEditForm({ ...editForm, mailRole: e.target.value })}>
-              <option value="TO">TO</option>
-              <option value="CC">CC</option>
-            </Select>
-            <Input className="sm:col-span-2" placeholder="Office address" value={editForm.officeAddress} onChange={(e) => setEditForm({ ...editForm, officeAddress: e.target.value })} />
-            <div className="flex gap-2 sm:col-span-2">
+          <form className="space-y-3" onSubmit={(e) => void saveEdit(e)}>
+            {fields}
+            <div className="flex gap-2">
               <Button type="submit" disabled={busy}>
                 Save
               </Button>
@@ -209,25 +277,17 @@ export function CommsMatrixPanel({
 
       {canEdit && !editingId && (
         <Card>
-          <h3 className="font-semibold text-sm mb-3">Add contact</h3>
-          <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={(e) => void addContact(e)}>
-            <Select value={contactForm.orgSection} onChange={(e) => setContactForm({ ...contactForm, orgSection: e.target.value })}>
-              {ORG_SECTIONS.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </Select>
-            <Input placeholder="Organisation" value={contactForm.orgName} onChange={(e) => setContactForm({ ...contactForm, orgName: e.target.value })} required />
-            <Input placeholder="Name" value={contactForm.personName} onChange={(e) => setContactForm({ ...contactForm, personName: e.target.value })} />
-            <Input placeholder="Designation" value={contactForm.designation} onChange={(e) => setContactForm({ ...contactForm, designation: e.target.value })} />
-            <Input placeholder="Company" value={contactForm.company} onChange={(e) => setContactForm({ ...contactForm, company: e.target.value })} />
-            <Input placeholder="SPOC" value={contactForm.spoc} onChange={(e) => setContactForm({ ...contactForm, spoc: e.target.value })} />
-            <Input placeholder="Mobile" value={contactForm.mobile} onChange={(e) => setContactForm({ ...contactForm, mobile: e.target.value })} />
-            <Input placeholder="E-mail" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} />
-            <Select value={contactForm.mailRole} onChange={(e) => setContactForm({ ...contactForm, mailRole: e.target.value })}>
-              <option value="TO">TO</option>
-              <option value="CC">CC</option>
-            </Select>
-            <Input className="sm:col-span-2" placeholder="Office address" value={contactForm.officeAddress} onChange={(e) => setContactForm({ ...contactForm, officeAddress: e.target.value })} />
+          <h3 className="font-semibold text-sm mb-1">Add contact</h3>
+          <p className="text-[11px] text-steel-muted mb-3">
+            Search the matching directory for this party. Missing consultant or vendor? Add them here — you stay on this
+            matrix.
+          </p>
+          <form className="space-y-3" onSubmit={(e) => void addContact(e)}>
+            {fields}
+            <label className="flex items-center gap-2 text-xs text-steel-muted">
+              <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
+              Also add to the other matrix (Technical + Commercial)
+            </label>
             <Button type="submit" disabled={busy}>
               Add Row
             </Button>
@@ -312,7 +372,7 @@ export function CommsMatrixPanel({
             {!contacts.length && (
               <tr>
                 <td colSpan={canEdit ? 10 : 9} className="p-8 text-center text-steel-muted text-sm">
-                  No rows — click Load BPCL Excel to pre-fill technical and commercial matrices.
+                  No rows — import the project directory or add a Client / Consultant / Contractor from the lists above.
                 </td>
               </tr>
             )}

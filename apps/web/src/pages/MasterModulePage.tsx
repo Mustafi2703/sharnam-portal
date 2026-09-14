@@ -196,6 +196,7 @@ export default function MasterModulePage() {
             <DirectoryPeoplePanel token={token} canEdit={canManage} />
           ) : (
             <DirectoryCompaniesPanel
+              key={directoryTab}
               tab={directoryTab as "clients" | "vendors" | "stakeholders"}
               token={token}
               canEdit={canManage}

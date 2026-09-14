@@ -1172,7 +1172,7 @@ model Candidate {
   experienceYears  Float?
   skills           String?
   location         String?
-  /// New | Screened | Shortlisted | Interview | Selected | Offered | Joined | Rejected | Withdrawn
+  /// New | Screened | Shortlisted | Interview | Interviewed | Selected | SalaryDiscussion | Offered | Accepted | Joined | Rejected | Withdrawn
   status           String   @default("New")
   screenedById     String?
   rejectionReason  String?
@@ -2371,7 +2371,7 @@ model RaBillRevision {
  */
 model HrmsDocument {
   id               String    @id @default(cuid())
-  /// Appointment | Relieving | Exit | AssetReturn | Offer | Confirmation | Warning | Experience
+  /// Appointment | Relieving | Exit | AssetReturn | Offer | Confirmation | Promotion | Warning | Experience
   kind             String
   refNo            String
   employeeUserId   String?

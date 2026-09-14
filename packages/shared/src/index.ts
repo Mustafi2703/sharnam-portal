@@ -278,6 +278,15 @@ export {
 } from "./moduleRoles.js";
 
 export {
+  CANDIDATE_STAGES,
+  CANDIDATE_STAGE_IDS,
+  ACTIVE_CANDIDATE_STAGES,
+  candidateStageLabel,
+  candidateStageTone,
+  type CandidateStageId,
+} from "./hrmsStages.js";
+
+export {
   CUBE_SIZE_MM,
   cubeStrengthFromLoadKN,
   gradeTargetMPa,

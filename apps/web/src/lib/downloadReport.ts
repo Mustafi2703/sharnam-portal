@@ -26,9 +26,7 @@ export type ExportModule =
   | "drawings"
   | "progress"
   | "cost"
-  | "analytics"
-  | "dpr"
-  | "wpr";
+  | "analytics";
 
 export function exportPaths(projectId: string, kind: ExportModule) {
   if (kind === "analytics") {
@@ -37,22 +35,6 @@ export function exportPaths(projectId: string, kind: ExportModule) {
       html: `/api/reports/analytics/${projectId}/download.html`,
       xlsxName: `Sharnam-Analytics.xlsx`,
       htmlName: `Sharnam-Analytics.html`,
-    };
-  }
-  if (kind === "dpr") {
-    return {
-      xlsx: `/api/reports/dpr/${projectId}/download.xlsx`,
-      html: `/api/reports/dpr/${projectId}/download.html`,
-      xlsxName: `DPR.xlsx`,
-      htmlName: `DPR.html`,
-    };
-  }
-  if (kind === "wpr") {
-    return {
-      xlsx: `/api/reports/wpr/${projectId}/download.xlsx`,
-      html: `/api/reports/wpr/${projectId}/download.html`,
-      xlsxName: `WPR.xlsx`,
-      htmlName: `WPR.html`,
     };
   }
   return {

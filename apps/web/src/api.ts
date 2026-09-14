@@ -44,3 +44,12 @@ export function formatINR(n: number) {
     maximumFractionDigits: 0,
   }).format(n || 0);
 }
+
+/** Prefix API host for /uploads and relative Drive paths so letter previews actually open. */
+export function mediaUrl(path?: string | null) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = API_BASE.replace(/\/$/, "");
+  if (path.startsWith("/")) return `${base}${path}`;
+  return `${base}/${path}`;
+}

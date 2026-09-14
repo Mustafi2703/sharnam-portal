@@ -4,7 +4,7 @@ import { useAuth } from "../../auth";
 import { UploadModal } from "../../components/UploadModal";
 import { Badge, Button, Card, Select } from "../../components/ui";
 
-const FILE_KINDS = ["PAN", "Aadhaar", "Bank", "PF-ESIC", "Offer", "Appointment", "Payslip", "Medical", "BGV", "ID-card", "Other"];
+const FILE_KINDS = ["PAN", "Aadhaar", "Bank", "PF-ESIC", "Offer", "Appointment", "Promotion", "Payslip", "Medical", "BGV", "ID-card", "Other"];
 
 type StaffRow = {
   id: string;

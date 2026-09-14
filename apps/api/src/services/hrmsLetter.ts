@@ -23,6 +23,13 @@ import { mockOneDrive } from "./mockOneDrive.js";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
 
 const HRMS_LETTERS_FOLDER = "06_HR_AND_ADMIN/06.01_Letters";
+const HRMS_FILE_FOLDER = "06_HR_AND_ADMIN/06.02_Employee_Files";
+
+export function hrPersonFolder(name: string) {
+  return String(name || "Unknown")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .slice(0, 48) || "Unfiled";
+}
 
 /** Where the HR team drops editable format files (docx/html/txt) they want to be used. */
 function formatCandidates(kind: string): string[] {
@@ -104,6 +111,10 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
     ctc: ctcInr,
     reportingManager: String(data.reportingManager || data.reportingTo || "—"),
     reportingTo: String(data.reportingManager || data.reportingTo || "—"),
+    previousDesignation: String(data.previousDesignation || data.fromDesignation || "").trim() || "—",
+    newDesignation: String(data.newDesignation || designation || "").trim() || designation || "—",
+    previousCtc: formatInr(data.previousCtc ?? data.oldCtcAnnual ?? ""),
+    newCtc: formatInr(data.newCtc ?? data.newCtcAnnual ?? ctcRaw),
     empCode: String(data.empCode || "—"),
     address: String(data.address || "—"),
     probationMonths: String(data.probationMonths || "6"),
@@ -183,7 +194,7 @@ function defaultBody(kind: string, ctx: Record<string, unknown>): string {
   const designation = escapeHtml(ctx.designation || "____________");
   const department = escapeHtml(ctx.department || "____________");
   const location = escapeHtml(ctx.location || "SPDC Corporate Office, Vadodara");
-  const effective = escapeHtml(fmtDate(ctx.effectiveDate as Date | string | null));
+  const effective = escapeHtml(ctx.effectiveDate || ctx.joinDate || "____________");
   const ctc = escapeHtml(ctx.ctcAnnual || ctx.ctc || "____________");
   const reason = escapeHtml(ctx.reason || "");
 
@@ -201,7 +212,7 @@ function defaultBody(kind: string, ctx: Record<string, unknown>): string {
           <tr><td class="k">Function / Discipline</td><td>${department}</td></tr>
           <tr><td class="k">Base Location</td><td>${location}</td></tr>
           <tr><td class="k">Date of Joining</td><td>${effective}</td></tr>
-          <tr><td class="k">Fixed CTC (per annum)</td><td>INR ${ctc}</td></tr>
+          <tr><td class="k">Fixed CTC (per annum)</td><td>${ctc}</td></tr>
         </table>
         <p>The detailed terms and conditions are governed by the SPDC Letter of Appointment (17 clauses, Annexures I–III)
            and by the policies of the Firm as notified from time to time. Annexure I containing the compensation structure
@@ -214,7 +225,7 @@ function defaultBody(kind: string, ctx: Record<string, unknown>): string {
         <p>Dear ${name},</p>
         <p>With reference to your recent discussions with our HR team, we are pleased to offer you the role of
            <strong>${designation}</strong> at Sharnam Project Development Consultants &amp; Co., based at ${location}.
-           Your Fixed Cost to Company will be <strong>INR ${ctc}</strong> per annum, with the joining date on or before
+           Your Fixed Cost to Company will be <strong>${ctc}</strong> per annum, with the joining date on or before
            ${effective}. Kindly signify your acceptance within seven (7) days of the date of this letter.</p>
       `;
     case "Relieving":
@@ -256,8 +267,31 @@ function defaultBody(kind: string, ctx: Record<string, unknown>): string {
         <p>We are pleased to confirm your services with Sharnam Project Development Consultants &amp; Co. as
            <strong>${designation}</strong> in the ${department} function, with effect from ${effective}. Your performance
            during the probationary period has been noted as satisfactory. All other terms of your employment shall remain
-           as per your Letter of Appointment.</p>
+           unchanged except as notified in writing.</p>
       `;
+    case "Promotion": {
+      const previous = escapeHtml(ctx.previousDesignation || "____________");
+      const nextRole = escapeHtml(ctx.newDesignation || designation);
+      const newCtc = escapeHtml(ctx.newCtc || ctc);
+      return `
+        <h1 class="title">Letter of Promotion</h1>
+        <h2 class="subtitle">${nextRole} · ${department} · ${location}</h2>
+        <p>Dear ${name},</p>
+        <p>We are pleased to promote you from <strong>${previous}</strong> to <strong>${nextRole}</strong> in the
+           <strong>${department}</strong> function of Sharnam Project Development Consultants &amp; Co., with effect from
+           ${effective}.</p>
+        <table class="kv">
+          <tr><td class="k">Employee name</td><td>${name}</td></tr>
+          <tr><td class="k">Previous designation</td><td>${previous}</td></tr>
+          <tr><td class="k">New designation</td><td>${nextRole}</td></tr>
+          <tr><td class="k">Department</td><td>${department}</td></tr>
+          <tr><td class="k">Effective date</td><td>${effective}</td></tr>
+          <tr><td class="k">Revised Fixed CTC (per annum)</td><td>${newCtc}</td></tr>
+        </table>
+        <p>All other terms of your Letter of Appointment continue unless expressly revised by this letter. Please sign the
+           duplicate as token of acceptance.</p>
+      `;
+    }
     case "Warning":
       return `
         <h1 class="title">Notice of Concern</h1>
@@ -284,7 +318,7 @@ function defaultBody(kind: string, ctx: Record<string, unknown>): string {
 }
 
 function signBlock(kind: string): string {
-  const authority = kind === "Appointment" || kind === "Offer" || kind === "Confirmation"
+  const authority = kind === "Appointment" || kind === "Offer" || kind === "Confirmation" || kind === "Promotion"
     ? "For Sharnam Project Development Consultants &amp; Co."
     : "For SPDC — Human Resources";
   return `
@@ -371,6 +405,69 @@ async function buildAnnexureXlsx(row: HrmsDocument, ctx: Record<string, unknown>
   return Buffer.from(ab);
 }
 
+export function renderHrmsLetterHtml(row: HrmsDocument) {
+  let ctx: Record<string, unknown> = {};
+  try {
+    ctx = row.dataJson ? JSON.parse(row.dataJson) : {};
+  } catch {
+    ctx = {};
+  }
+  return assembleHtml(row, letterMergeContext(row, ctx));
+}
+
+export function renderHrPolicyAcknowledgement(ctx: {
+  employeeName: string;
+  designation?: string;
+  department?: string;
+  joinDate?: string;
+  acknowledgedAt?: string;
+}) {
+  const name = escapeHtml(ctx.employeeName || "____________");
+  const designation = escapeHtml(ctx.designation || "____________");
+  const department = escapeHtml(ctx.department || "____________");
+  const join = escapeHtml(ctx.joinDate || "____________");
+  const ack = escapeHtml(ctx.acknowledgedAt || fmtDate(new Date()));
+  const logo = sharnamLogoDataUri();
+  const img = logo
+    ? `<img src="${logo}" alt="Sharnam" style="height:56px" />`
+    : "";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>HR Policy Acknowledgement · ${name}</title>
+  <style>${LETTERHEAD_CSS}</style>
+</head>
+<body>
+  <div class="sheet">
+    <header class="letterhead">
+      ${img}
+      <div class="brand">
+        Sharnam Project Development Consultants &amp; Co.
+        <small>Human Resources · Policy acknowledgement</small>
+      </div>
+    </header>
+    <h1 class="title">HR Policy Acknowledgement</h1>
+    <h2 class="subtitle">${name} · ${designation} · ${department}</h2>
+    <p>I, <strong>${name}</strong>, designated <strong>${designation}</strong> in <strong>${department}</strong>,
+       joining on <strong>${join}</strong>, confirm that I have read, understood, and agree to abide by the
+       SPDC Human Resources policies as notified by the Firm, including:</p>
+    <table class="kv">
+      <tr><td class="k">Code of conduct</td><td>Professional behaviour, conflict of interest, gifts, and client confidentiality.</td></tr>
+      <tr><td class="k">Information security</td><td>Portal, email, drawings, and commercial data stay inside SPDC systems. No unauthorised sharing.</td></tr>
+      <tr><td class="k">Leave &amp; attendance</td><td>Leave is applied on the portal. Site / office punches follow the roster assigned by HR.</td></tr>
+      <tr><td class="k">Health &amp; safety</td><td>Site induction, PPE, and permit-to-work rules apply on every SPDC project.</td></tr>
+      <tr><td class="k">IT &amp; assets</td><td>Laptop, ID, and tools remain Firm property and are returned on exit.</td></tr>
+    </table>
+    <p>I understand that updates to these policies will be published on the HRMS portal and that continued employment
+       constitutes acceptance of the current version.</p>
+    <p><strong>Acknowledged on:</strong> ${ack}</p>
+    ${signBlock("Confirmation")}
+    <footer>Filed under 06.02 Employee Files / ${name} · SPDC HRMS</footer>
+  </div>
+</body>
+</html>`;
+}
 export async function generateHrmsLetter(row: HrmsDocument) {
   let ctx: Record<string, unknown> = {};
   try {
@@ -379,24 +476,32 @@ export async function generateHrmsLetter(row: HrmsDocument) {
     ctx = {};
   }
   const merged = letterMergeContext(row, ctx);
-  const personFolder = String(merged.employeeName || "Unknown")
-    .replace(/[^a-zA-Z0-9._-]+/g, "_")
-    .slice(0, 48);
-  const folder = `${HRMS_LETTERS_FOLDER}/${personFolder || "Unfiled"}`;
+  const personFolder = hrPersonFolder(String(merged.employeeName || ""));
+  const letterFolder = `${HRMS_LETTERS_FOLDER}/${personFolder}`;
+  const employeeFolder = `${HRMS_FILE_FOLDER}/${personFolder}/Letters`;
 
   const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
   const html = assembleHtml(row, merged);
   const htmlSaved = await mockOneDrive.upload(
     "_HR",
-    folder,
+    employeeFolder,
     `${row.kind}-${safeRef}.html`,
     Buffer.from(html, "utf8"),
-    "text/html; charset=utf-8"
+    "text/html; charset=utf-8",
+    { replace: true },
+  );
+  await mockOneDrive.upload(
+    "_HR",
+    letterFolder,
+    `${row.kind}-${safeRef}.html`,
+    Buffer.from(html, "utf8"),
+    "text/html; charset=utf-8",
+    { replace: true },
   );
 
   const ctcNum = numOrNull(ctx.fixedCtcAnnual ?? ctx.ctcAnnual ?? ctx.ctc);
   let xlsxBuf: Buffer;
-  if ((row.kind === "Appointment" || row.kind === "Offer") && ctcNum) {
+  if ((row.kind === "Appointment" || row.kind === "Offer" || row.kind === "Promotion") && ctcNum) {
     const { computeCtcBreakdown, buildAnnexureXlsx: buildCtcXlsx } = await import("./ctcAnnexure.js");
     const breakdown = computeCtcBreakdown({
       candidateName: String(merged.candidateName || ""),
@@ -417,10 +522,11 @@ export async function generateHrmsLetter(row: HrmsDocument) {
     const annexHtml = (await import("./ctcAnnexure.js")).buildAnnexureHtml(breakdown);
     await mockOneDrive.upload(
       "_HR",
-      folder,
+      employeeFolder,
       `${row.kind}-${safeRef}-Annexure-I.html`,
       Buffer.from(annexHtml, "utf8"),
-      "text/html; charset=utf-8"
+      "text/html; charset=utf-8",
+      { replace: true },
     );
   } else {
     xlsxBuf = await buildAnnexureXlsx(row, merged);
@@ -428,10 +534,11 @@ export async function generateHrmsLetter(row: HrmsDocument) {
 
   const xlsxSaved = await mockOneDrive.upload(
     "_HR",
-    folder,
+    employeeFolder,
     `${row.kind}-${safeRef}.xlsx`,
     xlsxBuf,
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    { replace: true },
   );
 
   return {
@@ -439,5 +546,6 @@ export async function generateHrmsLetter(row: HrmsDocument) {
     pdfUrl: htmlSaved.sharePointUrl || htmlSaved.url || `/uploads/onedrive/_HR/${htmlSaved.path}`,
     storagePath: htmlSaved.sharePointPath || htmlSaved.path,
     sharePointUrl: htmlSaved.sharePointUrl || htmlSaved.url || null,
+    folder: employeeFolder,
   };
 }
