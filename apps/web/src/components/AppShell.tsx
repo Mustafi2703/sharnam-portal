@@ -102,7 +102,7 @@ const ROLE_LABELS: Record<string, string> = {
 /** Office admin — full control surface */
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey; end?: boolean }[] = [
   { to: "/master/dms", label: "All-project DMS", icon: "dms" },
-  { to: "/login/hr", label: "HR portal", icon: "modules" },
+  { to: "/hrm", label: "HR portal", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
   { to: "/roles", label: "Access · Users", icon: "master" },
   { to: "/audit", label: "Audit trail", icon: "reports" },
@@ -589,7 +589,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link to="/crm" className="app-topbar__chip hover:border-brand">
                   CRM
                 </Link>
-                <Link to="/login/hr" className="app-topbar__chip hover:border-brand">
+                <Link to="/hrm" className="app-topbar__chip hover:border-brand">
                   HR portal
                 </Link>
               </div>

@@ -428,7 +428,7 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     const roleOk =
       cfg.allowedRoles.includes(user.role) || (cfg.key === "office" && staffEmployee);
     if (!roleOk) return <Navigate to={homePathForUser(user)} replace />;
-    return <Navigate to={homePathForUser(user)} replace />;
+    return <Navigate to={cfg.landingPath || homePathForUser(user)} replace />;
   }
 
   return (
