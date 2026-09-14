@@ -182,6 +182,7 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   }
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
   let login = null;
+  let projectsSynced = 0;
   if (v.email || password) {
     const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
     login = await syncDirectoryPortalLogin({
@@ -189,7 +190,11 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
       password,
     });
   }
-  res.json({ ...v, login });
+  if (v.partyType === "Client") {
+    const { syncClientVendorToLinkedProjects } = await import("../services/crmVendorCredentials.js");
+    projectsSynced = await syncClientVendorToLinkedProjects(v);
+  }
+  res.json({ ...v, login, projectsSynced });
 });
 
 vendorsRouter.delete("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

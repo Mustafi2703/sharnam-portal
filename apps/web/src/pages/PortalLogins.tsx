@@ -37,7 +37,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     demoEmail: "office@sharnam.demo", allowedRoles: ["admin", "office"],
     points: ["Projects · modules", "Directory · access", "Master documents"],
     cta: "Enter Master", tone: "#1E3A8A", icon: "MS",
-    landingPath: "/master", workspaceKey: null, group: "master",
+    landingPath: "/crm", workspaceKey: null, group: "master",
     policies: [...SHARNAM_PORTAL_POLICIES, "Master desk configures projects, modules, and global templates."],
   },
   office: {

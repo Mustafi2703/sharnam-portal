@@ -213,7 +213,7 @@ export default function App() {
                 <Route path="/workspace" element={<WorkspacePage />} />
                 <Route path="/training" element={<TrainingPage />} />
                 <Route path="/master" element={<MasterModulePage />} />
-                <Route path="/master/vendors" element={<Navigate to="/master?tab=vendors" replace />} />
+                <Route path="/master/vendors" element={<Navigate to="/crm/directory/vendors" replace />} />
                 <Route path="/master/checklists" element={<ChecklistMasterPage />} />
                 <Route path="/master/dms" element={<OfficeDmsViewerPage />} />
                 <Route path="/dms/open/:token" element={<DmsSharedOpenPage />} />

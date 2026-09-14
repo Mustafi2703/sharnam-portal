@@ -410,7 +410,7 @@ const G: Guide[] = [
       "Below are cards for Drawing-check master, Quality (QI) checklist master, and Safety checklist master — each opens the shared checklist editor filtered to that family.",
       "Every master has: Seed defaults · Add row · Upload XLSX · Download Sharnam-branded XLSX · Print info sheet.",
     ],
-    openTo: "/master",
+    openTo: "/crm",
     openLabel: "Open Master setup",
   },
   {

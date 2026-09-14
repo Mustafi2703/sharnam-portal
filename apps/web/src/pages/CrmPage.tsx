@@ -181,7 +181,12 @@ export default function CrmPage() {
       {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
 
       {section === "proposals" && (
-        <CrmProposalsRegister quotations={quotations} canWrite={canManage} onRefresh={() => void load()} />
+        <>
+          <p className="text-xs text-steel-muted max-w-3xl leading-relaxed">
+            PMC proposals live in SharePoint. Open a row to edit in Word, mark <strong className="text-ink">Sent to client</strong>, add a new version, then <strong className="text-ink">Award</strong> to put the job on Projects as Planning. Add companies on CRM → Clients — not on a separate directory page.
+          </p>
+          <CrmProposalsRegister quotations={quotations} canWrite={canManage} onRefresh={() => void load()} />
+        </>
       )}
 
       {section === "leads" && canManage && (

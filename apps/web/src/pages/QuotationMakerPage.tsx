@@ -249,7 +249,7 @@ export default function QuotationMakerPage() {
       <PageHeader
         eyebrow="CRM · Proposal"
         title={isEditing ? saved?.clientName || "Proposal" : "New proposal"}
-        subtitle="Generate the client format into SharePoint (05.03 / PMC_Proposals). Client changes add R1 / R2 on this register. Award puts a Planning job on Projects."
+        subtitle="SharePoint PMC format — edit in Word, mark sent, Award to Planning on Projects."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -330,22 +330,12 @@ export default function QuotationMakerPage() {
               {href ? (
                 <a href={href} target="_blank" rel="noopener noreferrer" className="block">
                   <Button type="button" className="w-full sm:w-auto">
-                    Open proposal in SharePoint / Drive →
+                    Open in SharePoint →
                   </Button>
                 </a>
               ) : (
-                <p className="text-sm text-warn">File link missing — use Download .docx below, then re-save to SharePoint.</p>
+                <p className="text-sm text-warn">File link missing — use Download .docx, then re-save to SharePoint.</p>
               )}
-              <div className="grid sm:grid-cols-2 gap-2 text-xs text-steel-muted">
-                <div className="rounded-lg border border-line p-3 bg-sand/30">
-                  <div className="font-mono uppercase text-[10px] mb-1">Folder</div>
-                  <code className="font-mono text-[11px]">05.03 Tender Documents / PMC_Proposals</code>
-                </div>
-                <div className="rounded-lg border border-line p-3 bg-sand/30">
-                  <div className="font-mono uppercase text-[10px] mb-1">Workflow</div>
-                  Draft → edit in Word → Sent to client → Done → Award
-                </div>
-              </div>
 
               {canWrite && (
                 <div className="space-y-3 border-t border-line pt-4">

@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { VendorManageActions } from "../../components/VendorManageActions";
-import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
-import { EMPTY_VENDOR_FORM, formatPartyType, VENDOR_PARTY_TYPES, type VendorPartyType } from "../../lib/vendorTypes";
+import { formatPartyType, isVendorOrContractor } from "../../lib/vendorTypes";
 
 export default function VendorsPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
-  const [directory, setDirectory] = useState<any[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
   const [assigned, setAssigned] = useState<any[]>([]);
-  const [form, setForm] = useState({ ...EMPTY_VENDOR_FORM, tradeRole: "" });
-  const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
+  const [vendorId, setVendorId] = useState("");
+  const [tradeRole, setTradeRole] = useState("");
+  const [msg, setMsg] = useState("");
   const canEdit = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
@@ -21,7 +22,7 @@ export default function VendorsPage() {
       api<any[]>("/api/vendors", { token }),
       api<any[]>(`/api/vendors/project/${id}`, { token }),
     ]);
-    setDirectory(all);
+    setVendors(all.filter((v) => isVendorOrContractor(v.partyType)));
     setAssigned(proj);
   };
 
@@ -29,148 +30,100 @@ export default function VendorsPage() {
     void load();
   }, [id, token]);
 
+  const assignOptions = useMemo(() => {
+    const onProject = new Set(assigned.map((a) => a.vendorId || a.vendor?.id));
+    return vendors
+      .filter((v) => !onProject.has(v.id))
+      .map((v) => ({
+        value: v.id,
+        label: v.name,
+        sublabel: [v.trade, v.email].filter(Boolean).join(" · ") || undefined,
+        keywords: `${v.name} ${v.email || ""} ${v.trade || ""}`,
+      }));
+  }, [vendors, assigned]);
+
+  async function assignVendor(e: FormEvent) {
+    e.preventDefault();
+    if (!vendorId || !id) return;
+    await api(`/api/vendors/project/${id}/assign`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ vendorId, tradeRole: tradeRole || undefined }),
+    });
+    setVendorId("");
+    setTradeRole("");
+    setMsg("Company linked from CRM directory.");
+    await load();
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Project directory"
+        eyebrow="Project · vendors"
         title="Vendors / contractors on this project"
-        subtitle="Assign companies from the global directory, or create a new company and assign a trade role here."
+        subtitle="Assign companies from the CRM vendor directory. Add or edit the master record on CRM → Vendors — not here."
         actions={
-          <Link to="/master/vendors" className="text-sm font-semibold text-brand">
-            Company directory (global) →
+          <Link to="/crm/directory/vendors" className="text-sm font-semibold text-brand">
+            CRM vendor directory →
           </Link>
         }
       />
 
+      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-xl">{msg}</p>}
+
       {canEdit && (
-        <Card>
-          <h3 className="font-semibold mb-3">Create company & assign</h3>
-          <p className="text-xs text-steel-muted mb-3">
-            For full profile (address, website, flags) use{" "}
-            <Link to="/master/vendors" className="text-brand font-semibold">
-              Master → Company vendors
-            </Link>
-            .
-          </p>
-          <form
-            className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const { tradeRole, ...vendorBody } = form;
-              const v = await api<any>("/api/vendors", { method: "POST", token, body: JSON.stringify(vendorBody) });
-              await api(`/api/vendors/project/${id}/assign`, {
-                method: "POST",
-                token,
-                body: JSON.stringify({ vendorId: v.id, tradeRole: tradeRole || form.trade }),
-              });
-              setForm({ ...EMPTY_VENDOR_FORM, tradeRole: "" });
-              await load();
-            }}
-          >
-            <Input required placeholder="Company name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Select value={form.partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
-              {VENDOR_PARTY_TYPES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-            <Input placeholder="Trade on this project" value={form.tradeRole} onChange={(e) => setForm({ ...form, tradeRole: e.target.value })} />
-            <Input placeholder="Primary contact" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-            <Input placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-            <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-            <Input placeholder="GST" value={form.gstNumber} onChange={(e) => setForm({ ...form, gstNumber: e.target.value })} />
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.isPrequalified} onChange={(e) => setForm({ ...form, isPrequalified: e.target.checked })} /> Prequalified
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={form.insuranceVerified} onChange={(e) => setForm({ ...form, insuranceVerified: e.target.checked })} /> Insurance verified
-            </label>
-            <Button type="submit" className="sm:col-span-2 lg:col-span-3 w-fit">
-              Create & assign
-            </Button>
+        <Card className="!p-4">
+          <form className="flex flex-wrap gap-2 items-end" onSubmit={(e) => void assignVendor(e)}>
+            <SearchableSelect
+              className="min-w-[220px] flex-1"
+              options={assignOptions}
+              value={vendorId}
+              onChange={setVendorId}
+              placeholder="Pick from CRM directory…"
+              searchPlaceholder="Search contractor…"
+              required
+            />
+            <Input
+              className="min-w-[160px]"
+              placeholder="Trade on this job"
+              value={tradeRole}
+              onChange={(e) => setTradeRole(e.target.value)}
+            />
+            <Button type="submit">Assign</Button>
           </form>
         </Card>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">On this project</div>
-          <ul className="divide-y divide-line max-h-96 overflow-y-auto">
-            {assigned.map((a) => (
-              <li key={a.id} className="px-4 py-3 text-sm space-y-2">
-                <div className="flex justify-between gap-2">
-                  <span className="font-medium">{a.vendor.name}</span>
-                  <Badge tone="neutral">{formatPartyType(a.vendor.partyType)}</Badge>
-                </div>
-                <div className="text-steel-muted text-xs">
-                  {a.tradeRole || a.vendor.trade || "—"} · {a.vendor.city || "—"}
-                  {a.vendor.isPrequalified ? " · Prequalified" : ""}
-                </div>
-                {canEdit ? (
-                  <VendorManageActions
-                    vendor={a.vendor}
-                    token={token}
-                    projectId={id}
-                    onEdit={() => setEditVendor(a.vendor)}
-                    onChanged={() => void load()}
-                  />
-                ) : null}
-              </li>
-            ))}
-            {!assigned.length && <li className="p-4 text-steel-muted text-sm">No vendors assigned yet.</li>}
-          </ul>
-        </Card>
-
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">Global company directory</div>
-          <ul className="divide-y divide-line max-h-96 overflow-y-auto">
-            {directory.map((v) => (
-              <li key={v.id} className="px-4 py-3 text-sm flex flex-wrap justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-medium">{v.name}</div>
-                  <div className="text-xs text-steel-muted">
-                    {formatPartyType(v.partyType)} · {v.trade || "General"} · {v.primaryContactName || "—"}
-                  </div>
-                </div>
-                {canEdit && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="text-xs text-brand font-medium shrink-0"
-                      onClick={async () => {
-                        await api(`/api/vendors/project/${id}/assign`, {
-                          method: "POST",
-                          token,
-                          body: JSON.stringify({ vendorId: v.id, tradeRole: v.trade }),
-                        });
-                        await load();
-                      }}
-                    >
-                      Assign
-                    </button>
-                    <VendorManageActions
-                      vendor={v}
-                      token={token}
-                      onEdit={() => setEditVendor(v)}
-                      onChanged={() => void load()}
-                    />
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
-
-      <VendorQuickEditModal
-        open={!!editVendor}
-        vendor={editVendor}
-        token={token}
-        onClose={() => setEditVendor(null)}
-        onSaved={() => void load()}
-      />
+      <Card padding={false}>
+        <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">On this project</div>
+        <ul className="divide-y divide-line">
+          {assigned.map((a) => (
+            <li key={a.id} className="px-4 py-3 text-sm space-y-2">
+              <div className="flex justify-between gap-2">
+                <span className="font-medium">{a.vendor.name}</span>
+                <Badge tone="neutral">{formatPartyType(a.vendor.partyType)}</Badge>
+              </div>
+              <div className="text-steel-muted text-xs">
+                {a.tradeRole || a.vendor.trade || "—"} · {a.vendor.email || "—"}
+              </div>
+              {canEdit ? (
+                <VendorManageActions
+                  vendor={a.vendor}
+                  token={token}
+                  projectId={id}
+                  showEdit={false}
+                  onChanged={() => void load()}
+                />
+              ) : null}
+            </li>
+          ))}
+          {!assigned.length && (
+            <li className="p-4 text-steel-muted text-sm">
+              No vendors assigned yet. Pick from CRM directory above or add a company on CRM → Vendors.
+            </li>
+          )}
+        </ul>
+      </Card>
     </div>
   );
 }

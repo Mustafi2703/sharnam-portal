@@ -20,12 +20,12 @@ export const CRM_HUB = { to: "", label: "Hub", subtitle: "CRM desk — open each
 export const CRM_SECTIONS: CrmSection[] = [
   {
     id: "directories",
-    label: "People & companies",
+    label: "Directory",
     tools: [
-      { to: "directory/clients", label: "Clients", subtitle: "Add the owner — company, contact, email, phone — client portal login is created here." },
+      { to: "directory/clients", label: "Clients", subtitle: "Client master — company, contact, portal login. Edits sync to linked projects." },
       { to: "directory/stakeholders", label: "Consultants", subtitle: "Consultants and PMC firms. Stakeholder login is created here." },
-      { to: "directory/vendors", label: "Vendors / contractors", subtitle: "Separate contractor master. Login at /login/vendor." },
-      { to: "packages", label: "Package management", subtitle: "Org work-package catalogue. Tick packages on a job in Project setup." },
+      { to: "directory/vendors", label: "Vendors / contractors", subtitle: "Contractor master for bid packages and project assignment." },
+      { to: "packages", label: "Work packages", subtitle: "Org catalogue — tick packages on a job in Project setup." },
     ],
   },
   {
@@ -35,7 +35,7 @@ export const CRM_SECTIONS: CrmSection[] = [
       { to: "setup", label: "Project setup", subtitle: "Client card, consultants, vendors, packages, and SPDC staff. Open any time from Projects → Edit card & team to add more during the job." },
       { to: "projects", label: "Projects", subtitle: "Register of delivery jobs. Edit card & team adds consultants, vendors, and employees — during setup or after launch." },
       { to: "leads", label: "Leads", subtitle: "Market register · convert to a PMC proposal (SharePoint). Award later to open Project setup." },
-      { to: "proposals", label: "Proposals", subtitle: "Client format in SharePoint. Add R0/R1/R2 on this register, then Award to the projects register." },
+      { to: "proposals", label: "Proposals", subtitle: "SharePoint PMC format — edit in Word, mark sent, Award to Planning on Projects." },
     ],
   },
   {
@@ -45,7 +45,7 @@ export const CRM_SECTIONS: CrmSection[] = [
       {
         to: "bids",
         label: "Bid management",
-        subtitle: "Separate from project setup. Pick a project, select vendors, open the bid — they see it on /login/vendor.",
+        subtitle: "Pick a project, add CRM vendors, open the bid — contractors upload BOQs at /login/vendor.",
       },
     ],
   },

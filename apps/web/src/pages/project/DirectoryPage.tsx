@@ -7,11 +7,8 @@ import { matchesSearch, SearchableSelect } from "../../components/SearchableSele
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
-import { ConsultantTypeSelect } from "../../components/ConsultantTypesPanel";
-import { useConsultantTypes } from "../../lib/consultantTypes";
 import { formatPartyType } from "../../lib/vendorTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
-import { VendorQuickEditModal, type VendorQuickEditRow } from "../../components/VendorQuickEditModal";
 import { PortalAccountFields } from "../../components/PortalAccountFields";
 import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
 import { UserManageActions } from "../../components/UserManageActions";
@@ -37,7 +34,11 @@ const USER_TOOLS: {
   { key: "Contractor", label: "Vendor / contractor", party: "Contractor", roles: [] },
 ];
 
-const PARTY_TYPES = ["PMC", "Contractor", "Client", "Consultant", "Designer"] as const;
+function crmDirectoryHref(party: string) {
+  if (party === "Client") return "/crm/directory/clients";
+  if (party === "Contractor" || party === "Vendor") return "/crm/directory/vendors";
+  return "/crm/directory/stakeholders";
+}
 
 /** Project directory — four user tools: Office · Site · Client · Contractor */
 export default function DirectoryPage() {
@@ -52,17 +53,7 @@ export default function DirectoryPage() {
   const [role, setRole] = useState("member");
   const [vendorId, setVendorId] = useState("");
   const [trade, setTrade] = useState("");
-  const [partyForm, setPartyForm] = useState({
-    name: "",
-    partyType: "Contractor" as (typeof PARTY_TYPES)[number],
-    trade: "",
-    email: "",
-    primaryContactName: "",
-    businessPhone: "",
-    city: "",
-  });
   const [msg, setMsg] = useState("");
-  const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
   const [listQ, setListQ] = useState("");
   const canEdit = user?.role === "admin" || user?.role === "office";
   const [userForm, setUserForm] = useState<PortalAccountForm>({
@@ -72,15 +63,10 @@ export default function DirectoryPage() {
   });
   const [userKind, setUserKind] = useState<PortalAccountKind>("staff");
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
-  const { types: consultantTypes } = useConsultantTypes(token);
 
   const activeTool = USER_TOOLS.find((t) => t.party === partyTab) || USER_TOOLS[0];
 
   useEffect(() => {
-    setPartyForm((f) => ({
-      ...f,
-      partyType: (activeTool.party === "Site" ? "Contractor" : activeTool.party) as (typeof PARTY_TYPES)[number],
-    }));
     if (activeTool.party === "Client") {
       setUserKind("client");
       setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "client" });
@@ -152,32 +138,6 @@ export default function DirectoryPage() {
     return allParties.filter((v) => want.includes(v.partyType));
   }, [allParties, activeTool.party]);
 
-  async function createParty(e: FormEvent) {
-    e.preventDefault();
-    setMsg("");
-    const created = await api<any>("/api/vendors", {
-      method: "POST",
-      token,
-      body: JSON.stringify(partyForm),
-    });
-    await api(`/api/vendors/project/${id}/assign`, {
-      method: "POST",
-      token,
-      body: JSON.stringify({ vendorId: created.id, tradeRole: partyForm.trade || partyForm.partyType }),
-    });
-    setPartyForm({
-      name: "",
-      partyType: partyForm.partyType,
-      trade: "",
-      email: "",
-      primaryContactName: "",
-      businessPhone: "",
-      city: "",
-    });
-    setMsg(`${created.partyType} added to directory and project`);
-    await load();
-  }
-
   async function assignExistingParty(e: FormEvent) {
     e.preventDefault();
     if (!vendorId) return;
@@ -186,7 +146,7 @@ export default function DirectoryPage() {
       token,
       body: JSON.stringify({ vendorId, tradeRole: trade }),
     });
-    setMsg("Party linked from global directory.");
+    setMsg("Party linked from CRM directory.");
     setVendorId("");
     await load();
   }
@@ -194,19 +154,19 @@ export default function DirectoryPage() {
   return (
     <div className="space-y-6 w-full">
       <PageHeader
-        eyebrow="Directory · Master tools"
-        title="Four user kinds"
-        subtitle="Sharnam Office · Site · Client · Vendor / contractor — assign people and parties for matrix, RFIs, and fills."
+        eyebrow="Project · directory"
+        title="People on this job"
+        subtitle="Assign SPDC staff and link companies already in CRM. Add or edit client, consultant, and vendor master records on CRM directory tabs only."
         actions={
           <div className="flex flex-wrap gap-3">
-            <Link to="/master/vendors" className="text-sm font-semibold text-brand">
-              Company directory →
+            <Link to="/crm/directory/clients" className="text-sm font-semibold text-brand">
+              CRM clients →
             </Link>
-            <Link to={`/projects/${id}/vendors`} className="text-sm font-semibold text-brand">
-              Project vendors →
+            <Link to="/crm/directory/stakeholders" className="text-sm font-semibold text-brand">
+              CRM consultants →
             </Link>
-            <Link to="/master" className="text-sm font-semibold text-brand">
-              Master →
+            <Link to="/crm/directory/vendors" className="text-sm font-semibold text-brand">
+              CRM vendors →
             </Link>
           </div>
         }
@@ -338,18 +298,7 @@ export default function DirectoryPage() {
                     vendor={{ id: r.vendor?.id || r.vendorId || r.id, name: r.vendor?.name || r.name }}
                     token={token}
                     projectId={id}
-                    onEdit={() =>
-                      setEditVendor({
-                        id: r.vendor?.id || r.vendorId || r.id,
-                        name: r.vendor?.name || r.name,
-                        partyType: r.vendor?.partyType || r.partyType,
-                        email: r.vendor?.email || r.email,
-                        businessPhone: r.vendor?.businessPhone,
-                        primaryContactName: r.vendor?.primaryContactName,
-                        city: r.vendor?.city,
-                        trade: r.tradeRole || r.vendor?.trade,
-                      })
-                    }
+                    showEdit={false}
                     onChanged={() => void load()}
                   />
                 ) : null}
@@ -364,57 +313,15 @@ export default function DirectoryPage() {
 
       {canEdit && (
         <div className="grid lg:grid-cols-2 gap-4">
-          <Card>
-            <h3 className="font-semibold mb-3 text-sm">Add {activeTool.label} party</h3>
-            <form className="grid sm:grid-cols-2 gap-3" onSubmit={createParty}>
-              <Select
-                value={partyForm.partyType}
-                onChange={(e) => setPartyForm({ ...partyForm, partyType: e.target.value as (typeof PARTY_TYPES)[number] })}
-              >
-                {PARTY_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {formatPartyType(t)}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                placeholder="Company / party name"
-                value={partyForm.name}
-                onChange={(e) => setPartyForm({ ...partyForm, name: e.target.value })}
-                required
-              />
-              {partyForm.partyType === "Consultant" || partyForm.partyType === "Designer" ? (
-                <ConsultantTypeSelect
-                  value={partyForm.trade}
-                  onChange={(trade) => setPartyForm({ ...partyForm, trade })}
-                  types={consultantTypes}
-                />
-              ) : (
-                <Input
-                  placeholder="Trade / role"
-                  value={partyForm.trade}
-                  onChange={(e) => setPartyForm({ ...partyForm, trade: e.target.value })}
-                />
-              )}
-              <Input
-                placeholder="Primary contact"
-                value={partyForm.primaryContactName}
-                onChange={(e) => setPartyForm({ ...partyForm, primaryContactName: e.target.value })}
-              />
-              <Input
-                placeholder="Email"
-                value={partyForm.email}
-                onChange={(e) => setPartyForm({ ...partyForm, email: e.target.value })}
-              />
-              <Input
-                placeholder="Phone (contact — optional)"
-                value={partyForm.businessPhone}
-                onChange={(e) => setPartyForm({ ...partyForm, businessPhone: e.target.value })}
-              />
-              <Button type="submit" className="sm:col-span-2">
-                Create & assign
-              </Button>
-            </form>
+          <Card className="!p-4 bg-sand/30">
+            <h3 className="font-semibold mb-2 text-sm">Company master is on CRM</h3>
+            <p className="text-xs text-steel-muted mb-3">
+              Add or edit {activeTool.label.toLowerCase()} companies on{" "}
+              <Link to={crmDirectoryHref(activeTool.party)} className="text-brand font-semibold">
+                CRM directory
+              </Link>
+              , then link them to this project below.
+            </p>
           </Card>
 
           <Card>
@@ -525,7 +432,7 @@ export default function DirectoryPage() {
                 }))}
                 value={vendorId}
                 onChange={setVendorId}
-                placeholder="Link from global directory…"
+                placeholder="Link from CRM directory…"
                 searchPlaceholder="Search company by name, contact, or email…"
                 required
               />
@@ -538,13 +445,6 @@ export default function DirectoryPage() {
         </div>
       )}
 
-      <VendorQuickEditModal
-        open={!!editVendor}
-        vendor={editVendor}
-        token={token}
-        onClose={() => setEditVendor(null)}
-        onSaved={() => void load()}
-      />
       <UserAccountEditModal
         open={!!editUser}
         user={editUser}

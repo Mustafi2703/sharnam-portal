@@ -62,7 +62,7 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
     icon: "modules",
     roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
   },
-  { to: "/master", label: "Directory", icon: "master", roles: ["admin", "office"] },
+  { to: "/crm", label: "CRM", icon: "modules", roles: ["admin", "office"] },
   {
     to: "/training",
     label: "Training",
@@ -101,8 +101,6 @@ const ROLE_LABELS: Record<string, string> = {
 
 /** Office admin — full control surface */
 const officeAdminNav: { to: string; label: string; icon: ModuleIconKey; end?: boolean }[] = [
-  { to: "/crm", label: "CRM", icon: "modules", end: true },
-  { to: "/crm/bids", label: "Bid management", icon: "cost" },
   { to: "/master/dms", label: "All-project DMS", icon: "dms" },
   { to: "/login/hr", label: "HR portal", icon: "modules" },
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },

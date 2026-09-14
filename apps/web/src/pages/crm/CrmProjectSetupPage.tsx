@@ -258,6 +258,9 @@ export default function CrmProjectSetupPage() {
           memberIds: staffIds,
         }),
       });
+      if (clientId) {
+        await syncLinkedClientVendor(clientId, createForm);
+      }
       setCreateForm(EMPTY_PROJECT);
       await loadLists();
       setStep("project", created.id);
@@ -282,6 +285,9 @@ export default function CrmProjectSetupPage() {
       const firstConsultant = vendors.find((v) => consultantIds.includes(v.id));
       const firstContractor = vendors.find((v) => contractorIds.includes(v.id));
       const firstPmc = vendors.find((v) => pmcIds.includes(v.id));
+      if (clientId) {
+        await syncLinkedClientVendor(clientId, details);
+      }
       await api(`/api/projects/${projectId}/settings`, {
         method: "PATCH",
         token,
@@ -324,6 +330,7 @@ export default function CrmProjectSetupPage() {
           : "Project card saved. Technical and commercial matrices filled from this card. No new login was created."
       );
       await loadProject();
+      await loadLists();
       setStep("project", projectId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
@@ -366,6 +373,26 @@ export default function CrmProjectSetupPage() {
     };
     if (into === "create") setCreateForm((f) => ({ ...f, ...patch }));
     else setDetails((f) => ({ ...f, ...patch }));
+  }
+
+  async function syncLinkedClientVendor(
+    id: string,
+    card: Pick<typeof EMPTY_PROJECT, "clientName" | "clientContactName" | "clientEmail" | "clientPhone" | "clientAddress" | "clientGst">,
+  ) {
+    if (!token || !id) return;
+    await api(`/api/vendors/${id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({
+        name: card.clientName,
+        primaryContactName: card.clientContactName,
+        email: card.clientEmail,
+        businessPhone: card.clientPhone,
+        address: card.clientAddress,
+        gstNumber: card.clientGst,
+        partyType: "Client",
+      }),
+    });
   }
 
   const clientOptions = vendors.filter((v) => v.partyType === "Client");
@@ -541,9 +568,11 @@ export default function CrmProjectSetupPage() {
               <div className="sm:col-span-2 space-y-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-steel-muted">Client (from Client directory)</span>
-                  <Link to="/crm/directory/clients" className="text-[11px] font-semibold text-brand">
-                    Add a client + login →
-                  </Link>
+                  {canManage ? (
+                    <Link to="/crm/directory/clients" className="text-[11px] font-semibold text-brand">
+                      Add new client →
+                    </Link>
+                  ) : null}
                 </div>
                 <SearchableSelect
                   options={clientOptions.map((c) => ({
@@ -557,48 +586,69 @@ export default function CrmProjectSetupPage() {
                   placeholder="Pick client company…"
                   searchPlaceholder="Search client directory…"
                 />
-                <div className="grid sm:grid-cols-2 gap-2 rounded-lg border border-line bg-sand/30 p-3">
-                  <Input
-                    placeholder="Client company"
-                    value={projectId ? details.clientName : createForm.clientName}
-                    onChange={(e) =>
-                      projectId
-                        ? setDetails({ ...details, clientName: e.target.value })
-                        : setCreateForm({ ...createForm, clientName: e.target.value })
-                    }
-                  />
-                  <Input
-                    placeholder="Contact name"
-                    value={projectId ? details.clientContactName : createForm.clientContactName}
-                    onChange={(e) =>
-                      projectId
-                        ? setDetails({ ...details, clientContactName: e.target.value })
-                        : setCreateForm({ ...createForm, clientContactName: e.target.value })
-                    }
-                  />
-                  <Input
-                    type="email"
-                    placeholder="Client email (login)"
-                    value={projectId ? details.clientEmail : createForm.clientEmail}
-                    onChange={(e) =>
-                      projectId
-                        ? setDetails({ ...details, clientEmail: e.target.value })
-                        : setCreateForm({ ...createForm, clientEmail: e.target.value })
-                    }
-                  />
-                  <Input
-                    placeholder="Phone"
-                    value={projectId ? details.clientPhone : createForm.clientPhone}
-                    onChange={(e) =>
-                      projectId
-                        ? setDetails({ ...details, clientPhone: e.target.value })
-                        : setCreateForm({ ...createForm, clientPhone: e.target.value })
-                    }
-                  />
-                  <p className="sm:col-span-2 text-[11px] text-steel-muted">
-                    Pulled from the client directory. Save links this company to the job — it does not create a login. Add a new client on Clients.
+                {clientId ? (
+                  <div className="grid sm:grid-cols-2 gap-2 rounded-lg border border-line bg-sand/30 p-3">
+                    <Input
+                      disabled={!canManage}
+                      placeholder="Client company"
+                      value={projectId ? details.clientName : createForm.clientName}
+                      onChange={(e) =>
+                        projectId
+                          ? setDetails({ ...details, clientName: e.target.value })
+                          : setCreateForm({ ...createForm, clientName: e.target.value })
+                      }
+                    />
+                    <Input
+                      disabled={!canManage}
+                      placeholder="Contact name"
+                      value={projectId ? details.clientContactName : createForm.clientContactName}
+                      onChange={(e) =>
+                        projectId
+                          ? setDetails({ ...details, clientContactName: e.target.value })
+                          : setCreateForm({ ...createForm, clientContactName: e.target.value })
+                      }
+                    />
+                    <Input
+                      disabled={!canManage}
+                      type="email"
+                      placeholder="Client email (login)"
+                      value={projectId ? details.clientEmail : createForm.clientEmail}
+                      onChange={(e) =>
+                        projectId
+                          ? setDetails({ ...details, clientEmail: e.target.value })
+                          : setCreateForm({ ...createForm, clientEmail: e.target.value })
+                      }
+                    />
+                    <Input
+                      disabled={!canManage}
+                      placeholder="Phone"
+                      value={projectId ? details.clientPhone : createForm.clientPhone}
+                      onChange={(e) =>
+                        projectId
+                          ? setDetails({ ...details, clientPhone: e.target.value })
+                          : setCreateForm({ ...createForm, clientPhone: e.target.value })
+                      }
+                    />
+                    <Input
+                      disabled={!canManage}
+                      className="sm:col-span-2"
+                      placeholder="Office address"
+                      value={projectId ? details.clientAddress : createForm.clientAddress}
+                      onChange={(e) =>
+                        projectId
+                          ? setDetails({ ...details, clientAddress: e.target.value })
+                          : setCreateForm({ ...createForm, clientAddress: e.target.value })
+                      }
+                    />
+                    <p className="sm:col-span-2 text-[11px] text-steel-muted">
+                      Office and admin only. Save updates the client directory and every project linked to this company.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-steel-muted rounded-lg border border-dashed border-line px-3 py-2">
+                    Pick a client above to edit the card here, or add a new company on CRM → Clients.
                   </p>
-                </div>
+                )}
               </div>
               <div className="sm:col-span-2 grid lg:grid-cols-3 gap-3">
                 <SetupPartyMultiPick

@@ -63,7 +63,7 @@ export default function OfficeDmsViewerPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="neutral">{projects.length} projects</Badge>
-            <Link to="/master">
+            <Link to="/crm">
               <Button type="button" variant="secondary">
                 Directory
               </Button>

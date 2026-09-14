@@ -215,7 +215,7 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
         <Card className="!p-4 space-y-3">
           <div className="flex justify-between items-center gap-2">
             <h3 className="font-semibold text-sm">Vendors / contractors</h3>
-            <Link to="/master/vendors" className="text-xs font-semibold text-brand">
+            <Link to="/crm/directory/vendors" className="text-xs font-semibold text-brand">
               Global directory →
             </Link>
           </div>

@@ -48,7 +48,7 @@ const TAB_META: Record<
   },
   clients: {
     title: "Client directory",
-    subtitle: "Ask for company, contact, email, and phone here. Client portal at /login/client is ready as soon as you save.",
+    subtitle: "Select a client to edit company, contact, email, phone, and portal password. Saves sync to every linked project card.",
     partyTypes: ["Client"],
     defaultParty: "Client",
     loginRole: "client",
@@ -82,6 +82,7 @@ export function DirectoryCompaniesPanel({
   const [loginPassword, setLoginPassword] = useState("Demo@1234");
   const [listSearch, setListSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [creatingNew, setCreatingNew] = useState(false);
   const formPanelRef = useRef<HTMLDivElement>(null);
   const { types: consultantTypes } = useConsultantTypes(token);
 
@@ -97,6 +98,7 @@ export function DirectoryCompaniesPanel({
   useEffect(() => {
     setRows([]);
     setSelectedId(null);
+    setCreatingNew(false);
     setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
     setMsg("");
     setLoginMsg("");
@@ -132,11 +134,19 @@ export function DirectoryCompaniesPanel({
 
   function startNewCompany() {
     setSelectedId(null);
+    setCreatingNew(true);
     setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
     setMsg("");
     setLoginMsg("");
     setLoginPassword("Demo@1234");
     requestAnimationFrame(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  }
+
+  function selectCompany(id: string) {
+    setCreatingNew(false);
+    setSelectedId(id);
+    setMsg("");
+    setLoginMsg("");
   }
 
   const partyType = meta.partyTypes.includes(form.partyType) ? form.partyType : meta.defaultParty;
@@ -152,24 +162,27 @@ export function DirectoryCompaniesPanel({
           setMsg(`This company is not on ${vendorDeskLabel(meta.defaultParty)}. Open the matching CRM list to edit it.`);
           return;
         }
-        const updated = await api<VendorRow & { login?: { passwordUpdated?: boolean; created?: boolean } }>(
-          `/api/vendors/${selectedId}`,
-          {
-            method: "PATCH",
-            token,
-            body: JSON.stringify({
-              ...payload,
-              ...(loginPassword.trim() ? { password: loginPassword.trim() } : {}),
-            }),
-          }
-        );
+        const updated = await api<
+          VendorRow & { login?: { passwordUpdated?: boolean; created?: boolean }; projectsSynced?: number }
+        >(`/api/vendors/${selectedId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({
+            ...payload,
+            ...(loginPassword.trim() ? { password: loginPassword.trim() } : {}),
+          }),
+        });
         setLoginPassword("");
+        const syncNote =
+          tab === "clients" && updated.projectsSynced
+            ? ` Linked project cards updated (${updated.projectsSynced}).`
+            : "";
         setMsg(
-          updated.login?.passwordUpdated
+          (updated.login?.passwordUpdated
             ? "Updated — portal password changed."
             : updated.login?.created
               ? "Updated — portal login created."
-              : "Updated"
+              : "Updated.") + syncNote
         );
       } else {
         const created = await api<VendorRow & { login?: { email: string; created: boolean; tempPassword?: string } }>(
@@ -180,6 +193,7 @@ export function DirectoryCompaniesPanel({
             body: JSON.stringify({ ...payload, createLogin: true, password: loginPassword }),
           }
         );
+        setCreatingNew(false);
         setSelectedId(created.id);
         const path =
           tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
@@ -289,7 +303,7 @@ export function DirectoryCompaniesPanel({
               key={r.id}
               className={`px-4 py-3 flex flex-wrap items-start justify-between gap-2 ${selectedId === r.id ? "bg-brand-soft/50" : ""}`}
             >
-              <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => setSelectedId(r.id)}>
+              <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => selectCompany(r.id)}>
                 <div className="font-medium">{r.name}</div>
                 <div className="text-xs text-steel-muted mt-0.5">
                   {tab === "stakeholders" && r.trade ? r.trade : formatPartyType(r.partyType)}
@@ -302,13 +316,16 @@ export function DirectoryCompaniesPanel({
                   vendor={r}
                   token={token}
                   onEdit={() => {
-                    setSelectedId(r.id);
+                    selectCompany(r.id);
                     requestAnimationFrame(() =>
                       formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
                     );
                   }}
                   onChanged={async () => {
-                    if (selectedId === r.id) setSelectedId(null);
+                    if (selectedId === r.id) {
+                      setSelectedId(null);
+                      setCreatingNew(false);
+                    }
                     setMsg("Directory updated.");
                     await load();
                   }}
@@ -321,26 +338,61 @@ export function DirectoryCompaniesPanel({
       </Card>
 
       <div ref={formPanelRef}>
+      {!selected && !creatingNew ? (
+        <Card className="!p-6 text-sm text-steel-muted space-y-2">
+          <p>
+            Select a company from the list to edit it here
+            {tab === "clients" ? " — changes sync to every project using that client." : "."}
+          </p>
+          {canEdit ? (
+            <p>
+              Or click <strong className="text-ink">+ New</strong> to add a company and portal login.
+            </p>
+          ) : (
+            <p>View only — office and admin can add or edit.</p>
+          )}
+        </Card>
+      ) : (
       <Card>
-        <h3 className="font-semibold text-sm mb-1">{selected ? "Edit company" : "Add company + portal login"}</h3>
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+          <h3 className="font-semibold text-sm">{selected ? "Edit company" : "Add company + portal login"}</h3>
+          {canEdit && selected ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="!text-xs"
+              onClick={() => {
+                setSelectedId(null);
+                setCreatingNew(false);
+                setMsg("");
+              }}
+            >
+              Close
+            </Button>
+          ) : null}
+        </div>
         {!selected ? (
           <p className="text-[11px] text-steel-muted mb-3">
             Company, contact, email, and phone are collected here. Saving creates the{" "}
             {tab === "clients" ? "client" : tab === "stakeholders" ? "consultant / stakeholder" : "vendor"} login.
           </p>
+        ) : tab === "clients" ? (
+          <p className="text-[11px] text-steel-muted mb-3">
+            Saves to the client master and updates the client card on every linked project.
+          </p>
         ) : null}
         <form className="space-y-3" onSubmit={save}>
-          <Input required placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Select value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
+          <Input required disabled={!canEdit} placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
             {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
               </option>
             ))}
           </Select>
-          <Input required placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-          <Input required placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input required placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+          <Input required disabled={!canEdit} placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
+          <Input required disabled={!canEdit} placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input required disabled={!canEdit} placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
           {canEdit ? (
             <Input
               type="password"
@@ -357,7 +409,10 @@ export function DirectoryCompaniesPanel({
           {tab === "stakeholders" ? (
             <ConsultantTypeSelect value={form.trade} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
           ) : null}
-          <Input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+          {tab === "clients" ? (
+            <Input disabled={!canEdit} placeholder="Office address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          ) : null}
           {(tab === "vendors" || meta.partyTypes.includes("Contractor")) && (
             <div className="space-y-3">
               <div>
@@ -377,10 +432,23 @@ export function DirectoryCompaniesPanel({
               </div>
             </div>
           )}
-          <TextArea placeholder="Notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <TextArea disabled={!canEdit} placeholder="Notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           {canEdit && (
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit">Save</Button>
+              {creatingNew ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setCreatingNew(false);
+                    setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
+                    setMsg("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              ) : null}
               {selected && (meta.loginRole || tab === "vendors" || tab === "clients" || tab === "stakeholders") && (
                 <Button type="button" variant="secondary" onClick={() => void createLogin()}>
                   Create portal login
@@ -393,6 +461,7 @@ export function DirectoryCompaniesPanel({
                   showEdit={false}
                   onChanged={async () => {
                     setSelectedId(null);
+                    setCreatingNew(false);
                     setMsg("Company removed from directory.");
                     await load();
                   }}
@@ -447,6 +516,7 @@ export function DirectoryCompaniesPanel({
           )}
         </p>
       </Card>
+      )}
       </div>
     </div>
     </div>
@@ -464,6 +534,9 @@ export default function CrmDirectoryPage() {
   return (
     <div className="space-y-4">
       <PageHeader dense title={meta.title} subtitle={meta.subtitle} />
+      <p className="text-xs text-steel-muted max-w-3xl leading-relaxed -mt-2">
+        Company master for the whole portal — clients, consultants, and vendors are managed here only. Project pages link companies from this list; they do not maintain a separate directory.
+      </p>
       <DirectoryCompaniesPanel key={tab} tab={tab} token={token} canEdit={canEdit} />
     </div>
   );

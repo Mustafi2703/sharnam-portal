@@ -113,6 +113,36 @@ export async function ensureClientPortalLogin(party: { email?: string | null; na
   });
 }
 
+/** Push client directory edits onto every project that uses this company. */
+export async function syncClientVendorToLinkedProjects(vendor: {
+  id: string;
+  name: string;
+  primaryContactName?: string | null;
+  email?: string | null;
+  businessPhone?: string | null;
+  address?: string | null;
+  gstNumber?: string | null;
+}) {
+  const links = await prisma.projectVendor.findMany({
+    where: { vendorId: vendor.id },
+    select: { projectId: true },
+  });
+  const projectIds = [...new Set(links.map((l) => l.projectId))];
+  if (!projectIds.length) return 0;
+  await prisma.project.updateMany({
+    where: { id: { in: projectIds } },
+    data: {
+      clientName: vendor.name,
+      clientContactName: vendor.primaryContactName || null,
+      clientEmail: vendor.email || null,
+      clientPhone: vendor.businessPhone || null,
+      clientAddress: vendor.address || null,
+      clientGst: vendor.gstNumber || null,
+    },
+  });
+  return projectIds.length;
+}
+
 /** Update or create the portal login tied to a CRM directory company. */
 export async function syncDirectoryPortalLogin(opts: {
   vendor: {

@@ -161,7 +161,7 @@ export function CrmBidProjectSetupSection({ projectId, token, onMsg }: Props) {
           <Link to={`/projects/${projectId}/directory`} className="text-xs font-semibold text-brand self-center">
             Project directory →
           </Link>
-          <Link to={`/master?tab=projects`} className="text-xs font-semibold text-brand self-center">
+          <Link to={`/crm/setup?projectId=${projectId}`} className="text-xs font-semibold text-brand self-center">
             Directory setup →
           </Link>
         </div>

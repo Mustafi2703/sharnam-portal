@@ -153,7 +153,7 @@ export default function CustomSheetsPage() {
               <Button type="button" onClick={() => setUploadOpen(true)}>
                 Upload Excel / CSV
               </Button>
-              <Link to="/master">
+              <Link to="/crm">
                 <Button type="button" variant="secondary">
                   Master setup
                 </Button>

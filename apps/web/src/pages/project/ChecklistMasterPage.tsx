@@ -251,7 +251,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               </Button>
             )}
             {!id ? (
-              <Link to="/master" className="text-sm font-semibold text-brand">
+              <Link to="/crm" className="text-sm font-semibold text-brand">
                 ← Directory
               </Link>
             ) : (

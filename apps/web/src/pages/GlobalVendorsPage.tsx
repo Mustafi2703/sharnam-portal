@@ -127,7 +127,7 @@ export default function GlobalVendorsPage() {
             <Link to="/crm/bids">
               <Button type="button" variant="secondary">Open bid packages →</Button>
             </Link>
-            <Link to="/master">
+            <Link to="/crm">
               <Button type="button" variant="secondary">← Master hub</Button>
             </Link>
           </div>
