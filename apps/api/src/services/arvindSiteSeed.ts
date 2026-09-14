@@ -93,10 +93,17 @@ async function upsertVendor(db: PrismaClient, def: (typeof PARTIES)[number]) {
   });
 }
 
-async function assignPeople(db: PrismaClient, projectId: string, userIds: string[]) {
+/**
+ * Only admins and the seeding office owner land on the project. The rest of the
+ * team is assigned deliberately in HR desk → Users so the register starts clean.
+ * Set SEED_ASSIGN_ALL=1 to restore the old blanket assignment.
+ */
+async function assignPeople(db: PrismaClient, projectId: string, userIds: string[], ownerId?: string) {
+  const assignAll = process.env.SEED_ASSIGN_ALL === "1";
   for (const userId of userIds) {
     const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) continue;
+    if (!assignAll && user.role !== "admin" && userId !== ownerId) continue;
     await db.projectMember.upsert({
       where: { projectId_userId: { projectId, userId } },
       create: { projectId, userId, role: user.role === "admin" ? "office" : user.role },
@@ -287,7 +294,7 @@ export async function seedArvindSitePack(db: PrismaClient) {
         update: { tradeRole: v.trade },
       });
     }
-    await assignPeople(db, project.id, userIds);
+    await assignPeople(db, project.id, userIds, office.id);
     await seedArvindCommsMatrix(project.id);
     await ensureMatrixScaffold(project.id);
     await syncCommsContactsFromDirectory(project.id);

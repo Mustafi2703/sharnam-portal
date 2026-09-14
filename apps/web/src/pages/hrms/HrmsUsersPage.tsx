@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
@@ -9,7 +9,17 @@ import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
-import { canManageHrms } from "../../lib/portalAccounts";
+import { canManageHrms, homePathForUser } from "../../lib/portalAccounts";
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  office: "Office",
+  hr: "HR",
+  site_employee: "Site employee",
+  employee: "Employee",
+  client: "Client",
+  vendor: "Vendor",
+};
 
 const LOGIN_ROLES = [
   { value: "site_employee", label: "SPDC site — /login/site" },
@@ -89,8 +99,11 @@ function AddUserModal({
 
 /** HRMS user management — office admin only. */
 export default function HrmsUsersPage() {
-  const { token, user } = useAuth();
+  const { token, user, impersonate } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
+  /** An admin already testing as someone else can hop straight to the next login. */
+  const canImpersonate = isAdmin || Boolean(user?.impersonatedBy);
   const canEdit = canManageHrms(user);
   const [employees, setEmployees] = useState<UserAccountRow[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -153,6 +166,66 @@ export default function HrmsUsersPage() {
     [projects]
   );
 
+  async function removeAssignment(userId: string, projectId: string, code: string, name: string) {
+    if (!window.confirm(`Remove ${name} from ${code}? They lose that project's desk until you assign them again.`)) return;
+    setBusy(true);
+    try {
+      await api("/api/hrm/assign", { method: "DELETE", token, body: JSON.stringify({ userId, projectId }) });
+      setMsgTone("ok");
+      setMsg(`${name} removed from ${code}.`);
+      await load();
+    } catch (err) {
+      const reason = actionReasonFromError("Could not remove from project", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearAllAssignments() {
+    if (
+      !window.confirm(
+        "Remove every staff member from every project? Admin logins stay. Use this once to clear the demo seed assignments, then assign people project by project."
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const res = await api<{ removed: number }>("/api/hrm/assign/clear-all", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsgTone("ok");
+      setMsg(`${res.removed} seeded project assignments removed. Assign people with "Assign to project".`);
+      await load();
+    } catch (err) {
+      const reason = actionReasonFromError("Could not clear assignments", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signInAs(row: UserAccountRow) {
+    setBusy(true);
+    try {
+      const res = await impersonate(row.id);
+      navigate(homePathForUser(res.user), { replace: true });
+    } catch (err) {
+      const reason = actionReasonFromError("Could not open that desk", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function assignProject() {
     setBusy(true);
     setMsg("");
@@ -177,9 +250,12 @@ export default function HrmsUsersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          Staff logins only — office and site. Client, consultant, and vendor accounts stay in CRM directories. Role permissions stay in Office → Access.
+          Staff logins only — office, HR, and site. Client, consultant, and vendor accounts stay in CRM directories. Role permissions stay in Office → Access.
+          <span className="block mt-1">
+            Projects are never assigned automatically. Use <strong>Assign to project</strong>, or remove a project with the × on its chip.
+          </span>
           <span className="block mt-1 font-semibold text-warn">
-            Only office and admin can add or delete users. Live SPDC / Twinoxis logins stay protected.
+            Only office, HR, and admin can add or delete users. Live SPDC / Twinoxis logins stay protected.
           </span>
         </p>
         <div className="flex flex-wrap gap-2">
@@ -190,6 +266,11 @@ export default function HrmsUsersPage() {
           )}
           {canEdit ? (
             <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
+          ) : null}
+          {isAdmin ? (
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void clearAllAssignments()}>
+              Clear seeded assignments
+            </Button>
           ) : null}
           <Link to="/roles" className="text-sm font-semibold text-brand self-center px-2">Role matrix ↗</Link>
         </div>
@@ -248,18 +329,33 @@ export default function HrmsUsersPage() {
                 <tr key={e.id} className="border-b border-line/60 hover:bg-sand/20">
                   <td className="px-4 py-2.5 font-medium">{e.fullName}</td>
                   <td className="px-4 py-2.5 text-steel-muted">{e.email}</td>
-                  <td className="px-4 py-2.5 capitalize">{e.role?.replace("_", " ")}</td>
+                  <td className="px-4 py-2.5">{ROLE_LABELS[e.role || ""] || e.role?.replace("_", " ")}</td>
                   <td className="px-4 py-2.5">{e.profile?.department || "—"}</td>
                   <td className="px-4 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {(e.memberships || []).slice(0, 3).map((m) => (
-                        <Link
+                    <div className="flex flex-wrap gap-1 max-w-[15rem]">
+                      {(e.memberships || []).length === 0 ? (
+                        <span className="text-[10px] text-steel-muted">Not on any project</span>
+                      ) : null}
+                      {(e.memberships || []).map((m) => (
+                        <span
                           key={m.id}
-                          to={`/projects/${m.project.id}/directory`}
-                          className="text-[10px] font-mono text-brand bg-brand-soft px-1.5 py-0.5 rounded"
+                          className="inline-flex items-center gap-1 text-[10px] font-mono bg-brand-soft rounded pl-1.5"
                         >
-                          {m.project.code}
-                        </Link>
+                          <Link to={`/projects/${m.project.id}/directory`} className="text-brand py-0.5">
+                            {m.project.code}
+                          </Link>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              title={`Remove from ${m.project.code}`}
+                              disabled={busy}
+                              className="px-1 py-0.5 text-steel-muted hover:text-danger disabled:opacity-50"
+                              onClick={() => void removeAssignment(e.id, m.project.id, m.project.code, e.fullName)}
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </span>
                       ))}
                     </div>
                   </td>
@@ -278,6 +374,16 @@ export default function HrmsUsersPage() {
                           await load();
                         }}
                       />
+                      {canImpersonate && e.id !== user?.id && e.isActive !== false ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="block text-[10px] font-semibold text-brand mt-1 disabled:opacity-50"
+                          onClick={() => void signInAs(e)}
+                        >
+                          Sign in as
+                        </button>
+                      ) : null}
                     </td>
                   ) : null}
                 </tr>
@@ -350,7 +456,7 @@ export default function HrmsUsersPage() {
             searchPlaceholder="Search project by name or code…"
           />
           <Select value={assign.role} onChange={(ev) => setAssign({ ...assign, role: ev.target.value })}>
-            {["site_employee", "office", "project_manager"].map((r) => (
+            {["site_employee", "site_engineer", "office", "project_manager", "viewer"].map((r) => (
               <option key={r} value={r}>{r.replace("_", " ")}</option>
             ))}
           </Select>

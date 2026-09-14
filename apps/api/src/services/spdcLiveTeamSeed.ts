@@ -56,10 +56,17 @@ async function ensureUsers(db: PrismaClient) {
   return out;
 }
 
+/**
+ * Seeds only put admin logins on the project so the register is not pre-filled.
+ * Office, site, and employee staff are assigned deliberately in HR desk → Users.
+ * Set SEED_ASSIGN_ALL=1 to put the whole live team on the demo project again.
+ */
 async function ensureProjectMembers(db: PrismaClient, projectId: string, userIds: Record<string, string>) {
+  const assignAll = process.env.SEED_ASSIGN_ALL === "1";
   for (const t of LIVE_TEAM) {
     const userId = userIds[t.email];
     if (!userId || isHrDeskOnly(t.email)) continue;
+    if (!assignAll && t.role !== "admin") continue;
     const role =
       t.role === "admin" || t.role === "office"
         ? "project_manager"

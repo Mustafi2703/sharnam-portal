@@ -36,5 +36,5 @@ export function isHrApprover(user?: { email?: string | null; role?: string | nul
   if (!user) return false;
   if (user.role === "admin") return true;
   if (user.email?.toLowerCase() === HR_HEAD_EMAIL) return true;
-  return user.role === "office";
+  return user.role === "office" || user.role === "hr";
 }

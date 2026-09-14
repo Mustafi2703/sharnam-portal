@@ -44,7 +44,7 @@ export default function HrmsMastersPage() {
   return (
     <div className="space-y-5">
       {!canManage && (
-        <p className="text-sm text-steel-muted">Read-only view — admin / office can edit these masters.</p>
+        <p className="text-sm text-steel-muted">Read-only view — admin, office, and HR can edit these masters.</p>
       )}
 
       <div className="grid lg:grid-cols-2 gap-4">

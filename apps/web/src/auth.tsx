@@ -11,6 +11,9 @@ type AuthState = {
   loginWithToken: (token: string, user: AuthUser) => void;
   logout: () => void;
   refresh: () => Promise<void>;
+  /** Admin test mode — open another user's desk, then hand the session back. */
+  impersonate: (userId: string) => Promise<{ user: AuthUser; landingPath: string }>;
+  stopImpersonation: () => Promise<AuthUser>;
 };
 
 const AuthCtx = createContext<AuthState | null>(null);
@@ -69,6 +72,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem("sharnam_token");
         setToken(null);
         setUser(null);
+      },
+      impersonate: async (userId) => {
+        const data = await api<{ token: string; user: AuthUser; landingPath: string }>("/api/auth/impersonate", {
+          method: "POST",
+          token,
+          body: JSON.stringify({ userId }),
+        });
+        localStorage.setItem("sharnam_token", data.token);
+        setToken(data.token);
+        setUser(data.user);
+        return { user: data.user, landingPath: data.landingPath || "/dashboard" };
+      },
+      stopImpersonation: async () => {
+        const data = await api<{ token: string; user: AuthUser }>("/api/auth/impersonate/stop", {
+          method: "POST",
+          token,
+        });
+        localStorage.setItem("sharnam_token", data.token);
+        setToken(data.token);
+        setUser(data.user);
+        return data.user;
       },
       refresh,
     }),

@@ -192,13 +192,71 @@ authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
     if (!user) return res.status(404).json({ error: "Not found" });
     const roleDef = await prisma.roleDefinition.findUnique({ where: { key: user.role } });
     res.json({
-      user: toAuthUser(user),
+      user: toAuthUser(user, req.user!.impersonatedBy),
       permissions: roleDef ? JSON.parse(roleDef.permissions) : DEFAULT_ROLE_PERMISSIONS[user.role as RoleKey],
     });
   } catch (err) {
     console.error("auth/me error:", err);
     res.status(503).json({ error: "Database temporarily unavailable — please retry." });
   }
+});
+
+/**
+ * Admin test mode — sign in as any login to walk that desk, then return.
+ * The real admin is kept on the token so the session can always be handed back.
+ */
+async function resolveImpersonator(req: AuthedRequest) {
+  const adminId = req.user?.impersonatedBy?.id || req.user?.id;
+  if (!adminId) return null;
+  const admin = await prisma.user.findUnique({ where: { id: adminId } });
+  if (!admin || !admin.isActive || admin.role !== "admin") return null;
+  return admin;
+}
+
+authRouter.post("/impersonate", requireAuth, async (req: AuthedRequest, res) => {
+  const admin = await resolveImpersonator(req);
+  if (!admin) {
+    return res.status(403).json({ error: "Only an admin can sign in as another user." });
+  }
+  const userId = req.body?.userId ? String(req.body.userId) : "";
+  const email = req.body?.email ? String(req.body.email).trim().toLowerCase() : "";
+  if (!userId && !email) return res.status(400).json({ error: "userId or email required" });
+
+  const target = userId
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : await prisma.user.findUnique({ where: { email } });
+  if (!target) return res.status(404).json({ error: "No login for that user" });
+  if (!target.isActive) return res.status(400).json({ error: "That login is inactive — activate it first." });
+  if (target.id === admin.id) {
+    return res.status(400).json({ error: "That is already your own account." });
+  }
+
+  const authUser = toAuthUser(target, admin);
+  const token = signToken(authUser);
+  await audit("auth.impersonate", {
+    userId: admin.id,
+    entity: "User",
+    entityId: target.id,
+    meta: { as: target.email, role: target.role },
+  });
+  res.json({ token, user: authUser, landingPath: loginPathForRole(target.role) });
+});
+
+authRouter.post("/impersonate/stop", requireAuth, async (req: AuthedRequest, res) => {
+  if (!req.user?.impersonatedBy) {
+    return res.status(400).json({ error: "This session is already your own account." });
+  }
+  const admin = await resolveImpersonator(req);
+  if (!admin) return res.status(403).json({ error: "Original admin login is no longer active." });
+  const authUser = toAuthUser(admin);
+  const token = signToken(authUser);
+  await audit("auth.impersonate.stop", {
+    userId: admin.id,
+    entity: "User",
+    entityId: req.user.id,
+    meta: { was: req.user.email },
+  });
+  res.json({ token, user: authUser });
 });
 
 export const rolesRouter = Router();
@@ -241,7 +299,7 @@ usersRouter.get("/", requireRoles("admin", "office"), async (req, res) => {
       ...(kind === "staff"
         ? {
             OR: [
-              { role: { in: ["admin", "office", "site_employee"] } },
+              { role: { in: ["admin", "office", "hr", "site_employee"] } },
               { role: "employee", vendorId: null },
             ],
           }

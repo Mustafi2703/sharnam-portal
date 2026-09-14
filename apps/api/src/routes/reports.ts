@@ -1417,7 +1417,7 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   res.status(201).json(user);
 });
 
-hrmRouter.post("/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/assign", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const { projectId, userId, role } = req.body;
   if (!projectId || !userId) return res.status(400).json({ error: "projectId and userId required" });
   const member = await prisma.projectMember.upsert({
@@ -1434,7 +1434,29 @@ hrmRouter.post("/assign", requireRoles("admin", "office"), async (req: AuthedReq
   res.json(member);
 });
 
-hrmRouter.delete("/assign", requireRoles("admin", "office"), async (req, res) => {
+/**
+ * Clears the blanket project memberships the demo seeds used to create, so staff
+ * can be put on projects deliberately. Admin logins are always kept.
+ */
+hrmRouter.post("/assign/clear-all", requireRoles("admin"), async (req: AuthedRequest, res) => {
+  const projectId = req.body?.projectId ? String(req.body.projectId) : "";
+  const admins = await prisma.user.findMany({ where: { role: "admin" }, select: { id: true } });
+  const keepUserIds = [...new Set([...admins.map((a) => a.id), req.user!.id])];
+  const { count } = await prisma.projectMember.deleteMany({
+    where: {
+      ...(projectId ? { projectId } : {}),
+      userId: { notIn: keepUserIds },
+    },
+  });
+  await audit("hrm.assign.cleared", {
+    userId: req.user?.id,
+    entity: "ProjectMember",
+    meta: { projectId: projectId || "all", removed: count },
+  });
+  res.json({ ok: true, removed: count });
+});
+
+hrmRouter.delete("/assign", requireRoles("admin", "office", "hr"), async (req, res) => {
   const { projectId, userId } = req.body;
   if (!projectId || !userId) return res.status(400).json({ error: "projectId and userId required" });
   await prisma.projectMember.deleteMany({ where: { projectId, userId } });
@@ -1613,7 +1635,7 @@ hrmRouter.get("/attendance", hrmStaff, async (req, res) => {
 /** Selfie + GPS punch — multipart: selfie (required), kind, lat, lng, accuracy, projectId */
 hrmRouter.post(
   "/attendance/punch",
-  requireRoles("admin", "office", "site_employee", "employee"),
+  requireRoles("admin", "office", "hr", "site_employee", "employee"),
   hrmUpload.single("selfie"),
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "selfie photo required" });
@@ -1746,7 +1768,7 @@ hrmRouter.post(
   }
 );
 
-hrmRouter.post("/attendance", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/attendance", requireRoles("admin", "office", "hr", "site_employee", "employee"), async (req: AuthedRequest, res) => {
   await applyAutoEodClockOut();
   const date = new Date(req.body.date || Date.now());
   date.setHours(0, 0, 0, 0);
@@ -1934,7 +1956,7 @@ hrmRouter.get("/employee-files", hrmDesk, async (req, res) => {
 
 hrmRouter.post(
   "/employee-files",
-  requireRoles("admin", "office"),
+  hrmDesk,
   hrmUpload.array("files", 12),
   async (req: AuthedRequest, res) => {
     const userId = String(req.body.userId || "");
@@ -2146,7 +2168,7 @@ hrmRouter.get("/hrms-documents/:id/preview", hrmDesk, async (req, res) => {
 /** Upload the signed / scanned copy back and attach to the same record. */
 hrmRouter.post(
   "/hrms-documents/:id/upload",
-  requireRoles("admin", "office"),
+  hrmDesk,
   hrmUpload.single("file"),
   async (req: AuthedRequest, res) => {
     const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
@@ -2201,7 +2223,7 @@ hrmRouter.get("/leave", hrmDesk, async (_req, res) => {
   res.json(rows);
 });
 
-hrmRouter.post("/leave", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", "employee"), async (req: AuthedRequest, res) => {
   const from = new Date(req.body.fromDate);
   const to = new Date(req.body.toDate);
   const halfDay = !!req.body.halfDay;
@@ -2268,7 +2290,7 @@ function parseVoucherParticulars(raw: unknown): { particular: string; amount: nu
   }
 }
 
-hrmRouter.get("/vouchers", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+hrmRouter.get("/vouchers", requireRoles("admin", "office", "hr", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const mine = !canApproveVoucher(req.user);
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const rows = await prisma.expenseVoucher.findMany({
@@ -2292,7 +2314,7 @@ hrmRouter.get("/vouchers", requireRoles("admin", "office", "employee", "site_emp
   );
 });
 
-hrmRouter.post("/vouchers", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/vouchers", requireRoles("admin", "office", "hr", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const particulars = parseVoucherParticulars(req.body.particulars);
   const lineSum = particulars.reduce((s, l) => s + Number(l.amount || 0), 0);
   const amount = Number(req.body.amount || lineSum);

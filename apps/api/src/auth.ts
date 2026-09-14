@@ -53,14 +53,17 @@ export function requirePermission(module: ModuleKey, action: PermissionAction) {
   };
 }
 
-export function toAuthUser(u: {
-  id: string;
-  email: string;
-  fullName: string;
-  role: string;
-  portal: string;
-  vendorId?: string | null;
-}): AuthUser {
+export function toAuthUser(
+  u: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: string;
+    portal: string;
+    vendorId?: string | null;
+  },
+  impersonatedBy?: { id: string; email: string; fullName: string } | null
+): AuthUser {
   return {
     id: u.id,
     email: u.email,
@@ -69,5 +72,8 @@ export function toAuthUser(u: {
     portal: u.portal as PortalKey,
     vendorId: u.vendorId ?? null,
     hrDeskOnly: isHrDeskOnly(u.email, u.role),
+    impersonatedBy: impersonatedBy
+      ? { id: impersonatedBy.id, email: impersonatedBy.email, fullName: impersonatedBy.fullName }
+      : null,
   };
 }
