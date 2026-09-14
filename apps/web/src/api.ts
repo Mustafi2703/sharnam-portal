@@ -15,7 +15,7 @@ export class ApiError extends Error {
 
 export async function api<T = unknown>(
   path: string,
-  opts: RequestInit & { token?: string | null } = {}
+  opts: RequestInit & { token?: string | null; timeoutMs?: number } = {}
 ): Promise<T> {
   const headers = new Headers(opts.headers || {});
   if (!(opts.body instanceof FormData)) {
@@ -23,23 +23,39 @@ export async function api<T = unknown>(
   }
   if (opts.token) headers.set("Authorization", `Bearer ${opts.token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers,
-    redirect: "manual",
-    cache: "no-store",
-  });
-  if (res.status >= 300 && res.status < 400) {
-    throw new ApiError(
-      "API request was redirected (check portal URL / VITE_API_URL — use https://portal.spdc.in on the same host).",
-      res.status
-    );
+  const timeoutMs = opts.timeoutMs ?? 55_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { timeoutMs: _omit, ...fetchOpts } = opts;
+
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...fetchOpts,
+      headers,
+      redirect: "manual",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (res.status >= 300 && res.status < 400) {
+      throw new ApiError(
+        "API request was redirected (check portal URL / VITE_API_URL — use https://portal.spdc.in on the same host).",
+        res.status
+      );
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ApiError(data.error || res.statusText || "Request failed", res.status);
+    }
+    return data as T;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ApiError(`Request timed out after ${Math.round(timeoutMs / 1000)}s — try again in a moment.`, 504);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiError(data.error || res.statusText || "Request failed", res.status);
-  }
-  return data as T;
 }
 
 export function formatINR(n: number) {

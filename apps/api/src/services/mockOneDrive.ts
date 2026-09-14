@@ -29,6 +29,15 @@ function liveSharePoint() {
   return cfg.configured && !cfg.mock;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
 export class MockOneDriveService {
   root() {
     ensureDir(UPLOAD_DIR);
@@ -47,28 +56,33 @@ export class MockOneDriveService {
     const folders = [...PROJECT_LIBRARY_FOLDERS];
 
     for (const rel of folders) {
-      const abs = path.join(root, rel);
-      ensureDir(abs);
-      const name = rel.split("/").pop()!;
-      const parentPath = rel.includes("/") ? rel.split("/").slice(0, -1).join("/") : null;
-      await prisma.documentFolder.upsert({
-        where: { projectId_path: { projectId, path: rel } },
-        create: {
-          projectId,
-          path: rel,
-          name,
-          parentPath,
-          mockDriveId: `mock-${project.code}-${rel}`,
-          lastSyncedAt: new Date(),
-        },
-        update: { lastSyncedAt: new Date() },
-      });
+      ensureDir(path.join(root, rel));
     }
+
+    const syncedAt = new Date();
+    await prisma.$transaction(
+      folders.map((rel) => {
+        const name = rel.split("/").pop()!;
+        const parentPath = rel.includes("/") ? rel.split("/").slice(0, -1).join("/") : null;
+        return prisma.documentFolder.upsert({
+          where: { projectId_path: { projectId, path: rel } },
+          create: {
+            projectId,
+            path: rel,
+            name,
+            parentPath,
+            mockDriveId: `mock-${project.code}-${rel}`,
+            lastSyncedAt: syncedAt,
+          },
+          update: { lastSyncedAt: syncedAt },
+        });
+      })
+    );
 
     let sharePoint: { rootFolder: string; folders: string[] } | null = null;
     if (liveSharePoint()) {
       try {
-        const sp = await ensureProjectSharePointTree(project.code);
+        const sp = await withTimeout(ensureProjectSharePointTree(project.code), 25_000, "SharePoint project tree");
         sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
       } catch (err) {
         console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);

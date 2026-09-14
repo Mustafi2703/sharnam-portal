@@ -149,7 +149,10 @@ export default function CrmProjectSetupPage() {
   const loadLists = useCallback(async () => {
     if (!token || !canManage) return;
     const [p, u, v] = await Promise.all([
-      api<ProjectRow[]>("/api/projects", { token }),
+      api<ProjectRow[]>("/api/projects", { token }).catch((err) => {
+        setMsg(err instanceof Error ? err.message : "Could not load projects register");
+        return [] as ProjectRow[];
+      }),
       api<UserRow[]>("/api/users?kind=staff", { token }).catch(() => []),
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
     ]);

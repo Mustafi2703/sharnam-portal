@@ -110,7 +110,10 @@ export default function CrmPage() {
 
   const load = async () => {
     const [p, l, q, bp] = await Promise.all([
-      api<any[]>("/api/projects", { token }),
+      api<any[]>("/api/projects", { token }).catch((err) => {
+        setMsg(err instanceof Error ? err.message : "Could not load projects register");
+        return [];
+      }),
       canManage ? api<any[]>("/api/crm/leads", { token }).catch(() => []) : Promise.resolve([]),
       api<any[]>("/api/crm/quotations", { token }).catch(() => []),
       canManage ? api<any[]>("/api/crm/bid-packages", { token }).catch(() => []) : Promise.resolve([]),

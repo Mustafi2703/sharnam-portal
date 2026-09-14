@@ -370,21 +370,76 @@ const revisionInclude = {
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
+/** List/register fields only — skip large JSON blobs (workPackages, bidDisciplinesJson, enabledModules). */
+const PROJECT_LIST_SELECT = {
+  id: true,
+  code: true,
+  name: true,
+  status: true,
+  clientName: true,
+  clientContactName: true,
+  clientEmail: true,
+  location: true,
+  designConsultant: true,
+  contractorName: true,
+  pmcName: true,
+  startDate: true,
+  endDate: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: { select: { drawings: true, members: true } },
+} as const;
+
+async function provisionProjectCardExtras(opts: {
+  projectId: string;
+  userId: string;
+  vendorIds: string[];
+  projectName: string;
+  clientEmail?: string | null;
+  clientName?: string | null;
+  clientContactName?: string | null;
+  clientPhone?: string | null;
+  clientAddress?: string | null;
+  clientGst?: string | null;
+}) {
+  await mockOneDrive.ensureProjectTree(opts.projectId);
+  if (!opts.vendorIds.length && !opts.clientEmail && !opts.clientName) return;
+  const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import("../services/crmVendorCredentials.js");
+  if (opts.clientEmail || opts.clientName) {
+    await ensureClientVendorAndPortal({
+      projectId: opts.projectId,
+      name: opts.clientName || opts.clientContactName || opts.projectName,
+      email: opts.clientEmail,
+      phone: opts.clientPhone,
+      contactName: opts.clientContactName,
+      address: opts.clientAddress,
+      gst: opts.clientGst,
+    });
+  }
+  if (opts.vendorIds.length) {
+    await provisionProjectVendorAccess({
+      projectId: opts.projectId,
+      vendorIds: opts.vendorIds,
+      assignedVia: "Project setup",
+    });
+  }
+}
+
 projectsRouter.get("/", async (req: AuthedRequest, res) => {
   const { projectPayloadForRole } = await import("../services/projectVisibility.js");
   const role = req.user!.role;
   if (role === "admin" || role === "office") {
     const projects = await prisma.project.findMany({
-      include: { _count: { select: { drawings: true, members: true } } },
+      select: PROJECT_LIST_SELECT,
       orderBy: { updatedAt: "desc" },
     });
     return res.json(projects);
   }
-  const include = { _count: { select: { drawings: true, members: true } } } as const;
+  const projectSelect = { select: PROJECT_LIST_SELECT } as const;
   const byId = new Map<string, unknown>();
   const memberships = await prisma.projectMember.findMany({
     where: { userId: req.user!.id },
-    include: { project: { include } },
+    include: { project: projectSelect },
   });
   for (const m of memberships) byId.set(m.project.id, m.project);
 
@@ -394,7 +449,7 @@ projectsRouter.get("/", async (req: AuthedRequest, res) => {
     if (vendor) {
       const assigned = await prisma.projectVendor.findMany({
         where: { vendorId: vendor.id },
-        include: { project: { include } },
+        include: { project: projectSelect },
       });
       for (const row of assigned) byId.set(row.project.id, row.project);
       const bidSlots = await prisma.crmVendorBoq.findMany({
@@ -402,7 +457,7 @@ projectsRouter.get("/", async (req: AuthedRequest, res) => {
           OR: [{ vendorId: vendor.id }, { vendorLabel: vendor.name }],
           bidPackage: { status: { in: ["Open", "Evaluation", "Awarded"] } },
         },
-        include: { bidPackage: { include: { project: { include } } } },
+        include: { bidPackage: { include: { project: projectSelect } } },
       });
       for (const slot of bidSlots) {
         const project = slot.bidPackage.project;
@@ -536,34 +591,21 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       create: { projectId: project.id, userId: req.user!.id, role: "office" },
       update: {},
     });
-    await mockOneDrive.ensureProjectTree(project.id);
-    if (vendorIds.length || project.clientEmail) {
-      try {
-        const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import(
-          "../services/crmVendorCredentials.js"
-        );
-        if (project.clientEmail || project.clientName) {
-          await ensureClientVendorAndPortal({
-            projectId: project.id,
-            name: project.clientName || project.clientContactName || project.name,
-            email: project.clientEmail,
-            phone: project.clientPhone,
-            contactName: project.clientContactName,
-            address: project.clientAddress,
-            gst: project.clientGst,
-          });
-        }
-        if (vendorIds.length) {
-          await provisionProjectVendorAccess({
-            projectId: project.id,
-            vendorIds,
-            assignedVia: "Project setup",
-          });
-        }
-      } catch (portalErr) {
-        console.warn("Project create portal provisioning skipped:", portalErr instanceof Error ? portalErr.message : portalErr);
-      }
-    }
+    const backgroundVendorIds = vendorIds;
+    void provisionProjectCardExtras({
+      projectId: project.id,
+      userId: req.user!.id,
+      vendorIds: backgroundVendorIds,
+      projectName: project.name,
+      clientEmail: project.clientEmail,
+      clientName: project.clientName,
+      clientContactName: project.clientContactName,
+      clientPhone: project.clientPhone,
+      clientAddress: project.clientAddress,
+      clientGst: project.clientGst,
+    }).catch((portalErr) => {
+      console.warn("Project create background provisioning skipped:", portalErr instanceof Error ? portalErr.message : portalErr);
+    });
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }

@@ -1072,33 +1072,6 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
     }
   }
 
-  await mockOneDrive.ensureProjectTree(projectId!);
-  try {
-    const stored = resolveProposalDiskPath(qtn.attachmentUrl);
-    if (stored && fs.existsSync(stored)) {
-      const { createProjectProposalFile } = await import("../services/crmSharePoint.js");
-      const file = await createProjectProposalFile(
-        project!.code,
-        qtn.clientName,
-        qtn.quotationNo,
-        qtn.currentRevisionNo || 0,
-        fs.readFileSync(stored)
-      );
-      await prisma.quotation.update({
-        where: { id: qtn.id },
-        data: { attachmentUrl: file.url, attachmentSharePointUrl: file.sharePointUrl || file.url },
-      });
-    }
-  } catch (err) {
-    console.warn("Copy proposal into awarded project folder failed:", err instanceof Error ? err.message : err);
-  }
-  try {
-    const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
-    await provisionProjectSheetPack(projectId!, req.user!.id);
-  } catch (err) {
-    console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
-  }
-
   const row = await prisma.quotation.update({
     where: { id: qtn.id },
     data: { status: "Awarded", awardedAt: new Date(), awardedProjectId: projectId, projectId },
@@ -1138,6 +1111,37 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
   });
 
   res.json({ quotation: row, projectId, project: { id: project!.id, code: project!.code, name: project!.name, status: project!.status } });
+
+  void (async () => {
+    await mockOneDrive.ensureProjectTree(projectId!);
+    try {
+      const stored = resolveProposalDiskPath(qtn.attachmentUrl);
+      if (stored && fs.existsSync(stored)) {
+        const { createProjectProposalFile } = await import("../services/crmSharePoint.js");
+        const file = await createProjectProposalFile(
+          project!.code,
+          qtn.clientName,
+          qtn.quotationNo,
+          qtn.currentRevisionNo || 0,
+          fs.readFileSync(stored)
+        );
+        await prisma.quotation.update({
+          where: { id: qtn.id },
+          data: { attachmentUrl: file.url, attachmentSharePointUrl: file.sharePointUrl || file.url },
+        });
+      }
+    } catch (err) {
+      console.warn("Copy proposal into awarded project folder failed:", err instanceof Error ? err.message : err);
+    }
+    try {
+      const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
+      await provisionProjectSheetPack(projectId!, req.user!.id);
+    } catch (err) {
+      console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
+    }
+  })().catch((err) => {
+    console.warn("Award background provisioning skipped:", err instanceof Error ? err.message : err);
+  });
 });
 
 export const hrmRouter = Router();
