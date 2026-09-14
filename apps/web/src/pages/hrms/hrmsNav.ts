@@ -35,7 +35,7 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         to: "recruitment",
         label: "Recruitment",
         icon: "comms",
-        subtitle: "Requisition → posting → screening → interview scorecard → offer letter.",
+        subtitle: "Requisition → posting → screening → interview meetings (interviewee + interviewers) → offer.",
       },
       {
         to: "onboarding",

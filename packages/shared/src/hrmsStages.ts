@@ -46,3 +46,14 @@ export function candidateStageTone(
   if (status === "Interview" || status === "Interviewed" || status === "Shortlisted") return "warn";
   return "neutral";
 }
+
+/** Seats on an HR interview meeting (interviewer side). Interviewee is always the candidate. */
+export const INTERVIEWER_SEATS = [
+  { id: "Technical", label: "Technical interviewer" },
+  { id: "HR", label: "HR interviewer" },
+  { id: "Management", label: "Management interviewer" },
+  { id: "Client", label: "Client interviewer" },
+] as const;
+
+export type InterviewerSeatId = (typeof INTERVIEWER_SEATS)[number]["id"];
+

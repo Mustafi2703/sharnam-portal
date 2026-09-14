@@ -283,7 +283,9 @@ export {
   ACTIVE_CANDIDATE_STAGES,
   candidateStageLabel,
   candidateStageTone,
+  INTERVIEWER_SEATS,
   type CandidateStageId,
+  type InterviewerSeatId,
 } from "./hrmsStages.js";
 
 export {

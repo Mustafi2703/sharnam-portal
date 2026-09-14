@@ -2,8 +2,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
+import { SearchableSelect } from "../components/SearchableSelect";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
-import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone } from "@sharnam/shared";
+import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_SEATS } from "@sharnam/shared";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -37,22 +38,25 @@ export default function RecruitmentPage() {
   const [reqs, setReqs] = useState<any[]>([]);
   const [postings, setPostings] = useState<any[]>([]);
   const [candidates, setCandidates] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [loadError, setLoadError] = useState("");
 
   const reload = async () => {
     try {
-      const [r, p, c, o] = await Promise.all([
+      const [r, p, c, o, people] = await Promise.all([
         api<any[]>("/api/hrm/requisitions", { token }),
         api<any[]>("/api/hrm/postings", { token }),
         api<any[]>("/api/hrm/candidates", { token }),
         api<any[]>("/api/hrm/offers", { token }),
+        api<any[]>("/api/hrm/employees", { token }).catch(() => []),
       ]);
       setReqs(r);
       setPostings(p);
       setCandidates(c);
       setOffers(o);
+      setStaff(people);
       setLoadError("");
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load recruitment");
@@ -89,7 +93,7 @@ export default function RecruitmentPage() {
       {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "postings" && <PostingsTab reqs={reqs} postings={postings} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "candidates" && <CandidatesTab postings={postings} candidates={candidates} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
-      {tab === "interviews" && <InterviewsTab candidates={candidates} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OffersTab candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
     </div>
   );
@@ -403,12 +407,25 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
 
 /* ────────────────────────────  4  Interviews & scorecard  ──────────────────────────── */
 
-function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
+function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
   const [sp] = useSearchParams();
   const preselected = sp.get("candidateId") || "";
   const [candidateId, setCandidateId] = useState(preselected);
   const [rounds, setRounds] = useState<any[]>([]);
-  const [form, setForm] = useState({ roundType: "Technical", panel: "", scheduledAt: "", durationMins: 60, meetingLink: "" });
+  const [diary, setDiary] = useState<any[]>([]);
+  const [form, setForm] = useState({
+    roundType: "Technical",
+    scheduledAt: "",
+    durationMins: 60,
+    mode: "Teams",
+    meetingLink: "",
+    location: "",
+    interviewers: [{ userId: "", seat: "Technical" }] as Array<{ userId: string; seat: string }>,
+  });
+
+  useEffect(() => {
+    api<any[]>("/api/hrm/interviews", { token }).then(setDiary).catch(() => setDiary([]));
+  }, [token]);
 
   useEffect(() => {
     if (!candidateId) {
@@ -421,18 +438,56 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
   async function schedule(e: FormEvent) {
     e.preventDefault();
     if (!candidateId) return;
+    const interviewers = form.interviewers
+      .map((row) => {
+        const emp = staff.find((s: any) => s.id === row.userId);
+        if (!emp) return null;
+        return {
+          userId: emp.id,
+          name: emp.fullName,
+          email: emp.email,
+          designation: emp.profile?.designation || emp.profile?.department || "",
+          seat: row.seat,
+        };
+      })
+      .filter(Boolean);
+    if (!interviewers.length) {
+      setMsg("Add at least one interviewer (pick a staff login and their seat).");
+      return;
+    }
     try {
-      const body = { ...form, panel: form.panel.split(",").map((s) => s.trim()).filter(Boolean) };
-      const r = await api<any>(`/api/hrm/candidates/${candidateId}/interviews`, { method: "POST", token, body: JSON.stringify({ ...body, mode: "Teams" }) });
+      const r = await api<any>(`/api/hrm/candidates/${candidateId}/interviews`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          roundType: form.roundType,
+          scheduledAt: form.scheduledAt,
+          durationMins: form.durationMins,
+          mode: form.mode,
+          meetingLink: form.meetingLink,
+          location: form.location,
+          interviewers,
+        }),
+      });
       setRounds((prev) => [...prev, r]);
-      setForm({ roundType: "Technical", panel: "", scheduledAt: "", durationMins: 60, meetingLink: "" });
+      setForm({
+        roundType: "Technical",
+        scheduledAt: "",
+        durationMins: 60,
+        mode: "Teams",
+        meetingLink: "",
+        location: "",
+        interviewers: [{ userId: "", seat: "Technical" }],
+      });
       setMsg(
         r.meetingLink
-          ? "Interview scheduled · Teams join link ready."
+          ? "Interview meeting scheduled. Interviewee and interviewers are on the card — use Join for Teams."
           : r.teamsNote
             ? `Interview saved. Teams: ${r.teamsNote}`
-            : "Interview scheduled. Add a Teams link if Graph is not connected."
+            : "Interview meeting saved in the portal."
       );
+      const all = await api<any[]>("/api/hrm/interviews", { token }).catch(() => []);
+      setDiary(all);
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -446,31 +501,137 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
   }
 
   const candidate = candidates.find((c: any) => c.id === candidateId);
+  const staffOptions = (staff || []).map((s: any) => ({
+    value: s.id,
+    label: s.fullName,
+    sublabel: [s.profile?.designation, s.email].filter(Boolean).join(" · "),
+    keywords: `${s.fullName} ${s.email || ""} ${s.profile?.designation || ""}`,
+  }));
 
   return (
     <div className="space-y-3">
+      <Card padding={false}>
+        <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">Interview meetings</div>
+        <ul className="divide-y max-h-64 overflow-y-auto">
+          {diary.slice(0, 12).map((r) => (
+            <li key={r.id} className="px-4 py-2.5 text-sm flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="font-medium">
+                  {r.interviewee?.name || r.candidate?.fullName} · {r.roundType}
+                </div>
+                <div className="text-[11px] text-steel-muted">
+                  Interviewee: {r.interviewee?.name || "—"}
+                  {r.interviewee?.applyingFor ? ` · ${r.interviewee.applyingFor}` : ""}
+                  {" · "}
+                  Interviewer: {(r.interviewers || []).map((p: any) => `${p.name} (${p.seat})`).join(", ") || "—"}
+                </div>
+              </div>
+              <div className="text-xs text-right">
+                <div>{r.scheduledAt ? new Date(r.scheduledAt).toLocaleString("en-IN") : "Unscheduled"}</div>
+                {r.meetingLink ? (
+                  <a href={r.meetingLink} target="_blank" rel="noreferrer" className="text-brand font-semibold">
+                    Join
+                  </a>
+                ) : (
+                  <Badge tone={r.status === "Completed" ? "ok" : "brand"}>{r.status}</Badge>
+                )}
+              </div>
+            </li>
+          ))}
+          {!diary.length && <li className="px-4 py-6 text-center text-sm text-steel-muted">No interview meetings yet. Pick a candidate below and schedule.</li>}
+        </ul>
+      </Card>
+
       <Card>
-        <h3 className="font-semibold text-sm mb-2">Pick candidate</h3>
+        <h3 className="font-semibold text-sm mb-2">Interviewee (candidate)</h3>
         <Select value={candidateId} onChange={(e) => setCandidateId(e.target.value)} className="max-w-md">
-          <option value="">— select —</option>
-          {candidates.map((c: any) => <option key={c.id} value={c.id}>{c.fullName} · {candidateStageLabel(c.status)}{c.currentCompany ? ` · ${c.currentCompany}` : ""}</option>)}
+          <option value="">— select candidate —</option>
+          {candidates.map((c: any) => (
+            <option key={c.id} value={c.id}>
+              {c.fullName} · {candidateStageLabel(c.status)}
+              {c.currentCompany ? ` · ${c.currentCompany}` : ""}
+            </option>
+          ))}
         </Select>
+        {candidate && (
+          <div className="mt-3 grid sm:grid-cols-2 gap-2 text-sm rounded-lg border border-line bg-sand/30 p-3">
+            <div><span className="text-[11px] uppercase text-steel-muted block">Name</span>{candidate.fullName}</div>
+            <div><span className="text-[11px] uppercase text-steel-muted block">Email / phone</span>{candidate.email || "—"} · {candidate.phone || "—"}</div>
+            <div><span className="text-[11px] uppercase text-steel-muted block">Applying for</span>{candidate.posting?.title || candidate.currentDesign || "—"}</div>
+            <div><span className="text-[11px] uppercase text-steel-muted block">Stage</span><Badge tone={candidateStageTone(candidate.status)}>{candidateStageLabel(candidate.status)}</Badge></div>
+          </div>
+        )}
       </Card>
 
       {candidate && canManage && (
         <Card>
-          <h3 className="font-semibold text-sm mb-2">Schedule an interview round for {candidate.fullName}</h3>
-          <form onSubmit={schedule} className="grid md:grid-cols-4 gap-2">
-            <Select value={form.roundType} onChange={(e) => setForm({ ...form, roundType: e.target.value })}>
-              {["Technical", "HR", "Management", "Client", "Assessment"].map((v) => <option key={v}>{v}</option>)}
-            </Select>
-            <Input placeholder="Panel members (comma-separated)" value={form.panel} onChange={(e) => setForm({ ...form, panel: e.target.value })} />
-            <Input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} />
-            <Input placeholder="Duration (mins)" type="number" value={form.durationMins} onChange={(e) => setForm({ ...form, durationMins: Number(e.target.value) })} />
-            <Input placeholder="Paste Teams link only if Graph is down" value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} className="md:col-span-2" />
-            <Button type="submit">Schedule Teams round</Button>
+          <h3 className="font-semibold text-sm mb-2">Schedule meeting · interviewers</h3>
+          <form onSubmit={schedule} className="space-y-3">
+            <div className="grid md:grid-cols-4 gap-2">
+              <Select value={form.roundType} onChange={(e) => setForm({ ...form, roundType: e.target.value })}>
+                {["Technical", "HR", "Management", "Client", "Assessment"].map((v) => <option key={v}>{v}</option>)}
+              </Select>
+              <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
+                <option>Teams</option>
+                <option>In-person</option>
+                <option>Phone</option>
+              </Select>
+              <Input type="datetime-local" required value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} />
+              <Input placeholder="Duration (mins)" type="number" value={form.durationMins} onChange={(e) => setForm({ ...form, durationMins: Number(e.target.value) })} />
+              <Input placeholder={form.mode === "Teams" ? "Location (optional)" : "Site / office room"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="md:col-span-2" />
+              <Input placeholder="Paste Teams link only if Graph is down" value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} className="md:col-span-2" />
+            </div>
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase text-steel-muted">Interviewers (staff seats)</div>
+              {form.interviewers.map((row, idx) => (
+                <div key={idx} className="grid md:grid-cols-[1fr_220px_auto] gap-2 items-center">
+                  <SearchableSelect
+                    options={staffOptions}
+                    value={row.userId}
+                    onChange={(userId) => {
+                      const next = [...form.interviewers];
+                      next[idx] = { ...row, userId };
+                      setForm({ ...form, interviewers: next });
+                    }}
+                    placeholder="Pick interviewer…"
+                    searchPlaceholder="Search staff…"
+                  />
+                  <Select
+                    value={row.seat}
+                    onChange={(e) => {
+                      const next = [...form.interviewers];
+                      next[idx] = { ...row, seat: e.target.value };
+                      setForm({ ...form, interviewers: next });
+                    }}
+                  >
+                    {INTERVIEWER_SEATS.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </Select>
+                  <button
+                    type="button"
+                    className="text-xs text-danger"
+                    onClick={() => setForm({ ...form, interviewers: form.interviewers.filter((_, i) => i !== idx) })}
+                    disabled={form.interviewers.length === 1}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setForm({ ...form, interviewers: [...form.interviewers, { userId: "", seat: "HR" }] })}
+              >
+                Add interviewer
+              </Button>
+            </div>
+            <Button type="submit">Schedule interview meeting</Button>
           </form>
-          <p className="text-[10px] text-steel-muted mt-2">Interviews are Microsoft Teams only. The portal creates the meeting on the SPDC mailbox when Graph is connected.</p>
+          <p className="text-[10px] text-steel-muted mt-2">
+            Interviewee is always the candidate. Interviewers are SPDC staff with a seat (technical / HR / management / client).
+            Teams meetings are created on the SPDC mailbox when Graph is connected.
+          </p>
         </Card>
       )}
 
@@ -489,12 +650,19 @@ function InterviewsTab({ candidates, canManage, reload, setMsg, token }: any) {
                   </div>
                   <Badge tone={r.status === "Completed" ? "ok" : r.status === "Cancelled" ? "danger" : "brand"}>{r.status}</Badge>
                 </div>
-                {(() => {
-                  try {
-                    const panel = JSON.parse(r.panelJson || "[]") as string[];
-                    return panel.length ? <div className="text-xs text-steel-muted">Panel: {panel.join(" · ")}</div> : null;
-                  } catch { return null; }
-                })()}
+                <div className="text-xs grid sm:grid-cols-2 gap-2">
+                  <div>
+                    <span className="uppercase text-steel-muted block">Interviewee</span>
+                    {r.interviewee?.name || candidate.fullName}
+                    {r.interviewee?.email ? ` · ${r.interviewee.email}` : ""}
+                  </div>
+                  <div>
+                    <span className="uppercase text-steel-muted block">Interviewers</span>
+                    {(r.interviewers || []).length
+                      ? (r.interviewers as any[]).map((p) => `${p.name} — ${p.seat}${p.designation ? ` (${p.designation})` : ""}`).join("; ")
+                      : "—"}
+                  </div>
+                </div>
                 {r.meetingLink && (
                   <div className="text-xs">
                     <a href={r.meetingLink} target="_blank" rel="noreferrer" className="text-brand font-semibold">↗ Join {r.mode} meeting</a>

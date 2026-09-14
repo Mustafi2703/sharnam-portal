@@ -249,35 +249,154 @@ hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office"), a
 
 /* ═════════════════════════════════════  INTERVIEW ROUNDS  ═════════════════════════════════════ */
 
+type InterviewerSeat = {
+  userId?: string;
+  name: string;
+  email?: string;
+  designation?: string;
+  seat: string;
+};
+
+type IntervieweeSeat = {
+  candidateId?: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  applyingFor?: string;
+};
+
+function decodeInterviewPanel(json: string | null | undefined, interviewee: IntervieweeSeat): {
+  interviewers: InterviewerSeat[];
+  interviewee: IntervieweeSeat;
+} {
+  try {
+    const p = JSON.parse(json || "[]");
+    if (Array.isArray(p)) {
+      return {
+        interviewers: p.filter(Boolean).map((name: unknown) => ({
+          name: String(name),
+          seat: "Technical",
+        })),
+        interviewee,
+      };
+    }
+    if (p && typeof p === "object") {
+      const interviewers = Array.isArray(p.interviewers) ? p.interviewers : [];
+      return {
+        interviewers: interviewers.map((row: InterviewerSeat) => ({
+          userId: row.userId,
+          name: String(row.name || ""),
+          email: row.email,
+          designation: row.designation,
+          seat: String(row.seat || "Technical"),
+        })),
+        interviewee: { ...interviewee, ...(p.interviewee || {}) },
+      };
+    }
+  } catch {
+    /* legacy */
+  }
+  return { interviewers: [], interviewee };
+}
+
+function interviewPublic(row: { panelJson?: string | null; candidate?: { id?: string; fullName?: string; email?: string | null; phone?: string | null; posting?: { title?: string } | null } } & Record<string, unknown>) {
+  const interviewee: IntervieweeSeat = {
+    candidateId: row.candidate?.id,
+    name: row.candidate?.fullName || "",
+    email: row.candidate?.email || "",
+    phone: row.candidate?.phone || "",
+    applyingFor: row.candidate?.posting?.title || "",
+  };
+  const panel = decodeInterviewPanel(row.panelJson as string, interviewee);
+  return { ...row, ...panel };
+}
+
+hrmRecruitmentRouter.get("/interviews", async (_req, res) => {
+  await safeHrmList("interviews", () =>
+    prisma.interviewRound
+      .findMany({
+        include: {
+          candidate: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              status: true,
+              posting: { select: { title: true } },
+            },
+          },
+        },
+        orderBy: { scheduledAt: "desc" },
+        take: 200,
+      })
+      .then((rows) => rows.map((r) => interviewPublic(r))),
+    res
+  );
+});
+
 hrmRecruitmentRouter.get("/candidates/:id/interviews", async (req, res) => {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: req.params.id },
+    include: { posting: { select: { title: true } } },
+  });
+  if (!candidate) return res.status(404).json({ error: "not found" });
   const rows = await prisma.interviewRound.findMany({
-    where: { candidateId: req.params.id },
+    where: { candidateId: candidate.id },
     orderBy: { roundNumber: "asc" },
   });
-  res.json(rows);
+  res.json(rows.map((r) => interviewPublic({ ...r, candidate })));
 });
 
 hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: req.params.id },
+    include: { posting: { select: { title: true } } },
+  });
   if (!candidate) return res.status(404).json({ error: "not found" });
   const priorRounds = await prisma.interviewRound.count({ where: { candidateId: candidate.id } });
-  const panel = Array.isArray(req.body.panel) ? req.body.panel : req.body.panel ? [req.body.panel] : [];
+  const interviewee: IntervieweeSeat = {
+    candidateId: candidate.id,
+    name: candidate.fullName,
+    email: candidate.email || "",
+    phone: candidate.phone || "",
+    applyingFor: candidate.posting?.title || s(req.body.applyingFor) || "",
+  };
+  const rawInterviewers = Array.isArray(req.body.interviewers) ? req.body.interviewers : [];
+  const fromPanel = Array.isArray(req.body.panel) ? req.body.panel : req.body.panel ? [req.body.panel] : [];
+  const interviewers: InterviewerSeat[] = rawInterviewers.length
+    ? rawInterviewers
+        .map((row: InterviewerSeat) => ({
+          userId: s(row.userId) || undefined,
+          name: String(row.name || "").trim(),
+          email: s(row.email) || undefined,
+          designation: s(row.designation) || undefined,
+          seat: String(row.seat || "Technical"),
+        }))
+        .filter((row: InterviewerSeat) => row.name)
+    : fromPanel.filter(Boolean).map((name: unknown) => ({ name: String(name), seat: "Technical" }));
   const scheduledAt = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
-  const mode = "Teams";
+  const mode = s(req.body.mode) === "In-person" || s(req.body.mode) === "Phone" ? String(req.body.mode) : "Teams";
   const durationMins = Number(req.body.durationMins) || 60;
+  const location = s(req.body.location) || (mode === "Teams" ? "Microsoft Teams" : "");
 
   let meetingLink = s(req.body.meetingLink);
   let meetingId = s(req.body.meetingId);
   let teamsNote: string | null = null;
-  if (!meetingLink && scheduledAt) {
+  if (!meetingLink && scheduledAt && mode === "Teams") {
     try {
       const end = new Date(scheduledAt.getTime() + durationMins * 60_000);
+      const interviewerLines = interviewers
+        .map((p) => `<li>${p.seat}: <strong>${p.name}</strong>${p.designation ? ` · ${p.designation}` : ""}${p.email ? ` · ${p.email}` : ""}</li>`)
+        .join("");
       const sch = await createTeamsSchedule({
         subject: `HR interview · ${candidate.fullName} · ${s(req.body.roundType) || "Technical"}`,
         start: scheduledAt,
         end,
-        location: "Microsoft Teams",
-        bodyHtml: `<p>Interview scheduled from Sharnam HRMS for <strong>${candidate.fullName}</strong>.</p>`,
+        location: location || "Microsoft Teams",
+        bodyHtml: `<p>Interview scheduled from Sharnam HRMS.</p>
+          <p><strong>Interviewee:</strong> ${candidate.fullName}${candidate.email ? ` · ${candidate.email}` : ""}${interviewee.applyingFor ? ` · applying for ${interviewee.applyingFor}` : ""}</p>
+          <p><strong>Interviewers</strong></p><ul>${interviewerLines || "<li>Panel to be confirmed</li>"}</ul>`,
       });
       meetingLink = sch.teamsJoinUrl;
       meetingId = sch.graphEventId;
@@ -298,7 +417,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
       candidateId: candidate.id,
       roundNumber: Number(req.body.roundNumber) || priorRounds + 1,
       roundType: s(req.body.roundType) || "Technical",
-      panelJson: JSON.stringify(panel),
+      panelJson: JSON.stringify({ version: 1, interviewers, interviewee }),
       scheduledAt,
       durationMins,
       mode,
@@ -308,8 +427,13 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     },
   });
   await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Interview" } });
-  await audit("hrms.interview.schedule", { userId: req.user!.id, entity: "InterviewRound", entityId: row.id, meta: { candidateId: candidate.id, roundNumber: row.roundNumber, mode } });
-  res.status(201).json({ ...row, teamsNote });
+  await audit("hrms.interview.schedule", {
+    userId: req.user!.id,
+    entity: "InterviewRound",
+    entityId: row.id,
+    meta: { candidateId: candidate.id, roundNumber: row.roundNumber, mode, interviewers: interviewers.map((p) => p.name) },
+  });
+  res.status(201).json({ ...interviewPublic({ ...row, candidate }), teamsNote });
 });
 
 hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -338,7 +462,11 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office"), a
   }
 
   await audit("hrms.interview.feedback", { userId: req.user!.id, entity: "InterviewRound", entityId: row.id, meta: { decision: row.decision, score: row.scoreOverall } });
-  res.json(row);
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: row.candidateId },
+    include: { posting: { select: { title: true } } },
+  });
+  res.json(interviewPublic({ ...row, candidate: candidate || undefined }));
 });
 
 /* ═════════════════════════════════════  OFFER LETTER  ═════════════════════════════════════ */
