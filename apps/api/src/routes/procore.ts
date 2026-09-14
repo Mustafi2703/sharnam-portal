@@ -142,19 +142,11 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
   await audit(existing ? "vendor.update" : "vendor.create", { userId: req.user!.id, entity: "Vendor", entityId: v.id });
 
   let login = null;
-  if (req.body.createLogin !== false && email) {
-    const { ensurePortalLogin } = await import("../services/crmVendorCredentials.js");
-    const role =
-      partyType === "Client" ? "client" : partyType === "Contractor" ? "vendor" : "employee";
-    login = await ensurePortalLogin({
-      email,
-      fullName: String(data.primaryContactName || name),
-      role,
-      phone: data.businessPhone ? String(data.businessPhone) : null,
+  if (email) {
+    const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
+    login = await syncDirectoryPortalLogin({
+      vendor: v,
       password: req.body.password ? String(req.body.password) : null,
-      vendorId: v.id,
-      designation: name,
-      department: partyType === "Consultant" || partyType === "Designer" || partyType === "PMC" ? data.trade || null : null,
     });
   }
   res.status(existing ? 200 : 201).json({ ...v, login });
@@ -183,7 +175,7 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
   let login = null;
   let projectsSynced = 0;
-  if (v.email || password) {
+  if (v.email) {
     const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
     login = await syncDirectoryPortalLogin({
       vendor: v,

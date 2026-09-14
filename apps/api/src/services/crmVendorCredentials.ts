@@ -296,6 +296,7 @@ export async function syncDirectoryPortalLogin(opts: {
     passwordHash?: string;
     role?: RoleKey;
     portal?: string;
+    isActive?: boolean;
   } = {
     fullName,
     phone: opts.vendor.businessPhone ? String(opts.vendor.businessPhone) : null,
@@ -318,6 +319,9 @@ export async function syncDirectoryPortalLogin(opts: {
   if (user.role !== role && !LOCKED_ROLES.has(user.role)) {
     data.role = role;
     data.portal = portalForRole(role);
+  }
+  if (user.isActive === false) {
+    data.isActive = true;
   }
 
   const updated = await prisma.user.update({ where: { id: user.id }, data });
@@ -532,4 +536,86 @@ export async function openAwardedProjectForVendor(opts: { projectId: string; ven
     });
   }
   return { login, vendorName: vendor.name, email: vendor.email };
+}
+
+/** Backfill portal User rows for every CRM directory company that has an email. */
+export async function syncAllDirectoryPortalLogins() {
+  const vendors = await prisma.vendor.findMany({
+    where: { isActive: true, email: { not: null } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      partyType: true,
+      businessPhone: true,
+      primaryContactName: true,
+      trade: true,
+    },
+    orderBy: { name: "asc" },
+  });
+  let created = 0;
+  let linked = 0;
+  let skipped = 0;
+  let failed = 0;
+  const errors: string[] = [];
+  for (const vendor of vendors) {
+    if (!String(vendor.email || "").trim()) {
+      skipped++;
+      continue;
+    }
+    try {
+      const login = await syncDirectoryPortalLogin({ vendor });
+      if (!login) {
+        skipped++;
+        continue;
+      }
+      if (login.created) created++;
+      else linked++;
+    } catch (err) {
+      failed++;
+      if (errors.length < 12) {
+        errors.push(`${vendor.email}: ${err instanceof Error ? err.message : "sync failed"}`);
+      }
+    }
+  }
+
+  const projects = await prisma.project.findMany({
+    where: { clientEmail: { not: null } },
+    select: {
+      id: true,
+      clientName: true,
+      clientEmail: true,
+      clientPhone: true,
+      clientContactName: true,
+      clientAddress: true,
+      clientGst: true,
+    },
+  });
+  for (const project of projects) {
+    if (!String(project.clientEmail || "").trim()) continue;
+    try {
+      const out = await ensureClientVendorAndPortal({
+        projectId: project.id,
+        name: project.clientName || project.clientContactName || "Client",
+        email: project.clientEmail,
+        phone: project.clientPhone,
+        contactName: project.clientContactName,
+        address: project.clientAddress,
+        gst: project.clientGst,
+      });
+      if (!out.login) {
+        skipped++;
+        continue;
+      }
+      if (out.login.created) created++;
+      else linked++;
+    } catch (err) {
+      failed++;
+      if (errors.length < 12) {
+        errors.push(`${project.clientEmail}: ${err instanceof Error ? err.message : "sync failed"}`);
+      }
+    }
+  }
+
+  return { scanned: vendors.length + projects.length, created, linked, skipped, failed, errors };
 }

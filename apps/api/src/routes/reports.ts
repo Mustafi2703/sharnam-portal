@@ -1348,8 +1348,8 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
       where:
         scope === "all"
           ? {
-              role: { in: [...HRMS_ALL_LOGIN_ROLES] },
               NOT: { email: { startsWith: "deleted." } },
+              OR: [{ role: { in: [...HRMS_ALL_LOGIN_ROLES] } }, { vendorId: { not: null } }],
             }
           : { ...staffWhere, isActive: true },
       orderBy: { fullName: "asc" },
@@ -1382,6 +1382,28 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
       detail: errorDetail(err),
     });
     res.status(500).json({ error: "Could not list employees" });
+  }
+});
+
+/** Create / relink portal logins for all CRM directory companies with email (clients, vendors, consultants). */
+hrmRouter.post("/employees/sync-directory-logins", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { syncAllDirectoryPortalLogins } = await import("../services/crmVendorCredentials.js");
+    const out = await syncAllDirectoryPortalLogins();
+    await audit("hrm.employees.sync_directory_logins", {
+      userId: req.user?.id,
+      entity: "User",
+      meta: out,
+    });
+    res.json(out);
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees.sync_directory_logins",
+      message: "Could not sync CRM directory logins",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not sync CRM directory logins" });
   }
 });
 

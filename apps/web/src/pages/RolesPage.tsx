@@ -50,9 +50,34 @@ export default function RolesPage() {
     setUsers(u);
   };
 
+  async function syncDirectoryLogins() {
+    setMsg("");
+    try {
+      const out = await api<{ scanned: number; created: number; linked: number; failed: number }>(
+        "/api/hrm/employees/sync-directory-logins",
+        { method: "POST", token, body: JSON.stringify({}) }
+      );
+      setMsg(
+        `CRM sync: ${out.created} new login${out.created === 1 ? "" : "s"}, ${out.linked} linked` +
+          (out.failed ? `, ${out.failed} failed` : "") +
+          ` (${out.scanned} companies scanned).`
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "CRM login sync failed");
+    }
+  }
+
   useEffect(() => {
     if (!canManage) return;
-    void load();
+    void (async () => {
+      try {
+        await api("/api/hrm/employees/sync-directory-logins", { method: "POST", token, body: JSON.stringify({}) });
+      } catch {
+        /* list still loads if sync unavailable on old API */
+      }
+      await load();
+    })();
   }, [token, canManage, showDemoLogins]);
 
   async function deleteDemoSeedLogins() {
@@ -215,11 +240,15 @@ export default function RolesPage() {
           </div>
           {!showDemoLogins ? (
             <p className="text-xs text-steel-muted">
-              Demo seed logins are hidden. Only real SPDC staff and live client / vendor accounts show here.
+              Demo seed logins (@sharnam.demo) are hidden. Client / vendor logins from CRM appear after save — use{" "}
+              <strong className="text-ink">Sync CRM logins</strong> if a company has email but no row here yet.
             </p>
           ) : null}
           {canManage ? (
             <div className="flex flex-wrap gap-2 items-center">
+              <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void syncDirectoryLogins()}>
+                Sync CRM logins
+              </Button>
               <label className="inline-flex items-center gap-2 text-xs font-semibold text-steel-muted">
                 <input
                   type="checkbox"
