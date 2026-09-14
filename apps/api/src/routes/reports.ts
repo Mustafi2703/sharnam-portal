@@ -1306,8 +1306,9 @@ hrmRouter.get("/activity", hrmDesk, async (req, res) => {
   res.json({ events, runtime: listRuntimeLogs(120) });
 });
 
-hrmRouter.get("/employees", hrmDesk, async (req, res) => {
+hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const scope = String(req.query.scope || "staff");
+  const includeDemo = String(req.query.includeDemo || "") === "1" && req.user?.role === "admin";
   const staffWhere = {
     NOT: { email: { startsWith: "deleted." } },
     OR: [
@@ -1340,7 +1341,12 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
       },
     });
     const profiles = await prisma.employeeProfile.findMany();
-    res.json(users.map((u) => ({ ...u, profile: profiles.find((p) => p.userId === u.id) || null })));
+    let rows = users.map((u) => ({ ...u, profile: profiles.find((p) => p.userId === u.id) || null }));
+    if (!includeDemo) {
+      const { isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
+      rows = rows.filter((u) => !isDemoSeedLoginEmail(u.email));
+    }
+    res.json(rows);
   } catch (err) {
     pushRuntimeLog({
       level: "error",
@@ -1349,6 +1355,38 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
       detail: errorDetail(err),
     });
     res.status(500).json({ error: "Could not list employees" });
+  }
+});
+
+/** One-time cleanup — soft-off demo seed logins still active in the DB. Admin only. */
+hrmRouter.post("/employees/deactivate-demo-seed", requireRoles("admin"), async (req: AuthedRequest, res) => {
+  try {
+    const { isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
+    const active = await prisma.user.findMany({
+      where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+      select: { id: true, email: true, fullName: true },
+    });
+    const targets = active.filter((u) => isDemoSeedLoginEmail(u.email));
+    if (!targets.length) {
+      return res.json({ deactivated: 0, emails: [] });
+    }
+    await prisma.$transaction(
+      targets.map((u) => prisma.user.update({ where: { id: u.id }, data: { isActive: false } }))
+    );
+    await audit("hrm.employees.deactivate_demo_seed", {
+      userId: req.user?.id,
+      entity: "User",
+      meta: { count: targets.length, emails: targets.map((t) => t.email) },
+    });
+    res.json({ deactivated: targets.length, emails: targets.map((t) => t.email) });
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees.deactivate_demo_seed",
+      message: "Could not deactivate demo seed logins",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not deactivate demo logins" });
   }
 });
 

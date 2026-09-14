@@ -42,6 +42,8 @@ export default function RolesPage() {
   const canManage = user?.role === "admin" || user?.role === "office";
   /** Admins can open any desk as that user; an active test session can hop straight on. */
   const canImpersonate = user?.role === "admin" || Boolean(user?.impersonatedBy);
+  const isAdmin = user?.role === "admin";
+  const [showDemoLogins, setShowDemoLogins] = useState(false);
 
   async function signInAs(row: UserAccountRow) {
     setSwitching(row.id);
@@ -57,9 +59,10 @@ export default function RolesPage() {
   }
 
   const load = async () => {
+    const demoQ = showDemoLogins && isAdmin ? "&includeDemo=1" : "";
     const [r, u] = await Promise.all([
       api<any[]>("/api/roles", { token }),
-      api<UserAccountRow[]>("/api/hrm/employees?scope=all", { token }),
+      api<UserAccountRow[]>(`/api/hrm/employees?scope=all${demoQ}`, { token }),
     ]);
     setRoles(r);
     setUsers(u);
@@ -68,7 +71,32 @@ export default function RolesPage() {
   useEffect(() => {
     if (!canManage) return;
     void load();
-  }, [token, canManage]);
+  }, [token, canManage, showDemoLogins]);
+
+  async function deactivateDemoSeedLogins() {
+    if (
+      !window.confirm(
+        "Turn off all demo seed logins (@sharnam.demo, @consultant.demo, @arvind.demo, @bhavanainfra.demo)? Real @spdc.in staff stay active."
+      )
+    )
+      return;
+    setMsg("");
+    try {
+      const res = await api<{ deactivated: number; emails: string[] }>("/api/hrm/employees/deactivate-demo-seed", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsg(
+        res.deactivated
+          ? `Deactivated ${res.deactivated} demo login${res.deactivated === 1 ? "" : "s"}.`
+          : "No active demo seed logins found."
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not deactivate demo logins");
+    }
+  }
 
   const shownUsers = useMemo(() => {
     const needle = userQ.trim().toLowerCase();
@@ -178,6 +206,27 @@ export default function RolesPage() {
             <h2 className="font-display text-lg text-ink">All portal logins</h2>
             <Badge tone="neutral">{shownUsers.length}{userQ || kindFilter !== "all" ? ` / ${users.length}` : ""} accounts</Badge>
           </div>
+          {!showDemoLogins ? (
+            <p className="text-xs text-steel-muted">
+              Demo seed logins are hidden. Only real SPDC staff and live client / vendor accounts show here.
+            </p>
+          ) : null}
+          {isAdmin ? (
+            <div className="flex flex-wrap gap-2 items-center">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-steel-muted">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--color-mark)]"
+                  checked={showDemoLogins}
+                  onChange={(e) => setShowDemoLogins(e.target.checked)}
+                />
+                Show demo seed logins
+              </label>
+              <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void deactivateDemoSeedLogins()}>
+                Deactivate demo logins
+              </Button>
+            </div>
+          ) : null}
           <Input
             className="!text-sm"
             placeholder="Search name, email, company…"

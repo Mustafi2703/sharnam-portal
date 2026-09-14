@@ -10,6 +10,16 @@ export const KEEP_PORTAL_EMAILS = Array.from(
   ])
 );
 
+/** Seeded UAT accounts — hidden from Access / HRMS lists on the live portal. */
+export const DEMO_LOGIN_SUFFIXES = ["@sharnam.demo", "@consultant.demo", "@arvind.demo", "@bhavanainfra.demo"] as const;
+
 export function isKeptPortalEmail(email?: string | null) {
   return KEEP_PORTAL_EMAILS.includes(String(email || "").trim().toLowerCase());
+}
+
+export function isDemoSeedLoginEmail(email?: string | null) {
+  const lower = String(email || "").trim().toLowerCase();
+  if (!lower || lower.startsWith("deleted.")) return false;
+  if (isKeptPortalEmail(lower)) return false;
+  return DEMO_LOGIN_SUFFIXES.some((suffix) => lower.endsWith(suffix));
 }
