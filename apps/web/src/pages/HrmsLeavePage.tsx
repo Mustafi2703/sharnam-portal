@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
+import { canManageHrms } from "../lib/portalAccounts";
 
 /** HRMS · Leave — pre-approval flow with balances + admin approve/reject. */
 export default function HrmsLeavePage() {
   const { token, user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "office";
+  const canManage = canManageHrms(user);
   const [leave, setLeave] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
   const [balances, setBalances] = useState<any[]>([]);

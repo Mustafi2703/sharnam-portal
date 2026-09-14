@@ -1201,10 +1201,10 @@ hrmRouter.get("/attendance/:id/photo/:kind", requireAuth, async (req, res) => {
 hrmRouter.use(requireAuth);
 
 /** HR desk metrics — office / admin only (portal UI is gated; API must match). */
-const hrmDesk = requireRoles("admin", "office");
+const hrmDesk = requireRoles("admin", "office", "hr");
 /** Field staff may punch and view roster; vendors/clients must not. */
-const hrmStaff = requireRoles("admin", "office", "site_employee", "employee");
-const HRMS_STAFF_ROLES = ["admin", "office", "employee", "site_employee"] as const;
+const hrmStaff = requireRoles("admin", "office", "hr", "site_employee", "employee");
+const HRMS_STAFF_ROLES = ["admin", "office", "hr", "employee", "site_employee"] as const;
 const HRMS_ALL_LOGIN_ROLES = [...HRMS_STAFF_ROLES, "vendor", "client"] as const;
 
 async function safeCount(label: string, fn: () => Promise<number>): Promise<number> {
@@ -1243,7 +1243,7 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
           isActive: true,
           NOT: { email: { startsWith: "deleted." } },
           OR: [
-            { role: { in: ["admin", "office", "site_employee"] } },
+            { role: { in: ["admin", "office", "hr", "site_employee"] } },
             { role: "employee", vendorId: null },
           ],
         },
@@ -1311,7 +1311,7 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
   const staffWhere = {
     NOT: { email: { startsWith: "deleted." } },
     OR: [
-      { role: { in: ["admin", "office", "site_employee"] } },
+      { role: { in: ["admin", "office", "hr", "site_employee"] } },
       { role: "employee", vendorId: null },
     ],
   };
@@ -1352,7 +1352,7 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
   }
 });
 
-hrmRouter.post("/employees", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const bcrypt = await import("bcryptjs");
   const { portalForRole } = await import("@sharnam/shared");
   const { email, fullName, role, phone, empCode, department, designation, password, vendorId: vendorIdRaw, desk } = req.body;
@@ -1446,7 +1446,7 @@ hrmRouter.delete("/assign", requireRoles("admin", "office"), async (req, res) =>
   res.json({ ok: true });
 });
 
-hrmRouter.patch("/employees/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const userId = req.params.id;
   const { email, fullName, role, phone, empCode, department, designation, password, isActive } = req.body;
   const existing = await prisma.user.findUnique({ where: { id: userId } });
@@ -1524,7 +1524,7 @@ hrmRouter.patch("/employees/:id", requireRoles("admin", "office"), async (req: A
   res.json({ ...user, profile, memberships });
 });
 
-hrmRouter.delete("/employees/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const userId = req.params.id;
   if (userId === req.user?.id) return res.status(400).json({ error: "Cannot remove your own account" });
 
@@ -1826,7 +1826,7 @@ hrmRouter.get("/leave-types", hrmStaff, async (_req, res) => {
   res.json(rows);
 });
 
-hrmRouter.post("/leave-types", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.post("/leave-types", hrmDesk, async (req, res) => {
   const row = await prisma.leaveType.upsert({
     where: { code: String(req.body.code || req.body.name || "").toUpperCase() },
     create: {
@@ -1858,7 +1858,7 @@ hrmRouter.get("/holidays", async (req, res) => {
   res.json(rows);
 });
 
-hrmRouter.post("/holidays", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.post("/holidays", hrmDesk, async (req, res) => {
   const rows: Array<{ date: string; name: string; region?: string; isOptional?: boolean }> = Array.isArray(req.body) ? req.body : [req.body];
   const created = [];
   for (const r of rows) {
@@ -1875,7 +1875,7 @@ hrmRouter.post("/holidays", requireRoles("admin", "office"), async (req, res) =>
   res.status(201).json(created);
 });
 
-hrmRouter.delete("/holidays/:id", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.delete("/holidays/:id", hrmDesk, async (req, res) => {
   await prisma.holiday.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
 });
@@ -1890,7 +1890,7 @@ hrmRouter.get("/leave-balances", hrmStaff, async (req: AuthedRequest, res) => {
   res.json(rows);
 });
 
-hrmRouter.post("/leave-balances", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.post("/leave-balances", hrmDesk, async (req, res) => {
   const { userId, leaveTypeId, year, entitled } = req.body;
   if (!userId || !leaveTypeId || !year) return res.status(400).json({ error: "userId, leaveTypeId, year required" });
   const row = await prisma.leaveBalance.upsert({
@@ -1908,7 +1908,7 @@ hrmRouter.get("/documents/:userId", async (req, res) => {
   res.json(rows);
 });
 
-hrmRouter.post("/documents", requireRoles("admin", "office"), async (req, res) => {
+hrmRouter.post("/documents", hrmDesk, async (req, res) => {
   const row = await prisma.employeeDocument.create({
     data: {
       userId: req.body.userId,
@@ -1980,7 +1980,7 @@ hrmRouter.post(
   }
 );
 
-hrmRouter.delete("/employee-files/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.delete("/employee-files/:id", hrmDesk, async (req: AuthedRequest, res) => {
   await prisma.employeeDocument.delete({ where: { id: req.params.id } });
   await audit("hrm.files.delete", { userId: req.user!.id, entity: "EmployeeDocument", entityId: req.params.id });
   res.json({ ok: true });
@@ -2050,7 +2050,7 @@ hrmRouter.get("/hrms-documents", hrmDesk, async (req, res) => {
  *   kind (required), employeeName (required), employeeUserId?, designation?, department?,
  *   effectiveDate?, data (json blob for the template placeholders)
  */
-hrmRouter.post("/hrms-documents", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
   const kindRaw = String(req.body.kind || "");
   if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
     return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
@@ -2086,7 +2086,7 @@ hrmRouter.post("/hrms-documents", requireRoles("admin", "office"), async (req: A
  * Templates live in apps/api/formats/hrms/<kind>.docx (or fallback .html/.txt).
  * Also stamps the Sharnam logo via brandedExport if the fallback path is used.
  */
-hrmRouter.post("/hrms-documents/:id/generate", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedRequest, res) => {
   const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
 
@@ -2174,7 +2174,7 @@ hrmRouter.post(
   }
 );
 
-hrmRouter.patch("/hrms-documents/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.patch("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const before = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const data: Record<string, unknown> = {};
@@ -2187,7 +2187,7 @@ hrmRouter.patch("/hrms-documents/:id", requireRoles("admin", "office"), async (r
   res.json(row);
 });
 
-hrmRouter.delete("/hrms-documents/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.delete("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) => {
   await prisma.hrmsDocument.delete({ where: { id: req.params.id } });
   await audit("hrm.docs.delete", { userId: req.user!.id, entity: "HrmsDocument", entityId: req.params.id });
   res.json({ ok: true });
@@ -2221,7 +2221,7 @@ hrmRouter.post("/leave", requireRoles("admin", "office", "site_employee", "emplo
   res.status(201).json(row);
 });
 
-hrmRouter.patch("/leave/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.patch("/leave/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const before = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const status = String(req.body.status);
@@ -2253,7 +2253,7 @@ hrmRouter.patch("/leave/:id", requireRoles("admin", "office"), async (req: Authe
 const HR_HEAD_EMAIL = "anushka.jha@spdc.in";
 function canApproveVoucher(user?: { email?: string; role?: string } | null) {
   if (!user) return false;
-  if (user.role === "admin") return true;
+  if (user.role === "admin" || user.role === "hr") return true;
   if (user.email?.toLowerCase() === HR_HEAD_EMAIL) return true;
   return user.role === "office";
 }
@@ -2324,7 +2324,7 @@ hrmRouter.post("/vouchers", requireRoles("admin", "office", "employee", "site_em
   res.status(201).json({ ...row, particulars });
 });
 
-hrmRouter.patch("/vouchers/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRouter.patch("/vouchers/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (!canApproveVoucher(req.user)) return res.status(403).json({ error: "HR approval only" });
   const before = await prisma.expenseVoucher.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });

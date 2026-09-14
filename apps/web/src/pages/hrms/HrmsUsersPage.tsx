@@ -9,10 +9,12 @@ import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
+import { canManageHrms } from "../../lib/portalAccounts";
 
 const LOGIN_ROLES = [
   { value: "site_employee", label: "SPDC site — /login/site" },
   { value: "office", label: "SPDC office — /login/office" },
+  { value: "hr", label: "HR — /login/hr" },
 ] as const;
 
 const EMPTY_USER_FORM = {
@@ -89,7 +91,7 @@ function AddUserModal({
 export default function HrmsUsersPage() {
   const { token, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const canEdit = user?.role === "admin" || user?.role === "office";
+  const canEdit = canManageHrms(user);
   const [employees, setEmployees] = useState<UserAccountRow[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [msg, setMsg] = useState("");

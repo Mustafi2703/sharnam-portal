@@ -22,6 +22,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 const STAFF_ROLES = [
   { value: "office", label: "SPDC office — /login/office" },
+  { value: "hr", label: "HR — /login/hr" },
   { value: "site_employee", label: "SPDC site — /login/site" },
   { value: "employee", label: "SPDC employee — /login/office" },
   { value: "admin", label: "Admin — /login/office" },

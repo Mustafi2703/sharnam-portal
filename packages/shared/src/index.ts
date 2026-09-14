@@ -1,6 +1,7 @@
 export const ROLES = [
   "admin",
   "office",
+  "hr",
   "site_employee",
   "client",
   "employee",
@@ -12,6 +13,7 @@ export type RoleKey = (typeof ROLES)[number];
 export const PORTALS = [
   "admin",
   "office",
+  "hr",
   "site",
   "client",
   "vendor",
@@ -84,6 +86,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     rfis: { view: true, create: true, edit: true, approve: true },
     inspections: { view: true, create: true, edit: true, approve: true },
     safety: { view: true, create: true, edit: true, approve: true },
+  },
+  hr: {
+    ...emptyPermissions(false),
+    hrm: { view: true, create: true, edit: true, approve: true },
+    users: { view: true, create: true, edit: true, approve: false },
   },
   site_employee: {
     ...emptyPermissions(false),
@@ -178,6 +185,8 @@ export function portalForRole(role: RoleKey): PortalKey {
     case "office":
     case "employee":
       return "office";
+    case "hr":
+      return "hr";
     case "site_employee":
       return "site";
     case "client":

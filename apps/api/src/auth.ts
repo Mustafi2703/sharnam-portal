@@ -25,7 +25,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   if (!raw) return res.status(401).json({ error: "Unauthorized" });
   try {
     req.user = jwt.verify(raw, JWT_SECRET) as AuthUser;
-    if (isHrDeskOnly(req.user.email) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
+    if (isHrDeskOnly(req.user.email, req.user.role) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
       return res.status(403).json({ error: "This login is HR portal only — people management." });
     }
     next();
@@ -68,6 +68,6 @@ export function toAuthUser(u: {
     role: u.role as RoleKey,
     portal: u.portal as PortalKey,
     vendorId: u.vendorId ?? null,
-    hrDeskOnly: isHrDeskOnly(u.email),
+    hrDeskOnly: isHrDeskOnly(u.email, u.role),
   };
 }

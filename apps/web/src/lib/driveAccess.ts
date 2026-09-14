@@ -4,7 +4,8 @@ export const SPDC_PORTAL_ROLES = ["admin", "office", "employee", "site_employee"
 
 export const HR_HEAD_EMAIL = "anushka.jha@spdc.in";
 
-export function isHrDeskOnly(email?: string | null): boolean {
+export function isHrDeskOnly(email?: string | null, role?: string | null): boolean {
+  if (String(role || "").trim().toLowerCase() === "hr") return true;
   return String(email || "").trim().toLowerCase() === HR_HEAD_EMAIL;
 }
 

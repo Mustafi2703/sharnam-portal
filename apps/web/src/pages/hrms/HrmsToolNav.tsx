@@ -1,5 +1,6 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth";
+import { canManageHrms } from "../../lib/portalAccounts";
 import { HRMS_ACCENT, HRMS_SECTIONS, type HrmsSection } from "./hrmsNav";
 
 function toolPath(to: string) {
@@ -30,7 +31,7 @@ const tabClass = (on: boolean) =>
 export default function HrmsToolNav() {
   const loc = useLocation();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "office";
+  const isAdmin = canManageHrms(user);
   const section = activeHrmsSection(loc.pathname);
   const tools = section.tools.filter((t) => !t.adminOnly || isAdmin);
 

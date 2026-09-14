@@ -1,5 +1,6 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth";
+import { canManageHrms } from "../../lib/portalAccounts";
 import { ModuleIcon, IconMoon, IconSun } from "../../components/icons";
 import { formatUiText } from "../../lib/formatUiText";
 import type { ColorMode } from "../../themes";
@@ -27,7 +28,7 @@ export default function HrmsSideNav({
   const loc = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "office";
+  const isAdmin = canManageHrms(user);
   const dark = colorMode === "dark";
 
   return (

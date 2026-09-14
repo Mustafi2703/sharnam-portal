@@ -64,7 +64,7 @@ hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
   );
 });
 
-hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const row = await prisma.manpowerRequisition.create({
     data: {
       requisitionNo: s(req.body.requisitionNo) || `MR-${Date.now()}`,
@@ -86,7 +86,7 @@ hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office"), asyn
   res.status(201).json(row);
 });
 
-hrmRecruitmentRouter.patch("/requisitions/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/requisitions/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.manpowerRequisition.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const nextStatus = s(req.body.status) || before.status;
@@ -120,7 +120,7 @@ hrmRecruitmentRouter.get("/postings", async (_req, res) => {
   );
 });
 
-hrmRecruitmentRouter.post("/postings", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/postings", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const channels = Array.isArray(req.body.channels) ? req.body.channels : req.body.channels ? String(req.body.channels).split(",").map((c: string) => c.trim()) : [];
   const row = await prisma.jobPosting.create({
     data: {
@@ -141,7 +141,7 @@ hrmRecruitmentRouter.post("/postings", requireRoles("admin", "office"), async (r
   res.status(201).json(row);
 });
 
-hrmRecruitmentRouter.patch("/postings/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/postings/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.jobPosting.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const channels = Array.isArray(req.body.channels) ? req.body.channels : undefined;
@@ -193,7 +193,7 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   );
 });
 
-hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office"), upload.single("resume"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), upload.single("resume"), async (req: AuthedRequest, res) => {
   let resumeUrl: string | undefined;
   if (req.file) {
     const saved = await mockOneDrive.upload(
@@ -227,7 +227,7 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office"), upload
   res.status(201).json(row);
 });
 
-hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const nextStatus = s(req.body.status) || before.status;
@@ -348,7 +348,7 @@ hrmRecruitmentRouter.get("/candidates/:id/interviews", async (req, res) => {
   res.json(rows.map((r) => interviewPublic({ ...r, candidate })));
 });
 
-hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const candidate = await prisma.candidate.findUnique({
     where: { id: req.params.id },
     include: { posting: { select: { title: true } } },
@@ -436,7 +436,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   res.status(201).json({ ...interviewPublic({ ...row, candidate }), teamsNote });
 });
 
-hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.interviewRound.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const row = await prisma.interviewRound.update({
@@ -491,7 +491,7 @@ hrmRecruitmentRouter.get("/offers/:id", async (req, res) => {
 });
 
 /** Fill the SPDC appointment letter from the accepted offer and file it on Drive. */
-hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const offer = await prisma.offer.findUnique({
     where: { id: req.params.id },
     include: { candidate: true, preJoin: true, onboard: true },
@@ -580,7 +580,7 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
   res.status(201).json(updated);
 });
 
-hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office"), upload.single("letter"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office", "hr"), upload.single("letter"), async (req: AuthedRequest, res) => {
   const candidateId = String(req.body.candidateId);
   const candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
   if (!candidate) return res.status(400).json({ error: "candidateId required / not found" });
@@ -684,7 +684,7 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office"), upload.sin
  * the full Parts A/B/C breakdown back without saving anything.  Used by the
  * "Preview" button on the OffersTab.
  */
-hrmRecruitmentRouter.post("/ctc/compute", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/ctc/compute", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   try {
     const b = req.body || {};
     const inputs: CtcInputs = {
@@ -747,7 +747,7 @@ hrmRecruitmentRouter.get("/offers/:id/annexure.xlsx", async (req, res) => {
   res.send(buf);
 });
 
-hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.offer.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const nextStatus = s(req.body.status) || before.status;
@@ -809,7 +809,7 @@ hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req, res) => {
   res.json(row);
 });
 
-hrmRecruitmentRouter.patch("/pre-joining/:offerId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/pre-joining/:offerId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const existing = await prisma.preJoiningChecklist.upsert({
     where: { offerId: req.params.offerId },
     create: { offerId: req.params.offerId },
@@ -928,7 +928,7 @@ hrmRecruitmentRouter.get("/onboarding/:offerId", async (req, res) => {
   res.json({ ...row, itemsCompletedAt: JSON.parse(row.itemsCompletedAtJson || "{}") });
 });
 
-hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const existing = await prisma.onboardingChecklist.upsert({
     where: { offerId: req.params.offerId },
     create: { offerId: req.params.offerId },
@@ -993,7 +993,7 @@ hrmRecruitmentRouter.get("/onboarding/:offerId/hr-policy", async (req, res) => {
   res.send(html);
 });
 
-hrmRecruitmentRouter.post("/onboarding/:offerId/hr-policy", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/onboarding/:offerId/hr-policy", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const filed = await fileHrPolicyAcknowledgement(req.params.offerId, req.user!.id);
   if (!filed) return res.status(404).json({ error: "not found" });
   res.json({
@@ -1018,7 +1018,7 @@ hrmRecruitmentRouter.get("/pay-hikes", async (req, res) => {
   );
 });
 
-hrmRecruitmentRouter.post("/pay-hikes", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/pay-hikes", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const oldCtc = Number(req.body.oldCtcAnnual || 0);
   const newCtc = Number(req.body.newCtcAnnual || 0);
   const hikePercent = oldCtc > 0 ? ((newCtc - oldCtc) / oldCtc) * 100 : 0;
@@ -1042,7 +1042,7 @@ hrmRecruitmentRouter.post("/pay-hikes", requireRoles("admin", "office"), async (
   res.status(201).json(row);
 });
 
-hrmRecruitmentRouter.patch("/pay-hikes/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/pay-hikes/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.payHike.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const nextStatus = s(req.body.status) || before.status;
@@ -1075,7 +1075,7 @@ hrmRecruitmentRouter.patch("/pay-hikes/:id", requireRoles("admin", "office"), as
 /* ═════════════════════════════════════  PAYSLIP  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/payslips", async (req: AuthedRequest, res) => {
-  const isAdmin = ["admin", "office"].includes(req.user!.role);
+  const isAdmin = ["admin", "office", "hr"].includes(req.user!.role);
   const filters: Record<string, unknown> = {};
   if (req.query.year) filters.year = Number(req.query.year);
   if (req.query.month) filters.month = Number(req.query.month);
@@ -1192,7 +1192,7 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
   });
 }
 
-hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const userId = String(req.body.userId || "");
   const year = Number(req.body.year);
   const month = Number(req.body.month);
@@ -1230,7 +1230,7 @@ hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office"),
   }
 });
 
-hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const year = Number(req.body.year);
   const month = Number(req.body.month);
   if (!year || !month) return res.status(400).json({ error: "year and month required" });
@@ -1265,10 +1265,10 @@ hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "off
   res.status(201).json({ created, skipped });
 });
 
-hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "office", "hr", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const row = await prisma.payslip.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
-  if (req.user!.role !== "admin" && req.user!.role !== "office" && req.user!.id !== row.userId) {
+  if (req.user!.role !== "admin" && req.user!.role !== "office" && req.user!.role !== "hr" && req.user!.id !== row.userId) {
     return res.status(403).json({ error: "Forbidden" });
   }
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
@@ -1280,7 +1280,7 @@ hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "offic
   res.send(html);
 });
 
-hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.payslip.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const overrides: Record<string, number> = {};

@@ -4,6 +4,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
+import { canManageHrms } from "../lib/portalAccounts";
 import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_SEATS } from "@sharnam/shared";
 
 /**
@@ -31,7 +32,7 @@ function money(n?: number | null) {
 
 export default function RecruitmentPage() {
   const { token, user } = useAuth();
-  const canManage = ["admin", "office"].includes(user?.role || "");
+  const canManage = canManageHrms(user);
   const [sp, setSp] = useSearchParams();
   const tab = (sp.get("tab") as TabId) || "requisitions";
 

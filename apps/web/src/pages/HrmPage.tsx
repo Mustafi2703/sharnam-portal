@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { canManageHrms } from "../lib/portalAccounts";
 import { Card, Stat } from "../components/ui";
 
 /** HRMS dashboard — KPIs and quick links into every HR workflow. */
 export default function HrmPage() {
   const { token, user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "office";
+  const canManage = canManageHrms(user);
   const [employees, setEmployees] = useState<any[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);

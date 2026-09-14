@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../auth";
 import { homePathForUser } from "../../lib/portalAccounts";
 
-/** HRMS is only for Sharnam office admins and HR desk users (admin / office roles). */
+/** HRMS is for office/admin and the HR role (HR portal only). */
 export default function HrmsProtected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
@@ -15,7 +15,9 @@ export default function HrmsProtected({ children }: { children: ReactNode }) {
   }
   if (!user) return <Navigate to="/login/hr" replace />;
   if (user.role !== "admin" && user.role !== "office") {
-    return <Navigate to={homePathForUser(user)} replace />;
+    if (user.role !== "hr" && !user.hrDeskOnly) {
+      return <Navigate to={homePathForUser(user)} replace />;
+    }
   }
   return <>{children}</>;
 }

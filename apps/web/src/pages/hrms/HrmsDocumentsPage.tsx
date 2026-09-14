@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { api, apiBase, mediaUrl } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
+import { canManageHrms } from "../../lib/portalAccounts";
 
 /**
  * HRMS letter desk — Appointment / Promotion / Relieving / Exit / Offer / Confirmation.
@@ -57,7 +58,7 @@ const KIND_OPTIONS: { key: DocKind; label: string; hint: string }[] = [
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "office";
+  const canManage = canManageHrms(user);
   const [rows, setRows] = useState<DocRow[]>([]);
   const [msg, setMsg] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | DocKind>("all");

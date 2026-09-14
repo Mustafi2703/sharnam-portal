@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
+import { canManageHrms } from "../lib/portalAccounts";
 
 /**
  * Onboarding hub — top level shows all offers past "Accepted" with a live pre-join +
@@ -69,7 +70,7 @@ function OnboardingList() {
 function OfferOnboardingPage() {
   const { offerId } = useParams();
   const { token, user } = useAuth();
-  const canWrite = ["admin", "office"].includes(user?.role || "");
+  const canWrite = canManageHrms(user);
   const [offer, setOffer] = useState<any | null>(null);
   const [preJoin, setPreJoin] = useState<any | null>(null);
   const [onboard, setOnboard] = useState<any | null>(null);

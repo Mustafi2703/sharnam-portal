@@ -1,7 +1,8 @@
-/** Anushka Jha — people management only. Same password as other SPDC logins. */
+/** HR portal — people management only. Same password as other SPDC logins. */
 export const HR_DESK_ONLY_EMAILS = ["anushka.jha@spdc.in"];
 
-export function isHrDeskOnly(email?: string | null) {
+export function isHrDeskOnly(email?: string | null, role?: string | null) {
+  if (String(role || "").trim().toLowerCase() === "hr") return true;
   return HR_DESK_ONLY_EMAILS.includes(String(email || "").trim().toLowerCase());
 }
 

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Button, Card, Input } from "../components/ui";
+import { canManageHrms } from "../lib/portalAccounts";
 
 /** HRMS · Masters — leave types + holidays uploads. Admin / office only. */
 export default function HrmsMastersPage() {
   const { token, user } = useAuth();
-  const canManage = user?.role === "admin" || user?.role === "office";
+  const canManage = canManageHrms(user);
   const [types, setTypes] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [typeForm, setTypeForm] = useState({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });

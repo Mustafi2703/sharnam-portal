@@ -145,7 +145,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     headline: "HRMS desk",
     subtitle: "Recruitment, attendance, leave, payroll, and letters.",
     demoEmail: "anushka.jha@spdc.in",
-    allowedRoles: ["admin", "office"],
+    allowedRoles: ["admin", "office", "hr"],
     points: ["Recruit to onboard", "Attendance & leave", "Payroll & letters"],
     cta: "Sign in", tone: "#0D9488", icon: "HR",
     landingPath: "/hrm", workspaceKey: null, group: "role",

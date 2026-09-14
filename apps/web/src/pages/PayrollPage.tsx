@@ -17,7 +17,7 @@ function money(n?: number | null) {
 
 export default function PayrollPage() {
   const { token, user } = useAuth();
-  const canWrite = ["admin", "office"].includes(user?.role || "");
+  const canWrite = ["admin", "office", "hr"].includes(user?.role || "") || Boolean(user?.hrDeskOnly);
   const [tab, setTab] = useState<"payslip" | "hike">("payslip");
   const [employees, setEmployees] = useState<any[]>([]);
   const [hikes, setHikes] = useState<any[]>([]);

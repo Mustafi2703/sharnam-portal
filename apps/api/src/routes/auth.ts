@@ -70,6 +70,7 @@ function loginPathForRole(role: string) {
   if (role === "vendor") return "/login/vendor";
   if (role === "client") return "/login/client";
   if (role === "site_employee") return "/login/site";
+  if (role === "hr") return "/login/hr";
   if (role === "employee") return "/login/stakeholder";
   if (role === "admin" || role === "office") return "/login/office";
   return "/login";
@@ -133,9 +134,9 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
-    if (isHrDeskOnly(user.email) && portal && portal !== "hr") {
+    if (isHrDeskOnly(user.email, user.role) && portal && portal !== "hr") {
       return res.status(403).json({
-        error: "Anushka Jha signs in only at the HR portal (people management): https://portal.spdc.in/login/hr",
+        error: "This account signs in only at the HR portal (people management): https://portal.spdc.in/login/hr",
       });
     }
 
