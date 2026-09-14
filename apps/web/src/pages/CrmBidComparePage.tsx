@@ -138,15 +138,13 @@ export default function CrmBidComparePage() {
 
   const load = useCallback(async () => {
     if (!canManage) return;
-    const [pkgs, disc, l, p, v] = await Promise.all([
+    const [pkgs, l, p, v] = await Promise.all([
       api<BidPackage[]>(`/api/crm/bid-packages${setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : ""}`, { token }).catch(() => []),
-      api<Discipline[]>("/api/crm/disciplines", { token }).catch(() => []),
       api<any[]>("/api/crm/leads", { token }).catch(() => []),
       api<{ id: string; code: string; name: string }[]>("/api/projects", { token }).catch(() => []),
       api<any[]>("/api/vendors", { token }).catch(() => []),
     ]);
     setPackages(pkgs);
-    setDisciplines(disc);
     setLeads(l);
     setProjects(p);
     setVendors(v);
@@ -197,7 +195,7 @@ export default function CrmBidComparePage() {
       leadId: "",
       revisionLabel: "R2",
       vendorIds: [],
-      disciplineKeys: disciplines.map((d) => d.key),
+      disciplineKeys: [],
       customDisciplines: [],
       ...prefill,
       projectId: pid || "",
@@ -248,11 +246,6 @@ export default function CrmBidComparePage() {
   }
 
   useEffect(() => {
-    if (form.projectId || !disciplines.length || form.disciplineKeys.length) return;
-    setForm((f) => ({ ...f, disciplineKeys: disciplines.map((d) => d.key) }));
-  }, [disciplines, form.disciplineKeys.length, form.projectId]);
-
-  useEffect(() => {
     if (setupProjectId && !routePkgId) {
       setShowNewBidForm(true);
     }
@@ -301,10 +294,13 @@ export default function CrmBidComparePage() {
       { token }
     )
       .then((r) => {
+        setDisciplineSource(r.source || "default");
         if (r.disciplines?.length) {
           setDisciplines(r.disciplines);
-          setDisciplineSource(r.source || "default");
           setForm((f) => ({ ...f, disciplineKeys: r.disciplines.map((d) => d.key) }));
+        } else {
+          setDisciplines([]);
+          setForm((f) => ({ ...f, disciplineKeys: [] }));
         }
       })
       .catch(() => {});
@@ -404,7 +400,10 @@ export default function CrmBidComparePage() {
       return;
     }
     if (!form.disciplineKeys.length) {
-      showActionNeed("Discipline required", "Select at least one discipline BOQ sheet.");
+      showActionNeed(
+        "Work package required",
+        "Pick a project with work packages on the project card (Civil, PEB, MEP, etc.). Those packages become the bid disciplines.",
+      );
       return;
     }
     setBusy(true);
@@ -466,7 +465,7 @@ export default function CrmBidComparePage() {
         leadId: form.leadId,
         revisionLabel: "R2",
         vendorIds: [],
-        disciplineKeys: disciplines.map((d) => d.key),
+        disciplineKeys: [],
         customDisciplines: [],
       });
     } catch (err) {
@@ -805,14 +804,23 @@ export default function CrmBidComparePage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-steel-muted mb-1">
-                Discipline BOQ sheets
+                Work packages (bid disciplines)
                 {disciplineSource === "work_packages" && (
-                  <span className="font-normal text-steel-muted"> · auto from project work packages</span>
+                  <span className="font-normal text-steel-muted"> · from project card</span>
                 )}
                 {disciplineSource === "saved" && (
-                  <span className="font-normal text-steel-muted"> · from project bid setup</span>
+                  <span className="font-normal text-steel-muted"> · saved on project</span>
                 )}
               </p>
+              {!disciplines.length ? (
+                <p className="text-xs text-amber-800 border border-amber-200 rounded-lg p-2 bg-amber-50">
+                  No work packages on this project yet. Add packages (Civil, PEB, MEP, etc.) on{" "}
+                  <Link to={`/crm/setup?projectId=${form.projectId}&step=project`} className="text-brand font-semibold">
+                    Project setup
+                  </Link>{" "}
+                  first — not the R2 sheet list (CCV, Electrical Lab, etc.).
+                </p>
+              ) : (
               <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1">
                 {disciplines.map((d) => (
                   <label key={d.key} className="flex items-center gap-2 text-sm">
@@ -832,9 +840,10 @@ export default function CrmBidComparePage() {
                   </label>
                 ))}
               </div>
+              )}
             </div>
             <p className="text-xs text-steel-muted">
-              Each vendor uploads one BOQ tab per discipline using the{" "}
+              Each vendor uploads one BOQ per work package using the{" "}
               <button
                 type="button"
                 className="text-brand font-semibold underline-offset-2 hover:underline"
@@ -1329,7 +1338,7 @@ export default function CrmBidComparePage() {
           ) : (
             <Card>
               <p className="text-sm text-steel-muted">
-                Select a bid package. Each vendor uploads one Excel per discipline (CCV, Electrical Lab, Admin, Security, etc.) —
+                Select a bid package. Each vendor uploads one Excel per work package (Civil, PEB, MEP, etc.) —
                 same structure as Comparative Statement R2.
               </p>
             </Card>

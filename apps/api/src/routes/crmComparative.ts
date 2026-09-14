@@ -111,19 +111,14 @@ async function loadBidPackage(id: string) {
 }
 
 async function resolveProjectForPackage(projectId?: string | null, leadId?: string | null) {
+  const select = { id: true, code: true, name: true, bidDisciplinesJson: true, workPackages: true } as const;
   if (projectId) {
-    return prisma.project.findUnique({
-      where: { id: projectId },
-      select: { id: true, code: true, name: true, bidDisciplinesJson: true },
-    });
+    return prisma.project.findUnique({ where: { id: projectId }, select });
   }
   if (leadId) {
     const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { projectId: true } });
     if (lead?.projectId) {
-      return prisma.project.findUnique({
-        where: { id: lead.projectId },
-        select: { id: true, code: true, name: true, bidDisciplinesJson: true },
-      });
+      return prisma.project.findUnique({ where: { id: lead.projectId }, select });
     }
   }
   return null;
@@ -234,11 +229,14 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     req.body.projectId ? String(req.body.projectId) : null,
     req.body.leadId ? String(req.body.leadId) : null
   );
+  const { parseProjectWorkPackages } = await import("../services/workPackageCatalog.js");
+  const workPackages = project ? parseProjectWorkPackages(project.workPackages) : [];
 
   const selectedDisciplines = resolveDisciplinesForPackage({
     disciplineKeys,
     customDisciplines,
     projectDisciplinesJson: project?.bidDisciplinesJson,
+    workPackages,
   });
   if (!selectedDisciplines.length) {
     return res.status(400).json({ error: "Select at least one discipline BOQ sheet for this package" });
@@ -448,9 +446,20 @@ crmComparativeRouter.post("/bid-packages/:id/disciplines", requireRoles("admin",
   const existing = packageDisciplines(pkg);
   const disciplineKeys = parseDisciplineKeys(req.body.disciplineKeys) || [];
   const customDisciplines = parseCustomDisciplines(req.body.customDisciplines);
-  const toAdd = resolveDisciplinesForPackage({ disciplineKeys, customDisciplines }).filter(
-    (d) => !existing.some((e) => e.key === d.key)
-  );
+  const project = pkg.projectId
+    ? await prisma.project.findUnique({
+        where: { id: pkg.projectId },
+        select: { workPackages: true, bidDisciplinesJson: true },
+      })
+    : null;
+  const { parseProjectWorkPackages } = await import("../services/workPackageCatalog.js");
+  const workPackages = project ? parseProjectWorkPackages(project.workPackages) : [];
+  const toAdd = resolveDisciplinesForPackage({
+    disciplineKeys,
+    customDisciplines,
+    workPackages,
+    projectDisciplinesJson: project?.bidDisciplinesJson,
+  }).filter((d) => !existing.some((e) => e.key === d.key));
   if (!toAdd.length) return res.status(400).json({ error: "No new disciplines to add" });
 
   const vendorNames = parseVendorNames(pkg.vendorNamesJson);

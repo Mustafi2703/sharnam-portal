@@ -77,62 +77,22 @@ export function parseStoredBidDisciplinesJson(json: string | null | undefined): 
   }
 }
 
-const WORK_PACKAGE_DISCIPLINE_KEYS: Record<string, string[]> = {
-  civil: ["CCV"],
-  peb: ["ENTRANCE_GATE"],
-  mep: ["ELE_LAB", "COOLING_TOWER", "UG_TANK"],
-  electrical: ["ELE_LAB"],
-  ele: ["ELE_LAB"],
-  plumbing: ["UG_TANK"],
-  hvac: ["COOLING_TOWER"],
-  "fire fighting": ["SECURITY"],
-  fire: ["SECURITY"],
-  admin: ["ADMIN"],
-  security: ["SECURITY"],
-  "cooling tower": ["COOLING_TOWER"],
-  "weigh bridge": ["WEIGH_BRIDGE"],
-  "entrance gate": ["ENTRANCE_GATE"],
-  landscape: ["CCV"],
-};
-
-/** Map org work-package names to R2 discipline BOQ sheets (one package may expand to several sheets). */
+/** Each org work-package name is one bid discipline (not mapped to R2 catalog sheets). */
 export function disciplinesFromWorkPackages(workPackages: string[]): DisciplineDef[] {
-  const catalog = defaultDisciplines();
-  const byKey = Object.fromEntries(catalog.map((d) => [d.key, d]));
   const seen = new Set<string>();
   const out: DisciplineDef[] = [];
-
   for (const raw of workPackages) {
     const pkg = String(raw || "").trim();
     if (!pkg) continue;
-    const norm = pkg.toLowerCase();
-    const mappedKeys = WORK_PACKAGE_DISCIPLINE_KEYS[norm];
-    if (mappedKeys?.length) {
-      for (const key of mappedKeys) {
-        const def = byKey[key];
-        if (def && !seen.has(key)) {
-          seen.add(key);
-          out.push(def);
-        }
-      }
-      continue;
-    }
-    const catalogMatch = catalog.find(
-      (d) =>
-        d.label.toLowerCase() === norm ||
-        d.key.toLowerCase() === norm.replace(/[^a-z0-9]+/g, "_") ||
-        d.label.toLowerCase().includes(norm) ||
-        norm.includes(d.label.toLowerCase().split(" ")[0] || ""),
-    );
-    if (catalogMatch && !seen.has(catalogMatch.key)) {
-      seen.add(catalogMatch.key);
-      out.push(catalogMatch);
-      continue;
-    }
     const key = normalizeDisciplineKey(pkg);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ key, label: pkg, sheetName: `BOQ-${pkg.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().slice(0, 28)}` });
+    const sheetSlug = pkg.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().slice(0, 28);
+    out.push({
+      key,
+      label: pkg,
+      sheetName: sheetSlug ? `BOQ-${sheetSlug}` : `BOQ-${key}`,
+    });
   }
   return out;
 }
@@ -141,11 +101,11 @@ export function resolveProjectBidDisciplines(opts: {
   bidDisciplinesJson?: string | null;
   workPackages?: string[];
 }): { disciplines: DisciplineDef[]; source: "saved" | "work_packages" | "default" } {
-  const saved = parseStoredBidDisciplinesJson(opts.bidDisciplinesJson);
-  if (saved?.length) return { disciplines: saved, source: "saved" };
   const fromPackages = opts.workPackages?.length ? disciplinesFromWorkPackages(opts.workPackages) : [];
   if (fromPackages.length) return { disciplines: fromPackages, source: "work_packages" };
-  return { disciplines: defaultDisciplines(), source: "default" };
+  const saved = parseStoredBidDisciplinesJson(opts.bidDisciplinesJson);
+  if (saved?.length) return { disciplines: saved, source: "saved" };
+  return { disciplines: [], source: "default" };
 }
 
 /** Resolve discipline list from explicit keys + optional custom entries + project defaults. */
@@ -154,9 +114,14 @@ export function resolveDisciplinesForPackage(opts: {
   customDisciplines?: DisciplineDef[];
   projectDisciplinesJson?: string | null;
   packageDisciplinesJson?: string | null;
+  workPackages?: string[];
 }): DisciplineDef[] {
   const catalog = defaultDisciplines();
   const byKey = Object.fromEntries(catalog.map((d) => [d.key, d]));
+  const fromWorkPackages = opts.workPackages?.length ? disciplinesFromWorkPackages(opts.workPackages) : [];
+  const wpByKey = Object.fromEntries(fromWorkPackages.map((d) => [d.key, d]));
+  const savedProject = parseStoredBidDisciplinesJson(opts.projectDisciplinesJson) || [];
+  const savedByKey = Object.fromEntries(savedProject.map((d) => [d.key, d]));
 
   if (opts.packageDisciplinesJson) {
     const pkg = parseDisciplinesJson(opts.packageDisciplinesJson);
@@ -168,20 +133,23 @@ export function resolveDisciplinesForPackage(opts: {
     label: d.label.trim(),
     sheetName: d.sheetName.trim() || d.label.trim(),
   }));
+  const customByKey = Object.fromEntries(custom.map((d) => [d.key, d]));
 
   if (opts.disciplineKeys?.length) {
     const picked = opts.disciplineKeys
-      .map((k) => byKey[normalizeDisciplineKey(k)] || custom.find((c) => c.key === normalizeDisciplineKey(k)))
+      .map((k) => {
+        const nk = normalizeDisciplineKey(k);
+        return wpByKey[nk] || savedByKey[nk] || customByKey[nk] || byKey[nk];
+      })
       .filter(Boolean) as DisciplineDef[];
     const extras = custom.filter((c) => !picked.some((p) => p.key === c.key));
     const merged = [...picked, ...extras];
     if (merged.length) return merged;
   }
 
-  if (opts.projectDisciplinesJson) {
-    const projectDisc = parseDisciplinesJson(opts.projectDisciplinesJson);
-    if (projectDisc.length) return projectDisc;
-  }
+  if (fromWorkPackages.length) return fromWorkPackages;
+
+  if (savedProject.length) return savedProject;
 
   return catalog;
 }

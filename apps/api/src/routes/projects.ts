@@ -960,6 +960,14 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
   };
   let project;
   try {
+    const workPackagesList = Array.isArray(workPackages)
+      ? (workPackages as unknown[]).map(String).filter(Boolean)
+      : null;
+    let bidDisciplinesPatch: string | undefined;
+    if (workPackagesList?.length) {
+      const { disciplinesFromWorkPackages } = await import("../services/comparativeStatement.js");
+      bidDisciplinesPatch = JSON.stringify(disciplinesFromWorkPackages(workPackagesList));
+    }
     project = await prisma.project.update({
       where: { id: req.params.id },
       data: {
@@ -992,9 +1000,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
         pmcName: pmcName !== undefined ? pmcName : undefined,
         startDate: dateOrNull(startDate),
         endDate: dateOrNull(endDate),
-        workPackages: Array.isArray(workPackages)
-          ? JSON.stringify((workPackages as unknown[]).map(String).filter(Boolean))
-          : undefined,
+        workPackages: workPackagesList ? JSON.stringify(workPackagesList) : undefined,
+        ...(bidDisciplinesPatch ? { bidDisciplinesJson: bidDisciplinesPatch } : {}),
       },
     });
   } catch (err) {
