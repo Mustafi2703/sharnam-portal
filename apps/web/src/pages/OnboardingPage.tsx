@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
-import { canManageHrms } from "../lib/portalAccounts";
+import { canManageHrms, isJoiningEmployee } from "../lib/portalAccounts";
 
 /**
  * Onboarding hub — top level shows all offers past "Accepted" with a live pre-join +
@@ -16,11 +16,12 @@ export default function OnboardingPage() {
 }
 
 function OnboardingList() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [offers, setOffers] = useState<any[]>([]);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    if (isJoiningEmployee(user)) return;
     (async () => {
       try {
         const list = await api<any[]>("/api/hrm/offers", { token });
@@ -31,7 +32,11 @@ function OnboardingList() {
         setLoadError(err instanceof Error ? err.message : "Could not load onboarding");
       }
     })();
-  }, [token]);
+  }, [token, user]);
+
+  if (isJoiningEmployee(user)) {
+    return <Navigate to={`/hrm/onboarding/${user!.joiningOfferId}`} replace />;
+  }
 
   return (
     <div className="space-y-4">
@@ -81,7 +86,8 @@ function OnboardingList() {
 function OfferOnboardingPage() {
   const { offerId } = useParams();
   const { token, user } = useAuth();
-  const canWrite = canManageHrms(user);
+  const canHrWrite = canManageHrms(user);
+  const isJoiner = isJoiningEmployee(user) && offerId === user?.joiningOfferId;
   const [offer, setOffer] = useState<any | null>(null);
   const [preJoin, setPreJoin] = useState<any | null>(null);
   const [onboard, setOnboard] = useState<any | null>(null);
@@ -90,7 +96,10 @@ function OfferOnboardingPage() {
   const [letterHtml, setLetterHtml] = useState("");
   const [policyHtml, setPolicyHtml] = useState("");
   const [policyUrl, setPolicyUrl] = useState("");
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [vaultDocs, setVaultDocs] = useState<Array<{ id: string; category: string; title: string; fileUrl: string; storagePath?: string | null; createdAt: string }>>([]);
   const signedUploadRef = useRef<HTMLInputElement | null>(null);
+  const docUploadRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
     if (!offerId) return;
@@ -126,10 +135,17 @@ function OfferOnboardingPage() {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (policyRes.ok) setPolicyHtml(await policyRes.text());
-    // Timeline: audit events tied to the candidate + offer + user (if joined)
-    if (o?.candidate?.id) {
+    if (o?.onboard?.userId) {
+      const docs = await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(o.onboard.userId)}`, { token }).catch(() => []);
+      setVaultDocs(docs);
+    } else {
+      setVaultDocs([]);
+    }
+    if (o?.candidate?.id && canHrWrite) {
       const events = await api<any[]>(`/api/hrm/employees/${o.candidate.id}/timeline`, { token }).catch(() => []);
       setTimeline(events);
+    } else {
+      setTimeline([]);
     }
   };
   useEffect(() => {
@@ -174,20 +190,87 @@ function OfferOnboardingPage() {
     }
   }
 
-  const preJoinItems = useMemo(() => {
+  async function uploadPreJoinDocs(files: FileList | null, category: string) {
+    if (!offerId || !files?.length) return;
+    setUploadBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      for (const f of files) fd.append("files", f);
+      fd.append("category", category);
+      const r = await api<{ uploaded: number }>(`/api/hrm/pre-joining/${offerId}/documents`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setMsg(`${r.uploaded} file(s) uploaded to your HR folder (${category}).`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadBusy(false);
+      if (docUploadRef.current) docUploadRef.current.value = "";
+    }
+  }
+
+  type PreJoinItem = {
+    key: string;
+    label: string;
+    hrOnly?: boolean;
+    candidate?: boolean;
+    picker?: string[];
+    text?: boolean;
+    boolTextKey?: string;
+    afterLetter?: boolean;
+  };
+
+  const preJoinItems = useMemo((): PreJoinItem[] => {
     if (!preJoin) return [];
     return [
-      { key: "docCollectionDone", label: "1 · Document collection" },
-      { key: "bgvStatus", label: "2 · Background verification", picker: ["Pending", "In-Progress", "Cleared", "Failed"] },
-      { key: "medicalStatus", label: "3 · Medical fitness", picker: ["Pending", "In-Progress", "Cleared", "Failed", "Not-Applicable"] },
-      { key: "empCodeGenerated", label: "4 · Employee code generated", text: true },
-      { key: "appointmentLetterUrl", label: "5 · Appointment letter URL", text: true },
-      { key: "itAssetRequested", label: "6 · IT asset requested" },
-      { key: "emailCreated", label: "7 · Email ID created", text: true, boolTextKey: "emailAddress" },
-      { key: "idCardRequested", label: "8 · ID card requested" },
-      { key: "welcomeKitPrepared", label: "9 · Welcome kit ready" },
+      { key: "docCollectionDone", label: "1 · Document collection", candidate: true },
+      { key: "bgvStatus", label: "2 · Background verification", hrOnly: true, picker: ["Pending", "In-Progress", "Cleared", "Failed"] },
+      { key: "medicalStatus", label: "3 · Medical fitness", hrOnly: true, picker: ["Pending", "In-Progress", "Cleared", "Failed", "Not-Applicable"] },
+      { key: "empCodeGenerated", label: "4 · Employee code generated", hrOnly: true, text: true },
+      { key: "appointmentLetterUrl", label: "5 · Appointment letter", hrOnly: true, text: true },
+      { key: "itAssetRequested", label: "6 · IT asset allocation request", candidate: true },
+      { key: "emailCreated", label: "7 · Email ID created", hrOnly: true, text: true, boolTextKey: "emailAddress" },
+      { key: "idCardRequested", label: "8 · ID card request", candidate: true },
+      { key: "welcomeKitPrepared", label: "9 · Welcome kit ready", hrOnly: true, afterLetter: true },
     ];
   }, [preJoin]);
+
+  function canEditPreJoinItem(item: PreJoinItem) {
+    if (item.hrOnly) return canHrWrite;
+    if (item.candidate) return isJoiner || canHrWrite;
+    return canHrWrite;
+  }
+
+  const preJoinComplete = useMemo(() => {
+    if (!preJoin) return !!user?.preJoinComplete;
+    return [
+      preJoin.docCollectionDone,
+      preJoin.bgvStatus === "Cleared",
+      preJoin.medicalStatus === "Cleared" || preJoin.medicalStatus === "Not-Applicable",
+      !!preJoin.empCodeGenerated,
+      !!preJoin.appointmentLetterUrl,
+      preJoin.itAssetRequested,
+      preJoin.emailCreated,
+      preJoin.idCardRequested,
+      preJoin.welcomeKitPrepared,
+    ].every(Boolean);
+  }, [preJoin, user?.preJoinComplete]);
+
+  const letterReady = preJoin
+    ? [
+        preJoin.docCollectionDone,
+        preJoin.bgvStatus === "Cleared",
+        preJoin.medicalStatus === "Cleared" || preJoin.medicalStatus === "Not-Applicable",
+        !!preJoin.empCodeGenerated,
+        preJoin.itAssetRequested,
+        preJoin.emailCreated,
+        preJoin.idCardRequested,
+      ].every(Boolean)
+    : false;
 
   const onboardItems = [
     { key: "joiningFormalitiesDone", label: "1 · Joining formalities" },
@@ -221,11 +304,27 @@ function OfferOnboardingPage() {
   const preTotal = 9;
   const onboardTotal = onboardItems.length;
 
+  if (user && isJoiningEmployee(user) && offerId && offerId !== user.joiningOfferId) {
+    return <Navigate to={`/hrm/onboarding/${user.joiningOfferId}`} replace />;
+  }
+
   return (
     <div className="space-y-6">
+      {isJoiner ? (
+        <Card className="!p-4 bg-brand-soft/20 border-brand/20">
+          <p className="text-sm text-ink font-semibold">Welcome — pre-joining desk</p>
+          <p className="text-xs text-steel-muted mt-1 leading-relaxed">
+            Upload your documents, confirm IT and ID card requests, and track HR steps (BGV, medical, employee code,
+            appointment letter). Day 1 onboarding opens once HR completes section 2.
+          </p>
+        </Card>
+      ) : null}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-lg">{offer ? `${offer.candidate?.fullName} · ${offer.designation}` : "Loading…"}</h2>
+          <h2 className="font-semibold text-lg">
+            {offer ? `${offer.candidate?.fullName} · ${offer.designation}` : "Loading…"}
+          </h2>
           {offer && (
             <p className="text-sm text-steel-muted mt-1">
               Offer {offer.offerNo} · CTC ₹{Number(offer.ctcAnnual).toLocaleString("en-IN")} · joining{" "}
@@ -234,9 +333,11 @@ function OfferOnboardingPage() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {canWrite && offerId ? (
+          {canHrWrite && offerId ? (
             <Button
               type="button"
+              disabled={!letterReady}
+              title={!letterReady ? "Complete steps 1–4 and IT / email / ID before generating the letter" : undefined}
               onClick={async () => {
                 try {
                   const letter = await api<any>(`/api/hrm/offers/${offerId}/appointment-letter`, { method: "POST", token });
@@ -254,15 +355,21 @@ function OfferOnboardingPage() {
               Generate appointment letter
             </Button>
           ) : null}
-          {offer?.onboard?.userId ? (
+          {canHrWrite && offer?.onboard?.userId ? (
             <Link to={`/hrm/files?userId=${offer.onboard.userId}`}>
-              <Button variant="secondary">Employee files (HR DMS)</Button>
+              <Button variant="secondary">Employee files · upload PAN / payslip</Button>
             </Link>
           ) : null}
-          <Link to="/hrm/documents">
-            <Button variant="secondary">Letters register</Button>
-          </Link>
-          <Link to="/hrm/onboarding"><Button variant="secondary">Back to list</Button></Link>
+          {canHrWrite ? (
+            <>
+              <Link to="/hrm/documents">
+                <Button variant="secondary">Letters register</Button>
+              </Link>
+              <Link to="/hrm/onboarding">
+                <Button variant="secondary">Back to list</Button>
+              </Link>
+            </>
+          ) : null}
         </div>
       </div>
       {msg && <p className="text-sm text-brand-dark">{msg}</p>}
@@ -273,8 +380,9 @@ function OfferOnboardingPage() {
             <div>
               <div className="font-semibold text-sm">Appointment letter · {offer?.candidate?.fullName}</div>
               <p className="text-[11px] text-steel-muted">
-                Candidate name, designation, CTC and joining date are merged into the SPDC letter. Filed under 06.02
-                Employee Files / {offer?.candidate?.fullName} / Letters.
+                {isJoiner
+                  ? "Your appointment letter from SPDC HR. Download or print for records."
+                  : "Candidate name, designation, CTC and joining date merged into the SPDC letter. Filed under 06.02 Employee Files."}
               </p>
             </div>
             {preJoin?.appointmentLetterUrl ? (
@@ -282,7 +390,7 @@ function OfferOnboardingPage() {
                 Open filed copy
               </a>
             ) : null}
-            {canWrite ? (
+            {canHrWrite ? (
               <>
                 <Button
                   type="button"
@@ -323,12 +431,14 @@ function OfferOnboardingPage() {
       ) : (
         <Card>
           <p className="text-sm text-steel-muted">
-            Generate the appointment letter to preview {offer?.candidate?.fullName || "the candidate"}&apos;s name, designation, CTC and
-            joining date on the SPDC letterhead.
+            {isJoiner
+              ? "Your appointment letter will appear here once HR completes verification and generates it."
+              : `Generate the appointment letter after steps 1–4 and IT / email / ID are done — preview ${offer?.candidate?.fullName || "the candidate"}'s name, designation, CTC and joining date on the SPDC letterhead.`}
           </p>
         </Card>
       )}
 
+      {!isJoiner ? (
       <Card className="!p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -344,7 +454,7 @@ function OfferOnboardingPage() {
                 Open filed copy
               </a>
             ) : null}
-            {canWrite ? (
+            {canHrWrite ? (
               <Button type="button" variant="secondary" onClick={() => void fileHrPolicy()}>
                 File acknowledgement
               </Button>
@@ -357,6 +467,81 @@ function OfferOnboardingPage() {
           <p className="px-4 py-6 text-sm text-steel-muted">Loading policy…</p>
         )}
       </Card>
+      ) : null}
+
+      {(isJoiner || canHrWrite) && preJoin ? (
+        <Card>
+          <h3 className="font-semibold text-sm mb-1">Upload pre-joining documents</h3>
+          <p className="text-[11px] text-steel-muted mb-3">
+            PAN, Aadhaar, bank proof, education certificates, photo — saved to your HR employee folder.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-xs flex flex-col gap-1">
+              <span className="text-steel-muted">Category</span>
+              <select id="prejoin-doc-category" defaultValue="PAN" className="border border-line rounded px-2 py-1.5 text-sm">
+                <option value="PAN">PAN card</option>
+                <option value="Aadhaar">Aadhaar</option>
+                <option value="Bank">Bank proof / cancelled cheque</option>
+                <option value="Education">Education / experience</option>
+                <option value="Photo">Passport photo</option>
+                <option value="PF-ESIC">PF / ESIC</option>
+                <option value="Medical">Medical fitness</option>
+                <option value="BGV">BGV report</option>
+                <option value="Other">Other pre-join</option>
+              </select>
+            </label>
+            <input
+              ref={docUploadRef}
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              hidden
+              onChange={(e) => {
+                const cat = (document.getElementById("prejoin-doc-category") as HTMLSelectElement)?.value || "Pre-join";
+                void uploadPreJoinDocs(e.target.files, cat);
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={uploadBusy}
+              onClick={() => docUploadRef.current?.click()}
+            >
+              {uploadBusy ? "Uploading…" : "Choose files"}
+            </Button>
+            {isJoiner ? (
+              <label className="flex items-center gap-2 text-sm ml-auto">
+                <input
+                  type="checkbox"
+                  checked={!!preJoin.docCollectionDone}
+                  onChange={(e) => void updatePreJoin({ docCollectionDone: e.target.checked })}
+                />
+                I have uploaded all required documents
+              </label>
+            ) : null}
+          </div>
+          {vaultDocs.length ? (
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="text-xs font-semibold text-ink mb-2">Files in HR vault ({vaultDocs.length})</p>
+              <ul className="divide-y text-xs">
+                {vaultDocs.map((d) => (
+                  <li key={d.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      <Badge tone="brand">{d.category}</Badge>{" "}
+                      <span className="text-steel-muted">{d.title}</span>
+                    </span>
+                    <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline shrink-0">
+                      Open
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-[11px] text-steel-muted mt-3">Uploaded files are stored under _HR/06.02 Employee Files with names like PAN_{`{empCode}`}_scan.pdf</p>
+          )}
+        </Card>
+      ) : null}
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-1">
@@ -365,6 +550,11 @@ function OfferOnboardingPage() {
           <div className="space-y-3">
             <ProgressBar label={`Pre-joining · ${preDone}/${preTotal}`} value={preDone / preTotal} />
             <ProgressBar label={`Onboarding · ${onboardDone}/${onboardTotal}`} value={onboardDone / onboardTotal} tone="ok" />
+            {isJoiner && !preJoinComplete ? (
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                Section 3 opens when HR completes pre-joining (including welcome kit after your appointment letter).
+              </p>
+            ) : null}
           </div>
         </Card>
 
@@ -372,39 +562,67 @@ function OfferOnboardingPage() {
           <h3 className="font-semibold text-sm mb-1">2 · Pre-Joining Process</h3>
           <p className="text-[11px] text-steel-muted mb-3">
             Document collection · BGV · medical · employee code · appointment letter · IT asset · email · ID card · welcome kit
+            {isJoiner ? " — items marked HR are updated by the HR team." : ""}
           </p>
           {!preJoin && <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>}
           {preJoin && (
             <ul className="space-y-2 text-sm">
-              {preJoinItems.map((item) => (
+              {preJoinItems.map((item) => {
+                const editable = canEditPreJoinItem(item);
+                const lockedAfterLetter = item.afterLetter && !preJoin.appointmentLetterUrl;
+                return (
                 <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
                   {"text" in item && item.text ? (
                     <>
-                      <span className="flex-1">{item.label}</span>
-                      <Input
-                        defaultValue={preJoin[item.key] || ""}
-                        onBlur={(e) => updatePreJoin({ [item.key]: e.target.value })}
-                        placeholder={item.boolTextKey ? "e.g. jane@spdc.in" : ""}
-                        disabled={!canWrite}
-                        className="max-w-xs"
-                      />
-                      {item.key === "appointmentLetterUrl" && preJoin.appointmentLetterUrl ? (
-                        <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
-                          Open
-                        </a>
-                      ) : null}
+                      <span className="flex-1">
+                        {item.label}
+                        {item.hrOnly && isJoiner ? <Badge tone="neutral" className="ml-2 !text-[9px]">HR</Badge> : null}
+                      </span>
+                      {canHrWrite ? (
+                        <>
+                          <Input
+                            defaultValue={preJoin[item.key] || ""}
+                            onBlur={(e) => updatePreJoin({ [item.key]: e.target.value })}
+                            placeholder={item.boolTextKey ? "e.g. jane@spdc.in" : item.key === "empCodeGenerated" ? "SPDC-001" : ""}
+                            disabled={!editable || lockedAfterLetter}
+                            className="max-w-xs"
+                          />
+                          {item.key === "appointmentLetterUrl" && preJoin.appointmentLetterUrl ? (
+                            <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
+                              Open
+                            </a>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-xs text-steel-muted tabular-nums">
+                          {item.key === "appointmentLetterUrl"
+                            ? preJoin.appointmentLetterUrl
+                              ? "Ready"
+                              : "Pending"
+                            : preJoin[item.key]
+                              ? String(preJoin[item.key])
+                              : preJoin[item.boolTextKey || ""] || "Pending"}
+                        </span>
+                      )}
                     </>
                   ) : "picker" in item && item.picker ? (
                     <>
-                      <span className="flex-1">{item.label}</span>
-                      <select
-                        defaultValue={preJoin[item.key] || "Pending"}
-                        onChange={(e) => updatePreJoin({ [item.key]: e.target.value })}
-                        disabled={!canWrite}
-                        className="border border-line rounded px-2 py-1 text-xs"
-                      >
-                        {item.picker.map((p) => <option key={p}>{p}</option>)}
-                      </select>
+                      <span className="flex-1">
+                        {item.label}
+                        {item.hrOnly && isJoiner ? <Badge tone="neutral" className="ml-2 !text-[9px]">HR</Badge> : null}
+                      </span>
+                      {canHrWrite ? (
+                        <select
+                          defaultValue={preJoin[item.key] || "Pending"}
+                          onChange={(e) => updatePreJoin({ [item.key]: e.target.value })}
+                          disabled={!editable}
+                          className="border border-line rounded px-2 py-1 text-xs"
+                        >
+                          {item.picker.map((p) => <option key={p}>{p}</option>)}
+                        </select>
+                      ) : (
+                        <Badge tone={preJoin[item.key] === "Cleared" ? "ok" : "neutral"}>{preJoin[item.key] || "Pending"}</Badge>
+                      )}
                     </>
                   ) : (
                     <>
@@ -412,26 +630,38 @@ function OfferOnboardingPage() {
                         type="checkbox"
                         checked={!!preJoin[item.key]}
                         onChange={(e) => updatePreJoin({ [item.key]: e.target.checked })}
-                        disabled={!canWrite}
+                        disabled={!editable || lockedAfterLetter}
                       />
-                      <span className="flex-1">{item.label}</span>
+                      <span className="flex-1">
+                        {item.label}
+                        {item.hrOnly && isJoiner ? <Badge tone="neutral" className="ml-2 !text-[9px]">HR</Badge> : null}
+                        {item.afterLetter && !preJoin.appointmentLetterUrl ? (
+                          <span className="block text-[10px] text-steel-muted">After appointment letter</span>
+                        ) : null}
+                      </span>
                     </>
                   )}
                 </li>
-              ))}
+              );
+              })}
             </ul>
           )}
         </Card>
       </div>
 
-      <Card>
+      <Card className={!preJoinComplete && isJoiner ? "opacity-80" : ""}>
         <h3 className="font-semibold text-sm mb-1">3 · Employee Onboarding</h3>
         <p className="text-[11px] text-steel-muted mb-3">
           Joining formalities · personal &amp; bank details · PAN/Aadhaar · PF/ESIC · nominee · doc verification · department ·
           reporting manager · orientation · HR policy
         </p>
-        {!onboard && <p className="text-sm text-steel-muted">Loading onboarding checklist…</p>}
-        {onboard && (
+        {!preJoinComplete && isJoiner ? (
+          <p className="text-sm text-steel-muted mb-3 rounded-lg border border-line bg-sand/30 px-3 py-2">
+            Complete section 2 first. HR will guide you through Day 1 formalities once pre-joining is done.
+          </p>
+        ) : null}
+        {!onboard && preJoinComplete && <p className="text-sm text-steel-muted">Loading onboarding checklist…</p>}
+        {onboard && (preJoinComplete || canHrWrite) && (
           <ul className="grid md:grid-cols-2 gap-2 text-sm">
             {onboardItems.map((item) => (
               <li key={item.key} className="flex items-start gap-2 border border-line rounded-lg px-3 py-2">
@@ -445,7 +675,7 @@ function OfferOnboardingPage() {
                     }
                     void updateOnboard({ [item.key]: e.target.checked });
                   }}
-                  disabled={!canWrite}
+                  disabled={!canHrWrite}
                   className="mt-1"
                 />
                 <div className="flex-1">
@@ -465,18 +695,19 @@ function OfferOnboardingPage() {
             ))}
           </ul>
         )}
-        {onboard && (
+        {onboard && (preJoinComplete || canHrWrite) && (
           <TextArea
             rows={2}
             placeholder="Onboarding notes"
             defaultValue={onboard.notes || ""}
             onBlur={(e) => updateOnboard({ notes: e.target.value })}
             className="mt-3"
-            disabled={!canWrite}
+            disabled={!canHrWrite}
           />
         )}
       </Card>
 
+      {canHrWrite ? (
       <Card padding={false}>
         <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">Employee audit log</div>
         <ul className="divide-y max-h-96 overflow-y-auto">
@@ -494,6 +725,7 @@ function OfferOnboardingPage() {
           {!timeline.length && <li className="px-4 py-4 text-center text-sm text-steel-muted">No audit events for this candidate yet.</li>}
         </ul>
       </Card>
+      ) : null}
     </div>
   );
 }

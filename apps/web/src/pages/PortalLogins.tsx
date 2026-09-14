@@ -61,17 +61,14 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before other site tools."],
   },
   employee: {
-    key: "employee", title: "Stakeholders", shortLabel: "Stakeholders",
-    headline: "Stakeholder desk",
-    subtitle: "Partner PMC — coordination, GFC review, meetings, RFIs.",
-    demoEmail: "pmc@sharnam.demo", allowedRoles: ["employee"],
-    points: ["Design coordination", "Meetings & MoM", "GFC · RFI"],
-    cta: "Sign in", tone: "#6366F1", icon: "PM",
-    landingPath: "/stakeholder", workspaceKey: "drawings", group: "role",
-    policies: [
-      ...SHARNAM_PORTAL_POLICIES,
-      "Access limited to projects you are assigned to.",
-    ],
+    key: "employee", title: "New joiner", shortLabel: "New joiner",
+    headline: "Pre-joining desk",
+    subtitle: "After offer acceptance — upload documents, track pre-joining steps, then Day 1 onboarding when HR opens it.",
+    demoEmail: "riya.shah@sharnam.demo", allowedRoles: ["employee"],
+    points: ["Upload PAN / Aadhaar / bank", "Pre-joining checklist", "Appointment letter when HR completes"],
+    cta: "Sign in", tone: "#4F46E5", icon: "EM",
+    landingPath: "/hrm/onboarding", workspaceKey: null, group: "role",
+    policies: [...SHARNAM_PORTAL_POLICIES, "Sign in with the email on your offer letter. Default password Demo@1234 unless HR changed it."],
   },
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
@@ -170,6 +167,7 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
   "office",
   "hr",
+  "employee",
   "stakeholder",
   "vendor",
   "client",
@@ -199,6 +197,7 @@ function portalHero(key: string) {
 
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Vendor";
+  if (key === "employee") return "New joiner";
   if (key === "stakeholder") return "Stakeholders";
   if (key === "office") return "Office & Admin";
   if (key === "hr") return "HR Team";
@@ -297,7 +296,7 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
           portal: cfg.key,
         }),
       });
-      const dest = cfg.landingPath || "/dashboard";
+      const dest = homePathForUser(data.user) || cfg.landingPath || "/dashboard";
       try {
         localStorage.setItem(LOGIN_LANDING_KEY, dest);
         clearStoredProjectId();
@@ -420,13 +419,16 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     if (cfg.key === "stakeholder" && staffEmployee) {
       return <Navigate to={homePathForUser(user)} replace />;
     }
+    if (cfg.key === "employee" && consultant) {
+      return <Navigate to="/stakeholder" replace />;
+    }
     if ((cfg.key === "office" || cfg.key === "hr") && consultant) {
       return <Navigate to="/stakeholder" replace />;
     }
     const roleOk =
       cfg.allowedRoles.includes(user.role) || (cfg.key === "office" && staffEmployee);
     if (!roleOk) return <Navigate to={homePathForUser(user)} replace />;
-    return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
+    return <Navigate to={homePathForUser(user)} replace />;
   }
 
   return (
@@ -473,7 +475,7 @@ function PortalHubCard({ cfg }: { cfg: PortalConfig }) {
 export function LoginHubPage() {
   const { user, loading } = useAuth();
   useAuthPageScroll();
-  if (!loading && user) return <Navigate to={consumeLoginLanding()} replace />;
+  if (!loading && user) return <Navigate to={homePathForUser(user)} replace />;
 
   return (
     <div

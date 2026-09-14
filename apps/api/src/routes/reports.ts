@@ -2165,9 +2165,11 @@ hrmRouter.post("/employees/provision-vaults", requireRoles("admin", "office", "h
   }
 });
 
-hrmRouter.get("/employee-files", hrmDesk, async (req, res) => {
+hrmRouter.get("/employee-files", async (req: AuthedRequest, res) => {
   const userId = String(req.query.userId || "");
   if (!userId) return res.status(400).json({ error: "userId required" });
+  const isHr = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "hr";
+  if (!isHr && req.user!.id !== userId) return res.status(403).json({ error: "Forbidden" });
   const rows = await prisma.employeeDocument.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
   res.json(rows);
 });
@@ -2189,6 +2191,7 @@ hrmRouter.post(
     const {
       employeeVaultRelPath,
       vaultSubfolderForCategory,
+      vaultFileNameForUpload,
       ensureEmployeeVault,
     } = await import("../services/hrEmployeeVault.js");
     await ensureEmployeeVault({ userId, fullName: user.fullName, email: user.email, profile });
@@ -2196,7 +2199,12 @@ hrmRouter.post(
     const subfolder = vaultSubfolderForCategory(category);
     const created = [];
     for (const file of files) {
-      const safeName = `${category}-${Date.now()}-${file.originalname || "file"}`.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeName = vaultFileNameForUpload({
+        category,
+        profile,
+        fullName: user.fullName,
+        originalName: file.originalname,
+      });
       const saved = await mockOneDrive.upload(
         "_HR",
         `${vaultRel}/${subfolder}`,

@@ -216,6 +216,9 @@ export type AuthUser = {
   vendorId?: string | null;
   /** HR Head — HRMS only, no project / CRM / DMS desk. */
   hrDeskOnly?: boolean;
+  /** Active accepted offer — new joiner pre-joining desk. */
+  joiningOfferId?: string | null;
+  preJoinComplete?: boolean;
   /** Set while an admin is signed in as this user for testing. */
   impersonatedBy?: { id: string; email: string; fullName: string } | null;
 };

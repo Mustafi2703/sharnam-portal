@@ -481,7 +481,11 @@ hrmRecruitmentRouter.get("/offers", async (_req, res) => {
   );
 });
 
-hrmRecruitmentRouter.get("/offers/:id", async (req, res) => {
+hrmRecruitmentRouter.get("/offers/:id", async (req: AuthedRequest, res) => {
+  const { canAccessOffer } = await import("../services/joiningPortal.js");
+  if (!(await canAccessOffer(req.user!, req.params.id))) {
+    return res.status(404).json({ error: "not found" });
+  }
   const row = await prisma.offer.findUnique({
     where: { id: req.params.id },
     include: { candidate: true, preJoin: true, onboard: true },
@@ -492,11 +496,17 @@ hrmRecruitmentRouter.get("/offers/:id", async (req, res) => {
 
 /** Fill the SPDC appointment letter from the accepted offer and file it on Drive. */
 hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const { isPreJoinReadyForAppointmentLetter } = await import("../services/joiningPortal.js");
   const offer = await prisma.offer.findUnique({
     where: { id: req.params.id },
     include: { candidate: true, preJoin: true, onboard: true },
   });
   if (!offer) return res.status(404).json({ error: "offer not found" });
+  if (!isPreJoinReadyForAppointmentLetter(offer.preJoin)) {
+    return res.status(400).json({
+      error: "Complete pre-joining steps 1–4 and IT / email / ID requests before generating the appointment letter.",
+    });
+  }
   const employeeName = offer.candidate.fullName;
   const refNo = `SPDC/HR/OL/${String(new Date().getFullYear()).slice(-2)}-${String(Date.now()).slice(-4)}`;
   const letter = await prisma.hrmsDocument.create({
@@ -863,6 +873,12 @@ hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office", "hr"),
       create: { offerId: row.id },
       update: {},
     });
+    try {
+      const { provisionJoiningPortalLogin } = await import("../services/joiningPortal.js");
+      await provisionJoiningPortalLogin(row.id);
+    } catch (err) {
+      console.warn("[hrms] joining portal provision:", err instanceof Error ? err.message : err);
+    }
   }
   if (nextStatus === "Joined") {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Joined" } });
@@ -879,7 +895,26 @@ hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office", "hr"),
 
 /* ═════════════════════════════════════  PRE-JOINING  ═════════════════════════════════════ */
 
-hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req, res) => {
+hrmRecruitmentRouter.get("/my-joining", async (req: AuthedRequest, res) => {
+  const { findActiveJoiningForUser, isPreJoinComplete } = await import("../services/joiningPortal.js");
+  const offer = await findActiveJoiningForUser(req.user!.id, req.user!.email);
+  if (!offer) return res.json(null);
+  res.json({
+    offerId: offer.id,
+    offerNo: offer.offerNo,
+    designation: offer.designation,
+    joiningDate: offer.joiningDate,
+    status: offer.status,
+    preJoinComplete: isPreJoinComplete(offer.preJoin),
+    candidateName: offer.candidate.fullName,
+  });
+});
+
+hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req: AuthedRequest, res) => {
+  const { canAccessOffer } = await import("../services/joiningPortal.js");
+  if (!(await canAccessOffer(req.user!, req.params.offerId))) {
+    return res.status(404).json({ error: "not found" });
+  }
   const offer = await prisma.offer.findUnique({ where: { id: req.params.offerId } });
   if (!offer) return res.status(404).json({ error: "not found" });
   const row = await prisma.preJoiningChecklist.upsert({
@@ -891,7 +926,16 @@ hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req, res) => {
   res.json(row);
 });
 
-hrmRecruitmentRouter.patch("/pre-joining/:offerId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.patch("/pre-joining/:offerId", async (req: AuthedRequest, res) => {
+  const { canAccessOffer, isHrOfferManager, splitPreJoinPatch } = await import("../services/joiningPortal.js");
+  if (!(await canAccessOffer(req.user!, req.params.offerId))) {
+    return res.status(404).json({ error: "not found" });
+  }
+  const asHr = isHrOfferManager(req.user!);
+  const patch = splitPreJoinPatch(req.body as Record<string, unknown>, asHr);
+  if (!Object.keys(patch).length) {
+    return res.status(403).json({ error: asHr ? "No valid fields" : "You can only update document collection and IT / ID requests" });
+  }
   const existing = await prisma.preJoiningChecklist.upsert({
     where: { offerId: req.params.offerId },
     create: { offerId: req.params.offerId },
@@ -900,30 +944,98 @@ hrmRecruitmentRouter.patch("/pre-joining/:offerId", requireRoles("admin", "offic
   const row = await prisma.preJoiningChecklist.update({
     where: { id: existing.id },
     data: {
-      empCodeGenerated: s(req.body.empCodeGenerated) ?? existing.empCodeGenerated,
-      appointmentLetterUrl: s(req.body.appointmentLetterUrl) ?? existing.appointmentLetterUrl,
-      docCollectionDone: req.body.docCollectionDone !== undefined ? !!req.body.docCollectionDone : existing.docCollectionDone,
-      docCollectionAt: req.body.docCollectionDone && !existing.docCollectionAt ? new Date() : existing.docCollectionAt,
-      bgvStatus: s(req.body.bgvStatus) ?? existing.bgvStatus,
-      bgvAt: req.body.bgvStatus === "Cleared" && !existing.bgvAt ? new Date() : existing.bgvAt,
-      medicalStatus: s(req.body.medicalStatus) ?? existing.medicalStatus,
-      medicalAt: req.body.medicalStatus === "Cleared" && !existing.medicalAt ? new Date() : existing.medicalAt,
-      itAssetRequested: req.body.itAssetRequested !== undefined ? !!req.body.itAssetRequested : existing.itAssetRequested,
-      itAssetIssuedAt: req.body.itAssetIssued && !existing.itAssetIssuedAt ? new Date() : existing.itAssetIssuedAt,
-      itAssetDetails: s(req.body.itAssetDetails) ?? existing.itAssetDetails,
-      emailCreated: req.body.emailCreated !== undefined ? !!req.body.emailCreated : existing.emailCreated,
-      emailCreatedAt: req.body.emailCreated && !existing.emailCreatedAt ? new Date() : existing.emailCreatedAt,
-      emailAddress: s(req.body.emailAddress) ?? existing.emailAddress,
-      idCardRequested: req.body.idCardRequested !== undefined ? !!req.body.idCardRequested : existing.idCardRequested,
-      idCardIssuedAt: req.body.idCardIssued && !existing.idCardIssuedAt ? new Date() : existing.idCardIssuedAt,
-      welcomeKitPrepared: req.body.welcomeKitPrepared !== undefined ? !!req.body.welcomeKitPrepared : existing.welcomeKitPrepared,
-      welcomeKitAt: req.body.welcomeKitPrepared && !existing.welcomeKitAt ? new Date() : existing.welcomeKitAt,
-      notes: s(req.body.notes) ?? existing.notes,
+      empCodeGenerated: s(patch.empCodeGenerated as string) ?? existing.empCodeGenerated,
+      appointmentLetterUrl: s(patch.appointmentLetterUrl as string) ?? existing.appointmentLetterUrl,
+      docCollectionDone:
+        patch.docCollectionDone !== undefined ? !!patch.docCollectionDone : existing.docCollectionDone,
+      docCollectionAt:
+        patch.docCollectionDone && !existing.docCollectionAt ? new Date() : existing.docCollectionAt,
+      bgvStatus: s(patch.bgvStatus as string) ?? existing.bgvStatus,
+      bgvAt: patch.bgvStatus === "Cleared" && !existing.bgvAt ? new Date() : existing.bgvAt,
+      medicalStatus: s(patch.medicalStatus as string) ?? existing.medicalStatus,
+      medicalAt: patch.medicalStatus === "Cleared" && !existing.medicalAt ? new Date() : existing.medicalAt,
+      itAssetRequested:
+        patch.itAssetRequested !== undefined ? !!patch.itAssetRequested : existing.itAssetRequested,
+      itAssetIssuedAt: patch.itAssetIssued && !existing.itAssetIssuedAt ? new Date() : existing.itAssetIssuedAt,
+      itAssetDetails: s(patch.itAssetDetails as string) ?? existing.itAssetDetails,
+      emailCreated: patch.emailCreated !== undefined ? !!patch.emailCreated : existing.emailCreated,
+      emailCreatedAt: patch.emailCreated && !existing.emailCreatedAt ? new Date() : existing.emailCreatedAt,
+      emailAddress: s(patch.emailAddress as string) ?? existing.emailAddress,
+      idCardRequested:
+        patch.idCardRequested !== undefined ? !!patch.idCardRequested : existing.idCardRequested,
+      idCardIssuedAt: patch.idCardIssued && !existing.idCardIssuedAt ? new Date() : existing.idCardIssuedAt,
+      welcomeKitPrepared:
+        patch.welcomeKitPrepared !== undefined ? !!patch.welcomeKitPrepared : existing.welcomeKitPrepared,
+      welcomeKitAt: patch.welcomeKitPrepared && !existing.welcomeKitAt ? new Date() : existing.welcomeKitAt,
+      notes: s(patch.notes as string) ?? existing.notes,
     },
   });
   await audit("hrms.preJoining.update", { userId: req.user!.id, entity: "PreJoiningChecklist", entityId: row.id });
   res.json(row);
 });
+
+hrmRecruitmentRouter.post(
+  "/pre-joining/:offerId/documents",
+  upload.array("files", 8),
+  async (req: AuthedRequest, res) => {
+    const { canAccessOffer } = await import("../services/joiningPortal.js");
+    if (!(await canAccessOffer(req.user!, req.params.offerId))) {
+      return res.status(404).json({ error: "not found" });
+    }
+    const offer = await prisma.offer.findUnique({
+      where: { id: req.params.offerId },
+      include: { candidate: true, onboard: true },
+    });
+    if (!offer) return res.status(404).json({ error: "not found" });
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    if (!files.length) return res.status(400).json({ error: "Upload at least one file" });
+    const category = String(req.body.category || "Pre-join");
+    let userId = offer.onboard?.userId || null;
+    if (!userId) {
+      const { provisionJoiningPortalLogin } = await import("../services/joiningPortal.js");
+      const login = await provisionJoiningPortalLogin(offer.id);
+      userId = login?.userId || null;
+    }
+    if (!userId) return res.status(400).json({ error: "Could not link employee vault" });
+
+    const {
+      employeeVaultRelPath,
+      vaultSubfolderForCategory,
+      vaultFileNameForUpload,
+      ensureEmployeeVault,
+    } = await import("../services/hrEmployeeVault.js");
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: "employee not found" });
+    const profile = await prisma.employeeProfile.findFirst({ where: { userId } });
+    await ensureEmployeeVault({ userId, fullName: user.fullName, email: user.email, profile });
+    const vaultRel = employeeVaultRelPath(profile, user.fullName);
+    const subfolder = vaultSubfolderForCategory(category);
+    const created = [];
+    for (const file of files) {
+      const safeName = vaultFileNameForUpload({
+        category,
+        profile,
+        fullName: user.fullName,
+        originalName: file.originalname,
+      });
+      const saved = await mockOneDrive.upload("_HR", `${vaultRel}/${subfolder}`, safeName, file.buffer);
+      const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+      created.push(
+        await prisma.employeeDocument.create({
+          data: {
+            userId,
+            category,
+            title: file.originalname || category,
+            fileUrl: url,
+            storagePath: saved.sharePointPath || saved.path,
+            issuedOn: new Date(),
+          },
+        })
+      );
+    }
+    res.status(201).json({ uploaded: created.length, documents: created });
+  }
+);
 
 /* ═════════════════════════════════════  ONBOARDING  ═════════════════════════════════════ */
 

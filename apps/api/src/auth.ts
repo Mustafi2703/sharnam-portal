@@ -62,7 +62,8 @@ export function toAuthUser(
     portal: string;
     vendorId?: string | null;
   },
-  impersonatedBy?: { id: string; email: string; fullName: string } | null
+  impersonatedBy?: { id: string; email: string; fullName: string } | null,
+  joining?: { joiningOfferId?: string | null; preJoinComplete?: boolean } | null
 ): AuthUser {
   return {
     id: u.id,
@@ -72,8 +73,17 @@ export function toAuthUser(
     portal: u.portal as PortalKey,
     vendorId: u.vendorId ?? null,
     hrDeskOnly: isHrDeskOnly(u.email, u.role),
+    joiningOfferId: joining?.joiningOfferId ?? null,
+    preJoinComplete: joining?.preJoinComplete ?? false,
     impersonatedBy: impersonatedBy
       ? { id: impersonatedBy.id, email: impersonatedBy.email, fullName: impersonatedBy.fullName }
       : null,
   };
+}
+
+export async function joiningMetaForUser(userId: string, email: string) {
+  const { findActiveJoiningForUser, isPreJoinComplete } = await import("./services/joiningPortal.js");
+  const offer = await findActiveJoiningForUser(userId, email);
+  if (!offer) return { joiningOfferId: null, preJoinComplete: false };
+  return { joiningOfferId: offer.id, preJoinComplete: isPreJoinComplete(offer.preJoin) };
 }

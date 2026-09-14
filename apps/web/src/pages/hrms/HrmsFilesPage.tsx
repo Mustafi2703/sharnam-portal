@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api } from "../../api";
+import { api, mediaUrl } from "../../api";
 import { useAuth } from "../../auth";
 import { UploadModal } from "../../components/UploadModal";
 import { Badge, Button, Card, Select } from "../../components/ui";
@@ -186,6 +186,14 @@ export default function HrmsFilesPage() {
         </div>
       </div>
 
+      {canManage && !vaultPath ? (
+        <Card className="!p-3 text-xs text-amber-900 bg-amber-50 border-amber-200">
+          No vault folder yet for this employee. Click <strong>Ensure vault folder</strong> before uploading — existing
+          documents will be re-filed under <span className="font-mono">_HR/06.02 Employee Files/{"{empCode}"}/Documents/</span> with
+          names like <span className="font-mono">PAN_SPDC-001_scan_2026-09-15.pdf</span>.
+        </Card>
+      ) : null}
+
       {vaultPath ? (
         <Card className="!p-3 text-xs text-steel-muted font-mono break-all">
           SharePoint path: <span className="text-ink">{vaultPath}</span>
@@ -238,9 +246,14 @@ export default function HrmsFilesPage() {
                     {new Date(f.issuedOn || f.createdAt).toLocaleDateString("en-IN")}
                   </td>
                   <td className="px-4 py-2.5">
-                    <a href={f.fileUrl} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
+                    <a href={mediaUrl(f.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
                       Open
                     </a>
+                    {f.storagePath ? (
+                      <div className="text-[10px] text-steel-muted font-mono mt-0.5 truncate max-w-[220px]" title={f.storagePath}>
+                        {f.storagePath}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}

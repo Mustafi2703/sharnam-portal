@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../prisma.js";
-import { requireAuth, requireRoles, signToken, toAuthUser, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireRoles, signToken, toAuthUser, joiningMetaForUser, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import {
   DEFAULT_ROLE_PERMISSIONS,
@@ -174,7 +174,8 @@ authRouter.post("/login", async (req, res) => {
       }
     }
 
-    const authUser = toAuthUser(user);
+    const joining = await joiningMetaForUser(user.id, user.email);
+    const authUser = toAuthUser(user, undefined, joining);
     const token = signToken(authUser);
     await audit("login", { userId: user.id, meta: { portal: portal || "general" } });
     res.json({ token, user: authUser });
@@ -190,9 +191,10 @@ authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) return res.status(404).json({ error: "Not found" });
+    const joining = await joiningMetaForUser(user.id, user.email);
     const roleDef = await prisma.roleDefinition.findUnique({ where: { key: user.role } });
     res.json({
-      user: toAuthUser(user, req.user!.impersonatedBy),
+      user: toAuthUser(user, req.user!.impersonatedBy, joining),
       permissions: roleDef ? JSON.parse(roleDef.permissions) : DEFAULT_ROLE_PERMISSIONS[user.role as RoleKey],
     });
   } catch (err) {

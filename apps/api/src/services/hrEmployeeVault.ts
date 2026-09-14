@@ -75,6 +75,33 @@ export function vaultSubfolderForCategory(category: string): VaultSubfolder {
   return "Documents";
 }
 
+/** Canonical file name — e.g. PAN_SPDC-001_scan_2026-09-15.pdf under Documents/. */
+export function vaultFileNameForUpload(opts: {
+  category: string;
+  profile?: { empCode?: string | null } | null;
+  fullName: string;
+  originalName?: string | null;
+}) {
+  const cat =
+    String(opts.category || "Document")
+      .trim()
+      .replace(/[^a-zA-Z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 24) || "Document";
+  const code =
+    opts.profile?.empCode?.trim().replace(/[^a-zA-Z0-9._-]+/g, "") ||
+    opts.fullName
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .slice(0, 20) ||
+    "STAFF";
+  const orig = opts.originalName || "file";
+  const ext = path.extname(orig) || "";
+  const base = path.basename(orig, ext).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 32) || "file";
+  const stamp = new Date().toISOString().slice(0, 10);
+  return `${cat}_${code}_${base}_${stamp}${ext}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+}
+
 function uploadRoot() {
   return path.join(mockOneDrive.root(), "onedrive", "_HR");
 }

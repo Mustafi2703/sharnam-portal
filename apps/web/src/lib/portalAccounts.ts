@@ -71,14 +71,24 @@ export function loginPathForAccount(role: string, kind?: PortalAccountKind): str
 }
 
 /** After sign-in (or a denied desk), send the user to the desk they actually own. */
-export function homePathForUser(user: Pick<AuthUser, "role" | "hrDeskOnly" | "vendorId"> | null | undefined): string {
+export function homePathForUser(
+  user: Pick<AuthUser, "role" | "hrDeskOnly" | "vendorId" | "joiningOfferId"> | null | undefined,
+): string {
   if (!user) return "/login";
   if (user.hrDeskOnly || user.role === "hr") return "/hrm";
   if (user.role === "vendor") return "/crm/vendor-bids";
   if (user.role === "site_employee") return "/attendance";
-  if (user.role === "employee") return user.vendorId ? "/stakeholder" : "/dashboard";
+  if (user.role === "employee") {
+    if (user.vendorId) return "/stakeholder";
+    if (user.joiningOfferId) return `/hrm/onboarding/${user.joiningOfferId}`;
+    return "/dashboard";
+  }
   if (user.role === "client") return "/dashboard";
   return "/dashboard";
+}
+
+export function isJoiningEmployee(user?: Pick<AuthUser, "role" | "vendorId" | "joiningOfferId"> | null) {
+  return !!user && user.role === "employee" && !user.vendorId && !!user.joiningOfferId;
 }
 
 export function canManageHrms(user?: { role?: string | null; hrDeskOnly?: boolean } | null) {
