@@ -1444,8 +1444,8 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
     const profiles = await prisma.employeeProfile.findMany();
     let rows = users.map((u) => ({ ...u, profile: profiles.find((p) => p.userId === u.id) || null }));
     if (!includeDemo) {
-      const { isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
-      rows = rows.filter((u) => !isDemoSeedLoginEmail(u.email));
+      const { isHiddenPortalListUser } = await import("../services/keepPortalUsers.js");
+      rows = rows.filter((u) => !isHiddenPortalListUser(u.email));
     }
     if (!includeInactive) {
       rows = rows.filter((u) => u.isActive !== false && !u.fullName.startsWith("[Removed]"));
@@ -1625,6 +1625,51 @@ hrmRouter.post("/employees/purge-twinoxis-test", requireRoles("admin", "office")
       detail: errorDetail(err),
     });
     res.status(500).json({ error: "Could not purge Twinoxis test logins" });
+  }
+});
+
+/** Remove demo seed (@sharnam.demo etc.) and Twinoxis test logins in one step — office / admin. */
+hrmRouter.post("/employees/purge-uat-logins", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { isHiddenPortalListUser, isKeptPortalEmail } = await import("../services/keepPortalUsers.js");
+    const active = await prisma.user.findMany({
+      where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+      select: { id: true, email: true, fullName: true },
+    });
+    const targets = active.filter((u) => isHiddenPortalListUser(u.email) && !isKeptPortalEmail(u.email));
+    if (!targets.length) {
+      return res.json({ removed: 0, emails: [] });
+    }
+    const stamp = Date.now();
+    for (const u of targets) {
+      if (u.id === req.user?.id) continue;
+      const retiredEmail = `deleted.${stamp}.${u.email.replace("@", "_at_")}`.slice(0, 180);
+      await prisma.projectMember.deleteMany({ where: { userId: u.id } });
+      await prisma.employeeProfile.deleteMany({ where: { userId: u.id } });
+      await prisma.user.update({
+        where: { id: u.id },
+        data: {
+          isActive: false,
+          email: retiredEmail,
+          fullName: `[Removed] ${u.fullName}`.slice(0, 200),
+          vendorId: null,
+        },
+      });
+    }
+    await audit("hrm.employees.purge_uat_logins", {
+      userId: req.user?.id,
+      entity: "User",
+      meta: { count: targets.length, emails: targets.map((t) => t.email) },
+    });
+    res.json({ removed: targets.length, emails: targets.map((t) => t.email) });
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees.purge_uat_logins",
+      message: "Could not purge UAT logins",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not purge UAT logins" });
   }
 });
 

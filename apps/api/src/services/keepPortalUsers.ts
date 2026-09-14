@@ -30,3 +30,8 @@ export function isDemoSeedLoginEmail(email?: string | null) {
   if (isKeptPortalEmail(lower)) return false;
   return DEMO_LOGIN_SUFFIXES.some((suffix) => lower.endsWith(suffix));
 }
+
+/** Hide from Access, HRMS, and project staff pickers — demo seed + Twinoxis UAT duplicates. */
+export function isHiddenPortalListUser(email?: string | null) {
+  return isDemoSeedLoginEmail(email) || isTwinoxisTestEmail(email);
+}

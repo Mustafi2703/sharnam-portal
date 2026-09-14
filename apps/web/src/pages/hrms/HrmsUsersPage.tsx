@@ -9,6 +9,7 @@ import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
+import { isHiddenPortalListUser } from "../../lib/portalUserLists";
 import { canManageHrms } from "../../lib/portalAccounts";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -160,6 +161,7 @@ export default function HrmsUsersPage() {
   const shownEmployees = useMemo(() => {
     const needle = deferredUserQ.trim().toLowerCase();
     return employees.filter((e) => {
+      if (isHiddenPortalListUser(e.email)) return false;
       if (payrollFilter === "ready" && !hasPayrollSetup(e)) return false;
       if (payrollFilter === "missing" && hasPayrollSetup(e)) return false;
       if (!needle) return true;
@@ -240,16 +242,16 @@ export default function HrmsUsersPage() {
     }
   }
 
-  async function purgeTwinoxisTestLogins() {
+  async function purgeUatLogins() {
     if (
       !window.confirm(
-        "Remove all Twinoxis test logins (@twinoxis.com, @twinoxis1.com)? @spdc.in production staff stay."
+        "Remove demo seed logins (@sharnam.demo etc.) and Twinoxis test logins (@twinoxis.com)? @spdc.in production staff stay."
       )
     )
       return;
     setBusy(true);
     try {
-      const res = await api<{ removed: number; emails: string[] }>("/api/hrm/employees/purge-twinoxis-test", {
+      const res = await api<{ removed: number; emails: string[] }>("/api/hrm/employees/purge-uat-logins", {
         method: "POST",
         token,
         body: JSON.stringify({}),
@@ -257,12 +259,12 @@ export default function HrmsUsersPage() {
       setMsgTone("ok");
       setMsg(
         res.removed
-          ? `Removed ${res.removed} Twinoxis test login${res.removed === 1 ? "" : "s"}.`
-          : "No Twinoxis test logins to remove."
+          ? `Removed ${res.removed} demo/test login${res.removed === 1 ? "" : "s"}.`
+          : "No demo or test logins to remove."
       );
       await load();
     } catch (err) {
-      const reason = actionReasonFromError("Could not remove Twinoxis test logins", err);
+      const reason = actionReasonFromError("Could not remove demo/test logins", err);
       setActionError(reason);
       setMsgTone("err");
       setMsg(reason.message);
@@ -319,8 +321,8 @@ export default function HrmsUsersPage() {
             <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
           ) : null}
           {canEdit ? (
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeTwinoxisTestLogins()}>
-              Remove Twinoxis test logins
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeUatLogins()}>
+              Remove demo &amp; test logins
             </Button>
           ) : null}
           {isAdmin ? (

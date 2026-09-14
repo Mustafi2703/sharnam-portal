@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../lib/spdcStaff";
+import { isHiddenPortalListUser } from "../lib/portalUserLists";
 
 export type AllocateUser = {
   id: string;
@@ -53,7 +54,10 @@ export function ProjectTeamAllocatePanel({
   const [memberRole, setMemberRole] = useState("site_engineer");
   const [listQ, setListQ] = useState("");
 
-  const staff = useMemo(() => users.filter(isSpdcStaff), [users]);
+  const staff = useMemo(
+    () => users.filter((u) => isSpdcStaff(u) && !isHiddenPortalListUser(u.email)),
+    [users],
+  );
   const staffItems = useMemo(
     () =>
       staff.map((u) => ({

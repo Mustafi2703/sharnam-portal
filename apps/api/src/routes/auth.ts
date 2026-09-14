@@ -310,7 +310,8 @@ usersRouter.get("/", requireRoles("admin", "office"), async (req, res) => {
     select: { id: true, email: true, fullName: true, role: true, portal: true, phone: true, isActive: true, vendorId: true },
     orderBy: { fullName: "asc" },
   });
-  res.json(users);
+  const { isHiddenPortalListUser } = await import("../services/keepPortalUsers.js");
+  res.json(users.filter((u) => !isHiddenPortalListUser(u.email)));
 });
 
 usersRouter.patch("/:id", requireRoles("admin", "office"), async (req, res) => {

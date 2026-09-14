@@ -14,6 +14,7 @@ import {
 import { useConsultantTypes } from "../lib/consultantTypes";
 import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared";
 import { Badge, Button, Card, Input, PageHero } from "../components/ui";
+import { isHiddenPortalListUser } from "../lib/portalUserLists";
 import { WORKSPACES } from "../workspaces";
 
 const ACTIONS: PermissionAction[] = ["view", "create", "edit", "approve"];
@@ -100,6 +101,31 @@ export default function RolesPage() {
     }
   }
 
+  async function purgeUatLogins() {
+    if (
+      !window.confirm(
+        "Remove demo seed logins (@sharnam.demo etc.) and Twinoxis test logins (@twinoxis.com)? All @spdc.in staff and baibhabmustafi@gmail.com stay."
+      )
+    )
+      return;
+    setMsg("");
+    try {
+      const res = await api<{ removed: number; emails: string[] }>("/api/hrm/employees/purge-uat-logins", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsg(
+        res.removed
+          ? `Removed ${res.removed} demo/test login${res.removed === 1 ? "" : "s"}: ${res.emails.join(", ")}`
+          : "No demo or test logins to remove."
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not remove demo/test logins");
+    }
+  }
+
   async function purgeTwinoxisTestLogins() {
     if (
       !window.confirm(
@@ -153,6 +179,7 @@ export default function RolesPage() {
   const shownUsers = useMemo(() => {
     const needle = userQ.trim().toLowerCase();
     return users.filter((u) => {
+      if (!showDemoLogins && isHiddenPortalListUser(u.email)) return false;
       const kind = kindForAccount(u);
       if (kindFilter !== "all" && kind !== kindFilter) return false;
       if (kindFilter === "stakeholder" && typeFilter) {
@@ -166,7 +193,7 @@ export default function RolesPage() {
         .toLowerCase()
         .includes(needle);
     });
-  }, [users, kindFilter, typeFilter, userQ]);
+  }, [users, kindFilter, typeFilter, userQ, showDemoLogins]);
 
   if (!canManage) return <Navigate to="/dashboard" replace />;
 
@@ -236,6 +263,9 @@ export default function RolesPage() {
               />
               Show demo seed logins
             </label>
+            <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void purgeUatLogins()}>
+              Remove demo &amp; test logins
+            </Button>
             <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void purgeTwinoxisTestLogins()}>
               Remove Twinoxis test logins
             </Button>
