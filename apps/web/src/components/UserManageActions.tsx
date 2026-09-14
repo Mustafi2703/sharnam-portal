@@ -46,8 +46,8 @@ export function UserManageActions({ user, token, onEdit, onChanged, showEdit = t
             <Card className="space-y-3">
               <h3 className="font-display text-xl">Delete {user.fullName}?</h3>
               <p className="text-sm text-steel-muted">
-                They lose portal login and project assignments. Live SPDC / Twinoxis accounts cannot be removed. Type{" "}
-                <strong>{user.email}</strong> to confirm.
+                They lose portal login and project assignments. Only protected <strong>@spdc.in</strong> production
+                accounts cannot be removed. Type <strong>{user.email}</strong> to confirm.
               </p>
               <Input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder={user.email} />
               {err ? <p className="text-sm text-danger">{err}</p> : null}

@@ -45,6 +45,11 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
   const [createQuotationNo, setCreateQuotationNo] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteCode, setDeleteCode] = useState("");
+  const [deleteProjectToo, setDeleteProjectToo] = useState(true);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteMsg, setDeleteMsg] = useState("");
 
   const statusOptions = useMemo(
     () => [...new Set(quotations.map((r) => r.status).filter(Boolean))].sort() as string[],
@@ -148,6 +153,38 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
       setAwardMsg(err instanceof Error ? err.message : "Could not award this proposal");
     } finally {
       setAwardBusy(false);
+    }
+  }
+
+  async function deleteSelected() {
+    if (!selectedId || !token || !selected) return;
+    const confirm = deleteCode.trim();
+    if (confirm.toUpperCase() !== selected.quotationNo.toUpperCase()) {
+      setDeleteMsg(`Type ${selected.quotationNo} to confirm.`);
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteMsg("");
+    try {
+      const res = await api<{ purgedProject?: { code: string } | null }>(`/api/crm/quotations/${selectedId}`, {
+        method: "DELETE",
+        token,
+        body: JSON.stringify({ confirmCode: confirm, deleteProject: deleteProjectToo && Boolean(awardedProjectId) }),
+      });
+      setDeleteOpen(false);
+      setDeleteCode("");
+      setSelectedId(null);
+      setDetail(null);
+      onRefresh?.();
+      setAwardMsg(
+        res.purgedProject
+          ? `Removed proposal and Planning project ${res.purgedProject.code}.`
+          : "Proposal removed from register.",
+      );
+    } catch (err) {
+      setDeleteMsg(err instanceof Error ? err.message : "Could not delete proposal");
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -330,6 +367,21 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                     Another proposal on this lead →
                   </button>
                 )}
+                {canWrite && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!text-xs !border-danger !text-danger"
+                    onClick={() => {
+                      setDeleteCode("");
+                      setDeleteMsg("");
+                      setDeleteProjectToo(Boolean(awardedProjectId));
+                      setDeleteOpen(true);
+                    }}
+                  >
+                    Delete proposal…
+                  </Button>
+                )}
               </div>
             </>
           )}
@@ -352,6 +404,55 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
           >
             Next
           </Button>
+        </div>
+      )}
+
+      {deleteOpen && selected && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md space-y-3">
+            <h3 className="font-display text-xl">Delete {selected.quotationNo}?</h3>
+            <p className="text-sm text-steel-muted leading-relaxed">
+              Removes the proposal file, SharePoint revisions, and status log from the register.
+            </p>
+            {awardedProjectId ? (
+              <label className="flex items-start gap-2 text-xs text-steel-muted cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={deleteProjectToo}
+                  onChange={(e) => setDeleteProjectToo(e.target.checked)}
+                />
+                <span>
+                  Also purge the linked Planning project on the projects register (drawings, DPR, checklists, etc.).
+                  Uncheck to keep the project row.
+                </span>
+              </label>
+            ) : null}
+            <label className="block text-xs font-semibold text-steel-muted">
+              Type quotation number to confirm
+              <Input
+                className="mt-1 font-mono"
+                value={deleteCode}
+                onChange={(e) => setDeleteCode(e.target.value)}
+                placeholder={selected.quotationNo}
+                autoFocus
+              />
+            </label>
+            {deleteMsg ? <p className="text-xs text-danger">{deleteMsg}</p> : null}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                className="!bg-danger !border-danger"
+                disabled={deleteBusy}
+                onClick={() => void deleteSelected()}
+              >
+                {deleteBusy ? "Deleting…" : "Delete proposal"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setDeleteOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
 

@@ -22,11 +22,10 @@ export type CrmProjectRow = {
   location?: string | null;
 };
 
-const PAGE_SIZE = 50;
-
-function setupHref(projectId: string) {
-  return `/crm/setup?projectId=${projectId}&step=project`;
-}
+export type CrmProjectProposalLink = {
+  id: string;
+  quotationNo: string;
+};
 
 type Props = {
   projects: CrmProjectRow[];
@@ -34,13 +33,23 @@ type Props = {
   onDelete?: (project: CrmProjectRow) => void;
   selectedId?: string | null;
   onSelect?: (project: CrmProjectRow) => void;
+  proposalByProjectId?: Record<string, CrmProjectProposalLink>;
 };
 
-function projectDetailLines(p: CrmProjectRow) {
+const PAGE_SIZE = 50;
+
+function setupHref(projectId: string) {
+  return `/crm/setup?projectId=${projectId}&step=project`;
+}
+
+function projectDetailLines(p: CrmProjectRow, proposal?: CrmProjectProposalLink | null) {
   return [
     { label: "Project code", value: p.code, mono: true },
     { label: "Project name", value: p.name },
     { label: "Status", value: p.status || "Planning" },
+    ...(proposal
+      ? [{ label: "Source proposal", value: proposal.quotationNo, mono: true }]
+      : []),
     { label: "Client", value: p.clientName || "—" },
     { label: "Contact", value: p.clientContactName || "—" },
     { label: "Email", value: p.clientEmail || "—" },
@@ -67,7 +76,14 @@ function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
   });
 }
 
-export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: selectedIdProp, onSelect }: Props) {
+export function CrmProjectsRegister({
+  projects,
+  canWrite,
+  onDelete,
+  selectedId: selectedIdProp,
+  onSelect,
+  proposalByProjectId = {},
+}: Props) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
@@ -89,6 +105,7 @@ export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: 
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   const selected = projects.find((p) => p.id === selectedId) || null;
+  const selectedProposal = selected ? proposalByProjectId[selected.id] : null;
 
   return (
     <div className="space-y-3 pb-2">
@@ -144,7 +161,9 @@ export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: 
             </thead>
             <tbody>
               {!pageRows.length && <RegisterEmptyRow colSpan={8} message="No projects match filters." />}
-              {pageRows.map((p) => (
+              {pageRows.map((p) => {
+                const proposal = proposalByProjectId[p.id];
+                return (
                 <tr
                   key={p.id}
                   className={selectedId === p.id ? "bg-brand/5 cursor-pointer" : "cursor-pointer hover:bg-sand/30"}
@@ -176,12 +195,20 @@ export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: 
                   </td>
                   <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-2">
+                      {proposal ? (
+                        <Link
+                          to={`/crm/proposals/${proposal.id}`}
+                          className="text-[10px] font-semibold text-steel-muted hover:text-brand"
+                        >
+                          {proposal.quotationNo}
+                        </Link>
+                      ) : null}
                       {canWrite ? (
                         <Link
                           to={setupHref(p.id)}
                           className="inline-flex items-center rounded-md border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand/50"
                         >
-                          Edit card & team
+                          Edit setup
                         </Link>
                       ) : null}
                       {canWrite && onDelete ? (
@@ -205,7 +232,8 @@ export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: 
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </RegisterSheetFrame>
@@ -225,11 +253,16 @@ export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: 
                 )}
                 <p className="text-[11px] text-steel-muted mt-1">{projectStatusHint(selected.status)}</p>
               </div>
-              <CrmDetailLines lines={projectDetailLines(selected)} />
+              <CrmDetailLines lines={projectDetailLines(selected, selectedProposal)} />
               <div className="flex flex-col gap-2 border-t border-line pt-3">
+                {selectedProposal ? (
+                  <Link to={`/crm/proposals/${selectedProposal.id}`} className="text-sm font-semibold text-brand">
+                    View source proposal {selectedProposal.quotationNo} →
+                  </Link>
+                ) : null}
                 {canWrite ? (
                   <Link to={setupHref(selected.id)} className="text-sm font-semibold text-brand">
-                    Edit card · add consultants, vendors, employees →
+                    Edit setup · parties & SPDC staff →
                   </Link>
                 ) : null}
                 {(!selected.status || selected.status === "Planning") ? (

@@ -12,8 +12,6 @@ const PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
 
 export const LIVE_TEAM: { email: string; fullName: string; role: RoleKey; org: string }[] = [
   { email: "baibhabmustafi@gmail.com", fullName: "Baibhab Kumar Mustafi", role: "admin", org: "Twinoxis / SPDC UAT" },
-  { email: "admin@twinoxis.com", fullName: "Twinoxis Admin", role: "vendor", org: "Twinoxis Demo Contractor" },
-  { email: "hello@twinoxis.com", fullName: "Twinoxis Site Engineer", role: "site_employee", org: "Twinoxis" },
   { email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "admin", org: "SPDC" },
   { email: "operations@spdc.in", fullName: "Saurabh Prajapati", role: "office", org: "SPDC Operations" },
   { email: "saurabh@spdc.in", fullName: "Saurabh Prajapati", role: "admin", org: "SPDC" },
@@ -106,7 +104,7 @@ async function seedContacts(db: PrismaClient, projectId: string) {
 }
 
 async function seedMeetings(db: PrismaClient, projectId: string, userIds: Record<string, string>) {
-  const officeId = userIds["hello@twinoxis.com"] || userIds["nirav@spdc.in"];
+  const officeId = userIds["nirav@spdc.in"] || userIds["baibhabmustafi@gmail.com"];
   const meetDate = new Date(Date.now() + 2 * 86400000);
   meetDate.setHours(11, 0, 0, 0);
 
@@ -168,8 +166,8 @@ async function seedCoordination(db: PrismaClient, projectId: string, userIds: Re
       discipline: "MEP",
       location: "Block A · L3",
       priority: "High",
-      assignedToName: "MEP Design Engineer",
-      assignedToEmail: "hello@twinoxis.com",
+      assignedToName: "Nirav Parekh",
+      assignedToEmail: "nirav@spdc.in",
       followUpCount: 1,
     },
     {
@@ -283,7 +281,7 @@ export async function seedSpdcLiveTeam(db: PrismaClient = prisma) {
   const meeting = await seedMeetings(db, project.id, userIds);
   await seedCoordination(db, project.id, userIds);
   await seedNcrCar(db, project.id);
-  const officeId = userIds["hello@twinoxis.com"] || userIds["nirav@spdc.in"];
+  const officeId = userIds["nirav@spdc.in"] || userIds["baibhabmustafi@gmail.com"];
   const rfi = officeId ? await seedDemoRfi(db, project.id, officeId) : null;
   await seedQapRow(db, project.id);
 

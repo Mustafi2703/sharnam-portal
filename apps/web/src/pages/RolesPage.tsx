@@ -99,6 +99,31 @@ export default function RolesPage() {
     }
   }
 
+  async function purgeTwinoxisTestLogins() {
+    if (
+      !window.confirm(
+        "Remove all Twinoxis test logins (@twinoxis.com, @twinoxis1.com)? baibhabmustafi@gmail.com and all @spdc.in staff stay."
+      )
+    )
+      return;
+    setMsg("");
+    try {
+      const res = await api<{ removed: number; emails: string[] }>("/api/hrm/employees/purge-twinoxis-test", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsg(
+        res.removed
+          ? `Removed ${res.removed} Twinoxis test login${res.removed === 1 ? "" : "s"}: ${res.emails.join(", ")}`
+          : "No Twinoxis test logins to remove."
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not remove Twinoxis test logins");
+    }
+  }
+
   async function deactivateDemoSeedLogins() {
     if (
       !window.confirm(
@@ -210,6 +235,9 @@ export default function RolesPage() {
               />
               Show demo seed logins
             </label>
+            <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void purgeTwinoxisTestLogins()}>
+              Remove Twinoxis test logins
+            </Button>
             <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void deactivateDemoSeedLogins()}>
               Deactivate demo logins
             </Button>

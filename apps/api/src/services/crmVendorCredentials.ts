@@ -3,6 +3,7 @@
  */
 import { prisma } from "../prisma.js";
 import type { RoleKey } from "@sharnam/shared";
+import { isKeptPortalEmail } from "./keepPortalUsers.js";
 
 export type PortalLoginResult = {
   userId: string;
@@ -23,6 +24,10 @@ function defaultTempPassword() {
 
 const LOCKED_ROLES = new Set(["admin", "office", "site_employee", "hr"]);
 
+function isProtectedStaffLogin(user: { role: string; email: string }) {
+  return LOCKED_ROLES.has(user.role) || isKeptPortalEmail(user.email);
+}
+
 export async function ensurePortalLogin(opts: {
   email: string;
   fullName: string;
@@ -40,6 +45,14 @@ export async function ensurePortalLogin(opts: {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
+    if (isProtectedStaffLogin(existing)) {
+      return {
+        userId: existing.id,
+        email: existing.email,
+        created: false,
+        role: existing.role as RoleKey,
+      };
+    }
     const { portalForRole } = await import("@sharnam/shared");
     const patch: {
       vendorId?: string;
@@ -288,6 +301,12 @@ export async function syncDirectoryPortalLogin(opts: {
       designation: opts.vendor.name,
       department: role === "employee" ? opts.vendor.trade || null : null,
     });
+  }
+
+  if (isProtectedStaffLogin(user)) {
+    return {
+      error: `${email} is an SPDC office login — use a different email for this ${opts.vendor.partyType === "Client" ? "client" : "company"} contact.`,
+    };
   }
 
   const bcrypt = await import("bcryptjs");

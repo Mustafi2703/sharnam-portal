@@ -1134,6 +1134,77 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
   });
 });
 
+/** Delete a proposal (and optionally its awarded Planning project). Type quotation no to confirm. */
+crmRouter.delete("/quotations/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const confirmCode = String(req.body?.confirmCode || req.query.confirmCode || "").trim();
+  const deleteProject =
+    req.body?.deleteProject === true || String(req.query.deleteProject || "") === "1";
+  const qtn = await prisma.quotation.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true,
+      quotationNo: true,
+      clientName: true,
+      status: true,
+      leadId: true,
+      projectId: true,
+      awardedProjectId: true,
+    },
+  });
+  if (!qtn) return res.status(404).json({ error: "not found" });
+  if (!confirmCode || confirmCode.toUpperCase() !== qtn.quotationNo.toUpperCase()) {
+    return res.status(400).json({ error: `Type the quotation number ${qtn.quotationNo} to confirm delete.` });
+  }
+
+  const linkedProjectId = qtn.awardedProjectId || qtn.projectId;
+  let purgedProject: { id: string; code: string } | null = null;
+
+  if (deleteProject && linkedProjectId) {
+    const project = await prisma.project.findUnique({
+      where: { id: linkedProjectId },
+      select: { id: true, code: true, name: true, status: true },
+    });
+    if (project) {
+      if (project.status && project.status !== "Planning") {
+        return res.status(409).json({
+          error: `${project.code} is live (${project.status}). Delete the project from CRM → Projects first, or uncheck purge project.`,
+        });
+      }
+      try {
+        const { purgeProjectChildren } = await import("../services/purgeProject.js");
+        await prisma.$transaction(async (tx) => {
+          await purgeProjectChildren(tx, project.id);
+        }, { timeout: 60_000, maxWait: 10_000 });
+        purgedProject = { id: project.id, code: project.code };
+      } catch (err) {
+        return res.status(409).json({
+          error: err instanceof Error ? err.message : "Could not purge the linked Planning project.",
+        });
+      }
+    }
+  }
+
+  await prisma.quotation.delete({ where: { id: qtn.id } });
+
+  if (qtn.leadId) {
+    await prisma.lead
+      .update({
+        where: { id: qtn.leadId },
+        data: { stage: "Qualified", latestStatus: "Proposal removed", projectId: purgedProject ? null : undefined },
+      })
+      .catch(() => null);
+  }
+
+  await audit("quotation.delete", {
+    userId: req.user!.id,
+    entity: "Quotation",
+    entityId: qtn.id,
+    meta: { quotationNo: qtn.quotationNo, clientName: qtn.clientName, deleteProject, purgedProject },
+  });
+
+  res.json({ ok: true, id: qtn.id, quotationNo: qtn.quotationNo, purgedProject });
+});
+
 export const hrmRouter = Router();
 const hrmUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 
@@ -1336,6 +1407,8 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const scope = String(req.query.scope || "staff");
   const includeDemo =
     String(req.query.includeDemo || "") === "1" && (req.user?.role === "admin" || req.user?.role === "office");
+  const includeInactive = String(req.query.includeInactive || "") === "1";
+  const activeOnly = includeInactive ? {} : { isActive: true };
   const staffWhere = {
     NOT: { email: { startsWith: "deleted." } },
     OR: [
@@ -1348,6 +1421,7 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
       where:
         scope === "all"
           ? {
+              ...activeOnly,
               NOT: { email: { startsWith: "deleted." } },
               OR: [{ role: { in: [...HRMS_ALL_LOGIN_ROLES] } }, { vendorId: { not: null } }],
             }
@@ -1372,6 +1446,9 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
     if (!includeDemo) {
       const { isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
       rows = rows.filter((u) => !isDemoSeedLoginEmail(u.email));
+    }
+    if (!includeInactive) {
+      rows = rows.filter((u) => u.isActive !== false && !u.fullName.startsWith("[Removed]"));
     }
     res.json(rows);
   } catch (err) {
@@ -1487,6 +1564,51 @@ hrmRouter.post("/employees/delete-demo-seed", requireRoles("admin", "office"), a
       detail: errorDetail(err),
     });
     res.status(500).json({ error: "Could not delete demo seed logins" });
+  }
+});
+
+/** Remove Twinoxis UAT test logins (@twinoxis.com, @twinoxis1.com) — office / admin. SPDC @spdc.in stays. */
+hrmRouter.post("/employees/purge-twinoxis-test", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { isTwinoxisTestEmail, isKeptPortalEmail } = await import("../services/keepPortalUsers.js");
+    const active = await prisma.user.findMany({
+      where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+      select: { id: true, email: true, fullName: true },
+    });
+    const targets = active.filter((u) => isTwinoxisTestEmail(u.email) && !isKeptPortalEmail(u.email));
+    if (!targets.length) {
+      return res.json({ removed: 0, emails: [] });
+    }
+    const stamp = Date.now();
+    for (const u of targets) {
+      if (u.id === req.user?.id) continue;
+      const retiredEmail = `deleted.${stamp}.${u.email.replace("@", "_at_")}`.slice(0, 180);
+      await prisma.projectMember.deleteMany({ where: { userId: u.id } });
+      await prisma.employeeProfile.deleteMany({ where: { userId: u.id } });
+      await prisma.user.update({
+        where: { id: u.id },
+        data: {
+          isActive: false,
+          email: retiredEmail,
+          fullName: `[Removed] ${u.fullName}`.slice(0, 200),
+          vendorId: null,
+        },
+      });
+    }
+    await audit("hrm.employees.purge_twinoxis_test", {
+      userId: req.user?.id,
+      entity: "User",
+      meta: { count: targets.length, emails: targets.map((t) => t.email) },
+    });
+    res.json({ removed: targets.length, emails: targets.map((t) => t.email) });
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees.purge_twinoxis_test",
+      message: "Could not purge Twinoxis test logins",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not purge Twinoxis test logins" });
   }
 });
 
@@ -1710,7 +1832,7 @@ hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const { isKeptPortalEmail, isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
   if (isKeptPortalEmail(existing.email)) {
     return res.status(403).json({
-      error: "This login is on the live SPDC / Twinoxis list and cannot be deleted.",
+      error: "This login is a protected SPDC production account (@spdc.in) and cannot be deleted.",
     });
   }
   const demoSeed = isDemoSeedLoginEmail(existing.email);

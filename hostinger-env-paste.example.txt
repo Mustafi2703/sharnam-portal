@@ -1,0 +1,65 @@
+# Safe template (no secrets) — copy to hostinger-env-paste.txt and fill values
+# Same KEY/VALUE format for Hostinger hPanel → Environment variables
+
+KEY:   NODE_ENV
+VALUE: production
+---
+KEY:   JWT_SECRET
+VALUE: CHANGE-ME-openssl-rand-base64-48
+---
+KEY:   WEB_ORIGIN
+VALUE: https://portal.spdc.in
+---
+KEY:   UPLOAD_DIR
+VALUE: ./data/uploads
+---
+KEY:   MYSQL_USER
+VALUE: u252873650_sharnam_qryx
+---
+KEY:   MYSQL_PASSWORD
+VALUE: YOUR_MYSQL_PASSWORD_FROM_HPANEL
+---
+KEY:   MYSQL_DATABASE
+VALUE: u252873650_sharnam_portal
+---
+KEY:   MYSQL_HOST
+VALUE: 127.0.0.1
+---
+KEY:   SKIP_BUILD_SEED
+VALUE: 1
+---
+KEY:   SEED_PASSWORD
+VALUE: Demo@1234
+---
+KEY:   SHARNAM_EXCEL_ROOT
+VALUE: ./seed/data
+---
+KEY:   MOCK_ONEDRIVE
+VALUE: false
+---
+KEY:   AZURE_TENANT_ID
+VALUE: YOUR_ENTRA_TENANT_ID
+---
+KEY:   AZURE_CLIENT_ID
+VALUE: 2fd78789-594e-4af6-b43d-cb82f59df39c
+---
+KEY:   AZURE_CLIENT_SECRET
+VALUE: YOUR_AZURE_CLIENT_SECRET
+---
+KEY:   SHAREPOINT_SITE_URL
+VALUE: https://spdcsmb.sharepoint.com/sites/SharnamProjects
+---
+KEY:   GRAPH_MAIL_FROM
+VALUE: pmc-portal@spdc.in
+---
+KEY:   GRAPH_MAIL_ENABLED
+VALUE: true
+---
+KEY:   PORTAL_MAIL_LIVE
+VALUE: false
+---
+
+# DO NOT SET on Hostinger:
+#   RUN_SEED          — re-seeds demo vendors/users on every build
+#   DATABASE_URL=file:... — SQLite; use MYSQL_* above instead
+#   PORT              — Hostinger injects automatically

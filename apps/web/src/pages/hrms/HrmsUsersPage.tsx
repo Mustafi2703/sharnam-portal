@@ -240,6 +240,37 @@ export default function HrmsUsersPage() {
     }
   }
 
+  async function purgeTwinoxisTestLogins() {
+    if (
+      !window.confirm(
+        "Remove all Twinoxis test logins (@twinoxis.com, @twinoxis1.com)? @spdc.in production staff stay."
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const res = await api<{ removed: number; emails: string[] }>("/api/hrm/employees/purge-twinoxis-test", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsgTone("ok");
+      setMsg(
+        res.removed
+          ? `Removed ${res.removed} Twinoxis test login${res.removed === 1 ? "" : "s"}.`
+          : "No Twinoxis test logins to remove."
+      );
+      await load();
+    } catch (err) {
+      const reason = actionReasonFromError("Could not remove Twinoxis test logins", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function assignProject() {
     setBusy(true);
     setMsg("");
@@ -275,7 +306,7 @@ export default function HrmsUsersPage() {
             Projects are never assigned automatically. Use <strong>Assign to project</strong>, or remove a project with the × on its chip.
           </span>
           <span className="block mt-1 font-semibold text-warn">
-            Only office, HR, and admin can add or delete users. Live SPDC / Twinoxis logins stay protected.
+            Only office, HR, and admin can add or delete users. <strong>@spdc.in</strong> production logins stay protected.
           </span>
         </p>
         <div className="flex flex-wrap gap-2">
@@ -286,6 +317,11 @@ export default function HrmsUsersPage() {
           )}
           {canEdit ? (
             <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
+          ) : null}
+          {canEdit ? (
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeTwinoxisTestLogins()}>
+              Remove Twinoxis test logins
+            </Button>
           ) : null}
           {isAdmin ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void clearAllAssignments()}>
