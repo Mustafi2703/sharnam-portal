@@ -3,9 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { CrmProjectsRegister, type CrmProjectRow } from "../../components/CrmProjectsRegister";
-import { Badge, Button, Card, Input } from "../../components/ui";
-import { openModuleToolWindow } from "../../lib/moduleToolWindow";
-import { CRM_ACCENT, CRM_SOFT } from "./crmNav";
+import { Button, Card, Input } from "../../components/ui";
 
 const EMPTY = {
   code: "",
@@ -19,18 +17,6 @@ const EMPTY = {
   designConsultant: "",
   contractorName: "",
 };
-
-type HubCard = {
-  label: string;
-  blurb: string;
-  href: string;
-  n: string;
-};
-
-function openBox(href: string, label: string) {
-  const w = openModuleToolWindow(href, label);
-  if (!w) window.location.assign(href);
-}
 
 export default function CrmProjectsPage() {
   const { token, user } = useAuth();
@@ -81,27 +67,14 @@ export default function CrmProjectsPage() {
     }
   }
 
-  const projectTools: HubCard[] = selected
-    ? [
-        {
-          n: "01",
-          label: !selected.status || selected.status === "Planning" ? "Continue setup" : "Edit card & team",
-          blurb: "Client card, consultants, vendors, work packages, and SPDC employees — add more any time during the job.",
-          href: `/crm/setup?projectId=${selected.id}&step=project`,
-        },
-        { n: "02", label: "Open project desk", blurb: "Site modules, DPR, drawings.", href: `/projects/${selected.id}` },
-        { n: "03", label: "R2 bid for this project", blurb: "Add vendors, upload BOQs, comparative.", href: `/crm/bids?projectId=${selected.id}` },
-      ]
-    : [];
-
   return (
     <div className="space-y-5 p-4 sm:p-5 pb-8 min-w-0">
       <div>
         <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · projects</p>
         <h2 className="font-display text-lg text-ink">Projects</h2>
         <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
-          Delivery projects and client cards. Award a proposal from the register — it lands here as Planning — or create a job here / in Project setup without a lead.
-          <strong className="font-semibold text-ink"> Edit card & team</strong> opens the full form: client lines, consultants, vendors, packages, and SPDC employees. Use it during the job when you hire more people or add parties.
+          Register of SPDC delivery jobs and client cards. When you award a proposal from the bid register, the job lands here as Planning. You can also create a project here or in Project setup without a lead.
+          Select a row to view the client card on the right. Use <strong className="font-semibold text-ink">Edit card & team</strong> to open the full setup form — client lines, consultants, vendors, work packages, and SPDC employees — and add more parties or staff any time during the job. Once live, <strong className="font-semibold text-ink">Open desk</strong> takes you to site modules, DPR, and drawings.
           <span className="block mt-1 font-semibold text-amber-800">
             Only office and admin can add, edit, or delete a project.
           </span>
@@ -137,40 +110,6 @@ export default function CrmProjectsPage() {
             </Button>
           </form>
         </Card>
-      )}
-
-      {selected && (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="brand">{selected.code}</Badge>
-            <span className="font-medium text-sm">{selected.name}</span>
-            <span className="text-xs text-steel-muted">
-              {selected.clientName || "—"} · {selected.location || "no location"}
-            </span>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-3 max-w-2xl">
-            {projectTools.map((card) => (
-              <button
-                key={card.n + card.label}
-                type="button"
-                className="text-left h-full rounded-xl border border-line bg-paper p-4 transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-brand/50"
-                onClick={() => openBox(card.href, `${selected.code} ${card.label}`)}
-              >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span
-                    className="text-[11px] font-bold uppercase tracking-[0.12em] px-2 py-0.5 rounded-md"
-                    style={{ background: CRM_SOFT, color: CRM_ACCENT }}
-                  >
-                    {card.n}
-                  </span>
-                  <span className="text-xs text-steel-muted">Open →</span>
-                </div>
-                <h3 className="font-semibold text-sm text-ink mb-1">{card.label}</h3>
-                <p className="text-xs text-steel-muted leading-relaxed">{card.blurb}</p>
-              </button>
-            ))}
-          </div>
-        </div>
       )}
 
       <CrmProjectsRegister
