@@ -11,6 +11,7 @@ import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePa
 import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
+import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
 
 type ProjectRow = {
   id: string;
@@ -48,7 +49,7 @@ type SetupSummary = {
     endDate?: string | null;
   };
   lead?: { id: string; title: string; stage: string } | null;
-  members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string }[];
+  members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string; vendorId?: string | null }[];
   vendors: {
     id: string;
     vendorId: string;
@@ -211,7 +212,9 @@ export default function CrmProjectSetupPage() {
       if (prev && s.vendors.some((v) => v.vendorId === prev)) return prev;
       return clientRow?.vendorId || "";
     });
-    setStaffIds(s.members.map((m) => m.userId).filter(Boolean));
+    setStaffIds(
+      s.members.filter((m) => isSpdcStaffMember(m)).map((m) => m.userId).filter(Boolean)
+    );
     void api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
         try {
@@ -262,7 +265,10 @@ export default function CrmProjectSetupPage() {
           pmcName: createForm.pmcName || firstPmc?.name || "SPDC",
           vendorIds: [...consultantIds, ...pmcIds, ...contractorIds, ...(clientId ? [clientId] : [])],
           workPackages: projectPackages,
-          memberIds: staffIds,
+          memberIds: staffIds.filter((id) => {
+            const u = users.find((x) => x.id === id);
+            return u && isSpdcStaffUser(u);
+          }),
         }),
       });
       if (clientId) {
@@ -325,11 +331,17 @@ export default function CrmProjectSetupPage() {
         }),
       });
       if (staffIds.length) {
-        await api(`/api/projects/${projectId}/members`, {
-          method: "POST",
-          token,
-          body: JSON.stringify({ userIds: staffIds, role: "member" }),
+        const spdcIds = staffIds.filter((id) => {
+          const u = users.find((x) => x.id === id);
+          return u && isSpdcStaffUser(u);
         });
+        if (spdcIds.length) {
+          await api(`/api/projects/${projectId}/members`, {
+            method: "POST",
+            token,
+            body: JSON.stringify({ userIds: spdcIds, role: "member" }),
+          });
+        }
       }
       await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
       const baseMsg =

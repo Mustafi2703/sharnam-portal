@@ -390,39 +390,6 @@ const PROJECT_LIST_SELECT = {
   _count: { select: { drawings: true, members: true } },
 } as const;
 
-async function provisionProjectPortalAccess(opts: {
-  projectId: string;
-  vendorIds: string[];
-  projectName: string;
-  clientEmail?: string | null;
-  clientName?: string | null;
-  clientContactName?: string | null;
-  clientPhone?: string | null;
-  clientAddress?: string | null;
-  clientGst?: string | null;
-}) {
-  if (!opts.vendorIds.length && !opts.clientEmail && !opts.clientName) return;
-  const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import("../services/crmVendorCredentials.js");
-  if (opts.clientEmail || opts.clientName) {
-    await ensureClientVendorAndPortal({
-      projectId: opts.projectId,
-      name: opts.clientName || opts.clientContactName || opts.projectName,
-      email: opts.clientEmail,
-      phone: opts.clientPhone,
-      contactName: opts.clientContactName,
-      address: opts.clientAddress,
-      gst: opts.clientGst,
-    });
-  }
-  if (opts.vendorIds.length) {
-    await provisionProjectVendorAccess({
-      projectId: opts.projectId,
-      vendorIds: opts.vendorIds,
-      assignedVia: "Project setup",
-    });
-  }
-}
-
 projectsRouter.get("/", async (req: AuthedRequest, res) => {
   const { projectPayloadForRole } = await import("../services/projectVisibility.js");
   const role = req.user!.role;
@@ -589,20 +556,6 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       create: { projectId: project.id, userId: req.user!.id, role: "office" },
       update: {},
     });
-    const backgroundVendorIds = vendorIds;
-    void provisionProjectPortalAccess({
-      projectId: project.id,
-      vendorIds: backgroundVendorIds,
-      projectName: project.name,
-      clientEmail: project.clientEmail,
-      clientName: project.clientName,
-      clientContactName: project.clientContactName,
-      clientPhone: project.clientPhone,
-      clientAddress: project.clientAddress,
-      clientGst: project.clientGst,
-    }).catch((portalErr) => {
-      console.warn("Project create background provisioning skipped:", portalErr instanceof Error ? portalErr.message : portalErr);
-    });
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
@@ -710,7 +663,7 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
     prisma.projectMember.findMany({
       where: { projectId },
       include: {
-        user: { select: { id: true, fullName: true, email: true, role: true, phone: true, portal: true } },
+        user: { select: { id: true, fullName: true, email: true, role: true, phone: true, portal: true, vendorId: true } },
       },
       orderBy: { createdAt: "asc" },
     }),
@@ -743,6 +696,7 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
       portalRole: m.user.role,
       phone: m.user.phone,
       portal: m.user.portal,
+      vendorId: m.user.vendorId,
     })),
     vendors: projectVendors.map((pv) => {
       let packages: string[] = [];

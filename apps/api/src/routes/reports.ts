@@ -1387,9 +1387,15 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
 
 /** Create / relink portal logins for all CRM directory companies with email (clients, vendors, consultants). */
 hrmRouter.post("/employees/sync-directory-logins", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const timeoutMs = 45_000;
   try {
     const { syncAllDirectoryPortalLogins } = await import("../services/crmVendorCredentials.js");
-    const out = await syncAllDirectoryPortalLogins();
+    const out = await Promise.race([
+      syncAllDirectoryPortalLogins(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("CRM directory sync timed out — try again or sync fewer companies at a time.")), timeoutMs);
+      }),
+    ]);
     await audit("hrm.employees.sync_directory_logins", {
       userId: req.user?.id,
       entity: "User",

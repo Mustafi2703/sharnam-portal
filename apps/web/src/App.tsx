@@ -5,7 +5,6 @@ import MasterModulePage from "./pages/MasterModulePage";
 import { LoginHubPage, PortalLoginPage, DynamicPortalLoginRoute } from "./pages/PortalLogins";
 import StakeholderDeskPage from "./pages/StakeholderDeskPage";
 import DashboardPage from "./pages/DashboardPage";
-import ProjectsPage from "./pages/ProjectsPage";
 import ChecklistPage from "./pages/ChecklistPage";
 import ChecklistFillPage from "./pages/ChecklistFillPage";
 import WorkspacePage from "./pages/WorkspacePage";
@@ -22,6 +21,7 @@ import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
 import CrmLayout from "./pages/crm/CrmLayout";
+import CrmProjectsRedirect from "./pages/crm/CrmProjectsRedirect";
 import CrmProtected from "./pages/crm/CrmProtected";
 import { homePathForUser } from "./lib/portalAccounts";
 import CrmPage from "./pages/CrmPage";
@@ -217,7 +217,7 @@ export default function App() {
                 <Route path="/master/checklists" element={<ChecklistMasterPage />} />
                 <Route path="/master/dms" element={<OfficeDmsViewerPage />} />
                 <Route path="/dms/open/:token" element={<DmsSharedOpenPage />} />
-                <Route path="/projects" element={<ProjectsPage />} />
+                <Route path="/projects" element={<CrmProjectsRedirect />} />
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
                   <Route path="setup" element={<LiveProjectSetupPage />} />

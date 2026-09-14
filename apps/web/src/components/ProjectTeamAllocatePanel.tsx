@@ -2,8 +2,7 @@ import { useMemo, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
-
-const STAFF_ROLES = new Set(["admin", "office", "site_employee"]);
+import { isSpdcStaffMember, isSpdcStaffUser } from "../lib/spdcStaff";
 
 export type AllocateUser = {
   id: string;
@@ -19,6 +18,7 @@ export type AllocateMember = {
   email: string;
   portalRole?: string;
   role: string;
+  vendorId?: string | null;
 };
 
 type Props = {
@@ -34,8 +34,7 @@ type Props = {
 };
 
 function isSpdcStaff(u: AllocateUser) {
-  if (STAFF_ROLES.has(u.role)) return true;
-  return u.role === "employee" && !u.vendorId;
+  return isSpdcStaffUser(u);
 }
 
 /** Assign SPDC staff from HRMS Users only — no clients, consultants, or vendors. */
@@ -84,7 +83,8 @@ export function ProjectTeamAllocatePanel({
     }
   }
 
-  const assigned = members.filter((m) =>
+  const staffMembers = useMemo(() => members.filter((m) => isSpdcStaffMember(m)), [members]);
+  const assigned = staffMembers.filter((m) =>
     `${m.fullName} ${m.email} ${m.portalRole || ""} ${m.role}`.toLowerCase().includes(listQ.trim().toLowerCase())
   );
 
@@ -94,7 +94,7 @@ export function ProjectTeamAllocatePanel({
       <p className="text-xs text-steel-muted">
         Only people from HRMS → Users. Clients, consultants, and vendors stay on the CRM lists above.
       </p>
-      {members.length > 0 && (
+      {staffMembers.length > 0 && (
         <>
           <Input
             placeholder="Search allocated staff…"

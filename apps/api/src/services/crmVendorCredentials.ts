@@ -430,7 +430,7 @@ export async function provisionCompanyAccess(opts: {
     vendorId: opts.vendor.id,
     userId: login?.userId,
     assignedVia: opts.assignedVia || "Project setup",
-    memberRole: role === "employee" ? "employee" : role,
+    memberRole: role === "client" ? "client" : role === "employee" ? "consultant" : "vendor",
   });
   return login;
 }
