@@ -2,6 +2,7 @@
  * Ensure portal logins exist for CRM bidders, clients, and stakeholders.
  */
 import { prisma } from "../prisma.js";
+import type { Prisma } from "@prisma/client";
 import type { RoleKey } from "@sharnam/shared";
 import { isKeptPortalEmail } from "./keepPortalUsers.js";
 
@@ -26,6 +27,71 @@ const LOCKED_ROLES = new Set(["admin", "office", "site_employee", "hr"]);
 
 function isProtectedStaffLogin(user: { role: string; email: string }) {
   return LOCKED_ROLES.has(user.role) || isKeptPortalEmail(user.email);
+}
+
+type LoginDb = Prisma.TransactionClient | typeof prisma;
+
+/** Soft-remove a portal login (Access panel / HRMS). Skips protected SPDC staff. */
+export async function retirePortalLogin(db: LoginDb, userId: string): Promise<boolean> {
+  const existing = await db.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, fullName: true, role: true, isActive: true },
+  });
+  if (!existing || existing.isActive === false || existing.email.startsWith("deleted.")) return false;
+  if (isProtectedStaffLogin(existing)) return false;
+
+  const stamp = Date.now();
+  const retiredEmail = `deleted.${stamp}.${existing.email.replace("@", "_at_")}`.slice(0, 180);
+  await db.projectMember.deleteMany({ where: { userId } });
+  await db.employeeProfile.deleteMany({ where: { userId } });
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      isActive: false,
+      vendorId: null,
+      email: retiredEmail,
+      fullName: `[Removed] ${existing.fullName}`.slice(0, 200),
+    },
+  });
+  return true;
+}
+
+/** Remove vendor/client/consultant portal logins tied to a deleted CRM company. */
+export async function retirePortalLoginsForVendor(
+  db: LoginDb,
+  vendor: { id: string; email?: string | null },
+): Promise<number> {
+  const email = String(vendor.email || "")
+    .trim()
+    .toLowerCase();
+  const users = await db.user.findMany({
+    where: {
+      isActive: true,
+      NOT: { email: { startsWith: "deleted." } },
+      OR: [{ vendorId: vendor.id }, ...(email ? [{ email }] : [])],
+    },
+    select: { id: true, email: true, fullName: true, role: true },
+  });
+  let retired = 0;
+  for (const u of users) {
+    if (isProtectedStaffLogin(u)) continue;
+    if (u.role !== "vendor" && u.role !== "client" && u.role !== "employee") continue;
+    if (await retirePortalLogin(db, u.id)) retired++;
+  }
+  return retired;
+}
+
+/** Drop Access logins whose CRM directory row was deleted (isActive=false). */
+export async function cleanupOrphanDirectoryPortalLogins() {
+  const inactiveVendors = await prisma.vendor.findMany({
+    where: { isActive: false },
+    select: { id: true, email: true },
+  });
+  let retired = 0;
+  for (const vendor of inactiveVendors) {
+    retired += await retirePortalLoginsForVendor(prisma, vendor);
+  }
+  return { scanned: inactiveVendors.length, retired };
 }
 
 export async function ensurePortalLogin(opts: {
@@ -645,5 +711,5 @@ export async function syncAllDirectoryPortalLogins() {
     }
   }
 
-  return { scanned: vendors.length + projects.length, created, linked, skipped, failed, errors };
+  return { scanned: vendors.length + projects.length, created, linked, skipped, failed, errors, cleanup: await cleanupOrphanDirectoryPortalLogins() };
 }

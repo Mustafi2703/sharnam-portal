@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Prints Hostinger env vars from local .env for manual copy-paste in hPanel.
+# Generate Hostinger env files from local .env
 # Usage: bash scripts/export-hostinger-env.sh
-# Output also saved to ./hostinger-env-paste.txt (delete after use)
+#
+# hostinger-env-import.env  → hPanel "Import .env" (KEY=value format)
+# hostinger-env-paste.txt    → manual one-by-one Add (KEY:/VALUE: format)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -10,22 +12,41 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-OUT="hostinger-env-paste.txt"
+IMPORT="hostinger-env-import.env"
+PASTE="hostinger-env-paste.txt"
+
 {
-  echo "# Paste each KEY and VALUE in Hostinger → Environment variables → Add"
-  echo "# DELETE this file after copying — contains secrets"
+  echo "# Hostinger → Import .env — generated $(date -u +%Y-%m-%dT%H:%MZ)"
+  echo "# DELETE after import — contains secrets"
   echo ""
   grep -v '^#' .env | grep -v '^$' | while IFS= read -r line; do
     key="${line%%=*}"
     val="${line#*=}"
-    # Skip PORT — Hostinger sets automatically
+    if [ "$key" = "PORT" ]; then continue; fi
+    if [ "$key" = "RUN_SEED" ]; then continue; fi
+    if [[ "$val" == *'#'* || "$val" == *' '* || "$val" == *'~'* ]]; then
+      echo "${key}=\"${val}\""
+    else
+      echo "${key}=${val}"
+    fi
+  done
+} > "$IMPORT"
+
+{
+  echo "# Manual paste only — hPanel does NOT import this format."
+  echo "# For bulk import use: hostinger-env-import.env → Import .env"
+  echo "# DELETE after use — contains secrets"
+  echo ""
+  grep -v '^#' .env | grep -v '^$' | while IFS= read -r line; do
+    key="${line%%=*}"
+    val="${line#*=}"
     if [ "$key" = "PORT" ]; then continue; fi
     echo "KEY:   $key"
     echo "VALUE: $val"
     echo "---"
   done
-} | tee "$OUT"
+} > "$PASTE"
 
-echo ""
-echo "Saved to $OUT — open in Cursor, copy each pair into Hostinger Add dialog"
-echo "Delete $OUT when done."
+echo "Wrote $IMPORT  → upload in hPanel: Import .env"
+echo "Wrote $PASTE   → manual Add dialog only"
+echo "Delete both files when done."

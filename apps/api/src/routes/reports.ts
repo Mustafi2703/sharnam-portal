@@ -1437,7 +1437,7 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
         isActive: true,
         createdAt: true,
         vendorId: true,
-        vendor: { select: { id: true, name: true, trade: true, partyType: true } },
+        vendor: { select: { id: true, name: true, trade: true, partyType: true, isActive: true } },
         memberships: { include: { project: { select: { id: true, code: true, name: true } } } },
       },
     });
@@ -1450,6 +1450,22 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
     if (!includeInactive) {
       rows = rows.filter((u) => u.isActive !== false && !u.fullName.startsWith("[Removed]"));
     }
+    const inactiveVendorEmails = new Set(
+      (
+        await prisma.vendor.findMany({
+          where: { isActive: false, email: { not: null } },
+          select: { email: true },
+        })
+      )
+        .map((v) => String(v.email).trim().toLowerCase())
+        .filter(Boolean),
+    );
+    rows = rows.filter((u) => {
+      if (u.role !== "vendor" && u.role !== "client") return true;
+      if (u.vendor && u.vendor.isActive === false) return false;
+      if (!u.vendorId && inactiveVendorEmails.has(String(u.email).trim().toLowerCase())) return false;
+      return true;
+    });
     res.json(rows);
   } catch (err) {
     pushRuntimeLog({

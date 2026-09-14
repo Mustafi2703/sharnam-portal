@@ -32,6 +32,17 @@ Paste each **KEY** and **VALUE** in: **Websites → portal.spdc.in → Environme
 | **First deploy** (empty DB) | `RUN_SEED=1` | `SKIP_BUILD_SEED` |
 | **Demo / all later deploys** | `SKIP_BUILD_SEED=1` | `RUN_SEED` *(delete the variable)* |
 
+## Bulk import (recommended)
+
+1. Edit `hostinger-env-import.env` locally (copy from `hostinger-env-import.example.env`)
+2. hPanel → **portal.spdc.in** → **Settings & Redeploy** → **Environment variables**
+3. Click **Import .env** → upload `hostinger-env-import.env` (or paste its contents)
+4. Confirm → redeploy
+
+Format must be `KEY=value` — **not** the `KEY:` / `VALUE:` blocks in `hostinger-env-paste.txt`.
+
+Generate from local `.env`: `bash scripts/export-hostinger-env.sh`
+
 ## After deploy — smoke test
 
 1. `https://portal.spdc.in/api/health` → `"ok": true`

@@ -47,14 +47,15 @@ export default function RolesPage() {
   async function syncDirectoryLogins() {
     setMsg("");
     try {
-      const out = await api<{ scanned: number; created: number; linked: number; failed: number }>(
+      const out = await api<{ scanned: number; created: number; linked: number; failed: number; cleanup?: { retired: number } }>(
         "/api/hrm/employees/sync-directory-logins",
         { method: "POST", token, body: JSON.stringify({}) }
       );
       setMsg(
         `CRM sync: ${out.created} new login${out.created === 1 ? "" : "s"}, ${out.linked} linked` +
+          (out.cleanup?.retired ? `, ${out.cleanup.retired} orphan login${out.cleanup.retired === 1 ? "" : "s"} removed` : "") +
           (out.failed ? `, ${out.failed} failed` : "") +
-          ` (${out.scanned} companies scanned).`
+          ` (${out.scanned} companies scanned).`,
       );
       await load();
     } catch (err) {

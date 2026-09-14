@@ -5,6 +5,7 @@ build
 .env.local
 .env.render.local
 hostinger-env-paste.txt
+hostinger-env-import.env
 *.db
 *.db-journal
 uploads/**

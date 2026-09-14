@@ -106,8 +106,27 @@ GROUP BY LOWER(email)
 HAVING cnt > 1;
 
 -- ---------------------------------------------------------------------------
--- 6) OPTIONAL — hard-delete soft-deleted rows (only after you are sure)
+-- 7) Orphan Access logins — vendor deleted in CRM but portal login still active
+--    (Run after deploy, or use Access → Sync CRM logins once new code is live)
 -- ---------------------------------------------------------------------------
+SELECT u.id, u.email, u.fullName, u.role, v.name AS inactive_vendor
+FROM `User` u
+INNER JOIN `Vendor` v ON LOWER(v.email) = LOWER(u.email) AND v.isActive = 0
+WHERE u.isActive = 1
+  AND u.email NOT LIKE 'deleted.%'
+  AND u.role IN ('vendor', 'client', 'employee');
+
+-- Soft-retire those orphan vendor/client logins (skip @spdc.in / baibhabmustafi@gmail.com manually)
+-- START TRANSACTION;
+-- UPDATE `User` u
+-- INNER JOIN `Vendor` v ON LOWER(v.email) = LOWER(u.email) AND v.isActive = 0
+-- SET u.isActive = 0, u.vendorId = NULL,
+--     u.email = CONCAT('deleted.', UNIX_TIMESTAMP() * 1000, '.', REPLACE(LOWER(u.email), '@', '_at_')),
+--     u.fullName = CONCAT('[Removed] ', u.fullName)
+-- WHERE u.isActive = 1 AND u.role IN ('vendor', 'client', 'employee')
+--   AND u.email NOT LIKE 'deleted.%'
+--   AND LOWER(u.email) NOT IN ('baibhabmustafi@gmail.com');
+-- COMMIT;
 -- DELETE FROM `EmployeeProfile` WHERE userId IN (
 --   SELECT id FROM `User` WHERE email LIKE 'deleted.%'
 -- );

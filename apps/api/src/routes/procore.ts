@@ -249,20 +249,28 @@ vendorsRouter.delete("/:id", requireRoles("admin", "office"), async (req: Authed
   const confirmName = String(req.body?.confirmName || req.query.confirmName || "").trim();
   const vendor = await prisma.vendor.findUnique({
     where: { id: req.params.id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, email: true },
   });
   if (!vendor) return res.status(404).json({ error: "Not found" });
   if (!confirmName || confirmName.toLowerCase() !== vendor.name.toLowerCase()) {
     return res.status(400).json({ error: `Type the company name ${vendor.name} to confirm delete.` });
   }
+  let portalLoginsRetired = 0;
   await prisma.$transaction(async (tx) => {
+    const { retirePortalLoginsForVendor } = await import("../services/crmVendorCredentials.js");
+    portalLoginsRetired = await retirePortalLoginsForVendor(tx, vendor);
     await tx.projectVendor.deleteMany({ where: { vendorId: vendor.id } });
     await tx.user.updateMany({ where: { vendorId: vendor.id }, data: { vendorId: null } });
     await tx.rfi.updateMany({ where: { responsibleVendorId: vendor.id }, data: { responsibleVendorId: null } });
     await tx.vendor.update({ where: { id: vendor.id }, data: { isActive: false } });
   });
-  await audit("vendor.delete", { userId: req.user!.id, entity: "Vendor", entityId: vendor.id, meta: { name: vendor.name } });
-  res.json({ ok: true, id: vendor.id });
+  await audit("vendor.delete", {
+    userId: req.user!.id,
+    entity: "Vendor",
+    entityId: vendor.id,
+    meta: { name: vendor.name, portalLoginsRetired },
+  });
+  res.json({ ok: true, id: vendor.id, portalLoginsRetired });
 });
 
 vendorsRouter.get("/project/:projectId", async (req, res) => {
