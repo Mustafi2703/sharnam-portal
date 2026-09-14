@@ -9,7 +9,41 @@ import { mockOneDrive } from "./mockOneDrive.js";
 import { hrPersonFolder } from "./hrmsLetter.js";
 
 export const HRMS_EMPLOYEE_FILES_ROOT = "06_HR_AND_ADMIN/06.02_Employee_Files";
+/** Company-wide mock/SharePoint drive code — not per project. */
+export const HR_VAULT_DRIVE_CODE = "_HR";
+/** Virtual path prefix used inside project DMS browse (`@_HR/06_HR_AND_ADMIN/...`). */
+export const HR_VAULT_VIRTUAL_PREFIX = "@_HR";
+export const HR_VAULT_TREE_ROOT = "06_HR_AND_ADMIN";
+export const HR_VAULT_LABEL = "06 HR & Admin (Company)";
+
+const HR_COMPANY_FOLDERS = [
+  HR_VAULT_TREE_ROOT,
+  `${HR_VAULT_TREE_ROOT}/06.01_Letters`,
+  `${HR_VAULT_TREE_ROOT}/06.02_Employee_Files`,
+  `${HR_VAULT_TREE_ROOT}/06.03_Payslips`,
+] as const;
+
 const VAULT_SUBFOLDERS = ["Letters", "Onboarding", "Documents"] as const;
+
+export function isHrVaultPath(folderPath: string) {
+  return folderPath === HR_VAULT_VIRTUAL_PREFIX || folderPath.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`);
+}
+
+export function hrRelFromVirtualPath(folderPath: string) {
+  if (folderPath === HR_VAULT_VIRTUAL_PREFIX) return "";
+  if (folderPath.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`)) {
+    return folderPath.slice(HR_VAULT_VIRTUAL_PREFIX.length + 1);
+  }
+  return "";
+}
+
+export function toHrVirtualPath(_hrRel: string, childPath: string) {
+  return `${HR_VAULT_VIRTUAL_PREFIX}/${childPath}`;
+}
+
+export function userCanBrowseHrVault(role: string) {
+  return role === "admin" || role === "office" || role === "hr";
+}
 
 export type VaultSubfolder = (typeof VAULT_SUBFOLDERS)[number];
 
@@ -49,6 +83,14 @@ function ensureLocalFolder(relPath: string) {
   const abs = path.join(uploadRoot(), relPath);
   fs.mkdirSync(abs, { recursive: true });
   return abs;
+}
+
+/** Ensure the company HR tree exists on the global `_HR` drive (not inside project folders). */
+export async function ensureHrCompanyTree() {
+  for (const rel of HR_COMPANY_FOLDERS) {
+    ensureLocalFolder(rel);
+  }
+  return { driveCode: HR_VAULT_DRIVE_CODE, folders: [...HR_COMPANY_FOLDERS] };
 }
 
 function indexPayload(user: { fullName: string; email: string }, profile: { empCode?: string | null } | null) {

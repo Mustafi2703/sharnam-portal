@@ -1230,10 +1230,23 @@ dmsRouter.post("/:projectId/sync", async (req: AuthedRequest, res) => {
   });
 });
 
-dmsRouter.get("/:projectId/folders", async (req, res) => {
+dmsRouter.get("/:projectId/folders", async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
-  res.json({ projectCode: project.code, folders: PROJECT_LIBRARY_FOLDERS });
+  const {
+    HR_VAULT_VIRTUAL_PREFIX,
+    HR_VAULT_LABEL,
+    HR_VAULT_DRIVE_CODE,
+    userCanBrowseHrVault,
+  } = await import("../services/hrEmployeeVault.js");
+  res.json({
+    projectCode: project.code,
+    folders: PROJECT_LIBRARY_FOLDERS,
+    hrVault:
+      req.user && userCanBrowseHrVault(req.user.role)
+        ? { path: HR_VAULT_VIRTUAL_PREFIX, label: HR_VAULT_LABEL, driveCode: HR_VAULT_DRIVE_CODE }
+        : null,
+  });
 });
 
 dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
@@ -1244,8 +1257,53 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     return res.status(403).json({ error: "Not on this project" });
   }
   const folderPath = String(req.query.path || "");
+  const {
+    HR_VAULT_DRIVE_CODE,
+    HR_VAULT_VIRTUAL_PREFIX,
+    HR_VAULT_LABEL,
+    ensureHrCompanyTree,
+    hrRelFromVirtualPath,
+    isHrVaultPath,
+    toHrVirtualPath,
+    userCanBrowseHrVault,
+  } = await import("../services/hrEmployeeVault.js");
   const syncOnOpen = String(req.query.sync || "0") === "1";
   let syncedAt: string | null = null;
+
+  if (isHrVaultPath(folderPath)) {
+    if (!userCanBrowseHrVault(req.user!.role)) {
+      return res.status(403).json({ error: "HR company vault is for Office / HR only" });
+    }
+    const hrRel = hrRelFromVirtualPath(folderPath);
+    if (!hrRel) await ensureHrCompanyTree();
+    let children = await mockOneDrive.listChildrenLive(HR_VAULT_DRIVE_CODE, hrRel);
+    children = children.map((c) => ({
+      ...c,
+      path: toHrVirtualPath(hrRel, c.path),
+      url:
+        c.type === "file"
+          ? c.url?.startsWith("http")
+            ? c.url
+            : `/uploads/onedrive/${HR_VAULT_DRIVE_CODE}/${c.path}`
+          : c.url,
+    }));
+    const directOpen = canOpenDriveDirectly(req.user!.role);
+    return res.json({
+      projectCode: project.code,
+      driveCode: HR_VAULT_DRIVE_CODE,
+      hrVault: true,
+      path: folderPath,
+      fullPath: `/onedrive/${HR_VAULT_DRIVE_CODE}/${hrRel}`.replace(/\/+/g, "/").replace(/\/$/, "") || `/onedrive/${HR_VAULT_DRIVE_CODE}`,
+      children,
+      folders: [],
+      syncedAt,
+      provider: resultProvider(children),
+      directOpen,
+      access: {},
+      note: "Company-wide HR vault — letters, employee files, payslips. Upload via HRMS → Employee files.",
+    });
+  }
+
   if (syncOnOpen) {
     // Touch only the opened folder — full tree sync is POST /sync
     if (folderPath) {
@@ -1268,6 +1326,12 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     }
   }
   let children = await mockOneDrive.listChildrenLive(project.code, folderPath);
+  if (!folderPath && userCanBrowseHrVault(req.user!.role)) {
+    children = [
+      { name: HR_VAULT_LABEL, path: HR_VAULT_VIRTUAL_PREFIX, type: "folder" as const },
+      ...children,
+    ];
+  }
   const directOpen = canOpenDriveDirectly(req.user!.role);
   if (!directOpen) {
     children = children.map((c) =>
