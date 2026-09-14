@@ -2143,7 +2143,27 @@ hrmRouter.post("/documents", hrmDesk, async (req, res) => {
   res.status(201).json(row);
 });
 
-const HRMS_FILE_FOLDER = "06_HR_AND_ADMIN/06.02_Employee_Files";
+hrmRouter.post("/employees/provision-vaults", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  try {
+    const userId = String(req.body?.userId || req.query.userId || "").trim() || undefined;
+    const { provisionAllEmployeeVaults } = await import("../services/hrEmployeeVault.js");
+    const out = await provisionAllEmployeeVaults({ userId, syncDocs: true });
+    await audit("hrm.employees.provision_vaults", {
+      userId: req.user?.id,
+      entity: "EmployeeDocument",
+      meta: { count: out.provisioned, userId: userId || null },
+    });
+    res.json(out);
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees.provision_vaults",
+      message: "Could not provision employee vaults",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not provision employee vaults" });
+  }
+});
 
 hrmRouter.get("/employee-files", hrmDesk, async (req, res) => {
   const userId = String(req.query.userId || "");
@@ -2166,14 +2186,21 @@ hrmRouter.post(
     const category = String(req.body.category || "General");
     const titleBase = String(req.body.title || "").trim();
     const profile = await prisma.employeeProfile.findFirst({ where: { userId } });
-    const folderName = (profile?.empCode || user.fullName).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48);
+    const {
+      employeeVaultRelPath,
+      vaultSubfolderForCategory,
+      ensureEmployeeVault,
+    } = await import("../services/hrEmployeeVault.js");
+    await ensureEmployeeVault({ userId, fullName: user.fullName, email: user.email, profile });
+    const vaultRel = employeeVaultRelPath(profile, user.fullName);
+    const subfolder = vaultSubfolderForCategory(category);
     const created = [];
     for (const file of files) {
-      const ext = /\.([a-zA-Z0-9]{2,5})$/.exec(file.originalname || "")?.[0] || "";
+      const safeName = `${category}-${Date.now()}-${file.originalname || "file"}`.replace(/[^a-zA-Z0-9._-]/g, "_");
       const saved = await mockOneDrive.upload(
         "_HR",
-        `${HRMS_FILE_FOLDER}/${folderName}`,
-        `${category}-${Date.now()}-${file.originalname || "file"}${ext ? "" : ""}`.replace(/[^a-zA-Z0-9._-]/g, "_"),
+        `${vaultRel}/${subfolder}`,
+        safeName,
         file.buffer
       );
       const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;

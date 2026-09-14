@@ -35,6 +35,17 @@ function OnboardingList() {
 
   return (
     <div className="space-y-4">
+      <Card className="!p-4 bg-brand-soft/20 border-brand/20">
+        <p className="text-sm text-ink font-semibold">2 · Pre-Joining &amp; 3 · Employee Onboarding</p>
+        <p className="text-xs text-steel-muted mt-1 leading-relaxed">
+          After recruitment (section 1), accepted offers appear here. HR runs pre-joining — documents, BGV, medical,
+          employee code, appointment letter, IT/email/ID — then onboarding formalities, KYC, PF/ESIC, orientation, and
+          policy acknowledgement.
+        </p>
+        <Link to="/hrm/recruitment" className="text-xs text-brand font-semibold underline mt-2 inline-block">
+          ← Recruitment &amp; interview (section 1)
+        </Link>
+      </Card>
       {loadError ? (
         <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
           {loadError}
@@ -349,7 +360,8 @@ function OfferOnboardingPage() {
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-1">
-          <h3 className="font-semibold text-sm mb-3">Progress</h3>
+          <h3 className="font-semibold text-sm mb-1">Progress</h3>
+          <p className="text-[11px] text-steel-muted mb-3">Nirav HRMS flow · sections 2 &amp; 3</p>
           <div className="space-y-3">
             <ProgressBar label={`Pre-joining · ${preDone}/${preTotal}`} value={preDone / preTotal} />
             <ProgressBar label={`Onboarding · ${onboardDone}/${onboardTotal}`} value={onboardDone / onboardTotal} tone="ok" />
@@ -357,7 +369,10 @@ function OfferOnboardingPage() {
         </Card>
 
         <Card className="lg:col-span-2">
-          <h3 className="font-semibold text-sm mb-3">Pre-joining checklist</h3>
+          <h3 className="font-semibold text-sm mb-1">2 · Pre-Joining Process</h3>
+          <p className="text-[11px] text-steel-muted mb-3">
+            Document collection · BGV · medical · employee code · appointment letter · IT asset · email · ID card · welcome kit
+          </p>
           {!preJoin && <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>}
           {preJoin && (
             <ul className="space-y-2 text-sm">
@@ -410,7 +425,11 @@ function OfferOnboardingPage() {
       </div>
 
       <Card>
-        <h3 className="font-semibold text-sm mb-3">Employee onboarding checklist</h3>
+        <h3 className="font-semibold text-sm mb-1">3 · Employee Onboarding</h3>
+        <p className="text-[11px] text-steel-muted mb-3">
+          Joining formalities · personal &amp; bank details · PAN/Aadhaar · PF/ESIC · nominee · doc verification · department ·
+          reporting manager · orientation · HR policy
+        </p>
         {!onboard && <p className="text-sm text-steel-muted">Loading onboarding checklist…</p>}
         {onboard && (
           <ul className="grid md:grid-cols-2 gap-2 text-sm">

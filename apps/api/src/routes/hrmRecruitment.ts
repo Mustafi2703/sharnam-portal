@@ -599,9 +599,14 @@ hrmRecruitmentRouter.post(
     }
 
     const safeRef = letter.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const { employeeVaultRelPath } = await import("../services/hrEmployeeVault.js");
+    let profile = null;
+    if (offer.onboard?.userId) {
+      profile = await prisma.employeeProfile.findFirst({ where: { userId: offer.onboard.userId } });
+    }
     const saved = await mockOneDrive.upload(
       "_HR",
-      `06_HR_AND_ADMIN/06.02_Employee_Files/${offer.candidate.fullName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48)}/Letters`,
+      `${employeeVaultRelPath(profile, offer.candidate.fullName)}/Letters`,
       `Appointment-${safeRef}-signed${extOf(req.file)}`,
       req.file.buffer,
     );
@@ -935,7 +940,8 @@ async function fileHrPolicyAcknowledgement(offerId: string, actorUserId: string)
   });
   const stamps = JSON.parse(onboard.itemsCompletedAtJson || "{}") as Record<string, string>;
   stamps.hrPolicyAcknowledged = stamps.hrPolicyAcknowledged || new Date().toISOString();
-  const { renderHrPolicyAcknowledgement, hrPersonFolder } = await import("../services/hrmsLetter.js");
+  const { renderHrPolicyAcknowledgement } = await import("../services/hrmsLetter.js");
+  const { employeeVaultRelPath } = await import("../services/hrEmployeeVault.js");
   const ackDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
   const html = renderHrPolicyAcknowledgement({
     employeeName: offer.candidate.fullName,
@@ -946,7 +952,11 @@ async function fileHrPolicyAcknowledgement(offerId: string, actorUserId: string)
       : "",
     acknowledgedAt: ackDate,
   });
-  const folder = `06_HR_AND_ADMIN/06.02_Employee_Files/${hrPersonFolder(offer.candidate.fullName)}/Onboarding`;
+  let profile = null;
+  if (onboard.userId) {
+    profile = await prisma.employeeProfile.findFirst({ where: { userId: onboard.userId } });
+  }
+  const folder = `${employeeVaultRelPath(profile, offer.candidate.fullName)}/Onboarding`;
   const saved = await mockOneDrive.upload(
     "_HR",
     folder,

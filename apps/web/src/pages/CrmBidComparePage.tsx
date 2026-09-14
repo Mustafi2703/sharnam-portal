@@ -60,6 +60,49 @@ function formatINR(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 }
 
+type BidWorkflowStep = "configure" | "publish" | "collect" | "compare" | "award";
+
+const BID_WORKFLOW_STEPS: { id: BidWorkflowStep; label: string; hint: string }[] = [
+  { id: "configure", label: "Configure", hint: "Project · work packages · vendors" },
+  { id: "publish", label: "Publish", hint: "Open bid & notify bidders" },
+  { id: "collect", label: "Collect BOQs", hint: "One R2 upload per vendor × package" },
+  { id: "compare", label: "Compare", hint: "Refresh comparative statement" },
+  { id: "award", label: "Award", hint: "Select L1 & close package" },
+];
+
+function BidDeskStepper({ active, complete }: { active: BidWorkflowStep; complete?: boolean }) {
+  const activeIdx = BID_WORKFLOW_STEPS.findIndex((s) => s.id === active);
+  return (
+    <nav
+      className="flex flex-wrap gap-1 sm:gap-0 sm:divide-x border border-line rounded-xl overflow-hidden bg-white"
+      aria-label="Bid management workflow"
+    >
+      {BID_WORKFLOW_STEPS.map((step, i) => {
+        const done = complete || i < activeIdx;
+        const current = !complete && step.id === active;
+        return (
+          <div
+            key={step.id}
+            className={`flex-1 min-w-[7rem] px-3 py-2 ${current ? "bg-brand-soft/50" : done ? "bg-ok/5" : "bg-sand/20"}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  done ? "bg-ok text-white" : current ? "bg-brand text-white" : "bg-line text-steel-muted"
+                }`}
+              >
+                {done ? "✓" : i + 1}
+              </span>
+              <span className={`text-xs font-semibold ${current ? "text-brand-dark" : "text-ink"}`}>{step.label}</span>
+            </div>
+            <p className="text-[10px] text-steel-muted mt-0.5 pl-6 hidden sm:block">{step.hint}</p>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
 function disciplineLabel(disciplines: Discipline[], key: string) {
   return disciplines.find((d) => d.key === key)?.label || key;
 }
@@ -135,6 +178,19 @@ export default function CrmBidComparePage() {
       return pid && convertedProjectIds.has(pid);
     });
   }, [packages, deskFilter, convertedProjectIds, setupProjectId]);
+
+  const bidWorkflowStep = useMemo((): BidWorkflowStep => {
+    if (showNewBidForm) return "configure";
+    if (!detail) return "configure";
+    if (detail.status === "Awarded") return "award";
+    if (detail.status === "Draft") return "publish";
+    const done = detail.uploadProgress?.done ?? 0;
+    const total = detail.uploadProgress?.total ?? 0;
+    if (detail.status === "Open" && total > 0 && done < total) return "collect";
+    if (detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0) return "compare";
+    if (total > 0 && done >= total) return "compare";
+    return "collect";
+  }, [showNewBidForm, detail]);
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -747,6 +803,10 @@ export default function CrmBidComparePage() {
       </Card>
       {msg && (
         <p className={`text-sm shrink-0 px-0.5 ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>
+      )}
+
+      {(showNewBidForm || detail) && (
+        <BidDeskStepper active={bidWorkflowStep} complete={detail?.status === "Awarded"} />
       )}
 
       {showNewBidForm && (

@@ -72,6 +72,18 @@ export default function RecruitmentPage() {
 
   return (
     <div className="space-y-6">
+      <Card className="!p-4 bg-brand-soft/20 border-brand/20">
+        <p className="text-sm text-ink font-semibold">1 · Recruitment &amp; Interview Management</p>
+        <p className="text-xs text-steel-muted mt-1 leading-relaxed">
+          Manpower requisition → HR approval → job posting → resume database &amp; screening → shortlist → interview line-up
+          &amp; schedule → feedback &amp; scorecard → final selection → salary discussion → offer approval → offer letter →
+          acceptance → joining confirmation. Accepted offers move to{" "}
+          <Link to="/hrm/onboarding" className="text-brand font-semibold underline">
+            Pre-joining &amp; Onboarding
+          </Link>
+          .
+        </p>
+      </Card>
       <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
         {TABS.map((t) => (
           <button

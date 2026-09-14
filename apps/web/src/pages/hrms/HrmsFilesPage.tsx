@@ -4,8 +4,17 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { UploadModal } from "../../components/UploadModal";
 import { Badge, Button, Card, Select } from "../../components/ui";
+import { canManageHrms } from "../../lib/portalAccounts";
 
 const FILE_KINDS = ["PAN", "Aadhaar", "Bank", "PF-ESIC", "Offer", "Appointment", "Promotion", "Payslip", "Medical", "BGV", "ID-card", "Other"];
+const HR_VAULT_ROOT = "06_HR_AND_ADMIN/06.02_Employee_Files";
+
+function vaultFolderName(person: StaffRow | undefined) {
+  if (!person) return "—";
+  const code = person.profile?.empCode?.trim();
+  const raw = code || person.fullName;
+  return raw.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48) || "Unfiled";
+}
 
 type StaffRow = {
   id: string;
@@ -26,7 +35,8 @@ type FileRow = {
 
 /** Per-employee HRMS vault — multiple files land under 06.02 Employee Files on Drive. */
 export default function HrmsFilesPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const canManage = canManageHrms(user);
   const [searchParams] = useSearchParams();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [hiring, setHiring] = useState<Array<{ id: string; candidate?: { fullName: string }; onboard?: { userId?: string | null } }>>([]);
@@ -40,6 +50,7 @@ export default function HrmsFilesPage() {
   const [category, setCategory] = useState("PAN");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [provisionBusy, setProvisionBusy] = useState(false);
 
   const loadStaff = useCallback(async () => {
     const [rows, pipeline] = await Promise.all([
@@ -74,6 +85,7 @@ export default function HrmsFilesPage() {
   }, [loadFiles]);
 
   const person = staff.find((s) => s.id === userId);
+  const vaultPath = person ? `_HR/${HR_VAULT_ROOT}/${vaultFolderName(person)}/` : null;
   const hiringForUser = useMemo(
     () => hiring.filter((o) => o.onboard?.userId === userId),
     [hiring, userId],
@@ -113,8 +125,8 @@ export default function HrmsFilesPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="max-w-xl">
           <p className="text-sm text-steel-muted">
-            Per-employee HR DMS on Drive — PAN, signed appointment, payslips, BGV. After onboarding, upload the signed
-            letter and it appears here automatically.
+            Per-employee HR DMS on SharePoint / Drive — PAN, signed appointment, payslips, BGV. Files land under{" "}
+            <span className="font-mono text-xs">_HR/{HR_VAULT_ROOT}/{"{empCode or name}"}/Letters|Onboarding|Documents</span>.
           </p>
           <Link to="/hrm/documents" className="text-xs text-brand font-semibold underline mt-1 inline-block">
             Appointment letters register →
@@ -135,8 +147,53 @@ export default function HrmsFilesPage() {
           <Button type="button" onClick={() => setOpen(true)} disabled={!userId}>
             Upload files
           </Button>
+          {canManage ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={provisionBusy}
+              onClick={async () => {
+                setProvisionBusy(true);
+                setMsg("");
+                try {
+                  const out = await api<{ provisioned: number; employees: Array<{ docsSynced: number }> }>(
+                    "/api/hrm/employees/provision-vaults",
+                    {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify(userId ? { userId } : {}),
+                    },
+                  );
+                  const synced = out.employees.reduce((n, e) => n + (e.docsSynced || 0), 0);
+                  setMsgTone("ok");
+                  setMsg(
+                    userId
+                      ? `Vault ready for ${person?.fullName || "employee"}${synced ? ` · ${synced} file(s) re-filed` : ""}.`
+                      : `Vault folders ready for ${out.provisioned} employee(s)${synced ? ` · ${synced} file(s) re-filed` : ""}.`,
+                  );
+                  await loadFiles();
+                } catch (err) {
+                  setMsgTone("err");
+                  setMsg(err instanceof Error ? err.message : "Could not provision vaults");
+                } finally {
+                  setProvisionBusy(false);
+                }
+              }}
+            >
+              {provisionBusy ? "Provisioning…" : userId ? "Ensure vault folder" : "Provision all vaults"}
+            </Button>
+          ) : null}
         </div>
       </div>
+
+      {vaultPath ? (
+        <Card className="!p-3 text-xs text-steel-muted font-mono break-all">
+          SharePoint path: <span className="text-ink">{vaultPath}</span>
+          <span className="block font-sans text-[11px] mt-1 normal-case">
+            Subfolders: Letters · Onboarding · Documents
+          </span>
+        </Card>
+      ) : null}
 
       {hiringForUser.length ? (
         <Card className="!p-3 text-xs text-steel-muted">
