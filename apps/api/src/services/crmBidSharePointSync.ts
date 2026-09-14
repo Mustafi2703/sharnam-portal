@@ -50,7 +50,6 @@ export async function ensureCrmBidSharePointTree(
   disciplineKeys: string[]
 ) {
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { code: true } });
-  await mockOneDrive.ensureProjectTree(projectId);
 
   const relPaths = new Set<string>([
     CRM_SHAREPOINT.comparative,

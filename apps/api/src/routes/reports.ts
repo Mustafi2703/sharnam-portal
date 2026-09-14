@@ -738,13 +738,6 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
   });
 
   try {
-    const { mockOneDrive } = await import("../services/mockOneDrive.js");
-    await mockOneDrive.ensureProjectTree(project.id);
-  } catch (err) {
-    console.error("Project folder tree failed:", err instanceof Error ? err.message : err);
-  }
-
-  try {
     const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import(
       "../services/crmVendorCredentials.js"
     );
@@ -844,7 +837,6 @@ crmRouter.get("/quotations/:id/download.html", async (req, res) => {
   writeQuotationFiles(doc);
   const html = renderQuotationHtml(doc);
   if (row.project?.code) {
-    await mockOneDrive.ensureProjectTree(row.project.id);
     await syncProposalSummaryFile(row.project.code, row.quotationNo, Buffer.from(html, "utf8"), "html");
   }
   const safe = row.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
@@ -863,7 +855,6 @@ crmRouter.get("/quotations/:id/download.doc", async (req, res) => {
   writeQuotationFiles(doc);
   const wordHtml = renderQuotationDoc(doc);
   if (row.project?.code) {
-    await mockOneDrive.ensureProjectTree(row.project.id);
     await syncProposalSummaryFile(row.project.code, row.quotationNo, Buffer.from(wordHtml, "utf8"), "doc");
   }
   const safe = row.quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
@@ -1113,7 +1104,6 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
   res.json({ quotation: row, projectId, project: { id: project!.id, code: project!.code, name: project!.name, status: project!.status } });
 
   void (async () => {
-    await mockOneDrive.ensureProjectTree(projectId!);
     try {
       const stored = resolveProposalDiskPath(qtn.attachmentUrl);
       if (stored && fs.existsSync(stored)) {

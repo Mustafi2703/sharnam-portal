@@ -356,7 +356,10 @@ export default function CrmProjectSetupPage() {
       setMsg(
         [
           `Setup complete. Status is ${out.status || "In Progress"}.`,
-          `Folders: ${out.folders.count}. Matrix contacts: ${out.comms.contacts.created}.`,
+          `Folders: ${out.folders.count} (${out.folders.provider}). Matrix contacts added: ${out.comms.contacts.created} (existing contacts are kept).`,
+          out.reports.dpr.created || out.reports.wpr.created
+            ? "First DPR/WPR drafts created if they were not already there."
+            : "DPR/WPR drafts were already on file — nothing duplicated.",
           "No emails were sent. Tick people below if you want onboarding mail.",
         ].join(" ")
       );
@@ -800,7 +803,7 @@ export default function CrmProjectSetupPage() {
           <h3 className="font-semibold text-sm">Project already launched</h3>
           <p className="text-sm text-steel-muted leading-relaxed">
             Status is <strong>{summary?.project.status}</strong>. Use step 1 to add consultants, vendors, or SPDC employees during the job.
-            Re-run launch only if you need to refresh folders or matrix scaffolding.
+            Re-run launch only if you need to refresh folders. Matrix, DPR, and WPR are not duplicated.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={() => setStep("project")}>
@@ -824,7 +827,8 @@ export default function CrmProjectSetupPage() {
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
               <p className="text-xs text-steel-muted mt-0.5">
-                Writes the communication matrix and sets status to <strong>In Progress</strong>. No emails are sent.
+                Creates ISO folders in SharePoint (about a minute), fills the communication matrix, and sets status to{" "}
+                <strong>In Progress</strong>. CRM saves, proposals, and HRMS stay fast until this step. No emails are sent.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

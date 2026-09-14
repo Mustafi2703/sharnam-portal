@@ -31,6 +31,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
   });
   if (!project) throw new Error("Project not found");
 
+  /** Full ISO + SharePoint tree — intentionally slow; only run from Launch / complete-setup. */
   const folders = await mockOneDrive.ensureProjectTree(projectId);
 
   const matrixCreated = await seedStandardCommsMatrix(projectId);

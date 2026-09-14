@@ -80,13 +80,17 @@ export class MockOneDriveService {
     );
 
     let sharePoint: { rootFolder: string; folders: string[] } | null = null;
-    if (liveSharePoint()) {
+    const existingFolderRows = await prisma.documentFolder.count({ where: { projectId } });
+    const sharePointAlreadyProvisioned = existingFolderRows >= folders.length;
+    if (liveSharePoint() && !sharePointAlreadyProvisioned) {
       try {
         const sp = await withTimeout(ensureProjectSharePointTree(project.code), 25_000, "SharePoint project tree");
         sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
       } catch (err) {
         console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);
       }
+    } else if (liveSharePoint() && sharePointAlreadyProvisioned) {
+      sharePoint = { rootFolder: project.code, folders };
     }
 
     return {

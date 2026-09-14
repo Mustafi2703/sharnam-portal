@@ -299,7 +299,6 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
   let comparativeSharePointUrl: string | null = null;
   if (project?.code) {
     try {
-      await mockOneDrive.ensureProjectTree(project.id);
       const sp = await syncComparativeWorkbook(project.code, rev);
       comparativeSharePointUrl = sp.sharePointUrl || null;
       if (comparativeSharePointUrl || sp.path) {
@@ -619,9 +618,6 @@ crmComparativeRouter.post(
     const relFolder = pkg.project?.code
       ? CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel, slot.discipline)
       : "CRM/BidPackages";
-    if (pkg.project?.id) {
-      await mockOneDrive.ensureProjectTree(pkg.project.id);
-    }
     const saved = await syncBufferToProjectSharePoint(projectCode, relFolder, safeName, req.file.buffer);
 
     const wb = XLSX.read(req.file.buffer, { type: "buffer", cellFormula: true });

@@ -390,9 +390,8 @@ const PROJECT_LIST_SELECT = {
   _count: { select: { drawings: true, members: true } },
 } as const;
 
-async function provisionProjectCardExtras(opts: {
+async function provisionProjectPortalAccess(opts: {
   projectId: string;
-  userId: string;
   vendorIds: string[];
   projectName: string;
   clientEmail?: string | null;
@@ -402,7 +401,6 @@ async function provisionProjectCardExtras(opts: {
   clientAddress?: string | null;
   clientGst?: string | null;
 }) {
-  await mockOneDrive.ensureProjectTree(opts.projectId);
   if (!opts.vendorIds.length && !opts.clientEmail && !opts.clientName) return;
   const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import("../services/crmVendorCredentials.js");
   if (opts.clientEmail || opts.clientName) {
@@ -592,9 +590,8 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       update: {},
     });
     const backgroundVendorIds = vendorIds;
-    void provisionProjectCardExtras({
+    void provisionProjectPortalAccess({
       projectId: project.id,
-      userId: req.user!.id,
       vendorIds: backgroundVendorIds,
       projectName: project.name,
       clientEmail: project.clientEmail,

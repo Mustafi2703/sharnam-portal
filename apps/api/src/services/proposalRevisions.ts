@@ -82,8 +82,7 @@ export async function createVersionedProposal(opts: {
   leadId?: string | null;
 }) {
   const library = opts.projectCode || CRM_OFFICE_LIBRARY;
-  if (opts.projectId) await mockOneDrive.ensureProjectTree(opts.projectId);
-  else mockOneDrive.projectRoot(CRM_OFFICE_LIBRARY);
+  mockOneDrive.projectRoot(library);
   const file = await createProjectProposalFile(library, opts.clientName, opts.quotationNo, 0);
   const row = await prisma.quotation.create({
     data: {
@@ -142,7 +141,7 @@ export async function startNextProposalRevision(opts: {
   });
   const bytes = opts.buffer ?? bufferForNextRevision(q.attachmentUrl);
   const library = q.project?.code || CRM_OFFICE_LIBRARY;
-  if (q.project?.id) await mockOneDrive.ensureProjectTree(q.project.id);
+  mockOneDrive.projectRoot(library);
   const file = await createProjectProposalFile(library, q.clientName, q.quotationNo, nextNo, bytes);
   await prisma.quotationRevision.create({
     data: {
