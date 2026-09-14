@@ -407,9 +407,9 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
       <Card className="!p-4 space-y-3">
         <div className="flex flex-wrap justify-between gap-2 items-start">
           <div>
-            <h3 className="font-semibold text-sm">Complete setup · invites</h3>
+            <h3 className="font-semibold text-sm">Complete setup</h3>
             <p className="text-xs text-steel-muted mt-0.5">
-              Same launch as CRM: ISO folders, comms, client/vendor logins, first DPR / WPR drafts.
+              Writes the communication matrix and sets In Progress. No emails are sent.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -419,14 +419,8 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               onClick={async () => {
                 setBusy(true);
                 try {
-                  const out = await api<{
-                    clientPortals: { email: string; created: boolean; tempPassword?: string }[];
-                    contractorPortals: { email: string; created: boolean; tempPassword?: string }[];
-                  }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token, body: JSON.stringify({}) });
-                  setAccessSlip(
-                    [...(out.clientPortals || []), ...(out.contractorPortals || [])].filter((p) => p.email)
-                  );
-                  onMsg("Setup complete — folders, comms, portals, first DPR / WPR.");
+                  await api(`/api/projects/${projectId}/complete-setup`, { method: "POST", token, body: JSON.stringify({}) });
+                  onMsg("Setup complete. Status is In Progress. No emails were sent.");
                   await load();
                 } catch (err) {
                   onMsg(err instanceof Error ? err.message : "Complete setup failed");
@@ -436,27 +430,6 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               }}
             >
               Complete setup
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  const out = await api<{ sent: { email: string }[]; sharePassword: string }>(
-                    `/api/projects/${projectId}/send-portal-invites`,
-                    { method: "POST", token, body: JSON.stringify({}) }
-                  );
-                  onMsg(`Invites emailed to ${out.sent.length} people. Shared password: ${out.sharePassword}.`);
-                } catch (err) {
-                  onMsg(err instanceof Error ? err.message : "Invite send failed");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Email portal credentials
             </Button>
           </div>
         </div>

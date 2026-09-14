@@ -1900,8 +1900,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
 
 checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const { loadSafetyDashboardKpis } = await import("../services/safetyDashboardSheets.js");
-  const [records, allRecords, safetyFills, openRfis, onePagerSheet] = await Promise.all([
+  const [records, allRecords, safetyFills, openRfis] = await Promise.all([
     prisma.safetyRecord.findMany({
       where: { projectId },
       orderBy: { occurredAt: "desc" },
@@ -1918,7 +1917,6 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
     prisma.rfi.count({
       where: { projectId, status: { in: ["Open", "Answered"] }, rfiKind: { in: ["SafetyChecklist", "SafetyIR"] } },
     }),
-    Promise.resolve(loadSafetyDashboardKpis()),
   ]);
   const isNcr = (r: { recordType: string; title: string }) => /ncr/i.test(r.recordType) || /ncr/i.test(r.title);
   const dbIncidents = allRecords.filter((r) => r.recordType === "Incident" || r.recordType === "Near Miss").length;
@@ -1926,13 +1924,13 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
   const dbNcrs = allRecords.filter(isNcr).length;
   const dbSiteInstructions = allRecords.filter((r) => r.recordType === "Site Instruction").length;
   const onePager = {
-    totalIncidents: onePagerSheet?.totalIncidents || dbIncidents,
-    totalUnsafeActs: onePagerSheet?.totalUnsafeActs || dbUnsafeActs,
-    totalNcrs: onePagerSheet?.totalNcrs || dbNcrs,
-    safeManHours: onePagerSheet?.safeManHours ?? 0,
-    toolboxTalks: onePagerSheet?.toolboxTalks ?? 0,
-    siteInstructions: onePagerSheet?.siteInstructions || dbSiteInstructions,
-    source: onePagerSheet?.source || "database",
+    totalIncidents: dbIncidents,
+    totalUnsafeActs: dbUnsafeActs,
+    totalNcrs: dbNcrs,
+    safeManHours: 0,
+    toolboxTalks: 0,
+    siteInstructions: dbSiteInstructions,
+    source: "database",
   };
   res.json({
     onePager,

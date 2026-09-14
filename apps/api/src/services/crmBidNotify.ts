@@ -4,7 +4,7 @@
 import { prisma } from "../prisma.js";
 import { escapeHtml, fmtEmailDate } from "./rfiEmailFormat.js";
 import { sendGraphHtmlMail } from "./graphHtmlMail.js";
-import { queueProjectEmail } from "./email.js";
+import { portalMailLive, queueProjectEmail } from "./email.js";
 import { sharnamEmailLogoHtml } from "./brandedExport.js";
 
 function parseEmails(raw: string | null | undefined): string[] {
@@ -177,7 +177,7 @@ export async function notifyBidPackageOpened(opts: {
       `Upload BOQs: ${uploadBase}`,
     ].join("\n");
 
-    if (emails.length) {
+    if (emails.length && portalMailLive() && pkg.project.emailEnabled) {
       try {
         await sendGraphHtmlMail({ to: emails, subject: `[${pkg.project.code}] ${subject}`, bodyHtml: html });
         results.push({
@@ -202,11 +202,12 @@ export async function notifyBidPackageOpened(opts: {
     } else {
       results.push({
         vendor: vendorName,
-        email: null,
+        email: emails.join(", ") || null,
         sent: false,
         loginCreated,
+        tempPassword,
         projectAccess: Boolean(info.vendorId),
-        error: "no_email",
+        error: emails.length ? "mail_held" : "no_email",
       });
     }
   }

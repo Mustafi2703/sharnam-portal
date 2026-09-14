@@ -4,8 +4,6 @@
  */
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
-import { PROJECT_LIBRARY_FOLDERS } from "./graph.js";
-import { provisionProjectSheetPack } from "./projectSheetPack.js";
 import { seedArvindCommsMatrix, seedStandardCommsMatrix } from "./commsMatrixSeed.js";
 import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncCommsFromDirectory.js";
 import { initializeProjectReports, type InitReportsResult } from "./initializeProjectReports.js";
@@ -34,13 +32,6 @@ export async function completeProjectSetup(projectId: string, userId: string) {
   if (!project) throw new Error("Project not found");
 
   const folders = await mockOneDrive.ensureProjectTree(projectId);
-
-  let sheets: Awaited<ReturnType<typeof provisionProjectSheetPack>> | null = null;
-  try {
-    sheets = await provisionProjectSheetPack(projectId, userId);
-  } catch (err) {
-    console.error("Sheet pack failed:", err instanceof Error ? err.message : err);
-  }
 
   const arvindSite = /arvind/i.test(project.code) || /arvind/i.test(project.clientName || "") || /ntx/i.test(project.name);
   const matrixCreated = arvindSite
@@ -98,45 +89,18 @@ export async function completeProjectSetup(projectId: string, userId: string) {
   }
 
   const nextStatus =
-    !project.status || project.status === "Planning" || project.status === "Draft" ? "Active" : project.status;
+    !project.status || project.status === "Planning" || project.status === "Draft" || project.status === "Active"
+      ? "In Progress"
+      : project.status;
   if (nextStatus !== project.status) {
     await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus } });
-  }
-
-  const { emailPortalCredentials, emailProjectSetupBrief } = await import("./portalInvites.js");
-  for (const portal of [...clientPortals, ...contractorPortals, ...stakeholderPortals]) {
-    if (!portal.tempPassword) continue;
-    try {
-      await emailPortalCredentials({
-        projectId,
-        createdById: userId,
-        email: portal.email,
-        fullName: portal.email,
-        role: portal.role,
-        password: portal.tempPassword,
-      });
-    } catch (err) {
-      console.warn("Portal invite email failed:", portal.email, err instanceof Error ? err.message : err);
-    }
-  }
-
-  try {
-    await emailProjectSetupBrief({
-      projectId,
-      createdById: userId,
-      extraTo: ["baibhabmustafi@gmail.com"],
-    });
-  } catch (err) {
-    console.warn("Project setup brief failed:", err instanceof Error ? err.message : err);
   }
 
   return {
     projectId,
     status: nextStatus,
     folders: { root: folders.root, count: folders.folders.length, provider: folders.provider },
-    sheets: sheets
-      ? { ok: sheets.steps.every((s) => s.ok), steps: sheets.steps.map((s) => ({ key: s.key, ok: s.ok, skipped: s.skipped })) }
-      : { ok: false, steps: [] },
+    sheets: { ok: true, steps: [] },
     comms: { roleFlowsCreated: matrixCreated, contacts },
     clientPortals: clientPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
     contractorPortals: contractorPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
@@ -159,106 +123,55 @@ export async function getProjectSetupStatus(projectId: string) {
       location: true,
       contractorName: true,
       pmcName: true,
+      workPackages: true,
     },
   });
   if (!project) return null;
 
-  const [
-    folderCount,
-    memberCount,
-    vendorCount,
-    matrixCount,
-    contactCount,
-    clientMembers,
-    vendorMembers,
-    projectVendors,
-    signedMembers,
-    signedVendors,
-  ] = await Promise.all([
-    prisma.documentFolder.count({ where: { projectId } }),
+  let packages: string[] = [];
+  try {
+    packages = JSON.parse(project.workPackages || "[]");
+  } catch {
+    packages = [];
+  }
+
+  const [memberCount, vendorCount, matrixCount, contactCount] = await Promise.all([
     prisma.projectMember.count({ where: { projectId } }),
     prisma.projectVendor.count({ where: { projectId } }),
     prisma.communicationMatrix.count({ where: { projectId } }),
     prisma.communicationContact.count({ where: { projectId, isSectionHeader: false } }),
-    prisma.projectMember.findMany({
-      where: { projectId, user: { role: "client" } },
-      include: { user: { select: { email: true, fullName: true } } },
-    }),
-    prisma.projectMember.findMany({
-      where: { projectId, user: { role: "vendor" } },
-      include: { user: { select: { email: true, fullName: true } } },
-    }),
-    prisma.projectVendor.findMany({
-      where: { projectId },
-      include: { vendor: { select: { partyType: true, email: true, name: true } } },
-    }),
-    prisma.projectMember.count({ where: { projectId, signatureUrl: { not: null } } }),
-    prisma.projectVendor.count({ where: { projectId, signatureUrl: { not: null } } }),
   ]);
-
-  const contractors = projectVendors.filter((pv) => pv.vendor.partyType === "Contractor" || pv.vendor.partyType === "Vendor");
-  const contractorPortalOk = contractors.length === 0 || vendorMembers.length > 0 || contractors.some((c) => !c.vendor.email);
 
   const checks: SetupCheck[] = [
     {
       key: "card",
       ok: Boolean(project.name && project.location && project.clientName),
-      label: "Project card saved",
+      label: "Project card",
       detail:
         project.name && project.location && project.clientName
           ? `${project.code} · ${project.clientName} · ${project.location}`
-          : "Save name, client organisation, and site location on the project card",
+          : "Save name, client, and site location",
     },
     {
-      key: "folders",
-      ok: folderCount > 0,
-      label: "ISO folder structure",
-      detail: folderCount ? `${folderCount} folders (target ${PROJECT_LIBRARY_FOLDERS.length})` : "Not created yet",
+      key: "packages",
+      ok: packages.length > 0,
+      label: "Work packages",
+      detail: packages.length ? packages.join(", ") : "Pick Civil / PEB / Electrical (or your list) on the project card",
     },
     {
       key: "directory",
       ok: memberCount > 0,
-      label: "People assigned",
-      detail: `${memberCount} members · ${vendorCount} companies`,
+      label: "Employees assigned",
+      detail: memberCount ? `${memberCount} people from the staff list · ${vendorCount} companies` : "Select staff from the list",
     },
     {
       key: "comms",
-      ok: true,
+      ok: contactCount > 0 || matrixCount > 0,
       optional: true,
-      label: "Communication matrix (optional)",
-      detail: contactCount
-        ? `${matrixCount} role flows · ${contactCount} BPCL contacts — editable in setup and Comms`
-        : "Optional — add BPCL TECHNICAL / COMMERCIAL people now or later in Comms",
-    },
-    {
-      key: "clientPortal",
-      ok: clientMembers.length > 0 || !project.clientEmail,
-      label: "Client portal",
-      detail: clientMembers.length
-        ? clientMembers.map((m) => m.user.email).join(", ")
-        : project.clientEmail
-          ? "Client email set — run Complete setup"
-          : "Add a client contact email",
-    },
-    {
-      key: "contractorPortal",
-      ok: contractorPortalOk,
-      label: "Contractor portal",
-      detail: vendorMembers.length
-        ? vendorMembers.map((m) => m.user.email).join(", ")
-        : contractors.length
-          ? "Assign contractors with emails, then Complete setup"
-          : "No contractor assigned yet",
-    },
-    {
-      key: "signatures",
-      ok: true,
-      optional: true,
-      label: "Directory signatures (optional)",
-      detail:
-        signedMembers + signedVendors > 0
-          ? `${signedMembers} people · ${signedVendors} companies signed`
-          : "Optional — add PMC / client / contractor signatures later if you need signed checklists or WPR export",
+      label: "Communication matrix",
+      detail: contactCount || matrixCount
+        ? `${matrixCount} role flows · ${contactCount} contacts`
+        : "Add the people who should receive project mail — only those you pick",
     },
   ];
 
@@ -266,6 +179,6 @@ export async function getProjectSetupStatus(projectId: string) {
     project,
     checks,
     ready: checks.filter((c) => !c.optional).every((c) => c.ok),
-    counts: { folders: folderCount, members: memberCount, vendors: vendorCount, matrix: matrixCount, contacts: contactCount },
+    counts: { folders: 0, members: memberCount, vendors: vendorCount, matrix: matrixCount, contacts: contactCount },
   };
 }

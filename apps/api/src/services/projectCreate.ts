@@ -49,6 +49,7 @@ export async function createOrReuseProject(data: ProjectCreateInput) {
         pmcName: data.pmcName || "SPDC",
         startDate: data.startDate || null,
         endDate: data.endDate || null,
+        emailEnabled: false,
         ...(data.bidDisciplinesJson ? { bidDisciplinesJson: data.bidDisciplinesJson } : {}),
         ...(data.workPackages ? { workPackages: data.workPackages } : {}),
       },

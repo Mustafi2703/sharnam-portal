@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
-import { matchesSearch, SearchableSelect } from "./SearchableSelect";
+import { matchesSearch } from "./SearchableSelect";
 
 export type AllocateUser = { id: string; fullName: string; email: string; role: string };
 export type AllocateMember = {
@@ -26,7 +26,7 @@ type Props = {
 /** Assign existing SPDC logins (or create + assign) to a live project. */
 export function ProjectTeamAllocatePanel({ projectId, token, users, members, canEdit, onMsg, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
-  const [memberUserId, setMemberUserId] = useState("");
+  const [memberUserIds, setMemberUserIds] = useState<string[]>([]);
   const [memberRole, setMemberRole] = useState("site_engineer");
   const [listQ, setListQ] = useState("");
   const [userForm, setUserForm] = useState({
@@ -42,16 +42,16 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
 
   async function assignExisting(e: FormEvent) {
     e.preventDefault();
-    if (!token || !memberUserId) return;
+    if (!token || !memberUserIds.length) return;
     setBusy(true);
     try {
       await api(`/api/projects/${projectId}/members`, {
         method: "POST",
         token,
-        body: JSON.stringify({ userId: memberUserId, role: memberRole }),
+        body: JSON.stringify({ userIds: memberUserIds, role: memberRole }),
       });
-      setMemberUserId("");
-      onMsg("Person assigned to this project.");
+      setMemberUserIds([]);
+      onMsg(`${memberUserIds.length} employee(s) assigned to this project.`);
       onChanged();
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Assign failed");
@@ -119,21 +119,30 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
       </ul>
       {canEdit && (
         <>
-          <form className="flex flex-wrap gap-2 items-end border-t border-line pt-3" onSubmit={assignExisting}>
-            <SearchableSelect
-              className="min-w-[160px] flex-1"
-              options={users.map((u) => ({
-                value: u.id,
-                label: u.fullName,
-                sublabel: `${u.email} · ${u.role}`,
-                keywords: `${u.fullName} ${u.email} ${u.role}`,
-              }))}
-              value={memberUserId}
-              onChange={setMemberUserId}
-              placeholder="Existing login…"
-              searchPlaceholder="Search employee by name or email…"
-              required
-            />
+          <form className="space-y-2 border-t border-line pt-3" onSubmit={assignExisting}>
+            <p className="text-xs text-steel-muted">Tick staff from the HRMS list (clients and vendors stay in CRM).</p>
+            <ul className="max-h-44 overflow-y-auto border border-line rounded-lg divide-y">
+              {users
+                .filter((u) => !members.some((m) => m.userId === u.id || m.email === u.email))
+                .map((u) => (
+                  <li key={u.id} className="px-3 py-1.5 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={memberUserIds.includes(u.id)}
+                      onChange={() =>
+                        setMemberUserIds((cur) =>
+                          cur.includes(u.id) ? cur.filter((id) => id !== u.id) : [...cur, u.id]
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="font-medium">{u.fullName}</span>
+                      <span className="block text-[11px] font-mono text-steel-muted">{u.email}</span>
+                    </span>
+                  </li>
+                ))}
+            </ul>
+            <div className="flex flex-wrap gap-2 items-end">
             <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
               <option value="project_manager">Project Manager</option>
               <option value="site_engineer">Site Engineer</option>
@@ -141,9 +150,10 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
               <option value="member">Member</option>
               <option value="viewer">Viewer</option>
             </Select>
-            <Button type="submit" variant="secondary" disabled={busy}>
-              Assign
+            <Button type="submit" variant="secondary" disabled={busy || !memberUserIds.length}>
+              Assign selected ({memberUserIds.length})
             </Button>
+            </div>
           </form>
           <form className="grid sm:grid-cols-2 gap-2 border-t border-line pt-3" onSubmit={createAndAssign}>
             <p className="sm:col-span-2 text-[10px] uppercase tracking-wide text-steel-muted">Create login + assign</p>

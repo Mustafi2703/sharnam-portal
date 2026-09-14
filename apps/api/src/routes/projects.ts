@@ -768,13 +768,11 @@ projectsRouter.post("/:id/send-portal-invites", requireRoles("admin", "office"),
   if (!project) return res.status(404).json({ error: "Not found" });
   const { sendProjectPortalInvites } = await import("../services/portalInvites.js");
   const extra = Array.isArray(req.body?.people) ? req.body.people : [];
-  const out = await sendProjectPortalInvites(project.id, req.user!.id, extra);
-  const { emailProjectSetupBrief } = await import("../services/portalInvites.js");
-  await emailProjectSetupBrief({
-    projectId: project.id,
-    createdById: req.user!.id,
-    extraTo: ["baibhabmustafi@gmail.com"],
-  }).catch((err) => console.warn("Setup brief:", err instanceof Error ? err.message : err));
+  const memberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds.map(String) : [];
+  if (!memberIds.length && !extra.length) {
+    return res.json({ sent: [], sharePassword: null, held: true, reason: "Pick people before any onboarding mail." });
+  }
+  const out = await sendProjectPortalInvites(project.id, req.user!.id, extra, memberIds);
   await audit("project.portal_invites", {
     userId: req.user!.id,
     entity: "Project",
@@ -1046,13 +1044,23 @@ projectsRouter.post("/:id/whatsapp/test", requireRoles("admin", "office", "emplo
 });
 
 projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const { userId, role } = req.body;
-  const member = await prisma.projectMember.upsert({
-    where: { projectId_userId: { projectId: req.params.id, userId } },
-    create: { projectId: req.params.id, userId, role: role || "member" },
-    update: { role: role || "member" },
-  });
-  res.json(member);
+  const role = String(req.body?.role || "member");
+  const ids = [
+    ...(Array.isArray(req.body?.userIds) ? req.body.userIds : []),
+    ...(req.body?.userId ? [req.body.userId] : []),
+  ].map((id: unknown) => String(id).trim()).filter(Boolean);
+  if (!ids.length) return res.status(400).json({ error: "Select at least one employee from the list." });
+  const members = [];
+  for (const userId of ids) {
+    members.push(
+      await prisma.projectMember.upsert({
+        where: { projectId_userId: { projectId: req.params.id, userId } },
+        create: { projectId: req.params.id, userId, role },
+        update: { role },
+      })
+    );
+  }
+  res.json(ids.length === 1 ? members[0] : { ok: true, assigned: members.length });
 });
 
 export const dmsRouter = Router();
@@ -1126,8 +1134,6 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
   if (!(await userCanBrowseProjectDrive(req.user!, req.params.projectId))) {
     return res.status(403).json({ error: "Not on this project" });
   }
-  const { maybeDumpProjectRegisters } = await import("../services/logDump.js");
-  if (!String(req.query.path || "")) maybeDumpProjectRegisters(project.id);
   const folderPath = String(req.query.path || "");
   const syncOnOpen = String(req.query.sync || "0") === "1";
   let syncedAt: string | null = null;
@@ -1152,7 +1158,6 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
       console.warn("[dms] quality ISO link:", err instanceof Error ? err.message : err);
     }
   }
-  const folders = await prisma.documentFolder.findMany({ where: { projectId: project.id } });
   let children = await mockOneDrive.listChildrenLive(project.code, folderPath);
   const directOpen = canOpenDriveDirectly(req.user!.role);
   if (!directOpen) {
@@ -1168,7 +1173,7 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     path: folderPath,
     fullPath: `/onedrive/${project.code}/${folderPath}`.replace(/\/+/g, "/").replace(/\/$/, "") || `/onedrive/${project.code}`,
     children,
-    folders,
+    folders: [],
     syncedAt,
     provider: resultProvider(children),
     directOpen,

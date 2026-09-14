@@ -231,9 +231,16 @@ rolesRouter.put("/:key", requireRoles("admin"), async (req, res) => {
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
-usersRouter.get("/", requireRoles("admin", "office"), async (_req, res) => {
+usersRouter.get("/", requireRoles("admin", "office"), async (req, res) => {
+  const kind = String(req.query.kind || "");
   const users = await prisma.user.findMany({
-    where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+    where: {
+      isActive: true,
+      NOT: { email: { startsWith: "deleted." } },
+      ...(kind === "staff"
+        ? { role: { in: ["admin", "office", "site_employee", "employee", "project_manager"] } }
+        : {}),
+    },
     select: { id: true, email: true, fullName: true, role: true, portal: true, phone: true, isActive: true },
     orderBy: { fullName: "asc" },
   });

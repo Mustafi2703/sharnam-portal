@@ -66,7 +66,6 @@ export default function SafetyPage() {
   const [busy, setBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const addFormRef = useRef<HTMLFormElement>(null);
-  const hiraAutoSyncRef = useRef(false);
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canEdit = canCreate;
 
@@ -104,28 +103,6 @@ export default function SafetyPage() {
     [data]
   );
 
-  useEffect(() => {
-    if (sheetKey !== "hira" || !canCreate || !id) return;
-    if (hiraRows.length >= 20) return;
-    if (hiraAutoSyncRef.current) return;
-    hiraAutoSyncRef.current = true;
-    void (async () => {
-      setBusy(true);
-      try {
-        const out = await api<{ imported: number }>(`/api/safety/project/${id}/hira/sync-template`, {
-          method: "POST",
-          token,
-        });
-        setMsg(`Loaded ${out.imported} HIRA risk lines from Safety Dashboard.xlsx`);
-        await load();
-      } catch (err) {
-        hiraAutoSyncRef.current = false;
-        setMsg(err instanceof Error ? err.message : "HIRA template load failed");
-      } finally {
-        setBusy(false);
-      }
-    })();
-  }, [sheetKey, hiraRows.length, canCreate, id, token]);
 
   const filtered = useMemo(() => {
     const rows = data?.records || [];

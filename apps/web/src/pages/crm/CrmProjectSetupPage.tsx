@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
@@ -7,6 +7,7 @@ import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
+import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
 
 type ProjectRow = {
@@ -106,14 +107,13 @@ function dayField(v?: string | null) {
 }
 
 const STEPS: { id: Step; n: string; label: string }[] = [
-  { id: "project", n: "1", label: "Project card" },
+  { id: "project", n: "1", label: "Card · packages · people" },
   { id: "matrix", n: "2", label: "Communication matrix" },
-  { id: "launch", n: "3", label: "Portals · folders · DPR / WPR" },
+  { id: "launch", n: "3", label: "Launch" },
 ];
 
 export default function CrmProjectSetupPage() {
   const { token, user } = useAuth();
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const projectId = params.get("projectId") || "";
   const step = (["project", "matrix", "launch"].includes(params.get("step") || "") ? params.get("step") : "project") as Step;
@@ -131,7 +131,7 @@ export default function CrmProjectSetupPage() {
   const [consultantIds, setConsultantIds] = useState<string[]>([]);
   const [contractorIds, setContractorIds] = useState<string[]>([]);
   const [clientId, setClientId] = useState("");
-  const [projectPackages, setProjectPackages] = useState<string[]>([]);
+  const [_projectPackages, setProjectPackages] = useState<string[]>([]);
 
   const setStep = (next: Step, id = projectId) => {
     const q = new URLSearchParams();
@@ -144,7 +144,7 @@ export default function CrmProjectSetupPage() {
     if (!token || !canManage) return;
     const [p, u, v] = await Promise.all([
       api<ProjectRow[]>("/api/projects", { token }),
-      api<UserRow[]>("/api/users", { token }).catch(() => []),
+      api<UserRow[]>("/api/users?kind=staff", { token }).catch(() => []),
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
     ]);
     setProjects(p);
@@ -186,7 +186,10 @@ export default function CrmProjectSetupPage() {
     setContractorIds(
       s.vendors.filter((v) => ["Contractor", "Vendor"].includes(v.partyType)).map((v) => v.vendorId)
     );
-    const clientRow = s.vendors.find((v) => v.partyType === "Client");
+    const clientRow =
+      s.vendors.find((v) => v.partyType === "Client") ||
+      s.vendors.find((v) => v.email && v.email === s.project.clientEmail) ||
+      s.vendors.find((v) => v.name && v.name === s.project.clientName);
     setClientId(clientRow?.vendorId || "");
     void api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
@@ -207,6 +210,18 @@ export default function CrmProjectSetupPage() {
   useEffect(() => {
     void loadProject();
   }, [loadProject]);
+
+  useEffect(() => {
+    if (clientId) return;
+    const email = (details.clientEmail || createForm.clientEmail).trim().toLowerCase();
+    const name = (details.clientName || createForm.clientName).trim().toLowerCase();
+    const match = vendors.find(
+      (v) =>
+        (email && (v.email || "").toLowerCase() === email) ||
+        (name && (v.name || "").toLowerCase() === name)
+    );
+    if (match) setClientId(match.id);
+  }, [vendors, clientId, details.clientEmail, details.clientName, createForm.clientEmail, createForm.clientName]);
 
   async function createProject(e: FormEvent) {
     e.preventDefault();
@@ -271,19 +286,14 @@ export default function CrmProjectSetupPage() {
     setMsg("");
     try {
       const out = await api<CompleteOut & { status?: string }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token });
-      const passwords = [...out.clientPortals, ...out.contractorPortals, ...(out.stakeholderPortals || [])]
-        .filter((p) => p.created && p.tempPassword)
-        .map((p) => `${p.email} → ${p.tempPassword}`);
       setMsg(
         [
-          `Setup complete: ${out.folders.count} folders (${out.folders.provider}).`,
-          `Comms +${out.comms.contacts.created} contacts.`,
-          passwords.length ? `New portal passwords: ${passwords.join("; ")}` : "Existing portal logins reused.",
-          "Client signs in at /login/client. Design consultants and other consultants sign in at /login/stakeholder.",
+          `Setup complete. Status is ${out.status || "In Progress"}.`,
+          `Folders: ${out.folders.count}. Matrix contacts: ${out.comms.contacts.created}.`,
+          "No emails were sent. Tick people below if you want onboarding mail.",
         ].join(" ")
       );
       await loadProject();
-      navigate(`/projects/${projectId}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Complete setup failed");
     } finally {
@@ -322,7 +332,7 @@ export default function CrmProjectSetupPage() {
         <PageHeader
           eyebrow="CRM · project start"
           title="Project setup"
-          subtitle="Code and name first. Pick the client, consultants, and vendors from the CRM lists (logins are created there). Then fill the communication matrix. Bid management is a separate tool."
+          subtitle="Card, work packages, and staff from the list. Then the communication matrix. Onboarding emails are optional after launch — nothing is mailed until you pick people and send."
         />
         {summary && (
           <div className="flex flex-wrap items-center gap-2">
@@ -454,6 +464,48 @@ export default function CrmProjectSetupPage() {
                   placeholder="Pick client company…"
                   searchPlaceholder="Search client directory…"
                 />
+                <div className="grid sm:grid-cols-2 gap-2 rounded-lg border border-line bg-sand/30 p-3">
+                  <Input
+                    placeholder="Client company"
+                    value={projectId ? details.clientName : createForm.clientName}
+                    onChange={(e) =>
+                      projectId
+                        ? setDetails({ ...details, clientName: e.target.value })
+                        : setCreateForm({ ...createForm, clientName: e.target.value })
+                    }
+                  />
+                  <Input
+                    placeholder="Contact name"
+                    value={projectId ? details.clientContactName : createForm.clientContactName}
+                    onChange={(e) =>
+                      projectId
+                        ? setDetails({ ...details, clientContactName: e.target.value })
+                        : setCreateForm({ ...createForm, clientContactName: e.target.value })
+                    }
+                  />
+                  <Input
+                    type="email"
+                    placeholder="Client email (login)"
+                    value={projectId ? details.clientEmail : createForm.clientEmail}
+                    onChange={(e) =>
+                      projectId
+                        ? setDetails({ ...details, clientEmail: e.target.value })
+                        : setCreateForm({ ...createForm, clientEmail: e.target.value })
+                    }
+                  />
+                  <Input
+                    placeholder="Phone"
+                    value={projectId ? details.clientPhone : createForm.clientPhone}
+                    onChange={(e) =>
+                      projectId
+                        ? setDetails({ ...details, clientPhone: e.target.value })
+                        : setCreateForm({ ...createForm, clientPhone: e.target.value })
+                    }
+                  />
+                  <p className="sm:col-span-2 text-[11px] text-steel-muted">
+                    Pulled from the project card / client directory. Save once — Complete setup creates the client login from this email. No mail is sent.
+                  </p>
+                </div>
               </div>
               <div className="sm:col-span-2 grid lg:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -490,7 +542,7 @@ export default function CrmProjectSetupPage() {
                 </div>
               </div>
               {projectId && token ? (
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2 space-y-3">
                   <WorkPackagesPanel
                     token={token}
                     projectId={projectId}
@@ -498,6 +550,15 @@ export default function CrmProjectSetupPage() {
                       setProjectPackages(pkgs);
                       setMsg("Work packages saved.");
                     }}
+                  />
+                  <ProjectTeamAllocatePanel
+                    projectId={projectId}
+                    token={token}
+                    users={users}
+                    members={summary?.members || []}
+                    canEdit={canManage}
+                    onMsg={setMsg}
+                    onChanged={() => void loadProject()}
                   />
                 </div>
               ) : null}
@@ -575,11 +636,8 @@ export default function CrmProjectSetupPage() {
               Back · Project card
             </Button>
             <Button type="button" onClick={() => setStep("launch")}>
-              Next · Launch (matrix optional)
+              Next · Launch
             </Button>
-            <Link to={`/projects/${projectId}/comms`} className="text-sm font-semibold text-brand self-center">
-              Open in-project Comms →
-            </Link>
           </div>
         </div>
       )}
@@ -594,37 +652,12 @@ export default function CrmProjectSetupPage() {
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
               <p className="text-xs text-steel-muted mt-0.5">
-                Creates the ISO folder tree and writes the matrix into Comms. Client / consultant / vendor logins come from
-                the CRM directories. Open a bid later from Bid management — not from this page.
+                Writes the communication matrix and sets status to <strong>In Progress</strong>. No emails are sent.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" disabled={busy} onClick={() => void completeSetup()}>
                 Complete setup
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !projectId}
-                onClick={async () => {
-                  if (!projectId || !token) return;
-                  setBusy(true);
-                  try {
-                    const out = await api<{ sent: { email: string }[]; sharePassword: string }>(
-                      `/api/projects/${projectId}/send-portal-invites`,
-                      { method: "POST", token, body: JSON.stringify({}) }
-                    );
-                    setMsg(
-                      `Portal invites emailed to ${out.sent.length} people. Shared password: ${out.sharePassword}. They can forward the login email.`
-                    );
-                  } catch (err) {
-                    setMsg(err instanceof Error ? err.message : "Invite send failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Email portal credentials
               </Button>
             </div>
           </div>
@@ -639,29 +672,6 @@ export default function CrmProjectSetupPage() {
               </li>
             ))}
           </ul>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            <Link to={`/projects/${projectId}/comms`} className="font-semibold text-brand">
-              Comms →
-            </Link>
-            <Link to={`/projects/${projectId}/dms`} className="font-semibold text-brand">
-              Document library →
-            </Link>
-            <Link to={`/crm/bids?projectId=${projectId}`} className="font-semibold text-brand">
-              Bid management (separate) →
-            </Link>
-            <Link to={`/projects/${projectId}/dpr-maker`} className="font-semibold text-brand">
-              DPR maker →
-            </Link>
-            <Link to={`/projects/${projectId}/wpr-maker`} className="font-semibold text-brand">
-              WPR maker →
-            </Link>
-            <Link to="/login/client" className="font-semibold text-brand">
-              Client portal →
-            </Link>
-            <Link to="/login/vendor" className="font-semibold text-brand">
-              Contractor portal →
-            </Link>
-          </div>
           <Button type="button" variant="secondary" onClick={() => setStep("matrix")}>
             Back · Communication matrix
           </Button>

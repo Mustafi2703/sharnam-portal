@@ -700,8 +700,10 @@ async function quotationStatusLog(entityId: string) {
 
 const proposalUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-crmRouter.get("/quotations", async (_req, res) => {
+crmRouter.get("/quotations", async (req, res) => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
   const rows = await prisma.quotation.findMany({
+    where: projectId ? { projectId } : undefined,
     include: quotationInclude(),
     orderBy: { createdAt: "desc" },
   });

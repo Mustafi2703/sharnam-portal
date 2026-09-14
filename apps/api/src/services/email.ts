@@ -15,6 +15,11 @@ function graphMailEnabled() {
   return cfg.configured && Boolean(cfg.mailbox);
 }
 
+/** Live Graph to clients/vendors only when Hostinger sets PORTAL_MAIL_LIVE=true. */
+export function portalMailLive() {
+  return process.env.PORTAL_MAIL_LIVE === "true";
+}
+
 function threadHeaders(opts: { messageId: string; inReplyTo?: string | null; references?: string | null }) {
   // Graph only accepts custom headers that start with x- / X-.
   const headers: { name: string; value: string }[] = [{ name: "X-Portal-Message-ID", value: opts.messageId }];
@@ -71,7 +76,7 @@ export async function queueProjectEmail(opts: {
 }) {
   const project = await prisma.project.findUnique({ where: { id: opts.projectId } });
   if (!project) return { skipped: true as const, reason: "no_project" };
-  if (!project.emailEnabled && !opts.toOverride) {
+  if (!project.emailEnabled) {
     return { skipped: true as const, reason: "email_disabled" };
   }
   const toRaw = (opts.toOverride || project.notificationEmails || "").trim();
@@ -121,7 +126,7 @@ export async function queueProjectEmail(opts: {
     },
   });
 
-  if (graphMailEnabled()) {
+  if (graphMailEnabled() && portalMailLive()) {
     try {
       await sendViaGraph({
         to: recipients,
