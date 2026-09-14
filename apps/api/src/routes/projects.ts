@@ -537,6 +537,33 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       update: {},
     });
     await mockOneDrive.ensureProjectTree(project.id);
+    if (vendorIds.length || project.clientEmail) {
+      try {
+        const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import(
+          "../services/crmVendorCredentials.js"
+        );
+        if (project.clientEmail || project.clientName) {
+          await ensureClientVendorAndPortal({
+            projectId: project.id,
+            name: project.clientName || project.clientContactName || project.name,
+            email: project.clientEmail,
+            phone: project.clientPhone,
+            contactName: project.clientContactName,
+            address: project.clientAddress,
+            gst: project.clientGst,
+          });
+        }
+        if (vendorIds.length) {
+          await provisionProjectVendorAccess({
+            projectId: project.id,
+            vendorIds,
+            assignedVia: "Project setup",
+          });
+        }
+      } catch (portalErr) {
+        console.warn("Project create portal provisioning skipped:", portalErr instanceof Error ? portalErr.message : portalErr);
+      }
+    }
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
@@ -547,16 +574,24 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
 projectsRouter.get("/:id/bid-disciplines", requireRoles("admin", "office"), async (req, res) => {
   const project = await prisma.project.findUnique({
     where: { id: req.params.id },
-    select: { id: true, code: true, name: true, bidDisciplinesJson: true },
+    select: { id: true, code: true, name: true, bidDisciplinesJson: true, workPackages: true },
   });
   if (!project) return res.status(404).json({ error: "Not found" });
 
-  const { defaultDisciplines, parseDisciplinesJson } = await import("../services/comparativeStatement.js");
+  const { defaultDisciplines, resolveProjectBidDisciplines } = await import("../services/comparativeStatement.js");
+  const { parseProjectWorkPackages } = await import("../services/workPackageCatalog.js");
+  const workPackages = parseProjectWorkPackages(project.workPackages);
+  const resolved = resolveProjectBidDisciplines({
+    bidDisciplinesJson: project.bidDisciplinesJson,
+    workPackages,
+  });
   res.json({
     projectId: project.id,
     projectCode: project.code,
+    workPackages,
+    source: resolved.source,
     catalog: defaultDisciplines(),
-    disciplines: parseDisciplinesJson(project.bidDisciplinesJson),
+    disciplines: resolved.disciplines,
   });
 });
 
@@ -964,6 +999,22 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     });
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save project card" });
+  }
+  if (project.clientEmail || project.clientName) {
+    try {
+      const { ensureClientVendorAndPortal } = await import("../services/crmVendorCredentials.js");
+      await ensureClientVendorAndPortal({
+        projectId: project.id,
+        name: project.clientName || project.clientContactName || project.name,
+        email: project.clientEmail,
+        phone: project.clientPhone,
+        contactName: project.clientContactName,
+        address: project.clientAddress,
+        gst: project.clientGst,
+      });
+    } catch (portalErr) {
+      console.warn("Project settings client portal skipped:", portalErr instanceof Error ? portalErr.message : portalErr);
+    }
   }
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
   res.json(project);

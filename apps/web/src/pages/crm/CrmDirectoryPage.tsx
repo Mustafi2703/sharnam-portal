@@ -4,7 +4,6 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import {
   accountKindLabel,
-  loginPathForAccount,
   portalAccountKind,
 } from "../../lib/portalAccounts";
 import { ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
@@ -220,24 +219,32 @@ export function DirectoryCompaniesPanel({
     try {
       const role = meta.loginRole || (tab === "vendors" ? "vendor" : tab === "stakeholders" ? "employee" : "client");
       const kind = portalAccountKind(role, { department: tab === "stakeholders" ? selected.trade : null }, selected.id);
-      await api("/api/hrm/employees", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          email: selected.email,
-          fullName: selected.primaryContactName || selected.name,
-          role,
-          phone: selected.businessPhone,
-          designation: selected.name,
-          department: tab === "stakeholders" ? selected.trade || undefined : undefined,
-          vendorId: selected.id,
-          desk: "crm",
-          password: loginPassword.trim() || undefined,
-        }),
-      });
-      setLoginMsg(
-        `Portal login created for ${selected.email} (${accountKindLabel(kind)}). Default password: Demo@1234 · Sign in at ${loginPathForAccount(role, kind)}`
+      const updated = await api<{ login?: { created?: boolean; email?: string; tempPassword?: string; passwordUpdated?: boolean } }>(
+        `/api/vendors/${selected.id}`,
+        {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({
+            email: selected.email,
+            primaryContactName: selected.primaryContactName || selected.name,
+            ...(loginPassword.trim() ? { password: loginPassword.trim() } : {}),
+          }),
+        }
       );
+      const path =
+        tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
+      if (updated.login?.created) {
+        setLoginMsg(
+          `Portal login created for ${updated.login.email} (${accountKindLabel(kind)}). Password: ${updated.login.tempPassword || loginPassword || "Demo@1234"} · ${path}`
+        );
+      } else if (updated.login?.passwordUpdated) {
+        setLoginMsg(`Portal password updated for ${selected.email}. Sign in at ${path}`);
+      } else if (updated.login) {
+        setLoginMsg(`Portal login linked for ${selected.email} · ${path}`);
+      } else {
+        setLoginMsg("Could not create login — check the email address.");
+      }
+      await load();
     } catch (err) {
       setLoginMsg(err instanceof Error ? err.message : "Could not create login");
     }

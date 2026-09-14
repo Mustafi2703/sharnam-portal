@@ -6,7 +6,6 @@ import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
 import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
 import { CrmBidVendorMatrix } from "../components/CrmBidVendorMatrix";
-import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
@@ -102,6 +101,8 @@ export default function CrmBidComparePage() {
   const [deskFilter, setDeskFilter] = useState<"open" | "converted" | "all">("open");
   const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
   const [showNewBidForm, setShowNewBidForm] = useState(false);
+  const [projectVendorIds, setProjectVendorIds] = useState<string[]>([]);
+  const [disciplineSource, setDisciplineSource] = useState<"saved" | "work_packages" | "default" | "">("");
   const [dueDate, setDueDate] = useState("");
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
   const [actionError, setActionError] = useState<ActionReason | null>(null);
@@ -247,10 +248,15 @@ export default function CrmBidComparePage() {
   }
 
   useEffect(() => {
-    if (disciplines.length && !form.disciplineKeys.length) {
-      setForm((f) => ({ ...f, disciplineKeys: disciplines.map((d) => d.key) }));
+    if (form.projectId || !disciplines.length || form.disciplineKeys.length) return;
+    setForm((f) => ({ ...f, disciplineKeys: disciplines.map((d) => d.key) }));
+  }, [disciplines, form.disciplineKeys.length, form.projectId]);
+
+  useEffect(() => {
+    if (setupProjectId && !routePkgId) {
+      setShowNewBidForm(true);
     }
-  }, [disciplines, form.disciplineKeys.length]);
+  }, [setupProjectId, routePkgId]);
 
   useEffect(() => {
     if (!setupProjectId && !setupLeadId) return;
@@ -278,41 +284,52 @@ export default function CrmBidComparePage() {
           })
           .map((r) => r.vendorId || r.vendor?.id || "")
           .filter(Boolean);
-        if (!ids.length) return;
-        setForm((f) => (f.vendorIds.length ? f : { ...f, vendorIds: ids }));
+        setProjectVendorIds(ids);
+        if (ids.length) {
+          setForm((f) => ({ ...f, vendorIds: ids }));
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        setProjectVendorIds([]);
+      });
   }, [form.projectId, setupProjectId, token]);
 
   useEffect(() => {
     if (!form.projectId || !canManage) return;
-    void api<{ disciplines: Discipline[] }>(`/api/projects/${form.projectId}/bid-disciplines`, { token })
+    void api<{ disciplines: Discipline[]; source?: "saved" | "work_packages" | "default" }>(
+      `/api/projects/${form.projectId}/bid-disciplines`,
+      { token }
+    )
       .then((r) => {
         if (r.disciplines?.length) {
+          setDisciplines(r.disciplines);
+          setDisciplineSource(r.source || "default");
           setForm((f) => ({ ...f, disciplineKeys: r.disciplines.map((d) => d.key) }));
         }
       })
       .catch(() => {});
   }, [form.projectId, token, canManage]);
 
-  const allBidders = useMemo(
-    () =>
-      vendors.filter((v) => {
-        if (!isVendorOrContractor(v.partyType)) return false;
-        return vendorMatchesBidDisciplines(v, form.disciplineKeys);
-      }),
-    [vendors, form.disciplineKeys],
-  );
+  const selectableVendors = useMemo(() => {
+    const base = vendors.filter((v) => isVendorOrContractor(v.partyType));
+    if (!projectVendorIds.length) return [...base].sort((a, b) => a.name.localeCompare(b.name));
+    const onProject = new Set(projectVendorIds);
+    return [...base].sort((a, b) => {
+      const aOn = onProject.has(a.id) ? 0 : 1;
+      const bOn = onProject.has(b.id) ? 0 : 1;
+      return aOn - bOn || a.name.localeCompare(b.name);
+    });
+  }, [vendors, projectVendorIds]);
 
   const bidderItems = useMemo(
     () =>
-      allBidders.map((v) => ({
+      selectableVendors.map((v) => ({
         id: v.id,
         label: v.name,
-        sublabel: v.partyType,
+        sublabel: projectVendorIds.includes(v.id) ? `${v.partyType || "Vendor"} · assigned on project` : v.partyType,
         trade: v.trade,
       })),
-    [allBidders]
+    [selectableVendors, projectVendorIds],
   );
 
   const detailDisciplines = detail?.disciplines || disciplines;
@@ -690,7 +707,12 @@ export default function CrmBidComparePage() {
                 setSearchParams(q, { replace: true });
                 setSelectedId(null);
                 setDetail(null);
-                nav(id ? `/crm/bids?projectId=${encodeURIComponent(id)}` : "/crm/bids", { replace: true });
+                if (id) {
+                  openNewBidSetup({ projectId: id });
+                } else {
+                  setShowNewBidForm(false);
+                  nav("/crm/bids", { replace: true });
+                }
               }}
             >
               <option value="">All projects — pick one to set up a bid</option>
@@ -782,7 +804,15 @@ export default function CrmBidComparePage() {
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div>
-              <p className="text-xs font-semibold text-steel-muted mb-1">Discipline BOQ sheets</p>
+              <p className="text-xs font-semibold text-steel-muted mb-1">
+                Discipline BOQ sheets
+                {disciplineSource === "work_packages" && (
+                  <span className="font-normal text-steel-muted"> · auto from project work packages</span>
+                )}
+                {disciplineSource === "saved" && (
+                  <span className="font-normal text-steel-muted"> · from project bid setup</span>
+                )}
+              </p>
               <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1">
                 {disciplines.map((d) => (
                   <label key={d.key} className="flex items-center gap-2 text-sm">
@@ -803,6 +833,17 @@ export default function CrmBidComparePage() {
                 ))}
               </div>
             </div>
+            <p className="text-xs text-steel-muted">
+              Each vendor uploads one BOQ tab per discipline using the{" "}
+              <button
+                type="button"
+                className="text-brand font-semibold underline-offset-2 hover:underline"
+                onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
+              >
+                Comparative Statement R2 (.xlsx)
+              </button>{" "}
+              sample format.
+            </p>
             <div>
               <p className="text-xs font-semibold text-steel-muted mb-1">
                 Vendors / contractors{" "}
@@ -815,7 +856,7 @@ export default function CrmBidComparePage() {
                 selectedIds={form.vendorIds}
                 onChange={(vendorIds) => setForm({ ...form, vendorIds })}
                 placeholder="Search vendor…"
-                emptyMessage="No vendors yet — add them on CRM → Vendors / contractors."
+                emptyMessage="No vendors yet — add contractors on CRM → Vendors, or assign them on the project directory."
               />
             </div>
             <Button type="submit" disabled={busy}>

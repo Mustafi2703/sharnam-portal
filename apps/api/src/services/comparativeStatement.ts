@@ -58,6 +58,96 @@ export function parseDisciplinesJson(json: string | null | undefined): Disciplin
   }
 }
 
+/** Parse stored project bid disciplines — returns null when unset (distinct from full catalog default). */
+export function parseStoredBidDisciplinesJson(json: string | null | undefined): DisciplineDef[] | null {
+  if (!json?.trim()) return null;
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed) || !parsed.length) return null;
+    const rows = parsed
+      .map((d: { key?: string; label?: string; sheetName?: string }) => ({
+        key: normalizeDisciplineKey(d.key || d.label || ""),
+        label: String(d.label || d.key || "").trim(),
+        sheetName: String(d.sheetName || d.label || d.key || "").trim(),
+      }))
+      .filter((d) => d.key && d.label);
+    return rows.length ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+const WORK_PACKAGE_DISCIPLINE_KEYS: Record<string, string[]> = {
+  civil: ["CCV"],
+  peb: ["ENTRANCE_GATE"],
+  mep: ["ELE_LAB", "COOLING_TOWER", "UG_TANK"],
+  electrical: ["ELE_LAB"],
+  ele: ["ELE_LAB"],
+  plumbing: ["UG_TANK"],
+  hvac: ["COOLING_TOWER"],
+  "fire fighting": ["SECURITY"],
+  fire: ["SECURITY"],
+  admin: ["ADMIN"],
+  security: ["SECURITY"],
+  "cooling tower": ["COOLING_TOWER"],
+  "weigh bridge": ["WEIGH_BRIDGE"],
+  "entrance gate": ["ENTRANCE_GATE"],
+  landscape: ["CCV"],
+};
+
+/** Map org work-package names to R2 discipline BOQ sheets (one package may expand to several sheets). */
+export function disciplinesFromWorkPackages(workPackages: string[]): DisciplineDef[] {
+  const catalog = defaultDisciplines();
+  const byKey = Object.fromEntries(catalog.map((d) => [d.key, d]));
+  const seen = new Set<string>();
+  const out: DisciplineDef[] = [];
+
+  for (const raw of workPackages) {
+    const pkg = String(raw || "").trim();
+    if (!pkg) continue;
+    const norm = pkg.toLowerCase();
+    const mappedKeys = WORK_PACKAGE_DISCIPLINE_KEYS[norm];
+    if (mappedKeys?.length) {
+      for (const key of mappedKeys) {
+        const def = byKey[key];
+        if (def && !seen.has(key)) {
+          seen.add(key);
+          out.push(def);
+        }
+      }
+      continue;
+    }
+    const catalogMatch = catalog.find(
+      (d) =>
+        d.label.toLowerCase() === norm ||
+        d.key.toLowerCase() === norm.replace(/[^a-z0-9]+/g, "_") ||
+        d.label.toLowerCase().includes(norm) ||
+        norm.includes(d.label.toLowerCase().split(" ")[0] || ""),
+    );
+    if (catalogMatch && !seen.has(catalogMatch.key)) {
+      seen.add(catalogMatch.key);
+      out.push(catalogMatch);
+      continue;
+    }
+    const key = normalizeDisciplineKey(pkg);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, label: pkg, sheetName: `BOQ-${pkg.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().slice(0, 28)}` });
+  }
+  return out;
+}
+
+export function resolveProjectBidDisciplines(opts: {
+  bidDisciplinesJson?: string | null;
+  workPackages?: string[];
+}): { disciplines: DisciplineDef[]; source: "saved" | "work_packages" | "default" } {
+  const saved = parseStoredBidDisciplinesJson(opts.bidDisciplinesJson);
+  if (saved?.length) return { disciplines: saved, source: "saved" };
+  const fromPackages = opts.workPackages?.length ? disciplinesFromWorkPackages(opts.workPackages) : [];
+  if (fromPackages.length) return { disciplines: fromPackages, source: "work_packages" };
+  return { disciplines: defaultDisciplines(), source: "default" };
+}
+
 /** Resolve discipline list from explicit keys + optional custom entries + project defaults. */
 export function resolveDisciplinesForPackage(opts: {
   disciplineKeys?: string[];
@@ -118,6 +208,7 @@ export type ImportedSheet = {
 export function resolveR2TemplatePath(): string {
   const candidates = [
     path.join(process.cwd(), "Sharnam_modules_docs", "Comparative Statement - R2.xlsx"),
+    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Comparative Statement - R2.xlsx"),
     path.join(process.cwd(), "seed", "data", "Comparative Statement - R2.xlsx"),
     path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"),
   ];

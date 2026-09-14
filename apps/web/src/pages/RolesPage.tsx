@@ -41,7 +41,7 @@ export default function RolesPage() {
   const [showDemoLogins, setShowDemoLogins] = useState(false);
 
   const load = async () => {
-    const demoQ = showDemoLogins && isAdmin ? "&includeDemo=1" : "";
+    const demoQ = showDemoLogins && canManage ? "&includeDemo=1" : "";
     const [r, u] = await Promise.all([
       api<any[]>("/api/roles", { token }),
       api<UserAccountRow[]>(`/api/hrm/employees?scope=all${demoQ}`, { token }),
@@ -54,6 +54,31 @@ export default function RolesPage() {
     if (!canManage) return;
     void load();
   }, [token, canManage, showDemoLogins]);
+
+  async function deleteDemoSeedLogins() {
+    if (
+      !window.confirm(
+        "Remove all demo seed logins (@sharnam.demo, @consultant.demo, @arvind.demo, @bhavanainfra.demo)? Live @spdc.in staff stay."
+      )
+    )
+      return;
+    setMsg("");
+    try {
+      const res = await api<{ removed: number; emails: string[] }>("/api/hrm/employees/delete-demo-seed", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsg(
+        res.removed
+          ? `Removed ${res.removed} demo login${res.removed === 1 ? "" : "s"}.`
+          : "No demo seed logins to remove."
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not remove demo logins");
+    }
+  }
 
   async function deactivateDemoSeedLogins() {
     if (
@@ -193,7 +218,7 @@ export default function RolesPage() {
               Demo seed logins are hidden. Only real SPDC staff and live client / vendor accounts show here.
             </p>
           ) : null}
-          {isAdmin ? (
+          {canManage ? (
             <div className="flex flex-wrap gap-2 items-center">
               <label className="inline-flex items-center gap-2 text-xs font-semibold text-steel-muted">
                 <input
@@ -206,6 +231,9 @@ export default function RolesPage() {
               </label>
               <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void deactivateDemoSeedLogins()}>
                 Deactivate demo logins
+              </Button>
+              <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void deleteDemoSeedLogins()}>
+                Delete demo logins
               </Button>
             </div>
           ) : null}

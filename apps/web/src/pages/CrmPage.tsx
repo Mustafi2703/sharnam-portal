@@ -37,7 +37,6 @@ export default function CrmPage() {
       ? "projects"
       : "leads";
   const [leads, setLeads] = useState<any[]>([]);
-  const [deals, setDeals] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [bidPackages, setBidPackages] = useState<any[]>([]);
@@ -110,16 +109,14 @@ export default function CrmPage() {
   }
 
   const load = async () => {
-    const [p, l, d, q, bp] = await Promise.all([
+    const [p, l, q, bp] = await Promise.all([
       api<any[]>("/api/projects", { token }),
       canManage ? api<any[]>("/api/crm/leads", { token }).catch(() => []) : Promise.resolve([]),
-      canManage ? api<any[]>("/api/crm/deals", { token }).catch(() => []) : Promise.resolve([]),
       api<any[]>("/api/crm/quotations", { token }).catch(() => []),
       canManage ? api<any[]>("/api/crm/bid-packages", { token }).catch(() => []) : Promise.resolve([]),
     ]);
     setProjects(p);
     setLeads(l);
-    setDeals(d);
     setQuotations(q);
     setBidPackages(bp);
   };
@@ -370,32 +367,6 @@ export default function CrmPage() {
             </div>
           )}
 
-          {deals.length > 0 && (
-            <div className="grid xl:grid-cols-[1fr_320px] gap-3">
-              <RegisterSheetFrame title="Deals register" sheetLabel="CRM pipeline" rowCount={deals.length}>
-                <table className="sheet-register__table min-w-[640px]">
-                  <thead>
-                    <tr>
-                      <th>Deal</th>
-                      <th>Stage</th>
-                      <th>Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deals.map((d) => (
-                      <tr key={d.id}>
-                        <td className="font-medium">{d.name}</td>
-                        <td>
-                          <Badge>{d.stage}</Badge>
-                        </td>
-                        <td className="font-mono text-xs">{d.value != null ? `₹ ${Number(d.value).toLocaleString("en-IN")}` : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </RegisterSheetFrame>
-            </div>
-          )}
         </>
       )}
 

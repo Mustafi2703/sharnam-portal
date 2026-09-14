@@ -16,6 +16,8 @@ function defaultTempPassword() {
   return process.env.SEED_PASSWORD || "Demo@1234";
 }
 
+const LOCKED_ROLES = new Set(["admin", "office", "site_employee", "hr"]);
+
 export async function ensurePortalLogin(opts: {
   email: string;
   fullName: string;
@@ -33,10 +35,34 @@ export async function ensurePortalLogin(opts: {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    if (opts.vendorId && !existing.vendorId) {
-      await prisma.user.update({ where: { id: existing.id }, data: { vendorId: opts.vendorId } }).catch(() => {});
+    const { portalForRole } = await import("@sharnam/shared");
+    const patch: {
+      vendorId?: string;
+      role?: RoleKey;
+      portal?: string;
+      isActive?: boolean;
+      fullName?: string;
+      phone?: string | null;
+    } = {};
+    if (opts.vendorId && !existing.vendorId) patch.vendorId = opts.vendorId;
+    if (!LOCKED_ROLES.has(existing.role) && existing.role !== opts.role) {
+      patch.role = opts.role;
+      patch.portal = portalForRole(opts.role);
     }
-    return { userId: existing.id, email, created: false, role: existing.role as RoleKey };
+    if (existing.isActive === false) patch.isActive = true;
+    if (opts.fullName?.trim() && existing.fullName !== opts.fullName.trim()) patch.fullName = opts.fullName.trim();
+    if (opts.phone !== undefined) patch.phone = opts.phone || null;
+    if (Object.keys(patch).length) {
+      await prisma.user.update({ where: { id: existing.id }, data: patch }).catch(() => {});
+    }
+    await alignUserRole(existing.id, opts.role);
+    const refreshed = await prisma.user.findUnique({ where: { id: existing.id }, select: { id: true, role: true } });
+    return {
+      userId: existing.id,
+      email,
+      created: false,
+      role: (refreshed?.role || existing.role) as RoleKey,
+    };
   }
 
   const bcrypt = await import("bcryptjs");
@@ -104,13 +130,93 @@ export async function ensureVendorPortalLogin(vendor: {
   return login;
 }
 
-export async function ensureClientPortalLogin(party: { email?: string | null; name: string; businessPhone?: string | null }) {
+export async function ensureClientPortalLogin(party: {
+  email?: string | null;
+  name: string;
+  businessPhone?: string | null;
+  vendorId?: string | null;
+}) {
   return ensurePortalLogin({
     email: party.email || "",
     fullName: party.name,
     role: "client",
     phone: party.businessPhone,
+    vendorId: party.vendorId,
   });
+}
+
+/** Ensure CRM client company row + portal login + optional project seat. */
+export async function ensureClientVendorAndPortal(opts: {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  contactName?: string | null;
+  address?: string | null;
+  gst?: string | null;
+  projectId?: string;
+  password?: string | null;
+}) {
+  const name = String(opts.name || "").trim();
+  const email = String(opts.email || "")
+    .trim()
+    .toLowerCase();
+  if (!name) return { vendor: null as null, login: null as PortalLoginResult | null };
+
+  let vendor =
+    (email ? await prisma.vendor.findFirst({ where: { email, partyType: "Client" } }) : null) ||
+    (await prisma.vendor.findFirst({ where: { name, partyType: "Client" } }));
+
+  if (!vendor) {
+    vendor = await prisma.vendor.create({
+      data: {
+        name,
+        partyType: "Client",
+        email: email || null,
+        businessPhone: opts.phone || null,
+        primaryContactName: opts.contactName || null,
+        address: opts.address || null,
+        gstNumber: opts.gst || null,
+        isActive: true,
+        createdVia: "CRM",
+      },
+    });
+  } else {
+    vendor = await prisma.vendor.update({
+      where: { id: vendor.id },
+      data: {
+        name: name || vendor.name,
+        email: email || vendor.email,
+        businessPhone: opts.phone ?? vendor.businessPhone,
+        primaryContactName: opts.contactName ?? vendor.primaryContactName,
+        address: opts.address ?? vendor.address,
+        gstNumber: opts.gst ?? vendor.gstNumber,
+        isActive: true,
+      },
+    });
+  }
+
+  const login = email
+    ? await syncDirectoryPortalLogin({ vendor, password: opts.password })
+    : null;
+
+  if (opts.projectId) {
+    await prisma.projectVendor.upsert({
+      where: { projectId_vendorId: { projectId: opts.projectId, vendorId: vendor.id } },
+      create: { projectId: opts.projectId, vendorId: vendor.id, assignedVia: "Client portal" },
+      update: {},
+    });
+    if (login) {
+      await grantVendorProjectAccess({
+        projectId: opts.projectId,
+        vendorId: vendor.id,
+        userId: login.userId,
+        memberRole: "client",
+        assignedVia: "Client portal",
+      });
+    }
+  }
+
+  return { vendor, login };
 }
 
 /** Push client directory edits onto every project that uses this company. */
@@ -243,7 +349,6 @@ export async function ensureStakeholderPortalLogin(party: {
   return login;
 }
 
-const LOCKED_ROLES = new Set(["admin", "office", "site_employee"]);
 
 export function portalRoleForPartyType(partyType?: string | null): RoleKey {
   if (partyType === "Client") return "client";
@@ -327,20 +432,40 @@ export async function provisionProjectClientEmail(opts: {
   email?: string | null;
   name: string;
   phone?: string | null;
+  address?: string | null;
+  gst?: string | null;
+  contactName?: string | null;
 }) {
-  const login = await ensureClientPortalLogin({
-    email: opts.email,
-    name: opts.name,
-    businessPhone: opts.phone,
-  });
-  if (!login) return login;
-  await grantVendorProjectAccess({
+  const out = await ensureClientVendorAndPortal({
     projectId: opts.projectId,
-    userId: login.userId,
-    memberRole: "client",
-    assignedVia: "Project card",
+    name: opts.name,
+    email: opts.email,
+    phone: opts.phone,
+    address: opts.address,
+    gst: opts.gst,
+    contactName: opts.contactName,
   });
-  return login;
+  return out.login;
+}
+
+/** After project directory assign — create portal logins for companies with email. */
+export async function provisionProjectVendorAccess(opts: {
+  projectId: string;
+  vendorIds: string[];
+  assignedVia?: string;
+}) {
+  const vendors = await prisma.vendor.findMany({ where: { id: { in: opts.vendorIds } } });
+  const logins: PortalLoginResult[] = [];
+  for (const vendor of vendors) {
+    if (!vendor.email) continue;
+    const login = await provisionCompanyAccess({
+      projectId: opts.projectId,
+      vendor,
+      assignedVia: opts.assignedVia || "Project setup",
+    });
+    if (login) logins.push(login);
+  }
+  return logins;
 }
 
 /** Link vendor company + portal user to a live project so GET /api/projects lists the job. */

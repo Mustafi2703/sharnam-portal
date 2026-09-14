@@ -743,6 +743,32 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
     console.error("Project folder tree failed:", err instanceof Error ? err.message : err);
   }
 
+  try {
+    const { ensureClientVendorAndPortal, provisionProjectVendorAccess } = await import(
+      "../services/crmVendorCredentials.js"
+    );
+    if (project.clientEmail || project.clientName) {
+      await ensureClientVendorAndPortal({
+        projectId: project.id,
+        name: project.clientName || project.clientContactName || project.name,
+        email: project.clientEmail,
+        phone: project.clientPhone,
+        contactName: project.clientContactName,
+        address: project.clientAddress,
+        gst: project.clientGst,
+      });
+    }
+    if (vendorIds.length) {
+      await provisionProjectVendorAccess({
+        projectId: project.id,
+        vendorIds,
+        assignedVia: "CRM convert",
+      });
+    }
+  } catch (err) {
+    console.warn("CRM convert portal provisioning skipped:", err instanceof Error ? err.message : err);
+  }
+
   res.status(201).json({ project, leadId: lead.id });
 });
 
@@ -1308,7 +1334,8 @@ hrmRouter.get("/activity", hrmDesk, async (req, res) => {
 
 hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const scope = String(req.query.scope || "staff");
-  const includeDemo = String(req.query.includeDemo || "") === "1" && req.user?.role === "admin";
+  const includeDemo =
+    String(req.query.includeDemo || "") === "1" && (req.user?.role === "admin" || req.user?.role === "office");
   const staffWhere = {
     NOT: { email: { startsWith: "deleted." } },
     OR: [
@@ -1358,8 +1385,8 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   }
 });
 
-/** One-time cleanup — soft-off demo seed logins still active in the DB. Admin only. */
-hrmRouter.post("/employees/deactivate-demo-seed", requireRoles("admin"), async (req: AuthedRequest, res) => {
+/** One-time cleanup — soft-off demo seed logins still active in the DB. Office / admin. */
+hrmRouter.post("/employees/deactivate-demo-seed", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   try {
     const { isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
     const active = await prisma.user.findMany({
@@ -1387,6 +1414,51 @@ hrmRouter.post("/employees/deactivate-demo-seed", requireRoles("admin"), async (
       detail: errorDetail(err),
     });
     res.status(500).json({ error: "Could not deactivate demo logins" });
+  }
+});
+
+/** Remove all demo seed portal logins (@sharnam.demo etc.) — office / admin. Live SPDC logins stay. */
+hrmRouter.post("/employees/delete-demo-seed", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { isDemoSeedLoginEmail, isKeptPortalEmail } = await import("../services/keepPortalUsers.js");
+    const active = await prisma.user.findMany({
+      where: { NOT: { email: { startsWith: "deleted." } } },
+      select: { id: true, email: true, fullName: true, role: true },
+    });
+    const targets = active.filter((u) => isDemoSeedLoginEmail(u.email) && !isKeptPortalEmail(u.email));
+    if (!targets.length) {
+      return res.json({ removed: 0, emails: [] });
+    }
+    const stamp = Date.now();
+    for (const u of targets) {
+      if (u.id === req.user?.id) continue;
+      const retiredEmail = `deleted.${stamp}.${u.email.replace("@", "_at_")}`.slice(0, 180);
+      await prisma.projectMember.deleteMany({ where: { userId: u.id } });
+      await prisma.employeeProfile.deleteMany({ where: { userId: u.id } });
+      await prisma.user.update({
+        where: { id: u.id },
+        data: {
+          isActive: false,
+          email: retiredEmail,
+          fullName: `[Removed] ${u.fullName}`.slice(0, 200),
+          vendorId: null,
+        },
+      });
+    }
+    await audit("hrm.employees.delete_demo_seed", {
+      userId: req.user?.id,
+      entity: "User",
+      meta: { count: targets.length, emails: targets.map((t) => t.email) },
+    });
+    res.json({ removed: targets.length, emails: targets.map((t) => t.email) });
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.employees.delete_demo_seed",
+      message: "Could not delete demo seed logins",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not delete demo seed logins" });
   }
 });
 
@@ -1607,13 +1679,14 @@ hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
 
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return res.status(404).json({ error: "User not found" });
-  const { isKeptPortalEmail } = await import("../services/keepPortalUsers.js");
+  const { isKeptPortalEmail, isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
   if (isKeptPortalEmail(existing.email)) {
     return res.status(403).json({
       error: "This login is on the live SPDC / Twinoxis list and cannot be deleted.",
     });
   }
-  if (existing.role === "admin" && req.user?.role !== "admin") {
+  const demoSeed = isDemoSeedLoginEmail(existing.email);
+  if (existing.role === "admin" && req.user?.role !== "admin" && !demoSeed) {
     return res.status(403).json({ error: "Only admin can remove admin accounts" });
   }
 
