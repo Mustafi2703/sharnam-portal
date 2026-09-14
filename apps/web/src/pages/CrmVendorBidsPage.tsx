@@ -450,6 +450,27 @@ export default function CrmVendorBidsPage() {
       </Card>
 
       {desk === "bids" && (
+      <>
+      <Card className="!p-4 border-brand/25 bg-white">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-2">R2 bid workflow</p>
+        <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
+          <li>PMC opens the bid and selects your company on <strong className="text-ink">CRM → Bid management</strong>.</li>
+          <li>
+            Download the{" "}
+            <button
+              type="button"
+              className="text-brand font-semibold underline"
+              onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
+            >
+              Comparative Statement R2 (.xlsx)
+            </button>{" "}
+            template.
+          </li>
+          <li>Fill your rates on each work-package tab (Civil, PEB, MEP, etc.) — one discipline per upload slot below.</li>
+          <li>Upload the filled .xlsx while the package status is <strong className="text-ink">Open for bids</strong>.</li>
+          <li>PMC refreshes the comparative and awards L1 — your totals stay on this desk after award.</li>
+        </ol>
+      </Card>
       <div className="flex flex-wrap gap-2 shrink-0">
         <Button
           type="button"
@@ -459,6 +480,7 @@ export default function CrmVendorBidsPage() {
           Download R2 .xlsx
         </Button>
       </div>
+      </>
       )}
 
       {msg && <p className={`text-sm ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>}

@@ -18,13 +18,8 @@ type DriveItem = {
 
 type AccessState = { status: string; token?: string | null; shareUrl?: string | null };
 
-const HR_VAULT_VIRTUAL_PREFIX = "@_HR";
-const HR_VAULT_LABEL = "06 HR & Admin (Company)";
-
 type BrowseData = {
   projectCode: string;
-  driveCode?: string;
-  hrVault?: boolean;
   path: string;
   fullPath: string;
   children: DriveItem[];
@@ -34,8 +29,6 @@ type BrowseData = {
   access?: Record<string, AccessState>;
   note?: string;
 };
-
-type HrVaultLink = { path: string; label: string; driveCode: string };
 
 type AccessRequestRow = {
   id: string;
@@ -65,31 +58,15 @@ function formatDate(iso?: string) {
 }
 
 function folderLabel(path: string) {
-  if (path === HR_VAULT_VIRTUAL_PREFIX) return HR_VAULT_LABEL;
-  if (path.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`)) {
-    const leaf = path.slice(HR_VAULT_VIRTUAL_PREFIX.length + 1).split("/").pop() || path;
-    return leaf.replace(/_/g, " ");
-  }
   if (!path) return "Project root";
   const leaf = path.split("/").pop() || path;
   return leaf.replace(/_/g, " ");
 }
 
-function isHrVaultPath(path: string) {
-  return path === HR_VAULT_VIRTUAL_PREFIX || path.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`);
-}
-
-function driveCodeFor(data: BrowseData | null, browsePath: string) {
-  if (data?.driveCode === "_HR" || isHrVaultPath(browsePath)) return "_HR";
-  return data?.projectCode || "";
-}
-
-function fileUrl(projectCode: string, item: DriveItem, browsePath = "", data?: BrowseData | null) {
-  const code = data ? driveCodeFor(data, browsePath) : isHrVaultPath(browsePath) ? "_HR" : projectCode;
-  const rel = item.path.replace(/^@_HR\/?/, "");
+function fileUrl(projectCode: string, item: DriveItem) {
   if (item.url?.startsWith("http")) return item.url;
   if (item.url?.startsWith("/")) return `${apiBase()}${item.url}`;
-  return `${apiBase()}/uploads/onedrive/${code}/${rel}`;
+  return `${apiBase()}/uploads/onedrive/${projectCode}/${item.path}`;
 }
 
 function isPdf(name: string) {
@@ -169,7 +146,6 @@ export default function DmsPage({
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const canUpload = user?.role === "admin" || user?.role === "office";
-  const canBrowseHrVault = user?.role === "admin" || user?.role === "office" || user?.role === "hr";
   const isOffice = user?.role === "admin" || user?.role === "office";
   const needsRequestLink = user?.role === "vendor" || user?.role === "client";
   const isDrawings = mode === "drawings";
@@ -179,7 +155,6 @@ export default function DmsPage({
   const [path, setPath] = useState(initialPath || rootPrefix || "");
   const [data, setData] = useState<BrowseData | null>(null);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
-  const [hrVaultLink, setHrVaultLink] = useState<HrVaultLink | null>(null);
   const [filter, setFilter] = useState("");
   const [msg, setMsg] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -233,15 +208,9 @@ export default function DmsPage({
 
   useEffect(() => {
     if (!id) return;
-    api<{ folders: string[]; hrVault?: HrVaultLink | null }>(`/api/dms/${id}/folders`, { token })
-      .then((r) => {
-        setFolderPaths(r.folders || []);
-        setHrVaultLink(r.hrVault || null);
-      })
-      .catch(() => {
-        setFolderPaths([]);
-        setHrVaultLink(null);
-      });
+    api<{ folders: string[] }>(`/api/dms/${id}/folders`, { token })
+      .then((r) => setFolderPaths(r.folders || []))
+      .catch(() => setFolderPaths([]));
   }, [id, token]);
 
   useEffect(() => {
@@ -259,18 +228,6 @@ export default function DmsPage({
   }, [loadPending]);
 
   const breadcrumbs = useMemo(() => {
-    if (isHrVaultPath(path)) {
-      const rel = path === HR_VAULT_VIRTUAL_PREFIX ? "" : path.slice(HR_VAULT_VIRTUAL_PREFIX.length + 1);
-      const parts = rel ? rel.split("/").filter(Boolean) : [];
-      return [
-        { label: isDrawings ? "Design & Engineering" : isModule ? moduleTitle || "Module files" : "Project root", path: rootPrefix || "" },
-        { label: HR_VAULT_LABEL, path: HR_VAULT_VIRTUAL_PREFIX },
-        ...parts.map((_, i) => ({
-          label: parts[i].replace(/_/g, " "),
-          path: `${HR_VAULT_VIRTUAL_PREFIX}/${parts.slice(0, i + 1).join("/")}`,
-        })),
-      ];
-    }
     const rel = rootPrefix && path.startsWith(rootPrefix)
       ? path.slice(rootPrefix.length).replace(/^\//, "")
       : path;
@@ -333,12 +290,9 @@ export default function DmsPage({
     await load(path);
   }
 
-  const inHrVault = isHrVaultPath(path);
-  const canUploadHere = canUpload && !inHrVault;
-
   async function onUploadSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!id || !uploadFile || inHrVault) return;
+    if (!id || !uploadFile) return;
     setUploadBusy(true);
     setUploadErr("");
     try {
@@ -438,7 +392,7 @@ export default function DmsPage({
       void requestAccess(item);
       return;
     }
-    const url = fileUrl(data?.projectCode || "", item, path, data);
+    const url = fileUrl(data?.projectCode || "", item);
     setViewer({
       title: item.name,
       fileUrl: url,
@@ -523,7 +477,7 @@ export default function DmsPage({
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={isSharePoint ? "ok" : "warn"}>{isSharePoint ? "SharePoint" : "Local mock"}</Badge>
-            {canUploadHere && (
+            {canUpload && (
               <Button type="button" onClick={() => setUploadOpen(true)}>
                 Upload
               </Button>
@@ -531,7 +485,7 @@ export default function DmsPage({
             <Button type="button" variant="secondary" disabled={syncing} onClick={() => void fullSync()}>
               {syncing ? "Syncing…" : "Sync library"}
             </Button>
-            {canUploadHere && (
+            {canUpload && (
               <Button
                 type="button"
                 variant="secondary"
@@ -570,19 +524,9 @@ export default function DmsPage({
 
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {inHrVault && (
-        <Card className="!p-3 bg-brand-soft/30 border-brand/20 text-xs text-steel-muted flex flex-wrap items-center justify-between gap-2">
-          <span>
-            Company-wide HR vault on <span className="font-mono text-ink">_HR/06_HR_AND_ADMIN</span> — same folder on every
-            project. Upload appointment letters, PAN, payslips via{" "}
-            <Link to="/hrm/files" className="text-brand font-semibold underline">
-              HRMS → Employee files
-            </Link>
-            .
-          </span>
-          {data?.note ? <span className="text-[11px]">{data.note}</span> : null}
-        </Card>
-      )}
+      {!isDrawings && !isModule && data?.note ? (
+        <p className="text-xs text-steel-muted">{data.note}</p>
+      ) : null}
 
       <nav className="dms-breadcrumbs" aria-label="Folder path">
         {breadcrumbs.map((b, i) => (
@@ -619,18 +563,6 @@ export default function DmsPage({
                 📂 {isDrawings ? "Design & Engineering" : "Project root"}
               </button>
             </li>
-            {!isDrawings && !isModule && canBrowseHrVault && hrVaultLink ? (
-              <li>
-                <button
-                  type="button"
-                  className={`dms-tree__link w-full text-left ${path === HR_VAULT_VIRTUAL_PREFIX || inHrVault ? "dms-tree__link--active" : ""}`}
-                  onClick={() => setPath(HR_VAULT_VIRTUAL_PREFIX)}
-                  title="_HR/06_HR_AND_ADMIN"
-                >
-                  🏢 {hrVaultLink.label}
-                </button>
-              </li>
-            ) : null}
             {filteredTree.map((node) => (
               <li key={node.path}>
                 <button
@@ -692,7 +624,7 @@ export default function DmsPage({
                 ))}
                 {files.map((c) => {
                   const previewable = canPreviewInApp && (isPdf(c.name) || isImage(c.name));
-                  const url = fileUrl(data?.projectCode || "", c, path, data);
+                  const url = fileUrl(data?.projectCode || "", c);
                   const acc = fileAccess(c);
                   return (
                   <tr key={c.path} className="hover:bg-sand/50">

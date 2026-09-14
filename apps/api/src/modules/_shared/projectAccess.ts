@@ -22,7 +22,15 @@ export async function userCanAccessProject(req: AuthedRequest, projectId: string
       where: { projectId, vendorId: v.id },
       select: { id: true },
     });
-    return Boolean(raOnProject);
+    if (raOnProject) return true;
+    const bidSlot = await prisma.crmVendorBoq.findFirst({
+      where: {
+        OR: [{ vendorId: v.id }, { vendorLabel: v.name }],
+        bidPackage: { projectId, status: { in: ["Open", "Evaluation", "Awarded"] } },
+      },
+      select: { id: true },
+    });
+    return Boolean(bidSlot);
   }
   const member = await prisma.projectMember.findFirst({
     where: { projectId, userId: user.id },
