@@ -1,21 +1,19 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { PortalAccountFields } from "../components/PortalAccountFields";
 import { UserAccountEditModal, type UserAccountRow } from "../components/UserAccountEditModal";
 import { UserManageActions } from "../components/UserManageActions";
 import {
-  EMPTY_PORTAL_ACCOUNT_FORM,
   accountKindLabel,
+  badgeToneForKind,
+  kindForAccount,
   loginPathForAccount,
-  portalAccountKind,
-  roleFromAccountKind,
-  type PortalAccountForm,
   type PortalAccountKind,
 } from "../lib/portalAccounts";
+import { useConsultantTypes } from "../lib/consultantTypes";
 import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared";
-import { Badge, Button, Card, PageHero } from "../components/ui";
+import { Badge, Button, Card, Input, PageHero } from "../components/ui";
 import { WORKSPACES } from "../workspaces";
 import {
   downloadCsv,
@@ -33,16 +31,12 @@ export default function RolesPage() {
   const [selected, setSelected] = useState<string>("admin");
   const [msg, setMsg] = useState("");
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
-  const [userForm, setUserForm] = useState<PortalAccountForm>({
-    ...EMPTY_PORTAL_ACCOUNT_FORM,
-    role: "site_employee",
-    department: "Site",
-  });
-  const [userKind, setUserKind] = useState<PortalAccountKind>("staff");
-  const [busy, setBusy] = useState(false);
+  const [kindFilter, setKindFilter] = useState<"all" | PortalAccountKind>("all");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [userQ, setUserQ] = useState("");
+  const { types: consultantTypes } = useConsultantTypes(token);
 
   const canManage = user?.role === "admin" || user?.role === "office";
-  if (!canManage) return <Navigate to="/dashboard" replace />;
 
   const load = async () => {
     const [r, u] = await Promise.all([
@@ -54,8 +48,29 @@ export default function RolesPage() {
   };
 
   useEffect(() => {
+    if (!canManage) return;
     void load();
-  }, [token]);
+  }, [token, canManage]);
+
+  const shownUsers = useMemo(() => {
+    const needle = userQ.trim().toLowerCase();
+    return users.filter((u) => {
+      const kind = kindForAccount(u);
+      if (kindFilter !== "all" && kind !== kindFilter) return false;
+      if (kindFilter === "stakeholder" && typeFilter) {
+        const trade = u.profile?.department || u.vendor?.trade || "";
+        if (trade !== typeFilter) return false;
+      }
+      if (!needle) return true;
+      return [u.fullName, u.email, u.role, accountKindLabel(kind), u.profile?.department, u.vendor?.name, u.vendor?.trade]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [users, kindFilter, typeFilter, userQ]);
+
+  if (!canManage) return <Navigate to="/dashboard" replace />;
 
   const role = roles.find((r) => r.key === selected);
 
@@ -75,53 +90,21 @@ export default function RolesPage() {
     }
   }
 
-  async function createLoginUser(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMsg("");
-    try {
-      const role = roleFromAccountKind(userKind, userForm.role);
-      await api("/api/hrm/employees", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          fullName: userForm.fullName,
-          email: userForm.email,
-          role,
-          phone: userForm.phone,
-          password: userForm.password,
-          designation: userForm.designation,
-          department: userKind === "staff" || userKind === "stakeholder" ? userForm.department : undefined,
-          empCode: userKind === "staff" ? userForm.empCode : undefined,
-        }),
-      });
-      setMsg(`Login created for ${userForm.email} as ${accountKindLabel(userKind)} · ${loginPathForAccount(role, userKind)}`);
-      setUserForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "site_employee", department: "Site" });
-      setUserKind("staff");
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not create user");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <PageHero
         title="Access & users"
-        subtitle="Create portal logins, manage who can sign in, and allocate module permissions per role."
+        subtitle="Edit existing logins and the permission matrix. Create new people on the matching desk — staff in HRMS, everyone else in CRM."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link to="/hrm">
+            <Link to="/hrm/users">
               <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary">
-                HRMS directory
+                HRMS users
               </Button>
             </Link>
-            <Link to="/master">
+            <Link to="/crm/directory/clients">
               <Button type="button" className="!bg-[var(--color-mark)] !border-[var(--color-mark)]">
-                Master toggles →
+                CRM directories →
               </Button>
             </Link>
           </div>
@@ -132,23 +115,28 @@ export default function RolesPage() {
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="space-y-3">
-          <h2 className="font-display text-lg text-ink">Add user with login</h2>
+          <h2 className="font-display text-lg text-ink">Create a login</h2>
           <p className="text-sm text-steel-muted">
-            Creates an account that can sign in on the matching portal. Default password can be changed below.
+            One desk per party. This page does not create SPDC staff or external companies.
           </p>
-          <form className="space-y-3" onSubmit={createLoginUser}>
-            <PortalAccountFields
-              form={userForm}
-              onChange={setUserForm}
-              kind={userKind}
-              onKindChange={setUserKind}
-              allowAdminRole={user?.role === "admin"}
-              token={token}
-            />
-            <Button type="submit" disabled={busy}>
-              {busy ? "Creating…" : "Create user & login"}
-            </Button>
-          </form>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <Link to="/hrm/users" className="rounded-lg border border-line bg-sand/40 px-3 py-2.5 hover:border-brand">
+              <div className="text-sm font-semibold text-ink">SPDC staff</div>
+              <div className="text-[11px] text-steel-muted mt-0.5">HRMS → Users · /login/office or /login/site</div>
+            </Link>
+            <Link to="/crm/directory/clients" className="rounded-lg border border-line bg-sand/40 px-3 py-2.5 hover:border-brand">
+              <div className="text-sm font-semibold text-ink">Clients</div>
+              <div className="text-[11px] text-steel-muted mt-0.5">CRM → Clients · /login/client</div>
+            </Link>
+            <Link to="/crm/directory/stakeholders" className="rounded-lg border border-line bg-sand/40 px-3 py-2.5 hover:border-brand">
+              <div className="text-sm font-semibold text-ink">Consultants</div>
+              <div className="text-[11px] text-steel-muted mt-0.5">CRM → Consultants · /login/stakeholder</div>
+            </Link>
+            <Link to="/crm/directory/vendors" className="rounded-lg border border-line bg-sand/40 px-3 py-2.5 hover:border-brand">
+              <div className="text-sm font-semibold text-ink">Vendors / contractors</div>
+              <div className="text-[11px] text-steel-muted mt-0.5">CRM → Vendors · /login/vendor</div>
+            </Link>
+          </div>
           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
             <Button
               type="button"
@@ -169,20 +157,76 @@ export default function RolesPage() {
 
         <Card className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-display text-lg text-ink">Users & logins</h2>
-            <Badge tone="neutral">{users.length} accounts</Badge>
+            <h2 className="font-display text-lg text-ink">All portal logins</h2>
+            <Badge tone="neutral">{shownUsers.length}{userQ || kindFilter !== "all" ? ` / ${users.length}` : ""} accounts</Badge>
           </div>
+          <Input
+            className="!text-sm"
+            placeholder="Search name, email, company…"
+            value={userQ}
+            onChange={(e) => setUserQ(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-1">
+            {(["all", "staff", "client", "stakeholder", "vendor"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={`text-[11px] font-semibold rounded-full border px-2.5 py-1 ${
+                  kindFilter === k ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
+                }`}
+                onClick={() => {
+                  setKindFilter(k);
+                  if (k !== "stakeholder") setTypeFilter("");
+                }}
+              >
+                {k === "all" ? "All" : accountKindLabel(k)}
+              </button>
+            ))}
+          </div>
+          {kindFilter === "stakeholder" ? (
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className={`text-[11px] font-semibold rounded-full border px-2.5 py-1 ${
+                  !typeFilter ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
+                }`}
+                onClick={() => setTypeFilter("")}
+              >
+                All types
+              </button>
+              {consultantTypes.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`text-[11px] font-semibold rounded-full border px-2.5 py-1 ${
+                    typeFilter === t ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
+                  }`}
+                  onClick={() => setTypeFilter(typeFilter === t ? "" : t)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <ul className="divide-y divide-line max-h-[420px] overflow-y-auto text-sm">
-            {users.map((u) => (
+            {shownUsers.map((u) => {
+              const kind = kindForAccount(u);
+              const trade = u.profile?.department || u.vendor?.trade || "";
+              return (
               <li key={u.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-semibold text-ink truncate">{u.fullName}</div>
                   <div className="text-xs text-steel-muted truncate">
-                    {u.email} · {accountKindLabel(portalAccountKind(u.role, u.profile))} · {loginPathForAccount(u.role, portalAccountKind(u.role, u.profile))}
+                    {u.email} · {accountKindLabel(kind)}
+                    {kind === "stakeholder" && trade ? ` · ${trade}` : ""}
+                    {" · "}
+                    {loginPathForAccount(u.role, kind)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge tone={u.isActive !== false ? "ok" : "warn"}>{u.isActive !== false ? "Active" : "Off"}</Badge>
+                  <Badge tone={u.isActive === false ? "warn" : badgeToneForKind(kind)}>
+                    {u.isActive === false ? "Off" : accountKindLabel(kind)}
+                  </Badge>
                   <UserManageActions
                     user={u}
                     token={token}
@@ -194,8 +238,9 @@ export default function RolesPage() {
                   />
                 </div>
               </li>
-            ))}
-            {!users.length && <li className="py-6 text-steel-muted">No users yet.</li>}
+            );
+            })}
+            {!shownUsers.length && <li className="py-6 text-steel-muted">No users match this filter.</li>}
           </ul>
         </Card>
       </div>
@@ -205,6 +250,7 @@ export default function RolesPage() {
         user={editUser}
         token={token}
         isAdmin={user?.role === "admin"}
+        forceKind={editUser ? kindForAccount(editUser) : undefined}
         onClose={() => setEditUser(null)}
         onSaved={async () => {
           setMsg("User updated.");

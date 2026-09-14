@@ -1,9 +1,17 @@
-import { FormEvent, useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
-import { matchesSearch } from "./SearchableSelect";
+import { SearchableCheckboxList } from "./SearchableCheckboxList";
 
-export type AllocateUser = { id: string; fullName: string; email: string; role: string };
+const STAFF_ROLES = new Set(["admin", "office", "site_employee"]);
+
+export type AllocateUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  vendorId?: string | null;
+};
 export type AllocateMember = {
   id: string;
   userId?: string;
@@ -14,45 +22,61 @@ export type AllocateMember = {
 };
 
 type Props = {
-  projectId: string;
+  projectId?: string;
   token: string | null;
   users: AllocateUser[];
-  members: AllocateMember[];
+  members?: AllocateMember[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
   canEdit: boolean;
   onMsg: (text: string) => void;
-  onChanged: () => void;
+  onChanged?: () => void;
 };
 
-/** Assign existing SPDC logins (or create + assign) to a live project. */
-export function ProjectTeamAllocatePanel({ projectId, token, users, members, canEdit, onMsg, onChanged }: Props) {
+function isSpdcStaff(u: AllocateUser) {
+  if (STAFF_ROLES.has(u.role)) return true;
+  return u.role === "employee" && !u.vendorId;
+}
+
+/** Assign SPDC staff from HRMS Users only — no clients, consultants, or vendors. */
+export function ProjectTeamAllocatePanel({
+  projectId,
+  token,
+  users,
+  members = [],
+  selectedIds,
+  onChange,
+  canEdit,
+  onMsg,
+  onChanged,
+}: Props) {
   const [busy, setBusy] = useState(false);
-  const [memberUserIds, setMemberUserIds] = useState<string[]>([]);
   const [memberRole, setMemberRole] = useState("site_engineer");
   const [listQ, setListQ] = useState("");
-  const [userForm, setUserForm] = useState({
-    fullName: "",
-    email: "",
-    role: "site_employee",
-    phone: "",
-    password: "Demo@1234",
-  });
-  const shownMembers = members.filter((m) =>
-    matchesSearch(`${m.fullName} ${m.email} ${m.portalRole || ""} ${m.role}`, listQ)
+
+  const staff = useMemo(() => users.filter(isSpdcStaff), [users]);
+  const staffItems = useMemo(
+    () =>
+      staff.map((u) => ({
+        id: u.id,
+        label: u.fullName,
+        sublabel: u.role.replace("_", " "),
+        meta: u.email,
+      })),
+    [staff]
   );
 
-  async function assignExisting(e: FormEvent) {
-    e.preventDefault();
-    if (!token || !memberUserIds.length) return;
+  async function persist() {
+    if (!token || !projectId || !selectedIds.length) return;
     setBusy(true);
     try {
       await api(`/api/projects/${projectId}/members`, {
         method: "POST",
         token,
-        body: JSON.stringify({ userIds: memberUserIds, role: memberRole }),
+        body: JSON.stringify({ userIds: selectedIds, role: memberRole }),
       });
-      setMemberUserIds([]);
-      onMsg(`${memberUserIds.length} employee(s) assigned to this project.`);
-      onChanged();
+      onMsg(`${selectedIds.length} SPDC employee(s) assigned to this project.`);
+      onChanged?.();
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Assign failed");
     } finally {
@@ -60,116 +84,67 @@ export function ProjectTeamAllocatePanel({ projectId, token, users, members, can
     }
   }
 
-  async function createAndAssign(e: FormEvent) {
-    e.preventDefault();
-    if (!token) return;
-    if (!userForm.email.trim()) {
-      onMsg("Email is required for a portal login.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const created = await api<{ id: string }>("/api/hrm/employees", {
-        method: "POST",
-        token,
-        body: JSON.stringify(userForm),
-      });
-      await api("/api/hrm/assign", {
-        method: "POST",
-        token,
-        body: JSON.stringify({ projectId, userId: created.id, role: userForm.role }),
-      });
-      onMsg(`${userForm.fullName || userForm.email} created. Password: ${userForm.password || "Demo@1234"}`);
-      setUserForm({ fullName: "", email: "", role: "site_employee", phone: "", password: "Demo@1234" });
-      onChanged();
-    } catch (err) {
-      onMsg(err instanceof Error ? err.message : "Create user failed");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const assigned = members.filter((m) =>
+    `${m.fullName} ${m.email} ${m.portalRole || ""} ${m.role}`.toLowerCase().includes(listQ.trim().toLowerCase())
+  );
 
   return (
     <Card className="!p-4 space-y-3">
-      <h3 className="font-semibold text-sm">Allocate employees</h3>
+      <h3 className="font-semibold text-sm">SPDC employees</h3>
       <p className="text-xs text-steel-muted">
-        Assign the SPDC people already on the portal, or create a login. Email is required so they can sign in.
+        Only people from HRMS → Users. Clients, consultants, and vendors stay on the CRM lists above.
       </p>
       {members.length > 0 && (
-        <Input
-          placeholder="Search allocated people by name or email…"
-          value={listQ}
-          onChange={(e) => setListQ(e.target.value)}
-        />
-      )}
-      <ul className="text-sm divide-y divide-line max-h-48 overflow-y-auto">
-        {shownMembers.map((m) => (
-          <li key={m.id} className="py-1.5 flex justify-between gap-2">
-            <span>
-              <span className="font-medium">{m.fullName}</span>
-              <span className="block text-xs font-mono text-steel-muted">{m.email}</span>
-            </span>
-            <Badge tone="neutral">{m.portalRole || m.role}</Badge>
-          </li>
-        ))}
-        {!members.length && <li className="py-2 text-xs text-steel-muted">No people on this project yet.</li>}
-        {members.length > 0 && !shownMembers.length && (
-          <li className="py-2 text-xs text-steel-muted">No allocated person matches “{listQ}”.</li>
-        )}
-      </ul>
-      {canEdit && (
         <>
-          <form className="space-y-2 border-t border-line pt-3" onSubmit={assignExisting}>
-            <p className="text-xs text-steel-muted">Tick staff from the HRMS list (clients and vendors stay in CRM).</p>
-            <ul className="max-h-44 overflow-y-auto border border-line rounded-lg divide-y">
-              {users
-                .filter((u) => !members.some((m) => m.userId === u.id || m.email === u.email))
-                .map((u) => (
-                  <li key={u.id} className="px-3 py-1.5 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={memberUserIds.includes(u.id)}
-                      onChange={() =>
-                        setMemberUserIds((cur) =>
-                          cur.includes(u.id) ? cur.filter((id) => id !== u.id) : [...cur, u.id]
-                        )
-                      }
-                    />
-                    <span>
-                      <span className="font-medium">{u.fullName}</span>
-                      <span className="block text-[11px] font-mono text-steel-muted">{u.email}</span>
-                    </span>
-                  </li>
-                ))}
-            </ul>
-            <div className="flex flex-wrap gap-2 items-end">
-            <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-              <option value="project_manager">Project Manager</option>
-              <option value="site_engineer">Site Engineer</option>
-              <option value="quality_lead">Quality Lead</option>
-              <option value="member">Member</option>
-              <option value="viewer">Viewer</option>
-            </Select>
-            <Button type="submit" variant="secondary" disabled={busy || !memberUserIds.length}>
-              Assign selected ({memberUserIds.length})
-            </Button>
-            </div>
-          </form>
-          <form className="grid sm:grid-cols-2 gap-2 border-t border-line pt-3" onSubmit={createAndAssign}>
-            <p className="sm:col-span-2 text-[10px] uppercase tracking-wide text-steel-muted">Create login + assign</p>
-            <Input required placeholder="Full name" value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} />
-            <Input required type="email" placeholder="Email (required)" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} />
-            <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-              <option value="site_employee">Site employee</option>
-              <option value="office">Office</option>
-              <option value="employee">Employee</option>
-            </Select>
-            <Input placeholder="Phone" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
-            <Button type="submit" className="sm:col-span-2" disabled={busy}>
-              Create user + add to project
-            </Button>
-          </form>
+          <Input
+            placeholder="Search allocated staff…"
+            value={listQ}
+            onChange={(e) => setListQ(e.target.value)}
+          />
+          <ul className="text-sm divide-y divide-line max-h-36 overflow-y-auto">
+            {assigned.map((m) => (
+              <li key={m.id} className="py-1.5 flex justify-between gap-2">
+                <span>
+                  <span className="font-medium">{m.fullName}</span>
+                  <span className="block text-xs font-mono text-steel-muted">{m.email}</span>
+                </span>
+                <Badge tone="neutral">{m.portalRole || m.role}</Badge>
+              </li>
+            ))}
+            {!assigned.length && <li className="py-2 text-xs text-steel-muted">No match.</li>}
+          </ul>
         </>
+      )}
+      {canEdit && (
+        <div className="space-y-2 border-t border-line pt-3">
+          <SearchableCheckboxList
+            items={staffItems}
+            selectedIds={selectedIds}
+            onChange={onChange}
+            placeholder="Search SPDC staff by name or email…"
+            emptyMessage="No SPDC staff in HRMS → Users yet."
+            maxHeightClass="max-h-48"
+          />
+          {projectId ? (
+            <div className="flex flex-wrap gap-2 items-end">
+              <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                <option value="project_manager">Project Manager</option>
+                <option value="site_engineer">Site Engineer</option>
+                <option value="quality_lead">Quality Lead</option>
+                <option value="member">Member</option>
+              </Select>
+              <Button type="button" variant="secondary" disabled={busy || !selectedIds.length} onClick={() => void persist()}>
+                Assign selected ({selectedIds.length})
+              </Button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-steel-muted">
+              {selectedIds.length
+                ? `${selectedIds.length} staff selected — they save with the project card.`
+                : "Tick staff now; they save with the project card."}
+            </p>
+          )}
+        </div>
       )}
     </Card>
   );

@@ -17,6 +17,8 @@ export type UserAccountRow = {
   role: string;
   portal?: string | null;
   phone?: string | null;
+  vendorId?: string | null;
+  vendor?: { id: string; name: string; trade?: string | null; partyType?: string | null } | null;
   isActive?: boolean;
   profile?: { empCode?: string; department?: string | null; designation?: string | null } | null;
   memberships?: { id: string; project: { id: string; code: string; name: string }; role?: string }[];
@@ -65,7 +67,7 @@ export function UserAccountEditModal({
 
   useEffect(() => {
     if (!user) return;
-    const nextKind = forceKind || portalAccountKind(user.role, user.profile);
+    const nextKind = forceKind || portalAccountKind(user.role, user.profile, user.vendorId);
     setKind(nextKind);
     setForm(formFromUser(user));
     setErr("");
@@ -170,6 +172,7 @@ export function UserAccountEditModal({
           showActive
           passwordOptional
           token={token}
+          externalOnly={forceKind === "client" || forceKind === "vendor" || forceKind === "stakeholder"}
         />
 
         {user.memberships?.length ? (

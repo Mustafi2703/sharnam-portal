@@ -22,6 +22,8 @@ import ReportsPage from "./pages/ReportsPage";
 import AuditPage from "./pages/AuditPage";
 import RolesPage from "./pages/RolesPage";
 import CrmLayout from "./pages/crm/CrmLayout";
+import CrmProtected from "./pages/crm/CrmProtected";
+import { homePathForUser } from "./lib/portalAccounts";
 import CrmPage from "./pages/CrmPage";
 import CrmBidComparePage from "./pages/CrmBidComparePage";
 import CrmVendorBidsPage from "./pages/CrmVendorBidsPage";
@@ -73,6 +75,7 @@ import CrmDirectoryPage from "./pages/crm/CrmDirectoryPage";
 import CrmHubPage from "./pages/crm/CrmHubPage";
 import CrmProjectSetupPage from "./pages/crm/CrmProjectSetupPage";
 import CrmProjectsPage from "./pages/crm/CrmProjectsPage";
+import CrmPackagesPage from "./pages/crm/CrmPackagesPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 import TrainingPage from "./pages/TrainingPage";
 import { SiteAttendanceGate } from "./components/SiteAttendanceGate";
@@ -98,9 +101,7 @@ function OfficeDeskGate({ children }: { children: React.ReactNode }) {
 
 function HomeRedirect() {
   const { user } = useAuth();
-  if (user?.hrDeskOnly) return <Navigate to="/hrm" replace />;
-  if (user?.role === "site_employee") return <Navigate to="/attendance" replace />;
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to={homePathForUser(user)} replace />;
 }
 
 function RedirectCrmQuotation() {
@@ -138,6 +139,7 @@ export default function App() {
       <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
       <Route path="/login/hr" element={<PortalLoginPage portalKey="hr" />} />
       <Route path="/login/stakeholder" element={<PortalLoginPage portalKey="stakeholder" />} />
+      <Route path="/login/employee" element={<Navigate to="/login/stakeholder" replace />} />
       <Route path="/login/:portalKey" element={<DynamicPortalLoginRoute />} />
 
       <Route
@@ -190,9 +192,12 @@ export default function App() {
           <Route path="masters" element={<HrmsMastersPage />} />
           <Route path="activity" element={<HrmsActivityPage />} />
           <Route path="users" element={<HrmsUsersPage />} />
-          <Route path="vendors" element={<Navigate to="/crm/directory/vendors" replace />} />
+          <Route path="vendors" element={<Navigate to="/hrm/users" replace />} />
         </Route>
       </Route>
+
+      <Route path="/hrms" element={<Navigate to="/hrm" replace />} />
+      <Route path="/hrms/*" element={<Navigate to="/hrm" replace />} />
 
       <Route
         path="/*"
@@ -287,7 +292,7 @@ export default function App() {
                 </Route>
                 <Route path="/audit" element={<AuditPage />} />
                 <Route path="/roles" element={<RolesPage />} />
-                <Route path="/crm" element={<CrmLayout />}>
+                <Route path="/crm" element={<CrmProtected><CrmLayout /></CrmProtected>}>
                   <Route index element={<CrmHubPage />} />
                   <Route path="setup" element={<CrmProjectSetupPage />} />
                   <Route path="leads" element={<CrmPage />} />
@@ -295,8 +300,10 @@ export default function App() {
                   <Route path="proposals/:id" element={<QuotationMakerPage />} />
                   <Route path="proposals" element={<CrmPage />} />
                   <Route path="projects" element={<CrmProjectsPage />} />
+                  <Route path="packages" element={<CrmPackagesPage />} />
+                  <Route path="directory/people" element={<Navigate to="/roles" replace />} />
                   <Route path="directory/:tab" element={<CrmDirectoryPage />} />
-                  <Route path="directory" element={<Navigate to="/crm/directory/vendors" replace />} />
+                  <Route path="directory" element={<Navigate to="/crm/directory/clients" replace />} />
                   <Route path="bids" element={<CrmBidComparePage />} />
                   <Route path="bids/:id" element={<CrmBidComparePage />} />
                   <Route path="vendor-bids" element={<CrmVendorBidsPage />} />

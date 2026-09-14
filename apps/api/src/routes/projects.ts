@@ -475,9 +475,12 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       clientGst: clientGst ? String(clientGst).trim() : null,
       designConsultant: designConsultant ? String(designConsultant).trim() : null,
       contractorName: contractorName ? String(contractorName).trim() : null,
-      pmcName: pmcName ? String(pmcName).trim() : "SPDC",
+        pmcName: pmcName ? String(pmcName).trim() : "SPDC",
       startDate: startDate ? new Date(String(startDate)) : null,
       endDate: endDate ? new Date(String(endDate)) : null,
+      workPackages: Array.isArray(req.body.workPackages)
+        ? JSON.stringify((req.body.workPackages as unknown[]).map(String).filter(Boolean))
+        : undefined,
     });
     project = out.project;
     created = out.created;
@@ -489,21 +492,44 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   }
 
   try {
-    const memberIds: string[] = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
-    for (const userId of memberIds) {
-      await prisma.projectMember.upsert({
-        where: { projectId_userId: { projectId: project.id, userId } },
-        create: { projectId: project.id, userId, role: "member" },
-        update: {},
+    const memberIds: string[] = Array.isArray(req.body.memberIds)
+      ? [...new Set((req.body.memberIds as unknown[]).map((id) => String(id).trim()).filter(Boolean))]
+      : [];
+    if (memberIds.length) {
+      const staff = await prisma.user.findMany({
+        where: {
+          id: { in: memberIds },
+          OR: [
+            { role: { in: ["admin", "office", "site_employee"] } },
+            { role: "employee", vendorId: null },
+          ],
+        },
+        select: { id: true },
       });
+      const ok = new Set(staff.map((u) => u.id));
+      for (const userId of memberIds) {
+        if (!ok.has(userId)) continue;
+        await prisma.projectMember.upsert({
+          where: { projectId_userId: { projectId: project.id, userId } },
+          create: { projectId: project.id, userId, role: "member" },
+          update: {},
+        });
+      }
     }
-    const vendorIds: string[] = Array.isArray(req.body.vendorIds) ? req.body.vendorIds : [];
-    for (const vendorId of vendorIds) {
-      await prisma.projectVendor.upsert({
-        where: { projectId_vendorId: { projectId: project.id, vendorId } },
-        create: { projectId: project.id, vendorId, assignedVia: "Project setup" },
-        update: {},
-      });
+    const vendorIds: string[] = Array.isArray(req.body.vendorIds)
+      ? [...new Set((req.body.vendorIds as unknown[]).map((id) => String(id).trim()).filter(Boolean))]
+      : [];
+    if (vendorIds.length) {
+      const existingVendors = await prisma.vendor.findMany({ where: { id: { in: vendorIds } }, select: { id: true } });
+      const ok = new Set(existingVendors.map((v) => v.id));
+      for (const vendorId of vendorIds) {
+        if (!ok.has(vendorId)) continue;
+        await prisma.projectVendor.upsert({
+          where: { projectId_vendorId: { projectId: project.id, vendorId } },
+          create: { projectId: project.id, vendorId, assignedVia: "Project setup" },
+          update: {},
+        });
+      }
     }
     await prisma.projectMember.upsert({
       where: { projectId_userId: { projectId: project.id, userId: req.user!.id } },
@@ -511,15 +537,6 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       update: {},
     });
     await mockOneDrive.ensureProjectTree(project.id);
-    if (project.clientEmail) {
-      const { provisionProjectClientEmail } = await import("../services/crmVendorCredentials.js");
-      await provisionProjectClientEmail({
-        projectId: project.id,
-        email: project.clientEmail,
-        name: project.clientContactName || project.clientName || project.name,
-        phone: project.clientPhone,
-      });
-    }
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
@@ -700,13 +717,29 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
   const projectId = req.params.id;
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
-  const vendorIds: string[] = Array.isArray(req.body?.vendorIds) ? req.body.vendorIds.map(String) : [];
+  const vendorIds: string[] = Array.isArray(req.body?.vendorIds)
+    ? [...new Set((req.body.vendorIds as unknown[]).map((id) => String(id).trim()).filter(Boolean))]
+    : [];
 
-  for (const vendorId of vendorIds) {
-    await prisma.projectVendor.upsert({
-      where: { projectId_vendorId: { projectId, vendorId } },
-      create: { projectId, vendorId, assignedVia: "Project setup" },
-      update: {},
+  try {
+    const existing = vendorIds.length
+      ? await prisma.vendor.findMany({ where: { id: { in: vendorIds } }, select: { id: true } })
+      : [];
+    const ok = new Set(existing.map((v) => v.id));
+    for (const vendorId of vendorIds) {
+      if (!ok.has(vendorId)) continue;
+      await prisma.projectVendor.upsert({
+        where: { projectId_vendorId: { projectId, vendorId } },
+        create: { projectId, vendorId, assignedVia: "Project setup" },
+        update: {},
+      });
+    }
+  } catch (err) {
+    return res.status(400).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : "Could not attach companies. Re-pick the client, consultants, and vendors from the CRM lists, then save again.",
     });
   }
 
@@ -876,7 +909,20 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     pmcName,
     startDate,
     endDate,
+    workPackages,
   } = req.body;
+  const PROJECT_STATUSES = ["Planning", "In Progress", "On Hold", "Completed"];
+  if (status !== undefined && status !== null && String(status).trim()) {
+    if (!PROJECT_STATUSES.includes(String(status))) {
+      return res.status(400).json({ error: "Status must be Planning, In Progress, On Hold, or Completed." });
+    }
+  }
+  const dateOrNull = (v: unknown) => {
+    if (v === undefined) return undefined;
+    if (!v) return null;
+    const d = new Date(String(v));
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
   let project;
   try {
     project = await prisma.project.update({
@@ -909,27 +955,17 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
         designConsultant: designConsultant !== undefined ? designConsultant : undefined,
         contractorName: contractorName !== undefined ? contractorName : undefined,
         pmcName: pmcName !== undefined ? pmcName : undefined,
-        startDate: startDate !== undefined ? (startDate ? new Date(String(startDate)) : null) : undefined,
-        endDate: endDate !== undefined ? (endDate ? new Date(String(endDate)) : null) : undefined,
+        startDate: dateOrNull(startDate),
+        endDate: dateOrNull(endDate),
+        workPackages: Array.isArray(workPackages)
+          ? JSON.stringify((workPackages as unknown[]).map(String).filter(Boolean))
+          : undefined,
       },
     });
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save project card" });
   }
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
-  if (project.clientEmail) {
-    try {
-      const { provisionProjectClientEmail } = await import("../services/crmVendorCredentials.js");
-      await provisionProjectClientEmail({
-        projectId: project.id,
-        email: project.clientEmail,
-        name: project.clientContactName || project.clientName || project.name,
-        phone: project.clientPhone,
-      });
-    } catch (err) {
-      console.warn("Client portal from project card failed:", err instanceof Error ? err.message : err);
-    }
-  }
   res.json(project);
 });
 
@@ -1050,8 +1086,23 @@ projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req:
     ...(req.body?.userId ? [req.body.userId] : []),
   ].map((id: unknown) => String(id).trim()).filter(Boolean);
   if (!ids.length) return res.status(400).json({ error: "Select at least one employee from the list." });
+  const staff = await prisma.user.findMany({
+    where: {
+      id: { in: ids },
+      OR: [
+        { role: { in: ["admin", "office", "site_employee"] } },
+        { role: "employee", vendorId: null },
+      ],
+    },
+    select: { id: true },
+  });
+  const ok = new Set(staff.map((u) => u.id));
+  const allowed = ids.filter((id) => ok.has(id));
+  if (!allowed.length) {
+    return res.status(400).json({ error: "Assign SPDC staff from HRMS Users only — not clients, consultants, or vendors." });
+  }
   const members = [];
-  for (const userId of ids) {
+  for (const userId of allowed) {
     members.push(
       await prisma.projectMember.upsert({
         where: { projectId_userId: { projectId: req.params.id, userId } },

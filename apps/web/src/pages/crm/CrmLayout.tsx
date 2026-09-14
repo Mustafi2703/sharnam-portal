@@ -1,5 +1,5 @@
 import { Fragment, type CSSProperties, type MouseEvent } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth";
 import { Button } from "../../components/ui";
 import { closeToolWindowOrGo, isToolWindow, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
@@ -26,15 +26,19 @@ function openCrmTool(e: MouseEvent, href: string, label: string, inWin: boolean)
 /** CRM module shell — Procore-style chrome matching project tool workspaces. */
 export default function CrmLayout() {
   const loc = useLocation();
+  const [params] = useSearchParams();
   const { user } = useAuth();
   const isVendor = user?.role === "vendor";
   const tools = isVendor ? CRM_VENDOR_TOOLS : CRM_TOOLS;
   const inWin = isToolWindow(loc.search);
   const onHub = loc.pathname === "/crm" || loc.pathname === "/crm/";
+  const vendorDesk = params.get("desk") || "";
 
-  const activeTool = CRM_TOOLS.find((t) =>
-    toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup")
-  );
+  const activeTool = isVendor
+    ? CRM_VENDOR_TOOLS.find((t) => loc.pathname.startsWith("/crm/vendor-bids") && vendorDesk === (t.desk || ""))
+    : CRM_TOOLS.find((t) =>
+        toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup" || t.to === "packages")
+      );
 
   const onBids = loc.pathname.startsWith("/crm/bids");
   const onSetup = loc.pathname.startsWith("/crm/setup");
@@ -111,16 +115,16 @@ export default function CrmLayout() {
           <div className="flex gap-1.5 overflow-x-auto scrollbars-visible items-center">
             {isVendor ? (
               tools.map((t) => {
-                const to = `/crm/${t.to}`;
+                const desk = "desk" in t ? t.desk : undefined;
+                const to = desk ? `/crm/vendor-bids?desk=${desk}` : "/crm/vendor-bids";
+                const active = loc.pathname.startsWith("/crm/vendor-bids") && vendorDesk === (desk || "");
                 return (
                   <NavLink
-                    key={t.to}
+                    key={`${t.to}:${desk || "bids"}`}
                     to={inWin ? withToolWindowParam(to, true) : to}
-                    end={"end" in t ? t.end : false}
-                    className={({ isActive }) => tabClass(isActive)}
-                    style={({ isActive }) =>
-                      isActive ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined
-                    }
+                    end={!desk}
+                    className={() => tabClass(active)}
+                    style={active ? { background: CRM_ACCENT, borderColor: CRM_ACCENT } : undefined}
                     onClick={(e) => openCrmTool(e, to, t.label, inWin)}
                   >
                     {t.label}

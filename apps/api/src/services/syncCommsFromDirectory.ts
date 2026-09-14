@@ -7,6 +7,10 @@ import { prisma } from "../prisma.js";
 const KINDS = ["TECHNICAL", "COMMERCIAL"] as const;
 const PMC_ORG = "Sharnam Project Development Consultants & Co.";
 
+function pmcOrgName(project: { pmcName?: string | null }) {
+  return (project.pmcName || "").trim() || PMC_ORG;
+}
+
 type OrgSection = "Client" | "PMC" | "Consultant" | "Contractor" | "Other";
 
 function partyToSection(partyType: string): OrgSection {
@@ -93,9 +97,23 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     });
   }
 
+  if (project.clientName && !project.clientContactName && !project.clientEmail) {
+    people.push({
+      orgSection: "Client",
+      orgName: project.clientName,
+      personName: project.clientName,
+      designation: "Client",
+      company: project.clientName,
+      mobile: project.clientPhone || "",
+      email: "",
+      mailRole: "TO",
+      officeAddress: project.clientAddress || "",
+    });
+  }
+
   for (const m of members) {
     const orgSection = memberToSection(m.role, m.user.role);
-    const orgName = orgSection === "PMC" ? PMC_ORG : orgSection === "Client" ? project.clientName || "Client" : m.user.fullName;
+    const orgName = orgSection === "PMC" ? pmcOrgName(project) : orgSection === "Client" ? project.clientName || "Client" : m.user.fullName;
     people.push({
       orgSection,
       orgName,
@@ -122,6 +140,55 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       email: v.email || "",
       mailRole: orgSection === "Client" ? "TO" : "CC",
       officeAddress: [v.address, v.city, v.state].filter(Boolean).join(", "),
+    });
+  }
+
+  const hasName = (section: OrgSection, name?: string | null) => {
+    const n = String(name || "").trim().toLowerCase();
+    if (!n) return true;
+    return people.some((p) => p.orgSection === section && p.company.trim().toLowerCase() === n);
+  };
+
+  if (project.designConsultant && !hasName("Consultant", project.designConsultant)) {
+    people.push({
+      orgSection: "Consultant",
+      orgName: project.designConsultant,
+      personName: project.designConsultant,
+      designation: "Design consultant",
+      company: project.designConsultant,
+      mobile: "",
+      email: "",
+      mailRole: "CC",
+      officeAddress: "",
+    });
+  }
+
+  if (project.contractorName && !hasName("Contractor", project.contractorName)) {
+    people.push({
+      orgSection: "Contractor",
+      orgName: project.contractorName,
+      personName: project.contractorName,
+      designation: "Main contractor",
+      company: project.contractorName,
+      mobile: "",
+      email: "",
+      mailRole: "CC",
+      officeAddress: "",
+    });
+  }
+
+  if (!people.some((p) => p.orgSection === "PMC")) {
+    const pmcName = pmcOrgName(project);
+    people.push({
+      orgSection: "PMC",
+      orgName: pmcName,
+      personName: pmcName,
+      designation: "PMC",
+      company: pmcName,
+      mobile: "",
+      email: "",
+      mailRole: "CC",
+      officeAddress: "",
     });
   }
 
@@ -158,10 +225,19 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       if (!sections.has(section)) continue;
       const orgName =
         section === "PMC"
-          ? PMC_ORG
+          ? pmcOrgName(project)
           : section === "Client"
             ? project.clientName || "Client"
-            : uniquePeople.find((p) => p.orgSection === section)?.orgName || section;
+            : section === "Consultant"
+              ? project.designConsultant || uniquePeople.find((p) => p.orgSection === section)?.orgName || section
+              : section === "Contractor"
+                ? project.contractorName || uniquePeople.find((p) => p.orgSection === section)?.orgName || section
+                : uniquePeople.find((p) => p.orgSection === section)?.orgName || section;
+      const header = existing.find((r) => r.isSectionHeader && r.orgSection === section);
+      if (header && header.orgName !== orgName) {
+        await prisma.communicationContact.update({ where: { id: header.id }, data: { orgName } });
+        result.headers += 1;
+      }
       const headerKey = `${section}|${orgName}`.toLowerCase();
       if (!existingHeaders.has(headerKey) && !existing.some((r) => r.isSectionHeader && r.orgSection === section)) {
         maxSort = Math.max(maxSort, sectionBase(section));
@@ -231,7 +307,7 @@ export async function ensureMatrixScaffold(projectId: string) {
   let created = 0;
   const names: Record<OrgSection, string> = {
     Client: project.clientName || "Client",
-    PMC: PMC_ORG,
+    PMC: pmcOrgName(project),
     Consultant: project.designConsultant || "Consultant",
     Contractor: project.contractorName || "Contractor",
     Other: "Other",

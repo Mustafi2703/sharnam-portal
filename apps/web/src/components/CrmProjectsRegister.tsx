@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CrmDetailLines, CrmDetailPanel } from "./crm/CrmDetailPanel";
 import { RegisterEmptyRow, RegisterSheetFrame } from "./RegisterSheetFrame";
 import { Badge, Button, Input, Select } from "./ui";
+import { PROJECT_STATUSES, projectStatusHint } from "../lib/projectStatus";
 
 export type CrmProjectRow = {
   id: string;
@@ -36,7 +37,7 @@ function projectDetailLines(p: CrmProjectRow) {
   return [
     { label: "Project code", value: p.code, mono: true },
     { label: "Project name", value: p.name },
-    { label: "Status", value: p.status || "—" },
+    { label: "Status", value: p.status || "Planning" },
     { label: "Client", value: p.clientName || "—" },
     { label: "Contact", value: p.clientContactName || "—" },
     { label: "Email", value: p.clientEmail || "—" },
@@ -76,7 +77,7 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
   };
 
   const statusOptions = useMemo(
-    () => [...new Set(projects.map((p) => p.status).filter(Boolean))].sort() as string[],
+    () => [...new Set([...PROJECT_STATUSES, ...projects.map((p) => p.status).filter(Boolean)])] as string[],
     [projects],
   );
 
@@ -166,7 +167,9 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                     <span className="line-clamp-2">{p.contractorName || "—"}</span>
                   </td>
                   <td>
-                    <Badge>{p.status || "—"}</Badge>
+                    <Badge tone={p.status === "In Progress" ? "ok" : p.status === "Planning" || !p.status ? "warn" : "neutral"}>
+                      {p.status || "Planning"}
+                    </Badge>
                   </td>
                   <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-2">
@@ -184,9 +187,15 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                           Delete
                         </Button>
                       ) : null}
-                      <Link to={`/crm/setup?projectId=${p.id}&step=matrix`} className="text-[10px] font-semibold text-brand">
-                        Setup →
-                      </Link>
+                      {!p.status || p.status === "Planning" ? (
+                        <Link to={`/crm/setup?projectId=${p.id}&step=project`} className="text-[10px] font-semibold text-brand">
+                          Continue setup
+                        </Link>
+                      ) : (
+                        <Link to={`/projects/${p.id}`} className="text-[10px] font-semibold text-brand">
+                          Open desk
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -203,20 +212,22 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                 <h3 className="font-display text-lg leading-snug">{selected.name}</h3>
                 {selected.status && (
                   <span className="inline-block mt-1">
-                    <Badge>{selected.status}</Badge>
+                    <Badge tone={selected.status === "In Progress" ? "ok" : selected.status === "Planning" ? "warn" : "neutral"}>
+                      {selected.status}
+                    </Badge>
                   </span>
                 )}
+                <p className="text-[11px] text-steel-muted mt-1">{projectStatusHint(selected.status)}</p>
               </div>
               <CrmDetailLines lines={projectDetailLines(selected)} />
               <div className="flex flex-col gap-2 border-t border-line pt-3">
-                <Link to={`/crm/setup?projectId=${selected.id}&step=matrix`} className="text-sm font-semibold text-brand">
-                  Project setup (parties · comms · portals) →
-                </Link>
+                {(!selected.status || selected.status === "Planning") ? (
+                  <Link to={`/crm/setup?projectId=${selected.id}&step=project`} className="text-sm font-semibold text-brand">
+                    Continue setup (parties · staff) →
+                  </Link>
+                ) : null}
                 <Link to={`/projects/${selected.id}`} className="text-sm font-semibold text-brand">
                   Open project tools →
-                </Link>
-                <Link to="/master" className="text-xs font-semibold text-brand">
-                  Master setup (directory · modules) →
                 </Link>
                 {canWrite && (onEdit || onDelete) ? (
                   <div className="flex flex-wrap gap-2">

@@ -1,8 +1,5 @@
-import { useState } from "react";
-import { api } from "../api";
+import { Link } from "react-router-dom";
 import { useConsultantTypes } from "../lib/consultantTypes";
-import { ConsultantTypeSelect } from "./ConsultantTypesPanel";
-import { Button, Input } from "./ui";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
 
 export type SetupVendor = {
@@ -14,7 +11,7 @@ export type SetupVendor = {
   primaryContactName?: string | null;
 };
 
-type QuickKind = "Consultant" | "Contractor";
+type QuickKind = "Consultant" | "Contractor" | "PMC";
 
 type Props = {
   token: string | null;
@@ -23,14 +20,27 @@ type Props = {
   vendors: SetupVendor[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
-  onCreated: (vendor: SetupVendor) => void;
-  onMsg: (text: string) => void;
+  onCreated?: (vendor: SetupVendor) => void;
+  onMsg?: (text: string) => void;
   busy?: boolean;
+  directoryHref: string;
+  directoryLabel: string;
 };
 
-const EMPTY = { name: "", contact: "", email: "", phone: "", trade: "" };
+function matchesKind(v: SetupVendor, kind: QuickKind) {
+  const t = v.partyType || "";
+  if (kind === "PMC") return t === "PMC";
+  if (kind === "Consultant") return t === "Consultant" || t === "Designer";
+  return t === "Contractor" || t === "Vendor";
+}
 
-/** Multi-select from directory plus quick-create of another company in the same flow. */
+function noun(kind: QuickKind) {
+  if (kind === "PMC") return "PMC firms";
+  if (kind === "Consultant") return "consultants";
+  return "vendors / contractors";
+}
+
+/** Tick companies from the CRM directory. New companies are added on the directory pages, not here. */
 export function SetupPartyMultiPick({
   token,
   title,
@@ -38,100 +48,37 @@ export function SetupPartyMultiPick({
   vendors,
   selectedIds,
   onChange,
-  onCreated,
-  onMsg,
-  busy,
+  directoryHref,
+  directoryLabel,
 }: Props) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY);
-  const [saving, setSaving] = useState(false);
-  const { types } = useConsultantTypes(token);
-
-  async function addNew() {
-    if (!token) return;
-    if (!form.name.trim()) {
-      onMsg("Company name required");
-      return;
-    }
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      onMsg("Email looks invalid — leave it blank if they do not need a login yet.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const created = await api<SetupVendor>("/api/vendors", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          name: form.name,
-          partyType: kind,
-          primaryContactName: form.contact,
-          email: form.email,
-          businessPhone: form.phone,
-          trade: form.trade,
-        }),
-      });
-      onCreated(created);
-      onChange([...selectedIds, created.id]);
-      setForm(EMPTY);
-      setOpen(false);
-      onMsg(`${created.name} added to ${kind === "Consultant" ? "consultants" : "vendors / contractors"} and selected.`);
-    } catch (err) {
-      onMsg(err instanceof Error ? err.message : "Could not add company");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const items = vendors
-    .filter((v) => (kind === "Consultant" ? ["Consultant", "Designer", "PMC"].includes(v.partyType || "") : ["Contractor", "Vendor"].includes(v.partyType || "Vendor")))
-    .map((v) => ({
-      id: v.id,
-      label: v.name,
-      sublabel: v.primaryContactName || v.trade || undefined,
-      meta: v.email || undefined,
-      trade: v.trade,
-    }));
+  const { types } = useConsultantTypes(kind === "Consultant" ? token : null);
+  const items = vendors.filter((v) => matchesKind(v, kind)).map((v) => ({
+    id: v.id,
+    label: v.name,
+    sublabel: v.primaryContactName || v.trade || undefined,
+    meta: v.email || undefined,
+    trade: v.trade,
+  }));
 
   return (
     <div className="space-y-2 border border-line rounded-xl p-3">
       <div className="flex items-center justify-between gap-2">
         <h4 className="font-semibold text-sm">{title}</h4>
-        <Button type="button" variant="secondary" className="!text-xs" disabled={busy || saving} onClick={() => setOpen((v) => !v)}>
-          {open ? "Cancel" : `Add new ${kind === "Consultant" ? "consultant" : "vendor / contractor"}`}
-        </Button>
+        <Link to={directoryHref} className="text-[11px] font-semibold text-brand">
+          {directoryLabel}
+        </Link>
       </div>
+      {kind === "Consultant" && types.length ? (
+        <p className="text-[11px] text-steel-muted">Tick from the consultant directory. Add a new firm on Consultants.</p>
+      ) : null}
       <SearchableCheckboxList
         items={items}
         selectedIds={selectedIds}
         onChange={onChange}
-        placeholder={`Search ${kind === "Consultant" ? "consultants" : "vendors / contractors"}…`}
-        emptyMessage={`No ${kind === "Consultant" ? "consultants" : "vendors / contractors"} in the directory yet — add one below.`}
+        placeholder={`Search ${noun(kind)}…`}
+        emptyMessage={`No ${noun(kind)} in the directory yet. Add them on ${directoryLabel.replace(" →", "")}.`}
         maxHeightClass="max-h-40"
       />
-      {open && (
-        <div className="grid sm:grid-cols-2 gap-2 border-t border-line pt-2">
-          <Input placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input placeholder="Contact person" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
-          <Input type="email" placeholder="Email (optional — only if they need a login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input placeholder="Phone (contact — optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          {kind === "Consultant" ? (
-            <div className="sm:col-span-2">
-              <ConsultantTypeSelect value={form.trade} onChange={(trade) => setForm({ ...form, trade })} types={types} />
-            </div>
-          ) : (
-            <Input
-              className="sm:col-span-2"
-              placeholder="Trade — civil, PEB, electrical…"
-              value={form.trade}
-              onChange={(e) => setForm({ ...form, trade: e.target.value })}
-            />
-          )}
-          <Button type="button" className="sm:col-span-2" disabled={saving || busy} onClick={() => void addNew()}>
-            {saving ? "Adding…" : `Add ${kind === "Consultant" ? "consultant" : "vendor / contractor"} to this project`}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

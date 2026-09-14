@@ -23,7 +23,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 const STAFF_ROLES = [
   { value: "office", label: "SPDC office — /login/office" },
   { value: "site_employee", label: "SPDC site — /login/site" },
-  { value: "employee", label: "SPDC employee — /login/employee" },
+  { value: "employee", label: "SPDC employee — /login/office" },
   { value: "admin", label: "Admin — /login/office" },
 ] as const;
 
@@ -195,6 +195,7 @@ export function PortalAccountFields({
             type="password"
             value={form.password}
             onChange={(ev) => onChange({ ...form, password: ev.target.value })}
+            autoComplete={passwordOptional ? "new-password" : "new-password"}
             placeholder={passwordOptional ? "Leave blank to keep current" : "Demo@1234"}
           />
         </Field>

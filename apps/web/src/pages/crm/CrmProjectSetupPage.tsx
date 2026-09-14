@@ -1,14 +1,15 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
-import { SetupPartyMultiPick, type SetupVendor } from "../../components/SetupPartyMultiPick";
+import { SetupPartyMultiPick } from "../../components/SetupPartyMultiPick";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
+import { projectStatusHint } from "../../lib/projectStatus";
 
 type ProjectRow = {
   id: string;
@@ -21,7 +22,7 @@ type ProjectRow = {
   alreadyExists?: boolean;
 };
 
-type UserRow = { id: string; fullName: string; email: string; role: string; phone?: string | null };
+type UserRow = { id: string; fullName: string; email: string; role: string; phone?: string | null; vendorId?: string | null };
 type VendorRow = {
   id: string;
   name: string;
@@ -107,13 +108,14 @@ function dayField(v?: string | null) {
 }
 
 const STEPS: { id: Step; n: string; label: string }[] = [
-  { id: "project", n: "1", label: "Card · packages · people" },
+  { id: "project", n: "1", label: "Card · parties · staff" },
   { id: "matrix", n: "2", label: "Communication matrix" },
   { id: "launch", n: "3", label: "Launch" },
 ];
 
 export default function CrmProjectSetupPage() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const projectId = params.get("projectId") || "";
   const step = (["project", "matrix", "launch"].includes(params.get("step") || "") ? params.get("step") : "project") as Step;
@@ -130,8 +132,10 @@ export default function CrmProjectSetupPage() {
   const [details, setDetails] = useState(EMPTY_PROJECT);
   const [consultantIds, setConsultantIds] = useState<string[]>([]);
   const [contractorIds, setContractorIds] = useState<string[]>([]);
+  const [pmcIds, setPmcIds] = useState<string[]>([]);
   const [clientId, setClientId] = useState("");
-  const [_projectPackages, setProjectPackages] = useState<string[]>([]);
+  const [projectPackages, setProjectPackages] = useState<string[]>([]);
+  const [staffIds, setStaffIds] = useState<string[]>([]);
 
   const setStep = (next: Step, id = projectId) => {
     const q = new URLSearchParams();
@@ -144,7 +148,7 @@ export default function CrmProjectSetupPage() {
     if (!token || !canManage) return;
     const [p, u, v] = await Promise.all([
       api<ProjectRow[]>("/api/projects", { token }),
-      api<UserRow[]>("/api/users", { token }).catch(() => []),
+      api<UserRow[]>("/api/users?kind=staff", { token }).catch(() => []),
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
     ]);
     setProjects(p);
@@ -156,6 +160,12 @@ export default function CrmProjectSetupPage() {
     if (!token || !projectId) {
       setSummary(null);
       setStatus(null);
+      setStaffIds([]);
+      setProjectPackages([]);
+      setConsultantIds([]);
+      setContractorIds([]);
+      setPmcIds([]);
+      setClientId("");
       return;
     }
     const [s, st] = await Promise.all([
@@ -181,8 +191,9 @@ export default function CrmProjectSetupPage() {
       endDate: dayField(s.project.endDate),
     });
     setConsultantIds(
-      s.vendors.filter((v) => ["Consultant", "Designer", "PMC"].includes(v.partyType)).map((v) => v.vendorId)
+      s.vendors.filter((v) => ["Consultant", "Designer"].includes(v.partyType)).map((v) => v.vendorId)
     );
+    setPmcIds(s.vendors.filter((v) => v.partyType === "PMC").map((v) => v.vendorId));
     setContractorIds(
       s.vendors.filter((v) => ["Contractor", "Vendor"].includes(v.partyType)).map((v) => v.vendorId)
     );
@@ -191,6 +202,7 @@ export default function CrmProjectSetupPage() {
       s.vendors.find((v) => v.email && v.email === s.project.clientEmail) ||
       s.vendors.find((v) => v.name && v.name === s.project.clientName);
     setClientId(clientRow?.vendorId || "");
+    setStaffIds(s.members.map((m) => m.userId).filter(Boolean));
     void api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
         try {
@@ -230,6 +242,7 @@ export default function CrmProjectSetupPage() {
     try {
       const firstConsultant = vendors.find((v) => consultantIds.includes(v.id));
       const firstContractor = vendors.find((v) => contractorIds.includes(v.id));
+      const firstPmc = vendors.find((v) => pmcIds.includes(v.id));
       const created = await api<ProjectRow>("/api/projects", {
         method: "POST",
         token,
@@ -237,16 +250,20 @@ export default function CrmProjectSetupPage() {
           ...createForm,
           designConsultant: createForm.designConsultant || firstConsultant?.name || "",
           contractorName: createForm.contractorName || firstContractor?.name || "",
-          vendorIds: [...consultantIds, ...contractorIds, ...(clientId ? [clientId] : [])],
+          pmcName: createForm.pmcName || firstPmc?.name || "SPDC",
+          vendorIds: [...consultantIds, ...pmcIds, ...contractorIds, ...(clientId ? [clientId] : [])],
+          workPackages: projectPackages,
+          memberIds: staffIds,
         }),
       });
       setCreateForm(EMPTY_PROJECT);
       await loadLists();
       setStep("project", created.id);
+      await api(`/api/comms/contacts/${created.id}/sync-from-directory`, { method: "POST", token }).catch(() => null);
       setMsg(
         created.alreadyExists
-          ? `Project ${created.code} already exists — opened the saved card. Update details below, then continue.`
-          : `Project ${created.code} saved. Continue the communication matrix, then launch folders.`
+          ? `Project ${created.code} already exists — opened the saved card.`
+          : `Project ${created.code} is on the register as Planning. Matrix filled from this card. No login was created.`
       );
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Create failed");
@@ -260,17 +277,45 @@ export default function CrmProjectSetupPage() {
     if (!projectId) return;
     setBusy(true);
     try {
+      const firstConsultant = vendors.find((v) => consultantIds.includes(v.id));
+      const firstContractor = vendors.find((v) => contractorIds.includes(v.id));
+      const firstPmc = vendors.find((v) => pmcIds.includes(v.id));
       await api(`/api/projects/${projectId}/settings`, {
         method: "PATCH",
         token,
-        body: JSON.stringify(details),
+        body: JSON.stringify({
+          name: details.name,
+          clientName: details.clientName,
+          clientContactName: details.clientContactName,
+          clientEmail: details.clientEmail,
+          clientPhone: details.clientPhone,
+          clientAddress: details.clientAddress,
+          clientGst: details.clientGst,
+          location: details.location,
+          designConsultant: details.designConsultant || firstConsultant?.name || "",
+          contractorName: details.contractorName || firstContractor?.name || "",
+          pmcName: details.pmcName || firstPmc?.name || "SPDC",
+          startDate: details.startDate || null,
+          endDate: details.endDate || null,
+          workPackages: projectPackages,
+        }),
       });
       await api(`/api/projects/${projectId}/assign-parties`, {
         method: "POST",
         token,
-        body: JSON.stringify({ vendorIds: [...consultantIds, ...contractorIds, ...(clientId ? [clientId] : [])] }),
+        body: JSON.stringify({
+          vendorIds: [...consultantIds, ...pmcIds, ...contractorIds, ...(clientId ? [clientId] : [])].filter(Boolean),
+        }),
       });
-      setMsg("Project card saved. Details stay on this project — continue matrix, or launch to go live.");
+      if (staffIds.length) {
+        await api(`/api/projects/${projectId}/members`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ userIds: staffIds, role: "member" }),
+        });
+      }
+      await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
+      setMsg("Project card saved. Technical and commercial matrices filled from this card. No new login was created.");
       await loadProject();
       setStep("project", projectId);
     } catch (err) {
@@ -301,10 +346,6 @@ export default function CrmProjectSetupPage() {
     }
   }
 
-  function rememberVendor(v: SetupVendor) {
-    setVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [v, ...prev]));
-  }
-
   function applyClient(id: string, into: "create" | "details") {
     setClientId(id);
     const c = vendors.find((v) => v.id === id);
@@ -332,13 +373,15 @@ export default function CrmProjectSetupPage() {
         <PageHeader
           eyebrow="CRM · project start"
           title="Project setup"
-          subtitle="Card, work packages, and staff from the list. Then the communication matrix. Onboarding emails are optional after launch — nothing is mailed until you pick people and send."
+          subtitle="Pick client, PMC, consultants, vendors, packages, and SPDC staff. New people and companies are added on the directory pages — save only links them to this job."
         />
         {summary && (
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="brand">{summary.project.code}</Badge>
             <span className="text-sm font-medium">{summary.project.name}</span>
-            {status?.ready ? <Badge tone="ok">Ready to launch</Badge> : <Badge tone="warn">Setup in progress</Badge>}
+            <Badge tone={summary.project.status === "In Progress" ? "ok" : "warn"}>
+              {summary.project.status || "Planning"}
+            </Badge>
             <ProjectManageActions
               project={summary.project}
               token={token}
@@ -445,6 +488,19 @@ export default function CrmProjectSetupPage() {
                   }
                 />
               </label>
+              <div className="sm:col-span-2">
+                <WorkPackagesPanel
+                  token={token}
+                  projectId={projectId || undefined}
+                  mode="pick"
+                  selected={projectPackages}
+                  onChange={setProjectPackages}
+                  onSaved={(pkgs) => {
+                    setProjectPackages(pkgs);
+                    setMsg("Work packages saved.");
+                  }}
+                />
+              </div>
               <div className="sm:col-span-2 space-y-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-steel-muted">Client (from Client directory)</span>
@@ -503,73 +559,66 @@ export default function CrmProjectSetupPage() {
                     }
                   />
                   <p className="sm:col-span-2 text-[11px] text-steel-muted">
-                    Pulled from the project card / client directory. Save once — Complete setup creates the client login from this email. No mail is sent.
+                    Pulled from the client directory. Save links this company to the job — it does not create a login. Add a new client on Clients.
                   </p>
                 </div>
               </div>
-              <div className="sm:col-span-2 grid lg:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Link to="/crm/directory/stakeholders" className="text-[11px] font-semibold text-brand">
-                    Maintain consultants →
-                  </Link>
-                  <SetupPartyMultiPick
-                    token={token}
-                    title="Consultants on this project"
-                    kind="Consultant"
-                    vendors={vendors}
-                    selectedIds={consultantIds}
-                    onChange={setConsultantIds}
-                    onCreated={rememberVendor}
-                    onMsg={setMsg}
-                    busy={busy}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Link to="/crm/directory/vendors" className="text-[11px] font-semibold text-brand">
-                    Maintain vendors →
-                  </Link>
-                  <SetupPartyMultiPick
-                    token={token}
-                    title="Vendors / contractors on this project"
-                    kind="Contractor"
-                    vendors={vendors}
-                    selectedIds={contractorIds}
-                    onChange={setContractorIds}
-                    onCreated={rememberVendor}
-                    onMsg={setMsg}
-                    busy={busy}
-                  />
-                </div>
+              <div className="sm:col-span-2 grid lg:grid-cols-3 gap-3">
+                <SetupPartyMultiPick
+                  token={token}
+                  title="Consultants"
+                  kind="Consultant"
+                  vendors={vendors}
+                  selectedIds={consultantIds}
+                  onChange={setConsultantIds}
+                  directoryHref="/crm/directory/stakeholders"
+                  directoryLabel="Add on Consultants →"
+                />
+                <SetupPartyMultiPick
+                  token={token}
+                  title="PMC"
+                  kind="PMC"
+                  vendors={vendors}
+                  selectedIds={pmcIds}
+                  onChange={setPmcIds}
+                  directoryHref="/crm/directory/stakeholders"
+                  directoryLabel="Add PMC on Consultants →"
+                />
+                <SetupPartyMultiPick
+                  token={token}
+                  title="Vendors / contractors"
+                  kind="Contractor"
+                  vendors={vendors}
+                  selectedIds={contractorIds}
+                  onChange={setContractorIds}
+                  directoryHref="/crm/directory/vendors"
+                  directoryLabel="Add on Vendors →"
+                />
               </div>
-              {projectId && token ? (
-                <div className="sm:col-span-2 space-y-3">
-                  <WorkPackagesPanel
-                    token={token}
-                    projectId={projectId}
-                    onSaved={(pkgs) => {
-                      setProjectPackages(pkgs);
-                      setMsg("Work packages saved.");
-                    }}
-                  />
-                  <ProjectTeamAllocatePanel
-                    projectId={projectId}
-                    token={token}
-                    users={users}
-                    members={summary?.members || []}
-                    canEdit={canManage}
-                    onMsg={setMsg}
-                    onChanged={() => void loadProject()}
-                  />
-                </div>
-              ) : null}
-              <div className="sm:col-span-2 flex flex-wrap gap-2">
+              <div className="sm:col-span-2">
+                <ProjectTeamAllocatePanel
+                  projectId={projectId || undefined}
+                  token={token}
+                  users={users}
+                  members={summary?.members || []}
+                  selectedIds={staffIds}
+                  onChange={setStaffIds}
+                  canEdit={canManage}
+                  onMsg={setMsg}
+                  onChanged={() => void loadProject()}
+                />
+              </div>
+              <div className="sm:col-span-2 flex flex-wrap gap-2 items-center">
                 <Button type="submit" variant="secondary" disabled={busy}>
                   Save project card
                 </Button>
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => navigate("/crm/projects")}>
+                  Back to register
+                </Button>
                 {projectId ? (
-                  <Button type="button" disabled={busy} onClick={() => setStep("matrix")}>
-                    Next · Communication matrix
-                  </Button>
+                  <Link to={`/crm/setup?projectId=${projectId}&step=matrix`} className="text-[11px] font-semibold text-steel-muted">
+                    Communication matrix (optional)
+                  </Link>
                 ) : null}
               </div>
             </form>
@@ -591,7 +640,8 @@ export default function CrmProjectSetupPage() {
             {summary?.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
             {summary && (
               <p className="text-xs text-steel-muted leading-relaxed">
-                Stored: {summary.members.length} people · {summary.vendors.length} companies
+                {projectStatusHint(summary.project.status)} Stored: {summary.members.length} SPDC staff ·{" "}
+                {summary.vendors.length} companies
                 {details.location ? ` · ${details.location}` : ""}.
               </p>
             )}

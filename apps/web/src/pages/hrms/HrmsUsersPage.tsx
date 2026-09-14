@@ -10,7 +10,10 @@ import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 
-const LOGIN_ROLES = ["site_employee", "office", "employee"] as const;
+const LOGIN_ROLES = [
+  { value: "site_employee", label: "SPDC site — /login/site" },
+  { value: "office", label: "SPDC office — /login/office" },
+] as const;
 
 const EMPTY_USER_FORM = {
   fullName: "",
@@ -21,6 +24,7 @@ const EMPTY_USER_FORM = {
   department: "Site",
   designation: "",
   password: "Demo@1234",
+  desk: "hrm",
 };
 
 function AddUserModal({
@@ -68,7 +72,7 @@ function AddUserModal({
         <Input required type="email" placeholder="Login email" value={form.email} onChange={(ev) => setForm({ ...form, email: ev.target.value })} />
         <Select value={form.role} onChange={(ev) => setForm({ ...form, role: ev.target.value })}>
           {LOGIN_ROLES.map((r) => (
-            <option key={r} value={r}>{r.replace("_", " ")}</option>
+            <option key={r.value} value={r.value}>{r.label}</option>
           ))}
         </Select>
         <Input placeholder="Password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} />
@@ -171,7 +175,7 @@ export default function HrmsUsersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          Staff logins only — office, site, and employees. Vendor and client accounts stay in CRM directory / Access. Role permissions stay in Office → Access.
+          Staff logins only — office and site. Client, consultant, and vendor accounts stay in CRM directories. Role permissions stay in Office → Access.
           <span className="block mt-1 font-semibold text-warn">
             Only office and admin can add or delete users. Live SPDC / Twinoxis logins stay protected.
           </span>
@@ -344,7 +348,7 @@ export default function HrmsUsersPage() {
             searchPlaceholder="Search project by name or code…"
           />
           <Select value={assign.role} onChange={(ev) => setAssign({ ...assign, role: ev.target.value })}>
-            {["site_employee", "office", "employee", "vendor", "project_manager"].map((r) => (
+            {["site_employee", "office", "project_manager"].map((r) => (
               <option key={r} value={r}>{r.replace("_", " ")}</option>
             ))}
           </Select>

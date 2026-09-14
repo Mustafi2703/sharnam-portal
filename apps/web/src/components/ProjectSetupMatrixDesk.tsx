@@ -56,6 +56,7 @@ export function ProjectSetupMatrixDesk({
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
+    await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
     const [tech, comm] = await Promise.all([
       api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=TECHNICAL`, { token }).catch(() => []),
       api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=COMMERCIAL`, { token }).catch(() => []),
@@ -63,15 +64,6 @@ export function ProjectSetupMatrixDesk({
     const people = (rows: MatrixContact[]) => rows.filter((r) => !r.isSectionHeader).length;
     setCounts({ technical: people(tech), commercial: people(comm) });
     setContacts(matrixKind === "COMMERCIAL" ? comm : tech);
-    if (!tech.length && !comm.length) {
-      await api(`/api/comms/contacts/${projectId}/scaffold`, { method: "POST", token }).catch(() => null);
-      const [tech2, comm2] = await Promise.all([
-        api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=TECHNICAL`, { token }).catch(() => []),
-        api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=COMMERCIAL`, { token }).catch(() => []),
-      ]);
-      setCounts({ technical: people(tech2), commercial: people(comm2) });
-      setContacts(matrixKind === "COMMERCIAL" ? comm2 : tech2);
-    }
   }, [projectId, token, matrixKind]);
 
   useEffect(() => {
@@ -202,8 +194,8 @@ export function ProjectSetupMatrixDesk({
         <div>
           <h3 className="font-semibold text-sm">Communication matrix</h3>
           <p className="text-xs text-steel-muted mt-0.5 max-w-2xl">
-            Technical and commercial sheets. Company and people lists follow the party you pick — search, auto-fill, then
-            edit. Add a missing client / consultant / vendor here without leaving setup.
+            Technical and commercial sheets fill from the project card — client, PMC, consultants, vendors, and SPDC staff.
+            Delete leftover seed rows, then pick the live companies. New companies go on the CRM directories, not here.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -252,7 +244,7 @@ export function ProjectSetupMatrixDesk({
               editing={Boolean(editingId)}
               onMsg={onMsg}
               onDirectoryChange={onDirectoryChange}
-              allowCreateCompany
+              allowCreateCompany={false}
             />
             {!editingId && (
               <label className="flex items-center gap-2 text-xs text-steel-muted">

@@ -56,8 +56,15 @@ vendorsRouter.get("/", async (req: AuthedRequest, res) => {
 });
 
 vendorsRouter.get("/consultant-types", async (_req, res) => {
-  const { getConsultantTypes } = await import("../services/consultantTypeCatalog.js");
-  res.json({ types: await getConsultantTypes() });
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const { getConsultantTypes, DEFAULT_CONSULTANT_TYPES } = await import("../services/consultantTypeCatalog.js");
+    const types = await getConsultantTypes();
+    res.json({ types: types.length ? types : [...DEFAULT_CONSULTANT_TYPES] });
+  } catch {
+    const { DEFAULT_CONSULTANT_TYPES } = await import("../services/consultantTypeCatalog.js");
+    res.json({ types: [...DEFAULT_CONSULTANT_TYPES] });
+  }
 });
 
 vendorsRouter.post("/consultant-types", requireRoles("admin", "office"), async (req, res) => {

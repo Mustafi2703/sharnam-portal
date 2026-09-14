@@ -2,23 +2,15 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { PortalAccountFields } from "../../components/PortalAccountFields";
-import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
-import { UserManageActions } from "../../components/UserManageActions";
 import {
-  EMPTY_PORTAL_ACCOUNT_FORM,
   accountKindLabel,
-  badgeToneForKind,
   loginPathForAccount,
   portalAccountKind,
-  roleFromAccountKind,
-  type PortalAccountForm,
-  type PortalAccountKind,
 } from "../../lib/portalAccounts";
 import { ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
 import { useConsultantTypes } from "../../lib/consultantTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
-import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
   VENDOR_PARTY_TYPES,
@@ -29,6 +21,11 @@ import {
   type VendorFormState,
   type VendorPartyType,
 } from "../../lib/vendorTypes";
+import {
+  CRM_BID_DISCIPLINES,
+  formatVendorBidDisciplines,
+  parseVendorBidDisciplines,
+} from "../../lib/crmBidDisciplines";
 
 function directoryVendorsQuery(tab: string) {
   if (tab === "vendors") return "?partyType=Contractor";
@@ -36,11 +33,6 @@ function directoryVendorsQuery(tab: string) {
   if (tab === "stakeholders") return "?partyType=Consultant,PMC,Designer";
   return "";
 }
-import {
-  CRM_BID_DISCIPLINES,
-  formatVendorBidDisciplines,
-  parseVendorBidDisciplines,
-} from "../../lib/crmBidDisciplines";
 
 type VendorRow = VendorFormState & { id: string; isActive?: boolean; _count?: { projects: number } };
 
@@ -68,12 +60,6 @@ const TAB_META: Record<
     defaultParty: "Consultant",
     loginRole: "employee",
   },
-  people: {
-    title: "External logins",
-    subtitle: "Client, consultant, and vendor accounts only. Manage SPDC employees in HRMS → Users.",
-    partyTypes: [],
-    defaultParty: "Contractor",
-  },
 };
 
 export const DIRECTORY_TAB_META = TAB_META;
@@ -95,6 +81,7 @@ export function DirectoryCompaniesPanel({
   const [loginMsg, setLoginMsg] = useState("");
   const [loginPassword, setLoginPassword] = useState("Demo@1234");
   const [listSearch, setListSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const formPanelRef = useRef<HTMLDivElement>(null);
   const { types: consultantTypes } = useConsultantTypes(token);
 
@@ -115,6 +102,7 @@ export function DirectoryCompaniesPanel({
     setLoginMsg("");
     setLoginPassword("Demo@1234");
     setListSearch("");
+    setTypeFilter("");
   }, [tab, meta.defaultParty]);
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
@@ -125,11 +113,12 @@ export function DirectoryCompaniesPanel({
 
   const visibleRows = useMemo(() => {
     const needle = listSearch.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((r) =>
-      [r.name, r.trade, r.email, r.partyType, r.city].filter(Boolean).join(" ").toLowerCase().includes(needle)
-    );
-  }, [rows, listSearch]);
+    return rows.filter((r) => {
+      if (tab === "stakeholders" && typeFilter && (r.trade || "") !== typeFilter) return false;
+      if (!needle) return true;
+      return [r.name, r.trade, r.email, r.partyType, r.city].filter(Boolean).join(" ").toLowerCase().includes(needle);
+    });
+  }, [rows, listSearch, tab, typeFilter]);
 
   useEffect(() => {
     if (selected) setForm(vendorToForm(selected));
@@ -194,7 +183,7 @@ export function DirectoryCompaniesPanel({
     setLoginMsg("");
     try {
       const role = meta.loginRole || (tab === "vendors" ? "vendor" : tab === "stakeholders" ? "employee" : "client");
-      const kind = portalAccountKind(role, { department: tab === "stakeholders" ? selected.trade : null });
+      const kind = portalAccountKind(role, { department: tab === "stakeholders" ? selected.trade : null }, selected.id);
       await api("/api/hrm/employees", {
         method: "POST",
         token,
@@ -205,6 +194,8 @@ export function DirectoryCompaniesPanel({
           phone: selected.businessPhone,
           designation: selected.name,
           department: tab === "stakeholders" ? selected.trade || undefined : undefined,
+          vendorId: selected.id,
+          desk: "crm",
         }),
       });
       setLoginMsg(
@@ -223,7 +214,34 @@ export function DirectoryCompaniesPanel({
 
   return (
     <div className="space-y-4">
-    {tab === "stakeholders" ? <ConsultantTypesPanel token={token} /> : null}
+    {tab === "stakeholders" ? (
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            className={`text-[11px] font-semibold rounded-full border px-2.5 py-1 ${
+              !typeFilter ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
+            }`}
+            onClick={() => setTypeFilter("")}
+          >
+            All types
+          </button>
+          {consultantTypes.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`text-[11px] font-semibold rounded-full border px-2.5 py-1 ${
+                typeFilter === t ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
+              }`}
+              onClick={() => setTypeFilter(typeFilter === t ? "" : t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <ConsultantTypesPanel token={token} />
+      </div>
+    ) : null}
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 space-y-2">
@@ -251,7 +269,7 @@ export function DirectoryCompaniesPanel({
               <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => setSelectedId(r.id)}>
                 <div className="font-medium">{r.name}</div>
                 <div className="text-xs text-steel-muted mt-0.5">
-                  {formatPartyType(r.partyType)}
+                  {tab === "stakeholders" && r.trade ? r.trade : formatPartyType(r.partyType)}
                   {r.email ? ` · ${r.email}` : ""}
                   {r._count?.projects ? ` · ${r._count.projects} project(s)` : ""}
                 </div>
@@ -302,6 +320,8 @@ export function DirectoryCompaniesPanel({
           <Input required placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
           {!selected ? (
             <Input
+              type="password"
+              autoComplete="new-password"
               placeholder="Portal password (default Demo@1234)"
               value={loginPassword}
               onChange={(e) => setLoginPassword(e.target.value)}
@@ -386,185 +406,10 @@ export function DirectoryCompaniesPanel({
   );
 }
 
-export function DirectoryPeoplePanel({ token, canEdit }: { token: string | null; canEdit: boolean }) {
-  const [people, setPeople] = useState<UserAccountRow[]>([]);
-  const [peopleSearch, setPeopleSearch] = useState("");
-  const [kindFilter, setKindFilter] = useState<"all" | PortalAccountKind>("all");
-  const [form, setForm] = useState<PortalAccountForm>({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "client" });
-  const [kind, setKind] = useState<PortalAccountKind>("client");
-  const [msg, setMsg] = useState("");
-  const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
-
-  const visiblePeople = useMemo(() => {
-    const needle = peopleSearch.trim().toLowerCase();
-    return people.filter((p) => {
-      const pKind = portalAccountKind(p.role, p.profile);
-      if (pKind === "staff") return false;
-      if (kindFilter !== "all" && pKind !== kindFilter) return false;
-      if (!needle) return true;
-      return [p.fullName, p.email, p.role, accountKindLabel(pKind), ...(p.memberships?.map((m) => m.project.code) || [])]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [people, peopleSearch, kindFilter]);
-
-  const load = useCallback(async () => {
-    const fromHrm = await api<UserAccountRow[]>("/api/hrm/employees?scope=all", { token }).catch(() => []);
-    if (fromHrm.length) {
-      setPeople(fromHrm);
-      return;
-    }
-    const fromUsers = await api<UserAccountRow[]>("/api/users", { token }).catch(() => []);
-    setPeople(fromUsers);
-  }, [token]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function create(e: FormEvent) {
-    e.preventDefault();
-    if (!canEdit) return;
-    setMsg("");
-    try {
-      const role = roleFromAccountKind(kind, form.role);
-      await api("/api/hrm/employees", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          fullName: form.fullName,
-          email: form.email,
-          role,
-          phone: form.phone,
-          designation: form.designation,
-          department: kind === "staff" || kind === "stakeholder" ? form.department : undefined,
-          empCode: kind === "staff" ? form.empCode : undefined,
-          password: form.password,
-        }),
-      });
-      setForm({ ...EMPTY_PORTAL_ACCOUNT_FORM, role: "client" });
-      setKind("client");
-      setMsg(`Login created for ${form.email} as ${accountKindLabel(kind)}. Sign in at ${loginPathForAccount(role, kind)}. Default password: ${form.password || "Demo@1234"}`);
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Create failed");
-    }
-  }
-
-  return (
-    <div className="grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4">
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b bg-sand/40 space-y-2">
-          <div className="font-semibold text-sm flex flex-wrap items-center justify-between gap-2">
-            <span>{visiblePeople.length} external logins</span>
-            <Link to="/hrm/users" className="text-[11px] font-semibold text-brand">
-              SPDC staff → HRMS
-            </Link>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {(["all", "client", "stakeholder", "vendor"] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                className={`text-[11px] font-semibold rounded-full border px-2 py-0.5 ${
-                  kindFilter === k ? "bg-brand text-white border-brand" : "bg-paper text-steel-muted border-line"
-                }`}
-                onClick={() => setKindFilter(k)}
-              >
-                {k === "all" ? "All" : accountKindLabel(k)}
-              </button>
-            ))}
-          </div>
-          <Input
-            placeholder="Search name, email, client…"
-            value={peopleSearch}
-            onChange={(e) => setPeopleSearch(e.target.value)}
-            className="!text-sm"
-          />
-        </div>
-        <ul className="divide-y max-h-[460px] overflow-y-auto text-sm">
-          {visiblePeople.map((p) => (
-            <li key={p.id} className="px-4 py-3 flex flex-wrap justify-between gap-2">
-              <div>
-                <div className="font-medium">{p.fullName}</div>
-                <div className="text-xs text-steel-muted">{p.email}{p.phone ? ` · ${p.phone}` : ""}</div>
-                {p.profile?.designation ? (
-                  <div className="text-[11px] text-ink mt-0.5">{p.profile.designation}</div>
-                ) : null}
-                {p.memberships?.length ? (
-                  <div className="text-[10px] text-steel-muted mt-1">
-                    {p.memberships.map((m) => m.project.code).join(", ")}
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge tone={p.isActive === false ? "warn" : badgeToneForKind(portalAccountKind(p.role, p.profile))}>
-                  {accountKindLabel(portalAccountKind(p.role, p.profile))}
-                </Badge>
-                <span className="text-[10px] font-mono text-steel-muted">
-                  {loginPathForAccount(p.role, portalAccountKind(p.role, p.profile))}
-                </span>
-                {canEdit ? (
-                  <UserManageActions
-                    user={p}
-                    token={token}
-                    onEdit={() => setEditUser(p)}
-                    onChanged={async () => {
-                      setMsg("User list updated.");
-                      await load();
-                    }}
-                  />
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Card>
-      <Card>
-        <h3 className="font-semibold text-sm mb-3">Create portal login</h3>
-        <form className="space-y-3" onSubmit={create}>
-          <PortalAccountFields
-            form={form}
-            onChange={setForm}
-            kind={kind}
-            onKindChange={setKind}
-            allowAdminRole={false}
-            token={token}
-            externalOnly
-          />
-          {canEdit && <Button type="submit">Create login</Button>}
-          {msg && <p className="text-xs text-steel-muted">{msg}</p>}
-        </form>
-        <p className="text-[11px] text-steel-muted mt-4">
-          Full access matrix: <Link to="/roles" className="text-brand font-semibold">Access · Users</Link>
-        </p>
-      </Card>
-
-      <UserAccountEditModal
-        open={!!editUser}
-        user={editUser}
-        token={token}
-        isAdmin={canEdit}
-        onClose={() => setEditUser(null)}
-        onSaved={async () => {
-          setMsg("User updated.");
-          await load();
-        }}
-        onDeleted={async () => {
-          setMsg("User removed.");
-          await load();
-        }}
-      />
-    </div>
-  );
-}
-
-/** CRM directories — vendors, clients, stakeholders, people. */
+/** CRM directories — clients, consultants, vendors. */
 export default function CrmDirectoryPage() {
-  const { tab: rawTab = "vendors" } = useParams();
-  const tab = (rawTab && rawTab in TAB_META ? rawTab : "vendors") as keyof typeof TAB_META;
+  const { tab: rawTab = "clients" } = useParams();
+  const tab = (rawTab && rawTab in TAB_META ? rawTab : "clients") as keyof typeof TAB_META;
   const { token, user } = useAuth();
   const canEdit = user?.role === "admin" || user?.role === "office";
   const meta = TAB_META[tab];
@@ -572,11 +417,7 @@ export default function CrmDirectoryPage() {
   return (
     <div className="space-y-4">
       <PageHeader dense title={meta.title} subtitle={meta.subtitle} />
-      {tab === "people" ? (
-        <DirectoryPeoplePanel key="people" token={token} canEdit={canEdit} />
-      ) : (
-        <DirectoryCompaniesPanel key={tab} tab={tab} token={token} canEdit={canEdit} />
-      )}
+      <DirectoryCompaniesPanel key={tab} tab={tab} token={token} canEdit={canEdit} />
     </div>
   );
 }

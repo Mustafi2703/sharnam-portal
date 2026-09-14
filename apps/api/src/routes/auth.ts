@@ -238,10 +238,15 @@ usersRouter.get("/", requireRoles("admin", "office"), async (req, res) => {
       isActive: true,
       NOT: { email: { startsWith: "deleted." } },
       ...(kind === "staff"
-        ? { role: { in: ["admin", "office", "site_employee", "employee", "project_manager"] } }
+        ? {
+            OR: [
+              { role: { in: ["admin", "office", "site_employee"] } },
+              { role: "employee", vendorId: null },
+            ],
+          }
         : {}),
     },
-    select: { id: true, email: true, fullName: true, role: true, portal: true, phone: true, isActive: true },
+    select: { id: true, email: true, fullName: true, role: true, portal: true, phone: true, isActive: true, vendorId: true },
     orderBy: { fullName: "asc" },
   });
   res.json(users);

@@ -23,7 +23,12 @@ export async function api<T = unknown>(
   }
   if (opts.token) headers.set("Authorization", `Bearer ${opts.token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers, redirect: "manual" });
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers,
+    redirect: "manual",
+    cache: "no-store",
+  });
   if (res.status >= 300 && res.status < 400) {
     throw new ApiError(
       "API request was redirected (check portal URL / VITE_API_URL — use https://portal.spdc.in on the same host).",

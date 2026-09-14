@@ -4,7 +4,7 @@
  */
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
-import { seedArvindCommsMatrix, seedStandardCommsMatrix } from "./commsMatrixSeed.js";
+import { seedStandardCommsMatrix } from "./commsMatrixSeed.js";
 import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncCommsFromDirectory.js";
 import { initializeProjectReports, type InitReportsResult } from "./initializeProjectReports.js";
 import {
@@ -33,10 +33,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   const folders = await mockOneDrive.ensureProjectTree(projectId);
 
-  const arvindSite = /arvind/i.test(project.code) || /arvind/i.test(project.clientName || "") || /ntx/i.test(project.name);
-  const matrixCreated = arvindSite
-    ? await seedArvindCommsMatrix(projectId)
-    : await seedStandardCommsMatrix(projectId);
+  const matrixCreated = await seedStandardCommsMatrix(projectId);
   await ensureMatrixScaffold(projectId);
   const contacts = await syncCommsContactsFromDirectory(projectId);
 

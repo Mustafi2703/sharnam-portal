@@ -1,3 +1,4 @@
+import type { AuthUser } from "@sharnam/shared";
 import { STAKEHOLDER_CONSULTANT_TRADES } from "./vendorTypes";
 
 const CONSULTANT_TRADES = new Set<string>(STAKEHOLDER_CONSULTANT_TRADES);
@@ -30,14 +31,18 @@ export const EMPTY_PORTAL_ACCOUNT_FORM: PortalAccountForm = {
   isActive: true,
 };
 
+type KindProfile = { empCode?: string | null; department?: string | null } | null | undefined;
+
 export function portalAccountKind(
   role: string | null | undefined,
-  profile?: { empCode?: string | null; department?: string | null } | null,
+  profile?: KindProfile,
+  vendorId?: string | null,
 ): PortalAccountKind {
   if (role === "client") return "client";
   if (role === "vendor") return "vendor";
   if (role === "admin" || role === "office" || role === "site_employee") return "staff";
   if (role === "employee") {
+    if (vendorId) return "stakeholder";
     const dept = profile?.department?.trim();
     if (!dept || CONSULTANT_TRADES.has(dept)) return "stakeholder";
     const staffDept = /^(site|office|hr|hrm|accounts|admin|finance|it|tender|operations|spdc)$/i.test(dept);
@@ -46,14 +51,32 @@ export function portalAccountKind(
   return "staff";
 }
 
+export function kindForAccount(user: {
+  role?: string | null;
+  profile?: KindProfile;
+  vendorId?: string | null;
+}): PortalAccountKind {
+  return portalAccountKind(user.role, user.profile, user.vendorId);
+}
+
 export function loginPathForAccount(role: string, kind?: PortalAccountKind): string {
   const resolved = kind || portalAccountKind(role);
   if (resolved === "client" || role === "client") return "/login/client";
   if (resolved === "vendor" || role === "vendor") return "/login/vendor";
   if (resolved === "stakeholder") return "/login/stakeholder";
   if (role === "site_employee") return "/login/site";
-  if (role === "employee") return "/login/employee";
   return "/login/office";
+}
+
+/** After sign-in (or a denied desk), send the user to the desk they actually own. */
+export function homePathForUser(user: Pick<AuthUser, "role" | "hrDeskOnly" | "vendorId"> | null | undefined): string {
+  if (!user) return "/login";
+  if (user.hrDeskOnly) return "/hrm";
+  if (user.role === "vendor") return "/crm/vendor-bids";
+  if (user.role === "site_employee") return "/attendance";
+  if (user.role === "employee") return user.vendorId ? "/stakeholder" : "/dashboard";
+  if (user.role === "client") return "/dashboard";
+  return "/dashboard";
 }
 
 export function accountKindLabel(kind: PortalAccountKind): string {
@@ -90,7 +113,7 @@ export function roleSelectLabel(role: string, kind?: PortalAccountKind): string 
   if (role === "admin") return "Admin — /login/office";
   if (role === "office") return "SPDC office — /login/office";
   if (role === "site_employee") return "SPDC site — /login/site";
-  if (role === "employee") return "SPDC employee — /login/employee";
+  if (role === "employee") return "SPDC employee — /login/office";
   return role;
 }
 

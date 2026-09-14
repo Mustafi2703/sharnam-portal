@@ -1100,9 +1100,12 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
     safeCount("headcount", () =>
       prisma.user.count({
         where: {
-          role: { in: [...HRMS_STAFF_ROLES] },
           isActive: true,
           NOT: { email: { startsWith: "deleted." } },
+          OR: [
+            { role: { in: ["admin", "office", "site_employee"] } },
+            { role: "employee", vendorId: null },
+          ],
         },
       })
     ),
@@ -1165,14 +1168,22 @@ hrmRouter.get("/activity", hrmDesk, async (req, res) => {
 
 hrmRouter.get("/employees", hrmDesk, async (req, res) => {
   const scope = String(req.query.scope || "staff");
-  const roles = scope === "all" ? [...HRMS_ALL_LOGIN_ROLES] : [...HRMS_STAFF_ROLES];
+  const staffWhere = {
+    NOT: { email: { startsWith: "deleted." } },
+    OR: [
+      { role: { in: ["admin", "office", "site_employee"] } },
+      { role: "employee", vendorId: null },
+    ],
+  };
   try {
     const users = await prisma.user.findMany({
-      where: {
-        role: { in: roles },
-        ...(scope === "all" ? {} : { isActive: true }),
-        NOT: { email: { startsWith: "deleted." } },
-      },
+      where:
+        scope === "all"
+          ? {
+              role: { in: [...HRMS_ALL_LOGIN_ROLES] },
+              NOT: { email: { startsWith: "deleted." } },
+            }
+          : { ...staffWhere, isActive: true },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -1183,6 +1194,8 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
         phone: true,
         isActive: true,
         createdAt: true,
+        vendorId: true,
+        vendor: { select: { id: true, name: true, trade: true, partyType: true } },
         memberships: { include: { project: { select: { id: true, code: true, name: true } } } },
       },
     });
@@ -1202,12 +1215,23 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
 hrmRouter.post("/employees", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const bcrypt = await import("bcryptjs");
   const { portalForRole } = await import("@sharnam/shared");
-  const { email, fullName, role, phone, empCode, department, designation, password } = req.body;
+  const { email, fullName, role, phone, empCode, department, designation, password, vendorId: vendorIdRaw, desk } = req.body;
   if (!email || !fullName || !role) return res.status(400).json({ error: "email, fullName, role required" });
+  const roleKey = role as import("@sharnam/shared").RoleKey;
+  if (String(desk || "") === "hrm" && (roleKey === "client" || roleKey === "vendor")) {
+    return res.status(400).json({
+      error: "HRMS Users creates SPDC staff only. Client, consultant, and vendor logins are created in CRM directories.",
+    });
+  }
   const existing = await prisma.user.findUnique({ where: { email: String(email).trim().toLowerCase() } });
   if (existing) return res.status(409).json({ error: "Email already has a login" });
   const hash = await bcrypt.hash(password || process.env.SEED_PASSWORD || "Demo@1234", 10);
-  const roleKey = role as import("@sharnam/shared").RoleKey;
+  const linkedVendorId =
+    roleKey === "client" || roleKey === "vendor" || roleKey === "employee"
+      ? vendorIdRaw
+        ? String(vendorIdRaw)
+        : null
+      : null;
   const user = await prisma.user.create({
     data: {
       email: String(email).trim().toLowerCase(),
@@ -1216,6 +1240,7 @@ hrmRouter.post("/employees", requireRoles("admin", "office"), async (req: Authed
       portal: portalForRole(roleKey),
       phone,
       passwordHash: hash,
+      vendorId: linkedVendorId,
     },
   });
   const org = designation ? String(designation).trim() : "";

@@ -68,15 +68,6 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
   const [catalogVendors, setCatalogVendors] = useState<VendorRow[]>([]);
   const [accessSlip, setAccessSlip] = useState<{ email: string; tempPassword?: string }[]>([]);
   const [editVendor, setEditVendor] = useState<VendorQuickEditRow | null>(null);
-  const [userForm, setUserForm] = useState({
-    fullName: "",
-    email: "",
-    role: "site_employee",
-    phone: "",
-    department: "Site",
-    designation: "",
-    password: "Demo@1234",
-  });
 
   const load = useCallback(async () => {
     if (!projectId) return;
@@ -119,38 +110,6 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
       await load();
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "BOQ seed failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createUserAndAssign(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const user = await api<{ id: string }>("/api/hrm/employees", {
-        method: "POST",
-        token,
-        body: JSON.stringify(userForm),
-      });
-      await api("/api/hrm/assign", {
-        method: "POST",
-        token,
-        body: JSON.stringify({ projectId, userId: user.id, role: userForm.role }),
-      });
-      setUserForm({
-        fullName: "",
-        email: "",
-        role: "site_employee",
-        phone: "",
-        department: "Site",
-        designation: "",
-        password: "Demo@1234",
-      });
-      onMsg(`${userForm.fullName || userForm.email} created and assigned to project directory.`);
-      await load();
-    } catch (err) {
-      onMsg(err instanceof Error ? err.message : "Create user failed");
     } finally {
       setBusy(false);
     }
@@ -244,22 +203,13 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
               Assign
             </Button>
           </form>
-          <form className="grid sm:grid-cols-2 gap-2 border-t border-line pt-3" onSubmit={createUserAndAssign}>
-            <p className="sm:col-span-2 text-[10px] font-mono uppercase text-steel-muted">Create login + assign (HR / Master)</p>
-            <Input placeholder="Full name" value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} required />
-            <Input placeholder="Email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
-            <Select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-              {["site_employee", "office", "employee", "client", "vendor", "admin"].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </Select>
-            <Input placeholder="Phone" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
-            <Button type="submit" className="sm:col-span-2" disabled={busy}>
-              Create user + add to project
-            </Button>
-          </form>
+          <p className="text-[11px] text-steel-muted border-t border-line pt-3">
+            New SPDC logins are created in{" "}
+            <Link to="/hrm/users" className="font-semibold text-brand">
+              HRMS → Users
+            </Link>
+            . Tick an existing person above to put them on this project.
+          </p>
         </Card>
 
         <Card className="!p-4 space-y-3">
@@ -340,29 +290,23 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
           <div className="grid sm:grid-cols-2 gap-3 border-t border-line pt-3">
             <SetupPartyMultiPick
               token={token}
-              title="Add consultant (email required)"
+              title="Consultants on this project"
               kind="Consultant"
               vendors={catalogVendors.length ? catalogVendors : allVendors}
               selectedIds={consultantIds}
               onChange={setConsultantIds}
-              onCreated={(v) =>
-                setCatalogVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, { ...v, trade: v.trade ?? undefined }]))
-              }
-              onMsg={onMsg}
-              busy={busy}
+              directoryHref="/crm/directory/stakeholders"
+              directoryLabel="Consultant directory →"
             />
             <SetupPartyMultiPick
               token={token}
-              title="Add vendor / contractor"
+              title="Vendors / contractors"
               kind="Contractor"
               vendors={catalogVendors.length ? catalogVendors : allVendors}
               selectedIds={contractorIds}
               onChange={setContractorIds}
-              onCreated={(v) =>
-                setCatalogVendors((prev) => (prev.some((x) => x.id === v.id) ? prev : [...prev, { ...v, trade: v.trade ?? undefined }]))
-              }
-              onMsg={onMsg}
-              busy={busy}
+              directoryHref="/crm/directory/vendors"
+              directoryLabel="Vendor directory →"
             />
           </div>
           <Button

@@ -189,6 +189,33 @@ function fillFromVendor(form: MatrixFormState, v: MatrixVendor): MatrixFormState
   };
 }
 
+function fillFromProjectCard(form: MatrixFormState, project: Props["project"]): MatrixFormState {
+  if (!project) return form;
+  if (form.orgSection === "Client" && (project.clientName || project.clientEmail)) {
+    return {
+      ...form,
+      orgName: project.clientName || form.orgName,
+      company: project.clientName || form.company,
+      personName: project.clientContactName || form.personName,
+      email: project.clientEmail || form.email,
+      mobile: project.clientPhone || form.mobile,
+      officeAddress: project.clientAddress || form.officeAddress,
+      spoc: project.clientContactName || form.spoc,
+      mailRole: "TO",
+    };
+  }
+  if (form.orgSection === "PMC" && project.pmcName) {
+    return { ...form, orgName: project.pmcName, company: project.pmcName };
+  }
+  if (form.orgSection === "Consultant" && project.designConsultant) {
+    return { ...form, orgName: project.designConsultant, company: project.designConsultant };
+  }
+  if (form.orgSection === "Contractor" && project.contractorName) {
+    return { ...form, orgName: project.contractorName, company: project.contractorName };
+  }
+  return form;
+}
+
 function fillFromUser(form: MatrixFormState, u: MatrixUser): MatrixFormState {
   const kind = portalAccountKind(u.role, u.profile);
   const section = kind === "client" ? "Client" : kind === "vendor" ? "Contractor" : kind === "stakeholder" ? "Consultant" : "PMC";
@@ -262,9 +289,15 @@ export function MatrixPartyFields({
   useEffect(() => {
     if (editing) return;
     const hit = preferredVendor(form.orgSection, vendors, assignedVendors, project);
-    const key = `${form.orgSection}:${hit?.id || ""}`;
-    if (!hit || autoKey.current === key) return;
+    const key = hit
+      ? `${form.orgSection}:${hit.id}`
+      : `${form.orgSection}:card:${project?.clientName || ""}:${project?.pmcName || ""}:${project?.designConsultant || ""}:${project?.contractorName || ""}`;
+    if (autoKey.current === key) return;
     autoKey.current = key;
+    if (!hit) {
+      onChange(fillFromProjectCard(form, project));
+      return;
+    }
     setPickVendorId(hit.id);
     const next = fillFromVendor(form, hit);
     const person = sectionUsers.find((u) => u.email && hit.email && u.email.toLowerCase() === hit.email.toLowerCase());

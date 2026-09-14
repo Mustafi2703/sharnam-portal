@@ -9,7 +9,6 @@ import { MasterProjectSetupPanel } from "../components/MasterProjectSetupPanel";
 import { ProjectManageActions } from "../components/ProjectManageActions";
 import {
   DirectoryCompaniesPanel,
-  DirectoryPeoplePanel,
   DIRECTORY_TAB_META,
 } from "./crm/CrmDirectoryPage";
 import {
@@ -34,10 +33,9 @@ type Project = {
 };
 
 const DIRECTORY_TABS = [
-  { id: "people", label: "People & portal" },
   { id: "clients", label: "Clients" },
+  { id: "stakeholders", label: "Consultants" },
   { id: "vendors", label: "Vendors / contractors" },
-  { id: "stakeholders", label: "Stakeholders" },
   { id: "packages", label: "Work packages" },
   { id: "projects", label: "Projects" },
 ] as const;
@@ -59,10 +57,10 @@ export default function MasterModulePage() {
   const canManage = user?.role === "admin" || user?.role === "office";
 
   const directoryTab: DirectoryTab =
-    tabParam && DIRECTORY_TABS.some((t) => t.id === tabParam) ? tabParam : "people";
+    tabParam && DIRECTORY_TABS.some((t) => t.id === tabParam) ? tabParam : "clients";
 
   const dirProject = projects.find((p) => p.id === dirProjectId);
-  const directoryMeta = DIRECTORY_TAB_META[directoryTab] || DIRECTORY_TAB_META.people;
+  const directoryMeta = DIRECTORY_TAB_META[directoryTab as keyof typeof DIRECTORY_TAB_META] || DIRECTORY_TAB_META.clients;
 
   const load = async () => {
     const p = await api<Project[]>("/api/projects", { token });
@@ -77,7 +75,7 @@ export default function MasterModulePage() {
   useEffect(() => {
     if (!canManage || !token || directoryTab !== "projects") return;
     void Promise.all([
-      api<any[]>("/api/users", { token }).catch(() => []),
+      api<any[]>("/api/users?kind=staff", { token }).catch(() => []),
       api<any[]>("/api/vendors", { token }).catch(() => []),
     ]).then(([u, v]) => {
       setDirUsers(u);
@@ -176,7 +174,7 @@ export default function MasterModulePage() {
         active={directoryTab === "projects" ? 2 : 1}
         steps={[
           { label: "CRM · Convert lead", hint: "Client + project spine", href: "/crm/leads" },
-          { label: "Directory", hint: "Clients · vendors · people", href: "/master?tab=vendors" },
+          { label: "Work packages", hint: "Org package catalogue", href: "/master?tab=packages" },
           { label: "Project modules", hint: "Cost MB/BBS per project", href: "/master?tab=projects" },
           { label: "Pilot on dashboard", hint: "Verify RFIs · quality", href: "/dashboard" },
         ]}
@@ -185,23 +183,24 @@ export default function MasterModulePage() {
       {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
       {dirMsg && <p className="text-sm rounded-xl px-3 py-2 bg-amber-50 text-warn border border-amber-200">{dirMsg}</p>}
 
-      {["people", "clients", "vendors", "stakeholders"].includes(directoryTab) && (
+      {["clients", "vendors", "stakeholders"].includes(directoryTab) && (
         <div className="space-y-3">
           <Card className="!p-4 bg-sand/30 border-line">
             <p className="text-sm text-steel-muted">
-              <span className="font-semibold text-ink">{directoryMeta.title}</span> — {directoryMeta.subtitle}
+              <span className="font-semibold text-ink">{directoryMeta.title}</span> — {directoryMeta.subtitle}{" "}
+              Portal logins together:{" "}
+              <Link to="/roles" className="font-semibold text-brand">
+                Access · Users
+              </Link>
+              .
             </p>
           </Card>
-          {directoryTab === "people" ? (
-            <DirectoryPeoplePanel token={token} canEdit={canManage} />
-          ) : (
-            <DirectoryCompaniesPanel
-              key={directoryTab}
-              tab={directoryTab as "clients" | "vendors" | "stakeholders"}
-              token={token}
-              canEdit={canManage}
-            />
-          )}
+          <DirectoryCompaniesPanel
+            key={directoryTab}
+            tab={directoryTab as "clients" | "vendors" | "stakeholders"}
+            token={token}
+            canEdit={canManage}
+          />
         </div>
       )}
 

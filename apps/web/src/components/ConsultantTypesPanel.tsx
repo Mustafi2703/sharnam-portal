@@ -1,10 +1,12 @@
 import { FormEvent, useState } from "react";
 import { useConsultantTypes } from "../lib/consultantTypes";
+import { SearchableSelect } from "./SearchableSelect";
 import { Button, Input } from "./ui";
 
-/** CRM master — add / rename / remove consultant types used on setup and stakeholder logins. */
+/** Compact master list — keep it off the main consultant register until opened. */
 export function ConsultantTypesPanel({ token }: { token: string | null }) {
   const { types, busy, msg, addType, renameType, removeType } = useConsultantTypes(token);
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -20,82 +22,88 @@ export function ConsultantTypesPanel({ token }: { token: string | null }) {
   }
 
   return (
-    <div className="rounded-xl border border-line bg-sand/30 p-3 space-y-2">
-      <div>
-        <h4 className="font-semibold text-sm">Consultant types</h4>
-        <p className="text-[11px] text-steel-muted">
-          Master list for project setup and stakeholder logins — add or edit types here. Phone stays on the contact, not on the type.
-        </p>
-      </div>
-      <ul className="flex flex-wrap gap-1.5">
-        {types.map((t) => (
-          <li key={t} className="flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-0.5 text-xs">
-            {editing === t ? (
-              <>
-                <input
-                  className="w-40 bg-transparent outline-none"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="font-semibold text-brand"
-                  disabled={busy}
-                  onClick={async () => {
-                    try {
-                      await renameType(t, draft);
-                      setEditing(null);
-                    } catch {
-                      /* keep editor open */
-                    }
-                  }}
-                >
-                  Save
-                </button>
-                <button type="button" className="text-steel-muted" onClick={() => setEditing(null)}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <span>{t}</span>
-                <button
-                  type="button"
-                  className="text-brand font-semibold"
-                  onClick={() => {
-                    setEditing(t);
-                    setDraft(t);
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="text-danger"
-                  disabled={busy}
-                  onClick={() => {
-                    if (window.confirm(`Remove “${t}” from the master list?`)) void removeType(t);
-                  }}
-                >
-                  ×
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-      <form className="flex flex-wrap gap-2" onSubmit={add}>
-        <Input
-          className="!w-56"
-          placeholder="New type — e.g. Lighting consultant"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <Button type="submit" variant="secondary" className="!text-xs" disabled={busy || !name.trim()}>
-          Add type
-        </Button>
-      </form>
-      {msg ? <p className="text-[11px] text-steel-muted">{msg}</p> : null}
+    <div className="rounded-xl border border-line bg-paper">
+      <button
+        type="button"
+        className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-sm font-semibold text-ink">Consultant types</span>
+        <span className="text-[11px] text-steel-muted">{open ? "Hide" : `Manage ${types.length} types`}</span>
+      </button>
+      {open ? (
+        <div className="px-3 pb-3 space-y-2 border-t border-line pt-2">
+          <p className="text-[11px] text-steel-muted">
+            Used on the consultant directory and project setup. Phone stays on the contact, not on the type.
+          </p>
+          <ul className="divide-y border border-line rounded-lg overflow-hidden">
+            {types.map((t) => (
+              <li key={t} className="flex items-center gap-2 px-3 py-2 bg-paper text-sm">
+                {editing === t ? (
+                  <>
+                    <Input className="!py-1" value={draft} onChange={(e) => setDraft(e.target.value)} />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs"
+                      disabled={busy}
+                      onClick={async () => {
+                        try {
+                          await renameType(t, draft);
+                          setEditing(null);
+                        } catch {
+                          /* keep editor open */
+                        }
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <button type="button" className="text-xs text-steel-muted" onClick={() => setEditing(null)}>
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 min-w-0 truncate">{t}</span>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-brand"
+                      onClick={() => {
+                        setEditing(t);
+                        setDraft(t);
+                      }}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-danger"
+                      disabled={busy}
+                      onClick={() => {
+                        if (window.confirm(`Remove “${t}” from the master list?`)) void removeType(t);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+          <form className="flex flex-wrap gap-2" onSubmit={add}>
+            <Input
+              className="!w-64"
+              placeholder="New type — e.g. Lighting consultant"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" variant="secondary" className="!text-xs" disabled={busy || !name.trim()}>
+              Add type
+            </Button>
+          </form>
+          {msg ? <p className="text-[11px] text-steel-muted">{msg}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -105,25 +113,24 @@ export function ConsultantTypeSelect({
   onChange,
   types,
   className,
+  placeholder = "Consultant type…",
 }: {
   value: string;
   onChange: (next: string) => void;
   types: string[];
   className?: string;
+  placeholder?: string;
 }) {
-  const extra = value && !types.includes(value) ? [value] : [];
+  const extra = value && !types.includes(value) ? [{ value, label: value }] : [];
   return (
-    <select
-      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${className || ""}`}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">Consultant type…</option>
-      {[...types, ...extra].map((t) => (
-        <option key={t} value={t}>
-          {t}
-        </option>
-      ))}
-    </select>
+    <div className={className}>
+      <SearchableSelect
+        options={[{ value: "", label: placeholder }, ...types.map((t) => ({ value: t, label: t })), ...extra]}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        searchPlaceholder="Search type…"
+      />
+    </div>
   );
 }

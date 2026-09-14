@@ -5,6 +5,7 @@ import { api } from "../api";
 import type { AuthUser, RoleKey } from "@sharnam/shared";
 import { setActiveWorkspace, clearStoredProjectId, type WorkspaceKey } from "../workspaces";
 import { HUB_LEFT_BULLETS, HUB_LEFT_TAGLINE, SHARNAM_PORTAL_POLICIES } from "../lib/portalPolicies";
+import { homePathForUser } from "../lib/portalAccounts";
 
 /** Sharnam login — hub /login · per-portal /login/:key */
 
@@ -43,7 +44,7 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     key: "office", title: "Office & Admin", shortLabel: "Office & Admin",
     headline: "Office & admin desk",
     subtitle: "CRM, projects, bids, reports, and user access.",
-    demoEmail: "office@sharnam.demo", allowedRoles: ["office", "admin"],
+    demoEmail: "office@sharnam.demo", allowedRoles: ["office", "admin", "employee"],
     points: ["Full PMC modules", "Master setup & CRM", "Roles & audit"],
     cta: "Sign in", tone: "#0B6A78", icon: "OF",
     landingPath: "/dashboard", workspaceKey: null, group: "role",
@@ -60,14 +61,17 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before other site tools."],
   },
   employee: {
-    key: "employee", title: "Employee", shortLabel: "Employee",
-    headline: "Your workday desk.",
-    subtitle: "Assigned projects, drawings, and self-service.",
-    demoEmail: "employee@sharnam.demo", allowedRoles: ["employee", "office"],
-    points: ["Projects", "Drawings", "Self-service"],
-    cta: "Enter Employee", tone: "#64748B", icon: "EM",
-    landingPath: "/dashboard", group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES],
+    key: "employee", title: "Stakeholders", shortLabel: "Stakeholders",
+    headline: "Stakeholder desk",
+    subtitle: "Partner PMC — coordination, GFC review, meetings, RFIs.",
+    demoEmail: "pmc@sharnam.demo", allowedRoles: ["employee"],
+    points: ["Design coordination", "Meetings & MoM", "GFC · RFI"],
+    cta: "Sign in", tone: "#6366F1", icon: "PM",
+    landingPath: "/stakeholder", workspaceKey: "drawings", group: "role",
+    policies: [
+      ...SHARNAM_PORTAL_POLICIES,
+      "Access limited to projects you are assigned to.",
+    ],
   },
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
@@ -411,6 +415,17 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
   if (!cfg) return <Navigate to="/login" replace />;
   if (!loading && user) {
     if (user.hrDeskOnly) return <Navigate to="/hrm" replace />;
+    const consultant = user.role === "employee" && !!user.vendorId;
+    const staffEmployee = user.role === "employee" && !user.vendorId;
+    if (cfg.key === "stakeholder" && staffEmployee) {
+      return <Navigate to={homePathForUser(user)} replace />;
+    }
+    if ((cfg.key === "office" || cfg.key === "hr") && consultant) {
+      return <Navigate to="/stakeholder" replace />;
+    }
+    const roleOk =
+      cfg.allowedRoles.includes(user.role) || (cfg.key === "office" && staffEmployee);
+    if (!roleOk) return <Navigate to={homePathForUser(user)} replace />;
     return <Navigate to={consumeLoginLanding(cfg.landingPath || "/dashboard")} replace />;
   }
 

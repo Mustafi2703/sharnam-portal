@@ -3,8 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { CrmProjectsRegister, type CrmProjectRow } from "../../components/CrmProjectsRegister";
-import { Badge, Button, Card, Input } from "../../components/ui";
+import { Badge, Button, Card, Input, Select } from "../../components/ui";
 import { openModuleToolWindow } from "../../lib/moduleToolWindow";
+import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { CRM_ACCENT, CRM_SOFT } from "./crmNav";
 
 const EMPTY = {
@@ -84,8 +85,17 @@ export default function CrmProjectsPage() {
 
   const projectTools: HubCard[] = selected
     ? [
-        { n: "01", label: "Setup this project", blurb: "Card, parties, matrix, portals.", href: `/crm/setup?projectId=${selected.id}&step=project` },
-        { n: "02", label: "Live project setup", blurb: "Same launch on the job itself.", href: `/projects/${selected.id}/setup` },
+        ...(!selected.status || selected.status === "Planning"
+          ? [
+              {
+                n: "01",
+                label: "Continue setup",
+                blurb: "Client, consultants, vendors, packages, SPDC staff.",
+                href: `/crm/setup?projectId=${selected.id}&step=project`,
+              },
+            ]
+          : []),
+        { n: "02", label: "Open project desk", blurb: "Site modules, DPR, drawings.", href: `/projects/${selected.id}` },
         { n: "03", label: "R2 bid for this project", blurb: "Add vendors, upload BOQs, comparative.", href: `/crm/bids?projectId=${selected.id}` },
       ]
     : [];
@@ -96,8 +106,8 @@ export default function CrmProjectsPage() {
         <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · projects</p>
         <h2 className="font-display text-lg text-ink">Projects</h2>
         <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
-          Delivery projects and client cards. Select a row to continue setup or open an R2 bid for that project.
-          Site modules (DPR, Quality, Drawings) live on the project desk, not here.
+          Delivery projects and client cards. Save a card from Project setup — it lands here as Planning.
+          Edit changes the card and status only. Continue setup if still Planning; Open desk once In Progress.
           <span className="block mt-1 font-semibold text-amber-800">
             Only office and admin can add, edit, or delete a project.
           </span>
@@ -184,8 +194,9 @@ export default function CrmProjectsPage() {
       {editProject && token && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="font-display text-2xl mb-1">Client and project card</h3>
-            <p className="text-sm text-steel-muted mb-4 font-mono">{editProject.code}</p>
+            <h3 className="font-display text-2xl mb-1">Edit project card</h3>
+            <p className="text-sm text-steel-muted mb-1 font-mono">{editProject.code}</p>
+            <p className="text-xs text-steel-muted mb-4">{projectStatusHint(editProject.status)}</p>
             <form
               className="grid gap-2"
               onSubmit={async (e) => {
@@ -193,14 +204,39 @@ export default function CrmProjectsPage() {
                 await api(`/api/projects/${editProject.id}/settings`, {
                   method: "PATCH",
                   token,
-                  body: JSON.stringify(editProject),
+                  body: JSON.stringify({
+                    name: editProject.name,
+                    clientName: editProject.clientName,
+                    clientContactName: editProject.clientContactName,
+                    clientEmail: editProject.clientEmail,
+                    clientPhone: editProject.clientPhone,
+                    clientAddress: editProject.clientAddress,
+                    location: editProject.location,
+                    designConsultant: editProject.designConsultant,
+                    pmcName: editProject.pmcName,
+                    contractorName: editProject.contractorName,
+                    status: editProject.status || "Planning",
+                  }),
                 });
-                setMsg("Client information saved.");
+                setMsg("Project card and status saved.");
                 setEditProject(null);
                 await load();
               }}
             >
               <Input value={editProject.name || ""} onChange={(e) => setEditProject({ ...editProject, name: e.target.value })} placeholder="Project name" />
+              <label className="text-xs font-semibold text-steel-muted">
+                Status
+                <Select
+                  value={editProject.status || "Planning"}
+                  onChange={(e) => setEditProject({ ...editProject, status: e.target.value })}
+                >
+                  {PROJECT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </label>
               <Input value={editProject.clientName || ""} onChange={(e) => setEditProject({ ...editProject, clientName: e.target.value })} placeholder="Client organisation" />
               <Input value={editProject.clientContactName || ""} onChange={(e) => setEditProject({ ...editProject, clientContactName: e.target.value })} placeholder="Contact name" />
               <Input value={editProject.clientEmail || ""} onChange={(e) => setEditProject({ ...editProject, clientEmail: e.target.value })} placeholder="Email" />

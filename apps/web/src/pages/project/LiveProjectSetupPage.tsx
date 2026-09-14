@@ -49,7 +49,7 @@ type SetupStatus = {
   checks: { key: string; ok: boolean; label: string; detail?: string; optional?: boolean }[];
 };
 
-type UserRow = { id: string; fullName: string; email: string; role: string };
+type UserRow = { id: string; fullName: string; email: string; role: string; vendorId?: string | null };
 type VendorRow = SetupVendor & { partyType?: string };
 
 /** Live-project setup — same launch as CRM, for jobs already in the portal. */
@@ -62,6 +62,7 @@ export default function LiveProjectSetupPage() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [overview, setOverview] = useState<{ members?: any[]; vendors?: any[] } | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [staffIds, setStaffIds] = useState<string[]>([]);
   const [vendors, setVendors] = useState<VendorRow[]>([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -75,7 +76,7 @@ export default function LiveProjectSetupPage() {
       api<SetupSummary>(`/api/projects/${projectId}/setup-summary`, { token }),
       api<SetupStatus>(`/api/projects/${projectId}/setup-status`, { token }).catch(() => null),
       api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${projectId}/overview`, { token }).catch(() => null),
-      api<UserRow[]>("/api/users", { token }).catch(() => []),
+      api<UserRow[]>("/api/users?kind=staff", { token }).catch(() => []),
       api<VendorRow[]>("/api/vendors", { token }).catch(() => []),
       api<ProjectCard>(`/api/projects/${projectId}`, { token }).catch(() => null),
     ]);
@@ -93,6 +94,7 @@ export default function LiveProjectSetupPage() {
     setOverview(ov);
     setUsers(u);
     setVendors(v);
+    setStaffIds((s.members || []).map((m) => m.userId).filter(Boolean));
   }, [token, projectId]);
 
   useEffect(() => {
@@ -160,7 +162,7 @@ export default function LiveProjectSetupPage() {
       <PageHeader
         eyebrow="Live project"
         title={summary ? `Set up ${summary.project.code}` : "Project setup"}
-        subtitle="Fill the header, add the client, consultants, and vendors, pin work packages on each, allocate people, then launch. A bid is optional."
+        subtitle="Fill the header, tick packages, pick client / consultants / vendors, assign SPDC staff from HRMS, then launch when ready."
       />
       {msg && <p className="text-sm text-ok">{msg}</p>}
       {status && (
@@ -271,9 +273,12 @@ export default function LiveProjectSetupPage() {
       <WorkPackagesPanel
         token={token}
         projectId={projectId}
+        mode="pick"
+        selected={projectPackages}
+        onChange={setProjectPackages}
         onSaved={(pkgs) => {
           setProjectPackages(pkgs);
-          setMsg("Packages saved — pin them on the client, consultants, and vendors.");
+          setMsg("Packages saved on this project.");
         }}
       />
 
@@ -315,6 +320,8 @@ export default function LiveProjectSetupPage() {
         token={token}
         users={users}
         members={summary?.members || []}
+        selectedIds={staffIds}
+        onChange={setStaffIds}
         canEdit={canManage}
         onMsg={setMsg}
         onChanged={() => void load()}
