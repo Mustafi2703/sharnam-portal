@@ -39,6 +39,8 @@ type Props = {
   passwordOptional?: boolean;
   token?: string | null;
   externalOnly?: boolean;
+  /** HRMS user setup — org fields rendered in the parent panel. */
+  hideStaffOrgFields?: boolean;
 };
 
 export function PortalAccountFields({
@@ -52,6 +54,7 @@ export function PortalAccountFields({
   passwordOptional = false,
   token = null,
   externalOnly = false,
+  hideStaffOrgFields = false,
 }: Props) {
   const { types } = useConsultantTypes(token);
   const path = loginPathForAccount(form.role, kind);
@@ -165,7 +168,7 @@ export function PortalAccountFields({
           </>
         ) : null}
 
-        {kind === "staff" ? (
+        {kind === "staff" && !hideStaffOrgFields ? (
           <>
             <Field label="Emp code">
               <Input

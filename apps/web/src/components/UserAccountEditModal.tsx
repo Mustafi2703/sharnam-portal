@@ -8,7 +8,9 @@ import {
 } from "../lib/portalAccounts";
 import { PortalAccountFields } from "./PortalAccountFields";
 import { RegisterEntryModal } from "./RegisterEntryModal";
-import { Button, Input } from "./ui";
+import { Button, Input, Select } from "./ui";
+
+type DepartmentRow = { id: string; name: string };
 
 export type UserAccountRow = {
   id: string;
@@ -69,6 +71,7 @@ export function UserAccountEditModal({
 }: Props) {
   const [form, setForm] = useState<PortalAccountForm>(formFromUser(user || ({} as UserAccountRow)));
   const [payroll, setPayroll] = useState({ ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [kind, setKind] = useState<PortalAccountKind>("staff");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -79,12 +82,52 @@ export function UserAccountEditModal({
     setKind(nextKind);
     setForm(formFromUser(user));
     setPayroll({
-      ctcAnnual: user.profile?.ctcAnnual ? String(user.profile.ctcAnnual) : "",
-      basicMonthly: user.profile?.basicMonthly ? String(user.profile.basicMonthly) : "",
-      hraMonthly: user.profile?.hraMonthly ? String(user.profile.hraMonthly) : "",
+      ctcAnnual: user.profile?.ctcAnnual != null ? String(user.profile.ctcAnnual) : "",
+      basicMonthly: user.profile?.basicMonthly != null ? String(user.profile.basicMonthly) : "",
+      hraMonthly: user.profile?.hraMonthly != null ? String(user.profile.hraMonthly) : "",
     });
     setErr("");
   }, [user, forceKind]);
+
+  useEffect(() => {
+    if (!open || !token) return;
+    void api<DepartmentRow[]>("/api/hrm/departments", { token })
+      .then((rows) => setDepartments(rows.map((d) => ({ id: d.id || d.name, name: d.name }))))
+      .catch(() => setDepartments([]));
+  }, [open, token]);
+
+  async function splitCtcFromCalculator() {
+    if (!token || !payroll.ctcAnnual) {
+      setErr("Enter CTC annual first, then split using the SPDC calculator.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      const breakdown = await api<{
+        partA: { rows: { label: string; perMonth: number }[] };
+      }>("/api/hrm/ctc/compute", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          candidateName: form.fullName,
+          designation: form.designation || "Employee",
+          fixedCtcAnnual: Number(payroll.ctcAnnual),
+        }),
+      });
+      const basic = breakdown.partA.rows.find((r) => r.label === "Basic Salary")?.perMonth;
+      const hra = breakdown.partA.rows.find((r) => r.label === "House Rent Allowance")?.perMonth;
+      setPayroll((p) => ({
+        ...p,
+        basicMonthly: basic != null ? String(Math.round(basic)) : p.basicMonthly,
+        hraMonthly: hra != null ? String(Math.round(hra)) : p.hraMonthly,
+      }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not compute CTC split");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     if (!user || !token) return;
@@ -102,9 +145,9 @@ export function UserAccountEditModal({
       if (kind === "staff") {
         body.empCode = form.empCode;
         body.department = form.department;
-        if (payroll.ctcAnnual) body.ctcAnnual = payroll.ctcAnnual;
-        if (payroll.basicMonthly) body.basicMonthly = payroll.basicMonthly;
-        if (payroll.hraMonthly) body.hraMonthly = payroll.hraMonthly;
+        body.ctcAnnual = payroll.ctcAnnual;
+        body.basicMonthly = payroll.basicMonthly;
+        body.hraMonthly = payroll.hraMonthly;
       } else if (kind === "stakeholder") {
         body.department = form.department;
       }
@@ -164,7 +207,9 @@ export function UserAccountEditModal({
         ? "Edit vendor / contractor"
         : kind === "stakeholder"
           ? "Edit consultant / stakeholder"
-          : "Edit staff";
+          : forceKind === "staff"
+            ? "Setup employee"
+            : "Edit staff";
 
   return (
     <RegisterEntryModal
@@ -189,33 +234,61 @@ export function UserAccountEditModal({
           passwordOptional
           token={token}
           externalOnly={forceKind === "client" || forceKind === "vendor" || forceKind === "stakeholder"}
+          hideStaffOrgFields={forceKind === "staff"}
         />
 
         {(kind === "staff" || forceKind === "staff") && (
-          <div className="border-t border-line pt-3 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payroll · SPDC CTC split</p>
-            <p className="text-[11px] text-steel-muted leading-relaxed">
-              Used for payslip generation (see SPDC CTC calculator). Leave blank until offer is accepted or hike is applied.
-            </p>
-            <div className="grid sm:grid-cols-3 gap-2">
+          <div className="border-t border-line pt-3 space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Employee profile</p>
+              <p className="text-[11px] text-steel-muted mt-1">Dept, designation, and CTC drive payroll, letters, and onboarding.</p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
               <Input
-                type="number"
-                placeholder="CTC annual (₹)"
-                value={payroll.ctcAnnual}
-                onChange={(e) => setPayroll({ ...payroll, ctcAnnual: e.target.value })}
+                placeholder="Employee code"
+                value={form.empCode}
+                onChange={(e) => setForm({ ...form, empCode: e.target.value })}
               />
+              <Select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
+                <option value="">Department</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
               <Input
-                type="number"
-                placeholder="Basic monthly (₹)"
-                value={payroll.basicMonthly}
-                onChange={(e) => setPayroll({ ...payroll, basicMonthly: e.target.value })}
+                className="sm:col-span-2"
+                placeholder="Designation"
+                value={form.designation}
+                onChange={(e) => setForm({ ...form, designation: e.target.value })}
               />
-              <Input
-                type="number"
-                placeholder="HRA monthly (₹)"
-                value={payroll.hraMonthly}
-                onChange={(e) => setPayroll({ ...payroll, hraMonthly: e.target.value })}
-              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payroll · SPDC CTC split</p>
+              <div className="grid sm:grid-cols-3 gap-2">
+                <Input
+                  type="number"
+                  placeholder="CTC annual (₹)"
+                  value={payroll.ctcAnnual}
+                  onChange={(e) => setPayroll({ ...payroll, ctcAnnual: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  placeholder="Basic monthly (₹)"
+                  value={payroll.basicMonthly}
+                  onChange={(e) => setPayroll({ ...payroll, basicMonthly: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  placeholder="HRA monthly (₹)"
+                  value={payroll.hraMonthly}
+                  onChange={(e) => setPayroll({ ...payroll, hraMonthly: e.target.value })}
+                />
+              </div>
+              <Button type="button" variant="secondary" disabled={busy || !payroll.ctcAnnual} onClick={() => void splitCtcFromCalculator()}>
+                Split from SPDC CTC calculator
+              </Button>
             </div>
           </div>
         )}

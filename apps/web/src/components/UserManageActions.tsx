@@ -8,10 +8,12 @@ type Props = {
   token: string | null;
   onEdit: () => void;
   onChanged: () => void | Promise<void>;
+  /** When parent already has a primary Setup/Edit button, hide the duplicate. */
+  showEdit?: boolean;
 };
 
 /** Visible Edit + Delete on user lists. Office/admin only — parent hides when not allowed. */
-export function UserManageActions({ user, token, onEdit, onChanged }: Props) {
+export function UserManageActions({ user, token, onEdit, onChanged, showEdit = true }: Props) {
   const [del, setDel] = useState(false);
   const [confirmEmail, setConfirmEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -20,9 +22,11 @@ export function UserManageActions({ user, token, onEdit, onChanged }: Props) {
   return (
     <>
       <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-        <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={onEdit}>
-          Edit
-        </Button>
+        {showEdit ? (
+          <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={onEdit}>
+            Edit
+          </Button>
+        ) : null}
         <Button
           type="button"
           className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"

@@ -39,20 +39,31 @@ const EMPTY_USER_FORM = {
   desk: "hrm",
 };
 
+function money(n?: number | null) {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  return `₹ ${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
+function hasPayrollSetup(row: UserAccountRow) {
+  return Boolean(row.profile?.ctcAnnual || row.profile?.basicMonthly);
+}
+
 function AddUserModal({
   open,
   token,
+  departments,
   onClose,
   onCreated,
   onError,
 }: {
   open: boolean;
   token: string | null;
+  departments: Array<{ id: string; name: string }>;
   onClose: () => void;
   onCreated: (email: string) => Promise<void>;
   onError: (reason: ActionReason) => void;
 }) {
-  const [form, setForm] = useState(EMPTY_USER_FORM);
+  const [form, setForm] = useState({ ...EMPTY_USER_FORM, ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
   const [busy, setBusy] = useState(false);
 
   async function createUser() {
@@ -60,7 +71,7 @@ function AddUserModal({
     try {
       await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(form) });
       const email = form.email;
-      setForm(EMPTY_USER_FORM);
+      setForm({ ...EMPTY_USER_FORM, ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
       await onCreated(email);
     } catch (err) {
       onError(actionReasonFromError("Could not create login", err));
@@ -90,8 +101,18 @@ function AddUserModal({
         <Input placeholder="Password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} />
         <Input placeholder="Phone" value={form.phone} onChange={(ev) => setForm({ ...form, phone: ev.target.value })} />
         <Input placeholder="Emp code" value={form.empCode} onChange={(ev) => setForm({ ...form, empCode: ev.target.value })} />
-        <Input placeholder="Department" value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value })} />
+        <Select value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value })}>
+          <option value="">Department</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.name}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
         <Input placeholder="Designation" value={form.designation} onChange={(ev) => setForm({ ...form, designation: ev.target.value })} />
+        <Input type="number" placeholder="CTC annual (₹)" value={form.ctcAnnual} onChange={(ev) => setForm({ ...form, ctcAnnual: ev.target.value })} />
+        <Input type="number" placeholder="Basic monthly (₹)" value={form.basicMonthly} onChange={(ev) => setForm({ ...form, basicMonthly: ev.target.value })} />
+        <Input type="number" placeholder="HRA monthly (₹)" value={form.hraMonthly} onChange={(ev) => setForm({ ...form, hraMonthly: ev.target.value })} />
       </div>
     </RegisterEntryModal>
   );
@@ -106,6 +127,7 @@ export default function HrmsUsersPage() {
   const canImpersonate = isAdmin || Boolean(user?.impersonatedBy);
   const canEdit = canManageHrms(user);
   const [employees, setEmployees] = useState<UserAccountRow[]>([]);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [msgTone, setMsgTone] = useState<"ok" | "err">("ok");
@@ -115,20 +137,23 @@ export default function HrmsUsersPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [editUser, setEditUser] = useState<UserAccountRow | null>(null);
   const [userQ, setUserQ] = useState("");
+  const [payrollFilter, setPayrollFilter] = useState<"all" | "ready" | "missing">("all");
   const [assign, setAssign] = useState({ userId: "", projectId: "", role: "site_employee" });
   const deferredUserQ = useDeferredValue(userQ);
 
   const load = useCallback(async () => {
-    const [e, p] = await Promise.all([
+    const [e, p, d] = await Promise.all([
       api<UserAccountRow[]>("/api/hrm/employees", { token }).catch((err) => {
         setMsgTone("err");
         setMsg(err instanceof Error ? err.message : "Could not load staff");
         return [];
       }),
       api<any[]>("/api/projects", { token }).catch(() => []),
+      api<Array<{ id: string; name: string }>>("/api/hrm/departments", { token }).catch(() => []),
     ]);
     setEmployees(e);
     setProjects(p);
+    setDepartments(d.map((row) => ({ id: row.id || row.name, name: row.name })));
   }, [token]);
 
   useEffect(() => {
@@ -137,13 +162,20 @@ export default function HrmsUsersPage() {
 
   const shownEmployees = useMemo(() => {
     const needle = deferredUserQ.trim().toLowerCase();
-    if (!needle) return employees;
-    return employees.filter((e) =>
-      `${e.fullName} ${e.email} ${e.role} ${e.profile?.department || ""} ${e.profile?.empCode || ""}`
+    return employees.filter((e) => {
+      if (payrollFilter === "ready" && !hasPayrollSetup(e)) return false;
+      if (payrollFilter === "missing" && hasPayrollSetup(e)) return false;
+      if (!needle) return true;
+      return `${e.fullName} ${e.email} ${e.role} ${e.profile?.department || ""} ${e.profile?.empCode || ""} ${e.profile?.designation || ""}`
         .toLowerCase()
-        .includes(needle)
-    );
-  }, [employees, deferredUserQ]);
+        .includes(needle);
+    });
+  }, [employees, deferredUserQ, payrollFilter]);
+
+  const payrollStats = useMemo(() => {
+    const ready = employees.filter(hasPayrollSetup).length;
+    return { ready, missing: employees.length - ready, total: employees.length };
+  }, [employees]);
 
   const employeeOptions = useMemo(
     () =>
@@ -250,7 +282,13 @@ export default function HrmsUsersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          Staff logins only — office, HR, and site. Client, consultant, and vendor accounts stay in CRM directories. Role permissions stay in Office → Access.
+          Every SPDC staff login is listed here. HR sets emp code, department, designation, CTC, and project assignment before payroll and onboarding.
+          <span className="block mt-1">
+            <strong>{payrollStats.ready}</strong> of <strong>{payrollStats.total}</strong> have CTC on file ·{" "}
+            <button type="button" className="text-brand font-semibold underline" onClick={() => setPayrollFilter("missing")}>
+              {payrollStats.missing} need setup
+            </button>
+          </span>
           <span className="block mt-1">
             Projects are never assigned automatically. Use <strong>Assign to project</strong>, or remove a project with the × on its chip.
           </span>
@@ -299,6 +337,11 @@ export default function HrmsUsersPage() {
               value={userQ}
               onChange={(ev) => setUserQ(ev.target.value)}
             />
+            <Select className="!w-40" value={payrollFilter} onChange={(ev) => setPayrollFilter(ev.target.value as typeof payrollFilter)}>
+              <option value="all">All staff</option>
+              <option value="missing">Missing CTC</option>
+              <option value="ready">Payroll ready</option>
+            </Select>
             <Button type="button" variant="secondary" onClick={() => downloadCsv("users-empty.csv", [...USER_CSV_HEADERS], [])}>
               Empty CSV
             </Button>
@@ -316,9 +359,12 @@ export default function HrmsUsersPage() {
             <thead>
               <tr className="border-b bg-sand/30 text-left text-xs uppercase tracking-wide text-steel-muted">
                 <th className="px-4 py-2 font-semibold">Name</th>
-                <th className="px-4 py-2 font-semibold">Email</th>
+                <th className="px-4 py-2 font-semibold">Emp code</th>
                 <th className="px-4 py-2 font-semibold">Role</th>
                 <th className="px-4 py-2 font-semibold">Dept</th>
+                <th className="px-4 py-2 font-semibold">Designation</th>
+                <th className="px-4 py-2 font-semibold">CTC / yr</th>
+                <th className="px-4 py-2 font-semibold">Payroll</th>
                 <th className="px-4 py-2 font-semibold">Projects</th>
                 <th className="px-4 py-2 font-semibold">Status</th>
                 {canEdit ? <th className="px-4 py-2 font-semibold">Actions</th> : null}
@@ -327,10 +373,18 @@ export default function HrmsUsersPage() {
             <tbody>
               {shownEmployees.map((e) => (
                 <tr key={e.id} className="border-b border-line/60 hover:bg-sand/20">
-                  <td className="px-4 py-2.5 font-medium">{e.fullName}</td>
-                  <td className="px-4 py-2.5 text-steel-muted">{e.email}</td>
+                  <td className="px-4 py-2.5 font-medium">
+                    <div>{e.fullName}</div>
+                    <div className="text-[10px] text-steel-muted font-mono">{e.email}</div>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs">{e.profile?.empCode || "—"}</td>
                   <td className="px-4 py-2.5">{ROLE_LABELS[e.role || ""] || e.role?.replace("_", " ")}</td>
                   <td className="px-4 py-2.5">{e.profile?.department || "—"}</td>
+                  <td className="px-4 py-2.5 text-xs">{e.profile?.designation || "—"}</td>
+                  <td className="px-4 py-2.5 text-xs whitespace-nowrap">{money(e.profile?.ctcAnnual)}</td>
+                  <td className="px-4 py-2.5">
+                    <Badge tone={hasPayrollSetup(e) ? "ok" : "warn"}>{hasPayrollSetup(e) ? "Ready" : "Set CTC"}</Badge>
+                  </td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1 max-w-[15rem]">
                       {(e.memberships || []).length === 0 ? (
@@ -363,10 +417,14 @@ export default function HrmsUsersPage() {
                     <Badge tone={e.isActive !== false ? "ok" : "warn"}>{e.isActive !== false ? "Active" : "Inactive"}</Badge>
                   </td>
                   {canEdit ? (
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3 mb-1" onClick={() => setEditUser(e)}>
+                        Setup
+                      </Button>
                       <UserManageActions
                         user={e}
                         token={token}
+                        showEdit={false}
                         onEdit={() => setEditUser(e)}
                         onChanged={async () => {
                           setMsgTone("ok");
@@ -415,6 +473,7 @@ export default function HrmsUsersPage() {
       <AddUserModal
         open={modalOpen}
         token={token}
+        departments={departments}
         onClose={() => setModalOpen(false)}
         onCreated={async (email) => {
           setMsgTone("ok");

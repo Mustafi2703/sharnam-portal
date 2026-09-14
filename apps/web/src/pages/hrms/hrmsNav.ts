@@ -113,7 +113,7 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         to: "users",
         label: "Users",
         icon: "master",
-        subtitle: "Create staff logins, activate accounts, and assign employees to projects.",
+        subtitle: "All staff listed — set emp code, department, CTC, and project assignments before payroll.",
         adminOnly: true,
       },
     ],

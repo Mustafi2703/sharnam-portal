@@ -1324,7 +1324,7 @@ hrmRouter.get("/employees", hrmDesk, async (req, res) => {
               NOT: { email: { startsWith: "deleted." } },
             }
           : { ...staffWhere, isActive: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: { fullName: "asc" },
       select: {
         id: true,
         fullName: true,
@@ -1405,6 +1405,9 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
         department: department || null,
         designation: designation || null,
         joinDate: new Date(),
+        ...(req.body.ctcAnnual ? { ctcAnnual: Number(req.body.ctcAnnual) } : {}),
+        ...(req.body.basicMonthly ? { basicMonthly: Number(req.body.basicMonthly) } : {}),
+        ...(req.body.hraMonthly ? { hraMonthly: Number(req.body.hraMonthly) } : {}),
       },
     });
   }
@@ -1533,6 +1536,9 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (ctcAnnual !== undefined && ctcAnnual !== "") profilePatch.ctcAnnual = Number(ctcAnnual);
   if (basicMonthly !== undefined && basicMonthly !== "") profilePatch.basicMonthly = Number(basicMonthly);
   if (hraMonthly !== undefined && hraMonthly !== "") profilePatch.hraMonthly = Number(hraMonthly);
+  if (ctcAnnual === "" || ctcAnnual === null) profilePatch.ctcAnnual = null;
+  if (basicMonthly === "" || basicMonthly === null) profilePatch.basicMonthly = null;
+  if (hraMonthly === "" || hraMonthly === null) profilePatch.hraMonthly = null;
   if (Object.keys(profilePatch).length) {
     const prefix = effectiveRole === "client" ? "CLT" : effectiveRole === "vendor" ? "VND" : "EMP";
     await prisma.employeeProfile.upsert({

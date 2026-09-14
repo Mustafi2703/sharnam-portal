@@ -56,8 +56,10 @@ Use this checklist **tomorrow morning** before client demo. Sign in as **admin**
 | # | Steps | Expected |
 |---|--------|----------|
 | 1 | HRMS → **Masters** → add departments (Site, HR, Planning) | Appears in list |
-| 2 | HRMS → **Users** → Edit staff → **Payroll · CTC block** | CTC annual + basic + HRA saved |
-| 3 | Assign 2 site staff to **one project only** (× removes wrong assignments) | Projects column correct |
+| 2 | HRMS → **Users** → filter **Missing CTC** → **Setup** on one employee | Modal: emp code, dept, designation, login role |
+| 3 | Enter **CTC annual** → **Split from SPDC CTC calculator** → Save | Basic + HRA filled; row shows **Ready** and CTC / yr |
+| 4 | Repeat until banner shows all staff have CTC (or basic monthly) | Payroll → Generate all no longer shows 0 slips |
+| 5 | **Assign to project** for 2 site staff on **one project only** (× removes wrong assignments) | Projects column correct |
 
 ### 2.2 Recruitment (tabs 1–5)
 
