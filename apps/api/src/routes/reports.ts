@@ -1470,7 +1470,7 @@ hrmRouter.delete("/assign", requireRoles("admin", "office", "hr"), async (req, r
 
 hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const userId = req.params.id;
-  const { email, fullName, role, phone, empCode, department, designation, password, isActive } = req.body;
+  const { email, fullName, role, phone, empCode, department, designation, password, isActive, ctcAnnual, basicMonthly, hraMonthly } = req.body;
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return res.status(404).json({ error: "User not found" });
   if (existing.role === "admin" && req.user?.role !== "admin") {
@@ -1505,7 +1505,15 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
     const bcrypt = await import("bcryptjs");
     data.passwordHash = await bcrypt.hash(String(password), 10);
   }
-  if (!Object.keys(data).length && empCode === undefined && department === undefined && designation === undefined) {
+  if (
+    !Object.keys(data).length &&
+    empCode === undefined &&
+    department === undefined &&
+    designation === undefined &&
+    ctcAnnual === undefined &&
+    basicMonthly === undefined &&
+    hraMonthly === undefined
+  ) {
     return res.status(400).json({ error: "Nothing to update" });
   }
 
@@ -1522,6 +1530,9 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   }
   if (department !== undefined) profilePatch.department = department || null;
   if (designation !== undefined) profilePatch.designation = designation || null;
+  if (ctcAnnual !== undefined && ctcAnnual !== "") profilePatch.ctcAnnual = Number(ctcAnnual);
+  if (basicMonthly !== undefined && basicMonthly !== "") profilePatch.basicMonthly = Number(basicMonthly);
+  if (hraMonthly !== undefined && hraMonthly !== "") profilePatch.hraMonthly = Number(hraMonthly);
   if (Object.keys(profilePatch).length) {
     const prefix = effectiveRole === "client" ? "CLT" : effectiveRole === "vendor" ? "VND" : "EMP";
     await prisma.employeeProfile.upsert({
@@ -1841,7 +1852,55 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "hr", "site_employ
   res.json(row);
 });
 
-/* ─── leave types, balances, holidays ─── */
+/* ─── departments, leave types, balances, holidays ─── */
+
+async function distinctDepartmentNames(): Promise<string[]> {
+  const [profiles, reqs, posts] = await Promise.all([
+    prisma.employeeProfile.findMany({ where: { department: { not: null } }, select: { department: true }, distinct: ["department"] }),
+    prisma.manpowerRequisition.findMany({ select: { department: true }, distinct: ["department"] }),
+    prisma.jobPosting.findMany({ where: { department: { not: null } }, select: { department: true }, distinct: ["department"] }),
+  ]);
+  return [...new Set([...profiles, ...reqs, ...posts].map((r) => String(r.department || "").trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
+hrmRouter.get("/departments", hrmStaff, async (_req, res) => {
+  try {
+    const rows = await prisma.hrmDepartment.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+    if (rows.length) return res.json(rows);
+  } catch {
+    /* table may not be migrated yet */
+  }
+  const names = await distinctDepartmentNames();
+  res.json(names.map((name) => ({ id: name, code: name.slice(0, 12).toUpperCase().replace(/\s+/g, "_"), name, headName: null })));
+});
+
+hrmRouter.post("/departments", hrmDesk, async (req, res) => {
+  const name = String(req.body.name || "").trim();
+  const code = String(req.body.code || name.slice(0, 12)).trim().toUpperCase().replace(/\s+/g, "_");
+  if (!name) return res.status(400).json({ error: "name required" });
+  try {
+    const row = await prisma.hrmDepartment.upsert({
+      where: { code },
+      create: { code, name, headName: req.body.headName ? String(req.body.headName).trim() : null },
+      update: { name, headName: req.body.headName ? String(req.body.headName).trim() : null, isActive: true },
+    });
+    await audit("hrms.department.upsert", { userId: (req as AuthedRequest).user?.id, entity: "HrmDepartment", entityId: row.id });
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not save department — run database migration" });
+  }
+});
+
+hrmRouter.delete("/departments/:id", hrmDesk, async (req, res) => {
+  try {
+    await prisma.hrmDepartment.update({ where: { id: req.params.id }, data: { isActive: false } });
+    res.json({ ok: true });
+  } catch {
+    res.status(404).json({ error: "Department not found" });
+  }
+});
 
 hrmRouter.get("/leave-types", hrmStaff, async (_req, res) => {
   const rows = await prisma.leaveType.findMany({ orderBy: { name: "asc" } });

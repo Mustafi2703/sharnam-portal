@@ -1015,6 +1015,17 @@ model LeaveType {
   requests LeaveRequest[]
 }
 
+/// HR department master — used on requisitions, postings, and employee profiles.
+model HrmDepartment {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  headName  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model LeaveBalance {
   id          String @id @default(cuid())
   userId      String

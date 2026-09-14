@@ -3,9 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { CrmProjectsRegister, type CrmProjectRow } from "../../components/CrmProjectsRegister";
-import { Badge, Button, Card, Input, Select } from "../../components/ui";
+import { Badge, Button, Card, Input } from "../../components/ui";
 import { openModuleToolWindow } from "../../lib/moduleToolWindow";
-import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { CRM_ACCENT, CRM_SOFT } from "./crmNav";
 
 const EMPTY = {
@@ -44,7 +43,6 @@ export default function CrmProjectsPage() {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [editProject, setEditProject] = useState<CrmProjectRow | null>(null);
   const [deleteProject, setDeleteProject] = useState<CrmProjectRow | null>(null);
   const [deleteCode, setDeleteCode] = useState("");
 
@@ -85,16 +83,12 @@ export default function CrmProjectsPage() {
 
   const projectTools: HubCard[] = selected
     ? [
-        ...(!selected.status || selected.status === "Planning"
-          ? [
-              {
-                n: "01",
-                label: "Continue setup",
-                blurb: "Client, consultants, vendors, packages, SPDC staff.",
-                href: `/crm/setup?projectId=${selected.id}&step=project`,
-              },
-            ]
-          : []),
+        {
+          n: "01",
+          label: !selected.status || selected.status === "Planning" ? "Continue setup" : "Edit card & team",
+          blurb: "Client card, consultants, vendors, work packages, and SPDC employees — add more any time during the job.",
+          href: `/crm/setup?projectId=${selected.id}&step=project`,
+        },
         { n: "02", label: "Open project desk", blurb: "Site modules, DPR, drawings.", href: `/projects/${selected.id}` },
         { n: "03", label: "R2 bid for this project", blurb: "Add vendors, upload BOQs, comparative.", href: `/crm/bids?projectId=${selected.id}` },
       ]
@@ -107,7 +101,7 @@ export default function CrmProjectsPage() {
         <h2 className="font-display text-lg text-ink">Projects</h2>
         <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
           Delivery projects and client cards. Award a proposal from the register — it lands here as Planning — or create a job here / in Project setup without a lead.
-          Edit changes the card and status only. Continue setup if still Planning; Open desk once In Progress.
+          <strong className="font-semibold text-ink"> Edit card & team</strong> opens the full form: client lines, consultants, vendors, packages, and SPDC employees. Use it during the job when you hire more people or add parties.
           <span className="block mt-1 font-semibold text-amber-800">
             Only office and admin can add, edit, or delete a project.
           </span>
@@ -184,78 +178,11 @@ export default function CrmProjectsPage() {
         canWrite={canManage}
         selectedId={selected?.id || null}
         onSelect={setSelected}
-        onEdit={(p) => setEditProject({ ...p })}
         onDelete={(p) => {
           setDeleteProject(p);
           setDeleteCode("");
         }}
       />
-
-      {editProject && token && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="font-display text-2xl mb-1">Edit project card</h3>
-            <p className="text-sm text-steel-muted mb-1 font-mono">{editProject.code}</p>
-            <p className="text-xs text-steel-muted mb-4">{projectStatusHint(editProject.status)}</p>
-            <form
-              className="grid gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await api(`/api/projects/${editProject.id}/settings`, {
-                  method: "PATCH",
-                  token,
-                  body: JSON.stringify({
-                    name: editProject.name,
-                    clientName: editProject.clientName,
-                    clientContactName: editProject.clientContactName,
-                    clientEmail: editProject.clientEmail,
-                    clientPhone: editProject.clientPhone,
-                    clientAddress: editProject.clientAddress,
-                    location: editProject.location,
-                    designConsultant: editProject.designConsultant,
-                    pmcName: editProject.pmcName,
-                    contractorName: editProject.contractorName,
-                    status: editProject.status || "Planning",
-                  }),
-                });
-                setMsg("Project card and status saved.");
-                setEditProject(null);
-                await load();
-              }}
-            >
-              <Input value={editProject.name || ""} onChange={(e) => setEditProject({ ...editProject, name: e.target.value })} placeholder="Project name" />
-              <label className="text-xs font-semibold text-steel-muted">
-                Status
-                <Select
-                  value={editProject.status || "Planning"}
-                  onChange={(e) => setEditProject({ ...editProject, status: e.target.value })}
-                >
-                  {PROJECT_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <Input value={editProject.clientName || ""} onChange={(e) => setEditProject({ ...editProject, clientName: e.target.value })} placeholder="Client organisation" />
-              <Input value={editProject.clientContactName || ""} onChange={(e) => setEditProject({ ...editProject, clientContactName: e.target.value })} placeholder="Contact name" />
-              <Input value={editProject.clientEmail || ""} onChange={(e) => setEditProject({ ...editProject, clientEmail: e.target.value })} placeholder="Email" />
-              <Input value={editProject.clientPhone || ""} onChange={(e) => setEditProject({ ...editProject, clientPhone: e.target.value })} placeholder="Phone" />
-              <Input value={editProject.clientAddress || ""} onChange={(e) => setEditProject({ ...editProject, clientAddress: e.target.value })} placeholder="Address" />
-              <Input value={editProject.location || ""} onChange={(e) => setEditProject({ ...editProject, location: e.target.value })} placeholder="Location" />
-              <Input value={editProject.designConsultant || ""} onChange={(e) => setEditProject({ ...editProject, designConsultant: e.target.value })} placeholder="Design consultant" />
-              <Input value={editProject.pmcName || ""} onChange={(e) => setEditProject({ ...editProject, pmcName: e.target.value })} placeholder="PMC / SPDC" />
-              <Input value={editProject.contractorName || ""} onChange={(e) => setEditProject({ ...editProject, contractorName: e.target.value })} placeholder="Contractor" />
-              <div className="flex gap-2 pt-2">
-                <Button type="submit">Save</Button>
-                <Button type="button" variant="secondary" onClick={() => setEditProject(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
 
       {deleteProject && token && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

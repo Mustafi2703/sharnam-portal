@@ -53,7 +53,6 @@ export default function CrmPage() {
     stage: "New",
     value: "",
   });
-  const [editProject, setEditProject] = useState<any | null>(null);
   const [deleteProject, setDeleteProject] = useState<any | null>(null);
   const [deleteCode, setDeleteCode] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -417,7 +416,6 @@ export default function CrmPage() {
           <CrmProjectsRegister
             projects={projects}
             canWrite={canManage}
-            onEdit={(p) => setEditProject({ ...p })}
             onDelete={(p) => {
               setDeleteProject(p);
               setDeleteCode("");
@@ -462,46 +460,6 @@ export default function CrmPage() {
                 Cancel
               </Button>
             </div>
-          </Card>
-        </div>
-      )}
-
-      {editProject && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="font-display text-2xl mb-1">Client & project card</h3>
-            <p className="text-sm text-steel-muted mb-4 font-mono">{editProject.code}</p>
-            <form
-              className="grid gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await api(`/api/projects/${editProject.id}/settings`, {
-                  method: "PATCH",
-                  token,
-                  body: JSON.stringify(editProject),
-                });
-                setMsg("Client information saved.");
-                setEditProject(null);
-                await load();
-              }}
-            >
-              <Input value={editProject.name || ""} onChange={(e) => setEditProject({ ...editProject, name: e.target.value })} placeholder="Project name" />
-              <Input value={editProject.clientName || ""} onChange={(e) => setEditProject({ ...editProject, clientName: e.target.value })} placeholder="Client organisation" />
-              <Input value={editProject.clientContactName || ""} onChange={(e) => setEditProject({ ...editProject, clientContactName: e.target.value })} placeholder="Contact name" />
-              <Input value={editProject.clientEmail || ""} onChange={(e) => setEditProject({ ...editProject, clientEmail: e.target.value })} placeholder="Email" />
-              <Input value={editProject.clientPhone || ""} onChange={(e) => setEditProject({ ...editProject, clientPhone: e.target.value })} placeholder="Phone" />
-              <Input value={editProject.clientAddress || ""} onChange={(e) => setEditProject({ ...editProject, clientAddress: e.target.value })} placeholder="Address" />
-              <Input value={editProject.clientGst || ""} onChange={(e) => setEditProject({ ...editProject, clientGst: e.target.value })} placeholder="GST" />
-              <Input value={editProject.designConsultant || ""} onChange={(e) => setEditProject({ ...editProject, designConsultant: e.target.value })} placeholder="Design consultant" />
-              <Input value={editProject.contractorName || ""} onChange={(e) => setEditProject({ ...editProject, contractorName: e.target.value })} placeholder="Contractor" />
-              <Input value={editProject.location || ""} onChange={(e) => setEditProject({ ...editProject, location: e.target.value })} placeholder="Location" />
-              <div className="flex gap-2 pt-2">
-                <Button type="submit">Save</Button>
-                <Button type="button" variant="secondary" onClick={() => setEditProject(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
           </Card>
         </div>
       )}

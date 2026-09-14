@@ -8,7 +8,7 @@ import {
 } from "../lib/portalAccounts";
 import { PortalAccountFields } from "./PortalAccountFields";
 import { RegisterEntryModal } from "./RegisterEntryModal";
-import { Button } from "./ui";
+import { Button, Input } from "./ui";
 
 export type UserAccountRow = {
   id: string;
@@ -20,7 +20,14 @@ export type UserAccountRow = {
   vendorId?: string | null;
   vendor?: { id: string; name: string; trade?: string | null; partyType?: string | null } | null;
   isActive?: boolean;
-  profile?: { empCode?: string; department?: string | null; designation?: string | null } | null;
+  profile?: {
+    empCode?: string;
+    department?: string | null;
+    designation?: string | null;
+    ctcAnnual?: number | null;
+    basicMonthly?: number | null;
+    hraMonthly?: number | null;
+  } | null;
   memberships?: { id: string; project: { id: string; code: string; name: string }; role?: string }[];
 };
 
@@ -61,6 +68,7 @@ export function UserAccountEditModal({
   onDeleted,
 }: Props) {
   const [form, setForm] = useState<PortalAccountForm>(formFromUser(user || ({} as UserAccountRow)));
+  const [payroll, setPayroll] = useState({ ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
   const [kind, setKind] = useState<PortalAccountKind>("staff");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -70,6 +78,11 @@ export function UserAccountEditModal({
     const nextKind = forceKind || portalAccountKind(user.role, user.profile, user.vendorId);
     setKind(nextKind);
     setForm(formFromUser(user));
+    setPayroll({
+      ctcAnnual: user.profile?.ctcAnnual ? String(user.profile.ctcAnnual) : "",
+      basicMonthly: user.profile?.basicMonthly ? String(user.profile.basicMonthly) : "",
+      hraMonthly: user.profile?.hraMonthly ? String(user.profile.hraMonthly) : "",
+    });
     setErr("");
   }, [user, forceKind]);
 
@@ -89,6 +102,9 @@ export function UserAccountEditModal({
       if (kind === "staff") {
         body.empCode = form.empCode;
         body.department = form.department;
+        if (payroll.ctcAnnual) body.ctcAnnual = payroll.ctcAnnual;
+        if (payroll.basicMonthly) body.basicMonthly = payroll.basicMonthly;
+        if (payroll.hraMonthly) body.hraMonthly = payroll.hraMonthly;
       } else if (kind === "stakeholder") {
         body.department = form.department;
       }
@@ -174,6 +190,35 @@ export function UserAccountEditModal({
           token={token}
           externalOnly={forceKind === "client" || forceKind === "vendor" || forceKind === "stakeholder"}
         />
+
+        {(kind === "staff" || forceKind === "staff") && (
+          <div className="border-t border-line pt-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payroll · SPDC CTC split</p>
+            <p className="text-[11px] text-steel-muted leading-relaxed">
+              Used for payslip generation (see SPDC CTC calculator). Leave blank until offer is accepted or hike is applied.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-2">
+              <Input
+                type="number"
+                placeholder="CTC annual (₹)"
+                value={payroll.ctcAnnual}
+                onChange={(e) => setPayroll({ ...payroll, ctcAnnual: e.target.value })}
+              />
+              <Input
+                type="number"
+                placeholder="Basic monthly (₹)"
+                value={payroll.basicMonthly}
+                onChange={(e) => setPayroll({ ...payroll, basicMonthly: e.target.value })}
+              />
+              <Input
+                type="number"
+                placeholder="HRA monthly (₹)"
+                value={payroll.hraMonthly}
+                onChange={(e) => setPayroll({ ...payroll, hraMonthly: e.target.value })}
+              />
+            </div>
+          </div>
+        )}
 
         {user.memberships?.length ? (
           <div className="border-t border-line pt-3">

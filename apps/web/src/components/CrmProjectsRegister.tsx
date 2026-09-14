@@ -24,10 +24,13 @@ export type CrmProjectRow = {
 
 const PAGE_SIZE = 50;
 
+function setupHref(projectId: string) {
+  return `/crm/setup?projectId=${projectId}&step=project`;
+}
+
 type Props = {
   projects: CrmProjectRow[];
   canWrite: boolean;
-  onEdit?: (project: CrmProjectRow) => void;
   onDelete?: (project: CrmProjectRow) => void;
   selectedId?: string | null;
   onSelect?: (project: CrmProjectRow) => void;
@@ -64,7 +67,7 @@ function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
   });
 }
 
-export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, selectedId: selectedIdProp, onSelect }: Props) {
+export function CrmProjectsRegister({ projects, canWrite, onDelete, selectedId: selectedIdProp, onSelect }: Props) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
@@ -173,10 +176,13 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                   </td>
                   <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-2">
-                      {canWrite && onEdit ? (
-                        <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => onEdit(p)}>
-                          Edit
-                        </Button>
+                      {canWrite ? (
+                        <Link
+                          to={setupHref(p.id)}
+                          className="inline-flex items-center rounded-md border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand/50"
+                        >
+                          Edit card & team
+                        </Link>
                       ) : null}
                       {canWrite && onDelete ? (
                         <Button
@@ -188,7 +194,7 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
                         </Button>
                       ) : null}
                       {!p.status || p.status === "Planning" ? (
-                        <Link to={`/crm/setup?projectId=${p.id}&step=project`} className="text-[10px] font-semibold text-brand">
+                        <Link to={setupHref(p.id)} className="text-[10px] font-semibold text-brand">
                           Continue setup
                         </Link>
                       ) : (
@@ -221,21 +227,21 @@ export function CrmProjectsRegister({ projects, canWrite, onEdit, onDelete, sele
               </div>
               <CrmDetailLines lines={projectDetailLines(selected)} />
               <div className="flex flex-col gap-2 border-t border-line pt-3">
+                {canWrite ? (
+                  <Link to={setupHref(selected.id)} className="text-sm font-semibold text-brand">
+                    Edit card · add consultants, vendors, employees →
+                  </Link>
+                ) : null}
                 {(!selected.status || selected.status === "Planning") ? (
-                  <Link to={`/crm/setup?projectId=${selected.id}&step=project`} className="text-sm font-semibold text-brand">
-                    Continue setup (parties · staff) →
+                  <Link to={setupHref(selected.id)} className="text-xs text-steel-muted">
+                    First-time setup — pick parties and SPDC staff on the form above.
                   </Link>
                 ) : null}
                 <Link to={`/projects/${selected.id}`} className="text-sm font-semibold text-brand">
                   Open project tools →
                 </Link>
-                {canWrite && (onEdit || onDelete) ? (
+                {canWrite && onDelete ? (
                   <div className="flex flex-wrap gap-2">
-                    {onEdit ? (
-                      <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => onEdit(selected)}>
-                        Edit
-                      </Button>
-                    ) : null}
                     {onDelete ? (
                       <Button
                         type="button"

@@ -41,23 +41,26 @@ export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [msg, setMsg] = useState("");
   const [loadError, setLoadError] = useState("");
 
   const reload = async () => {
     try {
-      const [r, p, c, o, people] = await Promise.all([
+      const [r, p, c, o, people, depts] = await Promise.all([
         api<any[]>("/api/hrm/requisitions", { token }),
         api<any[]>("/api/hrm/postings", { token }),
         api<any[]>("/api/hrm/candidates", { token }),
         api<any[]>("/api/hrm/offers", { token }),
         api<any[]>("/api/hrm/employees", { token }).catch(() => []),
+        api<any[]>("/api/hrm/departments", { token }).catch(() => []),
       ]);
       setReqs(r);
       setPostings(p);
       setCandidates(c);
       setOffers(o);
       setStaff(people);
+      setDepartments(depts.map((d: any) => ({ id: d.id || d.name, name: d.name })));
       setLoadError("");
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load recruitment");
@@ -69,20 +72,18 @@ export default function RecruitmentPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
+      <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSp({ tab: t.id })}
-            className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
-              tab === t.id ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted hover:border-ink"
-            }`}
+            className={`hrms-subnav__tab${tab === t.id ? " is-on" : ""}`}
           >
             {t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {loadError ? (
         <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
@@ -91,8 +92,8 @@ export default function RecruitmentPage() {
       ) : null}
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
-      {tab === "postings" && <PostingsTab reqs={reqs} postings={postings} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "requisitions" && <RequisitionsTab reqs={reqs} departments={departments} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "postings" && <PostingsTab reqs={reqs} postings={postings} departments={departments} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "candidates" && <CandidatesTab postings={postings} candidates={candidates} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OffersTab candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
@@ -102,7 +103,7 @@ export default function RecruitmentPage() {
 
 /* ────────────────────────────  1  Requisitions  ──────────────────────────── */
 
-function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
+function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }: any) {
   const [form, setForm] = useState({ requisitionNo: "", department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" });
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -126,7 +127,14 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
           <h3 className="font-semibold text-sm mb-2">Raise a manpower requisition</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Input placeholder="Req No (auto)" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
-            <Input placeholder="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required />
+            <Select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required>
+              <option value="">Department</option>
+              {departments.map((d: any) => (
+                <option key={d.id} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
             <Input placeholder="Designation" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required />
             <Input placeholder="Head count" type="number" value={form.count} onChange={(e) => setForm({ ...form, count: Number(e.target.value) })} />
             <Select value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
@@ -187,7 +195,7 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
 
 /* ────────────────────────────  2  Postings  ──────────────────────────── */
 
-function PostingsTab({ reqs, postings, canManage, reload, setMsg, token }: any) {
+function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, token }: any) {
   const [form, setForm] = useState({ requisitionId: "", title: "", department: "", location: "", employmentType: "Permanent", description: "", requirements: "", channels: "LinkedIn, Naukri, Website" });
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -206,14 +214,24 @@ function PostingsTab({ reqs, postings, canManage, reload, setMsg, token }: any) 
     <div className="space-y-3">
       {canManage && (
         <Card>
-          <h3 className="font-semibold text-sm mb-2">Post a job (LinkedIn / Naukri / Website)</h3>
+          <h3 className="font-semibold text-sm mb-1">Post a job (LinkedIn / Naukri / Website)</h3>
+          <p className="text-[11px] text-steel-muted mb-2">
+            Publish here logs the posting in Sharnam and Activity. Posting to LinkedIn/Naukri is manual — note channels below.
+          </p>
           <form onSubmit={add} className="grid md:grid-cols-3 gap-2">
             <Select value={form.requisitionId} onChange={(e) => setForm({ ...form, requisitionId: e.target.value })}>
               <option value="">Link approved requisition (optional)</option>
               {approvedReqs.map((r: any) => <option key={r.id} value={r.id}>{r.requisitionNo} · {r.designation}</option>)}
             </Select>
             <Input placeholder="Job title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-            <Input placeholder="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+            <Select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
+              <option value="">Department</option>
+              {departments.map((d: any) => (
+                <option key={d.id} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
             <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             <Select value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
               {["Permanent", "Contract", "Consultant", "Intern"].map((v) => <option key={v}>{v}</option>)}
@@ -239,6 +257,7 @@ function PostingsTab({ reqs, postings, canManage, reload, setMsg, token }: any) 
                   {p.department || "—"} · {p.location || "—"} · {p.employmentType}
                   {p.requisition && <> · req <span className="font-mono">{p.requisition.requisitionNo}</span></>}
                   {" · "}<Badge tone={p.status === "Open" ? "ok" : "warn"}>{p.status}</Badge>
+                  {p.postedAt ? <> · posted {new Date(p.postedAt).toLocaleDateString("en-IN")}</> : null}
                 </div>
                 <div className="text-[10px] text-steel-muted mt-0.5">
                   {(() => {
@@ -248,7 +267,10 @@ function PostingsTab({ reqs, postings, canManage, reload, setMsg, token }: any) 
                   })()}
                 </div>
               </div>
-              <div className="text-xs text-steel-muted">Candidates: {p._count?.candidates ?? 0}</div>
+              <div className="text-right text-xs">
+                <div className="font-semibold text-ink">{p._count?.candidates ?? 0} applicants</div>
+                <div className="text-steel-muted">Resume DB</div>
+              </div>
             </li>
           ))}
           {!postings.length && <li className="px-4 py-6 text-center text-sm text-steel-muted">No postings yet.</li>}

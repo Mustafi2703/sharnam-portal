@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
@@ -59,23 +59,23 @@ export default function PayrollPage() {
   }, [year, month, scopeUserId, token]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-4">
+      <nav className="hrms-subnav" aria-label="Payroll views">
         {(["payslip", "hike"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
-              tab === t ? "bg-ink text-white border-ink" : "bg-white border-line text-steel-muted hover:border-ink"
-            }`}
+            className={`hrms-subnav__tab${tab === t ? " is-on" : ""}`}
           >
-            {t === "payslip" ? "Payslips" : "Pay Hikes"}
+            {t === "payslip" ? "Payslips" : "Pay hikes"}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {msg && <p className="text-sm text-brand-dark">{msg}</p>}
+      {msg ? (
+        <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft/50 text-brand-dark border border-brand/20">{msg}</p>
+      ) : null}
 
       {tab === "payslip" ? (
         <PayslipTab
@@ -170,67 +170,104 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
   const grossTotal = payslips.reduce((s: number, p: any) => s + p.grossEarnings, 0);
   const netTotal = payslips.reduce((s: number, p: any) => s + p.netPay, 0);
 
+  const staffWithCtc = useMemo(
+    () => employees.filter((e: any) => e.profile && (e.profile.ctcAnnual || e.profile.basicMonthly)),
+    [employees]
+  );
+  const staffMissingCtc = useMemo(
+    () =>
+      employees.filter(
+        (e: any) =>
+          e.profile &&
+          !e.profile.ctcAnnual &&
+          !e.profile.basicMonthly &&
+          ["admin", "office", "hr", "site_employee", "employee"].includes(e.role)
+      ),
+    [employees]
+  );
+
   return (
-    <div className="space-y-3">
-      <Card>
-        <div className="grid md:grid-cols-4 gap-2 mb-3 items-end">
-          <label className="text-xs text-steel-muted">
+    <div className="space-y-4">
+      <Card className="!p-4">
+        <div className="hrms-payroll-toolbar">
+          <label className="text-xs font-semibold text-steel-muted">
             Year
-            <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+            <Input type="number" className="mt-1" value={year} onChange={(e) => setYear(Number(e.target.value))} />
           </label>
-          <label className="text-xs text-steel-muted">
+          <label className="text-xs font-semibold text-steel-muted">
             Month
-            <Select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{i + 1} · {m}</option>)}
+            <Select className="mt-1" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>
+                  {i + 1} · {m}
+                </option>
+              ))}
             </Select>
           </label>
-          <label className="text-xs text-steel-muted">
-            Filter by employee
-            <Select value={scopeUserId} onChange={(e) => setScopeUserId(e.target.value)}>
+          <label className="text-xs font-semibold text-steel-muted md:col-span-2">
+            Filter employee
+            <Select className="mt-1" value={scopeUserId} onChange={(e) => setScopeUserId(e.target.value)}>
               <option value="">All employees</option>
-              {employees.map((emp: any) => <option key={emp.id} value={emp.id}>{emp.fullName}</option>)}
+              {employees.map((emp: any) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.fullName}
+                </option>
+              ))}
             </Select>
           </label>
         </div>
+        <p className="text-[11px] text-steel-muted mt-3 leading-relaxed">
+          {staffWithCtc.length} staff with CTC on file · {staffMissingCtc.length} missing CTC (set in HRMS → Users → Edit → Payroll block).
+        </p>
       </Card>
 
       {canWrite && (
-        <Card>
-          <h3 className="font-semibold text-sm mb-2">Generate payslip · {MONTHS[month - 1]} {year}</h3>
-          <form onSubmit={generate} className="grid md:grid-cols-5 gap-2">
+        <Card className="!p-4 space-y-3">
+          <div>
+            <h3 className="font-semibold text-sm">Generate · {MONTHS[month - 1]} {year}</h3>
+            <p className="text-[11px] text-steel-muted mt-1">
+              Blank overrides use the SPDC CTC split on the employee profile. HTML is filed on Drive under 06.03 Payslips / YYYY-MM.
+            </p>
+          </div>
+          <form onSubmit={generate} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} required>
-              <option value="">Employee</option>
-              {employees.filter((e: any) => e.profile).map((emp: any) => (
+              <option value="">Pick employee</option>
+              {staffWithCtc.map((emp: any) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.fullName}{emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}{emp.profile?.ctcAnnual ? ` · ₹${Number(emp.profile.ctcAnnual).toLocaleString("en-IN")}/yr` : ""}
+                  {emp.fullName}
+                  {emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}
+                  {emp.profile?.ctcAnnual ? ` · ₹${Number(emp.profile.ctcAnnual).toLocaleString("en-IN")}/yr` : ""}
                 </option>
               ))}
             </Select>
             <Input placeholder="Working days" type="number" value={form.workingDays} onChange={(e) => setForm({ ...form, workingDays: Number(e.target.value) })} />
             <Input placeholder="LOP days" type="number" value={form.lopDays} onChange={(e) => setForm({ ...form, lopDays: Number(e.target.value) })} />
-            <Input placeholder="TDS / Income tax (₹)" type="number" value={form.incomeTax} onChange={(e) => setForm({ ...form, incomeTax: Number(e.target.value) })} />
-            <Input placeholder="Basic override (₹)" type="number" value={form.basic} onChange={(e) => setForm({ ...form, basic: e.target.value })} />
-            <Input placeholder="HRA override (₹)" type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: e.target.value })} />
-            <Input placeholder="Special allow (₹)" type="number" value={form.specialAllow} onChange={(e) => setForm({ ...form, specialAllow: e.target.value })} />
-            <Button type="submit">Generate one</Button>
-            <Button type="button" variant="secondary" onClick={() => void generateAll()}>
-              Generate all staff this month
-            </Button>
+            <Input placeholder="TDS (₹)" type="number" value={form.incomeTax} onChange={(e) => setForm({ ...form, incomeTax: Number(e.target.value) })} />
+            <Input placeholder="Basic override" type="number" value={form.basic} onChange={(e) => setForm({ ...form, basic: e.target.value })} />
+            <Input placeholder="HRA override" type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: e.target.value })} />
+            <Input placeholder="Special allow" type="number" value={form.specialAllow} onChange={(e) => setForm({ ...form, specialAllow: e.target.value })} />
+            <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+              <Button type="submit">Generate one</Button>
+              <Button type="button" variant="secondary" onClick={() => void generateAll()}>
+                Generate all staff ({staffWithCtc.length})
+              </Button>
+            </div>
           </form>
-          <p className="text-[11px] text-steel-muted mt-2">
-            Blank overrides use the SPDC CTC split on the employee profile. Generated HTML is filed on Drive under 06.03 Payslips / YYYY-MM. Click a number to edit after generate.
-          </p>
         </Card>
       )}
 
       <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex justify-between">
-          <span className="font-semibold text-sm">Payslips · {MONTHS[month - 1]} {year} ({payslips.length})</span>
-          <span className="text-xs text-steel-muted">Gross {money(grossTotal)} · Net {money(netTotal)}</span>
+        <div className="px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-sm">
+            Payslips · {MONTHS[month - 1]} {year} ({payslips.length})
+          </span>
+          <span className="text-xs text-steel-muted">
+            Gross {money(grossTotal)} · Net {money(netTotal)}
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[1100px] w-full text-xs">
-            <thead className="text-left text-steel-muted bg-white">
+            <thead className="text-left text-steel-muted bg-sand/20">
               <tr>
                 <th className="p-2">User</th>
                 <th>Days</th>
@@ -403,13 +440,13 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
       )}
 
       <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex justify-between">
-          <span className="font-semibold text-sm">Pay Hikes</span>
+        <div className="px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-sm">Pay hikes</span>
           <span className="text-[11px] text-steel-muted">{hikes.length} entries</span>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-[1000px] w-full text-xs">
-            <thead className="text-left text-steel-muted bg-white">
+            <thead className="text-left text-steel-muted bg-sand/20">
               <tr><th className="p-2">Employee</th><th>Effective</th><th className="text-right">Old CTC</th><th className="text-right">New CTC</th><th className="text-right">Hike %</th><th>Rating</th><th>Reason</th><th>Status</th></tr>
             </thead>
             <tbody>

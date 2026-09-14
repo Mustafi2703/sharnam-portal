@@ -131,7 +131,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
         </header>
 
         <main className="app-frame__scroll">
-          <div className="w-full max-w-6xl mx-auto px-3 sm:px-5 py-4 sm:py-6">{children ?? <Outlet />}</div>
+          <div className="w-full max-w-7xl mx-auto px-3 sm:px-5 py-4 sm:py-6">{children ?? <Outlet />}</div>
         </main>
       </div>
 

@@ -2,14 +2,14 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick } from "../../components/SetupPartyMultiPick";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
-import { projectStatusHint } from "../../lib/projectStatus";
+import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 
 type ProjectRow = {
   id: string;
@@ -101,6 +101,7 @@ const EMPTY_PROJECT = {
   pmcName: "SPDC",
   startDate: "",
   endDate: "",
+  status: "Planning",
 };
 
 function dayField(v?: string | null) {
@@ -189,6 +190,7 @@ export default function CrmProjectSetupPage() {
       clientGst: s.project.clientGst || "",
       startDate: dayField(s.project.startDate),
       endDate: dayField(s.project.endDate),
+      status: s.project.status || "Planning",
     });
     setConsultantIds(
       s.vendors.filter((v) => ["Consultant", "Designer"].includes(v.partyType)).map((v) => v.vendorId)
@@ -297,6 +299,7 @@ export default function CrmProjectSetupPage() {
           pmcName: details.pmcName || firstPmc?.name || "SPDC",
           startDate: details.startDate || null,
           endDate: details.endDate || null,
+          status: details.status || "Planning",
           workPackages: projectPackages,
         }),
       });
@@ -315,7 +318,11 @@ export default function CrmProjectSetupPage() {
         });
       }
       await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
-      setMsg("Project card saved. Technical and commercial matrices filled from this card. No new login was created.");
+      setMsg(
+        details.status && details.status !== "Planning"
+          ? "Project card updated. New consultants, vendors, and SPDC staff are linked to this job."
+          : "Project card saved. Technical and commercial matrices filled from this card. No new login was created."
+      );
       await loadProject();
       setStep("project", projectId);
     } catch (err) {
@@ -362,6 +369,7 @@ export default function CrmProjectSetupPage() {
   }
 
   const clientOptions = vendors.filter((v) => v.partyType === "Client");
+  const isLaunched = Boolean(summary?.project.status && summary.project.status !== "Planning");
 
   if (!canManage) {
     return <p className="p-6 text-sm text-steel-muted">Office access is required for project setup.</p>;
@@ -372,8 +380,12 @@ export default function CrmProjectSetupPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageHeader
           eyebrow="CRM · project start"
-          title="Project setup"
-          subtitle="Pick client, PMC, consultants, vendors, packages, and SPDC staff. New people and companies are added on the directory pages — save only links them to this job."
+          title={projectId ? (isLaunched ? "Edit project card & team" : "Project setup") : "Project setup"}
+          subtitle={
+            projectId && isLaunched
+              ? "Job is live — update the client card and add consultants, vendors, packages, or SPDC employees as the project grows. Save links them; new logins are still created on the directory pages."
+              : "Pick client, PMC, consultants, vendors, packages, and SPDC staff. New people and companies are added on the directory pages — save only links them to this job."
+          }
         />
         {summary && (
           <div className="flex flex-wrap items-center gap-2">
@@ -388,6 +400,11 @@ export default function CrmProjectSetupPage() {
               showEdit={false}
               onChanged={() => void loadLists()}
             />
+            <Link to="/crm/projects">
+              <Button type="button" variant="secondary">
+                Projects register
+              </Button>
+            </Link>
             <Link to={`/projects/${summary.project.id}`}>
               <Button type="button" variant="secondary">
                 Open project desk
@@ -423,7 +440,12 @@ export default function CrmProjectSetupPage() {
       {step === "project" && (
         <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
           <Card className="!p-4 space-y-3">
-            <h3 className="font-semibold text-sm">{projectId ? "Project card" : "New delivery project"}</h3>
+            <h3 className="font-semibold text-sm">{projectId ? "Project card & parties" : "New delivery project"}</h3>
+            {projectId && isLaunched ? (
+              <p className="text-xs text-steel-muted leading-relaxed">
+                Tick more consultants, contractors, or SPDC staff below and save — existing assignments stay; new picks are added to this job.
+              </p>
+            ) : null}
             <form
               className="grid sm:grid-cols-2 gap-2"
               onSubmit={projectId ? saveDetails : createProject}
@@ -455,6 +477,21 @@ export default function CrmProjectSetupPage() {
                     : setCreateForm({ ...createForm, location: e.target.value })
                 }
               />
+              {projectId ? (
+                <label className="text-xs text-steel-muted sm:col-span-2">
+                  Project status
+                  <Select
+                    value={details.status || "Planning"}
+                    onChange={(e) => setDetails({ ...details, status: e.target.value })}
+                  >
+                    {PROJECT_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              ) : null}
               <Input
                 placeholder="PMC name"
                 value={projectId ? details.pmcName : createForm.pmcName}
@@ -609,8 +646,8 @@ export default function CrmProjectSetupPage() {
                 />
               </div>
               <div className="sm:col-span-2 flex flex-wrap gap-2 items-center">
-                <Button type="submit" variant="secondary" disabled={busy}>
-                  Save project card
+                <Button type="submit" disabled={busy}>
+                  {projectId ? (isLaunched ? "Save card & team" : "Save project card") : "Create project"}
                 </Button>
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => navigate("/crm/projects")}>
                   Back to register
@@ -697,7 +734,30 @@ export default function CrmProjectSetupPage() {
         <p className="text-sm text-steel-muted">Create or select a project first.</p>
       )}
 
-      {step === "launch" && projectId && (
+      {step === "launch" && projectId && isLaunched && (
+        <Card className="!p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Project already launched</h3>
+          <p className="text-sm text-steel-muted leading-relaxed">
+            Status is <strong>{summary?.project.status}</strong>. Use step 1 to add consultants, vendors, or SPDC employees during the job.
+            Re-run launch only if you need to refresh folders or matrix scaffolding.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={() => setStep("project")}>
+              Edit card & team
+            </Button>
+            <Link to="/crm/projects">
+              <Button type="button" variant="secondary">
+                Back to projects register
+              </Button>
+            </Link>
+            <Link to={`/projects/${projectId}`}>
+              <Button type="button">Open project desk</Button>
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {step === "launch" && projectId && !isLaunched && (
         <Card className="!p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
