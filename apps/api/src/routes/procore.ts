@@ -159,14 +159,47 @@ vendorsRouter.post("/seed-bid-catalog", requireRoles("admin", "office"), async (
   res.json({ ok: true, ...out });
 });
 
+function vendorPatchFromBody(body: Record<string, unknown>) {
+  const patch: Record<string, unknown> = {};
+  const pick = (key: string, transform?: (v: unknown) => unknown) => {
+    if (body[key] === undefined) return;
+    patch[key] = transform ? transform(body[key]) : body[key];
+  };
+  pick("name", (v) => String(v ?? "").trim());
+  pick("partyType");
+  pick("trade", (v) => (v == null ? null : String(v).trim()));
+  pick("address", (v) => (v == null ? null : String(v).trim()));
+  pick("city", (v) => (v == null ? null : String(v).trim()));
+  pick("state", (v) => (v == null ? null : String(v).trim()));
+  pick("country", (v) => (v == null ? null : String(v).trim()));
+  pick("businessPhone", (v) => (v == null ? null : String(v).trim()));
+  pick("email", (v) => {
+    const s = String(v ?? "").trim();
+    return s ? s.toLowerCase() : null;
+  });
+  pick("website", (v) => (v == null ? null : String(v).trim()));
+  pick("primaryContactName", (v) => (v == null ? null : String(v).trim()));
+  pick("licenseNumber", (v) => (v == null ? null : String(v).trim()));
+  pick("gstNumber", (v) => (v == null ? null : String(v).trim()));
+  pick("notes", (v) => (v == null ? null : String(v).trim()));
+  pick("isUnionMember", (v) => (v === undefined ? undefined : !!v));
+  pick("isPrequalified", (v) => (v === undefined ? undefined : !!v));
+  pick("isMinorityOwned", (v) => (v === undefined ? undefined : !!v));
+  pick("isWomenOwned", (v) => (v === undefined ? undefined : !!v));
+  pick("insuranceVerified", (v) => (v === undefined ? undefined : !!v));
+  pick("isActive", (v) => (v === undefined ? undefined : !!v));
+  return patch;
+}
+
 vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const current = await prisma.vendor.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ error: "Company not found" });
   const password = req.body.password ? String(req.body.password) : null;
-  const data = { ...req.body };
-  delete data.password;
-  delete data.createLogin;
+  const data = vendorPatchFromBody(req.body as Record<string, unknown>);
   if (data.partyType === "Vendor") data.partyType = "Contractor";
+  if (data.name !== undefined && !String(data.name).trim()) {
+    return res.status(400).json({ error: "Company name is required" });
+  }
   if (data.partyType && vendorDesk(String(current.partyType)) !== vendorDesk(String(data.partyType))) {
     return res.status(409).json({
       error: `${current.name} is on CRM → ${vendorDeskLabel(current.partyType)}. Open that list to edit — party type cannot jump desks.`,

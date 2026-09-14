@@ -122,14 +122,19 @@ export function DirectoryCompaniesPanel({
   }, [rows, listSearch, tab, typeFilter]);
 
   useEffect(() => {
-    if (selected) {
-      setForm(vendorToForm(selected));
-      setLoginPassword("");
-    } else if (!selectedId) {
-      setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
-      setLoginPassword("Demo@1234");
+    if (!selectedId) {
+      if (!creatingNew) {
+        setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
+        setLoginPassword("Demo@1234");
+      }
+      return;
     }
-  }, [selected, selectedId, meta.defaultParty]);
+    const row = rows.find((r) => r.id === selectedId);
+    if (row) {
+      setForm(vendorToForm(row));
+      setLoginPassword("");
+    }
+  }, [selectedId, rows, creatingNew, meta.defaultParty]);
 
   function startNewCompany() {
     setSelectedId(null);
@@ -154,7 +159,22 @@ export function DirectoryCompaniesPanel({
     e.preventDefault();
     if (!canEdit) return;
     setMsg("");
-    const payload = { ...form, partyType };
+    const trimmedName = form.name.trim();
+    if (!trimmedName) {
+      setMsg("Company name is required.");
+      return;
+    }
+    const payload = {
+      ...form,
+      name: trimmedName,
+      partyType,
+      primaryContactName: form.primaryContactName.trim(),
+      businessPhone: form.businessPhone.trim(),
+      email: form.email.trim().toLowerCase(),
+      address: form.address.trim(),
+      city: form.city.trim(),
+      gstNumber: form.gstNumber.trim(),
+    };
     try {
       if (selectedId) {
         if (!selected || vendorDesk(selected.partyType) !== vendorDesk(meta.defaultParty)) {
@@ -184,6 +204,10 @@ export function DirectoryCompaniesPanel({
               : "Updated.") + syncNote
         );
       } else {
+        if (!payload.email) {
+          setMsg("Add an email to create the portal login for this company.");
+          return;
+        }
         const created = await api<VendorRow & { login?: { email: string; created: boolean; tempPassword?: string } }>(
           "/api/vendors",
           {
@@ -389,7 +413,7 @@ export function DirectoryCompaniesPanel({
           </p>
         ) : null}
         <form className="space-y-3" onSubmit={save}>
-          <Input required disabled={!canEdit} placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
             {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
               <option key={p.value} value={p.value}>
@@ -397,9 +421,9 @@ export function DirectoryCompaniesPanel({
               </option>
             ))}
           </Select>
-          <Input required disabled={!canEdit} placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-          <Input required disabled={!canEdit} placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Input required disabled={!canEdit} placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Primary contact (login name)" value={form.primaryContactName} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Email (portal login)" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Input disabled={!canEdit} placeholder="Phone" value={form.businessPhone} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
           {canEdit ? (
             <Input
               type="password"

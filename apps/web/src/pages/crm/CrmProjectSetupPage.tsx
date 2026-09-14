@@ -203,7 +203,10 @@ export default function CrmProjectSetupPage() {
       s.vendors.find((v) => v.partyType === "Client") ||
       s.vendors.find((v) => v.email && v.email === s.project.clientEmail) ||
       s.vendors.find((v) => v.name && v.name === s.project.clientName);
-    setClientId(clientRow?.vendorId || "");
+    setClientId((prev) => {
+      if (prev && s.vendors.some((v) => v.vendorId === prev)) return prev;
+      return clientRow?.vendorId || "";
+    });
     setStaffIds(s.members.map((m) => m.userId).filter(Boolean));
     void api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
@@ -380,16 +383,18 @@ export default function CrmProjectSetupPage() {
     card: Pick<typeof EMPTY_PROJECT, "clientName" | "clientContactName" | "clientEmail" | "clientPhone" | "clientAddress" | "clientGst">,
   ) {
     if (!token || !id) return;
+    const name = card.clientName.trim();
+    if (!name) throw new Error("Client company name is required");
     await api(`/api/vendors/${id}`, {
       method: "PATCH",
       token,
       body: JSON.stringify({
-        name: card.clientName,
-        primaryContactName: card.clientContactName,
-        email: card.clientEmail,
-        businessPhone: card.clientPhone,
-        address: card.clientAddress,
-        gstNumber: card.clientGst,
+        name,
+        primaryContactName: card.clientContactName.trim() || null,
+        email: card.clientEmail.trim().toLowerCase() || null,
+        businessPhone: card.clientPhone.trim() || null,
+        address: card.clientAddress.trim() || null,
+        gstNumber: card.clientGst.trim() || null,
         partyType: "Client",
       }),
     });
