@@ -1,37 +1,102 @@
-<h1 class="title">Letter of Appointment</h1>
-<h2 class="subtitle">Sharnam Project Development Consultants &amp; Co.</h2>
+<p class="confidential">STRICTLY PRIVATE &amp; CONFIDENTIAL</p>
 
-<p>Dear {{candidateName}},</p>
-
-<p>
-  With reference to your application and subsequent interviews, we are pleased to appoint you as
-  <strong>{{designation}}</strong> with Sharnam Project Development Consultants &amp; Co. (“the Company”),
-  with effect from <strong>{{joinDate}}</strong>, on the terms set out below.
+<p class="address-block">
+  <strong>To,</strong><br/>
+  {{candidateName}}<br/>
+  {{address}}<br/>
+  Mobile: {{phone}} · E-mail: {{candidateEmail}}
 </p>
 
-<table class="kv">
-  <tr><td class="k">Employee name</td><td>{{candidateName}}</td></tr>
-  <tr><td class="k">Designation</td><td>{{designation}}</td></tr>
-  <tr><td class="k">Department</td><td>{{department}}</td></tr>
-  <tr><td class="k">Place of posting</td><td>{{location}}</td></tr>
-  <tr><td class="k">Fixed CTC (p.a.)</td><td>{{fixedCtcAnnual}}</td></tr>
-  <tr><td class="k">Reporting to</td><td>{{reportingManager}}</td></tr>
-</table>
+<h1 class="title">Letter of Appointment</h1>
+<h2 class="subtitle">{{designation}} · {{department}} · {{location}}</h2>
 
-<p><strong>1. Probation</strong> — You will be on probation for six (6) months, extendable at the Company’s discretion.</p>
-<p><strong>2. Compensation</strong> — Your fixed cost to company and break-up are detailed in <strong>Annexure I</strong> (CTC Structure) attached herewith.</p>
-<p><strong>3. Working hours</strong> — Normal office hours apply; site postings follow project shift patterns.</p>
-<p><strong>4. Leave</strong> — As per Company leave policy communicated on joining.</p>
-<p><strong>5. Confidentiality</strong> — You shall not disclose client, project, or Company information without written consent.</p>
-<p><strong>6. Non-compete</strong> — During employment and for twelve (12) months thereafter you shall not solicit Company clients or employees.</p>
-<p><strong>7. Intellectual property</strong> — All work product created during employment belongs to the Company.</p>
-<p><strong>8. Code of conduct</strong> — You shall comply with SPDC HSE, quality, and ethics policies on every assignment.</p>
-<p><strong>9. Termination</strong> — Either party may terminate with one (1) month notice during probation and two (2) months thereafter, or payment in lieu.</p>
-<p><strong>10. Documents</strong> — Joining is subject to verification of identity, education, and prior employment records.</p>
+<p>Dear {{salutation}},</p>
 
 <p>
-  Please sign and return the duplicate copy of this letter as token of your acceptance.
-  We welcome you to the Sharnam team and wish you a successful career with us.
+  Further to your application and the selection process concluded on {{selectionDate}}, we are pleased to confirm our
+  offer of employment with <strong>Sharnam Project Development Consultants &amp; Co.</strong> (&ldquo;SPDC&rdquo;, &ldquo;the Firm&rdquo;,
+  &ldquo;the Company&rdquo;), a project development and project management consultancy practice with its registered office at
+  Vadodara, Gujarat.
+</p>
+
+<p>
+  This Letter of Appointment, together with <strong>Annexure I</strong> (Compensation Structure), <strong>Annexure II</strong>
+  (Leave &amp; Holiday Entitlement) and <strong>Annexure III</strong> (Joining Documentation Checklist), records the complete
+  terms and conditions governing your employment and supersedes all prior oral or written communications.
+</p>
+
+<p><strong>Particulars of appointment</strong></p>
+<table class="kv">
+  <tr><td class="k">Designation</td><td>{{designation}}</td></tr>
+  <tr><td class="k">Grade / Band</td><td>{{grade}}</td></tr>
+  <tr><td class="k">Function / Discipline</td><td>{{department}}</td></tr>
+  <tr><td class="k">Reporting to</td><td>{{reportingManager}}</td></tr>
+  <tr><td class="k">Base location</td><td>{{location}}</td></tr>
+  <tr><td class="k">Date of joining</td><td>On or before {{joinDate}}</td></tr>
+  <tr><td class="k">Employment type</td><td>Full-time, permanent, subject to probation (Clause 4)</td></tr>
+  <tr><td class="k">Fixed cost to company</td><td>{{fixedCtcAnnual}} per annum — refer Annexure I</td></tr>
+  <tr><td class="k">Employee code</td><td>{{empCode}}</td></tr>
+  <tr><td class="k">Offer validity</td><td>Signed acceptance within {{offerValidityDays}} days of the date of this letter</td></tr>
+</table>
+
+<p><strong>Index of terms and conditions</strong> (forming an integral part of this letter · Ref. {{refNo}})</p>
+<table class="kv">
+  <tr><td class="k">1</td><td>Position, reporting and place of work</td></tr>
+  <tr><td class="k">2</td><td>Remuneration</td></tr>
+  <tr><td class="k">3</td><td>Performance management, increment and performance pay</td></tr>
+  <tr><td class="k">4</td><td>Probation and confirmation</td></tr>
+  <tr><td class="k">5</td><td>Hours of work, attendance and leave</td></tr>
+  <tr><td class="k">6</td><td>Statutory benefits and deductions</td></tr>
+  <tr><td class="k">7</td><td>Site deputation, travel and reimbursements</td></tr>
+  <tr><td class="k">8</td><td>Health, safety, environment and quality</td></tr>
+  <tr><td class="k">9</td><td>Background verification, medical fitness and accuracy of information</td></tr>
+  <tr><td class="k">10</td><td>Code of conduct, ethics and anti-bribery</td></tr>
+  <tr><td class="k">11</td><td>Confidentiality and intellectual property</td></tr>
+  <tr><td class="k">12</td><td>Non-solicitation and conflict of interest</td></tr>
+  <tr><td class="k">13</td><td>Notice period, resignation and termination</td></tr>
+  <tr><td class="k">14</td><td>Prevention of sexual harassment</td></tr>
+  <tr><td class="k">15</td><td>Data privacy</td></tr>
+  <tr><td class="k">16</td><td>Retirement and superannuation</td></tr>
+  <tr><td class="k">17</td><td>General</td></tr>
+</table>
+
+<p><strong>1. Position, reporting and place of work</strong> — You are appointed as {{designation}} in {{department}}. Your services may be transferred or deputed to any SPDC office or project site in India. You shall devote your whole time and professional ability to the Firm and shall not engage in any other employment without prior written consent.</p>
+
+<p><strong>2. Remuneration</strong> — You shall be paid compensation as set out in Annexure I, subject to statutory deductions including income tax, Provident Fund, Professional Tax and ESIC where applicable. Salary shall be credited to your designated bank account on or before the 7th of the succeeding month.</p>
+
+<p><strong>3. Performance management</strong> — The Firm operates an annual performance cycle. Salary revision and performance pay are discretionary and not guaranteed.</p>
+
+<p><strong>4. Probation and confirmation</strong> — You shall be on probation for {{probationMonths}} months from {{joinDate}}, extendable by up to three months. Confirmation shall be communicated in writing on satisfactory completion of probation.</p>
+
+<p><strong>5. Hours, attendance and leave</strong> — Normal office hours apply; site postings follow project shift patterns. Leave shall be as per the Firm&apos;s leave policy and Annexure II.</p>
+
+<p><strong>6. Statutory benefits</strong> — You shall be enrolled under applicable labour laws including PF and ESIC as per eligibility. All deductions authorised by law or by you shall be made from salary.</p>
+
+<p><strong>7. Site deputation and travel</strong> — Site presence, client premises and vendor works may be required. Reimbursements follow the Firm&apos;s travel and expense policy.</p>
+
+<p><strong>8. HSE &amp; quality</strong> — You shall comply with SPDC HSE, quality and ethics policies on every assignment.</p>
+
+<p><strong>9. Background verification</strong> — Joining is subject to satisfactory BGV, medical fitness and verification of identity, education and prior employment records.</p>
+
+<p><strong>10. Code of conduct</strong> — You shall comply with the SPDC code of conduct and anti-bribery policy at all times.</p>
+
+<p><strong>11. Confidentiality &amp; IP</strong> — All client, project and Firm information is confidential. Work product created during employment belongs to the Firm.</p>
+
+<p><strong>12. Non-solicitation</strong> — During employment and for twelve (12) months thereafter you shall not solicit Firm clients or employees.</p>
+
+<p><strong>13. Notice &amp; termination</strong> — Either party may terminate with one (1) month notice during probation and two (2) months thereafter, or payment in lieu, subject to Clause 13 of the full policy.</p>
+
+<p><strong>14. POSH</strong> — The Firm maintains a zero-tolerance policy on sexual harassment as per the applicable Act.</p>
+
+<p><strong>15. Data privacy</strong> — Personal data shall be processed per the Firm&apos;s privacy policy and applicable law.</p>
+
+<p><strong>16. Retirement</strong> — Superannuation age and benefits as per Firm policy and applicable law.</p>
+
+<p><strong>17. General</strong> — This letter, Annexures I–III and HR policies on the portal constitute the entire agreement. Amendments shall be in writing only.</p>
+
+<p>
+  Please sign and return the duplicate copy of this letter as token of your acceptance within {{offerValidityDays}} days.
+  We welcome you to the Sharnam team.
 </p>
 
 <div class="signblock">
@@ -43,4 +108,4 @@
   </div>
 </div>
 
-<p><em>Annexure I — Compensation Structure (CTC Calculator output) is generated separately and forms an integral part of this appointment.</em></p>
+<p><em>Annexure I — Compensation Structure (SPDC CTC calculator) · Annexure II — Leave · Annexure III — Joining checklist are issued separately and form an integral part of this appointment.</em></p>

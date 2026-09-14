@@ -19,6 +19,7 @@ import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import type { HrmsDocument } from "@prisma/client";
+import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
 
@@ -95,10 +96,14 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
   const ctcRaw = data.fixedCtcAnnual ?? data.ctcAnnual ?? data.ctc ?? "";
   const ctcInr = formatInr(ctcRaw);
   const issue = fmtDate(row.issueDate);
+  const parts = name.split(/\s+/).filter(Boolean);
+  const firstName = parts[0] || name;
   return {
     ...data,
     employeeName: name,
     candidateName: name,
+    salutation: parts.length ? `Mr. / Ms. ${firstName}` : "Mr. / Ms.",
+    firstName,
     designation,
     department,
     location,
@@ -115,13 +120,17 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
     newDesignation: String(data.newDesignation || designation || "").trim() || designation || "—",
     previousCtc: formatInr(data.previousCtc ?? data.oldCtcAnnual ?? ""),
     newCtc: formatInr(data.newCtc ?? data.newCtcAnnual ?? ctcRaw),
-    empCode: String(data.empCode || "—"),
-    address: String(data.address || "—"),
+    empCode: String(data.empCode || "To be assigned on joining"),
+    address: String(data.address || "____________"),
     probationMonths: String(data.probationMonths || "6"),
     refNo: row.refNo,
     kind: row.kind,
     issueDate: issue,
     candidateEmail: String(row.candidateEmail || data.candidateEmail || ""),
+    phone: String(data.phone || data.mobile || "____________"),
+    grade: String(data.grade || data.band || "As per SPDC Grade Structure"),
+    offerValidityDays: String(data.offerValidityDays || "7"),
+    selectionDate: fmtDate((data.selectionDate || data.interviewDate || joinRaw) as Date | string | null),
   };
 }
 
@@ -148,6 +157,8 @@ const LETTERHEAD_CSS = `
   .refline { display: flex; justify-content: space-between; font-size: 10pt; color: #444; margin-bottom: 18px; }
   h1.title { font-size: 14pt; text-align: center; letter-spacing: 1px; margin: 22px 0 8px; text-transform: uppercase; }
   h2.subtitle { font-size: 11pt; text-align: center; color: #555; font-weight: 500; margin-top: 0; margin-bottom: 22px; }
+  .confidential { font-size: 9pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #7B4DFF; margin-bottom: 12px; }
+  .address-block { font-size: 10.5pt; line-height: 1.5; margin-bottom: 18px; }
   .kv { border: 1px solid #ddd; border-collapse: collapse; width: 100%; margin: 12px 0; }
   .kv td { border: 1px solid #ddd; padding: 6px 10px; font-size: 10.5pt; }
   .kv td.k { background: #f7f6ff; font-weight: 600; width: 34%; }
@@ -468,6 +479,46 @@ export function renderHrPolicyAcknowledgement(ctx: {
 </body>
 </html>`;
 }
+
+/** File generated or signed letter copies on the employee HR DMS vault. */
+export async function attachHrmsLetterToEmployeeVault(
+  row: Pick<
+    HrmsDocument,
+    "kind" | "refNo" | "employeeName" | "employeeUserId" | "candidateEmail" | "storagePath"
+  >,
+  opts: { fileUrl: string; storagePath?: string | null; signed?: boolean }
+) {
+  let userId = row.employeeUserId;
+  if (!userId && row.candidateEmail) {
+    const u = await prisma.user.findFirst({
+      where: { email: row.candidateEmail.trim().toLowerCase(), isActive: true },
+      select: { id: true },
+    });
+    userId = u?.id || null;
+  }
+  if (!userId || !opts.fileUrl) return null;
+
+  const category = opts.signed ? `${row.kind}-Signed` : row.kind;
+  const title = opts.signed
+    ? `Signed ${row.kind} · ${row.employeeName} · ${row.refNo}`
+    : `${row.kind} letter · ${row.employeeName} · ${row.refNo}`;
+
+  const existing = await prisma.employeeDocument.findFirst({
+    where: { userId, category, title: { contains: row.refNo } },
+  });
+  const data = {
+    fileUrl: opts.fileUrl,
+    storagePath: opts.storagePath || row.storagePath,
+    issuedOn: new Date(),
+  };
+  if (existing) {
+    return prisma.employeeDocument.update({ where: { id: existing.id }, data });
+  }
+  return prisma.employeeDocument.create({
+    data: { userId, category, title, ...data },
+  });
+}
+
 export async function generateHrmsLetter(row: HrmsDocument) {
   let ctx: Record<string, unknown> = {};
   try {

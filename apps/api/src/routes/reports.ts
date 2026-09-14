@@ -2235,26 +2235,8 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
   });
   if (updated.employeeUserId && (updated.kind === "Appointment" || updated.kind === "Offer" || updated.kind === "Promotion")) {
     const fileUrl = updated.sharePointUrl || updated.generatedPdfUrl || "";
-    const existing = await prisma.employeeDocument.findFirst({
-      where: { userId: updated.employeeUserId, category: updated.kind, title: { contains: updated.refNo } },
-    });
-    const doc = {
-      fileUrl,
-      storagePath: updated.storagePath,
-      issuedOn: new Date(),
-    };
-    if (existing) {
-      await prisma.employeeDocument.update({ where: { id: existing.id }, data: doc });
-    } else {
-      await prisma.employeeDocument.create({
-        data: {
-          userId: updated.employeeUserId,
-          category: updated.kind,
-          title: `${updated.kind} letter · ${updated.employeeName} · ${updated.refNo}`,
-          ...doc,
-        },
-      });
-    }
+    const { attachHrmsLetterToEmployeeVault } = await import("../services/hrmsLetter.js");
+    await attachHrmsLetterToEmployeeVault(updated, { fileUrl, storagePath: updated.storagePath, signed: false });
   }
   await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
   res.json(updated);
@@ -2289,10 +2271,17 @@ hrmRouter.post(
       where: { id: row.id },
       data: {
         uploadedFileUrl: saved.url || `/uploads/office/${saved.path}`,
-        sharePointUrl: saved.url || row.sharePointUrl,
+        sharePointUrl: saved.sharePointUrl || saved.url || row.sharePointUrl,
         storagePath: saved.path,
         status: "Signed",
       },
+    });
+    const signedUrl = updated.uploadedFileUrl || updated.sharePointUrl || "";
+    const { attachHrmsLetterToEmployeeVault } = await import("../services/hrmsLetter.js");
+    await attachHrmsLetterToEmployeeVault(updated, {
+      fileUrl: signedUrl,
+      storagePath: updated.storagePath,
+      signed: true,
     });
     await audit("hrm.docs.upload", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
     res.json(updated);

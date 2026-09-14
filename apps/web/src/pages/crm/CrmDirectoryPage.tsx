@@ -410,7 +410,27 @@ export function DirectoryCompaniesPanel({
               <Link to="/crm/bids" className="text-brand font-semibold">
                 Bid management
               </Link>{" "}
-              and pick companies from this list.
+              and pick companies from this list. Vendor appointment / work-order letters:{" "}
+              <Link to="/hrm/documents" className="text-brand font-semibold">
+                HRMS → Documents
+              </Link>
+              .
+            </>
+          ) : tab === "clients" || tab === "stakeholders" ? (
+            <>
+              Attach on{" "}
+              <Link to="/crm/setup" className="text-brand font-semibold">
+                Project setup
+              </Link>
+              . Issue appointment / engagement letters via{" "}
+              <Link to="/hrm/documents" className="text-brand font-semibold">
+                HRMS → Documents
+              </Link>
+              . SPDC staff CTC:{" "}
+              <Link to="/hrm/users" className="text-brand font-semibold">
+                HRMS → Users
+              </Link>
+              .
             </>
           ) : (
             <>

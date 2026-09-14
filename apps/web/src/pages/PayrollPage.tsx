@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
@@ -217,7 +218,11 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           </label>
         </div>
         <p className="text-[11px] text-steel-muted mt-3 leading-relaxed">
-          {staffWithCtc.length} staff with CTC on file · {staffMissingCtc.length} missing CTC (set in HRMS → Users → Edit → Payroll block).
+          {staffWithCtc.length} staff with CTC on file · {staffMissingCtc.length} missing CTC —{" "}
+          <Link to="/hrm/users" className="text-brand font-semibold underline">
+            set CTC in HRMS → Users
+          </Link>{" "}
+          before Generate all. Payslip layout matches KGDPL reference (Courier, earnings/deductions grid).
         </p>
       </Card>
 

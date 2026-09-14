@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
@@ -58,10 +59,14 @@ const KIND_OPTIONS: { key: DocKind; label: string; hint: string }[] = [
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
+  const [searchParams] = useSearchParams();
   const canManage = canManageHrms(user);
   const [rows, setRows] = useState<DocRow[]>([]);
   const [msg, setMsg] = useState("");
-  const [kindFilter, setKindFilter] = useState<"all" | DocKind>("all");
+  const initialKind = searchParams.get("kind");
+  const [kindFilter, setKindFilter] = useState<"all" | DocKind>(
+    initialKind && KIND_OPTIONS.some((k) => k.key === initialKind) ? (initialKind as DocKind) : "Appointment",
+  );
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
 
@@ -205,11 +210,10 @@ export default function HrmsDocumentsPage() {
       <Card className="!p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-semibold text-sm">HRMS letters &amp; document management</h2>
+            <h2 className="font-semibold text-sm">HRMS letters &amp; appointment register</h2>
             <p className="text-[11px] text-steel-muted">
-              Pick the employee (or type a name). Name, joining date, CTC and reporting manager fill the
-              SPDC appointment letter. The letter plus CTC Annexure I are filed under Drive
-              06.02 Employee Files / candidate name / Letters (copy also in 06.01 Letters).
+              Full SPDC letter of appointment (17 clauses + Annexure I) is generated and previewed here. After the candidate
+              signs, upload the scan — it is filed on the register and in Employee files (HR DMS).
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">

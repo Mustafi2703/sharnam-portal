@@ -522,6 +522,7 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
         empCode: offer.preJoin?.empCodeGenerated || "",
         candidateEmail: offer.candidate.email || "",
         phone: offer.candidate.phone || "",
+        offerId: offer.id,
       }),
     },
   });
@@ -550,26 +551,11 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
   }
   if (offer.onboard?.userId) {
     const fileUrl = updated.sharePointUrl || updated.generatedPdfUrl || "";
-    const existing = await prisma.employeeDocument.findFirst({
-      where: { userId: offer.onboard.userId, category: "Appointment", title: { contains: refNo } },
-    });
-    if (existing) {
-      await prisma.employeeDocument.update({
-        where: { id: existing.id },
-        data: { fileUrl, storagePath: updated.storagePath, issuedOn: new Date() },
-      });
-    } else {
-      await prisma.employeeDocument.create({
-        data: {
-          userId: offer.onboard.userId,
-          category: "Appointment",
-          title: `Appointment letter · ${employeeName} · ${refNo}`,
-          fileUrl,
-          storagePath: updated.storagePath,
-          issuedOn: new Date(),
-        },
-      });
-    }
+    const { attachHrmsLetterToEmployeeVault } = await import("../services/hrmsLetter.js");
+    await attachHrmsLetterToEmployeeVault(
+      { ...updated, employeeUserId: offer.onboard.userId },
+      { fileUrl, storagePath: updated.storagePath, signed: false },
+    );
   }
   await audit("hrm.docs.generate", {
     userId: req.user!.id,
@@ -578,6 +564,97 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
     meta: { kind: "Appointment", offerId: offer.id, refNo },
   });
   res.status(201).json(updated);
+});
+
+/** Candidate returns signed appointment — files on letter register + employee HR DMS. */
+hrmRecruitmentRouter.post(
+  "/offers/:id/signed-appointment",
+  requireRoles("admin", "office", "hr"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required (PDF or scan)" });
+    const offer = await prisma.offer.findUnique({
+      where: { id: req.params.id },
+      include: { candidate: true, preJoin: true, onboard: true },
+    });
+    if (!offer) return res.status(404).json({ error: "offer not found" });
+
+    const docs = await prisma.hrmsDocument.findMany({
+      where: { kind: "Appointment", candidateEmail: offer.candidate.email || undefined },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    let letter =
+      docs.find((d) => {
+        try {
+          const data = JSON.parse(d.dataJson || "{}");
+          return data.offerId === offer.id;
+        } catch {
+          return false;
+        }
+      }) || docs[0];
+
+    if (!letter) {
+      return res.status(400).json({ error: "Generate the appointment letter first, then upload the signed copy." });
+    }
+
+    const safeRef = letter.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const saved = await mockOneDrive.upload(
+      "_HR",
+      `06_HR_AND_ADMIN/06.02_Employee_Files/${offer.candidate.fullName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48)}/Letters`,
+      `Appointment-${safeRef}-signed${extOf(req.file)}`,
+      req.file.buffer,
+    );
+    const signedUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+
+    letter = await prisma.hrmsDocument.update({
+      where: { id: letter.id },
+      data: {
+        uploadedFileUrl: signedUrl,
+        sharePointUrl: saved.sharePointUrl || signedUrl,
+        storagePath: saved.path,
+        status: "Signed",
+        employeeUserId: letter.employeeUserId || offer.onboard?.userId || null,
+      },
+    });
+
+    const { attachHrmsLetterToEmployeeVault } = await import("../services/hrmsLetter.js");
+    await attachHrmsLetterToEmployeeVault(letter, {
+      fileUrl: signedUrl,
+      storagePath: letter.storagePath,
+      signed: true,
+    });
+
+    if (offer.preJoin) {
+      await prisma.preJoiningChecklist.update({
+        where: { id: offer.preJoin.id },
+        data: { appointmentLetterUrl: signedUrl },
+      });
+    }
+
+    await audit("hrm.docs.signed_appointment", {
+      userId: req.user!.id,
+      entity: "HrmsDocument",
+      entityId: letter.id,
+      meta: { offerId: offer.id, refNo: letter.refNo },
+    });
+    res.json({ ok: true, letter, signedUrl });
+  },
+);
+
+/** Offers in hiring / onboarding — for HR employee DMS picker. */
+hrmRecruitmentRouter.get("/hiring-pipeline", requireRoles("admin", "office", "hr"), async (_req, res) => {
+  const offers = await prisma.offer.findMany({
+    where: { status: { in: ["Accepted", "Onboarding", "Joined"] } },
+    include: {
+      candidate: { select: { fullName: true, email: true } },
+      onboard: { select: { userId: true } },
+      preJoin: { select: { appointmentLetterUrl: true, empCodeGenerated: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 100,
+  });
+  res.json(offers);
 });
 
 hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office", "hr"), upload.single("letter"), async (req: AuthedRequest, res) => {
@@ -1189,6 +1266,26 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
   return prisma.payslip.update({
     where: { id: row.id },
     data: { fileUrl: saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}` },
+  }).then(async (updated) => {
+    const url = updated.fileUrl;
+    if (!url) return updated;
+    const existing = await prisma.employeeDocument.findFirst({
+      where: { userId: row.userId, category: "Payslip", title: { contains: ym } },
+    });
+    const doc = { fileUrl: url, storagePath: saved.path, issuedOn: new Date() };
+    if (existing) {
+      await prisma.employeeDocument.update({ where: { id: existing.id }, data: doc });
+    } else {
+      await prisma.employeeDocument.create({
+        data: {
+          userId: row.userId,
+          category: "Payslip",
+          title: `Payslip · ${ym} · ${user.fullName}`,
+          ...doc,
+        },
+      });
+    }
+    return updated;
   });
 }
 

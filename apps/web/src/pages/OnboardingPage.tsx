@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../api";
 import { useAuth } from "../auth";
@@ -79,6 +79,7 @@ function OfferOnboardingPage() {
   const [letterHtml, setLetterHtml] = useState("");
   const [policyHtml, setPolicyHtml] = useState("");
   const [policyUrl, setPolicyUrl] = useState("");
+  const signedUploadRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
     if (!offerId) return;
@@ -243,10 +244,13 @@ function OfferOnboardingPage() {
             </Button>
           ) : null}
           {offer?.onboard?.userId ? (
-            <Link to="/hrm/files">
-              <Button variant="secondary">Employee files</Button>
+            <Link to={`/hrm/files?userId=${offer.onboard.userId}`}>
+              <Button variant="secondary">Employee files (HR DMS)</Button>
             </Link>
           ) : null}
+          <Link to="/hrm/documents">
+            <Button variant="secondary">Letters register</Button>
+          </Link>
           <Link to="/hrm/onboarding"><Button variant="secondary">Back to list</Button></Link>
         </div>
       </div>
@@ -266,6 +270,41 @@ function OfferOnboardingPage() {
               <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
                 Open filed copy
               </a>
+            ) : null}
+            {canWrite ? (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={() => {
+                    signedUploadRef.current?.click();
+                  }}
+                >
+                  Upload signed copy
+                </Button>
+                <input
+                  ref={signedUploadRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,image/*"
+                  hidden
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !offerId) return;
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      await api(`/api/hrm/offers/${offerId}/signed-appointment`, { method: "POST", token, body: fd });
+                      setMsg(`Signed appointment saved to employee docs and letters register.`);
+                      await load();
+                    } catch (err) {
+                      setMsg(err instanceof Error ? err.message : "Upload failed");
+                    } finally {
+                      if (signedUploadRef.current) signedUploadRef.current.value = "";
+                    }
+                  }}
+                />
+              </>
             ) : null}
           </div>
           <iframe title="Appointment letter" srcDoc={letterHtml} className="w-full h-[520px] border-0 bg-white" />

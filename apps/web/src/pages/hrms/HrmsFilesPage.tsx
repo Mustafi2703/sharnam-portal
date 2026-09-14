@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { UploadModal } from "../../components/UploadModal";
@@ -26,8 +27,10 @@ type FileRow = {
 /** Per-employee HRMS vault — multiple files land under 06.02 Employee Files on Drive. */
 export default function HrmsFilesPage() {
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
   const [staff, setStaff] = useState<StaffRow[]>([]);
-  const [userId, setUserId] = useState("");
+  const [hiring, setHiring] = useState<Array<{ id: string; candidate?: { fullName: string }; onboard?: { userId?: string | null } }>>([]);
+  const [userId, setUserId] = useState(searchParams.get("userId") || "");
   const [files, setFiles] = useState<FileRow[]>([]);
   const [msg, setMsg] = useState("");
   const [msgTone, setMsgTone] = useState<"ok" | "err">("ok");
@@ -39,10 +42,19 @@ export default function HrmsFilesPage() {
   const [busy, setBusy] = useState(false);
 
   const loadStaff = useCallback(async () => {
-    const rows = await api<StaffRow[]>("/api/hrm/employees", { token }).catch(() => []);
+    const [rows, pipeline] = await Promise.all([
+      api<StaffRow[]>("/api/hrm/employees", { token }).catch(() => []),
+      api<Array<{ id: string; candidate?: { fullName: string }; onboard?: { userId?: string | null } }>>(
+        "/api/hrm/hiring-pipeline",
+        { token },
+      ).catch(() => []),
+    ]);
     setStaff(rows);
-    if (!userId && rows[0]) setUserId(rows[0].id);
-  }, [token, userId]);
+    setHiring(pipeline);
+    const fromUrl = searchParams.get("userId");
+    if (fromUrl) setUserId(fromUrl);
+    else setUserId((prev) => prev || rows[0]?.id || "");
+  }, [token, searchParams]);
 
   const loadFiles = useCallback(async () => {
     if (!userId) {
@@ -62,6 +74,10 @@ export default function HrmsFilesPage() {
   }, [loadFiles]);
 
   const person = staff.find((s) => s.id === userId);
+  const hiringForUser = useMemo(
+    () => hiring.filter((o) => o.onboard?.userId === userId),
+    [hiring, userId],
+  );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,8 +113,12 @@ export default function HrmsFilesPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="max-w-xl">
           <p className="text-sm text-steel-muted">
-            One folder per employee on Drive — PAN, Aadhaar, appointment, payslips, BGV. Multiple files in one upload.
+            Per-employee HR DMS on Drive — PAN, signed appointment, payslips, BGV. After onboarding, upload the signed
+            letter and it appears here automatically.
           </p>
+          <Link to="/hrm/documents" className="text-xs text-brand font-semibold underline mt-1 inline-block">
+            Appointment letters register →
+          </Link>
         </div>
         <div className="flex flex-wrap gap-2 items-end">
           <label className="text-xs text-steel-muted">
@@ -117,6 +137,12 @@ export default function HrmsFilesPage() {
           </Button>
         </div>
       </div>
+
+      {hiringForUser.length ? (
+        <Card className="!p-3 text-xs text-steel-muted">
+          Active hiring for this employee — appointment and onboarding docs are filed here once the candidate signs and HR uploads.
+        </Card>
+      ) : null}
 
       {msg ? (
         <p
