@@ -7,11 +7,13 @@ import type { PrismaClient } from "@prisma/client";
 import { evaluateAllRows, normalizeCell, type SheetCell } from "@sharnam/shared";
 import {
   COMPARATIVE_DISCIPLINES,
+  disciplineCatalogEntry,
   importR2WorkbookFromFile,
   parseDisciplineBoqSheet,
   parseDisciplinesJson,
   pickDisciplineWorksheet,
   resolveR2TemplatePath,
+  blankVendorRates,
   type ImportedSheet,
 } from "./comparativeStatement.js";
 import { mockOneDrive } from "./mockOneDrive.js";
@@ -183,18 +185,41 @@ export async function ensureVendorBoqSheet(
     }
   }
 
-  await seedBidPackageR2Boqs(prisma, bidPackageId, officeUserId, { force: true, slotIds: [slotId] });
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: bidPackageId },
+    select: { title: true, disciplinesJson: true },
+  });
+  if (!pkg) throw new Error("Bid package not found");
+  const disciplines = parseDisciplinesJson(pkg.disciplinesJson);
+  const disc = disciplineCatalogEntry(slot.discipline, disciplines);
+  const imported = importR2WorkbookFromFile();
+  const template = imported.disciplineTemplates[slot.discipline];
+  let parsed: ImportedSheet;
+  if (template?.rows?.length) {
+    parsed = blankVendorRates(template);
+  } else {
+    const r2Path = resolveR2TemplatePath();
+    const wb = XLSX.read(fs.readFileSync(r2Path), { type: "buffer", cellFormula: true });
+    const ws = pickDisciplineWorksheet(wb, slot.discipline, disciplines);
+    if (!ws) throw new Error(`No R2 BOQ template for ${slot.discipline}`);
+    parsed = blankVendorRates(parseDisciplineBoqSheet(ws, slot.discipline, disciplines));
+  }
 
-  const refreshed = await prisma.crmVendorBoq.findUnique({ where: { id: slotId } });
-  if (!refreshed?.sheetId) throw new Error("Could not create BOQ sheet for this slot");
+  const boqSheet = await prisma.customSheet.create({
+    data: {
+      name: `${slot.vendorLabel} — ${disc?.label || slot.discipline} — ${pkg.title}`,
+      category: "CRM Vendor BOQ",
+      headersJson: JSON.stringify(parsed.headers),
+      rowsJson: JSON.stringify(parsed.rows),
+      sourceFile: "Comparative Statement - R2.xlsx (vendor template)",
+      createdById: officeUserId,
+    },
+  });
 
-  const sheet = await prisma.customSheet.findUnique({ where: { id: refreshed.sheetId } });
-  if (!sheet) throw new Error("BOQ sheet missing after create");
+  await prisma.crmVendorBoq.update({
+    where: { id: slotId },
+    data: { sheetId: boqSheet.id },
+  });
 
-  const headers = JSON.parse(sheet.headersJson || "[]") as string[];
-  const raw = JSON.parse(sheet.rowsJson || "[]") as unknown[][];
-  const rows = evaluateAllRows(
-    raw.map((row) => (Array.isArray(row) ? row.map((cell) => normalizeCell(cell)) : []))
-  );
-  return { sheetId: sheet.id, headers, rows, created: true };
+  return { sheetId: boqSheet.id, headers: parsed.headers, rows: parsed.rows, created: true };
 }

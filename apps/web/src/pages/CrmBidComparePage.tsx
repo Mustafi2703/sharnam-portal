@@ -65,7 +65,7 @@ type BidWorkflowStep = "configure" | "publish" | "collect" | "compare" | "award"
 const BID_WORKFLOW_STEPS: { id: BidWorkflowStep; label: string; hint: string }[] = [
   { id: "configure", label: "Configure", hint: "Project · work packages · vendors" },
   { id: "publish", label: "Publish", hint: "Open bid & notify bidders" },
-  { id: "collect", label: "Collect BOQs", hint: "One R2 upload per vendor × package" },
+  { id: "collect", label: "Collect BOQs", hint: "Separate SPDC BOQ per vendor × package — Qty + Rate" },
   { id: "compare", label: "Compare", hint: "Refresh comparative statement" },
   { id: "award", label: "Award", hint: "Select L1 & close package" },
 ];
@@ -1330,9 +1330,26 @@ export default function CrmBidComparePage() {
                       <h4 className="font-semibold text-sm">
                         {slotPanel.slot.vendorLabel} · {disciplineLabel(disciplines, slotPanel.slot.discipline)}
                       </h4>
-                      <p className="text-xs text-steel-muted">Fill BOQ in portal or upload matching R2 Excel sheet.</p>
+                      <p className="text-xs text-steel-muted">
+                        Separate BOQ per contractor × work package. Download SPDC sample, fill Qty + Rate, or edit in portal — comparative updates for office.
+                      </p>
                     </div>
-                    <Button
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!text-xs"
+                        onClick={() =>
+                          void downloadAuthFile(
+                            `/api/crm/bid-packages/${selectedId}/vendor-boq/${slotPanel.slot.id}/template.xlsx`,
+                            token,
+                            `SPDC-BOQ-${slotPanel.slot.discipline}-${slotPanel.slot.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40)}.xlsx`,
+                          )
+                        }
+                      >
+                        Download SPDC BOQ
+                      </Button>
+                      <Button
                       type="button"
                       variant="ghost"
                       className="!text-xs"
@@ -1343,6 +1360,7 @@ export default function CrmBidComparePage() {
                     >
                       Close
                     </Button>
+                    </div>
                   </div>
                   <div className="flex gap-2 mb-4">
                     <Button

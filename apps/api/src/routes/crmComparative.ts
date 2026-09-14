@@ -30,6 +30,7 @@ import {
   resolveDisciplinesForPackage,
   resolveR2TemplatePath,
   buildVendorDisciplineSlots,
+  buildVendorBoqTemplateXlsx,
   normalizeDisciplineKey,
 } from "../services/comparativeStatement.js";
 import {
@@ -1179,8 +1180,60 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
   });
 });
 
-/** Download official Comparative Statement R2 workbook. */
-crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office", "vendor"), (_req, res) => {
+/** Download official Comparative Statement R2 workbook (office reference — all vendors). */
+crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office"), (_req, res) => {
+  const src = resolveR2TemplatePath();
+  res.download(src, "Comparative-Statement-R2.xlsx");
+});
+
+/** Per-vendor × discipline BOQ sample — SPDC branded, rates blanked (separate file per contractor). */
+crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", async (req: AuthedRequest, res) => {
+  try {
+    const pkg = await prisma.crmBidPackage.findUnique({
+      where: { id: req.params.id },
+      include: { project: { select: { code: true, name: true } } },
+    });
+    if (!pkg) return res.status(404).json({ error: "bid package not found" });
+
+    const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
+    if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
+
+    const isOffice = req.user!.role === "admin" || req.user!.role === "office";
+    if (!isOffice && req.user!.role === "vendor") {
+      const vendorUser = await resolveVendorForUser(req.user!);
+      const ownsSlot =
+        vendorUser &&
+        (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name || !slot.vendorId);
+      if (!ownsSlot) return res.status(403).json({ error: "Forbidden" });
+    } else if (!isOffice && req.user!.role !== "employee") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const disciplines = packageDisciplines(pkg);
+    const disc = disciplineCatalogEntry(slot.discipline, disciplines);
+    const safeVendor = slot.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
+    const fileName = `SPDC-BOQ-${slot.discipline}-${safeVendor}.xlsx`;
+
+    const buffer = buildVendorBoqTemplateXlsx({
+      disciplineKey: slot.discipline,
+      vendorLabel: slot.vendorLabel,
+      projectCode: pkg.project?.code || undefined,
+      projectName: pkg.project?.name || undefined,
+      pkgTitle: pkg.title,
+      revisionLabel: pkg.revisionLabel || "R2",
+      disciplines,
+    });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "template export failed" });
+  }
+});
+
+/** @deprecated full R2 for vendors — use per-slot template.xlsx */
+crmComparativeRouter.get("/template-vendor.xlsx", requireRoles("admin", "office", "vendor"), (_req, res) => {
   const src = resolveR2TemplatePath();
   res.download(src, "Comparative-Statement-R2.xlsx");
 });

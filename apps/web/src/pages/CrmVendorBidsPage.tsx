@@ -79,6 +79,7 @@ function VendorPackageCard({
   onUpload,
   onClear,
   vendorView = false,
+  token,
 }: {
   pkgId: string;
   pkgSlots: BidSlot[];
@@ -87,7 +88,17 @@ function VendorPackageCard({
   onUpload: (slot: BidSlot, mode: "online" | "excel") => void;
   onClear?: (slot: BidSlot) => void;
   vendorView?: boolean;
+  token?: string | null;
 }) {
+  async function downloadSlotTemplate(s: BidSlot) {
+    if (!token) return;
+    const safeVendor = s.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
+    await downloadAuthFile(
+      `/api/crm/bid-packages/${pkgId}/vendor-boq/${s.id}/template.xlsx`,
+      token,
+      `SPDC-BOQ-${s.discipline}-${safeVendor}.xlsx`,
+    );
+  }
   const head = pkgSlots[0];
   const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
   const isOpen = head?.bidPackageStatus === "Open";
@@ -161,7 +172,9 @@ function VendorPackageCard({
         </div>
       )}
 
-      <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">Your discipline BOQs (R2 sheets)</h4>
+      <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">
+        Your discipline BOQs — one file per work package (separate from other contractors)
+      </h4>
       <ul className="divide-y border border-line rounded-xl overflow-hidden">
         {pkgSlots.map((s) => (
           <li key={s.id} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-sm bg-paper">
@@ -184,7 +197,17 @@ function VendorPackageCard({
                 </a>
               )}
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {token ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs !py-1"
+                  onClick={() => void downloadSlotTemplate(s)}
+                >
+                  Download SPDC BOQ
+                </Button>
+              ) : null}
               <Button type="button" variant="primary" className="!text-xs !py-1" onClick={() => onUpload(s, "online")}>
                 {s.fileName ? "Edit BOQ" : "Fill BOQ online"}
               </Button>
@@ -456,30 +479,18 @@ export default function CrmVendorBidsPage() {
         <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
           <li>PMC opens the bid and selects your company on <strong className="text-ink">CRM → Bid management</strong>.</li>
           <li>
-            Download the{" "}
-            <button
-              type="button"
-              className="text-brand font-semibold underline"
-              onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-            >
-              Comparative Statement R2 (.xlsx)
-            </button>{" "}
-            template.
+            For each work package below, click <strong className="text-ink">Download SPDC BOQ</strong> — your own contractor file
+            (Qty + Rate columns only; not shared with other bidders).
           </li>
-          <li>Fill your rates on each work-package tab (Civil, PEB, MEP, etc.) — one discipline per upload slot below.</li>
+          <li>Fill Qty and Rate in Excel, or use <strong className="text-ink">Fill BOQ online</strong> — office sees updates immediately.</li>
           <li>Upload the filled .xlsx while the package status is <strong className="text-ink">Open for bids</strong>.</li>
           <li>PMC refreshes the comparative and awards L1 — your totals stay on this desk after award.</li>
         </ol>
       </Card>
-      <div className="flex flex-wrap gap-2 shrink-0">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-        >
-          Download R2 .xlsx
-        </Button>
-      </div>
+      <Card className="!p-3 text-xs text-steel-muted">
+        Office staff use the full Comparative Statement R2 on <strong className="text-ink">CRM → Bid management</strong>. Vendors
+        download <strong className="text-ink">SPDC BOQ</strong> per work package above — separate file per contractor.
+      </Card>
       </>
       )}
 
@@ -691,6 +702,7 @@ export default function CrmVendorBidsPage() {
                 onUpload={openUpload}
                 onClear={(s) => void clearBoq(s)}
                 vendorView
+                token={token}
               />
               {token && (
                 <CrmBidSharePointPanel token={token} bidPackageId={pkgId} vendorView />

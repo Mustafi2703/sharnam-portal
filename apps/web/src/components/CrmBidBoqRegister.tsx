@@ -22,7 +22,8 @@ function colEditable(header: string, canEdit: boolean): boolean {
   if (!canEdit) return false;
   const h = String(header).toLowerCase();
   if (h.includes("description") || h.includes("sr") || h.includes("unit")) return false;
-  return h.includes("rate") || h.includes("qty") || h.includes("quantity") || h.includes("weight") || h.includes("amount") || h.includes("remark");
+  if (h.includes("amount") || h.includes("total") || h.includes("weight") || h.includes("remark")) return false;
+  return h.includes("rate") || h.includes("qty") || h.includes("quantity");
 }
 
 function cellDisplay(cell?: SheetCell): string {
@@ -153,12 +154,12 @@ export function CrmBidBoqRegister({
     <>
     <CostRegisterShell
       title={title}
-      subtitle={sheetLabel ? `${sheetLabel} · R2 discipline BOQ` : "R2 discipline BOQ · white cells editable"}
+      subtitle={sheetLabel ? `${sheetLabel} · SPDC BOQ monitoring` : "SPDC BOQ · edit Qty and Rate only"}
       sheetKind="monitoring"
       toolbar={
         <div className="px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="text-steel-muted">
-            {rows.length} rows · {canEdit ? "Edit rates / qty / amount — saves on blur" : "Read-only"}
+            {rows.length} rows · {canEdit ? "Edit Qty and Rate — amount auto-calculates · saves on blur" : "Read-only"}
           </span>
           <div className="flex gap-2">
             {msg && <span className={`font-semibold ${actionError ? "text-danger" : "text-ok"}`}>{msg}</span>}

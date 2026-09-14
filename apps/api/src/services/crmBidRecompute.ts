@@ -10,6 +10,7 @@ import {
   importR2WorkbookFromFile,
   parseDisciplinesJson,
   parseR2SummarySheet,
+  blankVendorRates,
   type ComparativeSummary,
 } from "./comparativeStatement.js";
 
@@ -60,29 +61,6 @@ export function sumBoqSheetTotal(headers: string[], rows: SheetCell[][]): number
   }
 
   return 0;
-}
-
-/** Clear rate/amount cells so bidders fill their own pricing on the R2 line-item template. */
-export function blankVendorRates(sheet: ImportedSheet): ImportedSheet {
-  const lower = sheet.headers.map((h) => String(h).toLowerCase());
-  const editableCols = new Set<number>();
-  for (let i = 0; i < lower.length; i++) {
-    if (lower[i].includes("rate") || lower[i].includes("amount")) editableCols.add(i);
-  }
-  if (!editableCols.size) return sheet;
-
-  const rows = sheet.rows.map((row) =>
-    row.map((c, ci) => {
-      if (!editableCols.has(ci)) return { ...c };
-      if (isFormula(c.raw)) return { ...c };
-      return { raw: "" };
-    })
-  );
-  return { headers: sheet.headers, rows: evaluateAllRows(rows), sheetName: sheet.sheetName };
-}
-
-function isFormula(raw: string) {
-  return String(raw ?? "").trim().startsWith("=");
 }
 
 export function buildR2SummarySheet(

@@ -467,3 +467,145 @@ export function buildVendorDisciplineSlots(vendorNames: string[], disciplines: D
   }
   return slots;
 }
+
+/** Clear rate cells — vendors fill Qty + Rate only; amount stays formula/read-only. */
+export function blankVendorRates(sheet: ImportedSheet): ImportedSheet {
+  const lower = sheet.headers.map((h) => String(h).toLowerCase());
+  const rateCols = new Set<number>();
+  for (let i = 0; i < lower.length; i++) {
+    if (lower[i].includes("rate")) rateCols.add(i);
+  }
+  if (!rateCols.size) return sheet;
+  const rows = sheet.rows.map((row) =>
+    row.map((c, ci) => {
+      if (!rateCols.has(ci)) return { ...c };
+      if (String(c.raw ?? "").trim().startsWith("=")) return { ...c };
+      return { raw: "" };
+    })
+  );
+  return { headers: sheet.headers, rows: evaluateAllRows(rows), sheetName: sheet.sheetName };
+}
+
+function blankRatesInWorksheet(ws: WorkSheet) {
+  const ref = ws["!ref"];
+  if (!ref) return;
+  const range = XLSX.utils.decode_range(ref);
+  let headerRow = -1;
+  const rateCols: number[] = [];
+  for (let R = range.s.r; R <= Math.min(range.s.r + 20, range.e.r); R++) {
+    const labels: string[] = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      labels.push(String(ws[addr]?.v ?? "").toLowerCase());
+    }
+    const line = labels.join(" ");
+    if (line.includes("sr") && line.includes("description")) {
+      headerRow = R;
+      labels.forEach((h, i) => {
+        if (h.includes("rate")) rateCols.push(range.s.c + i);
+      });
+      break;
+    }
+  }
+  if (headerRow < 0 || !rateCols.length) return;
+  for (let R = headerRow + 1; R <= range.e.r; R++) {
+    for (const C of rateCols) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (!cell || cell.f) continue;
+      cell.t = "s";
+      cell.v = "";
+      cell.w = "";
+    }
+  }
+}
+
+function stampVendorBanner(ws: WorkSheet, vendorLabel: string, projectCode?: string) {
+  const ref = ws["!ref"];
+  if (!ref) return;
+  const range = XLSX.utils.decode_range(ref);
+  for (let R = range.s.r; R <= Math.min(range.s.r + 8, range.e.r); R++) {
+    for (let C = range.s.c; C <= Math.min(range.s.c + 3, range.e.c); C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const val = String(ws[addr]?.v ?? "").toLowerCase();
+      if (val.includes("contractor") || val.includes("bidder") || val.includes("vendor")) {
+        const next = XLSX.utils.encode_cell({ r: R, c: C + 1 });
+        ws[next] = { t: "s", v: vendorLabel };
+        return;
+      }
+    }
+  }
+  const bannerAddr = XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c });
+  ws[bannerAddr] = {
+    t: "s",
+    v: `SPDC · ${projectCode || "Bid"} · Contractor: ${vendorLabel}`,
+  };
+}
+
+/** Per-vendor × discipline BOQ sample — SPDC R2 sheet + instructions (separate file per contractor). */
+export function buildVendorBoqTemplateXlsx(opts: {
+  disciplineKey: string;
+  vendorLabel: string;
+  projectCode?: string;
+  projectName?: string;
+  pkgTitle?: string;
+  revisionLabel?: string;
+  disciplines?: DisciplineDef[];
+  sheet?: ImportedSheet;
+}): Buffer {
+  const disc = disciplineCatalogEntry(opts.disciplineKey, opts.disciplines);
+  const rev = opts.revisionLabel || "R2";
+  const wb = XLSX.utils.book_new();
+
+  const instructions: (string | number)[][] = [
+    ["SHARNAM PROJECT MANAGEMENT CONSULTANTS PVT LTD (SPDC)"],
+    [`Comparative Statement ${rev} — Vendor BOQ (sample format)`],
+    [""],
+    ["Project code", opts.projectCode || "—", "Project", opts.projectName || "—"],
+    ["Bid package", opts.pkgTitle || "—"],
+    ["Contractor / vendor", opts.vendorLabel],
+    ["Work package / discipline", disc?.label || opts.disciplineKey],
+    [""],
+    ["Fill QTY and RATE columns only"],
+    ["Description, unit, and amount columns are read-only on the portal — amount may auto-calculate in Excel."],
+    ["One workbook per vendor × work package — do not share with other bidders."],
+    ["Upload the filled file on Vendor bids desk, or use Fill BOQ online in the portal."],
+    [""],
+    ["Sheet tab", disc?.sheetName || opts.disciplineKey, "← fill rates on this tab"],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(instructions), "SPDC Instructions");
+
+  let attached = false;
+  try {
+    const src = resolveR2TemplatePath();
+    const srcWb = XLSX.read(fs.readFileSync(src), { type: "buffer", cellFormula: true });
+    const srcWs = pickDisciplineWorksheet(srcWb, opts.disciplineKey, opts.disciplines);
+    if (srcWs) {
+      blankRatesInWorksheet(srcWs);
+      stampVendorBanner(srcWs, opts.vendorLabel, opts.projectCode);
+      XLSX.utils.book_append_sheet(wb, srcWs, (disc?.sheetName || opts.disciplineKey).slice(0, 31));
+      attached = true;
+    }
+  } catch {
+    /* fallback below */
+  }
+
+  if (!attached) {
+    let parsed: ImportedSheet;
+    if (opts.sheet?.rows?.length) {
+      parsed = opts.sheet;
+    } else {
+      const imported = importR2WorkbookFromFile();
+      const template = imported.disciplineTemplates[opts.disciplineKey];
+      parsed = template?.rows?.length
+        ? blankVendorRates(template)
+        : { headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"], rows: [], sheetName: disc?.sheetName || opts.disciplineKey };
+    }
+    const aoa = parsed.headers.length
+      ? [parsed.headers, ...parsed.rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""))]
+      : parsed.rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), (disc?.sheetName || "BOQ").slice(0, 31));
+  }
+
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
