@@ -32,10 +32,10 @@ export const CRM_SECTIONS: CrmSection[] = [
     id: "pipeline",
     label: "Projects",
     tools: [
-      { to: "setup", label: "Project setup", subtitle: "Pick client, PMC, consultants, vendors, packages, and SPDC staff. Save links them — it does not create logins." },
-      { to: "projects", label: "Projects", subtitle: "Register of delivery jobs. Edit card and status here. Continue setup only while Planning." },
-      { to: "leads", label: "Leads", subtitle: "Market register · convert to a delivery project." },
-      { to: "proposals", label: "Proposals", subtitle: "PMC quotation register and letter export." },
+      { to: "setup", label: "Project setup", subtitle: "Pick client, PMC, consultants, vendors, packages, and SPDC staff. Save links them — it does not create logins. Awarded leads and standalone jobs both use this." },
+      { to: "projects", label: "Projects", subtitle: "Register of delivery jobs. Awarded proposals land here as Planning. Continue setup only while Planning." },
+      { to: "leads", label: "Leads", subtitle: "Market register · convert to a PMC proposal (SharePoint). Award later to open Project setup." },
+      { to: "proposals", label: "Proposals", subtitle: "Client format in SharePoint. Add R0/R1/R2 on this register, then Award to the projects register." },
     ],
   },
   {

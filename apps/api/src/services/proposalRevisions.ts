@@ -67,8 +67,8 @@ export function quotationInclude() {
 }
 
 export async function createVersionedProposal(opts: {
-  projectId: string;
-  projectCode: string;
+  projectId?: string | null;
+  projectCode?: string | null;
   clientName: string;
   quotationNo: string;
   userId: string;
@@ -81,8 +81,10 @@ export async function createVersionedProposal(opts: {
   quotationDate?: Date;
   leadId?: string | null;
 }) {
-  await mockOneDrive.ensureProjectTree(opts.projectId);
-  const file = await createProjectProposalFile(opts.projectCode, opts.clientName, opts.quotationNo, 0);
+  const library = opts.projectCode || CRM_OFFICE_LIBRARY;
+  if (opts.projectId) await mockOneDrive.ensureProjectTree(opts.projectId);
+  else mockOneDrive.projectRoot(CRM_OFFICE_LIBRARY);
+  const file = await createProjectProposalFile(library, opts.clientName, opts.quotationNo, 0);
   const row = await prisma.quotation.create({
     data: {
       quotationNo: opts.quotationNo,
@@ -95,7 +97,7 @@ export async function createVersionedProposal(opts: {
       validityDays: opts.validityDays ?? 30,
       quotationDate: opts.quotationDate ?? new Date(),
       leadId: opts.leadId ?? null,
-      projectId: opts.projectId,
+      projectId: opts.projectId ?? null,
       status: "Draft",
       currentRevisionNo: 0,
       attachmentUrl: file.url,
@@ -131,7 +133,7 @@ export async function startNextProposalRevision(opts: {
     where: { id: opts.quotationId },
     include: { project: { select: { id: true, code: true } } },
   });
-  if (!q?.project?.code) throw new Error("Proposal must stay on a converted SPDC project.");
+  if (!q) throw new Error("Proposal not found");
   await ensureProposalRevisionTrail(q.id);
   const nextNo = (q.currentRevisionNo || 0) + 1;
   await prisma.quotationRevision.updateMany({
@@ -139,8 +141,9 @@ export async function startNextProposalRevision(opts: {
     data: { stage: "Superseded" },
   });
   const bytes = opts.buffer ?? bufferForNextRevision(q.attachmentUrl);
-  await mockOneDrive.ensureProjectTree(q.project.id);
-  const file = await createProjectProposalFile(q.project.code, q.clientName, q.quotationNo, nextNo, bytes);
+  const library = q.project?.code || CRM_OFFICE_LIBRARY;
+  if (q.project?.id) await mockOneDrive.ensureProjectTree(q.project.id);
+  const file = await createProjectProposalFile(library, q.clientName, q.quotationNo, nextNo, bytes);
   await prisma.quotationRevision.create({
     data: {
       quotationId: q.id,

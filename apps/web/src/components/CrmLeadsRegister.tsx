@@ -8,6 +8,8 @@ import {
   leadDetailLines,
   leadDescriptionPreview,
   leadLocation,
+  leadPrimaryAction,
+  leadProposal,
   marketStatusTone,
   pipelineStageTone,
   textToLineItems,
@@ -75,21 +77,35 @@ function LeadDetailBody({
         <div className="space-y-2 border-t border-line pt-3">
           {lead.projectId ? (
             <>
-              <Link to={`/crm/proposals/new?leadId=${lead.id}`} className="inline-flex text-sm font-semibold text-brand">
-                Create PMC proposal (Word in SharePoint) →
+              <Link to={`/crm/setup?projectId=${lead.projectId}&step=project`} className="inline-flex text-sm font-semibold text-brand">
+                Project setup →
               </Link>
               <Link to={`/projects/${lead.projectId}`} className="inline-flex text-sm font-semibold text-brand">
                 Open converted project →
               </Link>
+              {leadProposal(lead) ? (
+                <Link to={`/crm/proposals/${leadProposal(lead)!.id}`} className="inline-flex text-sm font-semibold text-brand">
+                  Open awarded proposal →
+                </Link>
+              ) : null}
               <Button type="button" className="w-full" variant="secondary" onClick={() => onSetupBids(lead)}>
-                Setup comparative bids →
+                Bid management
               </Button>
+            </>
+          ) : leadProposal(lead) ? (
+            <>
+              <p className="text-xs text-steel-muted">Proposal is on the register. Award it there to put a Planning job on Projects.</p>
+              <Link to={`/crm/proposals/${leadProposal(lead)!.id}`}>
+                <Button type="button" className="w-full" variant="secondary">
+                  Open proposal (SharePoint + revisions)
+                </Button>
+              </Link>
             </>
           ) : (
             <>
-              <p className="text-xs text-steel-muted">Convert to SPDC project first — then save proposal to ISO folder.</p>
+              <p className="text-xs text-steel-muted">Convert to a PMC proposal first. The client format is stored in SharePoint. Award later to open Project setup.</p>
               <Button type="button" className="w-full" onClick={() => onConvert(lead)}>
-                Convert to SPDC project
+                Convert to proposal
               </Button>
             </>
           )}
@@ -115,7 +131,6 @@ export function CrmLeadsRegister({
   onStageChange,
   selectedId,
   onSelect,
-  bidPackagesByLeadId = {},
   defaultConversion = "all",
 }: Props) {
   const [q, setQ] = useState("");
@@ -272,7 +287,7 @@ export function CrmLeadsRegister({
               <th>Segment</th>
               <th>Description</th>
               <th>Pipeline</th>
-              <th>Bids</th>
+              <th>Proposal</th>
               <th />
             </tr>
           </thead>
@@ -311,19 +326,16 @@ export function CrmLeadsRegister({
                   </span>
                 </td>
                 <td className="text-xs whitespace-nowrap">
-                  {lead.projectId ? (
-                    (() => {
-                      const pkgs = bidPackagesByLeadId[lead.id] || [];
-                      if (!pkgs.length) return <span className="text-amber-700 font-semibold">Setup needed</span>;
-                      const awarded = pkgs.some((p) => p.status === "Awarded");
-                      const inProgress = pkgs.some((p) => (p.uploadProgress?.done || 0) < (p.uploadProgress?.total || 1));
-                      if (awarded) return <span className="text-emerald-700 font-semibold">Awarded</span>;
-                      if (inProgress) return <span className="text-brand font-semibold">In progress</span>;
-                      return <span className="text-steel-muted">{pkgs.length} pkg(s)</span>;
-                    })()
-                  ) : (
-                    "—"
-                  )}
+                  {(() => {
+                    const qtn = leadProposal(lead);
+                    if (lead.projectId) return <span className="text-emerald-700 font-semibold">Awarded</span>;
+                    if (!qtn) return "—";
+                    return (
+                      <span className="text-steel">
+                        R{qtn.currentRevisionNo ?? 0} · {qtn.status || "Draft"}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="whitespace-nowrap">
                   <button
@@ -336,27 +348,7 @@ export function CrmLeadsRegister({
                   >
                     View
                   </button>
-                  {lead.projectId ? (
-                    <>
-                      <button
-                        type="button"
-                        className="text-[10px] font-semibold text-brand mr-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSetupBids(lead);
-                        }}
-                      >
-                        Bids →
-                      </button>
-                      <Link
-                        to={`/projects/${lead.projectId}`}
-                        className="text-[10px] font-semibold text-brand"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Project →
-                      </Link>
-                    </>
-                  ) : canWrite ? (
+                  {canWrite ? (
                     <button
                       type="button"
                       className="text-[10px] font-semibold text-brand"
@@ -365,7 +357,7 @@ export function CrmLeadsRegister({
                         onConvert(lead);
                       }}
                     >
-                      Convert
+                      {leadPrimaryAction(lead).label} →
                     </button>
                   ) : null}
                 </td>

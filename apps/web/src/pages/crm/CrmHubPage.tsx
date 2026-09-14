@@ -33,16 +33,16 @@ export default function CrmHubPage() {
         </div>
         <div className="module-hub__workflow border-t border-line bg-sand/80 px-5 sm:px-6 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
           <span>
-            <strong className="text-ink font-semibold">1.</strong> Open tool (new window)
+            <strong className="text-ink font-semibold">1.</strong> Lead → convert to proposal
           </span>
           <span>
-            <strong className="text-ink font-semibold">2.</strong> Fill the project card and save
+            <strong className="text-ink font-semibold">2.</strong> Edit Word in SharePoint · add revisions
           </span>
           <span>
-            <strong className="text-ink font-semibold">3.</strong> Matrix, parties, then launch
+            <strong className="text-ink font-semibold">3.</strong> Award → Projects as Planning
           </span>
           <span>
-            <strong className="text-ink font-semibold">4.</strong> Back to this desk
+            <strong className="text-ink font-semibold">4.</strong> Project setup (from award or standalone)
           </span>
         </div>
       </div>

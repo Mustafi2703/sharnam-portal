@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import {
@@ -26,15 +26,19 @@ const PAGE_SIZE = 50;
 type Props = {
   quotations: CrmQuotation[];
   canWrite: boolean;
+  onRefresh?: () => void;
 };
 
-export function CrmProposalsRegister({ quotations, canWrite }: Props) {
+export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props) {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<(CrmQuotation & { log?: QuotationLogEntry[] }) | null>(null);
+  const [awardBusy, setAwardBusy] = useState(false);
+  const [awardMsg, setAwardMsg] = useState("");
 
   const statusOptions = useMemo(
     () => [...new Set(quotations.map((r) => r.status).filter(Boolean))].sort() as string[],
@@ -49,6 +53,10 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
   const selected = quotations.find((r) => r.id === selectedId) || null;
 
   useEffect(() => {
+    setAwardMsg("");
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!selectedId || !token) {
       setDetail(null);
       return;
@@ -59,6 +67,34 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
   }, [selectedId, token, selected]);
 
   const driveUrl = detail?.attachmentSharePointUrl || detail?.attachmentUrl || selected?.attachmentSharePointUrl || selected?.attachmentUrl;
+  const awardedProjectId = detail?.awardedProjectId || detail?.projectId || selected?.awardedProjectId || selected?.projectId;
+  const isAwarded = (detail?.status || selected?.status || "").toLowerCase() === "awarded";
+  const isLost = (detail?.status || selected?.status || "").toLowerCase() === "lost";
+
+  async function awardSelected() {
+    if (!selectedId || !token) return;
+    setAwardBusy(true);
+    setAwardMsg("");
+    try {
+      const res = await api<{
+        projectId?: string;
+        alreadyAwarded?: boolean;
+        project?: { id: string; code: string; name: string; status?: string };
+      }>(`/api/crm/quotations/${selectedId}/award`, { method: "POST", token, body: JSON.stringify({}) });
+      setAwardMsg(
+        res.alreadyAwarded
+          ? "Already awarded — continue setup on the projects register."
+          : `${res.project?.code || "Project"} is on the register as Planning. Continue setup to pick parties and staff.`,
+      );
+      onRefresh?.();
+      const row = await api<CrmQuotation & { log: QuotationLogEntry[] }>(`/api/crm/quotations/${selectedId}`, { token });
+      setDetail(row);
+    } catch (err) {
+      setAwardMsg(err instanceof Error ? err.message : "Could not award this proposal");
+    } finally {
+      setAwardBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-3 pb-2">
@@ -104,7 +140,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
       <div className="grid xl:grid-cols-[1fr_360px] gap-3">
         <RegisterSheetFrame
           title="PMC proposals register"
-          sheetLabel="Quotation desk · Drive + status log"
+          sheetLabel="SharePoint versions · Award → Planning project"
           rowCount={filtered.length}
           className="min-h-[420px]"
         >
@@ -170,7 +206,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
 
         <CrmDetailPanel
           title="Proposal detail"
-          emptyMessage="Select a proposal to view client lines, scope, and status history."
+          emptyMessage="Select a proposal to view client lines, SharePoint versions, and Award."
         >
           {selected && (
             <>
@@ -193,6 +229,7 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
               )}
 
               <div className="flex flex-col gap-2 border-t border-line pt-3">
+                {awardMsg && <p className="text-xs text-ok leading-relaxed">{awardMsg}</p>}
                 {driveUrl && (
                   <a
                     href={driveUrl}
@@ -200,11 +237,11 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                     rel="noopener noreferrer"
                     className="text-sm font-semibold text-brand"
                   >
-                    Open in Drive →
+                    Open in SharePoint →
                   </a>
                 )}
                 <Link to={`/crm/proposals/${selected.id}`} className="text-sm font-semibold text-brand">
-                  Full status log →
+                  Open proposal + add revision →
                 </Link>
                 {(detail?.revisions || selected.revisions || []).length > 0 && (
                   <CrmTextLineList
@@ -214,7 +251,22 @@ export function CrmProposalsRegister({ quotations, canWrite }: Props) {
                     )}
                   />
                 )}
-                {canWrite && selected.leadId && (
+                {canWrite && !isAwarded && !isLost && (
+                  <Button type="button" disabled={awardBusy} onClick={() => void awardSelected()}>
+                    {awardBusy ? "Awarding…" : "Award → projects register"}
+                  </Button>
+                )}
+                {isAwarded && awardedProjectId && (
+                  <>
+                    <Button type="button" onClick={() => navigate(`/crm/setup?projectId=${awardedProjectId}&step=project`)}>
+                      Continue project setup
+                    </Button>
+                    <Link to="/crm/projects" className="text-sm font-semibold text-brand">
+                      Open projects register →
+                    </Link>
+                  </>
+                )}
+                {canWrite && selected.leadId && !isAwarded && (
                   <Link to={`/crm/proposals/new?leadId=${selected.leadId}`} className="text-sm font-semibold text-brand">
                     Another proposal on this lead →
                   </Link>

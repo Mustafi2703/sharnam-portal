@@ -13,6 +13,7 @@ export type CrmQuotation = {
   validityDays?: number | null;
   quotationDate?: string | null;
   awardedAt?: string | null;
+  awardedProjectId?: string | null;
   attachmentUrl?: string | null;
   attachmentSharePointUrl?: string | null;
   currentRevisionNo?: number | null;

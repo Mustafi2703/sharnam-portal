@@ -6,7 +6,6 @@ import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { CrmLeadsRegister } from "../components/CrmLeadsRegister";
 import { CrmProposalsRegister } from "../components/CrmProposalsRegister";
 import { CrmProjectsRegister } from "../components/CrmProjectsRegister";
-import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { RegisterSheetFrame } from "../components/RegisterSheetFrame";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import {
@@ -14,9 +13,9 @@ import {
   PIPELINE_STAGES,
   countByField,
   leadLocation,
+  leadPrimaryAction,
   marketStatusTone,
 } from "../lib/crmLeadUtils";
-import { vendorMatchesBidDisciplines } from "../lib/crmBidDisciplines";
 import { openModuleToolWindow, withToolWindowParam } from "../lib/moduleToolWindow";
 
 function openCrmSetup(projectId: string) {
@@ -40,14 +39,12 @@ export default function CrmPage() {
   const [leads, setLeads] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [vendors, setVendors] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [bidPackages, setBidPackages] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [leadAddOpen, setLeadAddOpen] = useState(false);
   const leadFormRef = useRef<HTMLDivElement>(null);
-  const [convertLead, setConvertLead] = useState<any | null>(null);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
   const [leadForm, setLeadForm] = useState({
     title: "",
     contactName: "",
@@ -56,30 +53,6 @@ export default function CrmPage() {
     stage: "New",
     value: "",
   });
-  const emptyClient = {
-    clientName: "",
-    clientContactName: "",
-    clientEmail: "",
-    clientPhone: "",
-    clientAddress: "",
-    clientGst: "",
-    designConsultant: "",
-    contractorName: "",
-    location: "",
-  };
-  const [convertForm, setConvertForm] = useState({
-    code: "",
-    name: "",
-    ...emptyClient,
-    memberIds: [] as string[],
-    vendorIds: [] as string[],
-    disciplineKeys: [] as string[],
-    workPackages: [] as string[],
-  });
-  const [bidDisciplines, setBidDisciplines] = useState<{ key: string; label: string }[]>([]);
-  const [workPackageCatalog, setWorkPackageCatalog] = useState<string[]>([]);
-  const [newCatalogPackage, setNewCatalogPackage] = useState("");
-  const [catalogBusy, setCatalogBusy] = useState(false);
   const [editProject, setEditProject] = useState<any | null>(null);
   const [deleteProject, setDeleteProject] = useState<any | null>(null);
   const [deleteCode, setDeleteCode] = useState("");
@@ -87,24 +60,7 @@ export default function CrmPage() {
   const [leadsView, setLeadsView] = useState<LeadsView>("register");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
-
   const canManage = user?.role === "admin" || user?.role === "office";
-
-  useEffect(() => {
-    if (!canManage || !token) return;
-    void Promise.all([
-      api<{ key: string; label: string }[]>("/api/crm/disciplines", { token }),
-      api<{ packages: string[] }>("/api/projects/work-package-catalog", { token }).catch(() => ({ packages: ["Civil", "PEB"] })),
-    ]).then(([rows, pkgRes]) => {
-      setBidDisciplines(rows);
-      setWorkPackageCatalog(pkgRes.packages || ["Civil", "PEB"]);
-      setConvertForm((f) => ({
-        ...f,
-        disciplineKeys: f.disciplineKeys.length ? f.disciplineKeys : rows.map((d) => d.key),
-        workPackages: f.workPackages.length ? f.workPackages : (pkgRes.packages || ["Civil", "PEB"]).slice(0, 2),
-      }));
-    }).catch(() => {});
-  }, [token, canManage]);
 
   function openSetupBids(lead: CrmLead) {
     if (!lead.projectId) return;
@@ -112,25 +68,36 @@ export default function CrmPage() {
   }
 
   function openConvert(lead: CrmLead) {
+    if (convertingId) return;
     if (lead.projectId) {
-      openSetupBids(lead);
+      openCrmSetup(lead.projectId);
       return;
     }
-    setConvertLead(lead);
-    setConvertForm({
-      code: `SPDC-${String(lead.srNo || Date.now()).slice(-5)}`,
-      name: lead.title,
-      ...emptyClient,
-      clientName: lead.contactName || lead.title,
-      clientContactName: lead.contactName || "",
-      clientEmail: lead.email || "",
-      clientPhone: lead.phone || "",
-      location: leadLocation(lead),
-      memberIds: [],
-      vendorIds: [],
-      disciplineKeys: bidDisciplines.map((d) => d.key),
-      workPackages: workPackageCatalog.length ? workPackageCatalog.slice(0, 2) : ["Civil", "PEB"],
-    });
+    const existing = lead.quotations?.find((q) => (q.status || "").toLowerCase() !== "lost") || lead.quotations?.[0];
+    if (existing?.id) {
+      navigate(`/crm/proposals/${existing.id}`);
+      return;
+    }
+    setConvertingId(lead.id);
+    void (async () => {
+      try {
+        const row = await api<{ id: string; alreadyExisted?: boolean }>(`/api/crm/leads/${lead.id}/to-proposal`, {
+          method: "POST",
+          token,
+        });
+        setMsg(
+          row.alreadyExisted
+            ? "Opened the existing proposal."
+            : "Proposal file created in SharePoint. Edit the client format, add revisions here, then Award to put a Planning job on Projects.",
+        );
+        navigate(`/crm/proposals/${row.id}`);
+        await load();
+      } catch (err) {
+        setMsg(err instanceof Error ? err.message : "Could not convert to proposal");
+      } finally {
+        setConvertingId(null);
+      }
+    })();
   }
 
   async function updateLeadStage(leadId: string, stage: string) {
@@ -144,20 +111,16 @@ export default function CrmPage() {
   }
 
   const load = async () => {
-    const [p, l, d, u, v, q, bp] = await Promise.all([
+    const [p, l, d, q, bp] = await Promise.all([
       api<any[]>("/api/projects", { token }),
       canManage ? api<any[]>("/api/crm/leads", { token }).catch(() => []) : Promise.resolve([]),
       canManage ? api<any[]>("/api/crm/deals", { token }).catch(() => []) : Promise.resolve([]),
-      canManage ? api<any[]>("/api/users", { token }).catch(() => []) : Promise.resolve([]),
-      canManage ? api<any[]>("/api/vendors", { token }).catch(() => []) : Promise.resolve([]),
       api<any[]>("/api/crm/quotations", { token }).catch(() => []),
       canManage ? api<any[]>("/api/crm/bid-packages", { token }).catch(() => []) : Promise.resolve([]),
     ]);
     setProjects(p);
     setLeads(l);
     setDeals(d);
-    setUsers(u);
-    setVendors(v);
     setQuotations(q);
     setBidPackages(bp);
   };
@@ -189,33 +152,6 @@ export default function CrmPage() {
     return map;
   }, [pipelineLeads]);
 
-  const convertEligibleVendors = useMemo(
-    () => vendors.filter((v) => vendorMatchesBidDisciplines(v, convertForm.disciplineKeys)),
-    [vendors, convertForm.disciplineKeys]
-  );
-
-  const convertStaffItems = useMemo(
-    () =>
-      users.map((u) => ({
-        id: u.id,
-        label: u.fullName || u.name || u.email,
-        sublabel: u.role,
-        meta: u.email,
-      })),
-    [users]
-  );
-
-  const convertVendorItems = useMemo(
-    () =>
-      convertEligibleVendors.map((v) => ({
-        id: v.id,
-        label: v.name,
-        sublabel: v.partyType,
-        trade: v.trade,
-      })),
-    [convertEligibleVendors]
-  );
-
   const marketPipeline = useMemo(() => {
     const map: Record<string, CrmLead[]> = {};
     for (const lead of leads) {
@@ -241,106 +177,12 @@ export default function CrmPage() {
     await load();
   }
 
-  async function addCatalogPackage(e: FormEvent) {
-    e.preventDefault();
-    const name = newCatalogPackage.trim();
-    if (!name) return;
-    setCatalogBusy(true);
-    try {
-      const r = await api<{ packages: string[] }>("/api/projects/work-package-catalog", {
-        method: "POST",
-        token,
-        body: JSON.stringify({ name }),
-      });
-      setWorkPackageCatalog(r.packages);
-      setConvertForm((f) => ({
-        ...f,
-        workPackages: f.workPackages.includes(name) ? f.workPackages : [...f.workPackages, name].sort(),
-      }));
-      setNewCatalogPackage("");
-      setMsg(`Added “${name}” to work package catalogue.`);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Failed to add package");
-    } finally {
-      setCatalogBusy(false);
-    }
-  }
-
-  async function runConvert(e: FormEvent) {
-    e.preventDefault();
-    if (!convertLead) return;
-    setMsg("");
-    const leadId = convertLead.id;
-    try {
-      const res = await api<{ project: { id: string; code: string }; alreadyConverted?: boolean }>(
-        `/api/crm/leads/${leadId}/convert`,
-        {
-          method: "POST",
-          token,
-          body: JSON.stringify(convertForm),
-        },
-      );
-
-      if (res.alreadyConverted) {
-        setConvertLead(null);
-        setMsg(`Lead already linked to ${res.project.code} — opening project setup.`);
-        openCrmSetup(res.project.id);
-        await load();
-        return;
-      }
-
-      let bidPackageId: string | null = null;
-      if (convertForm.vendorIds.length >= 2 && convertForm.disciplineKeys.length) {
-        try {
-          const vendorNames = convertForm.vendorIds
-            .map((id) => vendors.find((v) => v.id === id)?.name)
-            .filter(Boolean) as string[];
-          const bp = await api<{ id: string }>("/api/crm/bid-packages", {
-            method: "POST",
-            token,
-            body: JSON.stringify({
-              title: `${convertForm.name} — comparative bid`,
-              projectId: res.project.id,
-              leadId,
-              revisionLabel: "R2",
-              vendorNames,
-              disciplineKeys: convertForm.disciplineKeys,
-            }),
-          });
-          bidPackageId = bp.id;
-        } catch (err) {
-          setMsg(
-            `Project ${res.project.code} created. Bid package failed: ${err instanceof Error ? err.message : "unknown"} — open Bid desk to set up manually.`,
-          );
-          setConvertLead(null);
-          openCrmSetup(res.project.id);
-          await load();
-          return;
-        }
-      }
-
-      setConvertLead(null);
-      if (bidPackageId) {
-        setMsg(
-          `Project ${res.project.code} created with a comparative bid and test BOQs from the R2 workbook. Open Bid management to award, then the winner can open the project desk.`,
-        );
-        openCrmSetup(res.project.id);
-      } else {
-        setMsg(`Project ${res.project.code} created. Open Project setup to save parties and launch portals.`);
-        openCrmSetup(res.project.id);
-      }
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Convert failed — check project code is unique and vendors are seeded.");
-    }
-  }
-
   return (
     <div className="space-y-6 pb-4">
       {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
 
       {section === "proposals" && (
-        <CrmProposalsRegister quotations={quotations} canWrite={canManage} />
+        <CrmProposalsRegister quotations={quotations} canWrite={canManage} onRefresh={() => void load()} />
       )}
 
       {section === "leads" && canManage && (
@@ -360,7 +202,7 @@ export default function CrmPage() {
               <div className="font-display text-3xl">{marketCounts["Pre-Construction"] || 0}</div>
             </Card>
             <Card className="!p-4">
-              <div className="text-[10px] font-mono uppercase text-steel-muted">Converted to SPDC</div>
+              <div className="text-[10px] font-mono uppercase text-steel-muted">Awarded to projects</div>
               <div className="font-display text-3xl">{leads.filter((l) => l.projectId).length}</div>
             </Card>
           </div>
@@ -400,7 +242,7 @@ export default function CrmPage() {
               [
                 ["register", "Register (all rows)"],
                 ["pipeline", "Sales pipeline"],
-                ["converted", "Converted + bid setup"],
+                ["converted", "Awarded (on projects)"],
                 ["market", "By market status"],
               ] as const
             ).map(([key, label]) => (
@@ -475,24 +317,9 @@ export default function CrmPage() {
                         {lead.latestSubStatus && (
                           <div className="text-[10px] text-steel-muted">{lead.latestSubStatus}</div>
                         )}
-                        {!lead.projectId ? (
-                          <Button className="!text-xs !py-1 !px-2" onClick={() => openConvert(lead)}>
-                            Convert →
-                          </Button>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="text-xs text-brand font-semibold"
-                              onClick={() => openSetupBids(lead)}
-                            >
-                              Setup bids →
-                            </button>
-                            <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
-                              Project →
-                            </Link>
-                          </div>
-                        )}
+                        <Button className="!text-xs !py-1 !px-2" onClick={() => openConvert(lead)}>
+                          {leadPrimaryAction(lead).label} →
+                        </Button>
                       </li>
                     ))}
                     {rows.length > 40 && (
@@ -522,22 +349,9 @@ export default function CrmPage() {
                             {lead.latestStatus}
                           </span>
                         )}
-                        {lead.projectId ? (
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className="text-xs text-brand font-semibold"
-                              onClick={() => openSetupBids(lead)}
-                            >
-                              Setup bids →
-                            </button>
-                            <Link to={`/projects/${lead.projectId}`} className="text-xs text-brand font-semibold">
-                              Project →
-                            </Link>
-                          </div>
-                        ) : stage !== "Lost" ? (
+                        {stage !== "Lost" ? (
                           <Button className="!text-xs !py-1 !px-2 w-full" onClick={() => openConvert(lead)}>
-                            Convert →
+                            {leadPrimaryAction(lead).label} →
                           </Button>
                         ) : null}
                       </li>
@@ -581,144 +395,21 @@ export default function CrmPage() {
         </>
       )}
 
-      {convertLead && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h3 className="font-display text-2xl mb-1">Convert lead</h3>
-            <p className="text-sm text-steel-muted mb-4">{convertLead.title}</p>
-            <form className="space-y-3" onSubmit={runConvert}>
-              <Input required placeholder="Project code" value={convertForm.code} onChange={(e) => setConvertForm({ ...convertForm, code: e.target.value })} />
-              <Input required placeholder="Project name" value={convertForm.name} onChange={(e) => setConvertForm({ ...convertForm, name: e.target.value })} />
-              <p className="text-[11px] font-mono uppercase text-steel-muted pt-1">Client information</p>
-              <Input placeholder="Client organisation" value={convertForm.clientName} onChange={(e) => setConvertForm({ ...convertForm, clientName: e.target.value })} />
-              <Input placeholder="Client contact name" value={convertForm.clientContactName} onChange={(e) => setConvertForm({ ...convertForm, clientContactName: e.target.value })} />
-              <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="Client email" value={convertForm.clientEmail} onChange={(e) => setConvertForm({ ...convertForm, clientEmail: e.target.value })} />
-                <Input placeholder="Client phone" value={convertForm.clientPhone} onChange={(e) => setConvertForm({ ...convertForm, clientPhone: e.target.value })} />
-              </div>
-              <Input placeholder="Client address" value={convertForm.clientAddress} onChange={(e) => setConvertForm({ ...convertForm, clientAddress: e.target.value })} />
-              <Input placeholder="GST / tax ID" value={convertForm.clientGst} onChange={(e) => setConvertForm({ ...convertForm, clientGst: e.target.value })} />
-              <Input placeholder="Design consultant" value={convertForm.designConsultant} onChange={(e) => setConvertForm({ ...convertForm, designConsultant: e.target.value })} />
-              <Input placeholder="Main contractor" value={convertForm.contractorName} onChange={(e) => setConvertForm({ ...convertForm, contractorName: e.target.value })} />
-              <Input placeholder="Site location" value={convertForm.location} onChange={(e) => setConvertForm({ ...convertForm, location: e.target.value })} />
-              <div>
-                <div className="text-xs font-mono uppercase text-steel-muted mb-1">Assign staff</div>
-                <SearchableCheckboxList
-                  items={convertStaffItems}
-                  selectedIds={convertForm.memberIds}
-                  onChange={(memberIds) => setConvertForm({ ...convertForm, memberIds })}
-                  placeholder="Search name, email, role…"
-                  maxHeightClass="max-h-36"
-                />
-              </div>
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="text-xs font-mono uppercase text-steel-muted">R2 bid packages (BOQ sheets — CCV, Admin, Security…)</div>
-                  <Link to="/master?tab=vendors" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
-                    Tag vendors ↗
-                  </Link>
-                </div>
-                <div className="max-h-32 overflow-y-auto border rounded-xl p-2 grid sm:grid-cols-2 gap-1">
-                  {bidDisciplines.map((d) => (
-                    <label key={d.key} className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={convertForm.disciplineKeys.includes(d.key)}
-                        onChange={(e) => {
-                          setConvertForm({
-                            ...convertForm,
-                            disciplineKeys: e.target.checked
-                              ? [...convertForm.disciplineKeys, d.key]
-                              : convertForm.disciplineKeys.filter((k) => k !== d.key),
-                          });
-                        }}
-                      />
-                      {d.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="text-xs font-mono uppercase text-steel-muted">Contractors / vendors (min 2 for auto-bid)</div>
-                  <Link to="/master/vendors" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
-                    Tag disciplines ↗
-                  </Link>
-                </div>
-                <p className="text-[10px] text-steel-muted mb-1">Vendors upload BOQs at /login/vendor after bid opens.</p>
-                <SearchableCheckboxList
-                  items={convertVendorItems}
-                  selectedIds={convertForm.vendorIds}
-                  onChange={(vendorIds) => setConvertForm({ ...convertForm, vendorIds })}
-                  placeholder="Search company, civil, electrical…"
-                  emptyMessage="No vendors for selected disciplines — seed R2 catalog in Master → Vendors."
-                  maxHeightClass="max-h-36"
-                />
-              </div>
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="text-xs font-mono uppercase text-steel-muted">Work packages (Civil, PEB, MEP…)</div>
-                  <Link to="/master?tab=packages" className="text-[10px] text-brand font-semibold" target="_blank" rel="noreferrer">
-                    Directory · packages ↗
-                  </Link>
-                </div>
-                <div className="max-h-32 overflow-y-auto border rounded-xl p-2 flex flex-wrap gap-1.5 mb-2">
-                  {workPackageCatalog.map((p) => (
-                    <label key={p} className="inline-flex items-center gap-1.5 text-xs rounded-full border border-line px-2.5 py-1 bg-paper">
-                      <input
-                        type="checkbox"
-                        checked={convertForm.workPackages.includes(p)}
-                        onChange={(e) => {
-                          setConvertForm({
-                            ...convertForm,
-                            workPackages: e.target.checked
-                              ? [...convertForm.workPackages, p].sort()
-                              : convertForm.workPackages.filter((x) => x !== p),
-                          });
-                        }}
-                      />
-                      {p}
-                    </label>
-                  ))}
-                  {!workPackageCatalog.length && <span className="text-xs text-steel-muted">Loading packages…</span>}
-                </div>
-                <form className="flex flex-wrap gap-2 items-end" onSubmit={addCatalogPackage}>
-                  <Input
-                    className="flex-1 min-w-[160px] !text-xs"
-                    placeholder="Add new package to catalogue"
-                    value={newCatalogPackage}
-                    onChange={(e) => setNewCatalogPackage(e.target.value)}
-                  />
-                  <Button type="submit" variant="secondary" className="!text-xs" disabled={catalogBusy || !newCatalogPackage.trim()}>
-                    Add package
-                  </Button>
-                </form>
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit">Create project + open bids</Button>
-                <Button type="button" variant="secondary" onClick={() => setConvertLead(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
 
       {section === "projects" && (
         <>
           <Card className="!p-5 border-brand/30 bg-brand-soft/40 shrink-0">
-            <h3 className="font-display text-lg mb-1">Create projects from leads</h3>
+            <h3 className="font-display text-lg mb-1">Projects register</h3>
             <p className="text-sm text-steel-muted mb-3">
-              Use <strong>Leads → Convert</strong> to spin up a delivery project with client card, team, vendors, bid package, sheets, and comms matrix. This register is read-only for client cards — finish directory and modules in Master setup.
+              Awarded proposals land here as Planning, ready for Project setup. Jobs that did not come from a lead can still be created from Project setup.
             </p>
             <div className="flex flex-wrap gap-2">
               <Link to="/crm/leads">
                 <Button type="button">Go to leads →</Button>
               </Link>
-              <Link to="/master">
+              <Link to="/crm/setup">
                 <Button type="button" variant="secondary">
-                  Master setup →
+                  Standalone project setup →
                 </Button>
               </Link>
             </div>

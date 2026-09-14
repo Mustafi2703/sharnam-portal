@@ -20,6 +20,14 @@ export type CrmLead = {
   phone?: string | null;
   value?: number | null;
   projectId?: string | null;
+  quotations?: {
+    id: string;
+    quotationNo?: string | null;
+    status?: string | null;
+    projectId?: string | null;
+    awardedProjectId?: string | null;
+    currentRevisionNo?: number | null;
+  }[];
   sourceSheet?: string | null;
 };
 
@@ -42,12 +50,14 @@ export function marketStatusTone(status?: string | null): string {
   if (s.includes("proposed")) return "bg-violet-500/15 text-violet-900 dark:text-violet-300";
   if (s.includes("approval")) return "bg-orange-500/15 text-orange-900 dark:text-orange-200";
   if (s.includes("land")) return "bg-stone-500/15 text-stone-800 dark:text-stone-300";
+  if (s.includes("award")) return "bg-emerald-600 text-white";
   return "bg-brand/10 text-brand-dark";
 }
 
 export function pipelineStageTone(stage?: string | null): string {
   const s = stage || "New";
   if (s === "Converted") return "bg-emerald-600 text-white";
+  if (s === "Awarded") return "bg-emerald-600 text-white";
   if (s === "Lost") return "bg-stone-400 text-white";
   if (s === "Negotiation") return "bg-brand text-white";
   if (s === "Proposal") return "bg-indigo-600 text-white";
@@ -162,4 +172,20 @@ export function leadDescriptionPreview(lead: CrmLead, maxLen = 80): string {
   const first = items[0];
   if (first.length <= maxLen) return items.length > 1 ? `${first} (+${items.length - 1} lines)` : first;
   return `${first.slice(0, maxLen)}…`;
+}
+
+export function leadProposal(lead: CrmLead) {
+  return lead.quotations?.find((q) => (q.status || "").toLowerCase() !== "lost") || lead.quotations?.[0] || null;
+}
+
+export function leadIsAwarded(lead: CrmLead) {
+  if (lead.latestStatus === "Awarded") return true;
+  if (lead.projectId) return true;
+  return Boolean(lead.quotations?.some((q) => (q.status || "").toLowerCase() === "awarded"));
+}
+
+export function leadPrimaryAction(lead: CrmLead): { kind: "setup" | "open-proposal" | "convert"; label: string } {
+  if (lead.projectId) return { kind: "setup", label: "Continue setup" };
+  if (leadProposal(lead)) return { kind: "open-proposal", label: "Open proposal" };
+  return { kind: "convert", label: "Convert to proposal" };
 }

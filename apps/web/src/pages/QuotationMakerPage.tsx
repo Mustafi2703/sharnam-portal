@@ -32,6 +32,7 @@ type Quotation = {
   clientName: string;
   status: string;
   projectId?: string | null;
+  awardedProjectId?: string | null;
   currentRevisionNo?: number | null;
   attachmentUrl?: string | null;
   attachmentSharePointUrl?: string | null;
@@ -61,7 +62,8 @@ function logLabel(row: LogRow) {
     /* ignore */
   }
   if (row.action === "quotation.create") return `Created proposal file for ${meta.clientName || "client"}`;
-  if (row.action === "quotation.revise") return "Opened a new version in the project SharePoint folder";
+  if (row.action === "quotation.revise") return "Opened a new version in SharePoint (previous R stays)";
+  if (row.action === "quotation.award") return "Awarded — Planning job added to the projects register";
   if (row.action === "quotation.status") {
     const move = meta.from && meta.to ? `${meta.from} → ${meta.to}` : meta.to || "Status updated";
     return meta.note ? `${move} — ${meta.note}` : move;
@@ -117,10 +119,6 @@ export default function QuotationMakerPage() {
       setMsg("Enter the client name to create a proposal file.");
       return;
     }
-    if (!leadPrefill?.projectId && !isEditing) {
-      setMsg("Convert this lead to an SPDC project first — proposals save to the project ISO folder (05.03 PMC_Proposals).");
-      return;
-    }
     setSaving(true);
     setMsg("");
     try {
@@ -134,7 +132,7 @@ export default function QuotationMakerPage() {
         }),
       });
       setSaved(r);
-      setMsg(`Proposal file created in project ISO folder for ${name}.`);
+      setMsg(`Proposal file created in SharePoint for ${name}. Edit the client format, then Award when the job is won.`);
       nav(`/crm/proposals/${r.id}`, { replace: true });
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not create proposal");
@@ -176,7 +174,7 @@ export default function QuotationMakerPage() {
       setSaved(r);
       setStatus("Editing");
       setNote("");
-      setMsg(`Opened R${r.currentRevisionNo ?? 0} in 05.03 / PMC_Proposals. Previous versions stay.`);
+      setMsg(`Opened R${r.currentRevisionNo ?? 0} in 05.03 / PMC_Proposals. Previous versions stay on this register.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not open the next version");
     } finally {
@@ -200,9 +198,40 @@ export default function QuotationMakerPage() {
       setSaved(r);
       setStatus("Editing");
       setNote("");
-      setMsg(`Stored ${file.name} as R${r.currentRevisionNo ?? 0} in the project SharePoint folder.`);
+      setMsg(`Stored ${file.name} as R${r.currentRevisionNo ?? 0} in SharePoint. Previous versions stay on this register.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function awardProposal() {
+    if (!saved) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await api<{
+        quotation: Quotation;
+        projectId?: string;
+        alreadyAwarded?: boolean;
+        project?: { id: string; code: string; status?: string };
+      }>(`/api/crm/quotations/${saved.id}/award`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      const q = await api<Quotation>(`/api/crm/quotations/${saved.id}`, { token });
+      setSaved(q);
+      setStatus(q.status);
+      const code = res.project?.code || "the job";
+      setMsg(
+        res.alreadyAwarded
+          ? `${code} is already on the projects register as Planning.`
+          : `${code} is on the projects register as Planning. Continue setup to pick parties and staff.`,
+      );
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not award this proposal");
     } finally {
       setSaving(false);
     }
@@ -212,15 +241,15 @@ export default function QuotationMakerPage() {
   const statusOptions = STATUSES.includes(status as (typeof STATUSES)[number])
     ? [...STATUSES]
     : [status, ...STATUSES];
-
-  const needsConvert = !isEditing && leadIdFromUrl && leadPrefill && !leadPrefill.projectId;
+  const isAwarded = (saved?.status || "").toLowerCase() === "awarded";
+  const awardedProjectId = saved?.awardedProjectId || saved?.projectId || null;
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="CRM · Proposal"
         title={isEditing ? saved?.clientName || "Proposal" : "New proposal"}
-        subtitle="Each send keeps its own R0 / R1 / R2 file in the project SharePoint folder (05.03 / PMC_Proposals). Older versions stay."
+        subtitle="Generate the client format into SharePoint (05.03 / PMC_Proposals). Client changes add R1 / R2 on this register. Award puts a Planning job on Projects."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -244,32 +273,26 @@ export default function QuotationMakerPage() {
             Download .docx
           </Button>
         )}
+        {saved && isAwarded && awardedProjectId && (
+          <Link to={`/crm/setup?projectId=${awardedProjectId}&step=project`}>
+            <Button type="button">Continue project setup</Button>
+          </Link>
+        )}
       </div>
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
-
-      {needsConvert && (
-        <Card className="!p-4 border-warn/40 bg-amber-50/50">
-          <p className="text-sm text-ink">
-            This lead is not converted yet.{" "}
-            <Link to="/crm/leads" className="font-semibold text-brand">
-              Go to Leads → Convert to SPDC project
-            </Link>{" "}
-            before creating a proposal file.
-          </p>
-        </Card>
-      )}
 
       {!isEditing && (
         <Card>
           <h3 className="font-semibold text-sm mb-1">Client name</h3>
           <p className="text-xs text-steel-muted mb-4">
             Creates <code className="font-mono">{clientName.trim() || "Client"}-PMC-Proposal-R0.docx</code> in{" "}
-            <code className="font-mono">05.03 Tender Documents / PMC_Proposals</code> on the linked SPDC project.
+            <code className="font-mono">05.03 Tender Documents / PMC_Proposals</code>
+            {leadPrefill?.projectId ? " on the linked project." : " in the office SharePoint library. Award later copies it onto the project."}
           </p>
-          {leadPrefill?.projectId && (
+          {leadPrefill && (
             <Badge tone="ok" className="mb-3">
-              Project linked — ISO folder will be created on save
+              {leadPrefill.projectId ? "Lead already awarded — file will land on the project" : "Linked to lead — convert stays on the proposal register until Award"}
             </Badge>
           )}
           <form className="flex flex-wrap gap-3 items-end" onSubmit={(e) => void createProposal(e)}>
@@ -281,10 +304,10 @@ export default function QuotationMakerPage() {
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 required
-                disabled={!canWrite || saving || !!needsConvert}
+                disabled={!canWrite || saving}
               />
             </label>
-            <Button type="submit" disabled={!canWrite || saving || !!needsConvert}>
+            <Button type="submit" disabled={!canWrite || saving}>
               {saving ? "Creating file…" : "Create proposal file"}
             </Button>
           </form>
@@ -320,7 +343,7 @@ export default function QuotationMakerPage() {
                 </div>
                 <div className="rounded-lg border border-line p-3 bg-sand/30">
                   <div className="font-mono uppercase text-[10px] mb-1">Workflow</div>
-                  Draft → edit in Word → Sent to client → Done
+                  Draft → edit in Word → Sent to client → Done → Award
                 </div>
               </div>
 
@@ -347,6 +370,11 @@ export default function QuotationMakerPage() {
                     <Button type="button" variant="secondary" disabled={saving} onClick={() => void newVersion()}>
                       New version (R{(saved.currentRevisionNo ?? 0) + 1})
                     </Button>
+                    {!isAwarded && saved.status !== "Lost" && (
+                      <Button type="button" disabled={saving} onClick={() => void awardProposal()}>
+                        Award → projects register
+                      </Button>
+                    )}
                   </div>
                   <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block">
                     Or upload the sent copy

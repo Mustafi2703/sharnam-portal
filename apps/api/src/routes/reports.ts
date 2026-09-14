@@ -348,10 +348,37 @@ crmRouter.use(requireAuth);
 
 crmRouter.get("/leads", async (_req, res) => {
   const leads = await prisma.lead.findMany({
-    include: { owner: { select: { fullName: true } }, project: true },
+    include: {
+      owner: { select: { fullName: true } },
+      project: { select: { id: true, code: true, name: true, status: true } },
+      quotations: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { id: true, quotationNo: true, status: true, projectId: true, awardedProjectId: true, currentRevisionNo: true },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
   res.json(leads);
+});
+
+crmRouter.get("/leads/:id", async (req, res) => {
+  const lead = await prisma.lead.findUnique({
+    where: { id: req.params.id },
+    include: {
+      owner: { select: { fullName: true } },
+      project: { select: { id: true, code: true, name: true, status: true } },
+      quotations: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, quotationNo: true, status: true, projectId: true, awardedProjectId: true, currentRevisionNo: true },
+      },
+    },
+  });
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  res.json({
+    ...lead,
+    clientName: lead.contactName || lead.title,
+  });
 });
 
 crmRouter.post("/leads", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -565,7 +592,49 @@ async function resolveBidDisciplinesJson(body: { disciplineKeys?: unknown; custo
   return disciplines.length ? JSON.stringify(disciplines) : undefined;
 }
 
-/** Convert a lead into a project + optional members/vendors + Closed Won deal */
+/** Convert a lead into a PMC proposal (SharePoint file + register row). No delivery project yet. */
+crmRouter.post("/leads/:id/to-proposal", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const lead = await prisma.lead.findUnique({
+    where: { id: req.params.id },
+    include: { quotations: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  if (!lead) return res.status(404).json({ error: "Lead not found" });
+  const existing = lead.quotations.find((q) => q.status !== "Lost");
+  if (existing) {
+    const row = await ensureProposalRevisionTrail(existing.id);
+    if (lead.stage === "New" || lead.stage === "Qualified") {
+      await prisma.lead.update({ where: { id: lead.id }, data: { stage: "Proposal" } });
+    }
+    return res.json({ ...row, alreadyExisted: true, leadId: lead.id });
+  }
+
+  const clientName = String(req.body.clientName || lead.contactName || lead.title).trim();
+  const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
+  const project = lead.projectId ? await prisma.project.findUnique({ where: { id: lead.projectId } }) : null;
+  const row = await createVersionedProposal({
+    projectId: project?.id || null,
+    projectCode: project?.code || null,
+    clientName,
+    quotationNo,
+    userId: req.user!.id,
+    clientAddress: lead.district ? [lead.landmark, lead.district, lead.state].filter(Boolean).join(", ") : null,
+    scopeSummary: lead.description || `PMC proposal for ${clientName}`,
+    totalValue: lead.value || 0,
+    leadId: lead.id,
+  });
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { stage: "Proposal" },
+  });
+  await audit("quotation.create", {
+    userId: req.user!.id,
+    entity: "Quotation",
+    entityId: row.id,
+    meta: { fromLead: lead.id, clientName, quotationNo, revision: 0 },
+  });
+  const log = await quotationStatusLog(row.id);
+  res.status(201).json({ ...row, log, leadId: lead.id, alreadyExisted: false });
+});
 crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
   if (!lead) return res.status(404).json({ error: "Lead not found" });
@@ -679,7 +748,7 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
 
 /* ─── Quotations (proposal desk — Drive file + status log) ─── */
 
-const PROPOSAL_STATUSES = ["Draft", "Editing", "Sent to client", "Done"] as const;
+const PROPOSAL_STATUSES = ["Draft", "Editing", "Sent to client", "Done", "Awarded", "Lost"] as const;
 
 async function quotationStatusLog(entityId: string) {
   return prisma.auditEvent.findMany({
@@ -779,28 +848,16 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
   const leadId = req.body.leadId ? String(req.body.leadId) : null;
   if (leadId && !projectId) {
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-    if (!lead?.projectId) {
-      return res.status(400).json({
-        error: "Convert lead to SPDC project before saving a proposal — proposals are stored in the project ISO folder.",
-      });
-    }
-    projectId = lead.projectId;
+    if (lead?.projectId) projectId = lead.projectId;
   }
-  if (!projectId) {
-    return res.status(400).json({
-      error: "Project required — convert the lead to SPDC first, then create the proposal from the project register.",
-    });
-  }
-
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!project) return res.status(404).json({ error: "Project not found" });
+  const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
 
   const quotationNo = String(req.body.quotationNo || "").trim() || `QTN-${Date.now()}`;
   let row;
   try {
     row = await createVersionedProposal({
-      projectId: project.id,
-      projectCode: project.code,
+      projectId: project?.id || null,
+      projectCode: project?.code || null,
       clientName,
       quotationNo,
       userId: req.user!.id,
@@ -815,6 +872,12 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
     });
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Could not create proposal file" });
+  }
+  if (leadId) {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { stage: "Proposal" },
+    }).catch(() => null);
   }
   await audit("quotation.create", {
     userId: req.user!.id,
@@ -886,6 +949,9 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
   if (req.body.status && nextStatus !== before.status && !PROPOSAL_STATUSES.includes(nextStatus as (typeof PROPOSAL_STATUSES)[number])) {
     return res.status(400).json({ error: `Status must be one of: ${PROPOSAL_STATUSES.join(", ")}` });
   }
+  if (nextStatus === "Awarded" && before.status !== "Awarded") {
+    return res.status(400).json({ error: "Use Award on the proposal to put a Planning job on the projects register." });
+  }
   const row = await prisma.quotation.update({
     where: { id: req.params.id },
     data: {
@@ -926,46 +992,120 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
   res.json({ ...(fresh || row), log });
 });
 
-/** Award the quotation → create a project (or link existing) */
+/** Award the quotation → Planning project on the register, ready for setup. Updates the linked lead. */
 crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const qtn = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+  const qtn = await prisma.quotation.findUnique({
+    where: { id: req.params.id },
+    include: { lead: true, project: { select: { id: true, code: true, name: true, status: true } } },
+  });
   if (!qtn) return res.status(404).json({ error: "not found" });
-  const code = String(req.body.code || "").trim();
-  const name = String(req.body.name || qtn.clientName).trim();
+
+  if (qtn.status === "Lost") {
+    return res.status(400).json({ error: "A lost proposal cannot be awarded." });
+  }
+  if (qtn.status === "Awarded" && (qtn.awardedProjectId || qtn.projectId)) {
+    const projectId = qtn.awardedProjectId || qtn.projectId;
+    const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
+    return res.json({ quotation: qtn, projectId, project, alreadyAwarded: true });
+  }
+
+  const lead = qtn.lead;
+  const autoCode = `SPDC-${String(lead?.srNo || qtn.quotationNo.replace(/\D/g, "") || Date.now()).slice(-5)}`;
+  const code = String(req.body.code || "").trim() || autoCode;
+  const name = String(req.body.name || lead?.title || qtn.clientName).trim();
   if (!code || !name) return res.status(400).json({ error: "code and name required" });
 
-  let projectId = req.body.projectId as string | undefined;
-  if (!projectId) {
+  let projectId = (req.body.projectId as string | undefined) || qtn.projectId || lead?.projectId || undefined;
+  let project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
+  if (!project) {
     try {
       const { createOrReuseProject } = await import("../services/projectCreate.js");
-      const { project } = await createOrReuseProject({
+      const out = await createOrReuseProject({
         code,
         name,
-        clientName: qtn.clientName,
+        clientName: qtn.clientName || lead?.contactName || null,
+        location: lead ? [lead.landmark, lead.district, lead.state].filter(Boolean).join(", ") || null : null,
         clientAddress: qtn.clientAddress || null,
         clientGst: qtn.clientGst || null,
+        clientContactName: lead?.contactName || null,
+        clientEmail: lead?.email || null,
+        clientPhone: lead?.phone || null,
+        pmcName: "SPDC",
         status: "Planning",
       });
+      project = out.project;
       projectId = project.id;
     } catch (err) {
       return res.status(400).json({ error: err instanceof Error ? err.message : "Could not create project from award" });
     }
-    const { mockOneDrive } = await import("../services/mockOneDrive.js");
-    await mockOneDrive.ensureProjectTree(projectId);
-    try {
-      const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
-      await provisionProjectSheetPack(projectId, req.user!.id);
-    } catch (err) {
-      console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
+  }
+
+  await mockOneDrive.ensureProjectTree(projectId!);
+  try {
+    const stored = resolveProposalDiskPath(qtn.attachmentUrl);
+    if (stored && fs.existsSync(stored)) {
+      const { createProjectProposalFile } = await import("../services/crmSharePoint.js");
+      const file = await createProjectProposalFile(
+        project!.code,
+        qtn.clientName,
+        qtn.quotationNo,
+        qtn.currentRevisionNo || 0,
+        fs.readFileSync(stored)
+      );
+      await prisma.quotation.update({
+        where: { id: qtn.id },
+        data: { attachmentUrl: file.url, attachmentSharePointUrl: file.sharePointUrl || file.url },
+      });
     }
+  } catch (err) {
+    console.warn("Copy proposal into awarded project folder failed:", err instanceof Error ? err.message : err);
+  }
+  try {
+    const { provisionProjectSheetPack } = await import("../services/projectSheetPack.js");
+    await provisionProjectSheetPack(projectId!, req.user!.id);
+  } catch (err) {
+    console.error("Auto sheet provision failed:", err instanceof Error ? err.message : err);
   }
 
   const row = await prisma.quotation.update({
     where: { id: qtn.id },
     data: { status: "Awarded", awardedAt: new Date(), awardedProjectId: projectId, projectId },
+    include: quotationInclude(),
   });
 
-  res.json({ quotation: row, projectId });
+  if (qtn.leadId) {
+    await prisma.lead.update({
+      where: { id: qtn.leadId },
+      data: { projectId, stage: "Converted", latestStatus: "Awarded" },
+    });
+  }
+
+  const existingDeal = await prisma.deal.findFirst({ where: { projectId } });
+  if (!existingDeal) {
+    await prisma.deal.create({
+      data: {
+        name: `${name} — PMC`,
+        stage: "Closed Won",
+        value: qtn.totalValue || lead?.value || 0,
+        projectId,
+      },
+    });
+  }
+
+  await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId: projectId!, userId: req.user!.id } },
+    create: { projectId: projectId!, userId: req.user!.id, role: "office" },
+    update: {},
+  });
+
+  await audit("quotation.award", {
+    userId: req.user!.id,
+    entity: "Quotation",
+    entityId: row.id,
+    meta: { projectId, code: project!.code, leadId: qtn.leadId },
+  });
+
+  res.json({ quotation: row, projectId, project: { id: project!.id, code: project!.code, name: project!.name, status: project!.status } });
 });
 
 export const hrmRouter = Router();

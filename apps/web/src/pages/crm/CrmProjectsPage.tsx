@@ -106,7 +106,7 @@ export default function CrmProjectsPage() {
         <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · projects</p>
         <h2 className="font-display text-lg text-ink">Projects</h2>
         <p className="text-xs text-steel-muted mt-1 max-w-3xl leading-relaxed">
-          Delivery projects and client cards. Save a card from Project setup — it lands here as Planning.
+          Delivery projects and client cards. Award a proposal from the register — it lands here as Planning — or create a job here / in Project setup without a lead.
           Edit changes the card and status only. Continue setup if still Planning; Open desk once In Progress.
           <span className="block mt-1 font-semibold text-amber-800">
             Only office and admin can add, edit, or delete a project.
