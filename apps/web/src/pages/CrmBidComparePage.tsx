@@ -148,6 +148,7 @@ export default function CrmBidComparePage() {
   const [disciplineSource, setDisciplineSource] = useState<"saved" | "work_packages" | "default" | "">("");
   const [dueDate, setDueDate] = useState("");
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
+  const [showSharePoint, setShowSharePoint] = useState(false);
   const [actionError, setActionError] = useState<ActionReason | null>(null);
   const [clearConfirm, setClearConfirm] = useState("");
 
@@ -208,11 +209,19 @@ export default function CrmBidComparePage() {
 
   const loadDetail = useCallback(
     async (id: string) => {
-      const row = await api<BidPackage>(`/api/crm/bid-packages/${id}`, { token });
-      setDetail(row);
-      if (row.disciplines?.length) setDisciplines(row.disciplines);
+      try {
+        const row = await api<BidPackage>(`/api/crm/bid-packages/${id}`, { token });
+        setDetail(row);
+        if (row.disciplines?.length) setDisciplines(row.disciplines);
+      } catch (err) {
+        setDetail(null);
+        setSelectedId(null);
+        setMsg(err instanceof Error ? err.message : "Bid package not found");
+        const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
+        nav(`/crm/bids${q}`, { replace: true });
+      }
     },
-    [token]
+    [token, nav, setupProjectId],
   );
 
   useEffect(() => {
@@ -222,6 +231,10 @@ export default function CrmBidComparePage() {
   useEffect(() => {
     if (routePkgId) setSelectedId(routePkgId);
   }, [routePkgId]);
+
+  useEffect(() => {
+    setShowSharePoint(false);
+  }, [selectedId]);
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId);
@@ -599,7 +612,11 @@ export default function CrmBidComparePage() {
     setBusy(true);
     setMsg("");
     try {
-      const out = await api<{ added: string[]; notify: { notified: number; total: number } | null }>(
+      const out = await api<{
+        added: string[];
+        notify: { notified: number; total: number } | null;
+        draftLogins?: { vendor: string; email: string; tempPassword?: string }[];
+      }>(
         `/api/crm/bid-packages/${selectedId}/vendors`,
         {
           method: "POST",
@@ -610,9 +627,20 @@ export default function CrmBidComparePage() {
       setAddVendorIds([]);
       const notifyPart =
         out.notify != null ? ` · emailed ${out.notify.notified}/${out.notify.total} new bidder(s)` : "";
-      setMsg(`Added ${out.added.join(", ")}${notifyPart}. Portal logins created when email is on file.`);
+      const loginPart = out.draftLogins?.length
+        ? ` · ${out.draftLogins.length} portal login(s) ready (see access slip)`
+        : "";
+      setMsg(`Added ${out.added.join(", ")}${notifyPart}${loginPart}. Portal logins created when email is on file.`);
+      if (out.draftLogins?.length) {
+        setAccessSlip(
+          out.draftLogins.map((s) => ({
+            vendor: s.vendor,
+            email: s.email,
+            tempPassword: s.tempPassword || "Demo@1234",
+          })),
+        );
+      }
       await loadDetail(selectedId);
-      await load();
     } catch (err) {
       showActionError("Could not add bidders", err);
     } finally {
@@ -1316,7 +1344,13 @@ export default function CrmBidComparePage() {
                     />
                     {selectedId && detail.project?.code && token && (
                       <div className="mt-4">
-                        <CrmBidSharePointPanel token={token} bidPackageId={selectedId} />
+                        {!showSharePoint ? (
+                          <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowSharePoint(true)}>
+                            Show SharePoint BOQ tree
+                          </Button>
+                        ) : (
+                          <CrmBidSharePointPanel token={token} bidPackageId={selectedId} />
+                        )}
                       </div>
                     )}
                   </div>

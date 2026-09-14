@@ -34,6 +34,7 @@ type VendorRow = {
   primaryContactName?: string | null;
   businessPhone?: string | null;
   address?: string | null;
+  gstNumber?: string | null;
 };
 
 type SetupSummary = {
@@ -393,6 +394,7 @@ export default function CrmProjectSetupPage() {
       clientEmail: c.email || "",
       clientPhone: c.businessPhone || "",
       clientAddress: c.address || "",
+      clientGst: c.gstNumber || "",
     };
     if (into === "create") setCreateForm((f) => ({ ...f, ...patch }));
     else setDetails((f) => ({ ...f, ...patch }));
@@ -653,6 +655,16 @@ export default function CrmProjectSetupPage() {
                         projectId
                           ? setDetails({ ...details, clientPhone: e.target.value })
                           : setCreateForm({ ...createForm, clientPhone: e.target.value })
+                      }
+                    />
+                    <Input
+                      disabled={!canManage}
+                      placeholder="GSTIN"
+                      value={projectId ? details.clientGst : createForm.clientGst}
+                      onChange={(e) =>
+                        projectId
+                          ? setDetails({ ...details, clientGst: e.target.value })
+                          : setCreateForm({ ...createForm, clientGst: e.target.value })
                       }
                     />
                     <Input

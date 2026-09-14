@@ -5,6 +5,7 @@
 import XLSX, { type WorkBook, type WorkSheet, type CellObject } from "../lib/xlsx.js";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import {
   type SheetCell,
   evaluateAllRows,
@@ -174,11 +175,15 @@ export type ImportedSheet = {
 };
 
 export function resolveR2TemplatePath(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.join(here, "..", "..", "..", "..");
   const candidates = [
+    path.join(repoRoot, "templates", "Comparative-Statement-R2.xlsx"),
+    path.join(repoRoot, "seed", "data", "Comparative Statement - R2.xlsx"),
+    path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"),
     path.join(process.cwd(), "Sharnam_modules_docs", "Comparative Statement - R2.xlsx"),
     path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Comparative Statement - R2.xlsx"),
     path.join(process.cwd(), "seed", "data", "Comparative Statement - R2.xlsx"),
-    path.join(process.cwd(), "templates", "Comparative-Statement-R2.xlsx"),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;

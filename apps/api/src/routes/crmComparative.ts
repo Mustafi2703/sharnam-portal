@@ -554,6 +554,33 @@ crmComparativeRouter.post("/bid-packages/:id/vendors", requireRoles("admin", "of
   );
 
   let notify = null;
+  let draftLogins: { vendor: string; email: string; tempPassword?: string }[] = [];
+  if (pkg.status === "Draft" && req.body.createLogins !== false) {
+    const { ensureVendorPortalLogin, grantVendorProjectAccess } = await import("../services/crmVendorCredentials.js");
+    for (const v of toAdd) {
+      if (!v.email) continue;
+      try {
+        const login = await ensureVendorPortalLogin({
+          email: v.email,
+          name: v.name,
+          vendorId: v.id,
+        });
+        if (login && pkg.projectId) {
+          await grantVendorProjectAccess({
+            projectId: pkg.projectId,
+            vendorId: v.id,
+            userId: login.userId,
+            assignedVia: "Bid package",
+          });
+        }
+        if (login?.created && login.tempPassword) {
+          draftLogins.push({ vendor: v.name, email: login.email, tempPassword: login.tempPassword });
+        }
+      } catch (err) {
+        console.warn("Draft bid vendor login:", v.email, err instanceof Error ? err.message : err);
+      }
+    }
+  }
   if (pkg.status === "Open" || pkg.status === "Evaluation") {
     notify = await notifyBidPackageOpened({
       bidPackageId: pkg.id,
@@ -571,7 +598,7 @@ crmComparativeRouter.post("/bid-packages/:id/vendors", requireRoles("admin", "of
   });
 
   const updated = await loadBidPackage(pkg.id);
-  res.json({ package: updated, added: toAdd.map((v) => v.name), slotsCreated: created.count, notify });
+  res.json({ package: updated, added: toAdd.map((v) => v.name), slotsCreated: created.count, notify, draftLogins });
 });
 
 /** Upload vendor BOQ for a specific discipline (office or matching vendor). */
@@ -1200,8 +1227,12 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
 
 /** Download official Comparative Statement R2 workbook (office reference — all vendors). */
 crmComparativeRouter.get("/template.xlsx", requireRoles("admin", "office"), (_req, res) => {
-  const src = resolveR2TemplatePath();
-  res.download(src, "Comparative-Statement-R2.xlsx");
+  try {
+    const src = resolveR2TemplatePath();
+    res.download(src, "Comparative-Statement-R2.xlsx");
+  } catch (e) {
+    res.status(404).json({ error: e instanceof Error ? e.message : "Template not found" });
+  }
 });
 
 /** Per-vendor × discipline BOQ sample — SPDC branded, rates blanked (separate file per contractor). */
