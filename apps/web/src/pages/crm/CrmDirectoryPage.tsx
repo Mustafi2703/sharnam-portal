@@ -180,7 +180,11 @@ export function DirectoryCompaniesPanel({
           return;
         }
         const updated = await api<
-          VendorRow & { login?: { passwordUpdated?: boolean; created?: boolean }; projectsSynced?: number }
+          VendorRow & {
+            login?: { passwordUpdated?: boolean; created?: boolean };
+            loginError?: string;
+            projectsSynced?: number;
+          }
         >(`/api/vendors/${selectedId}`, {
           method: "PATCH",
           token,
@@ -195,18 +199,25 @@ export function DirectoryCompaniesPanel({
             ? ` Linked project cards updated (${updated.projectsSynced}).`
             : "";
         setMsg(
-          (updated.login?.passwordUpdated
-            ? "Updated — portal password changed."
-            : updated.login?.created
-              ? "Updated — portal login created."
-              : "Updated.") + syncNote
+          updated.loginError
+            ? `Company saved. Portal login not updated — ${updated.loginError}${syncNote}`
+            : (updated.login?.passwordUpdated
+                ? "Updated — portal password changed."
+                : updated.login?.created
+                  ? "Updated — portal login created."
+                  : "Updated.") + syncNote
         );
       } else {
         if (!payload.email) {
           setMsg("Add an email to create the portal login for this company.");
           return;
         }
-        const created = await api<VendorRow & { login?: { email: string; created: boolean; tempPassword?: string } }>(
+        const created = await api<
+          VendorRow & {
+            login?: { email: string; created: boolean; tempPassword?: string };
+            loginError?: string;
+          }
+        >(
           "/api/vendors",
           {
             method: "POST",
@@ -218,7 +229,9 @@ export function DirectoryCompaniesPanel({
         setSelectedId(created.id);
         const path =
           tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
-        if (created.login?.created) {
+        if (created.loginError) {
+          setMsg(`Company saved. Portal login not created — ${created.loginError}`);
+        } else if (created.login?.created) {
           setMsg(`Saved. Portal ready — ${created.login.email} signs in at ${path}. Password: ${created.login.tempPassword || loginPassword}`);
         } else if (created.login) {
           setMsg(`Saved. Login already existed for ${created.login.email} · ${path}`);
@@ -241,7 +254,7 @@ export function DirectoryCompaniesPanel({
     try {
       const role = meta.loginRole || (tab === "vendors" ? "vendor" : tab === "stakeholders" ? "employee" : "client");
       const kind = portalAccountKind(role, { department: tab === "stakeholders" ? selected.trade : null }, selected.id);
-      const updated = await api<{ login?: { created?: boolean; email?: string; tempPassword?: string; passwordUpdated?: boolean } }>(
+      const updated = await api<{ login?: { created?: boolean; email?: string; tempPassword?: string; passwordUpdated?: boolean }; loginError?: string }>(
         `/api/vendors/${selected.id}`,
         {
           method: "PATCH",
@@ -255,7 +268,9 @@ export function DirectoryCompaniesPanel({
       );
       const path =
         tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
-      if (updated.login?.created) {
+      if (updated.loginError) {
+        setLoginMsg(`Company on file. Portal login not updated — ${updated.loginError}`);
+      } else if (updated.login?.created) {
         setLoginMsg(
           `Portal login created for ${updated.login.email} (${accountKindLabel(kind)}). Password: ${updated.login.tempPassword || loginPassword || "Demo@1234"} · ${path}`
         );
@@ -299,7 +314,7 @@ export function DirectoryCompaniesPanel({
             </button>
           ))}
         </div>
-        <ConsultantTypesPanel token={token} />
+        {canEdit ? <ConsultantTypesPanel token={token} canEdit /> : null}
       </div>
     ) : null}
     <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4">

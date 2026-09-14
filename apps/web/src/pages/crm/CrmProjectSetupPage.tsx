@@ -231,8 +231,8 @@ export default function CrmProjectSetupPage() {
 
   useEffect(() => {
     if (clientId) return;
-    const email = (details.clientEmail || createForm.clientEmail).trim().toLowerCase();
-    const name = (details.clientName || createForm.clientName).trim().toLowerCase();
+    const email = trimField(details.clientEmail || createForm.clientEmail).toLowerCase();
+    const name = trimField(details.clientName || createForm.clientName).toLowerCase();
     const match = vendors.find(
       (v) =>
         (email && (v.email || "").toLowerCase() === email) ||
@@ -289,8 +289,9 @@ export default function CrmProjectSetupPage() {
       const firstConsultant = vendors.find((v) => consultantIds.includes(v.id));
       const firstContractor = vendors.find((v) => contractorIds.includes(v.id));
       const firstPmc = vendors.find((v) => pmcIds.includes(v.id));
+      let loginWarn: string | null = null;
       if (clientId) {
-        await syncLinkedClientVendor(clientId, details);
+        loginWarn = await syncLinkedClientVendor(clientId, details);
       }
       await api(`/api/projects/${projectId}/settings`, {
         method: "PATCH",
@@ -328,11 +329,11 @@ export default function CrmProjectSetupPage() {
         });
       }
       await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
-      setMsg(
+      const baseMsg =
         details.status && details.status !== "Planning"
           ? "Project card updated. New consultants, vendors, and SPDC staff are linked to this job."
-          : "Project card saved. Technical and commercial matrices filled from this card. No new login was created."
-      );
+          : "Project card saved. Technical and commercial matrices filled from this card.";
+      setMsg(loginWarn ? `${baseMsg} Client master saved; portal login: ${loginWarn}` : baseMsg);
       await loadProject();
       await loadLists();
       setStep("project", projectId);
@@ -382,11 +383,11 @@ export default function CrmProjectSetupPage() {
   async function syncLinkedClientVendor(
     id: string,
     card: Pick<typeof EMPTY_PROJECT, "clientName" | "clientContactName" | "clientEmail" | "clientPhone" | "clientAddress" | "clientGst">,
-  ) {
-    if (!token || !id) return;
+  ): Promise<string | null> {
+    if (!token || !id) return null;
     const name = trimField(card.clientName);
     if (!name) throw new Error("Client company name is required");
-    await api(`/api/vendors/${id}`, {
+    const updated = await api<{ loginError?: string }>(`/api/vendors/${id}`, {
       method: "PATCH",
       token,
       body: JSON.stringify({
@@ -399,6 +400,7 @@ export default function CrmProjectSetupPage() {
         partyType: "Client",
       }),
     });
+    return updated.loginError || null;
   }
 
   const clientOptions = vendors.filter((v) => v.partyType === "Client");

@@ -3,10 +3,10 @@ import { useConsultantTypes } from "../lib/consultantTypes";
 import { SearchableSelect } from "./SearchableSelect";
 import { Button, Input } from "./ui";
 
-/** Compact master list — keep it off the main consultant register until opened. */
-export function ConsultantTypesPanel({ token }: { token: string | null }) {
+/** Office/admin — add, rename, or remove consultant type labels. */
+export function ConsultantTypesPanel({ token, canEdit = false }: { token: string | null; canEdit?: boolean }) {
   const { types, busy, msg, addType, renameType, removeType } = useConsultantTypes(token);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(canEdit);
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -20,6 +20,8 @@ export function ConsultantTypesPanel({ token }: { token: string | null }) {
       /* message shown by hook */
     }
   }
+
+  if (!canEdit) return null;
 
   return (
     <div className="rounded-xl border border-line bg-paper">

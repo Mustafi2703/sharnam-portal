@@ -144,14 +144,17 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
   await audit(existing ? "vendor.update" : "vendor.create", { userId: req.user!.id, entity: "Vendor", entityId: v.id });
 
   let login = null;
+  let loginError: string | undefined;
   if (email) {
     const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
-    login = await syncDirectoryPortalLogin({
+    const sync = await syncDirectoryPortalLogin({
       vendor: v,
       password: req.body.password ? String(req.body.password) : null,
     });
+    if (sync && "error" in sync) loginError = sync.error;
+    else login = sync;
   }
-  res.status(existing ? 200 : 201).json({ ...v, login });
+  res.status(existing ? 200 : 201).json({ ...v, login, loginError });
 });
 
 /** Seed global bidder catalog — one vendor per R2 BOQ discipline package (idempotent). */
@@ -209,19 +212,22 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   }
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
   let login = null;
+  let loginError: string | undefined;
   let projectsSynced = 0;
   if (v.email) {
     const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
-    login = await syncDirectoryPortalLogin({
+    const sync = await syncDirectoryPortalLogin({
       vendor: v,
       password,
     });
+    if (sync && "error" in sync) loginError = sync.error;
+    else login = sync;
   }
   if (v.partyType === "Client") {
     const { syncClientVendorToLinkedProjects } = await import("../services/crmVendorCredentials.js");
     projectsSynced = await syncClientVendorToLinkedProjects(v);
   }
-  res.json({ ...v, login, projectsSynced });
+  res.json({ ...v, login, loginError, projectsSynced });
 });
 
 vendorsRouter.delete("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

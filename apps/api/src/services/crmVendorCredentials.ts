@@ -12,6 +12,11 @@ export type PortalLoginResult = {
   role: RoleKey;
 };
 
+export type DirectoryLoginSyncResult =
+  | (PortalLoginResult & { passwordUpdated?: boolean })
+  | { error: string }
+  | null;
+
 function defaultTempPassword() {
   return process.env.SEED_PASSWORD || "Demo@1234";
 }
@@ -195,9 +200,8 @@ export async function ensureClientVendorAndPortal(opts: {
     });
   }
 
-  const login = email
-    ? await syncDirectoryPortalLogin({ vendor, password: opts.password })
-    : null;
+  const loginSync = email ? await syncDirectoryPortalLogin({ vendor, password: opts.password }) : null;
+  const login = loginSync && !("error" in loginSync) ? loginSync : null;
 
   if (opts.projectId) {
     await prisma.projectVendor.upsert({
@@ -261,7 +265,7 @@ export async function syncDirectoryPortalLogin(opts: {
     trade?: string | null;
   };
   password?: string | null;
-}): Promise<(PortalLoginResult & { passwordUpdated?: boolean }) | null> {
+}): Promise<DirectoryLoginSyncResult> {
   const email = String(opts.vendor.email || "")
     .trim()
     .toLowerCase();
@@ -306,7 +310,7 @@ export async function syncDirectoryPortalLogin(opts: {
   if (email !== user.email) {
     const clash = await prisma.user.findUnique({ where: { email } });
     if (clash && clash.id !== user.id) {
-      throw new Error("That email is already used by another portal login.");
+      return { error: "That email is already used by another portal login." };
     }
     data.email = email;
   }
@@ -565,8 +569,13 @@ export async function syncAllDirectoryPortalLogins() {
     }
     try {
       const login = await syncDirectoryPortalLogin({ vendor });
-      if (!login) {
-        skipped++;
+      if (!login || "error" in login) {
+        if (login && "error" in login && errors.length < 12) {
+          failed++;
+          errors.push(`${vendor.email}: ${login.error}`);
+        } else {
+          skipped++;
+        }
         continue;
       }
       if (login.created) created++;
