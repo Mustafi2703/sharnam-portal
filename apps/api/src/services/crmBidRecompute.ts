@@ -7,10 +7,8 @@ import {
   type DisciplineDef,
   type ImportedSheet,
   disciplineCatalogEntry,
-  importR2WorkbookFromFile,
   parseDisciplinesJson,
   parseR2SummarySheet,
-  blankVendorRates,
   type ComparativeSummary,
 } from "./comparativeStatement.js";
 import { loadMonitoringBoqTemplate } from "./monitoringBoqTemplate.js";
@@ -156,7 +154,6 @@ export async function ensureVendorBoqTemplateSheets(
   disciplines: DisciplineDef[],
   createdById?: string
 ) {
-  const imported = importR2WorkbookFromFile(undefined, vendorNames);
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: pkgId },
     select: { title: true, projectId: true },
@@ -172,16 +169,13 @@ export async function ensureVendorBoqTemplateSheets(
     const fromMonitoring = pkg.projectId
       ? await loadMonitoringBoqTemplate(prisma, pkg.projectId, slot.discipline, disciplines)
       : null;
-    const template = imported.disciplineTemplates[slot.discipline];
     const parsed = fromMonitoring?.rows?.length
       ? fromMonitoring
-      : template?.rows?.length
-        ? blankVendorRates(template)
-        : {
-            headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
-            rows: [] as SheetCell[][],
-            sheetName: disc?.sheetName || slot.discipline,
-          };
+      : {
+          headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
+          rows: [] as SheetCell[][],
+          sheetName: disc?.sheetName || slot.discipline,
+        };
 
     const boqSheet = await prisma.customSheet.create({
       data: {
@@ -191,7 +185,7 @@ export async function ensureVendorBoqTemplateSheets(
         rowsJson: JSON.stringify(parsed.rows),
         sourceFile: fromMonitoring?.rows?.length
           ? "Project budget monitoring (SPDC Budget)"
-          : "Comparative Statement - R2.xlsx (template)",
+          : "Empty BOQ — vendor upload or online fill",
         createdById,
       },
     });

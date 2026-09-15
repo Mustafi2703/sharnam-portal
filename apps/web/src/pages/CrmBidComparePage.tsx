@@ -9,7 +9,6 @@ import { CrmBidVendorMatrix } from "../components/CrmBidVendorMatrix";
 import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
 import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
 import { downloadAuthFile } from "../lib/downloadReport";
-import { CrmBidSharePointPanel } from "../components/CrmBidSharePointPanel";
 import { BidManageActions } from "../components/BidManageActions";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../components/ActionReasonDialog";
 import { isVendorOrContractor } from "../lib/vendorTypes";
@@ -54,53 +53,8 @@ type BidPackage = {
   } | null;
 };
 
-const SHOW_DEV_BID_TOOLS = false;
-
 function formatINR(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
-}
-
-type BidWorkflowStep = "configure" | "publish" | "collect" | "compare" | "award";
-
-const BID_WORKFLOW_STEPS: { id: BidWorkflowStep; label: string; hint: string }[] = [
-  { id: "configure", label: "Configure", hint: "Project · work packages · vendors" },
-  { id: "publish", label: "Publish", hint: "Open bid & notify bidders" },
-  { id: "collect", label: "Collect BOQs", hint: "8 work packages · vendor fills rate only (qty from budget)" },
-  { id: "compare", label: "Compare", hint: "Refresh comparative statement" },
-  { id: "award", label: "Award", hint: "Select L1 & close package" },
-];
-
-function BidDeskStepper({ active, complete }: { active: BidWorkflowStep; complete?: boolean }) {
-  const activeIdx = BID_WORKFLOW_STEPS.findIndex((s) => s.id === active);
-  return (
-    <nav
-      className="flex flex-wrap gap-1 sm:gap-0 sm:divide-x border border-line rounded-xl overflow-hidden bg-white"
-      aria-label="Bid management workflow"
-    >
-      {BID_WORKFLOW_STEPS.map((step, i) => {
-        const done = complete || i < activeIdx;
-        const current = !complete && step.id === active;
-        return (
-          <div
-            key={step.id}
-            className={`flex-1 min-w-[7rem] px-3 py-2 ${current ? "bg-brand-soft/50" : done ? "bg-ok/5" : "bg-sand/20"}`}
-          >
-            <div className="flex items-center gap-1.5">
-              <span
-                className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                  done ? "bg-ok text-white" : current ? "bg-brand text-white" : "bg-line text-steel-muted"
-                }`}
-              >
-                {done ? "✓" : i + 1}
-              </span>
-              <span className={`text-xs font-semibold ${current ? "text-brand-dark" : "text-ink"}`}>{step.label}</span>
-            </div>
-            <p className="text-[10px] text-steel-muted mt-0.5 pl-6 hidden sm:block">{step.hint}</p>
-          </div>
-        );
-      })}
-    </nav>
-  );
 }
 
 function disciplineLabel(disciplines: Discipline[], key: string) {
@@ -141,17 +95,12 @@ export default function CrmBidComparePage() {
   const [customDiscSheet, setCustomDiscSheet] = useState("");
   const [addDiscKeys, setAddDiscKeys] = useState<string[]>([]);
   const [addVendorIds, setAddVendorIds] = useState<string[]>([]);
-  const [deskFilter, setDeskFilter] = useState<"open" | "converted" | "all">("open");
-  const [activeDiscipline, setActiveDiscipline] = useState<string>("all");
   const [showNewBidForm, setShowNewBidForm] = useState(false);
   const [projectVendorIds, setProjectVendorIds] = useState<string[]>([]);
   const [disciplineSource, setDisciplineSource] = useState<"saved" | "work_packages" | "default" | "">("");
   const [dueDate, setDueDate] = useState("");
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
-  const [showSharePoint, setShowSharePoint] = useState(false);
-  const [showBidExtras, setShowBidExtras] = useState(false);
   const [actionError, setActionError] = useState<ActionReason | null>(null);
-  const [clearConfirm, setClearConfirm] = useState("");
 
   function showActionError(title: string, err: unknown) {
     const reason = actionReasonFromError(title, err);
@@ -164,35 +113,10 @@ export default function CrmBidComparePage() {
     setMsg(message);
   }
 
-  const convertedLeads = useMemo(() => leads.filter((l) => l.projectId), [leads]);
-  const convertedProjectIds = useMemo(
-    () => new Set(convertedLeads.map((l) => l.projectId).filter(Boolean) as string[]),
-    [convertedLeads],
-  );
   const packagesForDesk = useMemo(() => {
-    const scoped = setupProjectId
-      ? packages.filter((p) => (p.project?.id || p.projectId) === setupProjectId)
-      : packages;
-    if (deskFilter === "open") return scoped.filter((p) => p.status === "Open" || p.status === "Draft");
-    if (deskFilter === "all") return scoped;
-    return scoped.filter((p) => {
-      const pid = p.project?.id || p.projectId;
-      return pid && convertedProjectIds.has(pid);
-    });
-  }, [packages, deskFilter, convertedProjectIds, setupProjectId]);
-
-  const bidWorkflowStep = useMemo((): BidWorkflowStep => {
-    if (showNewBidForm) return "configure";
-    if (!detail) return "configure";
-    if (detail.status === "Awarded") return "award";
-    if (detail.status === "Draft") return "publish";
-    const done = detail.uploadProgress?.done ?? 0;
-    const total = detail.uploadProgress?.total ?? 0;
-    if (detail.status === "Open" && total > 0 && done < total) return "collect";
-    if (detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0) return "compare";
-    if (total > 0 && done >= total) return "compare";
-    return "collect";
-  }, [showNewBidForm, detail]);
+    if (!setupProjectId) return packages;
+    return packages.filter((p) => (p.project?.id || p.projectId) === setupProjectId);
+  }, [packages, setupProjectId]);
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -234,10 +158,6 @@ export default function CrmBidComparePage() {
   }, [routePkgId]);
 
   useEffect(() => {
-    setShowSharePoint(false);
-  }, [selectedId]);
-
-  useEffect(() => {
     if (selectedId) void loadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, loadDetail]);
@@ -247,7 +167,6 @@ export default function CrmBidComparePage() {
     setShowNewBidForm(false);
     setSlotPanel(null);
     setUploadFile(null);
-    setActiveDiscipline("all");
     const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
     nav(`/crm/bids/${id}${q}`, { replace: true });
   }
@@ -294,32 +213,6 @@ export default function CrmBidComparePage() {
       setBusy(false);
     }
   }
-
-  async function simulateR2Boqs() {
-    if (!selectedId) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const r = await api<{ uploaded: number; total: number }>(`/api/crm/bid-packages/${selectedId}/seed-r2-boqs`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ force: true }),
-      });
-      setMsg(`Test BOQs loaded from the R2 comparative workbook: ${r.uploaded}/${r.total} disciplines filled. Refresh comparative to award.`);
-      await loadDetail(selectedId);
-      await load();
-    } catch (err) {
-      showActionError("Test BOQs did not load", err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    if (setupProjectId && !routePkgId) {
-      setShowNewBidForm(true);
-    }
-  }, [setupProjectId, routePkgId]);
 
   useEffect(() => {
     if (!setupProjectId && !setupLeadId) return;
@@ -399,15 +292,11 @@ export default function CrmBidComparePage() {
   );
 
   const detailDisciplines = detail?.disciplines || disciplines;
-  const matrixDisciplines = useMemo(() => {
-    if (activeDiscipline === "all") return detailDisciplines;
-    return detailDisciplines.filter((d) => d.key === activeDiscipline);
-  }, [detailDisciplines, activeDiscipline]);
 
   const vendorMatrix = useMemo(() => {
     if (!detail?.vendorBoqs?.length) return [];
     const vendorNames = [...new Set(detail.vendorBoqs.map((b) => b.vendorLabel))];
-    const discList = matrixDisciplines.length ? matrixDisciplines : detailDisciplines;
+    const discList = detailDisciplines;
     return vendorNames.map((vendorLabel) => ({
       vendorLabel,
       slots: discList.map((d) => {
@@ -415,7 +304,7 @@ export default function CrmBidComparePage() {
         return { discipline: d, slot };
       }),
     }));
-  }, [detail, detailDisciplines, matrixDisciplines]);
+  }, [detail, detailDisciplines]);
 
   const summaryVendorGap = useMemo(() => {
     const summaryLabels = detail?.summary?.vendorLabels || [];
@@ -509,36 +398,8 @@ export default function CrmBidComparePage() {
       await load();
       selectPackage(row.id);
       setShowNewBidForm(false);
-      try {
-        const opened = await api<{
-          notify: {
-            notified: number;
-            total: number;
-            missingEmail?: string[];
-            accessSlips?: { vendor: string; email: string; tempPassword: string }[];
-          };
-        }>(`/api/crm/bid-packages/${row.id}/open`, {
-          method: "POST",
-          token,
-          body: JSON.stringify({ dueDate: dueDate || undefined, createLogins: true }),
-        });
-        setAccessSlip(opened.notify.accessSlips || []);
-        const missing = opened.notify.missingEmail?.length
-          ? ` Missing email: ${opened.notify.missingEmail.join(", ")}.`
-          : "";
-        setMsg(
-          `Bid opened — emailed ${opened.notify.notified}/${opened.notify.total} bidder(s). They sign in and upload at /crm/vendor-bids.${missing}`,
-        );
-        await loadDetail(row.id);
-        await load();
-      } catch (openErr) {
-        showActionError(
-          "Package saved — open bid failed",
-          openErr instanceof Error
-            ? openErr
-            : new Error("Package saved. Use Open bid & notify bidders to email vendor logins."),
-        );
-      }
+      setMsg(`Bid package saved as Draft. Click Open bid when vendors should upload BOQs.`);
+      await loadDetail(row.id);
       setForm({
         title: "",
         projectId: form.projectId,
@@ -714,41 +575,6 @@ export default function CrmBidComparePage() {
     }
   }
 
-  async function clearExistingBids() {
-    if (clearConfirm.trim() !== "DELETE ALL BIDS") {
-      showActionNeed(
-        "Confirm delete",
-        "Type DELETE ALL BIDS in the box, then click Clear existing bids. This removes bid packages and vendor BOQs only — projects, vendors, and logins stay.",
-      );
-      return;
-    }
-    setBusy(true);
-    setMsg("");
-    try {
-      const out = await api<{ removed: number; titles: string[] }>("/api/crm/bid-packages/clear-existing", {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          confirm: "DELETE ALL BIDS",
-          projectId: setupProjectId || undefined,
-        }),
-      });
-      setClearConfirm("");
-      setSelectedId(null);
-      setDetail(null);
-      setMsg(
-        setupProjectId
-          ? `Cleared ${out.removed} bid(s) on this project. Select vendors and create a new bid.`
-          : `Cleared ${out.removed} bid package(s). Select vendors and open a new bid.`,
-      );
-      await load();
-    } catch (err) {
-      showActionError("Could not delete existing bids", err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function copyVendorLink(vendorLabel: string) {
     const link = `${window.location.origin}/crm/vendor-bids?pkg=${encodeURIComponent(selectedId || "")}`;
     void navigator.clipboard?.writeText(link).then(
@@ -779,75 +605,10 @@ export default function CrmBidComparePage() {
     );
   }
 
-  const scopedProject = projects.find((p) => p.id === setupProjectId);
-
   return (
     <div className="crm-bid-page space-y-3">
-      <p className="text-xs text-steel-muted max-w-3xl leading-relaxed px-0.5 shrink-0">
-        R2 comparative bids per project — one BOQ file per work package (CCV, Electrical Lab, Admin Building, etc.).
-        Import budget on Cost → Monitoring first; bid templates pull item, section, UOM, and qty from monitoring. Vendors fill{" "}
-        <strong className="text-ink">rate only</strong>; refresh comparative for L1 award.
-      </p>
-      <Card className="!p-3">
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs font-semibold text-steel-muted flex-1 min-w-[16rem]">
-            Project for this bid
-            <select
-              className="mt-1 w-full border border-line rounded-lg px-2 py-1.5 text-sm bg-white"
-              value={setupProjectId}
-              onChange={(e) => {
-                const id = e.target.value;
-                const q = new URLSearchParams(searchParams);
-                if (id) q.set("projectId", id);
-                else q.delete("projectId");
-                setSearchParams(q, { replace: true });
-                setSelectedId(null);
-                setDetail(null);
-                if (id) {
-                  openNewBidSetup({ projectId: id });
-                } else {
-                  setShowNewBidForm(false);
-                  nav("/crm/bids", { replace: true });
-                }
-              }}
-            >
-              <option value="">All projects — pick one to set up a bid</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} · {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            type="button"
-            onClick={() => {
-              if (!setupProjectId) {
-                showActionNeed(
-                  "Pick a project first",
-                  "Choose the project in the dropdown, then open a new bid. After you select the vendor, Create & open package emails them to upload BOQs.",
-                );
-                return;
-              }
-              openNewBidSetup({ projectId: setupProjectId });
-            }}
-          >
-            New R2 bid for this project
-          </Button>
-        </div>
-        {scopedProject && (
-          <p className="text-xs text-steel-muted mt-2">
-            Packages below are only for <span className="font-mono text-ink">{scopedProject.code}</span>. Add vendors, then
-            fill or upload BOQs and open the comparative.
-          </p>
-        )}
-      </Card>
       {msg && (
         <p className={`text-sm shrink-0 px-0.5 ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>
-      )}
-
-      {(showNewBidForm || detail || setupProjectId) && (
-        <BidDeskStepper active={bidWorkflowStep} complete={detail?.status === "Awarded"} />
       )}
 
       {showNewBidForm && (
@@ -915,12 +676,11 @@ export default function CrmBidComparePage() {
               </p>
               {!disciplines.length ? (
                 <p className="text-xs text-amber-800 border border-amber-200 rounded-lg p-2 bg-amber-50">
-                  No work packages on this project yet. On{" "}
+                  No work packages on this project yet. Tick packages on{" "}
                   <Link to={`/crm/setup?projectId=${form.projectId}&step=project`} className="text-brand font-semibold">
                     Project setup
-                  </Link>
-                  , keep the eight R2 packages (CCV, Electrical Lab, Admin Building, Security, Cooling Tower, Weigh
-                  Bridge, U.G Tank + Pump Room, Entrance Gate), then sync budget monitoring on Cost.
+                  </Link>{" "}
+                  (Civil, PEB, MEP, etc.), then create the bid.
                 </p>
               ) : (
               <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1">
@@ -964,7 +724,7 @@ export default function CrmBidComparePage() {
               />
             </div>
             <Button type="submit" disabled={busy}>
-              {busy ? "Creating…" : "Create & open package"}
+              {busy ? "Creating…" : "Create bid"}
             </Button>
           </form>
         </Card>
@@ -973,8 +733,43 @@ export default function CrmBidComparePage() {
       <div className="crm-bid-desk">
         <aside className="crm-bid-desk__rail">
           <div className="crm-bid-desk__rail-head space-y-2">
+            <label className="text-[10px] font-semibold text-steel-muted block">
+              Project
+              <select
+                className="mt-1 w-full border border-line rounded-lg px-2 py-1.5 text-xs bg-white"
+                value={setupProjectId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const q = new URLSearchParams(searchParams);
+                  if (id) q.set("projectId", id);
+                  else q.delete("projectId");
+                  setSearchParams(q, { replace: true });
+                  setSelectedId(null);
+                  setDetail(null);
+                  setShowNewBidForm(false);
+                  if (!id) nav("/crm/bids", { replace: true });
+                }}
+              >
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" className="!text-xs flex-1" onClick={() => openNewBidSetup({ projectId: setupProjectId })}>
+              <Button
+                type="button"
+                className="!text-xs flex-1"
+                onClick={() => {
+                  if (!setupProjectId) {
+                    showActionNeed("Pick a project", "Choose a project above, then create a new bid.");
+                    return;
+                  }
+                  openNewBidSetup({ projectId: setupProjectId });
+                }}
+              >
                 + New bid
               </Button>
               <Button
@@ -983,57 +778,12 @@ export default function CrmBidComparePage() {
                 className="!text-xs"
                 onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
               >
-                R2 .xlsx
-              </Button>
-            </div>
-            <div className="flex gap-1">
-              <Button
-                variant={deskFilter === "open" ? "primary" : "secondary"}
-                type="button"
-                className="!text-xs flex-1"
-                onClick={() => setDeskFilter("open")}
-              >
-                Open
-              </Button>
-              <Button
-                variant={deskFilter === "converted" ? "primary" : "secondary"}
-                type="button"
-                className="!text-xs flex-1"
-                onClick={() => setDeskFilter("converted")}
-              >
-                Converted
-              </Button>
-              <Button
-                variant={deskFilter === "all" ? "primary" : "secondary"}
-                type="button"
-                className="!text-xs flex-1"
-                onClick={() => setDeskFilter("all")}
-              >
-                All
+                R2 sample
               </Button>
             </div>
             <p className="text-[10px] text-steel-muted font-mono uppercase tracking-wide">
               {packagesForDesk.length} package(s)
             </p>
-            {packages.length > 0 && (
-              <div className="space-y-1.5 pt-1">
-                <Input
-                  value={clearConfirm}
-                  onChange={(e) => setClearConfirm(e.target.value)}
-                  placeholder="Type DELETE ALL BIDS"
-                  className="!text-xs"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!text-xs w-full !bg-danger/10 !border-danger/40 !text-danger"
-                  disabled={busy}
-                  onClick={() => void clearExistingBids()}
-                >
-                  Clear existing bids
-                </Button>
-              </div>
-            )}
           </div>
           <ul className="crm-bid-desk__rail-list divide-y">
               {packagesForDesk.map((p) => {
@@ -1084,15 +834,6 @@ export default function CrmBidComparePage() {
         </aside>
 
         <div className="crm-bid-desk__main">
-          {detail?.project?.id && (
-            <div className="crm-bid-desk__toolbar mb-3">
-              <Link to={`/crm/setup?projectId=${detail.project.id}`}>
-                <Button variant="secondary" className="!text-xs">
-                  Project setup
-                </Button>
-              </Link>
-            </div>
-          )}
           <div className="space-y-4">
           {detail ? (
             <>
@@ -1128,16 +869,11 @@ export default function CrmBidComparePage() {
                   <div className="flex flex-wrap gap-2 shrink-0">
                     {(detail.status === "Draft" || detail.status === "Open") && (
                       <Button type="button" disabled={busy} onClick={() => void openBidPackage()}>
-                        {detail.status === "Draft" ? "Open bid & notify bidders" : "Resend bid invites"}
+                        {detail.status === "Draft" ? "Open bid" : "Resend invites"}
                       </Button>
                     )}
-                    {detail.comparativeSharePointUrl && (
-                      <a href={detail.comparativeSharePointUrl} target="_blank" rel="noopener noreferrer">
-                        <Button variant="secondary">R2 SharePoint</Button>
-                      </a>
-                    )}
                     <Button type="button" variant="secondary" disabled={busy} onClick={() => void recomputeComparative()}>
-                      Refresh comparative
+                      Refresh R2
                     </Button>
                     {canManage && token && (
                       <BidManageActions
@@ -1259,136 +995,16 @@ export default function CrmBidComparePage() {
 
               {vendorMatrix.length > 0 && (
                 <Card className="!p-4 min-w-0">
-                  <div className="flex flex-wrap gap-1 mb-3" role="tablist" aria-label="Discipline BOQ">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={activeDiscipline === "all"}
-                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border ${
-                        activeDiscipline === "all" ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
-                      }`}
-                      onClick={() => setActiveDiscipline("all")}
-                    >
-                      All disciplines
-                    </button>
-                    {detailDisciplines.map((d) => (
-                      <button
-                        key={d.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeDiscipline === d.key}
-                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border max-w-[180px] truncate ${
-                          activeDiscipline === d.key ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
-                        }`}
-                        onClick={() => setActiveDiscipline(d.key)}
-                      >
-                        {d.label}
-                      </button>
-                    ))}
-                  </div>
                   <CrmBidVendorMatrix
-                    disciplines={matrixDisciplines.length ? matrixDisciplines : detailDisciplines}
+                    disciplines={detailDisciplines}
                     vendorMatrix={vendorMatrix}
                     grandTotals={detail.summary?.grandTotals}
                     lowestVendor={detail.summary?.lowestVendor}
                     onManageSlot={openSlotPanel}
                     onCopyLink={copyVendorLink}
                   />
-                  {selectedId && detail.project?.code && token && (
-                    <div className="mt-4">
-                      {!showSharePoint ? (
-                        <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowSharePoint(true)}>
-                          Show SharePoint BOQ tree
-                        </Button>
-                      ) : (
-                        <CrmBidSharePointPanel token={token} bidPackageId={selectedId} />
-                      )}
-                    </div>
-                  )}
                 </Card>
               )}
-
-              <Card className="!p-0 overflow-hidden">
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left text-xs font-semibold text-ink hover:bg-sand/30"
-                  onClick={() => setShowBidExtras((v) => !v)}
-                >
-                  <span>Add bidders & discipline BOQ slots</span>
-                  <span className="text-steel-muted font-normal">{showBidExtras ? "Hide" : "Show"}</span>
-                </button>
-                {showBidExtras && (
-                  <div className="px-4 pb-4 space-y-4 border-t border-line">
-                    <div>
-                      <p className="text-[11px] text-steel-muted mb-2 pt-3">
-                        Pick from{" "}
-                        <Link to="/crm/directory/vendors" className="text-brand font-semibold">
-                          CRM vendor directory
-                        </Link>
-                        . New bidders get empty BOQ slots — no auto-fill; they upload rates or fill online.
-                      </p>
-                      <div className="flex flex-wrap gap-2 mb-2 max-h-28 overflow-y-auto">
-                        {vendorsNotOnPackage.map((v) => (
-                          <label key={v.id} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1 bg-paper">
-                            <input
-                              type="checkbox"
-                              checked={addVendorIds.includes(v.id)}
-                              onChange={(e) =>
-                                setAddVendorIds((prev) =>
-                                  e.target.checked ? [...prev, v.id] : prev.filter((x) => x !== v.id),
-                                )
-                              }
-                            />
-                            {v.name}
-                          </label>
-                        ))}
-                        {!vendorsNotOnPackage.length && (
-                          <span className="text-xs text-steel-muted">All directory vendors are already on this package.</span>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!text-xs"
-                        disabled={busy}
-                        onClick={() => void addVendorsToPackage()}
-                      >
-                        Add selected bidders
-                      </Button>
-                    </div>
-                    <div className="border-t border-line pt-3">
-                      <p className="text-xs font-mono uppercase text-steel-muted mb-2">Add discipline BOQ slots</p>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {disciplines
-                          .filter((d) => !(detail.disciplines || []).some((x) => x.key === d.key))
-                          .map((d) => (
-                            <label key={d.key} className="flex items-center gap-1 text-xs border rounded-lg px-2 py-1">
-                              <input
-                                type="checkbox"
-                                checked={addDiscKeys.includes(d.key)}
-                                onChange={(e) =>
-                                  setAddDiscKeys((prev) =>
-                                    e.target.checked ? [...prev, d.key] : prev.filter((x) => x !== d.key),
-                                  )
-                                }
-                              />
-                              {d.label}
-                            </label>
-                          ))}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!text-xs"
-                        disabled={busy}
-                        onClick={() => void addDisciplinesToPackage()}
-                      >
-                        Add selected disciplines
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
               </div>
 
               {slotPanel && selectedId && (
@@ -1488,10 +1104,10 @@ export default function CrmBidComparePage() {
               </div>
               <p className="font-semibold text-ink text-sm">Bid workflow</p>
               <ol className="text-xs text-steel-muted space-y-1 max-w-md text-left list-decimal list-inside">
-                <li>Pick a project above (or choose one from the left rail).</li>
-                <li>Create an R2 bid — eight work packages, one BOQ file each.</li>
-                <li>Vendors fill rates; qty and items come from budget monitoring.</li>
-                <li>Refresh comparative and award L1.</li>
+                <li>Pick a project in the left rail.</li>
+                <li>+ New bid — select vendors and work packages from the project card.</li>
+                <li>Open bid, then vendors upload BOQs or fill rates online.</li>
+                <li>Refresh R2 comparative and award L1.</li>
               </ol>
               {setupProjectId ? (
                 <Button type="button" onClick={() => openNewBidSetup({ projectId: setupProjectId })}>

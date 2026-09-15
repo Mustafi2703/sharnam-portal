@@ -37,6 +37,8 @@ import {
   ensureVendorBoqTemplateSheets,
   recomputeAndSyncBidPackage,
   vendorCanEditBoqSheet,
+  buildR2SummarySheet,
+  buildMasterCompareSheet,
 } from "../services/crmBidRecompute.js";
 import { loadMonitoringBoqTemplate } from "../services/monitoringBoqTemplate.js";
 import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
@@ -250,21 +252,22 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
     return res.status(400).json({ error: "Select at least one discipline BOQ sheet for this package" });
   }
 
-  const imported = importR2WorkbookFromFile(undefined, vendorNames);
+  const emptyTotals: Record<string, Record<string, number>> = {};
+  for (const d of selectedDisciplines) emptyTotals[d.key] = {};
 
   const summarySheet = await createSheetFromImport(
     `Summary — ${title} (${rev})`,
     "CRM Comparative Summary",
-    imported.summary,
+    buildR2SummarySheet(vendorNames, selectedDisciplines, emptyTotals),
     req.user!.id,
-    "Comparative Statement - R2.xlsx"
+    "Bid comparative (empty until BOQs uploaded)"
   );
   const masterSheet = await createSheetFromImport(
     `Master BOQ Compare — ${title} (${rev})`,
     "CRM Comparative BOQ",
-    imported.masterBoq,
+    buildMasterCompareSheet(vendorNames, selectedDisciplines, emptyTotals),
     req.user!.id,
-    "Comparative Statement - R2.xlsx"
+    "Bid comparative (empty until BOQs uploaded)"
   );
 
   const slots = buildVendorDisciplineSlots(vendorNames, selectedDisciplines);
@@ -282,7 +285,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
       notes: req.body.notes
         ? String(req.body.notes)
         : project
-          ? `Linked project: ${project.code} · ${project.name}. Source: Comparative Statement - R2.xlsx`
+          ? `Linked project: ${project.code} · ${project.name}`
           : null,
       comparativeSheetId: masterSheet.id,
       summarySheetId: summarySheet.id,

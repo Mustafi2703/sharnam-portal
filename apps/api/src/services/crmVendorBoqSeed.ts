@@ -196,19 +196,15 @@ export async function ensureVendorBoqSheet(
   const fromMonitoring = pkg.projectId
     ? await loadMonitoringBoqTemplate(prisma, pkg.projectId, slot.discipline, disciplines)
     : null;
-  const imported = importR2WorkbookFromFile();
-  const template = imported.disciplineTemplates[slot.discipline];
   let parsed: ImportedSheet;
   if (fromMonitoring?.rows?.length) {
     parsed = fromMonitoring;
-  } else if (template?.rows?.length) {
-    parsed = blankVendorRates(template);
   } else {
-    const r2Path = resolveR2TemplatePath();
-    const wb = XLSX.read(fs.readFileSync(r2Path), { type: "buffer", cellFormula: true });
-    const ws = pickDisciplineWorksheet(wb, slot.discipline, disciplines);
-    if (!ws) throw new Error(`No R2 BOQ template for ${slot.discipline}`);
-    parsed = blankVendorRates(parseDisciplineBoqSheet(ws, slot.discipline, disciplines));
+    parsed = {
+      headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
+      rows: [],
+      sheetName: disc?.sheetName || slot.discipline,
+    };
   }
 
   const boqSheet = await prisma.customSheet.create({
@@ -219,7 +215,7 @@ export async function ensureVendorBoqSheet(
       rowsJson: JSON.stringify(parsed.rows),
       sourceFile: fromMonitoring?.rows?.length
         ? "Project budget monitoring (SPDC Budget)"
-        : "Comparative Statement - R2.xlsx (vendor template)",
+        : "Empty BOQ — vendor upload or online fill",
       createdById: officeUserId,
     },
   });

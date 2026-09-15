@@ -590,37 +590,17 @@ export function buildVendorBoqTemplateXlsx(opts: {
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(instructions), "SPDC Instructions");
 
-  let attached = false;
-  try {
-    const src = resolveR2TemplatePath();
-    const srcWb = XLSX.read(fs.readFileSync(src), { type: "buffer", cellFormula: true });
-    const srcWs = pickDisciplineWorksheet(srcWb, opts.disciplineKey, opts.disciplines);
-    if (srcWs) {
-      blankRatesInWorksheet(srcWs);
-      stampVendorBanner(srcWs, opts.vendorLabel, opts.projectCode);
-      XLSX.utils.book_append_sheet(wb, srcWs, (disc?.sheetName || opts.disciplineKey).slice(0, 31));
-      attached = true;
-    }
-  } catch {
-    /* fallback below */
-  }
-
-  if (!attached) {
-    let parsed: ImportedSheet;
-    if (opts.sheet?.rows?.length) {
-      parsed = opts.sheet;
-    } else {
-      const imported = importR2WorkbookFromFile();
-      const template = imported.disciplineTemplates[opts.disciplineKey];
-      parsed = template?.rows?.length
-        ? blankVendorRates(template)
-        : { headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"], rows: [], sheetName: disc?.sheetName || opts.disciplineKey };
-    }
-    const aoa = parsed.headers.length
-      ? [parsed.headers, ...parsed.rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""))]
-      : parsed.rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), (disc?.sheetName || "BOQ").slice(0, 31));
-  }
+  const parsed: ImportedSheet = opts.sheet?.rows?.length
+    ? opts.sheet
+    : {
+        headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
+        rows: [],
+        sheetName: disc?.sheetName || opts.disciplineKey,
+      };
+  const aoa = parsed.headers.length
+    ? [parsed.headers, ...parsed.rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""))]
+    : parsed.rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), (disc?.sheetName || "BOQ").slice(0, 31));
 
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
