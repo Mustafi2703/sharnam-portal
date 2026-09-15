@@ -2,7 +2,12 @@ import fs from "fs/promises";
 import path from "path";
 import { prisma } from "../prisma.js";
 
-const DEFAULT_PACKAGES = ["Civil", "PEB", "MEP", "Fire Fighting", "Electrical", "Plumbing", "HVAC", "Landscape"];
+import { COMPARATIVE_DISCIPLINES } from "./comparativeStatement.js";
+
+/** Default work packages — same labels as CRM bid / comparative R2 disciplines (Sanika cold-storage scope). */
+export const SPDC_DEFAULT_WORK_PACKAGES = COMPARATIVE_DISCIPLINES.map((d) => d.label);
+
+const DEFAULT_PACKAGES = [...SPDC_DEFAULT_WORK_PACKAGES];
 
 function catalogPath() {
   return path.join(process.cwd(), "data", "work-package-catalog.json");
@@ -57,11 +62,11 @@ export async function removeWorkPackageCatalogEntry(name: string): Promise<strin
 }
 
 export function parseProjectWorkPackages(raw?: string | null): string[] {
-  if (!raw) return ["Civil", "PEB"];
+  if (!raw) return [...SPDC_DEFAULT_WORK_PACKAGES];
   try {
     const p = JSON.parse(raw);
-    return Array.isArray(p) ? p.map(String).filter(Boolean) : ["Civil", "PEB"];
+    return Array.isArray(p) && p.length ? p.map(String).filter(Boolean) : [...SPDC_DEFAULT_WORK_PACKAGES];
   } catch {
-    return ["Civil", "PEB"];
+    return [...SPDC_DEFAULT_WORK_PACKAGES];
   }
 }

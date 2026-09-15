@@ -3,8 +3,9 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Button, Card, Input } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
+import { CRM_BID_DISCIPLINES } from "../lib/crmBidDisciplines";
 
-const FALLBACK_PACKAGES = ["Civil", "PEB", "MEP", "Fire Fighting", "Electrical", "Plumbing", "HVAC", "Landscape"];
+const FALLBACK_PACKAGES = CRM_BID_DISCIPLINES.map((d) => d.label);
 
 type Props = {
   token?: string | null;

@@ -106,7 +106,7 @@ export function resolveProjectBidDisciplines(opts: {
   if (fromPackages.length) return { disciplines: fromPackages, source: "work_packages" };
   const saved = parseStoredBidDisciplinesJson(opts.bidDisciplinesJson);
   if (saved?.length) return { disciplines: saved, source: "saved" };
-  return { disciplines: [], source: "default" };
+  return { disciplines: defaultDisciplines(), source: "default" };
 }
 
 /** Resolve discipline list from explicit keys + optional custom entries + project defaults. */
