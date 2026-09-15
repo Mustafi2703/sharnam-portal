@@ -550,6 +550,10 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
       generatedPdfUrl: gen.pdfUrl,
       storagePath: gen.storagePath,
       sharePointUrl: gen.sharePointUrl,
+      dataJson: JSON.stringify({
+        ...(letter.dataJson ? JSON.parse(letter.dataJson) : {}),
+        ...(gen.annexureXlsxUrl ? { annexureXlsxUrl: gen.annexureXlsxUrl } : {}),
+      }),
       status: "Generated",
     },
   });

@@ -3,9 +3,9 @@
  *
  * User's rule: every HR document must have (a) a soft editable copy and (b) a print-ready PDF,
  * and every output page must carry the Sharnam logo. We produce:
- *   • .xlsx  — editable Annexure I companion (CTC calculator template lives at
- *              module_prompts/Sharnam_modules_docs 2/SPDC_CTC_Structure_Calculator.xlsx)
+ *   • .docx  — editable SPDC letter (SPDC_Letter_of_Appointment.docx template copy)
  *   • .html  — branded letter with SPDC letterhead + logo (print → Save as PDF from the browser)
+ *   • .xlsx  — Annexure I CTC calculator (separate from the letter; not the editable letter body)
  *
  * Templates live at apps/api/formats/hrms/<kind>.html (or .txt); if the format file is missing we
  * fall back to a built-in template so the workflow keeps working while HR ships the real format.
@@ -21,6 +21,7 @@ import ExcelJS from "exceljs";
 import type { HrmsDocument } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
+import { ensureHrCompanyTree } from "./hrEmployeeVault.js";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
 
 const HRMS_LETTERS_FOLDER = "06_HR_AND_ADMIN/06.01_Letters";
@@ -54,6 +55,30 @@ function readFirstExisting(paths: string[]): string | null {
       if (fs.existsSync(p)) return fs.readFileSync(p, "utf8");
     } catch {
       /* next */
+    }
+  }
+  return null;
+}
+
+/** Editable Word letter — kind-specific .docx in formats/hrms, else SPDC appointment template. */
+export function resolveHrmsLetterDocxPath(kind: string): string | null {
+  const bases = [
+    path.resolve(process.cwd(), "apps/api/formats/hrms"),
+    path.resolve(process.cwd(), "formats/hrms"),
+    path.resolve(process.cwd(), "../../apps/api/formats/hrms"),
+  ];
+  for (const base of bases) {
+    const specific = path.join(base, `${kind}.docx`);
+    if (fs.existsSync(specific)) return specific;
+  }
+  if (kind === "Appointment" || kind === "Offer" || kind === "Promotion") {
+    const shared = [
+      path.join(process.cwd(), "module_prompts/Sharnam_modules_docs 2/SPDC_Letter_of_Appointment.docx"),
+      path.join(process.cwd(), "Sharnam_modules_docs", "SPDC_Letter_of_Appointment.docx"),
+      path.join(process.cwd(), "apps/api/formats/hrms", "Appointment.docx"),
+    ];
+    for (const p of shared) {
+      if (fs.existsSync(p)) return p;
     }
   }
   return null;
@@ -519,7 +544,21 @@ export async function attachHrmsLetterToEmployeeVault(
   });
 }
 
+async function uploadHrmsFile(
+  folders: string[],
+  fileName: string,
+  buffer: Buffer,
+  contentType?: string,
+) {
+  let saved: Awaited<ReturnType<typeof mockOneDrive.upload>> | null = null;
+  for (const folder of folders) {
+    saved = await mockOneDrive.upload("_HR", folder, fileName, buffer, contentType, { replace: true });
+  }
+  return saved!;
+}
+
 export async function generateHrmsLetter(row: HrmsDocument) {
+  await ensureHrCompanyTree();
   let ctx: Record<string, unknown> = {};
   try {
     ctx = row.dataJson ? JSON.parse(row.dataJson) : {};
@@ -532,71 +571,81 @@ export async function generateHrmsLetter(row: HrmsDocument) {
   const employeeFolder = `${HRMS_FILE_FOLDER}/${personFolder}/Letters`;
 
   const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const uploadFolders = [employeeFolder, `${letterFolder}/${personFolder}`];
   const html = assembleHtml(row, merged);
-  const htmlSaved = await mockOneDrive.upload(
-    "_HR",
-    employeeFolder,
+  const htmlSaved = await uploadHrmsFile(
+    uploadFolders,
     `${row.kind}-${safeRef}.html`,
     Buffer.from(html, "utf8"),
     "text/html; charset=utf-8",
-    { replace: true },
-  );
-  await mockOneDrive.upload(
-    "_HR",
-    letterFolder,
-    `${row.kind}-${safeRef}.html`,
-    Buffer.from(html, "utf8"),
-    "text/html; charset=utf-8",
-    { replace: true },
   );
 
   const ctcNum = numOrNull(ctx.fixedCtcAnnual ?? ctx.ctcAnnual ?? ctx.ctc);
   let xlsxBuf: Buffer;
+  let ctcBreakdown: import("./ctcAnnexure.js").CtcBreakdown | null = null;
   if ((row.kind === "Appointment" || row.kind === "Offer" || row.kind === "Promotion") && ctcNum) {
     const { computeCtcBreakdown, buildAnnexureXlsx: buildCtcXlsx } = await import("./ctcAnnexure.js");
-    const breakdown = computeCtcBreakdown({
-      candidateName: String(merged.candidateName || ""),
+    ctcBreakdown = computeCtcBreakdown({
+      candidateName: String(merged.candidateName || merged.employeeName || ""),
       designation: String(merged.designation || ""),
       fixedCtcAnnual: ctcNum,
-      basicPctOfGross: 0.5,
-      hraPctOfBasic: 0.4,
-      restrictPfCeiling: false,
-      gratuityPctOfBasic: 0.0481,
-      ltaPctOfBasic: 0.0833,
-      conveyanceAnnual: 19200,
-      childrenEducationAnnual: 2400,
-      mediclaimAnnual: 12000,
-      performancePayPct: 0.1,
-      professionalTaxAnnual: 2400,
+      basicPctOfGross: Number(ctx.basicPctOfGross ?? 0.5),
+      hraPctOfBasic: Number(ctx.hraPctOfBasic ?? 0.4),
+      restrictPfCeiling: Boolean(ctx.restrictPfCeiling ?? false),
+      gratuityPctOfBasic: Number(ctx.gratuityPctOfBasic ?? 0.0481),
+      ltaPctOfBasic: Number(ctx.ltaPctOfBasic ?? 0.0833),
+      conveyanceAnnual: Number(ctx.conveyanceAnnual ?? 19200),
+      childrenEducationAnnual: Number(ctx.childrenEducationAnnual ?? 2400),
+      mediclaimAnnual: Number(ctx.mediclaimAnnual ?? 12000),
+      performancePayPct: Number(ctx.performancePayPct ?? 0.1),
+      professionalTaxAnnual: Number(ctx.professionalTaxAnnual ?? 2400),
     });
-    xlsxBuf = await buildCtcXlsx(breakdown);
-    const annexHtml = (await import("./ctcAnnexure.js")).buildAnnexureHtml(breakdown);
-    await mockOneDrive.upload(
-      "_HR",
-      employeeFolder,
+    xlsxBuf = await buildCtcXlsx(ctcBreakdown);
+    const annexHtml = (await import("./ctcAnnexure.js")).buildAnnexureHtml(ctcBreakdown);
+    await uploadHrmsFile(
+      uploadFolders,
       `${row.kind}-${safeRef}-Annexure-I.html`,
       Buffer.from(annexHtml, "utf8"),
       "text/html; charset=utf-8",
-      { replace: true },
     );
   } else {
     xlsxBuf = await buildAnnexureXlsx(row, merged);
   }
 
-  const xlsxSaved = await mockOneDrive.upload(
-    "_HR",
-    employeeFolder,
-    `${row.kind}-${safeRef}.xlsx`,
+  const xlsxSaved = await uploadHrmsFile(
+    uploadFolders,
+    `${row.kind}-${safeRef}-Annexure-I.xlsx`,
     xlsxBuf,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    { replace: true },
   );
 
+  let docxUrl: string | null = null;
+  let docxSharePointUrl: string | null = null;
+  const docxPath = resolveHrmsLetterDocxPath(row.kind);
+  if (docxPath) {
+    const templateBuf = fs.readFileSync(docxPath);
+    let docxBuf = templateBuf;
+    if (row.kind === "Appointment" || row.kind === "Offer" || row.kind === "Promotion") {
+      const { buildAppointmentDocxReplacements, fillAppointmentDocx } = await import("./hrmsAppointmentDocx.js");
+      const replacements = buildAppointmentDocxReplacements(row, merged, ctcBreakdown);
+      docxBuf = Buffer.from(await fillAppointmentDocx(templateBuf, replacements));
+    }
+    const docxSaved = await uploadHrmsFile(
+      uploadFolders,
+      `${row.kind}-${safeRef}.docx`,
+      docxBuf,
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    docxUrl = docxSaved.sharePointUrl || docxSaved.url || `/uploads/onedrive/_HR/${docxSaved.path}`;
+    docxSharePointUrl = docxSaved.sharePointUrl || null;
+  }
+
   return {
-    docxUrl: xlsxSaved.sharePointUrl || xlsxSaved.url || `/uploads/onedrive/_HR/${xlsxSaved.path}`,
+    docxUrl,
+    annexureXlsxUrl: xlsxSaved.sharePointUrl || xlsxSaved.url || `/uploads/onedrive/_HR/${xlsxSaved.path}`,
     pdfUrl: htmlSaved.sharePointUrl || htmlSaved.url || `/uploads/onedrive/_HR/${htmlSaved.path}`,
     storagePath: htmlSaved.sharePointPath || htmlSaved.path,
-    sharePointUrl: htmlSaved.sharePointUrl || htmlSaved.url || null,
+    sharePointUrl: docxSharePointUrl || htmlSaved.sharePointUrl || htmlSaved.url || null,
     folder: employeeFolder,
   };
 }

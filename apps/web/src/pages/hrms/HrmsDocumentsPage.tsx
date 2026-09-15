@@ -8,12 +8,11 @@ import { canManageHrms } from "../../lib/portalAccounts";
 /**
  * HRMS letter desk — Appointment / Promotion / Relieving / Exit / Offer / Confirmation.
  * Two ways to add a document:
- *   1. Fill the form and click "Generate" — the system builds a Sharnam-branded HTML letter
- *      (print → Save as PDF) plus an editable .xlsx annexure. Both land under
- *      06_HR_AND_ADMIN/06.01_Letters and are surfaced with SharePoint links.
+ *   1. Fill the form and click "Generate" — the system builds:
+ *      • editable .docx (SPDC Letter of Appointment template)
+ *      • print-ready HTML letter (print → Save as PDF)
+ *      • Annexure I .xlsx (CTC calculator) when CTC is on the form
  *   2. Upload the signed / scanned copy back after issuance.
- * Formats (real letterheads) go in apps/api/formats/hrms/<Kind>.html and the system
- * will use them instead of the built-in template.
  */
 
 type DocKind =
@@ -56,6 +55,23 @@ const KIND_OPTIONS: { key: DocKind; label: string; hint: string }[] = [
   { key: "Warning", label: "Warning / concern letter", hint: "Notice of concern with corrective actions" },
   { key: "Experience", label: "Experience certificate", hint: "Tenure and role certificate on request" },
 ];
+
+function annexureXlsxUrl(row: DocRow): string | null {
+  try {
+    const data = row.dataJson ? (JSON.parse(row.dataJson) as { annexureXlsxUrl?: string }) : {};
+    if (data.annexureXlsxUrl) return data.annexureXlsxUrl;
+  } catch {
+    /* fall through */
+  }
+  const legacy = row.generatedDocxUrl || "";
+  return legacy.toLowerCase().includes(".xlsx") ? legacy : null;
+}
+
+function editableDocxUrl(row: DocRow): string | null {
+  const url = row.generatedDocxUrl || "";
+  if (!url || url.toLowerCase().includes(".xlsx")) return null;
+  return url;
+}
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
@@ -392,7 +408,7 @@ export default function HrmsDocumentsPage() {
         <div className="px-4 py-3 border-b border-line bg-sand/40 flex items-center justify-between">
           <div>
             <div className="font-semibold text-sm">Letters register · {visible.length}</div>
-            <div className="text-[11px] text-steel-muted">Every letter carries the Sharnam logo. Download the .xlsx to edit, or print the HTML to PDF.</div>
+            <div className="text-[11px] text-steel-muted">Letter: print HTML to PDF. Edit the .docx in Word. CTC breakdown is a separate Annexure I spreadsheet.</div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -423,12 +439,17 @@ export default function HrmsDocumentsPage() {
                   <td className="space-y-1">
                     {r.generatedPdfUrl && (
                       <a href={mediaUrl(r.generatedPdfUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Letter (HTML → PDF)
+                        Print-ready letter (HTML → PDF)
                       </a>
                     )}
-                    {r.generatedDocxUrl && (
-                      <a href={mediaUrl(r.generatedDocxUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Editable annexure (.xlsx)
+                    {editableDocxUrl(r) && (
+                      <a href={mediaUrl(editableDocxUrl(r)!)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
+                        Editable letter (.docx)
+                      </a>
+                    )}
+                    {annexureXlsxUrl(r) && (
+                      <a href={mediaUrl(annexureXlsxUrl(r)!)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
+                        Annexure I · CTC (.xlsx)
                       </a>
                     )}
                     {r.sharePointUrl && r.sharePointUrl !== r.generatedPdfUrl && (

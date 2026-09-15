@@ -8,7 +8,8 @@ the system will pick it up automatically and use it instead of the fallback body
 
 One file per document kind. Match the `kind` field exactly:
 
-- `Appointment.html`  ← SPDC_Letter_of_Appointment.docx → convert to HTML
+- `Appointment.html`  ← optional HTML body override (letterhead added automatically)
+- `Appointment.docx`  ← editable Word letter (SPDC_Letter_of_Appointment.docx)
 - `Offer.html`
 - `Promotion.html`    ← letter of promotion (name, previous/new role, revised CTC)
 - `Relieving.html`

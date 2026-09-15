@@ -2432,8 +2432,8 @@ hrmRouter.delete("/employee-files/:id", hrmDesk, async (req: AuthedRequest, res)
 
 /* ─────────────────── HRMS Documents (Appointment / Relieving / Exit / Asset / Offer) ───────────────────
  * Two ways to add:
- *   1. Fill the form -> we build a .docx from the template stored in apps/api/formats/hrms/<kind>.docx
- *      (branded with the Sharnam letterhead) and store both the .docx and a print-ready HTML/PDF path.
+ *   1. Fill the form -> we build a .docx from apps/api/formats/hrms/<kind>.docx
+ *      (SPDC Letter of Appointment) plus print-ready HTML and Annexure I .xlsx when CTC applies.
  *   2. Upload the signed / scanned copy back -> attaches the file to the same record.
  * All artefacts land under 06_HR_AND_ADMIN/06.01_Letters on the mock OneDrive / SharePoint tree.
  */
@@ -2542,6 +2542,14 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
     return res.status(500).json({ error: err instanceof Error ? err.message : "Letter generate failed" });
   }
 
+  let dataJsonObj: Record<string, unknown> = {};
+  try {
+    dataJsonObj = row.dataJson ? JSON.parse(row.dataJson) : {};
+  } catch {
+    dataJsonObj = {};
+  }
+  if (gen.annexureXlsxUrl) dataJsonObj.annexureXlsxUrl = gen.annexureXlsxUrl;
+
   const updated = await prisma.hrmsDocument.update({
     where: { id: row.id },
     data: {
@@ -2549,6 +2557,7 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
       generatedPdfUrl: gen.pdfUrl || row.generatedPdfUrl,
       storagePath: gen.storagePath || row.storagePath,
       sharePointUrl: gen.sharePointUrl || row.sharePointUrl,
+      dataJson: JSON.stringify(dataJsonObj),
       status: "Generated",
     },
   });
