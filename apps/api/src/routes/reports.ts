@@ -1676,6 +1676,31 @@ hrmRouter.post("/employees/purge-uat-logins", requireRoles("admin", "office"), a
   }
 });
 
+/** Clear HRMS demo seed: FLOW recruitment, HB-DEMO docs, demo logins, demo leave rows. */
+hrmRouter.post("/purge-seed-data", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  try {
+    const { purgeHrmsSeedData } = await import("../services/purgeHrmsSeed.js");
+    const result = await prisma.$transaction(async (tx) => purgeHrmsSeedData(tx, req.user?.id), {
+      timeout: 60_000,
+      maxWait: 10_000,
+    });
+    await audit("hrm.purge_seed_data", {
+      userId: req.user?.id,
+      entity: "HrmsSeed",
+      meta: result,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.purge_seed_data",
+      message: "Could not purge HRMS seed data",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not purge HRMS seed data" });
+  }
+});
+
 hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const bcrypt = await import("bcryptjs");
   const { portalForRole } = await import("@sharnam/shared");

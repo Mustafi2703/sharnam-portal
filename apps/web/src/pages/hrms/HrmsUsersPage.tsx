@@ -273,6 +273,42 @@ export default function HrmsUsersPage() {
     }
   }
 
+  async function purgeHrmsSeed() {
+    if (
+      !window.confirm(
+        "Remove HRMS demo seed (Riya FLOW recruitment, HB-DEMO docs, @sharnam.demo logins, demo leave rows)? @spdc.in staff stay."
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const res = await api<{
+        loginsRemoved: number;
+        candidates: number;
+        offers: number;
+        requisitions: number;
+        hrmsDocuments: number;
+        leaveRequests: number;
+      }>("/api/hrm/purge-seed-data", {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsgTone("ok");
+      setMsg(
+        `HRMS seed cleared — ${res.loginsRemoved} login(s), ${res.candidates} candidate(s), ${res.requisitions} requisition(s), ${res.hrmsDocuments} document(s).`
+      );
+      await load();
+    } catch (err) {
+      const reason = actionReasonFromError("Could not purge HRMS seed", err);
+      setActionError(reason);
+      setMsgTone("err");
+      setMsg(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function assignProject() {
     setBusy(true);
     setMsg("");
@@ -323,6 +359,11 @@ export default function HrmsUsersPage() {
           {canEdit ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeUatLogins()}>
               Remove demo &amp; test logins
+            </Button>
+          ) : null}
+          {canEdit ? (
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeHrmsSeed()}>
+              Clear HRMS seed
             </Button>
           ) : null}
           {isAdmin ? (
