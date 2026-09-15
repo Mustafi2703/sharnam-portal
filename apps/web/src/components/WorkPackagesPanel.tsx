@@ -3,9 +3,24 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Button, Card, Input } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
-import { CRM_BID_DISCIPLINES } from "../lib/crmBidDisciplines";
 
-const FALLBACK_PACKAGES = CRM_BID_DISCIPLINES.map((d) => d.label);
+const FALLBACK_PACKAGES = ["Civil", "PEB", "MEP", "Fire Fighting", "Electrical", "Plumbing", "HVAC", "Landscape"];
+
+/** R2 bid sheet labels — not shown in work-package catalogue (bid desk uses these separately). */
+const HIDDEN_BID_LABELS = new Set([
+  "civil & structural (ccv)",
+  "electrical lab",
+  "admin building",
+  "security",
+  "cooling tower",
+  "weigh bridge",
+  "u.g tank + pump room",
+  "entrance gate",
+]);
+
+function catalogNames(names: string[]) {
+  return names.filter((p) => p && !HIDDEN_BID_LABELS.has(p.trim().toLowerCase()));
+}
 
 type Props = {
   token?: string | null;
@@ -37,7 +52,7 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
     api<{ packages: string[] }>("/api/projects/work-package-catalog", { token })
       .then((r) => {
         const fromApi = Array.isArray(r.packages) ? r.packages.map(String).filter(Boolean) : [];
-        setCatalog([...new Set([...FALLBACK_PACKAGES, ...fromApi])]);
+        setCatalog(catalogNames(fromApi.length ? fromApi : [...FALLBACK_PACKAGES]));
       })
       .catch(() => setCatalog([...FALLBACK_PACKAGES]));
 
@@ -96,7 +111,7 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
         body: JSON.stringify({ name }),
       });
       const nextCatalog = r.packages?.length ? r.packages : [...catalog, name];
-      setCatalog([...new Set([...FALLBACK_PACKAGES, ...nextCatalog])]);
+      setCatalog(catalogNames(nextCatalog));
       setNewName("");
       const next = projectPackages.includes(name) ? projectPackages : [...projectPackages, name].sort();
       if (pick) {
@@ -117,13 +132,24 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
   async function deleteFromCatalog(name: string) {
     if (!window.confirm(`Remove "${name}" from the package catalogue?`)) return;
     setBusy(true);
+    setMsg("");
     try {
-      const r = await api<{ packages: string[] }>("/api/projects/work-package-catalog", {
-        method: "DELETE",
-        token,
-        body: JSON.stringify({ name }),
-      });
-      setCatalog([...new Set([...FALLBACK_PACKAGES, ...(r.packages || [])])]);
+      const r = await api<{ packages: string[] }>(
+        `/api/projects/work-package-catalog?name=${encodeURIComponent(name)}`,
+        { method: "DELETE", token },
+      );
+      setCatalog(catalogNames(r.packages?.length ? r.packages : FALLBACK_PACKAGES.filter((p) => p !== name)));
+      const nextProject = projectPackages.filter((p) => p !== name);
+      if (projectPackages.includes(name)) {
+        setPackages(nextProject);
+        if (projectId) {
+          await api(`/api/projects/${projectId}/settings`, {
+            method: "PATCH",
+            token,
+            body: JSON.stringify({ workPackages: nextProject }),
+          });
+        }
+      }
       setMsg(`Removed ${name} from the catalogue.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Delete failed");
